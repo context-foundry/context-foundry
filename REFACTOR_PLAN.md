@@ -2,6 +2,10 @@
 
 **Goal:** Simplify codebase, ensure Windows compatibility, reduce from ~115k to ~40k lines
 
+**Audit Status:** Reviewed by DevOps Specialist - all findings addressed below
+
+---
+
 ## Current Architecture
 
 ```
@@ -25,70 +29,93 @@ context-foundry/
 
 ---
 
-## Phase 1: Remove Noise (Immediate, Low Risk)
+## Phase 0: Safety & CI Setup (AUDIT FINDING #1, #2)
 
-### Delete directories
+### 0.1 Create backup tag
 ```bash
-rm -rf archive/           # 788MB - old archived code
-rm -rf logs/              # 5.3MB - old logs
-rm -rf htmlcov/           # 8.6MB - coverage reports
-rm -rf builds/            # Working directory
-rm -rf flowise-builds/    # Working directory
-rm -rf projects/          # Working directory
-rm -rf sandbox/           # Working directory
-rm -rf working/           # Working directory
-rm -rf tmp/               # Working directory
-rm -rf checkpoints/       # Session checkpoints
-rm -rf ace/               # Unknown/unused
-rm -rf foundry/           # Old patterns dir
-rm -rf active-projects/   # Working directory
+git tag -a v2.5.4-pre-refactor -m "Backup before cross-platform refactor"
+git push origin v2.5.4-pre-refactor
+```
 
-# Clean extension build artifacts (keep source/transcripts)
+### 0.2 Enable Windows CI
+Update `.github/workflows/ci.yml` to add Windows matrix:
+
+```yaml
+test:
+  name: Run Tests
+  runs-on: ${{ matrix.os }}
+  strategy:
+    matrix:
+      os: [ubuntu-latest, windows-latest]
+      python-version: ['3.10', '3.11', '3.12']
+    exclude:
+      # Reduce matrix size - test 3.11 on Windows only initially
+      - os: windows-latest
+        python-version: '3.10'
+      - os: windows-latest
+        python-version: '3.12'
+```
+
+### 0.3 Establish Windows baseline
+Run current test suite on Windows to identify existing failures before refactor.
+
+### 0.4 Rollback strategy (AUDIT GAP #1)
+If refactor breaks dependencies:
+1. `git revert` the cleanup commit
+2. Or restore from `v2.5.4-pre-refactor` tag
+3. Keep `_archive_2025/` for 30 days before permanent deletion
+
+---
+
+## Phase 1: Safe Cleanup (AUDIT FINDING #2)
+
+### 1.1 Move directories to archive (NOT rm -rf)
+```bash
+mkdir -p _archive_2025
+
+# Move instead of delete
+mv archive/ _archive_2025/archive_old/
+mv logs/ _archive_2025/logs/
+mv htmlcov/ _archive_2025/htmlcov/
+mv builds/ _archive_2025/builds/
+mv flowise-builds/ _archive_2025/flowise-builds/
+mv projects/ _archive_2025/projects/
+mv sandbox/ _archive_2025/sandbox/
+mv working/ _archive_2025/working/
+mv tmp/ _archive_2025/tmp/
+mv checkpoints/ _archive_2025/checkpoints/
+mv ace/ _archive_2025/ace/
+mv foundry/ _archive_2025/foundry/
+mv active-projects/ _archive_2025/active-projects/
+```
+
+### 1.2 Clean extension build artifacts
+```bash
 rm -rf extensions/*/node_modules/
 rm -rf extensions/*/.next/
 ```
 
-### Extensions directory - KEEP
+### 1.3 Extensions directory - KEEP
 Keep `extensions/` - contains valuable assets:
 - `workday/*.txt` - Training transcripts (38 files, few KB)
 - `roblox/` - Roblox patterns and scripts
 - `workday-transcripts/` - Additional transcripts
 
-The 574MB was node_modules/.next/ - now gitignored and cleaned locally.
-
-### Already in .gitignore
-```
-archive/
-examples/
-extensions/flowise/
-extensions/roblox/
-extensions/*/node_modules/
-extensions/*/.next/
-```
-
-### Delete optional tools (move to separate packages later)
+### 1.4 Verify MCP server still works
 ```bash
-rm -rf tools/baml_*           # BAML integration (optional)
-rm -rf tools/baml_src/        # BAML schemas
-rm -rf tools/baml_schemas/    # BAML schemas
-rm -rf tools/baml_client/     # BAML client
-rm -rf tools/livestream/      # Multi-agent streaming
-rm -rf tools/incremental/     # Incremental builds
-rm -rf tools/back_pressure/   # Validation checks
-rm -rf tools/metrics/         # Telemetry collection
-rm -rf tools/log_monitor/     # Log monitoring
-rm -rf tools/context_budget/  # Context budget
-rm -rf tools/cache/           # Scout/test caching
-rm -rf tools/security/        # Sandbox enforcement
-rm -rf tools/screenshot_*     # Screenshot helpers
-rm -rf tools/generators/      # Code generators
+python -c "from tools.mcp_server import mcp; print('MCP server imports OK')"
+```
+
+### 1.5 Update .gitignore
+```
+_archive_2025/
 ```
 
 ---
 
-## Phase 2: Windows Compatibility
+## Phase 2: Windows Compatibility (AUDIT FINDING #1, #3)
 
-### Path Handling Audit
+### 2.1 Path Handling Audit
 Files using subprocess that need Windows checks:
 1. `tools/mcp_utils/delegation.py` - claude CLI invocation
 2. `tools/mcp_utils/autonomous_build.py` - build subprocess
@@ -96,7 +123,45 @@ Files using subprocess that need Windows checks:
 4. `tools/cli.py` - CLI subprocess calls
 5. `context_foundry/daemon/runner.py` - job execution
 
-### Required Changes
+### 2.2 psutil Abstraction (AUDIT FINDING #3)
+Files using psutil that need Windows-safe wrappers:
+1. `tools/mcp_utils/delegation.py` - process management
+2. `context_foundry/daemon/zombies.py` - zombie process cleanup
+3. `context_foundry/daemon/runner.py` - job process control
+
+Create `tools/mcp_utils/platform_utils.py`:
+```python
+import platform
+import psutil
+
+def kill_process_tree(pid: int, timeout: int = 5):
+    """Cross-platform process tree termination."""
+    try:
+        parent = psutil.Process(pid)
+        children = parent.children(recursive=True)
+
+        # On Windows, use terminate() first
+        for child in children:
+            child.terminate()
+        parent.terminate()
+
+        # Wait for graceful shutdown
+        gone, alive = psutil.wait_procs(children + [parent], timeout=timeout)
+
+        # Force kill remaining
+        for p in alive:
+            p.kill()
+    except psutil.NoSuchProcess:
+        pass
+
+def get_shell_command():
+    """Get appropriate shell for current platform."""
+    if platform.system() == "Windows":
+        return ["cmd", "/c"]
+    return ["/bin/bash", "-c"]
+```
+
+### 2.3 Required Changes
 
 1. **Detect OS and use appropriate shell:**
 ```python
@@ -128,79 +193,112 @@ path = Path.home() / ".context-foundry" / "patterns"
 - Use `newline=""` in file operations
 - Use `splitlines()` instead of `split("\n")`
 
----
-
-## Phase 3: Simplify Daemon (Optional, Higher Risk)
-
-Current daemon is feature-rich but complex:
-- `dashboard.py` (4.5k lines) - TUI dashboard (not needed if using web UI)
-- `cli.py` (3.2k lines) - Full CLI with many subcommands
-- `http_api.py` (1.9k lines) - REST API
-- `store.py` (1.5k lines) - SQLite job storage
-
-### Option A: Keep as-is
-- Pros: Full featured, battle tested
-- Cons: Complex, 18k lines
-
-### Option B: Slim daemon
-- Remove TUI dashboard (use web UI only)
-- Simplify CLI to essential commands
-- Keep HTTP API for web UI
-- Estimated: ~8k lines
-
-### Option C: Replace with simple job runner
-- File-based job queue (JSON files)
-- Minimal HTTP API for status
-- No TUI, web UI only
-- Estimated: ~2k lines
+### 2.4 Gate: CI must pass on Windows
+Do NOT proceed to Phase 3 until Windows CI is green.
 
 ---
 
-## Phase 4: Consolidate MCP Utils
+## Phase 3: Daemon Simplification (AUDIT FINDING #4)
 
-Current mcp_utils has many interconnected modules. Consider:
+**Decision: Option B - Slim Daemon** (balanced approach)
 
-### Keep (Essential):
+Rationale:
+- Option A (keep as-is): Too complex, 18k lines
+- Option C (simple runner): Too drastic, loses valuable features
+- Option B (slim): Removes TUI, keeps HTTP API for web UI
+
+### 3.1 Remove TUI Dashboard
+Delete or archive `context_foundry/daemon/dashboard.py` (4.5k lines)
+- Web UI at :8420 replaces TUI functionality
+- Keep HTTP API for programmatic access
+
+### 3.2 Simplify CLI
+Reduce `context_foundry/daemon/cli.py` to essential commands:
+- `cfd start` - Start daemon
+- `cfd stop` - Stop daemon
+- `cfd status` - Show status
+- `cfd submit` - Submit job
+- `cfd logs` - View logs
+- `cfd list` - List jobs
+
+Remove rarely-used commands to cut ~1.5k lines.
+
+### 3.3 Keep HTTP API
+`context_foundry/daemon/http_api.py` stays - web UI needs it.
+
+### 3.4 Expected reduction
+- Before: 18.5k lines
+- After: ~10k lines
+
+---
+
+## Phase 4: Consolidate MCP Utils (AFTER Phase 3)
+
+**Note:** This phase depends on Phase 3 daemon decision being complete.
+
+### 4.1 Keep (Essential):
 - `delegation.py` - Task delegation to Claude
 - `autonomous_build.py` - Main build orchestration
 - `pattern_management.py` - Pattern learning/storage
 - `phase_execution.py` - Phase execution
 - `project_detection.py` - Detect existing codebases
 
-### Merge or Remove:
+### 4.2 Merge or Remove:
 - `approval_gates.py` → Merge into autonomous_build
 - `contracts.py` → Merge into phase_execution
 - `audit.py` → Remove (optional logging)
 - `artifact_manifest.py` → Simplify
 - `conversation_logger.py` → Remove (optional)
-- `filesystem_tools.py` → Keep but simplify
 - `scope_guard.py` → Merge into autonomous_build
+
+### 4.3 Delete optional tools
+```bash
+mv tools/baml_* _archive_2025/tools/
+mv tools/baml_src/ _archive_2025/tools/
+mv tools/baml_schemas/ _archive_2025/tools/
+mv tools/baml_client/ _archive_2025/tools/
+mv tools/livestream/ _archive_2025/tools/
+mv tools/incremental/ _archive_2025/tools/
+mv tools/back_pressure/ _archive_2025/tools/
+mv tools/metrics/ _archive_2025/tools/
+mv tools/log_monitor/ _archive_2025/tools/
+mv tools/context_budget/ _archive_2025/tools/
+mv tools/cache/ _archive_2025/tools/
+mv tools/security/ _archive_2025/tools/
+mv tools/screenshot_* _archive_2025/tools/
+mv tools/generators/ _archive_2025/tools/
+```
 
 ---
 
-## Implementation Order
+## Implementation Order (AUDIT GAP #3 - Documentation)
 
-1. **Week 1: Cleanup**
-   - Remove archived/example directories
-   - Remove optional tools
-   - Update imports
-   - Test MCP server still works
+### Week 1: Phase 0 + Phase 1
+- [ ] Create backup tag
+- [ ] Update CI for Windows
+- [ ] Run baseline Windows tests
+- [ ] Move directories to `_archive_2025/`
+- [ ] Verify MCP server works
+- [ ] Update documentation (README, QUICKSTART)
 
-2. **Week 2: Windows Testing**
-   - Set up Windows VM/machine
-   - Run full test suite
-   - Fix path issues as found
-   - Test claude CLI integration
+### Week 2: Phase 2
+- [ ] Create platform_utils.py
+- [ ] Fix psutil usage
+- [ ] Fix subprocess calls
+- [ ] Run full test suite on Windows
+- [ ] **Gate: Windows CI green**
 
-3. **Week 3: Daemon Simplification (if chosen)**
-   - Decide on daemon approach
-   - Implement changes
-   - Test web UI still works
+### Week 3: Phase 3
+- [ ] Remove TUI dashboard
+- [ ] Simplify CLI
+- [ ] Test web UI still works
+- [ ] Update daemon documentation
 
-4. **Week 4: Polish**
-   - Update documentation
-   - Clean up unused imports
-   - Final cross-platform testing
+### Week 4: Phase 4
+- [ ] Merge mcp_utils modules
+- [ ] Archive optional tools
+- [ ] Final cross-platform testing
+- [ ] Bump version to v3.0.0
 
 ---
 
@@ -217,10 +315,27 @@ Current mcp_utils has many interconnected modules. Consider:
 
 ## Risks and Mitigations
 
-1. **Breaking MCP tools** - Test each tool individually before/after
-2. **Breaking daemon** - Keep daemon changes optional
-3. **Missing dependencies** - Audit all imports before removal
-4. **Windows edge cases** - Extensive testing on Windows
+| Risk | Mitigation |
+|------|------------|
+| Breaking MCP tools | Test each tool before/after; backup tag |
+| Breaking daemon | Keep daemon changes in Phase 3 separate |
+| Missing dependencies | `_archive_2025/` allows recovery for 30 days |
+| Windows edge cases | Windows CI gate before Phase 3 |
+| Lost user data | Move to archive, not delete |
+
+---
+
+## Version Bump (AUDIT GAP #2)
+
+After refactor complete:
+```bash
+# Update __version__.py
+echo '__version__ = "3.0.0"' > context_foundry/__init__.py
+
+# Tag release
+git tag -a v3.0.0 -m "Cross-platform refactor: simplified, Windows-compatible"
+git push origin v3.0.0
+```
 
 ---
 
