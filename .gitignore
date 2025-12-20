@@ -1,4 +1,7 @@
 
+# Refactor archive (safe cleanup - delete after 30 days)
+_archive_2025/
+
 # Privacy & Secrets
 **/*.db
 **/*.sqlite
