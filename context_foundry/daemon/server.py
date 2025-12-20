@@ -278,6 +278,52 @@ class CFDaemon:
 
         logger.info("Signal handlers registered")
 
+    def _ensure_path(self) -> None:
+        """
+        Ensure PATH includes common binary locations.
+
+        When the daemon is started by launchd (macOS) or as a Windows service,
+        it may have a minimal PATH that doesn't include homebrew/node locations.
+        The Claude CLI is a Node.js script, so we need node in PATH.
+        """
+        import platform
+
+        current_path = os.environ.get("PATH", "")
+        is_windows = platform.system() == "Windows"
+        separator = ";" if is_windows else ":"
+
+        if is_windows:
+            # Windows: common locations for Node.js and npm
+            appdata = os.environ.get("APPDATA", "")
+            localappdata = os.environ.get("LOCALAPPDATA", "")
+            programfiles = os.environ.get("ProgramFiles", r"C:\Program Files")
+
+            required_paths = [
+                os.path.join(programfiles, "nodejs"),  # Standard Node.js install
+                os.path.join(appdata, "npm") if appdata else "",  # npm global
+                os.path.join(localappdata, "Programs", "nodejs")
+                if localappdata
+                else "",
+            ]
+            # Filter out empty paths
+            required_paths = [p for p in required_paths if p]
+        else:
+            # macOS/Linux: common locations for homebrew and system binaries
+            required_paths = [
+                "/opt/homebrew/bin",  # Homebrew on Apple Silicon
+                "/usr/local/bin",  # Homebrew on Intel Mac, common location
+                "/opt/homebrew/sbin",
+                "/usr/local/sbin",
+            ]
+
+        # Build new PATH with required paths at the front
+        path_parts = current_path.split(separator) if current_path else []
+        for required in reversed(required_paths):
+            if required and required not in path_parts:
+                path_parts.insert(0, required)
+
+        os.environ["PATH"] = separator.join(path_parts)
+
     def _daemonize(self) -> Optional[int]:
         """
         Daemonize the process.
@@ -412,14 +458,8 @@ class CFDaemon:
         if devnull > 2:
             os.close(devnull)
 
-        # Ensure Claude CLI is in PATH (fix for daemon PATH issues)
-        # Claude is typically at /opt/homebrew/bin/claude on macOS
-        current_path = os.environ.get("PATH", "")
-        homebrew_bin = "/opt/homebrew/bin"
-        if homebrew_bin not in current_path:
-            os.environ["PATH"] = f"{homebrew_bin}:{current_path}"
-
         # CRITICAL: Preserve HOME for Claude CLI auth (reads tokens from ~/.config/claude/)
+        # Note: PATH is already set by _ensure_path() called at start()
         # The double-fork can sometimes lose these env vars
         if "HOME" not in os.environ:
             import pwd
@@ -452,6 +492,10 @@ class CFDaemon:
             True if daemon started successfully, False otherwise.
             In background mode, this returns in the parent after verifying child started.
         """
+        # Ensure PATH includes common binary locations (needed for Claude CLI which requires node)
+        # This fixes issues when daemon is started by launchd with minimal PATH
+        self._ensure_path()
+
         # Check if already running (before fork)
         if self._check_pid_file():
             print("Daemon is already running", file=sys.stderr)

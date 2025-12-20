@@ -3242,6 +3242,28 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                     )
                     logger.info("Sidekick: Running Claude subprocess...")
 
+                    # Ensure node is in PATH for the claude CLI (which is a node script)
+                    import platform
+
+                    env = os.environ.copy()
+                    if platform.system() == "Windows":
+                        # Windows: add common Node.js locations
+                        programfiles = os.environ.get(
+                            "ProgramFiles", r"C:\Program Files"
+                        )
+                        appdata = os.environ.get("APPDATA", "")
+                        extra_paths = (
+                            f"{programfiles}\\nodejs;{appdata}\\npm"
+                            if appdata
+                            else f"{programfiles}\\nodejs"
+                        )
+                        env["PATH"] = f"{extra_paths};{env.get('PATH', '')}"
+                    else:
+                        # macOS/Linux: add homebrew and common locations
+                        env["PATH"] = (
+                            f"/opt/homebrew/bin:/usr/local/bin:{env.get('PATH', '/usr/bin:/bin')}"
+                        )
+
                     result = subprocess.run(
                         [
                             claude_path,
@@ -3255,6 +3277,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                         capture_output=True,
                         text=True,
                         timeout=90,
+                        env=env,
                     )
 
                     logger.info(f"Sidekick: Claude returned code {result.returncode}")
