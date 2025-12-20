@@ -686,6 +686,19 @@ body {
   border: 1px solid rgba(249, 115, 22, 0.4);
 }
 
+/* Build profile badge - purple accent (Issue #191) */
+.job-profile-badge {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 500;
+  white-space: nowrap;
+  background: rgba(139, 92, 246, 0.15);
+  color: var(--accent-purple, #a78bfa);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  text-transform: capitalize;
+}
+
 /* ============ Job Detail ============ */
 .job-detail {
   padding: 24px;

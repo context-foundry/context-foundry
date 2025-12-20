@@ -75,6 +75,9 @@ def submit_autonomous_build_to_daemon(
     execution_mode: str = "autonomous",
     spec_files: Optional[List[str]] = None,
     simple_mode: bool = False,
+    # NEW: Phase Selection (Issue #191)
+    target_phases: Optional[List[str]] = None,
+    build_profile: Optional[str] = None,
 ) -> str:
     """
     Submit autonomous build job to CF Daemon queue.
@@ -95,7 +98,9 @@ def submit_autonomous_build_to_daemon(
         pause_after_phases: Phases to pause after (e.g., ["Scout", "Architect"])
         execution_mode: "autonomous", "interactive", or "selective"
         spec_files: List of specification file paths (enables spec mode)
-        simple_mode: Skip Screenshot and Deploy phases
+        simple_mode: DEPRECATED - use build_profile="standard" instead
+        target_phases: Explicit list of phases to run (e.g., ["scout", "architect"])
+        build_profile: Preset profile: "minimal", "standard", or "full"
 
     Returns:
         JSON string with job submission result
@@ -175,7 +180,10 @@ def submit_autonomous_build_to_daemon(
         "pause_after_phases": pause_after_phases or [],
         "execution_mode": execution_mode,
         "spec_files": spec_files or [],  # Spec mode: list of spec file paths
-        "simple_mode": simple_mode,  # Skip Screenshot and Deploy phases
+        "simple_mode": simple_mode,  # DEPRECATED: Use build_profile="standard" instead
+        # NEW: Phase Selection (Issue #191)
+        "target_phases": target_phases,  # Explicit list of phases to run
+        "build_profile": build_profile,  # Preset profile: "minimal", "standard", "full"
     }
 
     # Submit job to daemon queue

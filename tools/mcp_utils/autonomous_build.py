@@ -825,7 +825,10 @@ def autonomous_build_and_deploy_impl(
     pause_after_phases: Optional[List[str]] = None,
     execution_mode: str = "autonomous",
     spec_files: Optional[List[str]] = None,
-    simple_mode: bool = False,
+    simple_mode: bool = False,  # DEPRECATED: Use build_profile="standard" instead
+    # NEW: Phase selection parameters (Issue #191)
+    target_phases: Optional[List[str]] = None,  # Explicit list of phases to run
+    build_profile: Optional[str] = None,  # "minimal", "standard", or "full"
     # REMOVED: enable_test_loop - testing is now automatic based on project detection
 ) -> str:
     """
@@ -857,12 +860,83 @@ def autonomous_build_and_deploy_impl(
         pause_after_phases: Phases to pause after (HIL mode)
         execution_mode: "autonomous", "hitl", "interactive", or "selective"
         spec_files: List of spec file paths (enables Spec Mode)
-        simple_mode: Skip Screenshot and Deploy phases
+        simple_mode: DEPRECATED - Use build_profile="standard" instead
+        target_phases: Explicit list of phase IDs to run (e.g., ["scout", "builder"])
+        build_profile: Preset profile name ("minimal", "standard", "full")
+
+    Phase Selection Priority:
+        1. target_phases - explicit list takes precedence
+        2. build_profile - preset profile name
+        3. simple_mode - legacy (maps to "standard" profile)
+        4. Default - all phases (build_profile="full")
 
     Returns:
         JSON with task_id, status, message
     """
     try:
+        # ═══════════════════════════════════════════════════════════════════════
+        # PHASE SELECTION - Early normalization (Issue #191)
+        # ═══════════════════════════════════════════════════════════════════════
+        from tools.mcp_utils.phase_registry import get_registry
+
+        registry = get_registry()
+        working_path = Path(working_directory) if working_directory else None
+
+        # Resolve phases to run based on priority
+        if target_phases:
+            # Explicit phase list takes precedence
+            phases_to_run = [p.lower() for p in target_phases]
+            print(f"📋 Using explicit phases: {phases_to_run}", file=sys.stderr)
+        elif build_profile:
+            # Use preset profile
+            profile = registry.get_profile(build_profile)
+            if not profile:
+                return json.dumps(
+                    {
+                        "status": "error",
+                        "error": f"Unknown build profile: {build_profile}. "
+                        f"Available: {[p.name for p in registry.list_profiles()]}",
+                    }
+                )
+            phases_to_run = profile.phases
+            print(
+                f"📋 Using '{build_profile}' profile: {phases_to_run}", file=sys.stderr
+            )
+        elif simple_mode:
+            # LEGACY: Map simple_mode to standard profile
+            print(
+                "⚠️  simple_mode is DEPRECATED. Use build_profile='standard' instead.",
+                file=sys.stderr,
+            )
+            profile = registry.get_profile("standard")
+            phases_to_run = profile.phases if profile else registry.default_order
+            print(
+                f"📋 Using 'standard' profile (via simple_mode): {phases_to_run}",
+                file=sys.stderr,
+            )
+        else:
+            # Default: all phases
+            phases_to_run = registry.default_order
+            print("📋 Using all phases (full profile)", file=sys.stderr)
+
+        # Validate phase selection
+        validation = registry.validate_phase_selection(phases_to_run, working_path)
+
+        # Log warnings but proceed
+        for warning in validation.warnings:
+            print(f"⚠️  Phase selection: {warning}", file=sys.stderr)
+
+        # Hard errors - fail immediately
+        if not validation.valid:
+            error_msg = "\n".join(validation.errors)
+            return json.dumps(
+                {"status": "error", "error": f"Invalid phase selection:\n{error_msg}"}
+            )
+
+        # Use the topologically sorted order
+        phases_to_run = validation.resolved_order
+
+        print(f"✅ Phases to run: {phases_to_run}", file=sys.stderr)
         # ═══════════════════════════════════════════════════════════════════════
         # BAML CHECK (optional - build continues without it)
         # ═══════════════════════════════════════════════════════════════════════
@@ -1064,6 +1138,10 @@ def autonomous_build_and_deploy_impl(
             "execution_mode": execution_mode,
             "spec_files": spec_files or [],
             "simple_mode": simple_mode,
+            # Phase selection (Issue #191)
+            "target_phases": target_phases,
+            "build_profile": build_profile,
+            "phases_to_run": phases_to_run,  # Resolved list after validation
         }
 
         # Generate unique task ID
@@ -1619,14 +1697,33 @@ def execute_build_with_phase_spawning(
 
     try:
         # ═══════════════════════════════════════════════════════════════════════
+        # LOAD PHASES TO RUN (Phase Selection - Issue #191)
+        # ═══════════════════════════════════════════════════════════════════════
+        # Extract the resolved phase list from task_config (set during entry point)
+        phases_to_run = set(task_config.get("phases_to_run", []))
+        if not phases_to_run:
+            # Fallback to all phases if not set (backwards compatibility)
+            phases_to_run = {
+                "scout",
+                "architect",
+                "builder",
+                "test",
+                "screenshot",
+                "documentation",
+                "deploy",
+                "feedback",
+            }
+
+        # ═══════════════════════════════════════════════════════════════════════
         # PHASE 1: SCOUT
         # ═══════════════════════════════════════════════════════════════════════
         # Check if spec mode is enabled (user provided spec files)
         spec_files = task_config.get("spec_files", [])
         is_spec_mode = bool(spec_files)
 
-        # Check if phase should be skipped (already completed or resuming from later phase)
-        scout_skipped = _should_skip_phase(
+        # Check if phase should be skipped (not selected, already completed, or resuming)
+        scout_not_selected = "scout" not in phases_to_run
+        scout_skipped = scout_not_selected or _should_skip_phase(
             "Scout", pipeline_state, resume_from_phase, working_directory
         )
 
@@ -1646,7 +1743,8 @@ def execute_build_with_phase_spawning(
                     save_pipeline_state(pipeline_state, working_directory)
 
         if scout_skipped:
-            print("⏭️  Skipping Scout phase (already completed)", file=sys.stderr)
+            skip_reason = "not selected" if scout_not_selected else "already completed"
+            print(f"⏭️  Skipping Scout phase ({skip_reason})", file=sys.stderr)
             # Scout report is in scout-report.md - no JSON needed
         else:
             # Check emergency stop before starting phase
@@ -1810,13 +1908,17 @@ def execute_build_with_phase_spawning(
         # ═══════════════════════════════════════════════════════════════════════
         # PHASE 2: ARCHITECT
         # ═══════════════════════════════════════════════════════════════════════
-        # Check if phase should be skipped (already completed or resuming from later phase)
-        architect_skipped = _should_skip_phase(
+        # Check if phase should be skipped (not selected, already completed, or resuming)
+        architect_not_selected = "architect" not in phases_to_run
+        architect_skipped = architect_not_selected or _should_skip_phase(
             "Architect", pipeline_state, resume_from_phase, working_directory
         )
 
         if architect_skipped:
-            print("⏭️  Skipping Architect phase (already completed)", file=sys.stderr)
+            skip_reason = (
+                "not selected" if architect_not_selected else "already completed"
+            )
+            print(f"⏭️  Skipping Architect phase ({skip_reason})", file=sys.stderr)
             # Architecture is in architecture.md - no JSON needed
         else:
             # Check emergency stop before starting phase
@@ -2034,13 +2136,17 @@ def execute_build_with_phase_spawning(
         # ═══════════════════════════════════════════════════════════════════════
         # PHASE 3: BUILDER
         # ═══════════════════════════════════════════════════════════════════════
-        # Check if phase should be skipped (already completed or resuming from later phase)
-        builder_skipped = _should_skip_phase(
+        # Check if phase should be skipped (not selected, already completed, or resuming)
+        builder_not_selected = "builder" not in phases_to_run
+        builder_skipped = builder_not_selected or _should_skip_phase(
             "Builder", pipeline_state, resume_from_phase
         )
 
         if builder_skipped:
-            print("⏭️  Skipping Builder phase (already completed)", file=sys.stderr)
+            skip_reason = (
+                "not selected" if builder_not_selected else "already completed"
+            )
+            print(f"⏭️  Skipping Builder phase ({skip_reason})", file=sys.stderr)
         else:
             # Check emergency stop before starting phase
             emergency_result = check_emergency_stop("Builder")
@@ -2155,11 +2261,15 @@ def execute_build_with_phase_spawning(
         # ═══════════════════════════════════════════════════════════════════════
         # PHASE 4: TEST (with self-healing loop)
         # ═══════════════════════════════════════════════════════════════════════
-        # Check if phase should be skipped (already completed or resuming from later phase)
-        test_skipped = _should_skip_phase("Test", pipeline_state, resume_from_phase)
+        # Check if phase should be skipped (not selected, already completed, or resuming)
+        test_not_selected = "test" not in phases_to_run
+        test_skipped = test_not_selected or _should_skip_phase(
+            "Test", pipeline_state, resume_from_phase
+        )
 
         if test_skipped:
-            print("⏭️  Skipping Test phase (already completed)", file=sys.stderr)
+            skip_reason = "not selected" if test_not_selected else "already completed"
+            print(f"⏭️  Skipping Test phase ({skip_reason})", file=sys.stderr)
         elif enable_test_loop:
             # Check emergency stop before starting test phase
             emergency_result = check_emergency_stop("Test")
@@ -2515,18 +2625,20 @@ def execute_build_with_phase_spawning(
         # ═══════════════════════════════════════════════════════════════════════
         # PHASE 4.5: SCREENSHOT (Visual Documentation)
         # ═══════════════════════════════════════════════════════════════════════
-        # Check if phase should be skipped (simple_mode or already completed)
-        simple_mode = task_config.get("simple_mode", False)
-        screenshot_skipped = simple_mode or _should_skip_phase(
+        # Check if phase should be skipped (not selected, already completed, or resuming)
+        screenshot_not_selected = "screenshot" not in phases_to_run
+        screenshot_skipped = screenshot_not_selected or _should_skip_phase(
             "Screenshot", pipeline_state, resume_from_phase
         )
 
         if screenshot_skipped:
-            skip_reason = "simple_mode enabled" if simple_mode else "already completed"
+            skip_reason = (
+                "not selected" if screenshot_not_selected else "already completed"
+            )
             print(f"⏭️  Skipping Screenshot phase ({skip_reason})", file=sys.stderr)
             # Mark phase as skipped in pipeline state (fixes state desync)
-            if simple_mode and pipeline_state:
-                pipeline_state.mark_phase_skipped("Screenshot", "simple_mode")
+            if screenshot_not_selected and pipeline_state:
+                pipeline_state.mark_phase_skipped("Screenshot", "not_selected")
                 save_pipeline_state(pipeline_state, working_directory)
         else:
             # Check emergency stop before starting phase
@@ -2620,15 +2732,15 @@ def execute_build_with_phase_spawning(
         # ═══════════════════════════════════════════════════════════════════════
         # PHASE 5: DOCUMENTATION (README Generation)
         # ═══════════════════════════════════════════════════════════════════════
-        # Check if phase should be skipped
-        docs_skipped = _should_skip_phase(
+        # Check if phase should be skipped (not selected, already completed, or resuming)
+        docs_not_selected = "documentation" not in phases_to_run
+        docs_skipped = docs_not_selected or _should_skip_phase(
             "Documentation", pipeline_state, resume_from_phase
         )
 
         if docs_skipped:
-            print(
-                "⏭️  Skipping Documentation phase (already completed)", file=sys.stderr
-            )
+            skip_reason = "not selected" if docs_not_selected else "already completed"
+            print(f"⏭️  Skipping Documentation phase ({skip_reason})", file=sys.stderr)
         else:
             # Check emergency stop before starting phase
             emergency_result = check_emergency_stop("Documentation")
@@ -2718,20 +2830,19 @@ def execute_build_with_phase_spawning(
         # ═══════════════════════════════════════════════════════════════════════
         # PHASE 6: DEPLOY (GitHub)
         # ═══════════════════════════════════════════════════════════════════════
-        # Check if phase should be skipped (simple_mode or already completed/resuming)
-        deploy_skipped = simple_mode or _should_skip_phase(
+        # Check if phase should be skipped (not in phases_to_run or already completed)
+        deploy_not_selected = "deploy" not in phases_to_run
+        deploy_skipped = deploy_not_selected or _should_skip_phase(
             "Deploy", pipeline_state, resume_from_phase
         )
         if deploy_skipped:
-            skip_reason = (
-                "simple_mode enabled" if simple_mode else "resuming from later phase"
-            )
+            skip_reason = "not selected" if deploy_not_selected else "already completed"
             print(f"⏭️  Skipping Deploy phase ({skip_reason})", file=sys.stderr)
             # Mark phase as skipped in pipeline state (fixes state desync)
-            if simple_mode and pipeline_state:
-                pipeline_state.mark_phase_skipped("Deploy", "simple_mode")
+            if deploy_not_selected and pipeline_state:
+                pipeline_state.mark_phase_skipped("Deploy", "not_selected")
                 save_pipeline_state(pipeline_state, working_directory)
-            elif not simple_mode:
+            elif not deploy_not_selected:
                 phases_completed.append("Deploy")
         else:
             # Check emergency stop before starting phase
@@ -2830,12 +2941,16 @@ def execute_build_with_phase_spawning(
         # ═══════════════════════════════════════════════════════════════════════
         # PHASE 8: FEEDBACK (Quality Assurance & Pattern Learning)
         # ═══════════════════════════════════════════════════════════════════════
-        feedback_skipped = _should_skip_phase(
+        feedback_not_selected = "feedback" not in phases_to_run
+        feedback_skipped = feedback_not_selected or _should_skip_phase(
             "Feedback", pipeline_state, resume_from_phase
         )
 
         if feedback_skipped:
-            print("⏭️  Skipping Feedback phase (already completed)", file=sys.stderr)
+            skip_reason = (
+                "not selected" if feedback_not_selected else "already completed"
+            )
+            print(f"⏭️  Skipping Feedback phase ({skip_reason})", file=sys.stderr)
         else:
             # Check emergency stop before starting phase
             emergency_result = check_emergency_stop("Feedback")

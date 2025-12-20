@@ -52,11 +52,27 @@ function formatMode(mode: string | undefined): string {
   return mode.charAt(0).toUpperCase() + mode.slice(1).toLowerCase();
 }
 
+function getBuildProfile(job: Job): string | null {
+  // Priority: build_profile > target_phases count > simple_mode > null
+  const params = job.params;
+  if (params?.build_profile) {
+    return params.build_profile;
+  }
+  if (params?.target_phases && params.target_phases.length > 0) {
+    return `${params.target_phases.length} phases`;
+  }
+  if (params?.simple_mode) {
+    return 'standard';
+  }
+  return null;
+}
+
 export function JobCard({ job, isSelected, onClick }: JobCardProps) {
   const statusColor = STATUS_COLORS[job.status] ?? 'var(--text-secondary)';
   // Task can be in job.task or job.params.task depending on API version
   const task = job.task || job.params?.task;
   const mode = job.execution_mode || job.params?.execution_mode || 'autonomous';
+  const buildProfile = getBuildProfile(job);
 
   return (
     <div className={`job-card ${isSelected ? 'selected' : ''}`} onClick={onClick}>
@@ -71,6 +87,11 @@ export function JobCard({ job, isSelected, onClick }: JobCardProps) {
           <span className={`job-mode-badge mode-${mode === 'hitl' ? 'hitl' : 'autonomous'}`}>
             {formatMode(mode)}
           </span>
+          {buildProfile && (
+            <span className="job-profile-badge">
+              {buildProfile}
+            </span>
+          )}
         </div>
         <span className="job-time">{formatTimeAgo(job.created_at)}</span>
       </div>

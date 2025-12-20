@@ -42,6 +42,7 @@ export interface Job {
   execution_mode?: ExecutionMode;
   current_phase?: Phase | null;
   phases?: Task[];
+  expected_phases?: Phase[];  // Phases this job will run (Issue #191)
   created_at: string;
   updated_at?: string;
   started_at?: string | null;
@@ -56,6 +57,9 @@ export interface Job {
     working_directory?: string;
     execution_mode?: string;
     project_name?: string;
+    target_phases?: string[];  // Phase selection (Issue #191)
+    build_profile?: string;    // Phase selection (Issue #191)
+    simple_mode?: boolean;     // Legacy mode (deprecated)
   };
   phase?: string;
   type?: string;

@@ -1,0 +1,176 @@
+# Context Foundry Phase Definitions
+#
+# This file defines all pipeline phases, their dependencies, and build profiles.
+# The PhaseRegistry loads this at runtime for dynamic phase configuration.
+#
+# Design Document: docs/design/PHASE_SELECTION_DESIGN.md
+# GitHub Issue: #191
+
+version: "1.0"
+
+# =============================================================================
+# Phase Definitions
+# =============================================================================
+# Each phase defines:
+#   - name: Human-readable name
+#   - description: What this phase does
+#   - depends_on: List of phase IDs that must complete first
+#   - timeout_seconds: Maximum execution time
+#   - prompt_file: System prompt template (in tools/prompts/phases/)
+#   - inputs: Required input files (validated before phase runs)
+#   - outputs: Expected output files
+#   - can_skip: Whether this phase can be skipped
+#   - approval_required: Whether human approval is needed
+
+phases:
+  scout:
+    name: "Scout"
+    description: "Research and analyze the task, existing codebase, and requirements"
+    depends_on: []
+    timeout_seconds: 600
+    prompt_file: "phase_scout.txt"
+    inputs: []
+    outputs:
+      - ".context-foundry/scout-report.md"
+    can_skip: false
+    approval_required: false
+
+  architect:
+    name: "Architect"
+    description: "Design the solution architecture and implementation plan"
+    depends_on:
+      - scout
+    timeout_seconds: 900
+    prompt_file: "phase_architect.txt"
+    inputs:
+      - ".context-foundry/scout-report.md"
+    outputs:
+      - ".context-foundry/architecture.md"
+    can_skip: false
+    approval_required: false
+
+  builder:
+    name: "Builder"
+    description: "Implement the solution based on the architecture"
+    depends_on:
+      - architect
+    timeout_seconds: 1800
+    prompt_file: "phase_builder.txt"
+    inputs:
+      - ".context-foundry/architecture.md"
+    outputs: []  # Source files - validated by presence of any code files
+    can_skip: false
+    approval_required: false
+
+  test:
+    name: "Test"
+    description: "Run tests and fix any failures (self-healing loop)"
+    depends_on:
+      - builder
+    timeout_seconds: 1200
+    prompt_file: "phase_test.txt"
+    inputs: []  # Source files must exist (validated separately)
+    outputs:
+      - ".context-foundry/test-report.md"
+    can_skip: true
+    approval_required: false
+
+  screenshot:
+    name: "Screenshot"
+    description: "Capture visual documentation of the application"
+    depends_on:
+      - test
+    timeout_seconds: 300
+    prompt_file: "phase_screenshot.txt"
+    inputs: []
+    outputs: []  # Screenshots in docs/ or .context-foundry/
+    can_skip: true
+    approval_required: false
+
+  documentation:
+    name: "Documentation"
+    description: "Generate README and documentation"
+    depends_on:
+      - builder  # Only needs code to exist, not screenshots
+    timeout_seconds: 600
+    prompt_file: "phase_documentation.txt"
+    inputs: []
+    outputs:
+      - "README.md"
+    can_skip: true
+    approval_required: false
+
+  deploy:
+    name: "Deploy"
+    description: "Deploy to GitHub or target environment"
+    depends_on:
+      - documentation
+    timeout_seconds: 900
+    prompt_file: "phase_deploy.txt"
+    inputs:
+      - "README.md"
+    outputs: []  # .git directory or deployment manifest
+    can_skip: true
+    approval_required: true  # Requires human approval by default
+
+  feedback:
+    name: "Feedback"
+    description: "Capture learnings and update patterns"
+    depends_on:
+      - deploy
+    timeout_seconds: 300
+    prompt_file: "phase_feedback.txt"
+    inputs: []
+    outputs: []
+    can_skip: true
+    approval_required: false
+
+# =============================================================================
+# Default Execution Order
+# =============================================================================
+# Used as tie-breaker when topological sort has multiple valid orderings.
+# Also defines the "full" profile.
+
+default_order:
+  - scout
+  - architect
+  - builder
+  - test
+  - screenshot
+  - documentation
+  - deploy
+  - feedback
+
+# =============================================================================
+# Build Profiles
+# =============================================================================
+# Presets for common use cases. Users can also specify custom phase lists.
+
+profiles:
+  minimal:
+    description: "Fast prototype - just research, design, and build. No tests, docs, or deployment."
+    phases:
+      - scout
+      - architect
+      - builder
+
+  standard:
+    description: "Balanced build with tests and documentation. No screenshots or deployment."
+    phases:
+      - scout
+      - architect
+      - builder
+      - test
+      - documentation
+
+  full:
+    description: "Complete pipeline - all phases including screenshots, deployment, and feedback."
+    phases:
+      - scout
+      - architect
+      - builder
+      - test
+      - screenshot
+      - documentation
+      - deploy
+      - feedback

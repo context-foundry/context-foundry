@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 
 from .jobs import JobManager
@@ -489,6 +489,55 @@ def _get_phase_artifacts(job: Job) -> Dict[str, Any]:
     return artifacts
 
 
+def _get_job_phases(job: Job) -> List[str]:
+    """
+    Derive expected phases for a job from its parameters.
+
+    Priority:
+    1. target_phases (explicit list from params)
+    2. build_profile (resolve from registry)
+    3. simple_mode (maps to 'standard' profile)
+    4. Default: all phases (full profile)
+
+    Returns list of phase IDs (lowercase) in execution order.
+    """
+    params = job.params or {}
+
+    # Priority 1: Explicit target_phases
+    target_phases = params.get("target_phases")
+    if target_phases:
+        return [p.lower() for p in target_phases]
+
+    # Priority 2: Build profile
+    build_profile = params.get("build_profile")
+    if build_profile:
+        try:
+            from tools.mcp_utils.phase_registry import get_registry
+
+            registry = get_registry()
+            profile = registry.get_profile(build_profile)
+            if profile:
+                return profile.phases
+        except Exception:
+            pass  # Fall through to default
+
+    # Priority 3: simple_mode (legacy)
+    if params.get("simple_mode"):
+        return ["scout", "architect", "builder", "test", "documentation"]
+
+    # Default: all phases
+    return [
+        "scout",
+        "architect",
+        "builder",
+        "test",
+        "screenshot",
+        "documentation",
+        "deploy",
+        "feedback",
+    ]
+
+
 def _serialize_job(context: DashboardContext, job: Job) -> Dict[str, Any]:
     """Serialize a job plus lightweight runtime metadata for the dashboard."""
     tracker = context.job_manager.get_agent_tracker(job.id)
@@ -508,6 +557,9 @@ def _serialize_job(context: DashboardContext, job: Job) -> Dict[str, Any]:
     # Build phase artifacts info
     phase_artifacts = _get_phase_artifacts(job)
 
+    # Get expected phases for this job (Issue #191)
+    expected_phases = _get_job_phases(job)
+
     return {
         "id": job.id,
         "type": job.type.value,
@@ -526,6 +578,7 @@ def _serialize_job(context: DashboardContext, job: Job) -> Dict[str, Any]:
         "latest_phase": _build_phase_snapshot(last_phase),
         "all_phases": [_build_phase_snapshot(e) for e in phase_events],
         "phase_artifacts": phase_artifacts,
+        "expected_phases": expected_phases,  # Phases this job will run (Issue #191)
         "recent_logs": [
             {
                 "id": log.id,
@@ -694,6 +747,11 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self._serve_team_settings()
         elif parsed.path == "/api/settings/daemon":
             self._serve_config()
+        # NEW: Phase Selection API endpoints (Issue #191)
+        elif parsed.path == "/api/phases":
+            self._serve_phases()
+        elif parsed.path == "/api/profiles":
+            self._serve_profiles()
         else:
             # Fallback to serving static files (Vite app)
             self._serve_dashboard_asset(parsed.path)
@@ -1012,6 +1070,64 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self.wfile.write(body)
         except Exception as e:
             logger.error(f"Failed to serve agents: {e}")
+            self._send_json_error(500, str(e))
+
+    def _serve_phases(self) -> None:
+        """Serve available phases from PhaseRegistry (Issue #191)."""
+        try:
+            from tools.mcp_utils.phase_registry import get_registry
+
+            registry = get_registry()
+            phases = []
+            for phase_def in registry.list_phases():
+                phases.append(
+                    {
+                        "id": phase_def.id,
+                        "name": phase_def.name,
+                        "description": phase_def.description,
+                        "depends_on": phase_def.depends_on,
+                        "timeout_seconds": phase_def.timeout_seconds,
+                        "can_skip": phase_def.can_skip,
+                        "approval_required": phase_def.approval_required,
+                    }
+                )
+
+            body = json.dumps({"phases": phases}).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        except Exception as e:
+            logger.error(f"Failed to serve phases: {e}")
+            self._send_json_error(500, str(e))
+
+    def _serve_profiles(self) -> None:
+        """Serve available build profiles from PhaseRegistry (Issue #191)."""
+        try:
+            from tools.mcp_utils.phase_registry import get_registry
+
+            registry = get_registry()
+            profiles = []
+            for profile in registry.list_profiles():
+                profiles.append(
+                    {
+                        "name": profile.name,
+                        "description": profile.description,
+                        "phases": profile.phases,
+                    }
+                )
+
+            body = json.dumps({"profiles": profiles}).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        except Exception as e:
+            logger.error(f"Failed to serve profiles: {e}")
             self._send_json_error(500, str(e))
 
     def _serve_health(self) -> None:

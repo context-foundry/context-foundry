@@ -2098,14 +2098,27 @@ def cmd_run_phase(args):
         print(f"Error: Directory does not exist: {project_dir}", file=sys.stderr)
         return 1
 
-    # Parse phase names
+    registry = get_registry()
+
+    # Parse phase names - profile can be used as fallback
     phase_names = args.phases
-    if not phase_names:
+    build_profile = getattr(args, "profile", None)
+
+    if not phase_names and not build_profile:
         print("Error: No phases specified", file=sys.stderr)
         print("Usage: cfd run-phase Scout [Architect Builder ...]", file=sys.stderr)
+        print("   or: cfd run-phase --profile minimal", file=sys.stderr)
         return 1
 
-    registry = get_registry()
+    # If profile is specified and no explicit phases, use profile phases
+    if not phase_names and build_profile:
+        profile = registry.get_profile(build_profile)
+        if not profile:
+            print(f"Error: Unknown profile '{build_profile}'", file=sys.stderr)
+            print(f"Available: {[p.name for p in registry.list_profiles()]}")
+            return 1
+        phase_names = profile.phases
+        print(f"Using '{build_profile}' profile: {phase_names}")
 
     # Resolve phase names to PhaseIds
     phases, error = registry.resolve_phase_list(phase_names)
@@ -2150,6 +2163,7 @@ def cmd_run_phase(args):
         "working_directory": str(project_dir),
         "mode": "selective",
         "target_phases": [p.value for p in phases],
+        "build_profile": build_profile,  # None if explicit phases used
         "skip_contracts": args.skip_contracts,
         "timeout_minutes": args.timeout or 90,
     }
@@ -2164,7 +2178,7 @@ def cmd_run_phase(args):
         result = execute_build_with_phase_spawning(
             task=task_config["task"],
             working_directory=project_dir,
-            task_config=task_config,
+            task_config=task_config,  # Contains target_phases and build_profile
             enable_test_loop="Test" in [p.value for p in phases],
             max_test_iterations=3,
             flowise_mode=False,
@@ -2172,7 +2186,6 @@ def cmd_run_phase(args):
             incremental=True,
             use_parallel=None,
             timeout_minutes=task_config["timeout_minutes"],
-            target_phases=[p.value for p in phases],
         )
 
         if result.get("status") == "completed":
@@ -3068,6 +3081,13 @@ def main():
         "--wait",
         action="store_true",
         help="Wait for job to complete",
+    )
+    run_phase_parser.add_argument(
+        "--profile",
+        "-p",
+        type=str,
+        choices=["minimal", "standard", "full"],
+        help="Use a preset profile (minimal, standard, full). Overridden by explicit phases.",
     )
 
     # Resume command

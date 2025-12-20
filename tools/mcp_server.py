@@ -651,8 +651,15 @@ def autonomous_build_and_deploy(
     spec_files: Optional[
         List[str]
     ] = None,  # Spec mode: paths to specification files (skips Scout, Architect extracts)
-    simple_mode: bool = False,  # Skip Screenshot and Deploy phases
+    simple_mode: bool = False,  # DEPRECATED: Use build_profile="standard" instead
     no_daemon: bool = False,  # Run directly without CF Daemon
+    # NEW: Phase Selection (Issue #191)
+    target_phases: Optional[
+        List[str]
+    ] = None,  # Explicit list of phases to run (e.g., ["scout", "architect", "builder"])
+    build_profile: Optional[
+        str
+    ] = None,  # Preset profile: "minimal", "standard", or "full"
 ) -> str:
     """
     Run an autonomous build - either via CF Daemon or directly.
@@ -678,9 +685,13 @@ def autonomous_build_and_deploy(
     - Builder implements the spec exactly as written
     - Tester validates against Gherkin criteria extracted by Architect
 
-    Simple Mode:
-    - When simple_mode=True, Screenshot and Deploy phases are skipped
-    - Flow: Scout → Architect → Builder → Test → Documentation → Feedback
+    Phase Selection (NEW):
+    - target_phases: Explicit list of phases to run (e.g., ["scout", "architect"])
+    - build_profile: Use a preset profile:
+      - "minimal": Scout → Architect → Builder (fast prototype)
+      - "standard": Scout → Architect → Builder → Test → Documentation
+      - "full": All phases including Screenshot, Deploy, Feedback
+    - simple_mode is DEPRECATED - use build_profile="standard" instead
 
     Daemon Mode (default):
     - Prerequisites: CF Daemon must be running (`cfd start`)
@@ -710,6 +721,8 @@ def autonomous_build_and_deploy(
             execution_mode=execution_mode,
             spec_files=spec_files,
             simple_mode=simple_mode,
+            target_phases=target_phases,
+            build_profile=build_profile,
         )
     else:
         # Direct execution without daemon
@@ -729,6 +742,8 @@ def autonomous_build_and_deploy(
             execution_mode=execution_mode,
             spec_files=spec_files,
             simple_mode=simple_mode,
+            target_phases=target_phases,
+            build_profile=build_profile,
         )
 
 

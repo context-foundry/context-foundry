@@ -5,7 +5,8 @@ interface PhaseTimelineProps {
   job: Job;
 }
 
-const PHASE_ORDER: Phase[] = [
+// Default phase order (fallback when expected_phases not available)
+const DEFAULT_PHASE_ORDER: Phase[] = [
   'scout',
   'architect',
   'builder',
@@ -32,9 +33,12 @@ export function PhaseTimeline({ job }: PhaseTimelineProps) {
   // Create a map of phase -> task for quick lookup
   const phaseMap = new Map((job.phases || []).map((task) => [task.phase, task]));
 
+  // Use expected_phases from job (Issue #191), fall back to default
+  const phasesToShow = (job.expected_phases as Phase[]) || DEFAULT_PHASE_ORDER;
+
   return (
     <div className="phase-timeline">
-      {PHASE_ORDER.map((phase) => {
+      {phasesToShow.map((phase) => {
         const task = phaseMap.get(phase);
         const status = task?.status ?? 'created';
         const isActive = phase === job.current_phase;
