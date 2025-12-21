@@ -2187,6 +2187,7 @@ def execute_build_with_phase_spawning(
             builder_prompt = MODULE_DIR / "prompts" / "phases" / "phase_builder.txt"
 
             # Inject architecture as markdown (more token-efficient for LLM consumption)
+            # If no architecture exists, build directly from the task description
             arch_md_path = working_directory / ".context-foundry" / "architecture.md"
             if arch_md_path.exists() and arch_md_path.stat().st_size > 100:
                 arch_content = arch_md_path.read_text()
@@ -2196,11 +2197,14 @@ def execute_build_with_phase_spawning(
                 )
                 log_debug("Injecting architecture.md (markdown)", working_directory)
             else:
+                # No architecture - build directly from task (standalone builder mode)
                 builder_instruction = (
-                    "Read .context-foundry/architecture.md and implement the project."
+                    f"Build the following project from scratch:\n\n"
+                    f"TASK:\n{task}\n\n"
+                    f"There is no architecture document. Use your best judgment to design and implement the solution."
                 )
                 log_debug(
-                    "Architecture not found, builder will read directly",
+                    "No architecture found - building directly from task",
                     working_directory,
                 )
 
@@ -2266,6 +2270,58 @@ def execute_build_with_phase_spawning(
         test_skipped = test_not_selected or _should_skip_phase(
             "Test", pipeline_state, resume_from_phase
         )
+
+        # Re-evaluate enable_test_loop after Builder has run
+        # This fixes the bug where new projects have has_code=false at config time
+        # but now have code after Builder completes (Issue: test skipped for new projects)
+        if not enable_test_loop and not test_skipped:
+            code_extensions = {
+                ".py",
+                ".js",
+                ".ts",
+                ".jsx",
+                ".tsx",
+                ".java",
+                ".go",
+                ".rs",
+                ".c",
+                ".cpp",
+                ".h",
+                ".hpp",
+                ".cs",
+                ".rb",
+                ".php",
+                ".swift",
+                ".kt",
+                ".scala",
+                ".lua",
+                ".sh",
+            }
+            has_code_now = False
+            for item in working_directory.rglob("*"):
+                if item.is_file() and item.suffix in code_extensions:
+                    # Skip node_modules, venv, etc.
+                    if not any(
+                        skip in item.parts
+                        for skip in [
+                            "node_modules",
+                            "venv",
+                            ".venv",
+                            "__pycache__",
+                            ".git",
+                            "dist",
+                            "build",
+                        ]
+                    ):
+                        has_code_now = True
+                        break
+
+            if has_code_now:
+                print(
+                    "🔄 Re-enabling tests: code detected after Builder phase",
+                    file=sys.stderr,
+                )
+                enable_test_loop = True
 
         if test_skipped:
             skip_reason = "not selected" if test_not_selected else "already completed"
