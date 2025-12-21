@@ -321,6 +321,7 @@ class Store:
         job_type: Optional[JobType] = None,
         limit: int = 100,
         offset: int = 0,
+        sort: str = "newest",
     ) -> List[Job]:
         """
         List jobs with optional filters
@@ -330,6 +331,7 @@ class Store:
             job_type: Filter by job type
             limit: Maximum number of jobs to return
             offset: Number of jobs to skip
+            sort: Sort order - 'newest', 'oldest', or 'status'
 
         Returns:
             List of Job instances
@@ -345,7 +347,15 @@ class Store:
             query += " AND type = ?"
             params.append(job_type.value)
 
-        query += " ORDER BY priority DESC, created_at ASC LIMIT ? OFFSET ?"
+        # Apply sort order
+        if sort == "oldest":
+            query += " ORDER BY created_at ASC"
+        elif sort == "status":
+            query += " ORDER BY status ASC, created_at DESC"
+        else:  # "newest" (default)
+            query += " ORDER BY created_at DESC"
+
+        query += " LIMIT ? OFFSET ?"
         params.extend([limit, offset])
 
         with self._get_connection() as conn:

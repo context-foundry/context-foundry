@@ -566,6 +566,7 @@ class APIRequestHandler(BaseHTTPRequestHandler):
 
         limit = int(params.get("limit", 50))
         offset = int(params.get("offset", 0))
+        sort = params.get("sort", "newest")  # 'newest', 'oldest', or 'status'
 
         # CRITICAL: Refresh read connection to see subprocess writes
         # This fixes the race condition where cached connection misses updates
@@ -574,8 +575,10 @@ class APIRequestHandler(BaseHTTPRequestHandler):
         # Get gate manager for current_phase
         gate_mgr = GateManager(ctx.store)
 
-        # Get jobs
-        jobs = ctx.store.list_jobs(status=status_filter, limit=limit, offset=offset)
+        # Get jobs with sort order
+        jobs = ctx.store.list_jobs(
+            status=status_filter, limit=limit, offset=offset, sort=sort
+        )
 
         # Serialize
         serialized = []
@@ -618,6 +621,7 @@ class APIRequestHandler(BaseHTTPRequestHandler):
                 "count": len(serialized),
                 "limit": limit,
                 "offset": offset,
+                "sort": sort,
             }
         )
 
