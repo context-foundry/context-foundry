@@ -23,26 +23,9 @@ from .config import Config
 from .store import Store
 from .jobs import JobManager
 from .runner import create_runner
-from .dashboard import DashboardServer, DASHBOARD_HTML
+from .dashboard import DashboardServer
 from .http_api import APIServer
 from .metrics import get_metrics, log_structured, init_metrics
-
-
-def _load_dashboard_html() -> str:
-    """Load dashboard HTML from external file, falling back to embedded version."""
-    # Try to load from external cf.html file (allows live editing)
-    cf_html_paths = [
-        Path(__file__).parent.parent.parent / "tools" / "evolution" / "cf.html",
-        Path.home() / "homelab" / "context-foundry" / "tools" / "evolution" / "cf.html",
-    ]
-    for html_path in cf_html_paths:
-        if html_path.exists():
-            try:
-                return html_path.read_text(encoding="utf-8")
-            except Exception:
-                pass
-    # Fallback to embedded HTML
-    return DASHBOARD_HTML
 
 
 # Import emergency stop for daemon monitoring
@@ -571,7 +554,6 @@ class CFDaemon:
                     port=self.config.dashboard_port,
                     job_manager=self.job_manager,
                     store=self.store,
-                    html=_load_dashboard_html(),
                     refresh_interval=self.config.dashboard_refresh_interval,
                 )
                 self.dashboard_server.start()
