@@ -7,7 +7,6 @@ The goal is minimal dependencies (stdlib only) and fast startup.
 This module has been refactored to use modular handlers from the api/ package.
 """
 
-import json
 import logging
 import mimetypes
 import secrets
@@ -159,8 +158,8 @@ class DashboardRequestHandler(
             "/phase-prompts": lambda: self.handle_phase_prompts(query),
             "/phase-state": lambda: self.handle_phase_state(query),
             "/transaction-stats": lambda: self.handle_transaction_stats(query),
-            "/agent-activity": lambda: self._serve_agent_activity(query),
-            "/job-conversation": lambda: self._serve_legacy_job_conversation(query),
+            "/agent-activity": lambda: self.handle_agent_activity(query),
+            "/job-conversation": lambda: self.handle_legacy_job_conversation(query),
             "/config": self.handle_config,
             "/agents": self.handle_agents,
             "/health": self.handle_health,
@@ -213,8 +212,8 @@ class DashboardRequestHandler(
             "/phase-inject": self.handle_inject_phase_prompt,
             "/phase-start-review": self.handle_start_phase_review,
             "/phase-acknowledge": self.handle_acknowledge_phase,
-            "/save-system-prompt-to-disk": self._save_system_prompt_to_disk,
-            "/save-input-instruction-to-disk": self._save_input_instruction_to_disk,
+            "/save-system-prompt-to-disk": self.handle_save_system_prompt_to_disk,
+            "/save-input-instruction-to-disk": self.handle_save_input_instruction_to_disk,
             "/resume-pipeline": self.handle_resume_pipeline,
             "/sidekick-chat": self.handle_sidekick_chat,
             "/api/sidekick-chat": self.handle_sidekick_chat,
@@ -320,175 +319,6 @@ class DashboardRequestHandler(
         except Exception as e:
             logger.error(f"Failed to serve file {path}: {e}")
             self.send_error(500, str(e))
-
-    # =========================================================================
-    # LEGACY ENDPOINTS (complex, not yet extracted to mixins)
-    # =========================================================================
-
-    def _serve_legacy_job_conversation(self, query: str) -> None:
-        """Legacy endpoint for /job-conversation - delegates to imported function."""
-        from urllib.parse import parse_qs
-
-        params = parse_qs(query)
-        job_id = params.get("job_id", [None])[0]
-
-        if not job_id:
-            self.send_json_error(400, "Missing 'job_id' parameter")
-            return
-
-        try:
-            job = self.server.context.store.get_job(job_id)
-        except Exception as exc:
-            logger.warning(f"Error getting job {job_id}: {exc}")
-            self.send_json_error(500, f"Error retrieving job: {exc}")
-            return
-
-        if not job:
-            self.send_json_error(404, f"Job not found: {job_id}")
-            return
-
-        working_dir = job.params.get("working_directory")
-        if not working_dir:
-            self.send_json_response(
-                {
-                    "phases": [],
-                    "warning": "No working directory for job",
-                }
-            )
-            return
-
-        from tools.mcp_utils.phase_status import get_phase_status
-
-        status_data = get_phase_status(Path(working_dir))
-        self.send_json_response(
-            {
-                "job_id": job_id,
-                "status": status_data,
-                "working_directory": working_dir,
-            }
-        )
-
-    def _serve_agent_activity(self, query: str) -> None:
-        """SSE endpoint for real-time agent activity during phase execution."""
-        from urllib.parse import parse_qs
-        from .models import JobStatus
-        import time
-
-        params = parse_qs(query)
-
-        if not self.check_auth_with_query(query):
-            self.send_error(401, "Unauthorized: missing or invalid auth token")
-            return
-
-        job_id = params.get("job_id", [None])[0]
-
-        if not job_id:
-            self.send_error(400, "Missing 'job_id' parameter")
-            return
-
-        job = self.server.context.store.get_job(job_id)
-        if not job:
-            self.send_error(404, f"Job not found: {job_id}")
-            return
-
-        working_dir = job.params.get("working_directory")
-        if not working_dir:
-            self.send_error(400, "No working directory for job")
-            return
-
-        self.send_sse_headers()
-
-        try:
-            while not self.server.context.stop_event.is_set():
-                job = self.server.context.store.get_job(job_id)
-                if job and job.status not in (JobStatus.QUEUED, JobStatus.RUNNING):
-                    self.send_sse_event(
-                        "complete", {"job_id": job_id, "status": job.status.value}
-                    )
-                    break
-
-                self.send_sse_event("heartbeat", {"job_id": job_id})
-                time.sleep(2)
-
-        except (BrokenPipeError, ConnectionResetError):
-            pass
-
-    def _save_system_prompt_to_disk(self) -> None:
-        """Save system prompt edits back to the source file on disk."""
-        if not self.check_auth():
-            self.send_json_error(401, "Unauthorized")
-            return
-
-        try:
-            content_length = int(self.headers.get("Content-Length", 0))
-            body_raw = self.rfile.read(content_length)
-            data = json.loads(body_raw.decode("utf-8"))
-
-            phase = data.get("phase")
-            content = data.get("content")
-
-            if not phase or content is None:
-                self.send_json_error(400, "Missing 'phase' or 'content'")
-                return
-
-            root_dir = Path(__file__).resolve().parent.parent.parent
-            prompt_file = (
-                root_dir / "tools" / "prompts" / "phases" / f"phase_{phase}.txt"
-            )
-
-            if not prompt_file.parent.exists():
-                prompt_file.parent.mkdir(parents=True, exist_ok=True)
-
-            prompt_file.write_text(content, encoding="utf-8")
-            logger.info(f"System prompt saved: {prompt_file}")
-
-            self.send_json_response({"success": True, "path": str(prompt_file)})
-
-        except Exception as exc:
-            logger.warning(f"Error saving system prompt: {exc}")
-            self.send_json_error(500, str(exc))
-
-    def _save_input_instruction_to_disk(self) -> None:
-        """Save input instruction edits back to disk."""
-        if not self.check_auth():
-            self.send_json_error(401, "Unauthorized")
-            return
-
-        try:
-            content_length = int(self.headers.get("Content-Length", 0))
-            body_raw = self.rfile.read(content_length)
-            data = json.loads(body_raw.decode("utf-8"))
-
-            job_id = data.get("job_id")
-            phase = data.get("phase")
-            content = data.get("content")
-
-            if not job_id or not phase or content is None:
-                self.send_json_error(400, "Missing 'job_id', 'phase', or 'content'")
-                return
-
-            job = self.server.context.store.get_job(job_id)
-            if not job:
-                self.send_json_error(404, f"Job not found: {job_id}")
-                return
-
-            working_dir = job.params.get("working_directory")
-            if not working_dir:
-                self.send_json_error(400, "Job has no working directory")
-                return
-
-            cf_dir = Path(working_dir) / ".context-foundry"
-            instruction_file = cf_dir / f"{phase}-input.md"
-
-            cf_dir.mkdir(parents=True, exist_ok=True)
-            instruction_file.write_text(content, encoding="utf-8")
-
-            logger.info(f"Input instruction saved: {instruction_file}")
-            self.send_json_response({"success": True, "path": str(instruction_file)})
-
-        except Exception as exc:
-            logger.warning(f"Error saving input instruction: {exc}")
-            self.send_json_error(500, str(exc))
 
 
 # =============================================================================

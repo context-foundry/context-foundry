@@ -208,3 +208,80 @@ class SettingsHandlersMixin(HandlerMixin):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+    def handle_save_system_prompt_to_disk(self) -> None:
+        """Save system prompt edits back to the source file on disk."""
+        if not self.check_auth():
+            self.send_json_error(401, "Unauthorized")
+            return
+
+        try:
+            content_length = int(self.headers.get("Content-Length", 0))
+            body_raw = self.rfile.read(content_length)
+            data = json.loads(body_raw.decode("utf-8"))
+
+            phase = data.get("phase")
+            content = data.get("content")
+
+            if not phase or content is None:
+                self.send_json_error(400, "Missing 'phase' or 'content'")
+                return
+
+            root_dir = Path(__file__).resolve().parent.parent.parent.parent.parent
+            prompt_file = (
+                root_dir / "tools" / "prompts" / "phases" / f"phase_{phase}.txt"
+            )
+
+            if not prompt_file.parent.exists():
+                prompt_file.parent.mkdir(parents=True, exist_ok=True)
+
+            prompt_file.write_text(content, encoding="utf-8")
+            logger.info(f"System prompt saved: {prompt_file}")
+
+            self.send_json_response({"success": True, "path": str(prompt_file)})
+
+        except Exception as exc:
+            logger.warning(f"Error saving system prompt: {exc}")
+            self.send_json_error(500, str(exc))
+
+    def handle_save_input_instruction_to_disk(self) -> None:
+        """Save input instruction edits back to disk."""
+        if not self.check_auth():
+            self.send_json_error(401, "Unauthorized")
+            return
+
+        try:
+            content_length = int(self.headers.get("Content-Length", 0))
+            body_raw = self.rfile.read(content_length)
+            data = json.loads(body_raw.decode("utf-8"))
+
+            job_id = data.get("job_id")
+            phase = data.get("phase")
+            content = data.get("content")
+
+            if not job_id or not phase or content is None:
+                self.send_json_error(400, "Missing 'job_id', 'phase', or 'content'")
+                return
+
+            job = self.server.context.store.get_job(job_id)
+            if not job:
+                self.send_json_error(404, f"Job not found: {job_id}")
+                return
+
+            working_dir = job.params.get("working_directory")
+            if not working_dir:
+                self.send_json_error(400, "Job has no working directory")
+                return
+
+            cf_dir = Path(working_dir) / ".context-foundry"
+            instruction_file = cf_dir / f"{phase}-input.md"
+
+            cf_dir.mkdir(parents=True, exist_ok=True)
+            instruction_file.write_text(content, encoding="utf-8")
+
+            logger.info(f"Input instruction saved: {instruction_file}")
+            self.send_json_response({"success": True, "path": str(instruction_file)})
+
+        except Exception as exc:
+            logger.warning(f"Error saving input instruction: {exc}")
+            self.send_json_error(500, str(exc))
