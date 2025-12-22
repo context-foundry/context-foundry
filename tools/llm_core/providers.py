@@ -49,6 +49,9 @@ class LocalClaudeProvider(LLMProvider):
         working_directory: Optional[Path] = None,
         event_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
     ) -> str:
+        import sys
+        import threading
+
         # Verify claude CLI exists
         if not shutil.which("claude"):
             raise FileNotFoundError("claude CLI not found in PATH")
@@ -77,9 +80,14 @@ class LocalClaudeProvider(LLMProvider):
 
         cwd = working_directory if working_directory else Path.cwd()
 
+        # Windows-specific: use creationflags to prevent console window
+        creation_flags = 0
+        if sys.platform == 'win32':
+            creation_flags = subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
+
         try:
             if event_callback:
-                # Streaming execution
+                # Streaming execution with Windows-compatible approach
                 process = subprocess.Popen(
                     cmd,
                     cwd=cwd,
@@ -89,13 +97,30 @@ class LocalClaudeProvider(LLMProvider):
                     text=True,
                     bufsize=1,
                     env={**dict(os.environ), "PYTHONUNBUFFERED": "1"},
+                    creationflags=creation_flags,
                 )
 
-                # Write input and close stdin
-                process.stdin.write(user_prompt)
-                process.stdin.close()
-
                 response_text = []
+                stderr_lines = []
+
+                # Use a thread to read stderr to prevent deadlock on Windows
+                def read_stderr():
+                    try:
+                        for line in process.stderr:
+                            stderr_lines.append(line)
+                    except Exception:
+                        pass
+
+                stderr_thread = threading.Thread(target=read_stderr, daemon=True)
+                stderr_thread.start()
+
+                # Write input and close stdin
+                try:
+                    process.stdin.write(user_prompt)
+                    process.stdin.flush()
+                    process.stdin.close()
+                except BrokenPipeError:
+                    pass  # Process may have exited early
 
                 # Read stdout line by line
                 for line in process.stdout:
@@ -120,9 +145,10 @@ class LocalClaudeProvider(LLMProvider):
                         pass
 
                 process.wait()
+                stderr_thread.join(timeout=1.0)
 
                 if process.returncode != 0:
-                    stderr = process.stderr.read()
+                    stderr = "".join(stderr_lines)
                     raise RuntimeError(
                         f"Claude CLI execution failed (code {process.returncode}): {stderr}"
                     )
@@ -139,6 +165,7 @@ class LocalClaudeProvider(LLMProvider):
                     text=True,
                     check=True,
                     env={**dict(os.environ), "PYTHONUNBUFFERED": "1"},
+                    creationflags=creation_flags,
                 )
                 return result.stdout.strip()
 

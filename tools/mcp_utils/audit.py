@@ -150,17 +150,17 @@ class AuditLogger:
                 # Get exclusive lock for writing (platform-specific)
                 if HAVE_FCNTL:
                     fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+                    lock_acquired = True
                 else:
-                    # Windows: use msvcrt.locking
-                    msvcrt.locking(f.fileno(), msvcrt.LK_LOCK, 1)
+                    # Windows: msvcrt.locking has limitations with append mode
+                    # Skip locking on Windows - append writes are generally atomic
+                    lock_acquired = False
                 try:
                     f.write(event.to_json() + "\n")
                     f.flush()
                 finally:
-                    if HAVE_FCNTL:
+                    if HAVE_FCNTL and lock_acquired:
                         fcntl.flock(f.fileno(), fcntl.LOCK_UN)
-                    else:
-                        msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
         except OSError as e:
             # Fallback: print to stderr if file write fails
             print(f"AUDIT LOG WRITE FAILED: {e}", file=sys.stderr)

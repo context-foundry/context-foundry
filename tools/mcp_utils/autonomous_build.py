@@ -1063,13 +1063,16 @@ def autonomous_build_and_deploy_impl(
         config_file.parent.mkdir(parents=True, exist_ok=True)
         config_file.write_text(json.dumps(task_config, indent=2))
 
+        # Pre-compute CF root path with forward slashes for cross-platform compatibility
+        cf_root_posix = MODULE_DIR.parent.as_posix()
+
         build_script = f"""
 import sys
 import json
 from pathlib import Path
 
-# Add context-foundry to path
-sys.path.insert(0, '{str(MODULE_DIR.parent)}')
+# Add context-foundry to path (forward slashes for Windows compatibility)
+sys.path.insert(0, '{cf_root_posix}')
 
 from tools.mcp_utils.autonomous_build import execute_build_with_phase_spawning
 
