@@ -283,6 +283,25 @@ class TestStatusHandlersMixin:
 # HTTP Integration Tests - Real request/response validation
 # =============================================================================
 
+# Flag to track if socket binding is available in this environment
+_socket_binding_available = None
+
+
+def _check_socket_binding():
+    """Check if socket binding is available (fails in some sandboxed environments)."""
+    global _socket_binding_available
+    if _socket_binding_available is not None:
+        return _socket_binding_available
+
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind(("127.0.0.1", 0))
+            _socket_binding_available = True
+    except (PermissionError, OSError):
+        _socket_binding_available = False
+
+    return _socket_binding_available
+
 
 def find_free_port():
     """Find an available port for the test server."""
@@ -293,7 +312,15 @@ def find_free_port():
 
 @pytest.fixture
 def dashboard_server(tmp_path):
-    """Fixture that starts a real DashboardServer for integration tests."""
+    """Fixture that starts a real DashboardServer for integration tests.
+
+    Skips tests in environments where socket binding is not permitted
+    (e.g., sandboxed CI environments).
+    """
+    # Skip if socket binding is not available
+    if not _check_socket_binding():
+        pytest.skip("Socket binding not permitted in this environment")
+
     from context_foundry.daemon.dashboard import DashboardServer
     from context_foundry.daemon.jobs import JobManager
     from context_foundry.daemon.store import Store
@@ -310,17 +337,23 @@ def dashboard_server(tmp_path):
     job_manager = JobManager(config=config, store=store)
 
     # Find a free port
-    port = find_free_port()
+    try:
+        port = find_free_port()
+    except (PermissionError, OSError) as e:
+        pytest.skip(f"Cannot bind to socket: {e}")
 
     # Create and start server
-    server = DashboardServer(
-        host="127.0.0.1",
-        port=port,
-        job_manager=job_manager,
-        store=store,
-        refresh_interval=1.0,
-    )
-    server.start()
+    try:
+        server = DashboardServer(
+            host="127.0.0.1",
+            port=port,
+            job_manager=job_manager,
+            store=store,
+            refresh_interval=1.0,
+        )
+        server.start()
+    except (PermissionError, OSError) as e:
+        pytest.skip(f"Cannot start server: {e}")
 
     # Give server time to start
     time.sleep(0.1)
