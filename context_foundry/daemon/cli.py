@@ -14,6 +14,20 @@ import time
 from pathlib import Path
 from typing import Optional
 
+# Unicode symbols with ASCII fallbacks for Windows compatibility
+if sys.platform == 'win32':
+    # ASCII-safe alternatives for Windows console
+    SYM_CHECK = "[OK]"
+    SYM_WARNING = "[!]"
+    SYM_ERROR = "[X]"
+    SYM_WARNING_EMOJI = "[!]"  # ⚠️ replacement
+else:
+    # Unicode symbols for Unix/macOS
+    SYM_CHECK = "✓"
+    SYM_WARNING = "⚠"
+    SYM_ERROR = "✗"
+    SYM_WARNING_EMOJI = "⚠️"
+
 from .config import Config
 from .store import Store
 from .server import CFDaemon, get_running_daemon_pid, stop_running_daemon
@@ -567,11 +581,11 @@ def cmd_status(args):
                 age = current_time - last_heartbeat_time
 
                 if age < 10:
-                    health = "✓ Healthy"
+                    health = f"{SYM_CHECK} Healthy"
                 elif age < 60:
-                    health = f"⚠ Warning (heartbeat {age}s old)"
+                    health = f"{SYM_WARNING} Warning (heartbeat {age}s old)"
                 else:
-                    health = f"✗ UNHEALTHY (heartbeat {age}s old - daemon may be hung)"
+                    health = f"{SYM_ERROR} UNHEALTHY (heartbeat {age}s old - daemon may be hung)"
 
                 print(f"Health: {health}")
                 if args.verbose:
@@ -579,11 +593,11 @@ def cmd_status(args):
                     print(f"  Loop iterations: {iteration_count}")
                     print(f"  Heartbeat PID: {heartbeat_pid}")
             else:
-                print("Health: ⚠ Warning (incomplete heartbeat file)")
+                print(f"Health: {SYM_WARNING} Warning (incomplete heartbeat file)")
         else:
-            print("Health: ⚠ Warning (no heartbeat file - may be starting up)")
+            print(f"Health: {SYM_WARNING} Warning (no heartbeat file - may be starting up)")
     except Exception as e:
-        print(f"Health: ⚠ Warning (failed to read heartbeat: {e})")
+        print(f"Health: {SYM_WARNING} Warning (failed to read heartbeat: {e})")
 
     # Always show a compact pipeline summary
     _display_pipeline_summary()
@@ -607,9 +621,9 @@ def cmd_status(args):
         _display_pipeline_config()
 
     # Show ALL related processes (always, not just in verbose mode)
-    print("\n═══════════════════════════════════════════════════════════")
+    print("\n" + "=" * 59)
     print("ALL RELATED PROCESSES:")
-    print("═══════════════════════════════════════════════════════════")
+    print("=" * 59)
 
     related_processes = []
     process_scan_timeout = 5  # seconds
@@ -623,10 +637,10 @@ def cmd_status(args):
             related_processes = future.result(timeout=process_scan_timeout)
         except concurrent.futures.TimeoutError:
             print(
-                f"  ⚠️  Process enumeration timed out after {process_scan_timeout}s; skipping scan"
+                f"  {SYM_WARNING_EMOJI}  Process enumeration timed out after {process_scan_timeout}s; skipping scan"
             )
         except Exception as e:
-            print(f"  ⚠️  Process enumeration failed: {e}")
+            print(f"  {SYM_WARNING_EMOJI}  Process enumeration failed: {e}")
     finally:
         executor.shutdown(wait=False)  # Don't wait for hung threads
 
@@ -637,7 +651,7 @@ def cmd_status(args):
         print("\nTo kill all: cfd killall")
         print("To kill specific: kill <PID>")
     else:
-        print("  ✓ No related processes found (only daemon running)")
+        print(f"  {SYM_CHECK} No related processes found (only daemon running)")
 
     # Check for zombie processes (with timeout to prevent hanging)
     from .zombies import PSUTIL_AVAILABLE
@@ -649,7 +663,7 @@ def cmd_status(args):
         if args.verbose:
             print("\n💡 Run 'cfd cleanup' to check for zombie processes")
     elif args.verbose:
-        print("\n⚠️  psutil not available - cannot detect zombie processes")
+        print(f"\n{SYM_WARNING_EMOJI}  psutil not available - cannot detect zombie processes")
 
     return 0
 
@@ -966,11 +980,11 @@ def cmd_gates(args):
 
     # Status icons
     status_icons = {
-        "pending": "○",
-        "active": "►",
-        "passed": "✓",
-        "failed": "✗",
-        "skipped": "─",
+        "pending": "o" if sys.platform == 'win32' else "○",
+        "active": ">" if sys.platform == 'win32' else "►",
+        "passed": SYM_CHECK,
+        "failed": SYM_ERROR,
+        "skipped": "-" if sys.platform == 'win32' else "─",
     }
 
     for gate in report.gates:
@@ -1000,11 +1014,11 @@ def cmd_gates(args):
     print(f"Last Passed:  {report.highest_passed_gate or 'None'}")
 
     if report.all_required_passed:
-        print("\n✓ All required gates passed")
+        print(f"\n{SYM_CHECK} All required gates passed")
     elif report.has_failures:
-        print("\n✗ Has failed gates")
+        print(f"\n{SYM_ERROR} Has failed gates")
     else:
-        print("\n… In progress")
+        print("\n... In progress")
 
     return 0
 
@@ -1039,21 +1053,37 @@ def cmd_timeline(args):
     print(f"Job Status: {job.status.value}")
     print("=" * 70)
 
-    # Event type icons
-    event_icons = {
-        "task_created": "+",
-        "task_running": "►",
-        "task_succeeded": "✓",
-        "task_failed": "✗",
-        "task_timed_out": "⏱",
-        "job_running": "▶",
-        "job_succeeded": "✓",
-        "job_failed": "✗",
-        "job_stalled": "⚠",
-        "gate_passed": "►",
-        "gate_failed": "✗",
-        "heartbeat": "♥",
-    }
+    # Event type icons (ASCII-safe for Windows)
+    if sys.platform == 'win32':
+        event_icons = {
+            "task_created": "+",
+            "task_running": ">",
+            "task_succeeded": SYM_CHECK,
+            "task_failed": SYM_ERROR,
+            "task_timed_out": "T",
+            "job_running": ">",
+            "job_succeeded": SYM_CHECK,
+            "job_failed": SYM_ERROR,
+            "job_stalled": SYM_WARNING,
+            "gate_passed": ">",
+            "gate_failed": SYM_ERROR,
+            "heartbeat": "*",
+        }
+    else:
+        event_icons = {
+            "task_created": "+",
+            "task_running": "►",
+            "task_succeeded": "✓",
+            "task_failed": "✗",
+            "task_timed_out": "⏱",
+            "job_running": "▶",
+            "job_succeeded": "✓",
+            "job_failed": "✗",
+            "job_stalled": "⚠",
+            "gate_passed": "►",
+            "gate_failed": "✗",
+            "heartbeat": "♥",
+        }
 
     for event in events:
         ts = event["timestamp"][:19]  # Truncate microseconds
@@ -1110,20 +1140,35 @@ def cmd_recent_events(args):
     print(f"Recent Events ({len(events)} shown)")
     print("=" * 80)
 
-    # Event type icons
-    event_icons = {
-        "task_created": "+",
-        "task_running": "►",
-        "task_succeeded": "✓",
-        "task_failed": "✗",
-        "task_timed_out": "⏱",
-        "job_running": "▶",
-        "job_succeeded": "✓",
-        "job_failed": "✗",
-        "job_stalled": "⚠",
-        "gate_passed": "►",
-        "gate_failed": "✗",
-    }
+    # Event type icons (ASCII-safe for Windows)
+    if sys.platform == 'win32':
+        event_icons = {
+            "task_created": "+",
+            "task_running": ">",
+            "task_succeeded": SYM_CHECK,
+            "task_failed": SYM_ERROR,
+            "task_timed_out": "T",
+            "job_running": ">",
+            "job_succeeded": SYM_CHECK,
+            "job_failed": SYM_ERROR,
+            "job_stalled": SYM_WARNING,
+            "gate_passed": ">",
+            "gate_failed": SYM_ERROR,
+        }
+    else:
+        event_icons = {
+            "task_created": "+",
+            "task_running": "►",
+            "task_succeeded": "✓",
+            "task_failed": "✗",
+            "task_timed_out": "⏱",
+            "job_running": "▶",
+            "job_succeeded": "✓",
+            "job_failed": "✗",
+            "job_stalled": "⚠",
+            "gate_passed": "►",
+            "gate_failed": "✗",
+        }
 
     for event in events:
         ts = event["timestamp"][:19]

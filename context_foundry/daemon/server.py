@@ -10,6 +10,7 @@ import io
 import logging
 import os
 import signal
+import subprocess
 import sys
 import threading
 import time
@@ -271,18 +272,87 @@ class CFDaemon:
         # Register signal handlers
         signal.signal(signal.SIGTERM, handle_shutdown_signal)
         signal.signal(signal.SIGINT, handle_shutdown_signal)
-        signal.signal(signal.SIGHUP, handle_reload_signal)
+        # SIGHUP is not available on Windows
+        if hasattr(signal, 'SIGHUP'):
+            signal.signal(signal.SIGHUP, handle_reload_signal)
 
         logger.info("Signal handlers registered")
 
     def _daemonize(self) -> Optional[int]:
         """
-        Daemonize the process using the Unix double-fork technique
+        Daemonize the process.
 
-        This detaches the process from the controlling terminal and runs it in the background.
+        On Unix: Uses the double-fork technique to detach from controlling terminal.
+        On Windows: Uses subprocess.Popen with DETACHED_PROCESS flag.
 
         Returns:
-            Pipe read fd for parent to check child status, or None if we're the child
+            Pipe read fd for parent to check child status, or None if we're the child.
+            On Windows, always returns a pipe fd (parent waits for subprocess).
+        """
+        # Windows-specific daemonization using subprocess
+        if sys.platform == 'win32':
+            return self._daemonize_windows()
+
+        # Unix double-fork daemonization
+        return self._daemonize_unix()
+
+    def _daemonize_windows(self) -> int:
+        """
+        Windows-specific daemonization using subprocess.Popen.
+
+        Spawns a detached subprocess running the daemon in foreground mode.
+
+        Returns:
+            Pipe read fd for parent to check child status.
+        """
+        # Create a pipe for child status communication
+        pipe_r, pipe_w = os.pipe()
+
+        # Build command to start daemon in foreground mode as a detached process
+        cmd = [sys.executable, '-m', 'context_foundry.daemon.cli', 'start', '--foreground']
+        if self.config_path:
+            cmd.extend(['--config', str(self.config_path)])
+
+        # Windows-specific creation flags for detached process
+        DETACHED_PROCESS = 0x00000008
+        CREATE_NEW_PROCESS_GROUP = 0x00000200
+        CREATE_NO_WINDOW = 0x08000000
+
+        try:
+            # Start the subprocess detached from this console
+            proc = subprocess.Popen(
+                cmd,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW,
+                close_fds=True,
+            )
+
+            # Give the subprocess a moment to start and write its PID file
+            time.sleep(0.5)
+
+            # Check if process is still running
+            if proc.poll() is None:
+                # Process is running, write OK to pipe
+                os.write(pipe_w, b"OK\n")
+            else:
+                # Process exited unexpectedly
+                os.write(pipe_w, f"ERROR: Process exited with code {proc.returncode}\n".encode())
+
+        except Exception as e:
+            os.write(pipe_w, f"ERROR: {e}\n".encode())
+        finally:
+            os.close(pipe_w)
+
+        return pipe_r
+
+    def _daemonize_unix(self) -> Optional[int]:
+        """
+        Unix-specific daemonization using the double-fork technique.
+
+        Returns:
+            Pipe read fd for parent to check child status, or None if we're the child.
         """
         # Create a pipe for child status communication
         # Parent reads from pipe_r, child writes to pipe_w
@@ -528,35 +598,70 @@ class CFDaemon:
         Returns:
             True if child started successfully, False otherwise
         """
-        import select
-
         try:
-            # Wait up to 5 seconds for child to report status
-            ready, _, _ = select.select([pipe_fd], [], [], 5.0)
+            if sys.platform == 'win32':
+                # Windows: Use threading with timeout since select() doesn't work with pipes
+                result = {'status': None, 'error': None}
 
-            if ready:
-                # Read status from pipe
-                status = os.read(pipe_fd, 1024).decode().strip()
+                def read_pipe():
+                    try:
+                        result['status'] = os.read(pipe_fd, 1024).decode().strip()
+                    except Exception as e:
+                        result['error'] = str(e)
+
+                reader_thread = threading.Thread(target=read_pipe, daemon=True)
+                reader_thread.start()
+                reader_thread.join(timeout=5.0)
+
                 os.close(pipe_fd)
 
-                if status.startswith("OK"):
+                if reader_thread.is_alive():
+                    # Timeout - thread is still reading
+                    print(
+                        "Daemon failed to start: timed out waiting for status confirmation",
+                        file=sys.stderr,
+                    )
+                    return False
+
+                if result['error']:
+                    print(f"Error reading daemon status: {result['error']}", file=sys.stderr)
+                    return False
+
+                status = result['status']
+                if status and status.startswith("OK"):
                     print("Daemon started successfully")
                     return True
                 else:
                     print(f"Daemon failed to start: {status}", file=sys.stderr)
                     return False
             else:
-                # Timeout - child failed to report status (likely hung during init)
-                os.close(pipe_fd)
-                print(
-                    "Daemon failed to start: timed out waiting for status confirmation",
-                    file=sys.stderr,
-                )
-                print(
-                    "(Child process may have hung during initialization)",
-                    file=sys.stderr,
-                )
-                return False
+                # Unix: Use select() for timeout
+                import select
+                ready, _, _ = select.select([pipe_fd], [], [], 5.0)
+
+                if ready:
+                    # Read status from pipe
+                    status = os.read(pipe_fd, 1024).decode().strip()
+                    os.close(pipe_fd)
+
+                    if status.startswith("OK"):
+                        print("Daemon started successfully")
+                        return True
+                    else:
+                        print(f"Daemon failed to start: {status}", file=sys.stderr)
+                        return False
+                else:
+                    # Timeout - child failed to report status (likely hung during init)
+                    os.close(pipe_fd)
+                    print(
+                        "Daemon failed to start: timed out waiting for status confirmation",
+                        file=sys.stderr,
+                    )
+                    print(
+                        "(Child process may have hung during initialization)",
+                        file=sys.stderr,
+                    )
+                    return False
 
         except Exception as e:
             print(f"Error waiting for daemon status: {e}", file=sys.stderr)
@@ -1153,6 +1258,44 @@ class CFDaemon:
         ).start()
 
 
+def _is_pid_running(pid: int) -> bool:
+    """
+    Check if a process with the given PID is running.
+
+    Uses platform-specific methods:
+    - Windows: Uses ctypes to call OpenProcess
+    - Unix: Uses os.kill(pid, 0)
+
+    Args:
+        pid: Process ID to check
+
+    Returns:
+        True if process is running, False otherwise
+    """
+    if sys.platform == 'win32':
+        # Windows: Use OpenProcess with PROCESS_QUERY_LIMITED_INFORMATION
+        import ctypes
+
+        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+        kernel32 = ctypes.windll.kernel32
+
+        handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+        if handle:
+            kernel32.CloseHandle(handle)
+            return True
+        return False
+    else:
+        # Unix: Use os.kill(pid, 0)
+        try:
+            os.kill(pid, 0)
+            return True
+        except OSError as e:
+            # EPERM means process exists but we can't signal it
+            if e.errno == errno.EPERM:
+                return True
+            return False
+
+
 def get_running_daemon_pid(config: Optional[Config] = None) -> Optional[int]:
     """
     Get PID of running daemon instance
@@ -1163,8 +1306,6 @@ def get_running_daemon_pid(config: Optional[Config] = None) -> Optional[int]:
     Returns:
         PID if daemon is running, None otherwise
     """
-    import errno
-
     config = config or Config.load()
 
     if not config.pid_file.exists():
@@ -1173,22 +1314,10 @@ def get_running_daemon_pid(config: Optional[Config] = None) -> Optional[int]:
     try:
         pid = int(config.pid_file.read_text().strip())
 
-        # Verify process exists using os.kill(pid, 0)
-        try:
-            os.kill(pid, 0)
+        # Verify process exists
+        if _is_pid_running(pid):
             return pid
-        except OSError as e:
-            # EPERM (errno 1) means process exists but we can't signal it
-            # This happens in sandboxed/restricted environments
-            # EPERM is sufficient proof the process exists
-            if e.errno == errno.EPERM:
-                logger.debug(
-                    f"Permission denied signaling PID {pid}, but process exists"
-                )
-                return pid
-
-            # ESRCH (errno 3) means no such process - PID file is stale
-            return None
+        return None
 
     except (ValueError, FileNotFoundError):
         return None
