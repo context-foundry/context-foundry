@@ -1,0 +1,10 @@
+{
+    "nodes": [
+        {
+            "id": "chatOpenAI_0",
+            "type": "chatOpenAI",
+            "data": {"label": "ChatOpenAI"}
+        }
+    ],
+    "edges": []
+}

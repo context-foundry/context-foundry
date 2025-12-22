@@ -49,6 +49,37 @@ except ImportError:
     ConversationLogger = None
 
 
+def _get_claude_path() -> Optional[str]:
+    """Return a plausible Claude CLI path, handling Windows .cmd and env override."""
+    # Highest priority: explicit override
+    if os.environ.get("CLAUDE_PATH"):
+        return os.environ["CLAUDE_PATH"]
+
+    # Common Windows shim
+    for candidate in ("claude", "claude.cmd", "claude.exe"):
+        found = shutil.which(candidate)
+        if found:
+            return found
+
+    return None
+
+
+def _format_claude_not_found_error(cwd: str) -> str:
+    """User-friendly error when Claude CLI is missing."""
+    return f"""❌ Error: Claude CLI not found in PATH
+
+The 'claude' CLI executable is required to delegate tasks.
+
+**Troubleshooting**
+- Install Claude Code CLI and ensure it's on PATH
+- Or set CLAUDE_PATH to the CLI executable
+
+**Debug Info**
+- Working Directory: {cwd}
+- PATH: {os.environ.get("PATH", "not set")}
+"""
+
+
 def _write_delegation_metadata(task_id: str, metadata: dict) -> None:
     """
     Write delegation metadata to shared disk location for cross-process visibility.
@@ -137,19 +168,22 @@ def delegate_to_claude_code_impl(
     Returns:
         Formatted output with status, duration, stdout, and stderr (truncated if needed)
     """
+    # Initialize for exception contexts
+    cwd = working_directory if working_directory else os.getcwd()
+    cmd: list[str] = []
+
     try:
         # Build the command
         # Use --print flag to run in non-interactive mode and exit after completion
         # Use --permission-mode bypassPermissions to skip all permission prompts
         # Use --strict-mcp-config to prevent spawned instance from loading MCP servers (avoids recursion)
         # Disable thinking mode to prevent thinking blocks in output
-        # Get full path to claude CLI (needed for Windows .CMD files)
         claude_path = _get_claude_path()
         if not claude_path:
-            return _format_claude_not_found_error()
+            return _format_claude_not_found_error(cwd)
 
         cmd = [
-            claude_path,
+            "claude",  # normalized argv[0] for consistency in logs/tests
             "--print",
             "--permission-mode",
             "bypassPermissions",
@@ -166,9 +200,6 @@ def delegate_to_claude_code_impl(
 
         # Add the task as the final argument
         cmd.append(task)
-
-        # Determine working directory
-        cwd = working_directory if working_directory else os.getcwd()
 
         # Validate working directory exists
         if not os.path.isdir(cwd):
@@ -190,6 +221,7 @@ Please provide a valid directory path or omit the working_directory parameter to
         # env ensures PATH and other variables are properly set
         result = subprocess.run(
             cmd,
+            executable=claude_path,
             cwd=cwd,
             capture_output=True,
             text=True,
@@ -271,18 +303,7 @@ The claude process exceeded the timeout limit and was terminated.
 """
 
     except FileNotFoundError:
-        return f"""❌ Error: claude command not found
-
-The 'claude' CLI executable is not in your PATH.
-
-**Installation:**
-1. Make sure Claude Code CLI is installed
-2. Add it to your PATH environment variable
-3. Verify installation: `which claude` or `claude --version`
-
-**Current PATH:** {os.environ.get("PATH", "not set")}
-**Current Working Directory:** {cwd}
-"""
+        return _format_claude_not_found_error(cwd)
 
     except Exception as e:
         error_details = traceback.format_exc()
@@ -296,7 +317,7 @@ The 'claude' CLI executable is not in your PATH.
 
 **Debug Info:**
 - Working Directory: {cwd}
-- Command: {" ".join(cmd) if "cmd" in locals() else "N/A"}
+- Command: {" ".join(cmd) if cmd else "N/A"}
 """
 
 
@@ -326,14 +347,13 @@ def delegate_to_claude_code_async_impl(
         # Get full path to claude CLI (needed for Windows .CMD files)
         claude_path = _get_claude_path()
         if not claude_path:
-            return json.dumps({
-                "status": "error",
-                "error": "Claude CLI not found in PATH"
-            })
+            return json.dumps(
+                {"status": "error", "error": "Claude CLI not found in PATH"}
+            )
 
         # Build the command with thinking disabled
         cmd = [
-            claude_path,
+            "claude",
             "--print",
             "--permission-mode",
             "bypassPermissions",
@@ -369,6 +389,7 @@ def delegate_to_claude_code_async_impl(
         # Start the process (non-blocking)
         process = subprocess.Popen(
             cmd,
+            executable=claude_path,
             cwd=cwd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -469,14 +490,13 @@ def delegate_to_claude_code_streaming_impl(
         # Get full path to claude CLI (needed for Windows .CMD files)
         claude_path = _get_claude_path()
         if not claude_path:
-            return json.dumps({
-                "status": "error",
-                "error": "Claude CLI not found in PATH"
-            })
+            return json.dumps(
+                {"status": "error", "error": "Claude CLI not found in PATH"}
+            )
 
         # Build command with stream-json for full visibility
         cmd = [
-            claude_path,
+            "claude",
             "--print",
             "--output-format",
             "stream-json",  # KEY: Enables structured event output
@@ -520,6 +540,7 @@ def delegate_to_claude_code_streaming_impl(
         # Start the process (non-blocking)
         process = subprocess.Popen(
             cmd,
+            executable=claude_path,
             cwd=cwd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,

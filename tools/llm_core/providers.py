@@ -83,8 +83,12 @@ class LocalClaudeProvider(LLMProvider):
 
         # Windows-specific: use creationflags to prevent console window
         creation_flags = 0
-        if sys.platform == 'win32':
-            creation_flags = subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
+        if sys.platform == "win32":
+            creation_flags = (
+                subprocess.CREATE_NO_WINDOW
+                if hasattr(subprocess, "CREATE_NO_WINDOW")
+                else 0
+            )
 
         try:
             if event_callback:

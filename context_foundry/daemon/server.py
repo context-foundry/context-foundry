@@ -100,8 +100,15 @@ class CFDaemon:
         # State machine for centralized state transitions
         self._state_machine = None  # Lazy init after store is ready
 
-        # Enable faulthandler for thread dump capability
-        faulthandler.enable()
+        # Enable faulthandler for thread dump capability; be resilient to mocked/invalid stderr
+        try:
+            faulthandler.enable()
+        except RuntimeError:
+            # Fall back to the real stderr if the default stream is mocked or closed (common in tests)
+            try:
+                faulthandler.enable(file=sys.__stderr__)
+            except Exception:
+                logger.debug("Faulthandler could not be enabled; continuing without it")
 
     def _setup_logging(self, background_mode: bool = False):
         """
@@ -256,7 +263,7 @@ class CFDaemon:
         signal.signal(signal.SIGTERM, handle_shutdown_signal)
         signal.signal(signal.SIGINT, handle_shutdown_signal)
         # SIGHUP is not available on Windows
-        if hasattr(signal, 'SIGHUP'):
+        if hasattr(signal, "SIGHUP"):
             signal.signal(signal.SIGHUP, handle_reload_signal)
 
         logger.info("Signal handlers registered")
@@ -319,7 +326,7 @@ class CFDaemon:
             On Windows, always returns a pipe fd (parent waits for subprocess).
         """
         # Windows-specific daemonization using subprocess
-        if sys.platform == 'win32':
+        if sys.platform == "win32":
             return self._daemonize_windows()
 
         # Unix double-fork daemonization
@@ -338,9 +345,15 @@ class CFDaemon:
         pipe_r, pipe_w = os.pipe()
 
         # Build command to start daemon in foreground mode as a detached process
-        cmd = [sys.executable, '-m', 'context_foundry.daemon.cli', 'start', '--foreground']
+        cmd = [
+            sys.executable,
+            "-m",
+            "context_foundry.daemon.cli",
+            "start",
+            "--foreground",
+        ]
         if self.config_path:
-            cmd.extend(['--config', str(self.config_path)])
+            cmd.extend(["--config", str(self.config_path)])
 
         # Windows-specific creation flags for detached process
         DETACHED_PROCESS = 0x00000008
@@ -354,7 +367,9 @@ class CFDaemon:
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
-                creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW,
+                creationflags=DETACHED_PROCESS
+                | CREATE_NEW_PROCESS_GROUP
+                | CREATE_NO_WINDOW,
                 close_fds=True,
             )
 
@@ -367,7 +382,10 @@ class CFDaemon:
                 os.write(pipe_w, b"OK\n")
             else:
                 # Process exited unexpectedly
-                os.write(pipe_w, f"ERROR: Process exited with code {proc.returncode}\n".encode())
+                os.write(
+                    pipe_w,
+                    f"ERROR: Process exited with code {proc.returncode}\n".encode(),
+                )
 
         except Exception as e:
             os.write(pipe_w, f"ERROR: {e}\n".encode())
@@ -625,15 +643,15 @@ class CFDaemon:
             True if child started successfully, False otherwise
         """
         try:
-            if sys.platform == 'win32':
+            if sys.platform == "win32":
                 # Windows: Use threading with timeout since select() doesn't work with pipes
-                result = {'status': None, 'error': None}
+                result = {"status": None, "error": None}
 
                 def read_pipe():
                     try:
-                        result['status'] = os.read(pipe_fd, 1024).decode().strip()
+                        result["status"] = os.read(pipe_fd, 1024).decode().strip()
                     except Exception as e:
-                        result['error'] = str(e)
+                        result["error"] = str(e)
 
                 reader_thread = threading.Thread(target=read_pipe, daemon=True)
                 reader_thread.start()
@@ -649,11 +667,14 @@ class CFDaemon:
                     )
                     return False
 
-                if result['error']:
-                    print(f"Error reading daemon status: {result['error']}", file=sys.stderr)
+                if result["error"]:
+                    print(
+                        f"Error reading daemon status: {result['error']}",
+                        file=sys.stderr,
+                    )
                     return False
 
-                status = result['status']
+                status = result["status"]
                 if status and status.startswith("OK"):
                     print("Daemon started successfully")
                     return True
@@ -663,6 +684,7 @@ class CFDaemon:
             else:
                 # Unix: Use select() for timeout
                 import select
+
                 ready, _, _ = select.select([pipe_fd], [], [], 5.0)
 
                 if ready:
@@ -1298,7 +1320,7 @@ def _is_pid_running(pid: int) -> bool:
     Returns:
         True if process is running, False otherwise
     """
-    if sys.platform == 'win32':
+    if sys.platform == "win32":
         # Windows: Use OpenProcess with PROCESS_QUERY_LIMITED_INFORMATION
         import ctypes
 

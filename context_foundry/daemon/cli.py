@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Optional
 
 # Unicode symbols with ASCII fallbacks for Windows compatibility
-if sys.platform == 'win32':
+if sys.platform == "win32":
     # ASCII-safe alternatives for Windows console
     SYM_CHECK = "[OK]"
     SYM_WARNING = "[!]"
@@ -595,7 +595,9 @@ def cmd_status(args):
             else:
                 print(f"Health: {SYM_WARNING} Warning (incomplete heartbeat file)")
         else:
-            print(f"Health: {SYM_WARNING} Warning (no heartbeat file - may be starting up)")
+            print(
+                f"Health: {SYM_WARNING} Warning (no heartbeat file - may be starting up)"
+            )
     except Exception as e:
         print(f"Health: {SYM_WARNING} Warning (failed to read heartbeat: {e})")
 
@@ -663,7 +665,9 @@ def cmd_status(args):
         if args.verbose:
             print("\n💡 Run 'cfd cleanup' to check for zombie processes")
     elif args.verbose:
-        print(f"\n{SYM_WARNING_EMOJI}  psutil not available - cannot detect zombie processes")
+        print(
+            f"\n{SYM_WARNING_EMOJI}  psutil not available - cannot detect zombie processes"
+        )
 
     return 0
 
@@ -980,11 +984,11 @@ def cmd_gates(args):
 
     # Status icons
     status_icons = {
-        "pending": "o" if sys.platform == 'win32' else "○",
-        "active": ">" if sys.platform == 'win32' else "►",
+        "pending": "o" if sys.platform == "win32" else "○",
+        "active": ">" if sys.platform == "win32" else "►",
         "passed": SYM_CHECK,
         "failed": SYM_ERROR,
-        "skipped": "-" if sys.platform == 'win32' else "─",
+        "skipped": "-" if sys.platform == "win32" else "─",
     }
 
     for gate in report.gates:
@@ -1054,7 +1058,7 @@ def cmd_timeline(args):
     print("=" * 70)
 
     # Event type icons (ASCII-safe for Windows)
-    if sys.platform == 'win32':
+    if sys.platform == "win32":
         event_icons = {
             "task_created": "+",
             "task_running": ">",
@@ -1141,7 +1145,7 @@ def cmd_recent_events(args):
     print("=" * 80)
 
     # Event type icons (ASCII-safe for Windows)
-    if sys.platform == 'win32':
+    if sys.platform == "win32":
         event_icons = {
             "task_created": "+",
             "task_running": ">",
