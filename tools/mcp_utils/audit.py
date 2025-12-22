@@ -11,8 +11,16 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 import json
-import fcntl
+import sys
 import threading
+
+# fcntl is Unix-only; use msvcrt on Windows for file locking
+if sys.platform == 'win32':
+    import msvcrt
+    HAVE_FCNTL = False
+else:
+    import fcntl
+    HAVE_FCNTL = True
 
 # Default audit log location
 DEFAULT_AUDIT_DIR = Path.home() / ".context-foundry" / "audit"
@@ -139,17 +147,22 @@ class AuditLogger:
         """Write event to audit log with file locking"""
         try:
             with open(self.audit_file, "a") as f:
-                # Get exclusive lock for writing
-                fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+                # Get exclusive lock for writing (platform-specific)
+                if HAVE_FCNTL:
+                    fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+                else:
+                    # Windows: use msvcrt.locking
+                    msvcrt.locking(f.fileno(), msvcrt.LK_LOCK, 1)
                 try:
                     f.write(event.to_json() + "\n")
                     f.flush()
                 finally:
-                    fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+                    if HAVE_FCNTL:
+                        fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+                    else:
+                        msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
         except OSError as e:
             # Fallback: print to stderr if file write fails
-            import sys
-
             print(f"AUDIT LOG WRITE FAILED: {e}", file=sys.stderr)
             print(f"EVENT: {event.to_json()}", file=sys.stderr)
 
