@@ -20,7 +20,7 @@ class StatusHandlersMixin(HandlerMixin):
 
     def handle_status(self) -> None:
         """Serve current status as JSON."""
-        from .. import utils
+        from ... import utils
 
         payload = utils.build_status_payload(
             self.server.context.job_manager, self.server.context.store
@@ -37,7 +37,7 @@ class StatusHandlersMixin(HandlerMixin):
         - Falls back to full status updates every 30 seconds for sync
         """
         from ..events import get_event_bus
-        from .. import utils
+        from ... import utils
 
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream")

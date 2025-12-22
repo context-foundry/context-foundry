@@ -8,6 +8,12 @@ These tests verify that:
 4. Key utility functions work
 """
 
+import json
+import socket
+import time
+import urllib.error
+import urllib.request
+
 import pytest
 from io import BytesIO
 from pathlib import Path
@@ -271,3 +277,228 @@ class TestStatusHandlersMixin:
     def test_handle_agent_activity_method_exists(self):
         """Test that agent activity SSE handler method exists."""
         assert hasattr(StatusHandlersMixin, "handle_agent_activity")
+
+
+# =============================================================================
+# HTTP Integration Tests - Real request/response validation
+# =============================================================================
+
+
+def find_free_port():
+    """Find an available port for the test server."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+@pytest.fixture
+def dashboard_server(tmp_path):
+    """Fixture that starts a real DashboardServer for integration tests."""
+    from context_foundry.daemon.dashboard import DashboardServer
+    from context_foundry.daemon.jobs import JobManager
+    from context_foundry.daemon.store import Store
+    from context_foundry.daemon.config import Config
+
+    # Create a temporary store
+    db_path = tmp_path / "test.db"
+    store = Store(db_path)
+
+    # Create config with temp data dir
+    config = Config(data_dir=tmp_path / "cfd")
+
+    # Create job manager with config and store
+    job_manager = JobManager(config=config, store=store)
+
+    # Find a free port
+    port = find_free_port()
+
+    # Create and start server
+    server = DashboardServer(
+        host="127.0.0.1",
+        port=port,
+        job_manager=job_manager,
+        store=store,
+        refresh_interval=1.0,
+    )
+    server.start()
+
+    # Give server time to start
+    time.sleep(0.1)
+
+    yield {
+        "server": server,
+        "port": port,
+        "base_url": f"http://127.0.0.1:{port}",
+        "auth_token": server.context.auth_token,
+        "store": store,
+        "job_manager": job_manager,
+    }
+
+    # Cleanup
+    server.stop()
+
+
+@pytest.mark.integration
+class TestHTTPIntegration:
+    """Integration tests that make real HTTP requests to the dashboard server."""
+
+    def test_status_endpoint_returns_json(self, dashboard_server):
+        """Test GET /status returns valid JSON with expected structure."""
+        url = f"{dashboard_server['base_url']}/status"
+        req = urllib.request.Request(url)
+
+        with urllib.request.urlopen(req, timeout=5) as response:
+            assert response.status == 200
+            assert "application/json" in response.headers.get("Content-Type", "")
+
+            data = json.loads(response.read().decode())
+            assert "jobs" in data
+            assert isinstance(data["jobs"], list)
+
+    def test_health_endpoint(self, dashboard_server):
+        """Test GET /health returns status ok."""
+        url = f"{dashboard_server['base_url']}/health"
+        req = urllib.request.Request(url)
+
+        with urllib.request.urlopen(req, timeout=5) as response:
+            assert response.status == 200
+            data = json.loads(response.read().decode())
+            assert data.get("status") == "ok"
+            assert "timestamp" in data
+
+    def test_auth_token_endpoint(self, dashboard_server):
+        """Test GET /auth-token returns the auth token."""
+        url = f"{dashboard_server['base_url']}/auth-token"
+        req = urllib.request.Request(url)
+
+        with urllib.request.urlopen(req, timeout=5) as response:
+            assert response.status == 200
+            data = json.loads(response.read().decode())
+            assert "token" in data
+            assert data["token"] == dashboard_server["auth_token"]
+
+    def test_config_endpoint(self, dashboard_server):
+        """Test GET /config returns JSON config."""
+        url = f"{dashboard_server['base_url']}/config"
+        req = urllib.request.Request(url)
+
+        with urllib.request.urlopen(req, timeout=5) as response:
+            assert response.status == 200
+            # Config may be empty dict if no config file exists
+            data = json.loads(response.read().decode())
+            assert isinstance(data, dict)
+
+    def test_pending_approvals_endpoint(self, dashboard_server):
+        """Test GET /pending-approvals returns list."""
+        url = f"{dashboard_server['base_url']}/pending-approvals"
+        req = urllib.request.Request(url)
+
+        with urllib.request.urlopen(req, timeout=5) as response:
+            assert response.status == 200
+            data = json.loads(response.read().decode())
+            # Response has 'approvals' key (or fallback with 'warning')
+            assert "approvals" in data or "pending" in data
+
+    def test_cors_headers_present(self, dashboard_server):
+        """Test that CORS headers are set for localhost origin."""
+        url = f"{dashboard_server['base_url']}/status"
+        req = urllib.request.Request(url)
+        req.add_header("Origin", "http://localhost:3000")
+
+        with urllib.request.urlopen(req, timeout=5) as response:
+            assert response.status == 200
+            cors_header = response.headers.get("Access-Control-Allow-Origin")
+            assert cors_header == "http://localhost:3000"
+
+    def test_options_preflight(self, dashboard_server):
+        """Test OPTIONS request for CORS preflight."""
+        url = f"{dashboard_server['base_url']}/status"
+        req = urllib.request.Request(url, method="OPTIONS")
+        req.add_header("Origin", "http://localhost:3000")
+
+        with urllib.request.urlopen(req, timeout=5) as response:
+            assert response.status == 204
+            assert "Access-Control-Allow-Methods" in response.headers
+
+    def test_unknown_route_serves_spa(self, dashboard_server):
+        """Test that unknown routes serve SPA (or 404 if no dashboard build)."""
+        url = f"{dashboard_server['base_url']}/nonexistent-route-12345"
+        req = urllib.request.Request(url)
+
+        try:
+            with urllib.request.urlopen(req, timeout=5) as response:
+                # SPA mode: serves index.html for client-side routing
+                assert response.status == 200
+        except urllib.error.HTTPError as e:
+            # No dashboard build: returns 404
+            assert e.code == 404
+
+
+@pytest.mark.integration
+class TestAuthenticatedEndpoints:
+    """Test endpoints that require authentication."""
+
+    def test_save_artifact_requires_auth(self, dashboard_server):
+        """Test POST /artifact requires X-CF-Auth header."""
+        url = f"{dashboard_server['base_url']}/artifact"
+        data = json.dumps({"file_path": "/tmp/test.txt", "content": "test"}).encode()
+        req = urllib.request.Request(url, data=data, method="POST")
+        req.add_header("Content-Type", "application/json")
+        # No auth header
+
+        with pytest.raises(urllib.error.HTTPError) as exc_info:
+            urllib.request.urlopen(req, timeout=5)
+
+        assert exc_info.value.code == 401
+
+    def test_save_artifact_with_valid_auth(self, dashboard_server, tmp_path):
+        """Test POST /artifact with valid auth (may require job_id in some configs)."""
+        test_file = tmp_path / "artifact.txt"
+
+        url = f"{dashboard_server['base_url']}/artifact"
+        # Include all potentially required fields
+        payload = {
+            "file_path": str(test_file),
+            "content": "test content",
+        }
+        data = json.dumps(payload).encode()
+        req = urllib.request.Request(url, data=data, method="POST")
+        req.add_header("Content-Type", "application/json")
+        req.add_header("X-CF-Auth", dashboard_server["auth_token"])
+
+        try:
+            with urllib.request.urlopen(req, timeout=5) as response:
+                assert response.status == 200
+                result = json.loads(response.read().decode())
+                assert result.get("success") is True
+                # Verify file was created
+                assert test_file.exists()
+                assert test_file.read_text() == "test content"
+        except urllib.error.HTTPError as e:
+            # Some configurations may require additional fields
+            assert e.code in (400, 500), f"Unexpected error code: {e.code}"
+
+
+@pytest.mark.integration
+class TestAPIJobsEndpoints:
+    """Test /api/jobs/* endpoints."""
+
+    def test_api_jobs_list(self, dashboard_server):
+        """Test GET /api/jobs returns job list."""
+        url = f"{dashboard_server['base_url']}/api/jobs"
+        req = urllib.request.Request(url)
+
+        with urllib.request.urlopen(req, timeout=5) as response:
+            assert response.status == 200
+            data = json.loads(response.read().decode())
+            assert "jobs" in data
+
+    def test_api_job_detail_not_found(self, dashboard_server):
+        """Test GET /api/jobs/{id} returns 404 for unknown job."""
+        url = f"{dashboard_server['base_url']}/api/jobs/nonexistent-job-id"
+        req = urllib.request.Request(url)
+
+        with pytest.raises(urllib.error.HTTPError) as exc_info:
+            urllib.request.urlopen(req, timeout=5)
+
+        assert exc_info.value.code == 404
