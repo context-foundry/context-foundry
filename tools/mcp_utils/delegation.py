@@ -143,8 +143,13 @@ def delegate_to_claude_code_impl(
         # Use --permission-mode bypassPermissions to skip all permission prompts
         # Use --strict-mcp-config to prevent spawned instance from loading MCP servers (avoids recursion)
         # Disable thinking mode to prevent thinking blocks in output
+        # Get full path to claude CLI (needed for Windows .CMD files)
+        claude_path = _get_claude_path()
+        if not claude_path:
+            return _format_claude_not_found_error()
+
         cmd = [
-            "claude",
+            claude_path,
             "--print",
             "--permission-mode",
             "bypassPermissions",
@@ -173,25 +178,6 @@ Directory: {cwd}
 
 Please provide a valid directory path or omit the working_directory parameter to use the current directory.
 """
-
-        # Check if claude CLI is available
-        if not shutil.which("claude"):
-            error_msg = """❌ Error: Claude CLI not found in PATH
-
-The delegation system requires the Claude CLI to be installed and available in PATH.
-
-Installation:
-  - Download from: https://claude.com/download
-  - Ensure it's in your PATH after installation
-
-Current PATH: {}
-
-Troubleshooting:
-  - Verify installation: run 'which claude' in terminal
-  - Check PATH: echo $PATH
-  - Restart terminal after installation
-""".format(os.environ.get("PATH", "NOT SET"))
-            return error_msg
 
         # Convert timeout to seconds
         timeout_seconds = timeout_minutes * 60
@@ -337,9 +323,17 @@ def delegate_to_claude_code_async_impl(
         JSON string with task_id and status
     """
     try:
+        # Get full path to claude CLI (needed for Windows .CMD files)
+        claude_path = _get_claude_path()
+        if not claude_path:
+            return json.dumps({
+                "status": "error",
+                "error": "Claude CLI not found in PATH"
+            })
+
         # Build the command with thinking disabled
         cmd = [
-            "claude",
+            claude_path,
             "--print",
             "--permission-mode",
             "bypassPermissions",
@@ -472,9 +466,17 @@ def delegate_to_claude_code_streaming_impl(
         JSON string with task_id, status, and conversation_log paths
     """
     try:
+        # Get full path to claude CLI (needed for Windows .CMD files)
+        claude_path = _get_claude_path()
+        if not claude_path:
+            return json.dumps({
+                "status": "error",
+                "error": "Claude CLI not found in PATH"
+            })
+
         # Build command with stream-json for full visibility
         cmd = [
-            "claude",
+            claude_path,
             "--print",
             "--output-format",
             "stream-json",  # KEY: Enables structured event output
