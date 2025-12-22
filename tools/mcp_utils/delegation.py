@@ -831,6 +831,8 @@ def get_delegation_result_impl(
             task_info["duration"] = elapsed
             task_info["exit_code"] = process.returncode
             task_info["status"] = "completed" if process.returncode == 0 else "failed"
+            if process.returncode != 0 and not task_info.get("error"):
+                task_info["error"] = f"Process exited with code {process.returncode}"
 
             # Write full output to file for later review
             output_file_path = _write_full_output_to_file(
@@ -950,7 +952,7 @@ def get_delegation_result_impl(
                 if len(task_info["task"]) > 500
                 else task_info["task"],
                 "working_directory": task_info["cwd"],
-                "duration_seconds": round(task_info["duration"], 2),
+                "duration_seconds": round(task_info.get("duration") or 0.0, 2),
                 "exit_code": task_info["exit_code"],
                 "command": " ".join(task_info["cmd"])[:200] + "..."
                 if len(" ".join(task_info["cmd"])) > 200
@@ -976,8 +978,8 @@ def get_delegation_result_impl(
                 if len(task_info["task"]) > 500
                 else task_info["task"],
                 "working_directory": task_info["cwd"],
-                "duration_seconds": round(task_info["duration"], 2),
-                "exit_code": task_info["exit_code"],
+                "duration_seconds": round(task_info.get("duration") or 0.0, 2),
+                "exit_code": task_info.get("exit_code"),
                 "command": " ".join(task_info["cmd"])[:200] + "..."
                 if len(" ".join(task_info["cmd"])) > 200
                 else " ".join(task_info["cmd"]),
@@ -991,6 +993,9 @@ def get_delegation_result_impl(
                     "message": f"Showing first 50 + last 50 lines. Full output saved to: {task_info.get('output_file', 'not_created')}",
                 },
             }
+
+            if task_info.get("error"):
+                result["error"] = task_info["error"]
 
         return json.dumps(result, indent=2)
 

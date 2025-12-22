@@ -3086,8 +3086,8 @@ def main():
         "--profile",
         "-p",
         type=str,
-        choices=["minimal", "standard", "full"],
-        help="Use a preset profile (minimal, standard, full). Overridden by explicit phases.",
+        choices=["build-only", "minimal", "standard", "full"],
+        help="Use a preset profile (build-only, minimal, standard, full). Overridden by explicit phases.",
     )
 
     # Resume command

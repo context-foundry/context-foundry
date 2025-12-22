@@ -353,7 +353,7 @@ class Store:
         elif sort == "status":
             query += " ORDER BY status ASC, created_at DESC"
         else:  # "newest" (default)
-            query += " ORDER BY created_at DESC"
+            query += " ORDER BY priority DESC, created_at DESC"
 
         query += " LIMIT ? OFFSET ?"
         params.extend([limit, offset])

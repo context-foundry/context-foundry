@@ -104,7 +104,7 @@ def run_shell_command(
         # On Windows, use shell=True for complex commands
         return subprocess.run(
             command,
-            shell=True,
+            shell=True,  # nosec B602
             cwd=cwd,
             env=run_env,
             timeout=timeout,

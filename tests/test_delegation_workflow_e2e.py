@@ -360,6 +360,8 @@ class TestAsynchronousDelegationE2E:
             "stdout": "",
             "stderr": "Error: Build failed\n",
         }
+        active_tasks[task_id]["exit_code"] = 1
+        active_tasks[task_id]["error"] = "Process exited with code 1"
 
         # Get result
         final_result = get_delegation_result(task_id=task_id)

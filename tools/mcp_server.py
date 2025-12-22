@@ -144,11 +144,19 @@ def context_foundry_status() -> str:
     Returns:
         Status information including version and capabilities
     """
-    return f"""Context Foundry - Status
+    status_msg = f"""Context Foundry - Status
 
 ✅ Running
-✅ Version: {get_version()}
+✅ Version: {get_version()}"""
 
+    if active_tasks:
+        status_msg += "\n\n**Active Tasks:**\n"
+        for task_id, task_info in active_tasks.items():
+            status = task_info.get("status", "unknown")
+            task_desc = task_info.get("task", "Unknown Task")[:50]
+            status_msg += f"- `{task_id}`: {status} ({task_desc}...)\n"
+
+    status_msg += """
 **Quick Commands - Just Say:**
 
 🚀 **Build & Deploy:**
@@ -180,6 +188,7 @@ def context_foundry_status() -> str:
 Just describe what you want in plain English. Context Foundry handles the rest.
 No commands to memorize, no syntax to learn.
 """
+    return status_msg
 
 
 # ANCHOR: search_tools

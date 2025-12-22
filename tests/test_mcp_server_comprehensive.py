@@ -66,6 +66,7 @@ from mcp_server import (  # noqa: E402
     _detect_task_intent,
     active_tasks,
 )
+import mcp_server  # noqa: E402
 
 
 # ============================================================================
@@ -434,19 +435,21 @@ class TestTaskIntent:
 class TestAutonomousBuild:
     """Test autonomous_build_and_deploy() wrapper function"""
 
-    @patch("mcp_server._autonomous_build_and_deploy_impl")
+    @patch.object(mcp_server, "autonomous_build_and_deploy_impl")
     def test_autonomous_build_calls_impl(self, mock_impl, temp_working_dir):
         """Test that wrapper calls implementation function"""
         mock_impl.return_value = "Build started"
 
         result = autonomous_build_and_deploy(
-            task="Test task", working_directory=str(temp_working_dir)
+            task="Test task",
+            working_directory=str(temp_working_dir),
+            no_daemon=True,
         )
 
         assert mock_impl.called
         assert result == "Build started"
 
-    @patch("mcp_server._autonomous_build_and_deploy_impl")
+    @patch.object(mcp_server, "autonomous_build_and_deploy_impl")
     def test_autonomous_build_passes_all_parameters(self, mock_impl, temp_working_dir):
         """Test that all parameters are passed correctly"""
         autonomous_build_and_deploy(
@@ -454,16 +457,15 @@ class TestAutonomousBuild:
             working_directory=str(temp_working_dir),
             github_repo_name="test/repo",
             mode="fix_bug",
-            enable_test_loop=False,
             max_test_iterations=5,
             incremental=True,
+            no_daemon=True,
         )
 
         call_kwargs = mock_impl.call_args[1]
         assert call_kwargs["task"] == "Test task"
         assert call_kwargs["github_repo_name"] == "test/repo"
         assert call_kwargs["mode"] == "fix_bug"
-        assert call_kwargs["enable_test_loop"] is False
         assert call_kwargs["max_test_iterations"] == 5
         assert call_kwargs["incremental"] is True
 

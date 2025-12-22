@@ -51,13 +51,11 @@ phases:
 
   builder:
     name: "Builder"
-    description: "Implement the solution based on the architecture"
-    depends_on:
-      - architect
+    description: "Implement the solution based on the architecture (or task directly if no architecture)"
+    depends_on: []  # Can run standalone - will use architecture.md if available
     timeout_seconds: 1800
     prompt_file: "phase_builder.txt"
-    inputs:
-      - ".context-foundry/architecture.md"
+    inputs: []  # architecture.md is optional - builder can work from task alone
     outputs: []  # Source files - validated by presence of any code files
     can_skip: false
     approval_required: false
@@ -147,6 +145,11 @@ default_order:
 # Presets for common use cases. Users can also specify custom phase lists.
 
 profiles:
+  build-only:
+    description: "Direct build - Claude implements from task description alone. No research or planning overhead."
+    phases:
+      - builder
+
   minimal:
     description: "Fast prototype - just research, design, and build. No tests, docs, or deployment."
     phases:
