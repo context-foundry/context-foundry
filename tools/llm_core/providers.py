@@ -52,12 +52,13 @@ class LocalClaudeProvider(LLMProvider):
         import sys
         import threading
 
-        # Verify claude CLI exists
-        if not shutil.which("claude"):
+        # Verify claude CLI exists and get full path (needed for Windows .CMD files)
+        claude_path = shutil.which("claude")
+        if not claude_path:
             raise FileNotFoundError("claude CLI not found in PATH")
 
         cmd = [
-            "claude",
+            claude_path,
             "--permission-mode",
             "bypassPermissions",
             "--strict-mcp-config",
