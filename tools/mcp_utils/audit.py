@@ -15,11 +15,11 @@ import sys
 import threading
 
 # fcntl is Unix-only; use msvcrt on Windows for file locking
-if sys.platform == 'win32':
-    import msvcrt
+if sys.platform == "win32":
     HAVE_FCNTL = False
 else:
     import fcntl
+
     HAVE_FCNTL = True
 
 # Default audit log location
