@@ -108,6 +108,13 @@ docs/*_VULNERABILITY_*.md
 # Strange git artifacts
 =*
 
+# Desktop app (separate development)
+apps/context-foundry-desktop/
+
+# Test junk
+test_flowise_project/
+cloud_test*.txt
+
 # ═══════════════════════════════════════════════════════════
 # Private Extensions (user-specific, not for public repo)
 # ═══════════════════════════════════════════════════════════

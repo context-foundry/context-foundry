@@ -1,1 +1,0 @@
-Success from AWS Bedrock!
