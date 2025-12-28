@@ -70,6 +70,8 @@ foundry/patterns/*.db
 .claude-code/cache/
 CLAUDE.md
 **/CLAUDE.md
+# But track extension CLAUDE.md files (they're documentation)
+!extensions/**/CLAUDE.md
 
 # OS
 .DS_Store
