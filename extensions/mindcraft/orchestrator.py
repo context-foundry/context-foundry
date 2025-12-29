@@ -65,6 +65,12 @@ class MindcraftOrchestrator:
         self._last_vision_time: dict = {}  # agent -> timestamp
         self.VISION_SCAN_INTERVAL = 300  # Request vision scan every 5 minutes
 
+        # Home base settings - Andy should stay near spawn
+        self.HOME_BASE = {"x": 288, "y": 80, "z": -48}  # World spawn point
+        self.MAX_DISTANCE_FROM_HOME = 150  # Blocks - if further, return home
+        self._last_home_check: dict = {}  # agent -> timestamp
+        self.HOME_CHECK_INTERVAL = 60  # Check every 60 seconds
+
         # Goal definitions: (name, priority, commands/messages)
         self.GOAL_ROTATION = [
             # Phase 1: Gather wood
@@ -163,7 +169,10 @@ class MindcraftOrchestrator:
                 # 4. Request periodic vision scans for environmental awareness
                 await self._request_vision_scans()
 
-                # 5. Sleep tick
+                # 5. Check if agents are too far from home and recall them
+                await self._check_distance_from_home()
+
+                # 6. Sleep tick
                 # Detailed work happens in background tasks (monitor, etc)
                 await asyncio.sleep(1.0)
 
@@ -279,6 +288,53 @@ class MindcraftOrchestrator:
             # Vision HUD is now built into agent state - no need to request scans
             # Just update the timestamp to track when we would have requested
             self._last_vision_time[agent_name] = now
+
+    async def _check_distance_from_home(self):
+        """Check if agents are too far from home base and recall them."""
+        import time
+        import math
+
+        now = time.time()
+        monitor_status = self.monitor.get_monitor_status()
+        agent_states = monitor_status.get("agent_states", {})
+
+        for agent_name, state in agent_states.items():
+            # Initialize home check time if not set
+            if agent_name not in self._last_home_check:
+                self._last_home_check[agent_name] = now
+                continue
+
+            # Only check every HOME_CHECK_INTERVAL seconds
+            time_since_check = now - self._last_home_check[agent_name]
+            if time_since_check < self.HOME_CHECK_INTERVAL:
+                continue
+
+            self._last_home_check[agent_name] = now
+
+            # Get agent position from state
+            position = state.get("position", {})
+            if not position:
+                continue
+
+            agent_x = position.get("x", 0)
+            agent_z = position.get("z", 0)
+
+            # Calculate distance from home (2D, ignore Y)
+            dx = agent_x - self.HOME_BASE["x"]
+            dz = agent_z - self.HOME_BASE["z"]
+            distance = math.sqrt(dx * dx + dz * dz)
+
+            if distance > self.MAX_DISTANCE_FROM_HOME:
+                print(f"🏠 {agent_name} is {int(distance)} blocks from home (max: {self.MAX_DISTANCE_FROM_HOME})")
+                print(f"   Sending recall command...")
+
+                home_x = self.HOME_BASE["x"]
+                home_z = self.HOME_BASE["z"]
+                await self.client.send_message(
+                    agent_name,
+                    f"You've wandered too far from home base! Return towards spawn at coordinates X={home_x}, Z={home_z}. "
+                    f"Execute: !goToCoordinates({home_x}, 80, {home_z}, 1)"
+                )
 
 
 async def run_orchestrator(dry_run: bool = False, server_url: Optional[str] = None):
