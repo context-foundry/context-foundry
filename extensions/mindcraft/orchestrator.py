@@ -52,12 +52,12 @@ class MindcraftOrchestrator:
 
         # Stuck detection nudge settings
         self._last_nudge_time: dict = {}  # agent -> timestamp
-        self.NUDGE_COOLDOWN = 60  # Seconds between nudges per agent
-        self.STUCK_NUDGE_THRESHOLD = 30  # Stuck count before nudging
+        self.NUDGE_COOLDOWN = 300  # Seconds between nudges per agent (5 min)
+        self.STUCK_NUDGE_THRESHOLD = 120  # Stuck count before nudging (2 min of checks)
 
         # Autonomous goal loop settings
         self._last_goal_time: dict = {}  # agent -> timestamp
-        self.GOAL_CHECK_INTERVAL = 120  # Check every 2 minutes if agent needs a goal
+        self.GOAL_CHECK_INTERVAL = 300  # Check every 5 minutes if agent needs a goal
         self._goal_cycle: dict = {}  # agent -> cycle index
         self._agent_is_busy: dict = {}  # agent -> bool tracking if working on goal
 
@@ -70,32 +70,32 @@ class MindcraftOrchestrator:
             # Phase 1: Gather wood
             {
                 "name": "gather_wood",
-                "message": "Gather wood! Find and collect at least 32 logs. Use !collectBlocks to find oak_log, birch_log, spruce_log, or any other log type. Store extras in a chest if you have one.",
+                "message": "[TASK] Gather 32 logs now. Execute this: !collectBlocks('birch_log', 32)",
             },
             # Phase 2: Build something with wood
             {
                 "name": "build_wood_structure",
-                "message": "Build time! Use your wood to craft planks and build a small wooden platform or extend your shelter. Remember: NEVER dig straight down, always place blocks safely.",
+                "message": "[TASK] Build a wooden shelter. Execute: !newAction('Build a 5x5 wooden shelter with walls, door, and roof using planks')",
             },
             # Phase 3: Gather stone/cobblestone
             {
                 "name": "gather_stone",
-                "message": "Mine for stone! Find stone or mine existing terrain to collect at least 64 cobblestone. Use !collectBlocks('stone', 64). SAFETY: Never dig straight down, always have a way back up!",
+                "message": "[TASK] Mine 64 stone blocks now. Execute this: !collectBlocks('stone', 64)",
             },
             # Phase 4: Build with stone
             {
                 "name": "build_stone_structure",
-                "message": "Construction phase! Use your cobblestone to reinforce your shelter, add walls, or build a new structure. Aim for a proper 5x5 house with a door and roof. Place torches for light.",
+                "message": "[TASK] Build stone walls. Execute: !newAction('Reinforce shelter with cobblestone walls and add torches inside')",
             },
             # Phase 5: Gather food
             {
                 "name": "gather_food",
-                "message": "Food run! Hunt for animals (pigs, cows, chickens) or gather crops. Collect at least 16 food items. Use !attack to hunt or !collectBlocks for crops.",
+                "message": "[TASK] You need food. Hunt animals now. Execute: !attack('pig')",
             },
             # Phase 6: Explore and scout
             {
                 "name": "explore",
-                "message": "Exploration time! Venture out and explore your surroundings. Look for interesting biomes, caves, or resources. Mark interesting locations to return to later. Stay safe!",
+                "message": "[TASK] Scout the area. Execute: !vision then explore in a promising direction.",
             },
         ]
 
@@ -193,9 +193,9 @@ class MindcraftOrchestrator:
         """Send a nudge message to help a stuck agent."""
         nudge_messages = [
             "Hey, are you stuck? Try looking around and finding another way.",
-            "Status check - what are you working on? If stuck, try !stop and reassess.",
-            "I noticed you haven't moved in a while. Do you need help? Try climbing out or going around obstacles.",
-            "Nudge: If you're stuck in a hole, try placing blocks to climb out. What's your situation?",
+            "Status check - what are you working on right now?",
+            "I noticed you haven't moved in a while. Do you need help?",
+            "If you're stuck in a hole, try placing blocks to climb out. What's your situation?",
         ]
         import random
         message = random.choice(nudge_messages)
@@ -276,16 +276,8 @@ class MindcraftOrchestrator:
             if time_since_scan < self.VISION_SCAN_INTERVAL:
                 continue
 
-            # Time for a vision scan!
-            print(f"\n👁️ Requesting vision scan for {agent_name}")
-            await self.client.send_message(
-                agent_name,
-                "Use !vision to scan your surroundings and identify resources. "
-                "Look for trees, water, caves, villages, or other useful features. "
-                "Then use !findResource to locate specific things you need."
-            )
-
-            # Update tracking
+            # Vision HUD is now built into agent state - no need to request scans
+            # Just update the timestamp to track when we would have requested
             self._last_vision_time[agent_name] = now
 
 
