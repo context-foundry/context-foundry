@@ -15,6 +15,7 @@ import shutil
 from .goals import Goal, GoalStatus, GoalType
 from .models import AgentState, AgentStatus
 from .monitor import MindcraftMonitor
+from .learner import MindcraftLearner
 
 # Import standard library
 import asyncio
@@ -31,6 +32,7 @@ class MindcraftPlanner:
     def __init__(self, monitor: MindcraftMonitor, dry_run: bool = False):
         self.monitor = monitor
         self.dry_run = dry_run
+        self.learner = MindcraftLearner()  # Initialize Knowledge Base
 
         self.goals: Dict[str, Goal] = {}  # All goals by ID
         self.active_goal_ids: List[str] = []
@@ -222,12 +224,31 @@ class MindcraftPlanner:
                 print("Error: `claude` CLI not found")
                 return []
 
-            prompt = f"{self.system_prompt}\n\nINPUT DATA:\n{input_json}"
+            # Extract context tags using heuristics
+            context_tags = []
+
+            # Time-based tags
+            # (Assuming we get time from somewhere, for now defaulting to day)
+            # context_tags.append("day")
+
+            # Check for water near agents
+            for agent in agents.values():
+                biome = agent.get("biome", "").lower()
+                if "ocean" in biome or "river" in biome:
+                    context_tags.append("water")
+                    context_tags.append("ocean")
+
+            # Simple retrieval
+            patterns_text = self.learner.get_pattern_summary(context_tags)
+
+            full_prompt = (
+                f"{self.system_prompt}\n\n{patterns_text}\n\nINPUT DATA:\n{input_json}"
+            )
 
             process = await asyncio.create_subprocess_exec(
                 "claude",
                 "--message",
-                prompt,
+                full_prompt,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
