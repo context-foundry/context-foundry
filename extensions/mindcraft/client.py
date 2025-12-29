@@ -9,10 +9,11 @@ CRITICAL SAFETY RULE: All planning must avoid water blocks!
 
 import asyncio
 import time
-from dataclasses import dataclass, field
 from datetime import datetime
-from enum import Enum
 from typing import Any, Callable, Dict, List, Optional
+
+# Import models
+from .models import AgentState, AgentStatus
 
 # Socket.io import with fallback for dry run
 try:
@@ -22,52 +23,6 @@ try:
 except ImportError:
     socketio = None
     SOCKETIO_AVAILABLE = False
-
-
-class AgentStatus(Enum):
-    """Agent connection status."""
-
-    UNKNOWN = "unknown"
-    ONLINE = "online"
-    OFFLINE = "offline"
-    STARTING = "starting"
-    STOPPING = "stopping"
-    ERROR = "error"
-
-
-@dataclass
-class AgentState:
-    """Current state of a Mindcraft agent."""
-
-    name: str
-    status: AgentStatus = AgentStatus.UNKNOWN
-    health: float = 20.0
-    hunger: float = 20.0
-    position: tuple = (0, 0, 0)
-    biome: str = "unknown"
-    gamemode: str = "survival"
-    inventory: List[Dict[str, Any]] = field(default_factory=list)
-    equipped: List[str] = field(default_factory=list)
-    current_action: str = ""
-    last_message: str = ""
-    last_update: datetime = field(default_factory=datetime.now)
-
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary for serialization."""
-        return {
-            "name": self.name,
-            "status": self.status.value,
-            "health": self.health,
-            "hunger": self.hunger,
-            "position": list(self.position),
-            "biome": self.biome,
-            "gamemode": self.gamemode,
-            "inventory": self.inventory,
-            "equipped": self.equipped,
-            "current_action": self.current_action,
-            "last_message": self.last_message,
-            "last_update": self.last_update.isoformat(),
-        }
 
 
 class MindcraftClient:
