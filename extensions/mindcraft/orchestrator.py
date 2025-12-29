@@ -50,6 +50,51 @@ class MindcraftOrchestrator:
         self._running = False
         self._loop_task: Optional[asyncio.Task] = None
 
+        # Stuck detection nudge settings
+        self._last_nudge_time: dict = {}  # agent -> timestamp
+        self.NUDGE_COOLDOWN = 60  # Seconds between nudges per agent
+        self.STUCK_NUDGE_THRESHOLD = 30  # Stuck count before nudging
+
+        # Autonomous goal loop settings
+        self._last_goal_time: dict = {}  # agent -> timestamp
+        self.GOAL_CHECK_INTERVAL = 120  # Check every 2 minutes if agent needs a goal
+        self._goal_cycle: dict = {}  # agent -> cycle index
+        self._agent_is_busy: dict = {}  # agent -> bool tracking if working on goal
+
+        # Goal definitions: (name, priority, commands/messages)
+        self.GOAL_ROTATION = [
+            # Phase 1: Gather wood
+            {
+                "name": "gather_wood",
+                "message": "Gather wood! Find and collect at least 32 logs. Use !collectBlocks to find oak_log, birch_log, spruce_log, or any other log type. Store extras in a chest if you have one.",
+            },
+            # Phase 2: Build something with wood
+            {
+                "name": "build_wood_structure",
+                "message": "Build time! Use your wood to craft planks and build a small wooden platform or extend your shelter. Remember: NEVER dig straight down, always place blocks safely.",
+            },
+            # Phase 3: Gather stone/cobblestone
+            {
+                "name": "gather_stone",
+                "message": "Mine for stone! Find stone or mine existing terrain to collect at least 64 cobblestone. Use !collectBlocks('stone', 64). SAFETY: Never dig straight down, always have a way back up!",
+            },
+            # Phase 4: Build with stone
+            {
+                "name": "build_stone_structure",
+                "message": "Construction phase! Use your cobblestone to reinforce your shelter, add walls, or build a new structure. Aim for a proper 5x5 house with a door and roof. Place torches for light.",
+            },
+            # Phase 5: Gather food
+            {
+                "name": "gather_food",
+                "message": "Food run! Hunt for animals (pigs, cows, chickens) or gather crops. Collect at least 16 food items. Use !attack to hunt or !collectBlocks for crops.",
+            },
+            # Phase 6: Explore and scout
+            {
+                "name": "explore",
+                "message": "Exploration time! Venture out and explore your surroundings. Look for interesting biomes, caves, or resources. Mark interesting locations to return to later. Stay safe!",
+            },
+        ]
+
     async def start(self):
         """Start the full orchestration system."""
         if self._running:
@@ -96,6 +141,7 @@ class MindcraftOrchestrator:
 
     async def _main_loop(self):
         """The heartbeat of the system."""
+        import time
         print("💓 Main loop active")
 
         while self._running:
@@ -104,13 +150,98 @@ class MindcraftOrchestrator:
                 # This checks goals, assigns tasks, and may trigger LLM
                 self.planner.update()
 
-                # 2. Sleep tick
+                # 2. Check for stuck agents and nudge them
+                await self._check_and_nudge_stuck_agents()
+
+                # 3. Check for idle agents and assign new goals
+                await self._check_and_assign_goals()
+
+                # 4. Sleep tick
                 # Detailed work happens in background tasks (monitor, etc)
                 await asyncio.sleep(1.0)
 
             except Exception as e:
                 print(f"⚠️ Error in main loop: {e}")
                 await asyncio.sleep(1.0)
+
+    async def _check_and_nudge_stuck_agents(self):
+        """Check for stuck agents and send a nudge if needed."""
+        import time
+
+        monitor_status = self.monitor.get_monitor_status()
+        stuck_counts = monitor_status.get("stuck_counts", {})
+
+        for agent_name, count in stuck_counts.items():
+            if count >= self.STUCK_NUDGE_THRESHOLD:
+                # Check cooldown
+                last_nudge = self._last_nudge_time.get(agent_name, 0)
+                now = time.time()
+
+                if now - last_nudge >= self.NUDGE_COOLDOWN:
+                    print(f"🔔 Nudging stuck agent: {agent_name} (stuck for {count} checks)")
+                    await self._send_nudge(agent_name)
+                    self._last_nudge_time[agent_name] = now
+
+    async def _send_nudge(self, agent_name: str):
+        """Send a nudge message to help a stuck agent."""
+        nudge_messages = [
+            "Hey, are you stuck? Try looking around and finding another way.",
+            "Status check - what are you working on? If stuck, try !stop and reassess.",
+            "I noticed you haven't moved in a while. Do you need help? Try climbing out or going around obstacles.",
+            "Nudge: If you're stuck in a hole, try placing blocks to climb out. What's your situation?",
+        ]
+        import random
+        message = random.choice(nudge_messages)
+
+        await self.client.send_message(agent_name, message)
+        print(f"   Sent: '{message}'")
+
+    async def _check_and_assign_goals(self):
+        """Check for idle agents and assign new goals from the rotation."""
+        import time
+
+        # Get all known agents
+        agents = self.client.get_all_agents()
+        if not agents:
+            return
+
+        now = time.time()
+
+        for agent_name, agent_state in agents.items():
+            # Skip offline agents
+            if agent_state.status.value != "online":
+                continue
+
+            # Initialize tracking for new agents - give them their first goal right away
+            if agent_name not in self._last_goal_time:
+                self._last_goal_time[agent_name] = now
+                self._goal_cycle[agent_name] = 0
+                self._agent_is_busy[agent_name] = False
+
+                # Send first goal immediately
+                goal = self.GOAL_ROTATION[0]
+                print(f"\n🎯 Initializing {agent_name} with first goal: {goal['name']}")
+                await self.client.send_message(agent_name, goal["message"])
+                self._goal_cycle[agent_name] = 1
+                continue
+
+            # Check if enough time has passed since last goal
+            # Use GOAL_CHECK_INTERVAL (default 2 minutes) as the cycle time
+            time_since_goal = now - self._last_goal_time[agent_name]
+            if time_since_goal < self.GOAL_CHECK_INTERVAL:
+                continue
+
+            # Time for a new goal!
+            cycle_index = self._goal_cycle.get(agent_name, 0)
+            goal = self.GOAL_ROTATION[cycle_index % len(self.GOAL_ROTATION)]
+
+            print(f"\n🎯 Assigning new goal to {agent_name}: {goal['name']}")
+            await self.client.send_message(agent_name, goal["message"])
+
+            # Update tracking
+            self._last_goal_time[agent_name] = now
+            self._goal_cycle[agent_name] = cycle_index + 1
+            print(f"   Next goal will be: {self.GOAL_ROTATION[(cycle_index + 1) % len(self.GOAL_ROTATION)]['name']}")
 
 
 async def run_orchestrator(dry_run: bool = False, server_url: Optional[str] = None):

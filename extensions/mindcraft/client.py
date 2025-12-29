@@ -110,11 +110,15 @@ class MindcraftClient:
             self._handle_state_update(data)
 
         @self._sio.on("bot-output")
-        async def on_bot_output(data):
+        async def on_bot_output(*args):
+            # Server may send (agent_name, data) or just (data,)
+            data = args[-1] if args else {}
             self._handle_bot_output(data)
 
         @self._sio.on("chat-message")
-        async def on_chat_message(data):
+        async def on_chat_message(*args):
+            # Server may send (agent_name, data) or just (data,)
+            data = args[-1] if args else {}
             self._handle_chat_message(data)
 
     def _log_event(self, event: str, data: Any) -> None:
@@ -134,7 +138,14 @@ class MindcraftClient:
         """Handle agents-status event from server."""
         self._log_event("agents-status", data)
 
-        if isinstance(data, dict):
+        # Server sends an array of agent objects:
+        # [{name: "andy", in_game: true, viewerPort: 3000, socket_connected: true}, ...]
+        if isinstance(data, list):
+            for agent_info in data:
+                if isinstance(agent_info, dict) and "name" in agent_info:
+                    self._update_agent_from_status(agent_info["name"], agent_info)
+        elif isinstance(data, dict):
+            # Legacy format: {agent_name: {status...}, ...}
             for name, status in data.items():
                 self._update_agent_from_status(name, status)
 
@@ -176,9 +187,9 @@ class MindcraftClient:
             self._agents[name] = AgentState(name=name)
 
         agent = self._agents[name]
-        agent.status = (
-            AgentStatus.ONLINE if status.get("online") else AgentStatus.OFFLINE
-        )
+        # Server sends "in_game" field to indicate if agent is online
+        is_online = status.get("in_game") or status.get("online") or status.get("socket_connected")
+        agent.status = AgentStatus.ONLINE if is_online else AgentStatus.OFFLINE
         agent.last_update = datetime.now()
 
     def _update_agent_from_state(self, name: str, state: Dict) -> None:
@@ -285,8 +296,11 @@ class MindcraftClient:
             return False
 
         try:
+            # Server expects: socket.on('send-message', (agentName, data) => ...)
+            # Agent expects data to have: { from: senderName, message: content }
+            # python-socketio requires a tuple to send multiple arguments
             await self._sio.emit(
-                "send-message", {"agentName": agent_name, "message": message}
+                "send-message", (agent_name, {"from": "Orchestrator", "message": message})
             )
             self._log_event("send_message", {"agent": agent_name, "message": message})
             return True
