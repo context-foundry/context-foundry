@@ -61,6 +61,10 @@ class MindcraftOrchestrator:
         self._goal_cycle: dict = {}  # agent -> cycle index
         self._agent_is_busy: dict = {}  # agent -> bool tracking if working on goal
 
+        # Vision scan settings
+        self._last_vision_time: dict = {}  # agent -> timestamp
+        self.VISION_SCAN_INTERVAL = 300  # Request vision scan every 5 minutes
+
         # Goal definitions: (name, priority, commands/messages)
         self.GOAL_ROTATION = [
             # Phase 1: Gather wood
@@ -156,7 +160,10 @@ class MindcraftOrchestrator:
                 # 3. Check for idle agents and assign new goals
                 await self._check_and_assign_goals()
 
-                # 4. Sleep tick
+                # 4. Request periodic vision scans for environmental awareness
+                await self._request_vision_scans()
+
+                # 5. Sleep tick
                 # Detailed work happens in background tasks (monitor, etc)
                 await asyncio.sleep(1.0)
 
@@ -242,6 +249,44 @@ class MindcraftOrchestrator:
             self._last_goal_time[agent_name] = now
             self._goal_cycle[agent_name] = cycle_index + 1
             print(f"   Next goal will be: {self.GOAL_ROTATION[(cycle_index + 1) % len(self.GOAL_ROTATION)]['name']}")
+
+    async def _request_vision_scans(self):
+        """Request periodic vision scans to give agents environmental awareness."""
+        import time
+
+        # Get all known agents
+        agents = self.client.get_all_agents()
+        if not agents:
+            return
+
+        now = time.time()
+
+        for agent_name, agent_state in agents.items():
+            # Skip offline agents
+            if agent_state.status.value != "online":
+                continue
+
+            # Initialize tracking for new agents
+            if agent_name not in self._last_vision_time:
+                self._last_vision_time[agent_name] = now
+                continue
+
+            # Check if enough time has passed since last vision scan
+            time_since_scan = now - self._last_vision_time[agent_name]
+            if time_since_scan < self.VISION_SCAN_INTERVAL:
+                continue
+
+            # Time for a vision scan!
+            print(f"\n👁️ Requesting vision scan for {agent_name}")
+            await self.client.send_message(
+                agent_name,
+                "Use !vision to scan your surroundings and identify resources. "
+                "Look for trees, water, caves, villages, or other useful features. "
+                "Then use !findResource to locate specific things you need."
+            )
+
+            # Update tracking
+            self._last_vision_time[agent_name] = now
 
 
 async def run_orchestrator(dry_run: bool = False, server_url: Optional[str] = None):
