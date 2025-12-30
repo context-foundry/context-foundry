@@ -1,79 +1,143 @@
-# 🧠 Mindcraft Orchestrator
+# Mindcraft Orchestrator
 
 **Autonomous Minecraft Agent Framework for Context Foundry**
 
-The Mindcraft Orchestrator enables 24/7 autonomous Minecraft agents driven by LLMs. It provides a complete "Body" (Client), "Eyes" (State Monitor), "Brain" (Planner), and "Hands" (Orchestrator) for your bots.
+The Mindcraft Orchestrator enables 24/7 autonomous Minecraft agents driven by LLMs. It provides intelligent control, state monitoring, and multiple operational modes for your bots.
 
-## 🌟 Features
+## Features
 
-*   **Real-time Control:** Bidirectional communication via Socket.io to MindServer.
-*   **State Awareness:** Monitors health, hunger, inventory, and world events (Death, Night).
-*   **Goal Planning:** Autonomous goal generation and prioritization using LLMs (Claude).
-*   **Persistence:** Saves agent state and history to disk.
-*   **Context Foundry Native:** Built as a first-class Extension with CLI tools.
+- **LLM-Powered Intelligence:** Uses Claude CLI for context-aware responses and decisions
+- **Multiple Modes:** Builder, Helper, and Defender modes for different play styles
+- **RCON Integration:** Admin commands for giving items, teleporting, and server control
+- **State Awareness:** Monitors health, hunger, position, and detects stuck agents
+- **Auto-Rescue:** Detects underground/stuck agents and teleports them to safety
+- **Unlimited Supplies:** Agents can request any items via RCON admin commands
 
-## 🚀 Quick Start
+## Quick Start
 
-### 1. Installation
-The extension is built into Context Foundry. You just need to install the dependencies and tools.
+### Easy Mode Switching
 
-```bash
-# On your VPS or local machine
-git pull
-pip install "python-socketio[client]" aiohttp pydantic
-
-# Install CLI tools to ~/.context-foundry/tools/
-python3 scripts/install_mindcraft.py
-```
-
-### 2. Configuration
-The system auto-detects configuration from Environment Variables (Recommended for VPS) or a config file.
-
-**Option A: Environment Variables (Best for Docker/VPS)**
-```bash
-export MINDCRAFT_SERVER_URL="wss://your-server.com"
-export MINDCRAFT_AGENTS="andy,bob"
-```
-
-**Option B: Config File**
-Edit `~/.context-foundry/mindcraft/config.json`:
-```json
-{
-  "server_url": "wss://andy.minepad.cc",
-  "agents": ["andy"],
-  "dry_run": false
-}
-```
-
-### 3. Run It!
-Start the autonomous loop:
+Use the mode switcher script to quickly change Andy's behavior:
 
 ```bash
-# Dry Run (Simulation)
-python3 ~/.context-foundry/tools/mindcraft_orchestrate.py --dry-run
+cd /home/chuck/homelab/context-foundry/extensions/mindcraft
 
-# Live Connection
-python3 ~/.context-foundry/tools/mindcraft_orchestrate.py
+# Start Andy in builder mode (builds villages, unlimited supplies)
+./andy-mode.sh builder
+
+# Start Andy in helper mode (follows players, assists with tasks)
+./andy-mode.sh helper
+
+# Start Andy in defender mode (combat, mob hunting, protection)
+./andy-mode.sh defender
+
+# Stop the orchestrator
+./andy-mode.sh stop
+
+# Check status
+./andy-mode.sh status
 ```
 
----
+### Manual Start
 
-## 🛠 CLI Tools
+```bash
+cd /home/chuck/homelab/context-foundry
 
-The extension provides several standalone tools in `~/.context-foundry/tools/`:
+# Start with specific mode
+python -m extensions.mindcraft.orchestrator --mode builder
+python -m extensions.mindcraft.orchestrator --mode helper
+python -m extensions.mindcraft.orchestrator --mode defender
+```
 
-| Tool | Description | Usage |
-|------|-------------|-------|
-| `mindcraft_orchestrate.py` | **The Main Loop.** Runs the full autonomous system. | `python3 mindcraft_orchestrate.py` |
-| `mindcraft_status.py` | Check agent status (Health, Location). | `python3 mindcraft_status.py` |
-| `mindcraft_agent.py` | Manual control (Chat, Start/Stop). | `python3 mindcraft_agent.py --msg "Hello"` |
-| `mindcraft_config.py` | View or edit configuration. | `python3 mindcraft_config.py --view` |
+## Modes
 
-## 🏗 Architecture
+### Builder Mode
+Andy becomes a master village builder with unlimited supplies.
+- Assigns building projects (houses, farms, towers, villages)
+- Gives any materials Andy requests via RCON
+- Focuses 100% on construction, never resource gathering
+- Progressive complexity from simple houses to grand plazas
 
-The system is composed of 4 main phases:
+### Helper Mode
+Andy becomes a helpful companion to players.
+- Follows players and assists with their tasks
+- Helps mine, build, and explore
+- Places torches in dark areas
+- Fights mobs that threaten players
+- Doesn't start independent projects
 
-1.  **Foundation (`client.py`):** Handles raw Socket.io connectivity.
-2.  **State Awareness (`monitor.py`, `models.py`):** Tracks changes and detects anomalies (stuck, death).
-3.  **Planning (`planner.py`, `goals.py`):** Generates high-level goals ("Gather Wood") using `prompts/planner_system.md`.
-4.  **Autonomy (`orchestrator.py`):** runs the main loop `Observe -> Plan -> Act`.
+### Defender Mode
+Andy becomes a combat guardian.
+- Patrols the village perimeter
+- Hunts hostile mobs proactively
+- Protects players from threats
+- Equipped with full combat gear
+- Priority: creepers > skeletons > zombies
+
+## Mode Equipment Kits
+
+Each mode automatically equips Andy with appropriate gear:
+
+| Mode | Equipment |
+|------|-----------|
+| Builder | Diamond pickaxe, shovel, axe, 256 each of cobblestone/oak planks/glass, torches, doors |
+| Helper | Diamond pickaxe, shovel, sword, shield, 64 torches, food, building blocks |
+| Defender | Netherite sword, bow, 64 arrows, full diamond armor, shield, golden apples |
+
+## RCON Commands
+
+The orchestrator can execute any Minecraft command via RCON:
+
+```python
+# Give items
+/give andy diamond_pickaxe 1
+/give andy cobblestone 256
+
+# Teleport
+/tp andy 288 85 -48
+
+# Effects
+/effect give andy minecraft:regeneration 30 2
+```
+
+## Auto-Rescue System
+
+The orchestrator automatically detects and rescues stuck agents:
+
+- **Underground Detection:** If agent Y < 75, teleports to spawn
+- **Stuck Detection:** If agent hasn't moved in 5+ checks, rescues
+- **Invalid Position:** Skips Y=0 positions (indicates unloaded state)
+- **Cooldowns:** 60-second rescue cooldown, 5-minute kit cooldown
+
+## Logs
+
+View orchestrator activity:
+```bash
+tail -f /tmp/orch_log.txt
+```
+
+## Architecture
+
+```
+orchestrator.py
+├── LLM Integration (Claude CLI)
+├── RCON Commands (docker exec rcon-cli)
+├── Socket.io Client (MindServer connection)
+├── State Monitor (position, health, inventory)
+├── Stuck Detection & Auto-Rescue
+└── Mode System (builder/helper/defender)
+```
+
+## Prompts
+
+Mode-specific prompts are in `prompts/`:
+- `mode_builder.md` - Village builder system prompt
+- `mode_helper.md` - Helper companion system prompt
+- `mode_defender.md` - Combat guardian system prompt
+
+## Dependencies
+
+- Python 3.8+
+- python-socketio[client]
+- Claude CLI (for LLM responses)
+- Docker (for RCON access to Minecraft server)
