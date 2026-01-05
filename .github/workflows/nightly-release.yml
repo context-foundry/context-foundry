@@ -206,7 +206,7 @@ jobs:
 
       - name: Create GitHub Release
         if: steps.check_commits.outputs.has_commits == 'true'
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.version }}
           name: "Context Foundry Nightly - ${{ steps.version.outputs.date_formatted }}"
