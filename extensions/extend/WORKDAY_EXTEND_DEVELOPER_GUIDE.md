@@ -34,7 +34,7 @@ Steps to get started:
 
 **Important:** Developer tenant provisioning can take 1-5 business days. The tenant URL will look like:
 ```
-https://wd5-impl-services1.workday.com/<tenant_name>/d/home.htmld
+https://wd5-impl-services1.workday.com/<tenant_name>/d/home.html
 ```
 
 ### 1.2 Tenant Types and Their Roles
@@ -943,9 +943,11 @@ Solution:
 ```
 Problem: CORS errors when calling from browser
 Solution:
-  Workday APIs do NOT support CORS for browser-based calls
-  You MUST proxy API calls through a backend server
-  Never call Workday APIs directly from client-side JavaScript
+  Workday REST APIs require CORS origin configuration in the API client.
+  If you control the API client, add your domain to "Authorized CORS Origins"
+  in the API client configuration (see extend-js-example for reference).
+  For external apps without API client access, proxy calls through a backend.
+  Within Extend apps, use orchestration integration steps instead of browser calls.
 ```
 
 ### 4.7 Common Error Codes
@@ -1930,7 +1932,7 @@ Security Group: "Equipment Request - API"
 
 4. **WIDs are tenant-specific.** Never hardcode WIDs; use Reference IDs or configuration objects instead.
 
-5. **Workday APIs do not support CORS.** Browser-based JavaScript cannot call Workday APIs directly; use a backend proxy.
+5. **Workday APIs require CORS configuration.** Browser-based JavaScript requires the calling domain to be added to "Authorized CORS Origins" in the API client configuration. Without this, browser calls are blocked. Within Extend apps, use orchestration integration steps rather than direct browser calls. ([source: extend-js-example](https://github.com/Workday/extend-js-example))
 
 6. **PUT is idempotent in SOAP.** PUT creates if the object doesn't exist, updates if it does. There is no separate create operation.
 

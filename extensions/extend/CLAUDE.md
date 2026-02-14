@@ -31,7 +31,7 @@ This extension covers **Workday Extend** application development -- the PaaS pla
 - **Security policy activation is mandatory**: After ANY security change, run "Activate Pending Security Policy Changes"
 - **Credentials never migrate**: Always re-enter integration credentials after deploying to a new tenant
 - **WIDs are tenant-specific**: Never hardcode WIDs; use Reference IDs or configuration business objects
-- **No CORS support**: Workday APIs cannot be called from browser JavaScript; use a backend proxy
+- **CORS requires configuration**: Workday REST APIs require explicit CORS origin configuration in the API client; browser calls fail without it. Extend apps use orchestration steps instead of direct browser calls. ([source: extend-js-example](https://github.com/Workday/extend-js-example))
 - **Extend requires a license**: Not all Workday customers have Extend access
 - **Test before every release**: Workday releases twice per year and can break Extend apps
 

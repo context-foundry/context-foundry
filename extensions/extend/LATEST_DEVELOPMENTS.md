@@ -17,13 +17,13 @@ Workday Extend offers two tiers:
 At Workday Rising 2025, Workday launched **Workday Build** -- a unified developer platform that consolidates Workday Extend with new AI-powered tools:
 
 - **Workday Extend** (app building -- the core)
-- **Flowise Agent Builder**: Low-code AI agent design, available H1 2026 for Extend Professional customers
-- **Developer Copilot**: AI coding companion, GA by end of 2025
-- **Agent Gateway**: MCP-compliant APIs for third-party AI agent integration, early adopter access by end of 2025
-- **Developer CLI**: Command-line tool for DevOps workflows, GA by end of 2025
-- **AI Widgets**: Embeddable AI-powered UI components, GA by end of 2025
+- **Flowise Agent Builder**: Low-code AI agent design, targeted H1 2026 for Extend Professional customers (status: on track, not yet confirmed GA)
+- **Developer Copilot**: AI coding companion, targeted GA end 2025 (initial release 2024 R2; enhanced capabilities announced June 2025; no delays reported but GA not explicitly confirmed)
+- **Agent Gateway**: MCP- and A2A-compliant APIs for third-party AI agent integration, early adopter access reached end 2025; GA date TBD
+- **Developer CLI**: Command-line tool for DevOps workflows, targeted GA end 2025 (no delays reported but GA not explicitly confirmed)
+- **AI Widgets**: Embeddable AI-powered UI components, targeted GA end 2025 (no delays reported but GA not explicitly confirmed)
 - **AI Services**: Expanded native APIs for Document Intelligence and natural language queries
-- **Workday Data Cloud**: Zero-copy data sharing via Apache Iceberg, early access H1 2026
+- **Workday Data Cloud**: Zero-copy data sharing via Apache Iceberg, early adopter access targeted H1 2026, GA later 2026
 
 ### Agent Partner Network
 15+ launch partners including Accenture, Adobe, AWS, Deloitte, Google Cloud, IBM, Microsoft -- their agents integrate through the gateway to connect with Workday's Agent System of Record (ASOR).
@@ -87,8 +87,8 @@ At Workday Rising 2025, Workday launched **Workday Build** -- a unified develope
 ### REST API Details
 - **Endpoint pattern**: `https://{hostname}.workday.com/ccx/api/v1/{tenant_name}`
 - **Authentication**: OAuth 2.0 (Client ID + Client Secret -> Access/Refresh tokens)
-- **Rate limiting**: ~10 calls per second (Workday drops beyond that)
-- **No native webhook support**: Requires polling or third-party solutions
+- **Rate limiting**: Tenant-dependent; commonly reported as ~10 calls/sec but varies by tenant size, API type, and Workday configuration. Always implement exponential backoff and respect `Retry-After` headers.
+- **No inbound webhook endpoint**: The REST API does not expose a native webhook subscription endpoint. For event-driven outbound notifications, use orchestration steps with REST API calls (see orchestrations-integrations-guide.md). For inbound event detection, use polling or third-party middleware.
 
 ### Graph API
 - Used by Extend apps for data relationships
@@ -153,7 +153,7 @@ yarn add @workday/canvas-kit-react @workday/canvas-tokens-web
 |--------|-------------|--------|
 | Interface | Browser-based, drag-and-drop | Eclipse-based IDE |
 | Best for | Lightweight, real-time, event-driven API integrations | Bulk operations, payroll, millions of records |
-| Languages | JSON/XML expressions | Java, Python, Ruby, JavaScript |
+| Languages | JSON/XML expressions | XML assembly, XSLT 2.0, MVEL, Java (custom beans) |
 | Deployment | In-tenant | Deployed to Workday cloud |
 | Time savings | 30-50% reduction vs Studio | Baseline |
 
@@ -171,14 +171,14 @@ yarn add @workday/canvas-kit-react @workday/canvas-tokens-web
 | Copilot for Workday Extend | 2024 R2 |
 | Bidirectional BO Relationships | 2024 |
 | Quick Deploy to IMPL | Late 2024 |
-| AI Widgets | GA by end 2025 |
-| AI Services (expanded APIs) | GA by end 2025 |
-| Developer Copilot (enhanced) | GA by end 2025 |
-| Developer CLI | GA by end 2025 |
-| Agent Gateway (MCP-compliant) | Early adopter end 2025, GA later |
-| Flowise Agent Builder | H1 2026 (Extend Professional) |
-| Workday Data Cloud | Early access H1 2026, GA later 2026 |
-| Workday Build platform | 2025-2026 rollout |
+| AI Widgets | Targeted GA end 2025 (unconfirmed as of Feb 2026) |
+| AI Services (expanded APIs) | Targeted GA end 2025 (unconfirmed as of Feb 2026) |
+| Developer Copilot (enhanced) | Targeted GA end 2025; initial release 2024 R2 (unconfirmed as of Feb 2026) |
+| Developer CLI | Targeted GA end 2025 (unconfirmed as of Feb 2026) |
+| Agent Gateway (MCP + A2A) | Early adopter reached end 2025; GA date TBD |
+| Flowise Agent Builder | Targeted H1 2026, Extend Professional (on track, not yet confirmed) |
+| Workday Data Cloud | Early adopter targeted H1 2026, GA later 2026 |
+| Workday Build platform | 2025-2026 rollout (ongoing) |
 
 ---
 
@@ -198,7 +198,7 @@ Pre-built AI agents for HR, Financials, and Industry workflows:
 
 2. **JSON-centric**: Everything in Extend is JSON -- pages, metadata, orchestrations. Well-suited for AI generation, but must be authored within the App Builder or IntelliJ plugin.
 
-3. **New CLI opportunity**: The upcoming Developer CLI (GA end 2025) may enable AI agents to interact with Workday Extend programmatically, opening the door for automated app creation, testing, and deployment.
+3. **New CLI opportunity**: The Developer CLI (targeted GA end 2025, status unconfirmed) may enable AI agents to interact with Workday Extend programmatically, opening the door for automated app creation, testing, and deployment.
 
 4. **MCP-compliant Agent Gateway**: Workday's adoption of the Model Context Protocol means AI agents can potentially integrate directly with Workday's Agent System of Record.
 
@@ -234,7 +234,7 @@ Workday releases updates **twice per year**:
 | Developer Portal | https://developer.workday.com |
 | Canvas Kit GitHub | https://github.com/Workday/canvas-kit |
 | Extend JS Examples | https://github.com/Workday/extend-js-example |
-| Canvas Kit Storybook | https://storybook.css.org/showcase/workday-canvas |
+| Canvas Kit Storybook | https://workday.github.io/canvas-kit/ |
 | WQL Documentation | https://doc.workday.com (admin guide > reporting > WQL) |
 | Workday Engineering Blog | https://medium.com/workday-engineering |
 | Workday GitHub Page | https://workday.github.io/ |
@@ -242,4 +242,18 @@ Workday releases updates **twice per year**:
 
 ---
 
-*Sources: developer.workday.com, Workday DevCon 2024, Workday Rising 2025, Makse Group, TechTarget, SiliconANGLE, Diginomica, Futurum Group, PRNewswire, Collaborative Solutions, Workday Community, GitHub*
+## Source Citations
+
+| Claim Area | Primary Source |
+|------------|---------------|
+| Workday Build platform | [Workday blog: Workday Build announcement (Sep 2025)](https://blog.workday.com/en-us/2025/workday-introduces-workday-build-unified-platform-developers-build-manage-workday-agents-apps.html) |
+| Agent Gateway, Developer Copilot, CLI | [PRNewswire: Workday AI Developer Toolset (Jun 2025)](https://www.prnewswire.com/news-releases/workday-unveils-ai-developer-toolset-empowering-developers-to-customize-and-connect-ai-apps-and-agents-on-the-workday-platform-302471900.html) |
+| Flowise acquisition | [PRNewswire: Workday Acquires Flowise (Aug 2025)](https://www.prnewswire.com/news-releases/workday-acquires-flowise-bringing-powerful-ai-agent-builder-capabilities-to-the-workday-platform-302530557.html) |
+| Data Cloud, Flex Credits | [Futurum: Workday Rising 2025](https://futurumgroup.com/insights/workday-rising-2025-ai-agents-data-cloud-and-flex-credits-unveiled/) |
+| Agent Gateway details | [Diginomica: Workday DevCon agent gateway](https://diginomica.com/workday-devcon-new-agent-gateway-adds-third-party-ai-agents-workdays-agentic-landscape) |
+| Extend product page | [Workday: Application Development](https://www.workday.com/en-us/products/platform-product-extensions/application-development.html) |
+| CORS configuration | [GitHub: extend-js-example](https://github.com/Workday/extend-js-example) |
+| Canvas Kit | [GitHub: Workday/canvas-kit](https://github.com/Workday/canvas-kit) |
+| Studio languages | [GitHub: vassar-college-es/workday-studio-integrations](https://github.com/vassar-college-es/workday-studio-integrations), [PhenomCloud: Workday Studio](https://resources.phenomecloud.com/workday-studio) |
+
+*Last updated: 2026-02-13. Roadmap items with "unconfirmed" status should be re-verified against developer.workday.com before relying on them.*

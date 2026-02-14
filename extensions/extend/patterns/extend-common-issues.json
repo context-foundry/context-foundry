@@ -82,27 +82,28 @@
       ]
     },
     {
-      "pattern_id": "extend-no-cors",
+      "pattern_id": "extend-cors-config",
       "category": "integration",
       "severity": "high",
       "frequency": 1,
-      "description": "Workday APIs do not support CORS, preventing direct browser-side API calls",
+      "description": "Workday REST APIs require explicit CORS origin configuration in the API client settings; browser calls fail without it",
       "applies_to": ["extend", "api", "integration"],
       "node_types": ["Web Service Endpoint", "REST API"],
       "best_practices": [
-        "Always proxy Workday API calls through a backend server",
-        "Use server-side middleware (Lambda, Azure Functions, etc.) for API interactions",
-        "Within Extend apps, use orchestration integration steps for external calls"
+        "Configure 'Authorized CORS Origins' in the API client for domains that need browser access",
+        "For external apps without API client access, proxy Workday API calls through a backend server",
+        "Within Extend apps, use orchestration integration steps rather than direct browser calls",
+        "See extend-js-example repo for reference CORS configuration"
       ],
       "anti_patterns": [
-        "Attempting to call Workday APIs directly from client-side JavaScript",
-        "Building SPAs that directly consume Workday REST endpoints"
+        "Assuming Workday APIs have no CORS support at all",
+        "Calling Workday APIs from browser JavaScript without configuring CORS origins in the API client"
       ],
       "common_issues": [
         {
           "issue_id": "cors-blocked",
           "description": "Browser console shows CORS errors when attempting to call Workday APIs from a web application",
-          "solution": "Workday APIs do not include CORS headers. Route all API calls through a backend proxy server. Within Extend apps, use orchestration integration steps instead of client-side calls."
+          "solution": "Add the calling domain to 'Authorized CORS Origins' in the Workday API client configuration. If you don't control the API client, route calls through a backend proxy. Within Extend apps, use orchestration integration steps."
         }
       ]
     },
