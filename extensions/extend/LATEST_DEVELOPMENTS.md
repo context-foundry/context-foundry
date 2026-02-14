@@ -247,13 +247,13 @@ Workday releases updates **twice per year**:
 | Claim Area | Primary Source |
 |------------|---------------|
 | Workday Build platform | [Workday blog: Workday Build announcement (Sep 2025)](https://blog.workday.com/en-us/2025/workday-introduces-workday-build-unified-platform-developers-build-manage-workday-agents-apps.html) |
-| Agent Gateway, Developer Copilot, CLI | [PRNewswire: Workday AI Developer Toolset (Jun 2025)](https://www.prnewswire.com/news-releases/workday-unveils-ai-developer-toolset-empowering-developers-to-customize-and-connect-ai-apps-and-agents-on-the-workday-platform-302471900.html) |
-| Flowise acquisition | [PRNewswire: Workday Acquires Flowise (Aug 2025)](https://www.prnewswire.com/news-releases/workday-acquires-flowise-bringing-powerful-ai-agent-builder-capabilities-to-the-workday-platform-302530557.html) |
-| Data Cloud, Flex Credits | [Futurum: Workday Rising 2025](https://futurumgroup.com/insights/workday-rising-2025-ai-agents-data-cloud-and-flex-credits-unveiled/) |
-| Agent Gateway details | [Diginomica: Workday DevCon agent gateway](https://diginomica.com/workday-devcon-new-agent-gateway-adds-third-party-ai-agents-workdays-agentic-landscape) |
+| Agent Gateway, Developer Copilot, CLI, AI Widgets | [Workday Developer Portal](https://developer.workday.com) |
+| Flowise Agent Builder roadmap | [Workday Newsroom](https://www.workday.com/en-us/company/newsroom.html) |
+| Data Cloud roadmap | [Workday Newsroom](https://www.workday.com/en-us/company/newsroom.html) |
+| Agent Gateway details | [Workday Developer Portal](https://developer.workday.com) |
 | Extend product page | [Workday: Application Development](https://www.workday.com/en-us/products/platform-product-extensions/application-development.html) |
 | CORS configuration | [GitHub: extend-js-example](https://github.com/Workday/extend-js-example) |
 | Canvas Kit | [GitHub: Workday/canvas-kit](https://github.com/Workday/canvas-kit) |
-| Studio languages | [GitHub: vassar-college-es/workday-studio-integrations](https://github.com/vassar-college-es/workday-studio-integrations), [PhenomCloud: Workday Studio](https://resources.phenomecloud.com/workday-studio) |
+| Studio capabilities baseline | [Workday Developer Portal](https://developer.workday.com) |
 
-*Last updated: 2026-02-13. Roadmap items with "unconfirmed" status should be re-verified against developer.workday.com before relying on them.*
+*Last updated: 2026-02-14. Roadmap items with "unconfirmed" status should be re-verified against developer.workday.com before relying on them.*
