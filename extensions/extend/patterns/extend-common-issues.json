@@ -1,0 +1,266 @@
+{
+  "metadata": {
+    "version": "1.0",
+    "last_updated": "2026-02-13",
+    "total_builds": 0,
+    "description": "Common issues and patterns for Workday Extend application development"
+  },
+  "patterns": [
+    {
+      "pattern_id": "extend-security-policy-activation",
+      "category": "configuration",
+      "severity": "critical",
+      "frequency": 1,
+      "description": "Security policy changes are not enforced until explicitly activated",
+      "applies_to": ["extend", "security", "deployment"],
+      "node_types": ["Security Group", "Domain Security Policy"],
+      "best_practices": [
+        "Always run 'Activate Pending Security Policy Changes' after any security modification",
+        "Include security activation as a mandatory post-deployment step",
+        "Test security with the actual end-user accounts, not admin accounts"
+      ],
+      "anti_patterns": [
+        "Assuming security changes take effect immediately after saving",
+        "Testing only with admin accounts that bypass security restrictions"
+      ],
+      "common_issues": [
+        {
+          "issue_id": "security-not-activated",
+          "description": "Users report 'access denied' or cannot see app components after deployment, despite security groups being configured correctly",
+          "solution": "Run the task 'Activate Pending Security Policy Changes' in the tenant. Security changes remain in pending state until this task is executed."
+        }
+      ]
+    },
+    {
+      "pattern_id": "extend-credential-migration",
+      "category": "deployment",
+      "severity": "high",
+      "frequency": 1,
+      "description": "Integration credentials (passwords, API keys, secrets) are not included in migration packages",
+      "applies_to": ["extend", "deployment", "integration"],
+      "node_types": ["Migration Set", "Integration"],
+      "best_practices": [
+        "Maintain a secure credential inventory for each tenant",
+        "Include credential configuration as a mandatory post-migration checklist item",
+        "Document which integrations require credential re-entry"
+      ],
+      "anti_patterns": [
+        "Expecting credentials to transfer between tenants in migration packages",
+        "Storing credentials in business object data fields"
+      ],
+      "common_issues": [
+        {
+          "issue_id": "integration-auth-failure-after-migration",
+          "description": "Integrations fail with authentication errors immediately after deploying to a new tenant",
+          "solution": "Re-enter all integration credentials (API keys, passwords, client secrets) in the target tenant. Credentials are intentionally excluded from migration packages for security reasons."
+        }
+      ]
+    },
+    {
+      "pattern_id": "extend-wid-hardcoding",
+      "category": "development",
+      "severity": "high",
+      "frequency": 1,
+      "description": "Workday IDs (WIDs) are unique per tenant and must not be hardcoded",
+      "applies_to": ["extend", "development", "multi-tenant"],
+      "node_types": ["Business Object", "Orchestration", "Calculated Field"],
+      "best_practices": [
+        "Use Reference IDs instead of WIDs when referencing Workday objects",
+        "Store tenant-specific values in a configuration business object",
+        "Use InstanceSearch components in the UI for user-driven object selection"
+      ],
+      "anti_patterns": [
+        "Hardcoding WID values in orchestrations or calculated fields",
+        "Assuming a WID from sandbox will work in production"
+      ],
+      "common_issues": [
+        {
+          "issue_id": "wid-not-found-after-migration",
+          "description": "Orchestrations or calculated fields fail with 'instance not found' errors after deployment to a different tenant",
+          "solution": "Replace hardcoded WIDs with Reference IDs or configuration lookups. WIDs are generated per-tenant and will differ between sandbox, preview, and production."
+        }
+      ]
+    },
+    {
+      "pattern_id": "extend-no-cors",
+      "category": "integration",
+      "severity": "high",
+      "frequency": 1,
+      "description": "Workday APIs do not support CORS, preventing direct browser-side API calls",
+      "applies_to": ["extend", "api", "integration"],
+      "node_types": ["Web Service Endpoint", "REST API"],
+      "best_practices": [
+        "Always proxy Workday API calls through a backend server",
+        "Use server-side middleware (Lambda, Azure Functions, etc.) for API interactions",
+        "Within Extend apps, use orchestration integration steps for external calls"
+      ],
+      "anti_patterns": [
+        "Attempting to call Workday APIs directly from client-side JavaScript",
+        "Building SPAs that directly consume Workday REST endpoints"
+      ],
+      "common_issues": [
+        {
+          "issue_id": "cors-blocked",
+          "description": "Browser console shows CORS errors when attempting to call Workday APIs from a web application",
+          "solution": "Workday APIs do not include CORS headers. Route all API calls through a backend proxy server. Within Extend apps, use orchestration integration steps instead of client-side calls."
+        }
+      ]
+    },
+    {
+      "pattern_id": "extend-refresh-token-single-use",
+      "category": "authentication",
+      "severity": "medium",
+      "frequency": 1,
+      "description": "OAuth 2.0 refresh tokens are single-use; each refresh returns a new refresh token",
+      "applies_to": ["extend", "api", "authentication"],
+      "node_types": ["API Client", "OAuth"],
+      "best_practices": [
+        "Always store the latest refresh token after each token refresh",
+        "Implement atomic token storage to prevent race conditions",
+        "Handle the 'invalid_grant' error by re-authenticating from scratch"
+      ],
+      "anti_patterns": [
+        "Reusing a refresh token after it has been exchanged",
+        "Having multiple processes share and simultaneously refresh the same token"
+      ],
+      "common_issues": [
+        {
+          "issue_id": "invalid-grant-error",
+          "description": "Token refresh fails with 'invalid_grant' error",
+          "solution": "Refresh tokens are single-use. If the new refresh token was not saved after the last refresh, you must re-authenticate. Also, refresh tokens expire after 14 days of inactivity. Implement proper token storage that saves the new refresh token atomically after each use."
+        }
+      ]
+    },
+    {
+      "pattern_id": "extend-migration-id-stability",
+      "category": "deployment",
+      "severity": "high",
+      "frequency": 1,
+      "description": "Migration IDs are the cross-tenant identity for objects and must remain stable",
+      "applies_to": ["extend", "deployment", "migration"],
+      "node_types": ["Migration Set", "Business Object"],
+      "best_practices": [
+        "Assign meaningful migration IDs to all custom objects at creation time",
+        "Never change a migration ID after initial deployment to any non-sandbox tenant",
+        "Document migration IDs in your version control alongside changelogs"
+      ],
+      "anti_patterns": [
+        "Relying on auto-generated migration IDs",
+        "Changing migration IDs between deployments"
+      ],
+      "common_issues": [
+        {
+          "issue_id": "migration-id-conflict",
+          "description": "Migration import fails with 'duplicate migration ID' or creates duplicate objects instead of updating existing ones",
+          "solution": "Migration IDs must be stable and unique. If IDs were changed, Workday sees the object as new and creates a duplicate. Resolve by either reverting the migration ID or manually removing the duplicate in the target tenant."
+        }
+      ]
+    },
+    {
+      "pattern_id": "extend-schedule-not-migrated",
+      "category": "deployment",
+      "severity": "medium",
+      "frequency": 1,
+      "description": "Scheduled orchestration triggers are not included in migration packages",
+      "applies_to": ["extend", "deployment", "orchestration"],
+      "node_types": ["Orchestration", "Migration Set"],
+      "best_practices": [
+        "Document all scheduled triggers as part of deployment runbook",
+        "Include schedule configuration as a post-deployment checklist item",
+        "Verify scheduled triggers are running after deployment"
+      ],
+      "anti_patterns": [
+        "Assuming scheduled triggers transfer with the orchestration definition"
+      ],
+      "common_issues": [
+        {
+          "issue_id": "scheduled-orchestration-not-running",
+          "description": "Scheduled orchestrations work in sandbox but do not execute in the target tenant after migration",
+          "solution": "Schedules are not part of migration packages. Manually recreate the schedule trigger in the target tenant after import."
+        }
+      ]
+    },
+    {
+      "pattern_id": "extend-rate-limiting",
+      "category": "integration",
+      "severity": "medium",
+      "frequency": 1,
+      "description": "Workday APIs enforce rate limits that must be handled gracefully",
+      "applies_to": ["extend", "api", "integration"],
+      "node_types": ["REST API", "SOAP API", "Integration"],
+      "best_practices": [
+        "Implement exponential backoff with jitter for retries",
+        "Respect the Retry-After header in 429 responses",
+        "Use pagination with reasonable page sizes (100-200 records)",
+        "Cache API responses where data freshness allows",
+        "Schedule intensive operations during off-peak hours"
+      ],
+      "anti_patterns": [
+        "Ignoring 429 responses and retrying immediately",
+        "Making unbounded concurrent API calls",
+        "Polling APIs for changes instead of using events/notifications"
+      ],
+      "common_issues": [
+        {
+          "issue_id": "rate-limit-cascade",
+          "description": "Integration fails intermittently with 429 errors, especially during batch operations",
+          "solution": "Implement exponential backoff: wait 1s, 2s, 4s, 8s between retries. Respect the Retry-After header. Reduce concurrent connections. Consider using bulk/batch API operations instead of individual calls."
+        }
+      ]
+    },
+    {
+      "pattern_id": "extend-no-automated-testing",
+      "category": "testing",
+      "severity": "medium",
+      "frequency": 1,
+      "description": "Workday Extend has no built-in automated testing framework",
+      "applies_to": ["extend", "testing"],
+      "node_types": ["App", "Orchestration", "Page"],
+      "best_practices": [
+        "Maintain a structured test case document with test IDs, steps, and expected results",
+        "Test with multiple user roles (admin, manager, user, no-access) for every feature",
+        "Automate API-level testing with Postman/Newman for custom endpoints",
+        "Execute full regression before each deployment and after each Workday release"
+      ],
+      "anti_patterns": [
+        "Skipping testing because 'it worked in sandbox'",
+        "Testing only the happy path without negative test cases",
+        "Deploying to production without testing in preview tenant first"
+      ],
+      "common_issues": [
+        {
+          "issue_id": "regression-after-release",
+          "description": "Extend app breaks after a Workday biannual release",
+          "solution": "Always test your Extend app in the preview tenant 4 weeks before each production release. Watch for deprecated APIs, changed validation rules, and UI component updates."
+        }
+      ]
+    },
+    {
+      "pattern_id": "extend-wel-limitations",
+      "category": "development",
+      "severity": "medium",
+      "frequency": 1,
+      "description": "Workday Expression Language (WEL) has significant limitations compared to general-purpose languages",
+      "applies_to": ["extend", "development", "calculated-fields"],
+      "node_types": ["Calculated Field", "Condition Rule"],
+      "best_practices": [
+        "Keep WEL expressions simple and shallow (avoid nesting beyond 10 levels)",
+        "Use the 'Test Calculated Field' task to debug expressions interactively",
+        "Break complex logic into multiple simpler calculated fields",
+        "Store computed values in business object fields when the expression is performance-intensive"
+      ],
+      "anti_patterns": [
+        "Trying to implement loops or iteration in WEL (use collection functions instead)",
+        "Building deeply nested expressions that are hard to debug",
+        "Using WEL for logic that should be in an orchestration"
+      ],
+      "common_issues": [
+        {
+          "issue_id": "wel-expression-too-complex",
+          "description": "Calculated field returns an error about exceeding complexity limits",
+          "solution": "Break the expression into multiple smaller calculated fields that reference each other. WEL has a nesting depth limit of approximately 10-15 levels."
+        }
+      ]
+    }
+  ]
+}
