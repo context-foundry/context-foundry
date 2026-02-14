@@ -153,6 +153,7 @@ cloud_test*.txt
 # Private extensions (local only, not for public GitHub)
 extensions/flowise/
 extensions/roblox/
+extensions/extend/
 
 # Workday extension (keep transcripts private)
 extensions/workday/**/*.txt
