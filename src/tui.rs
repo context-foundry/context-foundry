@@ -134,6 +134,18 @@ fn wrap_line(line: &str, width: usize) -> Vec<String> {
         }
         // Find a safe char boundary at or before `width`
         let safe_width = truncate_str(remaining, width).len();
+        // Guarantee forward progress: if we can't fit even one char,
+        // push the first character and advance past it.
+        if safe_width == 0 {
+            let first_char_len = remaining
+                .chars()
+                .next()
+                .map(|c| c.len_utf8())
+                .unwrap_or(1);
+            result.push(remaining[..first_char_len].to_string());
+            remaining = &remaining[first_char_len..];
+            continue;
+        }
         // Try to break at a space within the safe range
         let split_at = remaining[..safe_width]
             .rfind(' ')
