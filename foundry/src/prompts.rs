@@ -75,6 +75,7 @@ RUNTIME VALIDATION:
 - If backend/tests/ exists: run `pytest backend/tests/ -x -q` and report results
 - If package.json has a "test" script: run `npm test` and report results
 - Check for listening ports, health endpoints, and container status as applicable
+- If a runtime tool is unavailable (Docker not running, pytest not installed, etc.), report it as a WARNING with the reason — do NOT silently skip
 
 WRITE YOUR REPORT to .buildloop/validation-report.md with this format:
 

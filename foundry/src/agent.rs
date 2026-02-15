@@ -79,13 +79,13 @@ pub async fn run_agent(
     cmd.arg("stream-json");
     cmd.arg("--verbose");
     if let Some(tools) = allowed_tools {
-        cmd.arg("--allowedTools");
-        cmd.arg(tools.join(" "));
+        cmd.arg("--tools");
+        cmd.arg(tools.join(","));
     }
     cmd.cwd(project_dir);
 
-    // Prevent nested Claude detection
-    std::env::remove_var("CLAUDECODE");
+    // Prevent nested Claude detection — set on the command, not process-wide
+    cmd.env("CLAUDECODE", "");
 
     // Open a PTY — this is the key to real-time streaming.
     // Node.js checks if stdout is a TTY (via isatty()). When it is,

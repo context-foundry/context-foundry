@@ -364,8 +364,10 @@ async fn build_loop(
             )
             .await;
 
-            // Mark done
-            let _ = task::mark_done(&plan_path, task_info.line_number);
+            // Only mark done if validation passed
+            if success {
+                let _ = task::mark_done(&plan_path, task_info.line_number);
+            }
 
             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::TaskCompleted(
                 task_info.id.clone(),
@@ -801,99 +803,59 @@ async fn run_audit_loop(
             break;
         }
 
-        // Fix HIGH findings (up to 3 attempts)
-        if high > 0 && iteration < max_iterations {
-            let max_fix = 3.min(max_iterations - iteration + 1);
-            for fix_attempt in 1..=max_fix {
-                let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
-                let fwd_tx = tx.clone();
-                tokio::spawn(async move {
-                    while let Some(evt) = agent_rx.recv().await {
-                        let _ = fwd_tx.send(AppEvent::AgentOutput(evt));
-                    }
-                });
-
-                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::AgentStarted(
-                    AgentRole::Fixer,
-                    config.fixer_model.clone(),
-                )));
-
-                let prompt = prompts::audit_fixer_prompt(
-                    task_id,
-                    task_desc,
-                    "HIGH",
-                    fix_attempt,
-                    max_fix,
-                );
-                let fix_result = agent::run_agent(
-                    &AgentRole::Fixer,
-                    &config.fixer_model,
-                    &prompt,
-                    project_dir,
-                    agent_tx,
-                    log_dir,
-                    None,
-                )
-                .await;
-
-                let _ = tx.send(AppEvent::AgentDone(
-                    fix_result.map(|r| r.success).unwrap_or(false),
-                ));
-            }
-            // Continue to re-audit
-            continue;
-        }
-
-        // Fix MEDIUM findings (up to 2 attempts)
-        if medium > 0 && high == 0 && iteration < max_iterations {
-            let max_fix = 2.min(max_iterations - iteration + 1);
-            for fix_attempt in 1..=max_fix {
-                let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
-                let fwd_tx = tx.clone();
-                tokio::spawn(async move {
-                    while let Some(evt) = agent_rx.recv().await {
-                        let _ = fwd_tx.send(AppEvent::AgentOutput(evt));
-                    }
-                });
-
-                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::AgentStarted(
-                    AgentRole::Fixer,
-                    config.fixer_model.clone(),
-                )));
-
-                let prompt = prompts::audit_fixer_prompt(
-                    task_id,
-                    task_desc,
-                    "MEDIUM",
-                    fix_attempt,
-                    max_fix,
-                );
-                let fix_result = agent::run_agent(
-                    &AgentRole::Fixer,
-                    &config.fixer_model,
-                    &prompt,
-                    project_dir,
-                    agent_tx,
-                    log_dir,
-                    None,
-                )
-                .await;
-
-                let _ = tx.send(AppEvent::AgentDone(
-                    fix_result.map(|r| r.success).unwrap_or(false),
-                ));
-            }
-            // Continue to re-audit
-            continue;
-        }
-
-        // If we still have findings but hit max iterations, log and break
+        // Can't fix on the last iteration — just log and exit
         if iteration == max_iterations {
             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
                 "Audit reached max iterations ({}) with {} high, {} medium remaining",
                 max_iterations, high, medium
             ))));
+            break;
         }
+
+        // Run ONE fixer per iteration, then re-audit on the next iteration.
+        // This avoids exhausting all fix attempts blind before checking results.
+        let severity = if high > 0 { "HIGH" } else { "MEDIUM" };
+
+        let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
+        let fwd_tx = tx.clone();
+        tokio::spawn(async move {
+            while let Some(evt) = agent_rx.recv().await {
+                let _ = fwd_tx.send(AppEvent::AgentOutput(evt));
+            }
+        });
+
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::AgentStarted(
+            AgentRole::Fixer,
+            config.fixer_model.clone(),
+        )));
+
+        let remaining = max_iterations - iteration;
+        let prompt = prompts::audit_fixer_prompt(
+            task_id,
+            task_desc,
+            severity,
+            iteration,
+            max_iterations,
+        );
+        let fix_result = agent::run_agent(
+            &AgentRole::Fixer,
+            &config.fixer_model,
+            &prompt,
+            project_dir,
+            agent_tx,
+            log_dir,
+            None,
+        )
+        .await;
+
+        let _ = tx.send(AppEvent::AgentDone(
+            fix_result.map(|r| r.success).unwrap_or(false),
+        ));
+
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+            "Fixed {} findings, {} audit iterations remaining",
+            severity, remaining
+        ))));
     }
 }
 
@@ -981,6 +943,7 @@ async fn run_pattern_extraction(
 // ─── Helpers ─────────────────────────────────────────────────
 
 /// Get files changed since last commit (excluding .buildloop/).
+/// Handles renames (R  old -> new), copies, and quoted paths.
 fn get_changed_files(project_dir: &Path) -> Vec<String> {
     let output = std::process::Command::new("git")
         .args(["status", "--porcelain"])
@@ -994,13 +957,20 @@ fn get_changed_files(project_dir: &Path) -> Vec<String> {
                 .lines()
                 .filter_map(|line| {
                     let trimmed = line.trim();
-                    if trimmed.len() > 3 {
-                        let file = trimmed[3..].trim();
-                        if !file.starts_with(".buildloop/") {
-                            return Some(file.to_string());
-                        }
+                    if trimmed.len() <= 3 {
+                        return None;
                     }
-                    None
+                    let mut file = trimmed[3..].trim();
+                    // Handle renames/copies: "R  old -> new" — take the destination
+                    if let Some(arrow_pos) = file.find(" -> ") {
+                        file = file[arrow_pos + 4..].trim();
+                    }
+                    // Strip quotes from paths with special characters
+                    let file = file.trim_matches('"');
+                    if file.is_empty() || file.starts_with(".buildloop/") {
+                        return None;
+                    }
+                    Some(file.to_string())
                 })
                 .collect()
         }
@@ -1009,15 +979,23 @@ fn get_changed_files(project_dir: &Path) -> Vec<String> {
 }
 
 /// Parse audit report JSON to count high/medium/low findings.
+/// Returns (1, 0, 0) if the report exists but JSON is malformed — treats parse
+/// failure as a HIGH finding to prevent false "all clear" convergence.
 fn parse_audit_findings(report_path: &Path) -> (usize, usize, usize) {
     let content = match std::fs::read_to_string(report_path) {
         Ok(c) => c,
         Err(_) => return (0, 0, 0),
     };
 
+    if content.trim().is_empty() {
+        return (0, 0, 0);
+    }
+
     let json_str = extract_json_from_report(&content);
     if json_str.is_empty() {
-        return (0, 0, 0);
+        // Report exists with content but no JSON fence — treat as suspicious
+        eprintln!("warning: audit report has no JSON code fence, treating as 1 high finding");
+        return (1, 0, 0);
     }
 
     match serde_json::from_str::<serde_json::Value>(&json_str) {
@@ -1027,7 +1005,10 @@ fn parse_audit_findings(report_path: &Path) -> (usize, usize, usize) {
             let low = v.get("low").and_then(|a| a.as_array()).map(|a| a.len()).unwrap_or(0);
             (high, medium, low)
         }
-        Err(_) => (0, 0, 0),
+        Err(e) => {
+            eprintln!("warning: failed to parse audit JSON: {}, treating as 1 high finding", e);
+            (1, 0, 0)
+        }
     }
 }
 
@@ -1073,10 +1054,13 @@ fn should_restart_docker(task_desc: &str) -> bool {
 }
 
 fn which_claude() -> Result<()> {
-    std::process::Command::new("which")
+    let output = std::process::Command::new("which")
         .arg("claude")
         .output()
-        .context("claude CLI not found — install Claude Code first")?;
+        .context("failed to run 'which' command")?;
+    if !output.status.success() {
+        anyhow::bail!("claude CLI not found in PATH — install Claude Code first");
+    }
     Ok(())
 }
 

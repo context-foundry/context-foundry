@@ -38,11 +38,15 @@ pub struct Pattern {
 }
 
 /// Expand `~/` prefix using $HOME environment variable.
+/// Falls back to /tmp/.foundry/patterns if HOME is unset (e.g., containers).
 pub fn resolve_patterns_dir(config_str: &str) -> PathBuf {
-    if config_str.starts_with("~/") {
+    if let Some(rest) = config_str.strip_prefix("~/") {
         if let Ok(home) = std::env::var("HOME") {
-            return PathBuf::from(home).join(&config_str[2..]);
+            return PathBuf::from(home).join(rest);
         }
+        // HOME unset — use /tmp fallback instead of literal ~/
+        eprintln!("warning: HOME not set, using /tmp/.foundry/patterns for pattern storage");
+        return PathBuf::from("/tmp/.foundry/patterns");
     }
     PathBuf::from(config_str)
 }
@@ -65,6 +69,11 @@ pub fn load_patterns(dir: &Path) -> Vec<Pattern> {
                     patterns.append(&mut arr);
                 } else if let Ok(p) = serde_json::from_str::<Pattern>(&content) {
                     patterns.push(p);
+                } else {
+                    eprintln!(
+                        "warning: failed to parse patterns file: {}",
+                        path.display()
+                    );
                 }
             }
         }
@@ -73,7 +82,7 @@ pub fn load_patterns(dir: &Path) -> Vec<Pattern> {
     patterns
 }
 
-/// Match patterns against a task description using keyword overlap scoring.
+/// Match patterns against a task description using whole-word keyword matching.
 /// Returns patterns sorted by relevance (highest score first).
 pub fn match_patterns<'a>(patterns: &'a [Pattern], task_desc: &str) -> Vec<&'a Pattern> {
     let desc_lower = task_desc.to_lowercase();
@@ -84,12 +93,14 @@ pub fn match_patterns<'a>(patterns: &'a [Pattern], task_desc: &str) -> Vec<&'a P
         .filter_map(|p| {
             let mut score = 0usize;
 
-            // Keyword matches
+            // Keyword matches — whole-word matching to avoid false positives
             for kw in &p.keywords {
                 let kw_lower = kw.to_lowercase();
-                if desc_lower.contains(&kw_lower) {
+                if desc_words.iter().any(|w| *w == kw_lower) {
+                    // Exact word match
                     score += 2;
-                } else if desc_words.iter().any(|w| w.contains(&kw_lower)) {
+                } else if desc_lower.contains(&kw_lower) {
+                    // Substring match (weaker signal, e.g. multi-word keywords)
                     score += 1;
                 }
             }
@@ -97,7 +108,9 @@ pub fn match_patterns<'a>(patterns: &'a [Pattern], task_desc: &str) -> Vec<&'a P
             // Tech stack matches
             for tech in &p.tech_stack {
                 let tech_lower = tech.to_lowercase();
-                if desc_lower.contains(&tech_lower) {
+                if desc_words.iter().any(|w| *w == tech_lower) {
+                    score += 1;
+                } else if desc_lower.contains(&tech_lower) {
                     score += 1;
                 }
             }
@@ -130,6 +143,7 @@ pub fn format_patterns_for_prompt(patterns: &[&Pattern], role: &str) -> String {
         return String::new();
     }
 
+    let role_lower = role.to_lowercase();
     let mut out = String::new();
     out.push_str("\n\n---\n## Known Patterns (from previous builds)\n\n");
 
@@ -150,10 +164,10 @@ pub fn format_patterns_for_prompt(patterns: &[&Pattern], role: &str) -> String {
         }
 
         if let Some(ref sol) = p.solution {
-            let advice = match role {
-                "planner" | "PLANNER" => &sol.planner,
-                "validator" | "VALIDATOR" => &sol.validator,
-                _ => &sol.planner,
+            let advice = if role_lower == "validator" {
+                &sol.validator
+            } else {
+                &sol.planner
             };
             if !advice.is_empty() {
                 out.push_str(&format!("**Advice:** {}\n", advice));
@@ -167,6 +181,7 @@ pub fn format_patterns_for_prompt(patterns: &[&Pattern], role: &str) -> String {
 }
 
 /// Merge new patterns into the patterns directory, deduplicating by pattern_id.
+/// Uses atomic write (tmp + rename) to prevent data corruption.
 /// Returns the number of new patterns added.
 pub fn merge_patterns(dir: &Path, new_patterns: Vec<Pattern>) -> Result<usize> {
     if new_patterns.is_empty() {
@@ -176,11 +191,14 @@ pub fn merge_patterns(dir: &Path, new_patterns: Vec<Pattern>) -> Result<usize> {
     std::fs::create_dir_all(dir)?;
 
     let target = dir.join("common-issues.json");
+    let tmp = dir.join(".common-issues.json.tmp");
 
-    // Load existing patterns from the target file
+    // Load existing patterns — handle both array and single-object formats
     let mut existing: Vec<Pattern> = if target.exists() {
         let content = std::fs::read_to_string(&target)?;
-        serde_json::from_str(&content).unwrap_or_default()
+        serde_json::from_str::<Vec<Pattern>>(&content)
+            .or_else(|_| serde_json::from_str::<Pattern>(&content).map(|p| vec![p]))
+            .unwrap_or_default()
     } else {
         Vec::new()
     };
@@ -196,8 +214,8 @@ pub fn merge_patterns(dir: &Path, new_patterns: Vec<Pattern>) -> Result<usize> {
 
     for np in new_patterns {
         if let Some(&idx) = by_id.get(&np.pattern_id) {
-            // Update existing: bump frequency, update last_seen
-            existing[idx].frequency += 1;
+            // Update existing: add incoming frequency (at least 1), update last_seen
+            existing[idx].frequency += np.frequency.max(1);
             if !np.last_seen.is_empty() {
                 existing[idx].last_seen = np.last_seen;
             }
@@ -212,8 +230,10 @@ pub fn merge_patterns(dir: &Path, new_patterns: Vec<Pattern>) -> Result<usize> {
         }
     }
 
+    // Atomic write: write to tmp, then rename
     let json = serde_json::to_string_pretty(&existing)?;
-    std::fs::write(&target, json)?;
+    std::fs::write(&tmp, &json)?;
+    std::fs::rename(&tmp, &target)?;
 
     Ok(added)
 }
@@ -238,23 +258,23 @@ pub fn extract_patterns_from_file(path: &Path) -> Result<Vec<Pattern>> {
     Ok(Vec::new())
 }
 
-/// Extract JSON content from markdown code fences.
+/// Extract JSON content from the first ```json code fence in markdown.
 fn extract_json_from_content(content: &str) -> String {
     let mut in_fence = false;
     let mut json_lines = Vec::new();
 
     for line in content.lines() {
-        if line.trim_start().starts_with("```json") || line.trim_start().starts_with("```") && in_fence {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with("```") {
             if in_fence {
-                break;
+                break; // closing fence
             }
-            in_fence = true;
+            if trimmed.starts_with("```json") {
+                in_fence = true;
+            }
             continue;
         }
         if in_fence {
-            if line.trim_start().starts_with("```") {
-                break;
-            }
             json_lines.push(line);
         }
     }
