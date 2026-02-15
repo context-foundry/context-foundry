@@ -7,6 +7,7 @@ use std::time::Duration;
 use tokio::sync::mpsc;
 
 use crate::agent::{self, AgentOutputEvent, AgentRole};
+use crate::utils::truncate_str;
 use crate::config::Config;
 use crate::git;
 use crate::patterns;
@@ -220,7 +221,7 @@ fn handle_event(state: &mut AppState, event: AppEvent) {
                     // Show first line only to avoid flooding
                     let first_line = output_preview.lines().next().unwrap_or("");
                     let display = if first_line.len() > 100 {
-                        format!("[result] {}...", &first_line[..100])
+                        format!("[result] {}...", truncate_str(first_line, 100))
                     } else {
                         format!("[result] {}", first_line)
                     };

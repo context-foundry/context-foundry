@@ -3,6 +3,8 @@ use regex::Regex;
 use std::fs;
 use std::path::Path;
 
+use crate::utils::truncate_str;
+
 #[derive(Debug, Clone)]
 pub struct Task {
     pub id: String,
@@ -16,7 +18,7 @@ impl Task {
         if self.description.len() <= max_len {
             self.description.clone()
         } else {
-            format!("{}...", &self.description[..max_len.saturating_sub(3)])
+            format!("{}...", truncate_str(&self.description, max_len.saturating_sub(3)))
         }
     }
 }

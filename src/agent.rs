@@ -3,6 +3,8 @@ use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 use serde_json::Value;
 use std::io::BufRead;
 use std::path::Path;
+
+use crate::utils::truncate_str;
 use tokio::sync::mpsc;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -251,7 +253,7 @@ fn parse_stream_event(line: &str) -> Option<AgentOutputEvent> {
                                     .and_then(|c| c.as_str())
                                     .map(|c| {
                                         if c.len() > 80 {
-                                            format!("{}...", &c[..80])
+                                            format!("{}...", truncate_str(c, 80))
                                         } else {
                                             c.to_string()
                                         }
@@ -270,7 +272,7 @@ fn parse_stream_event(line: &str) -> Option<AgentOutputEvent> {
                                 _ => {
                                     let s = input.to_string();
                                     if s.len() > 100 {
-                                        format!("{}...", &s[..100])
+                                        format!("{}...", truncate_str(&s, 100))
                                     } else {
                                         s
                                     }
@@ -305,7 +307,7 @@ fn parse_stream_event(line: &str) -> Option<AgentOutputEvent> {
             }
 
             let preview = if output.len() > 200 {
-                format!("{}...", &output[..200])
+                format!("{}...", truncate_str(&output, 200))
             } else {
                 output
             };

@@ -10,6 +10,7 @@ mod patterns;
 mod prompts;
 mod task;
 mod tui;
+mod utils;
 
 #[derive(Parser)]
 #[command(

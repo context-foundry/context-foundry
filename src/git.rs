@@ -2,6 +2,8 @@ use anyhow::Result;
 use std::path::Path;
 use std::process::Command;
 
+use crate::utils::truncate_str;
+
 pub fn commit_and_push(
     project_dir: &Path,
     task_id: &str,
@@ -29,11 +31,7 @@ pub fn commit_and_push(
         return Ok(false);
     }
 
-    let short_desc = if task_desc.len() > 72 {
-        &task_desc[..72]
-    } else {
-        task_desc
-    };
+    let short_desc = truncate_str(task_desc, 72);
 
     let msg = if is_wip {
         format!(

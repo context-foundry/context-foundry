@@ -12,6 +12,8 @@ use ratatui::{
 };
 use std::io;
 
+use crate::utils::truncate_str;
+
 use crate::agent::AgentRole;
 use crate::app::AppState;
 
@@ -130,11 +132,13 @@ fn wrap_line(line: &str, width: usize) -> Vec<String> {
             result.push(remaining.to_string());
             break;
         }
-        // Try to break at a space within the width
-        let split_at = remaining[..width]
+        // Find a safe char boundary at or before `width`
+        let safe_width = truncate_str(remaining, width).len();
+        // Try to break at a space within the safe range
+        let split_at = remaining[..safe_width]
             .rfind(' ')
             .map(|p| p + 1)
-            .unwrap_or(width);
+            .unwrap_or(safe_width);
         result.push(remaining[..split_at].to_string());
         remaining = &remaining[split_at..];
     }
