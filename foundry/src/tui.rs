@@ -185,6 +185,7 @@ fn render_agent_output(frame: &mut Frame, area: Rect, state: &AppState) {
             AgentRole::Validator => Color::Cyan,
             AgentRole::Fixer => Color::Yellow,
             AgentRole::Discovery => Color::Blue,
+            AgentRole::Auditor => Color::Red,
         };
         Span::styled(
             format!(" {} Output ", role),

@@ -12,6 +12,7 @@ pub enum AgentRole {
     Validator,
     Fixer,
     Discovery,
+    Auditor,
 }
 
 impl std::fmt::Display for AgentRole {
@@ -22,6 +23,7 @@ impl std::fmt::Display for AgentRole {
             AgentRole::Validator => write!(f, "VALIDATOR"),
             AgentRole::Fixer => write!(f, "FIXER"),
             AgentRole::Discovery => write!(f, "DISCOVERY"),
+            AgentRole::Auditor => write!(f, "AUDITOR"),
         }
     }
 }
@@ -60,6 +62,7 @@ pub async fn run_agent(
     project_dir: &Path,
     output_tx: mpsc::UnboundedSender<AgentOutputEvent>,
     log_dir: &Path,
+    allowed_tools: Option<&[&str]>,
 ) -> Result<AgentResult> {
     let timestamp = chrono::Utc::now().format("%Y%m%d-%H%M%S");
     let log_file_path = log_dir.join(format!("{}-{}.jsonl", role, timestamp));
@@ -75,6 +78,10 @@ pub async fn run_agent(
     cmd.arg("--output-format");
     cmd.arg("stream-json");
     cmd.arg("--verbose");
+    if let Some(tools) = allowed_tools {
+        cmd.arg("--allowedTools");
+        cmd.arg(tools.join(" "));
+    }
     cmd.cwd(project_dir);
 
     // Prevent nested Claude detection

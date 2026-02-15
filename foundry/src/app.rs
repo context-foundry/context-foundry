@@ -9,6 +9,7 @@ use tokio::sync::mpsc;
 use crate::agent::{self, AgentOutputEvent, AgentRole};
 use crate::config::Config;
 use crate::git;
+use crate::patterns;
 use crate::prompts;
 use crate::task::{self, Task};
 use crate::tui;
@@ -419,6 +420,7 @@ async fn build_loop(
                 &project_dir,
                 agent_tx,
                 &log_dir,
+                None,
             )
             .await;
 
@@ -472,6 +474,9 @@ async fn process_task(
 ) -> bool {
     let task_id = &task_info.id;
     let task_desc = &task_info.description;
+    let buildloop_dir = project_dir.join(".buildloop");
+    let audit_report = buildloop_dir.join("audit-report.md");
+    let patterns_extracted = buildloop_dir.join("patterns-extracted.json");
 
     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::TaskStarted(
         task_info.clone(),
@@ -480,6 +485,21 @@ async fn process_task(
     // Clean ephemeral files
     let _ = std::fs::remove_file(current_plan);
     let _ = std::fs::remove_file(validation_report);
+    let _ = std::fs::remove_file(&audit_report);
+    let _ = std::fs::remove_file(&patterns_extracted);
+
+    // ── LOAD PATTERNS ──
+    let patterns_dir = patterns::resolve_patterns_dir(&config.patterns_dir);
+    let all_patterns = patterns::load_patterns(&patterns_dir);
+    let matched = patterns::match_patterns(&all_patterns, task_desc);
+    let pattern_context = patterns::format_patterns_for_prompt(&matched, "planner");
+
+    if !matched.is_empty() {
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+            "Matched {} patterns for task",
+            matched.len()
+        ))));
+    }
 
     // ── PLANNER ──
     let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
@@ -495,7 +515,7 @@ async fn process_task(
         config.planner_model.clone(),
     )));
 
-    let prompt = prompts::planner_prompt(task_id, task_desc);
+    let prompt = prompts::planner_prompt(task_id, task_desc, &pattern_context);
     let plan_result = agent::run_agent(
         &AgentRole::Planner,
         &config.planner_model,
@@ -503,6 +523,7 @@ async fn process_task(
         project_dir,
         agent_tx,
         log_dir,
+        None,
     )
     .await;
 
@@ -539,6 +560,7 @@ async fn process_task(
         project_dir,
         agent_tx,
         log_dir,
+        None,
     )
     .await;
 
@@ -555,6 +577,7 @@ async fn process_task(
     }
 
     // ── VALIDATE + FIX LOOP ──
+    let validator_pattern_context = patterns::format_patterns_for_prompt(&matched, "validator");
     let mut validated = false;
 
     for attempt in 1..=config.max_fix_attempts {
@@ -574,7 +597,7 @@ async fn process_task(
             config.validator_model.clone(),
         )));
 
-        let prompt = prompts::validator_prompt(task_id, task_desc);
+        let prompt = prompts::validator_prompt(task_id, task_desc, &validator_pattern_context);
         let val_result = agent::run_agent(
             &AgentRole::Validator,
             &config.validator_model,
@@ -582,6 +605,7 @@ async fn process_task(
             project_dir,
             agent_tx,
             log_dir,
+            None,
         )
         .await;
 
@@ -632,6 +656,7 @@ async fn process_task(
                 project_dir,
                 agent_tx,
                 log_dir,
+                None,
             )
             .await;
 
@@ -639,6 +664,20 @@ async fn process_task(
                 fix_result.map(|r| r.success).unwrap_or(false),
             ));
         }
+    }
+
+    // ── AUDIT LOOP ──
+    if validated {
+        run_audit_loop(
+            task_id,
+            task_desc,
+            project_dir,
+            config,
+            &audit_report,
+            log_dir,
+            tx,
+        )
+        .await;
     }
 
     // ── COMMIT ──
@@ -652,6 +691,25 @@ async fn process_task(
             prefix, task_id
         ))));
     }
+
+    // ── PATTERN EXTRACTION ──
+    if validated {
+        run_pattern_extraction(
+            task_id,
+            task_desc,
+            project_dir,
+            config,
+            &patterns_dir,
+            &patterns_extracted,
+            log_dir,
+            tx,
+        )
+        .await;
+    }
+
+    // ── CLEANUP ──
+    let _ = std::fs::remove_file(&audit_report);
+    let _ = std::fs::remove_file(&patterns_extracted);
 
     // ── DOCKER RESTART (selective) ──
     if should_restart_docker(task_desc) {
@@ -669,6 +727,330 @@ async fn process_task(
     }
 
     validated
+}
+
+// ─── Audit Loop ──────────────────────────────────────────────
+
+async fn run_audit_loop(
+    task_id: &str,
+    task_desc: &str,
+    project_dir: &Path,
+    config: &Config,
+    audit_report: &Path,
+    log_dir: &Path,
+    tx: &mpsc::UnboundedSender<AppEvent>,
+) {
+    let files_changed = get_changed_files(project_dir);
+    if files_changed.is_empty() {
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+            "No changed files to audit".to_string(),
+        )));
+        return;
+    }
+
+    let files_list = files_changed.join("\n");
+    let max_iterations = config.max_audit_iterations;
+    let auditor_tools: &[&str] = &["Read", "Glob", "Grep", "Write"];
+
+    for iteration in 1..=max_iterations {
+        let _ = std::fs::remove_file(audit_report);
+
+        // ── Run Auditor ──
+        let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
+        let fwd_tx = tx.clone();
+        tokio::spawn(async move {
+            while let Some(evt) = agent_rx.recv().await {
+                let _ = fwd_tx.send(AppEvent::AgentOutput(evt));
+            }
+        });
+
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::AgentStarted(
+            AgentRole::Auditor,
+            config.auditor_model.clone(),
+        )));
+
+        let prompt = prompts::auditor_prompt(task_id, task_desc, &files_list);
+        let audit_result = agent::run_agent(
+            &AgentRole::Auditor,
+            &config.auditor_model,
+            &prompt,
+            project_dir,
+            agent_tx,
+            log_dir,
+            Some(auditor_tools),
+        )
+        .await;
+
+        let _ = tx.send(AppEvent::AgentDone(
+            audit_result.as_ref().map(|r| r.success).unwrap_or(false),
+        ));
+
+        // Parse findings
+        let (high, medium, _low) = parse_audit_findings(audit_report);
+
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+            "Audit iteration {}/{}: {} high, {} medium findings",
+            iteration, max_iterations, high, medium
+        ))));
+
+        // Convergence check
+        if high == 0 && medium == 0 {
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+                "Audit converged — no high or medium findings".to_string(),
+            )));
+            break;
+        }
+
+        // Fix HIGH findings (up to 3 attempts)
+        if high > 0 && iteration < max_iterations {
+            let max_fix = 3.min(max_iterations - iteration + 1);
+            for fix_attempt in 1..=max_fix {
+                let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
+                let fwd_tx = tx.clone();
+                tokio::spawn(async move {
+                    while let Some(evt) = agent_rx.recv().await {
+                        let _ = fwd_tx.send(AppEvent::AgentOutput(evt));
+                    }
+                });
+
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::AgentStarted(
+                    AgentRole::Fixer,
+                    config.fixer_model.clone(),
+                )));
+
+                let prompt = prompts::audit_fixer_prompt(
+                    task_id,
+                    task_desc,
+                    "HIGH",
+                    fix_attempt,
+                    max_fix,
+                );
+                let fix_result = agent::run_agent(
+                    &AgentRole::Fixer,
+                    &config.fixer_model,
+                    &prompt,
+                    project_dir,
+                    agent_tx,
+                    log_dir,
+                    None,
+                )
+                .await;
+
+                let _ = tx.send(AppEvent::AgentDone(
+                    fix_result.map(|r| r.success).unwrap_or(false),
+                ));
+            }
+            // Continue to re-audit
+            continue;
+        }
+
+        // Fix MEDIUM findings (up to 2 attempts)
+        if medium > 0 && high == 0 && iteration < max_iterations {
+            let max_fix = 2.min(max_iterations - iteration + 1);
+            for fix_attempt in 1..=max_fix {
+                let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
+                let fwd_tx = tx.clone();
+                tokio::spawn(async move {
+                    while let Some(evt) = agent_rx.recv().await {
+                        let _ = fwd_tx.send(AppEvent::AgentOutput(evt));
+                    }
+                });
+
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::AgentStarted(
+                    AgentRole::Fixer,
+                    config.fixer_model.clone(),
+                )));
+
+                let prompt = prompts::audit_fixer_prompt(
+                    task_id,
+                    task_desc,
+                    "MEDIUM",
+                    fix_attempt,
+                    max_fix,
+                );
+                let fix_result = agent::run_agent(
+                    &AgentRole::Fixer,
+                    &config.fixer_model,
+                    &prompt,
+                    project_dir,
+                    agent_tx,
+                    log_dir,
+                    None,
+                )
+                .await;
+
+                let _ = tx.send(AppEvent::AgentDone(
+                    fix_result.map(|r| r.success).unwrap_or(false),
+                ));
+            }
+            // Continue to re-audit
+            continue;
+        }
+
+        // If we still have findings but hit max iterations, log and break
+        if iteration == max_iterations {
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                "Audit reached max iterations ({}) with {} high, {} medium remaining",
+                max_iterations, high, medium
+            ))));
+        }
+    }
+}
+
+// ─── Pattern Extraction ──────────────────────────────────────
+
+async fn run_pattern_extraction(
+    task_id: &str,
+    task_desc: &str,
+    project_dir: &Path,
+    config: &Config,
+    patterns_dir: &Path,
+    patterns_extracted: &Path,
+    log_dir: &Path,
+    tx: &mpsc::UnboundedSender<AppEvent>,
+) {
+    let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
+    let fwd_tx = tx.clone();
+    tokio::spawn(async move {
+        while let Some(evt) = agent_rx.recv().await {
+            let _ = fwd_tx.send(AppEvent::AgentOutput(evt));
+        }
+    });
+
+    // Reuse the builder model for pattern extraction (lightweight task)
+    let model = &config.builder_model;
+    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::AgentStarted(
+        AgentRole::Discovery, // Reuse Discovery role display for pattern extraction
+        model.clone(),
+    )));
+    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+        "Extracting patterns from build artifacts...".to_string(),
+    )));
+
+    let prompt = prompts::pattern_extraction_prompt(task_id, task_desc);
+    let result = agent::run_agent(
+        &AgentRole::Discovery,
+        model,
+        &prompt,
+        project_dir,
+        agent_tx,
+        log_dir,
+        Some(&["Read", "Write"]),
+    )
+    .await;
+
+    let _ = tx.send(AppEvent::AgentDone(
+        result.as_ref().map(|r| r.success).unwrap_or(false),
+    ));
+
+    // Merge extracted patterns into global store
+    if patterns_extracted.exists() {
+        match patterns::extract_patterns_from_file(patterns_extracted) {
+            Ok(new_patterns) if !new_patterns.is_empty() => {
+                match patterns::merge_patterns(patterns_dir, new_patterns) {
+                    Ok(added) => {
+                        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                            "Merged patterns: {} new added to {}",
+                            added,
+                            patterns_dir.display()
+                        ))));
+                    }
+                    Err(e) => {
+                        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                            "Failed to merge patterns: {}",
+                            e
+                        ))));
+                    }
+                }
+            }
+            Ok(_) => {
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+                    "No patterns extracted for this task".to_string(),
+                )));
+            }
+            Err(e) => {
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                    "Failed to parse extracted patterns: {}",
+                    e
+                ))));
+            }
+        }
+    }
+}
+
+// ─── Helpers ─────────────────────────────────────────────────
+
+/// Get files changed since last commit (excluding .buildloop/).
+fn get_changed_files(project_dir: &Path) -> Vec<String> {
+    let output = std::process::Command::new("git")
+        .args(["status", "--porcelain"])
+        .current_dir(project_dir)
+        .output();
+
+    match output {
+        Ok(out) => {
+            let stdout = String::from_utf8_lossy(&out.stdout);
+            stdout
+                .lines()
+                .filter_map(|line| {
+                    let trimmed = line.trim();
+                    if trimmed.len() > 3 {
+                        let file = trimmed[3..].trim();
+                        if !file.starts_with(".buildloop/") {
+                            return Some(file.to_string());
+                        }
+                    }
+                    None
+                })
+                .collect()
+        }
+        Err(_) => Vec::new(),
+    }
+}
+
+/// Parse audit report JSON to count high/medium/low findings.
+fn parse_audit_findings(report_path: &Path) -> (usize, usize, usize) {
+    let content = match std::fs::read_to_string(report_path) {
+        Ok(c) => c,
+        Err(_) => return (0, 0, 0),
+    };
+
+    let json_str = extract_json_from_report(&content);
+    if json_str.is_empty() {
+        return (0, 0, 0);
+    }
+
+    match serde_json::from_str::<serde_json::Value>(&json_str) {
+        Ok(v) => {
+            let high = v.get("high").and_then(|a| a.as_array()).map(|a| a.len()).unwrap_or(0);
+            let medium = v.get("medium").and_then(|a| a.as_array()).map(|a| a.len()).unwrap_or(0);
+            let low = v.get("low").and_then(|a| a.as_array()).map(|a| a.len()).unwrap_or(0);
+            (high, medium, low)
+        }
+        Err(_) => (0, 0, 0),
+    }
+}
+
+/// Extract JSON content from markdown code fences in audit report.
+fn extract_json_from_report(content: &str) -> String {
+    let mut in_json_fence = false;
+    let mut json_lines = Vec::new();
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("```json") {
+            in_json_fence = true;
+            continue;
+        }
+        if in_json_fence && trimmed.starts_with("```") {
+            break;
+        }
+        if in_json_fence {
+            json_lines.push(line);
+        }
+    }
+
+    json_lines.join("\n")
 }
 
 fn check_validation_passed(report_path: &Path) -> bool {

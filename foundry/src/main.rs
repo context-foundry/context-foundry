@@ -6,6 +6,7 @@ mod agent;
 mod app;
 mod config;
 mod git;
+mod patterns;
 mod prompts;
 mod task;
 mod tui;

@@ -2,16 +2,21 @@ use serde::Deserialize;
 use std::path::Path;
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
 pub struct Config {
     pub planner_model: String,
     pub builder_model: String,
     pub validator_model: String,
     pub fixer_model: String,
     pub discovery_model: String,
+    pub auditor_model: String,
 
     pub max_fix_attempts: usize,
+    pub max_audit_iterations: usize,
     pub pause_between_tasks_secs: u64,
     pub pause_between_cycles_secs: u64,
+
+    pub patterns_dir: String,
 }
 
 impl Default for Config {
@@ -22,10 +27,14 @@ impl Default for Config {
             validator_model: "opus".into(),
             fixer_model: "opus".into(),
             discovery_model: "opus".into(),
+            auditor_model: "opus".into(),
 
             max_fix_attempts: 3,
+            max_audit_iterations: 3,
             pause_between_tasks_secs: 5,
             pause_between_cycles_secs: 30,
+
+            patterns_dir: "~/.foundry/patterns".into(),
         }
     }
 }
