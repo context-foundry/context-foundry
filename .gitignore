@@ -55,6 +55,9 @@ weather-app/
 todo-app/
 mario-game/
 
+# Rust build artifacts
+foundry/target/
+
 # Pattern library
 foundry/patterns/patterns.db
 foundry/patterns/*.db
