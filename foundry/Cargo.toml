@@ -1,0 +1,28 @@
+[package]
+name = "foundry"
+version = "0.1.0"
+edition = "2021"
+description = "Autonomous build loop — the engine of Context Foundry"
+license = "MIT"
+
+[[bin]]
+name = "foundry"
+path = "src/main.rs"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+ratatui = "0.29"
+crossterm = { version = "0.28", features = ["event-stream"] }
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", features = ["serde"] }
+regex = "1"
+anyhow = "1"
+futures = "0.3"
+portable-pty = "0.8"
+
+[profile.release]
+opt-level = 3
+lto = true
+strip = true
