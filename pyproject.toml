@@ -1,9 +1,0 @@
-[tool.ruff]
-# Exclude integration snippet files that aren't meant to be standalone Python
-exclude = [
-    "extensions/flowise/integration/*.py",
-]
-
-[tool.ruff.lint]
-# Allow unused imports in __init__.py files
-ignore-init-module-imports = true

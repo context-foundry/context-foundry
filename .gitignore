@@ -1,177 +1,29 @@
-
-# Refactor archive (safe cleanup - delete after 30 days)
-_archive_2025/
-
-# Privacy & Secrets
-**/*.db
-**/*.sqlite
-**/*.sqlite3
-config.json
-mcp_config.json
-secrets.json
-credentials.json
-**/.env*
-# Private/Local
-archive/
-examples/
-**/private/
-context_foundry/daemon/config.json
-
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-env/
-venv/
-.env
-*.egg-info/
-.pytest_cache/
-dist/
-build/
-
-# Logs
-logs/
-*.log
-
-# Session data and patterns (local + S3 backup, NOT GitHub)
-.context-foundry/
-**/.context-foundry/
-**/conversations/
-**/chat_history/
-**/*.jsonl
-blueprints/
-checkpoints/
-checkpoints/artifacts/temp/
-checkpoints/ralph/*/
-overnight_tasks.txt
-
-# Test projects built by foundry - don't commit to GitHub
-examples/*/
-*-cf/
-tennis-scoring-cf/
-weather-app/
-todo-app/
-mario-game/
-
-# Rust build artifacts
-foundry/target/
-
-# Pattern library
-foundry/patterns/patterns.db
-foundry/patterns/*.db
-
-# IDE
-.vscode/
-.idea/
+# Build artifacts
+/target/
 *.swp
 *.swo
-
-# Claude Code
-.claude/
-.claude-code/cache/
-CLAUDE.md
-**/CLAUDE.md
-# But track extension CLAUDE.md files (they're documentation)
-!extensions/**/CLAUDE.md
 
 # OS
 .DS_Store
 Thumbs.db
 
-# Temporary
-tmp/
-temp/
-*.tmp
-*.bak
-*.bak[0-9]
-*.backup
-ace/pricing.db
-.coverage
-**/htmlcov/
-coverage.json
+# IDE
+.vscode/
+.idea/
 
-# Internal Planning & Testing (private, not for public repo)
-HANDOFF*.md
-**/HANDOFF*.md
-NEXT_WEEK_PRIORITIES.md
-*_PRIORITIES.md
-*_ROADMAP.md
-INTERNAL_*.md
-SESSION_SUMMARY_*.md
-docs/proposals/
-test_results/
-smoke_test_*.txt
-.test_artifacts/
+# Environment
+.env
+.env.*
+!.env.example
 
-# Security Analysis (NEVER publish)
-docs/PROMPT_INJECTION_ANALYSIS.md
-docs/*_SECURITY_*.md
-docs/*_VULNERABILITY_*.md
+# Claude Code
+.claude/
+.claude-code/
 
-# Strange git artifacts
-=*
+# Foundry runtime
+.buildloop/
 
-# Desktop app (separate development)
-apps/context-foundry-desktop/
-
-# Test junk
-test_flowise_project/
-cloud_test*.txt
-
-# ═══════════════════════════════════════════════════════════
-# Private Extensions (user-specific, not for public repo)
-# ═══════════════════════════════════════════════════════════
-#
-# The extensions/ directory contains modular, user-specific
-# enhancements that teach Context Foundry specialized skills.
-#
-# CURRENT EXTENSIONS:
-#
-# 📊 extensions/flowise/ - Flowise Agent Flow Specialization
-#    - Enables Context Foundry to build production-ready Flowise
-#      multi-agent workflows from single-sentence prompts
-#    - Includes authoritative pattern reference (AGENT_PATTERN_REFERENCE.md)
-#    - Contains 13+ canonical Flowise flow templates
-#    - Validates against real Flowise export structure
-#    - Produces perfect, import-ready JSON on first build
-#
-#    Example: "Build warehouse operations flow with Workday integration"
-#    Result: Complete 9-agent system with routing, tools, knowledge sources
-#
-# WHY GITIGNORED:
-# - User-specific customizations (templates, patterns, configs)
-# - May contain proprietary flow designs
-# - Allows each user to maintain their own extension library
-# - Prevents merge conflicts from personalized extensions
-#
-# HOW TO PRESERVE:
-# - In PUBLIC repo: Extensions are LOCAL (not pushed to GitHub)
-# - In PRIVATE repo: Extensions ARE COMMITTED for cross-machine use
-# - This private repo (context-foundry-flowise-extension) includes
-#   the complete Flowise extension for easy deployment
-#
-# ═══════════════════════════════════════════════════════════
-# Private extensions (local only, not for public GitHub)
-extensions/flowise/
-extensions/roblox/
-extensions/extend/
-
-# Workday extension (keep transcripts private)
-extensions/workday/**/*.txt
-
-# Extension dependencies and build artifacts
-extensions/*/node_modules/
-extensions/*/.next/
-extensions/*/dist/
-extensions/*/.turbo/
-
-# Other assets
-docs/assets/SatoshiChoreTracker.gif
-
-# Token files
-.mcpregistry_*
-
-# Flowise extension (separate private repo)
-extensions/flowise/
+# Private extensions (uncomment to track)
+# extensions/roblox/
+# extensions/flowise/
+# extensions/extend/

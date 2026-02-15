@@ -1,7 +1,0 @@
-# Ruff ignore patterns
-# These files are code snippets/templates, not standalone Python files
-
-# Flowise integration snippets (meant to be manually inserted into other files)
-extensions/flowise/integration/*.py
-
-# Other template/snippet directories (add as needed)

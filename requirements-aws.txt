@@ -1,7 +1,0 @@
-# AWS Integration Dependencies
-# Optional - only needed for S3 pattern sync and AWS integration
-
-# Install with: pip install -r requirements-aws.txt
-
-boto3>=1.40.0  # AWS SDK for S3 community pattern library
-moto[s3]>=5.0.0  # S3 mocking for tests (development)
