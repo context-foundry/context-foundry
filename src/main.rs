@@ -10,6 +10,7 @@ mod patterns;
 mod prompts;
 mod task;
 mod tui;
+mod update;
 mod utils;
 
 #[derive(Parser)]
@@ -39,6 +40,8 @@ enum Commands {
     Status,
     /// List all tasks from IMPL_PLAN.md
     Tasks,
+    /// Update foundry to the latest version
+    Update,
 }
 
 #[tokio::main]
@@ -63,6 +66,9 @@ async fn main() -> Result<()> {
         }
         Commands::Tasks => {
             app::show_tasks(&project_dir)?;
+        }
+        Commands::Update => {
+            update::run_update()?;
         }
     }
 

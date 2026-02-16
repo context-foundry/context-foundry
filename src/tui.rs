@@ -198,10 +198,9 @@ fn render_agent_output(frame: &mut Frame, area: Rect, state: &AppState) {
         let color = match role {
             AgentRole::Planner => Color::Magenta,
             AgentRole::Builder => Color::Green,
-            AgentRole::Validator => Color::Cyan,
+            AgentRole::Reviewer => Color::Cyan,
             AgentRole::Fixer => Color::Yellow,
             AgentRole::Discovery => Color::Blue,
-            AgentRole::Auditor => Color::Red,
         };
         Span::styled(
             format!(" {} Output ", role),
@@ -259,7 +258,7 @@ fn render_status_bar(frame: &mut Frame, area: Rect, state: &AppState) {
         String::new()
     };
 
-    let status = Line::from(vec![
+    let mut spans = vec![
         Span::styled(
             " q ",
             Style::default()
@@ -285,8 +284,18 @@ fn render_status_bar(frame: &mut Frame, area: Rect, state: &AppState) {
         ),
         Span::raw(" scroll"),
         Span::styled(discovery_info, Style::default().fg(Color::DarkGray)),
-    ]);
+    ];
 
+    if let Some(ref version) = state.update_available {
+        spans.push(Span::styled(
+            format!(" | v{} available — `foundry update`", version),
+            Style::default()
+                .fg(Color::Green)
+                .add_modifier(Modifier::BOLD),
+        ));
+    }
+
+    let status = Line::from(spans);
     let bar = Paragraph::new(status);
     frame.render_widget(bar, area);
 }

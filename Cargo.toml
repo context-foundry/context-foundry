@@ -1,9 +1,11 @@
 [package]
 name = "foundry"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "Autonomous build loop — the engine of Context Foundry"
 license = "MIT"
+repository = "https://github.com/context-foundry/context-foundry"
+homepage = "https://github.com/context-foundry/context-foundry"
 
 [[bin]]
 name = "foundry"

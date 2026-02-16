@@ -11,10 +11,9 @@ use tokio::sync::mpsc;
 pub enum AgentRole {
     Planner,
     Builder,
-    Validator,
+    Reviewer,
     Fixer,
     Discovery,
-    Auditor,
 }
 
 impl std::fmt::Display for AgentRole {
@@ -22,10 +21,9 @@ impl std::fmt::Display for AgentRole {
         match self {
             AgentRole::Planner => write!(f, "PLANNER"),
             AgentRole::Builder => write!(f, "BUILDER"),
-            AgentRole::Validator => write!(f, "VALIDATOR"),
+            AgentRole::Reviewer => write!(f, "REVIEWER"),
             AgentRole::Fixer => write!(f, "FIXER"),
             AgentRole::Discovery => write!(f, "DISCOVERY"),
-            AgentRole::Auditor => write!(f, "AUDITOR"),
         }
     }
 }

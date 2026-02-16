@@ -6,13 +6,10 @@ use std::path::Path;
 pub struct Config {
     pub planner_model: String,
     pub builder_model: String,
-    pub validator_model: String,
+    pub reviewer_model: String,
     pub fixer_model: String,
     pub discovery_model: String,
-    pub auditor_model: String,
 
-    pub max_fix_attempts: usize,
-    pub max_audit_iterations: usize,
     pub pause_between_tasks_secs: u64,
     pub pause_between_cycles_secs: u64,
 
@@ -24,13 +21,10 @@ impl Default for Config {
         Self {
             planner_model: "opus".into(),
             builder_model: "opus".into(),
-            validator_model: "opus".into(),
+            reviewer_model: "opus".into(),
             fixer_model: "opus".into(),
             discovery_model: "opus".into(),
-            auditor_model: "opus".into(),
 
-            max_fix_attempts: 3,
-            max_audit_iterations: 3,
             pause_between_tasks_secs: 5,
             pause_between_cycles_secs: 30,
 

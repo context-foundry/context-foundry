@@ -7,6 +7,7 @@ use std::time::Duration;
 use tokio::sync::mpsc;
 
 use crate::agent::{self, AgentOutputEvent, AgentRole};
+use crate::update;
 use crate::utils::truncate_str;
 use crate::config::Config;
 use crate::git;
@@ -32,6 +33,7 @@ pub struct AppState {
     pub stop_after_task: bool,
     pub events_received: usize,
     pub tick_count: usize,
+    pub update_available: Option<String>,
 }
 
 impl AppState {
@@ -51,6 +53,7 @@ impl AppState {
             stop_after_task: false,
             events_received: 0,
             tick_count: 0,
+            update_available: None,
         }
     }
 
@@ -87,6 +90,7 @@ enum AppEvent {
     LoopEvent(LoopEvent),
     Key(event::KeyEvent),
     Tick,
+    UpdateAvailable(String),
 }
 
 enum LoopEvent {
@@ -161,6 +165,16 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
                     break;
                 }
             }
+        }
+    });
+
+    // Background update check (non-blocking, delayed)
+    let update_tx = event_tx.clone();
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        let result = tokio::task::spawn_blocking(update::check_for_update).await;
+        if let Ok(Ok(Some(version))) = result {
+            let _ = update_tx.send(AppEvent::UpdateAvailable(version));
         }
     });
 
@@ -308,6 +322,9 @@ fn handle_event(state: &mut AppState, event: AppEvent) {
         AppEvent::Tick => {
             state.tick_count = state.tick_count.wrapping_add(1);
         }
+        AppEvent::UpdateAvailable(version) => {
+            state.update_available = Some(version);
+        }
     }
 }
 
@@ -322,7 +339,7 @@ async fn build_loop(
     let buildloop_dir = project_dir.join(".buildloop");
     let log_dir = buildloop_dir.join("logs");
     let current_plan = buildloop_dir.join("current-plan.md");
-    let validation_report = buildloop_dir.join("validation-report.md");
+    let review_report = buildloop_dir.join("review-report.md");
 
     // Ensure dirs exist
     let _ = std::fs::create_dir_all(&log_dir);
@@ -359,7 +376,7 @@ async fn build_loop(
                 &config,
                 &plan_path,
                 &current_plan,
-                &validation_report,
+                &review_report,
                 &log_dir,
                 &tx,
             )
@@ -471,14 +488,13 @@ async fn process_task(
     config: &Config,
     _plan_path: &Path,
     current_plan: &Path,
-    validation_report: &Path,
+    review_report: &Path,
     log_dir: &Path,
     tx: &mpsc::UnboundedSender<AppEvent>,
 ) -> bool {
     let task_id = &task_info.id;
     let task_desc = &task_info.description;
     let buildloop_dir = project_dir.join(".buildloop");
-    let audit_report = buildloop_dir.join("audit-report.md");
     let patterns_extracted = buildloop_dir.join("patterns-extracted.json");
 
     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::TaskStarted(
@@ -487,8 +503,7 @@ async fn process_task(
 
     // Clean ephemeral files
     let _ = std::fs::remove_file(current_plan);
-    let _ = std::fs::remove_file(validation_report);
-    let _ = std::fs::remove_file(&audit_report);
+    let _ = std::fs::remove_file(review_report);
     let _ = std::fs::remove_file(&patterns_extracted);
 
     // ── LOAD PATTERNS ──
@@ -579,109 +594,19 @@ async fn process_task(
         return false;
     }
 
-    // ── VALIDATE + FIX LOOP ──
-    let validator_pattern_context = patterns::format_patterns_for_prompt(&matched, "validator");
-    let mut validated = false;
-
-    for attempt in 1..=config.max_fix_attempts {
-        // Validator
-        let _ = std::fs::remove_file(validation_report);
-
-        let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
-        let fwd_tx = tx.clone();
-        tokio::spawn(async move {
-            while let Some(evt) = agent_rx.recv().await {
-                let _ = fwd_tx.send(AppEvent::AgentOutput(evt));
-            }
-        });
-
-        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::AgentStarted(
-            AgentRole::Validator,
-            config.validator_model.clone(),
-        )));
-
-        let prompt = prompts::validator_prompt(task_id, task_desc, &validator_pattern_context);
-        let val_result = agent::run_agent(
-            &AgentRole::Validator,
-            &config.validator_model,
-            &prompt,
-            project_dir,
-            agent_tx,
-            log_dir,
-            None,
-        )
-        .await;
-
-        let _ = tx.send(AppEvent::AgentDone(
-            val_result.map(|r| r.success).unwrap_or(false),
-        ));
-
-        // Check verdict
-        if check_validation_passed(validation_report) {
-            validated = true;
-            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                "Validation PASSED (attempt {})",
-                attempt
-            ))));
-            break;
-        }
-
-        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-            "Validation FAILED (attempt {}/{})",
-            attempt, config.max_fix_attempts
-        ))));
-
-        // Fixer (unless last attempt)
-        if attempt < config.max_fix_attempts {
-            let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
-            let fwd_tx = tx.clone();
-            tokio::spawn(async move {
-                while let Some(evt) = agent_rx.recv().await {
-                    let _ = fwd_tx.send(AppEvent::AgentOutput(evt));
-                }
-            });
-
-            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::AgentStarted(
-                AgentRole::Fixer,
-                config.fixer_model.clone(),
-            )));
-
-            let prompt = prompts::fixer_prompt(
-                task_id,
-                task_desc,
-                attempt,
-                config.max_fix_attempts,
-            );
-            let fix_result = agent::run_agent(
-                &AgentRole::Fixer,
-                &config.fixer_model,
-                &prompt,
-                project_dir,
-                agent_tx,
-                log_dir,
-                None,
-            )
-            .await;
-
-            let _ = tx.send(AppEvent::AgentDone(
-                fix_result.map(|r| r.success).unwrap_or(false),
-            ));
-        }
-    }
-
-    // ── AUDIT LOOP ──
-    if validated {
-        run_audit_loop(
-            task_id,
-            task_desc,
-            project_dir,
-            config,
-            &audit_report,
-            log_dir,
-            tx,
-        )
-        .await;
-    }
+    // ── REVIEW + FIX LOOP (2 passes max) ──
+    let reviewer_pattern_context = patterns::format_patterns_for_prompt(&matched, "reviewer");
+    let validated = run_review_loop(
+        task_id,
+        task_desc,
+        project_dir,
+        config,
+        review_report,
+        log_dir,
+        &reviewer_pattern_context,
+        tx,
+    )
+    .await;
 
     // ── COMMIT ──
     let committed = git::commit_and_push(project_dir, task_id, task_desc, !validated)
@@ -711,7 +636,6 @@ async fn process_task(
     }
 
     // ── CLEANUP ──
-    let _ = std::fs::remove_file(&audit_report);
     let _ = std::fs::remove_file(&patterns_extracted);
 
     // ── DOCKER RESTART (selective) ──
@@ -732,33 +656,33 @@ async fn process_task(
     validated
 }
 
-// ─── Audit Loop ──────────────────────────────────────────────
+// ─── Review Loop (unified validator + auditor) ───────────────
 
-async fn run_audit_loop(
+async fn run_review_loop(
     task_id: &str,
     task_desc: &str,
     project_dir: &Path,
     config: &Config,
-    audit_report: &Path,
+    review_report: &Path,
     log_dir: &Path,
+    pattern_context: &str,
     tx: &mpsc::UnboundedSender<AppEvent>,
-) {
+) -> bool {
     let files_changed = get_changed_files(project_dir);
     if files_changed.is_empty() {
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
-            "No changed files to audit".to_string(),
+            "No changed files to review".to_string(),
         )));
-        return;
+        return false;
     }
 
     let files_list = files_changed.join("\n");
-    let max_iterations = config.max_audit_iterations;
-    let auditor_tools: &[&str] = &["Read", "Glob", "Grep", "Write"];
+    let reviewer_tools: &[&str] = &["Read", "Glob", "Grep", "Write", "Bash"];
 
-    for iteration in 1..=max_iterations {
-        let _ = std::fs::remove_file(audit_report);
+    for pass in 1..=2 {
+        let _ = std::fs::remove_file(review_report);
 
-        // ── Run Auditor ──
+        // ── Run Reviewer ──
         let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
         let fwd_tx = tx.clone();
         tokio::spawn(async move {
@@ -768,96 +692,96 @@ async fn run_audit_loop(
         });
 
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::AgentStarted(
-            AgentRole::Auditor,
-            config.auditor_model.clone(),
+            AgentRole::Reviewer,
+            config.reviewer_model.clone(),
         )));
 
-        let prompt = prompts::auditor_prompt(task_id, task_desc, &files_list);
-        let audit_result = agent::run_agent(
-            &AgentRole::Auditor,
-            &config.auditor_model,
-            &prompt,
-            project_dir,
-            agent_tx,
-            log_dir,
-            Some(auditor_tools),
-        )
-        .await;
-
-        let _ = tx.send(AppEvent::AgentDone(
-            audit_result.as_ref().map(|r| r.success).unwrap_or(false),
-        ));
-
-        // Parse findings
-        let (high, medium, _low) = parse_audit_findings(audit_report);
-
-        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-            "Audit iteration {}/{}: {} high, {} medium findings",
-            iteration, max_iterations, high, medium
-        ))));
-
-        // Convergence check
-        if high == 0 && medium == 0 {
-            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
-                "Audit converged — no high or medium findings".to_string(),
-            )));
-            break;
-        }
-
-        // Can't fix on the last iteration — just log and exit
-        if iteration == max_iterations {
-            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                "Audit reached max iterations ({}) with {} high, {} medium remaining",
-                max_iterations, high, medium
-            ))));
-            break;
-        }
-
-        // Run ONE fixer per iteration, then re-audit on the next iteration.
-        // This avoids exhausting all fix attempts blind before checking results.
-        let severity = if high > 0 { "HIGH" } else { "MEDIUM" };
-
-        let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
-        let fwd_tx = tx.clone();
-        tokio::spawn(async move {
-            while let Some(evt) = agent_rx.recv().await {
-                let _ = fwd_tx.send(AppEvent::AgentOutput(evt));
-            }
-        });
-
-        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::AgentStarted(
-            AgentRole::Fixer,
-            config.fixer_model.clone(),
-        )));
-
-        let remaining = max_iterations - iteration;
-        let prompt = prompts::audit_fixer_prompt(
+        let prompt = prompts::reviewer_prompt(
             task_id,
             task_desc,
-            severity,
-            iteration,
-            max_iterations,
+            &files_list,
+            pass,
+            pattern_context,
         );
-        let fix_result = agent::run_agent(
-            &AgentRole::Fixer,
-            &config.fixer_model,
+        let review_result = agent::run_agent(
+            &AgentRole::Reviewer,
+            &config.reviewer_model,
             &prompt,
             project_dir,
             agent_tx,
             log_dir,
-            None,
+            Some(reviewer_tools),
         )
         .await;
 
         let _ = tx.send(AppEvent::AgentDone(
-            fix_result.map(|r| r.success).unwrap_or(false),
+            review_result.as_ref().map(|r| r.success).unwrap_or(false),
         ));
 
+        // Check verdict and parse findings
+        let verdict_pass = check_review_passed(review_report);
+        let (high, medium, _low) = parse_audit_findings(review_report);
+
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-            "Fixed {} findings, {} audit iterations remaining",
-            severity, remaining
+            "Review pass {}/2: verdict={}, {} high, {} medium findings",
+            pass,
+            if verdict_pass { "PASS" } else { "FAIL" },
+            high,
+            medium
         ))));
+
+        // Convergence: PASS verdict AND no high/medium findings
+        if verdict_pass && high == 0 && medium == 0 {
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+                "Review passed — no issues found".to_string(),
+            )));
+            return true;
+        }
+
+        // Run Fixer (unless this is the last pass)
+        if pass < 2 {
+            let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
+            let fwd_tx = tx.clone();
+            tokio::spawn(async move {
+                while let Some(evt) = agent_rx.recv().await {
+                    let _ = fwd_tx.send(AppEvent::AgentOutput(evt));
+                }
+            });
+
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::AgentStarted(
+                AgentRole::Fixer,
+                config.fixer_model.clone(),
+            )));
+
+            let prompt = prompts::fixer_prompt(task_id, task_desc, pass);
+            let fix_result = agent::run_agent(
+                &AgentRole::Fixer,
+                &config.fixer_model,
+                &prompt,
+                project_dir,
+                agent_tx,
+                log_dir,
+                None,
+            )
+            .await;
+
+            let _ = tx.send(AppEvent::AgentDone(
+                fix_result.map(|r| r.success).unwrap_or(false),
+            ));
+
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+                "Fixer completed, running second review pass...".to_string(),
+            )));
+        } else {
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                "Review pass 2 still has issues: {} high, {} medium — committing as-is",
+                high, medium
+            ))));
+        }
     }
+
+    // If we exit the loop without returning true, check the final verdict
+    check_review_passed(review_report)
 }
 
 // ─── Pattern Extraction ──────────────────────────────────────
@@ -1035,7 +959,7 @@ fn extract_json_from_report(content: &str) -> String {
     json_lines.join("\n")
 }
 
-fn check_validation_passed(report_path: &Path) -> bool {
+fn check_review_passed(report_path: &Path) -> bool {
     if let Ok(content) = std::fs::read_to_string(report_path) {
         content.to_lowercase().contains("verdict: pass")
             || content.to_lowercase().contains("verdict:pass")
@@ -1080,10 +1004,22 @@ pub async fn run_headless(project_dir: &Path) -> Result<()> {
 
     let loop_dir = project_dir.to_path_buf();
     let loop_config = config;
-    let loop_tx = tx;
+    let loop_tx = tx.clone();
     tokio::spawn(async move {
         build_loop(loop_dir, loop_config, loop_tx).await;
     });
+
+    // Background update check
+    let update_tx = tx;
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        let result = tokio::task::spawn_blocking(update::check_for_update).await;
+        if let Ok(Ok(Some(version))) = result {
+            let _ = update_tx.send(AppEvent::UpdateAvailable(version));
+        }
+    });
+
+    let mut update_version: Option<String> = None;
 
     // Print events to stdout
     while let Some(evt) = rx.recv().await {
@@ -1129,8 +1065,19 @@ pub async fn run_headless(project_dir: &Path) -> Result<()> {
                 LoopEvent::Finished => break,
                 _ => {}
             },
+            AppEvent::UpdateAvailable(version) => {
+                update_version = Some(version);
+            }
             _ => {}
         }
+    }
+
+    if let Some(version) = update_version {
+        eprintln!(
+            "\nUpdate available: v{} → v{}. Run `foundry update` to upgrade.",
+            update::current_version(),
+            version
+        );
     }
 
     Ok(())
