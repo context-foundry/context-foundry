@@ -4,17 +4,11 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, SystemTime};
 
-const GITHUB_API_LATEST: &str =
-    "https://api.github.com/repos/context-foundry/context-foundry/releases/latest";
+const GITHUB_REPO: &str = "context-foundry/context-foundry";
+const GITHUB_API_RELEASES: &str =
+    "https://api.github.com/repos/context-foundry/context-foundry/releases";
 const CHECK_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60); // 24 hours
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ReleaseQueryErrorKind {
-    Network,
-    RateLimited,
-    NoReleases,
-    Unknown,
-}
+const ASSET_PREFIX: &str = "foundry-v";
 
 // ─── Version helpers ─────────────────────────────────────────
 
@@ -82,9 +76,14 @@ pub fn check_for_update() -> Result<Option<String>> {
         }
     }
 
-    // Fetch latest release tag
-    let latest = match fetch_latest_version() {
-        Ok(v) => v,
+    // Fetch latest binary release (skips Python-only releases)
+    let latest = match fetch_latest_binary_release() {
+        Ok(Some(rel)) => rel.version,
+        Ok(None) => {
+            // No binary releases found — cache empty result
+            let _ = fs::write(&check_file, "");
+            return Ok(None);
+        }
         Err(_) => {
             // Network failure — don't block, just skip
             return Ok(None);
@@ -101,9 +100,18 @@ pub fn check_for_update() -> Result<Option<String>> {
     }
 }
 
-// ─── Fetch latest version from GitHub API ────────────────────
+// ─── Fetch latest Rust binary release from GitHub API ────────
 
-fn fetch_latest_version() -> Result<String> {
+/// A release that contains foundry binary assets.
+struct BinaryRelease {
+    version: String,
+    body: String, // raw JSON for asset extraction
+}
+
+/// Fetches recent releases and returns the first one that contains
+/// foundry binary assets (i.e. files matching `foundry-v*-*.tar.gz`).
+/// This skips Python-only releases like the context_foundry wheel packages.
+fn fetch_latest_binary_release() -> Result<Option<BinaryRelease>> {
     let output = Command::new("curl")
         .args([
             "-sfL",
@@ -113,7 +121,8 @@ fn fetch_latest_version() -> Result<String> {
             "Accept: application/vnd.github+json",
             "-H",
             "User-Agent: foundry-updater",
-            GITHUB_API_LATEST,
+            // Fetch up to 20 recent releases to scan past Python-only ones
+            &format!("{}?per_page=20", GITHUB_API_RELEASES),
         ])
         .output()
         .context("failed to run curl")?;
@@ -123,18 +132,47 @@ fn fetch_latest_version() -> Result<String> {
     }
 
     let body = String::from_utf8_lossy(&output.stdout);
-    extract_tag_name(&body)
-}
+    let releases: Vec<serde_json::Value> =
+        serde_json::from_str(&body).context("failed to parse GitHub API response")?;
 
-fn extract_tag_name(json: &str) -> Result<String> {
-    // Minimal JSON parsing — find "tag_name": "v0.2.0"
-    let v: serde_json::Value =
-        serde_json::from_str(json).context("failed to parse GitHub API response")?;
-    let tag = v
-        .get("tag_name")
-        .and_then(|t| t.as_str())
-        .context("no tag_name in release")?;
-    Ok(tag.trim_start_matches('v').to_string())
+    for release in &releases {
+        // Skip drafts and pre-releases
+        if release.get("draft").and_then(|d| d.as_bool()).unwrap_or(false) {
+            continue;
+        }
+        if release.get("prerelease").and_then(|p| p.as_bool()).unwrap_or(false) {
+            continue;
+        }
+
+        let assets = match release.get("assets").and_then(|a| a.as_array()) {
+            Some(a) => a,
+            None => continue,
+        };
+
+        // Check if any asset looks like a foundry binary tarball
+        let has_binary = assets.iter().any(|asset| {
+            asset
+                .get("name")
+                .and_then(|n| n.as_str())
+                .map(|name| name.starts_with(ASSET_PREFIX) && name.ends_with(".tar.gz"))
+                .unwrap_or(false)
+        });
+
+        if has_binary {
+            let tag = release
+                .get("tag_name")
+                .and_then(|t| t.as_str())
+                .context("no tag_name in release")?;
+            let version = tag.trim_start_matches('v').to_string();
+            let release_json = serde_json::to_string(release)?;
+            return Ok(Some(BinaryRelease {
+                version,
+                body: release_json,
+            }));
+        }
+    }
+
+    Ok(None)
 }
 
 fn extract_assets(json: &str) -> Result<Vec<(String, String)>> {
@@ -158,32 +196,6 @@ fn extract_assets(json: &str) -> Result<Vec<(String, String)>> {
     Ok(result)
 }
 
-fn classify_release_query_error(stderr: &str) -> ReleaseQueryErrorKind {
-    let stderr_lower = stderr.to_lowercase();
-    let is_network_error = stderr_lower.contains("could not resolve host")
-        || stderr_lower.contains("couldn't resolve host")
-        || stderr_lower.contains("connection refused")
-        || stderr_lower.contains("timed out")
-        || stderr_lower.contains("failed to connect")
-        || stderr_lower.contains("network is unreachable")
-        || stderr_lower.contains("ssl connect error");
-
-    if is_network_error {
-        ReleaseQueryErrorKind::Network
-    } else if stderr_lower.contains("rate limit")
-        || stderr_lower.contains("returned error: 403")
-        || stderr_lower.contains("error: 403")
-    {
-        ReleaseQueryErrorKind::RateLimited
-    } else if stderr_lower.contains("returned error: 404")
-        || stderr_lower.contains("error: 404")
-    {
-        ReleaseQueryErrorKind::NoReleases
-    } else {
-        ReleaseQueryErrorKind::Unknown
-    }
-}
-
 // ─── Self-update flow ────────────────────────────────────────
 
 pub fn run_update() -> Result<()> {
@@ -201,52 +213,28 @@ pub fn run_update() -> Result<()> {
 
     println!("Checking for updates...");
 
-    let output = Command::new("curl")
-        .args([
-            "-sfL",
-            "--max-time",
-            "15",
-            "-H",
-            "Accept: application/vnd.github+json",
-            "-H",
-            "User-Agent: foundry-updater",
-            GITHUB_API_LATEST,
-        ])
-        .output()
-        .context("failed to run curl")?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        match classify_release_query_error(&stderr) {
-            ReleaseQueryErrorKind::Network => {
-                println!("Could not reach GitHub (network error). Try again later.");
-            }
-            ReleaseQueryErrorKind::RateLimited => {
-                println!("GitHub API rate limit exceeded. Try again later.");
-            }
-            ReleaseQueryErrorKind::NoReleases => {
-                println!("No releases found on GitHub yet.");
-            }
-            ReleaseQueryErrorKind::Unknown => {
-                println!("Failed to query GitHub Releases.");
-                if !stderr.trim().is_empty() {
-                    println!("Details: {}", stderr.trim());
-                }
-            }
+    let release = match fetch_latest_binary_release() {
+        Ok(Some(rel)) => rel,
+        Ok(None) => {
+            println!("No binary releases found (only Python packages exist).");
+            println!("Install from source:");
+            println!("  cargo install --git https://github.com/{} foundry", GITHUB_REPO);
+            return Ok(());
         }
-        println!("Install from source:");
-        println!("  cargo install --git https://github.com/context-foundry/context-foundry foundry");
-        return Ok(());
-    }
+        Err(e) => {
+            println!("Failed to check for updates: {}", e);
+            println!("Install from source:");
+            println!("  cargo install --git https://github.com/{} foundry", GITHUB_REPO);
+            return Ok(());
+        }
+    };
 
-    let body = String::from_utf8_lossy(&output.stdout);
-    let latest = extract_tag_name(&body)?;
+    let latest = &release.version;
 
-    if !is_newer(&latest, current) {
+    if !is_newer(latest, current) {
         println!("Already at latest version (v{}).", current);
-        // Update the cache
         if let Ok(dir) = foundry_cache_dir() {
-            let _ = fs::write(dir.join("last-update-check"), &latest);
+            let _ = fs::write(dir.join("last-update-check"), latest);
         }
         return Ok(());
     }
@@ -262,12 +250,12 @@ pub fn run_update() -> Result<()> {
                 std::env::consts::ARCH
             );
             println!("Install from source:");
-            println!("  cargo install --git https://github.com/context-foundry/context-foundry foundry");
+            println!("  cargo install --git https://github.com/{} foundry", GITHUB_REPO);
             return Ok(());
         }
     };
 
-    let assets = extract_assets(&body)?;
+    let assets = extract_assets(&release.body)?;
     let tarball_name = format!("foundry-v{}-{}.tar.gz", latest, target);
     let checksums_name = format!("foundry-v{}-checksums.txt", latest);
 
@@ -290,7 +278,7 @@ pub fn run_update() -> Result<()> {
                 println!("  - {}", name);
             }
             println!("\nInstall from source:");
-            println!("  cargo install --git https://github.com/context-foundry/context-foundry foundry");
+            println!("  cargo install --git https://github.com/{} foundry", GITHUB_REPO);
             return Ok(());
         }
     };
@@ -457,14 +445,7 @@ mod tests {
     }
 
     #[test]
-    fn test_extract_tag_name() {
-        let json = r#"{"tag_name": "v0.3.0", "name": "Release 0.3.0"}"#;
-        assert_eq!(extract_tag_name(json).unwrap(), "0.3.0");
-    }
-
-    #[test]
     fn test_get_target_triple() {
-        // Should return Some on supported platforms
         let triple = get_target_triple();
         assert!(triple.is_some() || cfg!(not(any(
             target_os = "macos",
@@ -473,38 +454,19 @@ mod tests {
     }
 
     #[test]
-    fn test_classify_release_query_error_network() {
-        assert_eq!(
-            classify_release_query_error("curl: (6) Could not resolve host: api.github.com"),
-            ReleaseQueryErrorKind::Network
-        );
-    }
-
-    #[test]
-    fn test_classify_release_query_error_rate_limit() {
-        assert_eq!(
-            classify_release_query_error("curl: (22) The requested URL returned error: 403"),
-            ReleaseQueryErrorKind::RateLimited
-        );
-        assert_eq!(
-            classify_release_query_error("API rate limit exceeded for 203.0.113.1."),
-            ReleaseQueryErrorKind::RateLimited
-        );
-    }
-
-    #[test]
-    fn test_classify_release_query_error_no_releases() {
-        assert_eq!(
-            classify_release_query_error("curl: (22) The requested URL returned error: 404"),
-            ReleaseQueryErrorKind::NoReleases
-        );
-    }
-
-    #[test]
-    fn test_classify_release_query_error_unknown() {
-        assert_eq!(
-            classify_release_query_error("curl: (35) SSL routines:ssl3_get_record:wrong version"),
-            ReleaseQueryErrorKind::Unknown
-        );
+    fn test_extract_assets_filters_binary_releases() {
+        let json = r#"{
+            "tag_name": "v0.3.0",
+            "assets": [
+                {"name": "foundry-v0.3.0-aarch64-apple-darwin.tar.gz", "browser_download_url": "https://example.com/a"},
+                {"name": "context_foundry-0.3.0.tar.gz", "browser_download_url": "https://example.com/b"}
+            ]
+        }"#;
+        let assets = extract_assets(json).unwrap();
+        assert_eq!(assets.len(), 2);
+        // The binary asset starts with ASSET_PREFIX
+        assert!(assets[0].0.starts_with(ASSET_PREFIX));
+        // The Python asset does not
+        assert!(!assets[1].0.starts_with(ASSET_PREFIX));
     }
 }

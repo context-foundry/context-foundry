@@ -19,6 +19,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Version bumped to 0.2.0
 - Added repository and homepage metadata to Cargo.toml
+- Self-updater now skips Python-only releases and only reports Rust binary releases
+
+### Fixed
+- Prompt injection surface: pattern context now wrapped in non-authoritative reference data delimiters
+- Validation commands are now stack-aware (Rust/Python/Node) instead of hardcoded Python/Node
+- Reviewer no longer runs `docker compose up` (replaced with read-only `docker compose config`)
+- Pattern routing mismatch: reviewer role now correctly receives reviewer advice instead of planner advice
+- Discovery agent allows 0 tasks and scopes exploration to primary source directories
+- Numbering typo in pattern extraction instructions (1, 2, 4 → 1, 2, 3)
+- Reviewer tone changed from presumptive to evidence-based ("every finding must cite specific evidence")
 
 ## [0.1.0] - 2025-01-01
 

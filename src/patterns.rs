@@ -8,7 +8,8 @@ pub struct PatternSolution {
     #[serde(default)]
     pub planner: String,
     #[serde(default)]
-    pub validator: String,
+    #[serde(alias = "validator")]
+    pub reviewer: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -164,8 +165,8 @@ pub fn format_patterns_for_prompt(patterns: &[&Pattern], role: &str) -> String {
         }
 
         if let Some(ref sol) = p.solution {
-            let advice = if role_lower == "validator" {
-                &sol.validator
+            let advice = if role_lower == "reviewer" {
+                &sol.reviewer
             } else {
                 &sol.planner
             };
@@ -280,4 +281,57 @@ fn extract_json_from_content(content: &str) -> String {
     }
 
     json_lines.join("\n")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_pattern_solution_deserializes_reviewer_field() {
+        let json = r#"{"planner": "plan advice", "reviewer": "review advice"}"#;
+        let sol: PatternSolution = serde_json::from_str(json).unwrap();
+        assert_eq!(sol.reviewer, "review advice");
+    }
+
+    #[test]
+    fn test_pattern_solution_deserializes_validator_alias() {
+        let json = r#"{"planner": "plan advice", "validator": "old validator advice"}"#;
+        let sol: PatternSolution = serde_json::from_str(json).unwrap();
+        assert_eq!(sol.reviewer, "old validator advice");
+    }
+
+    #[test]
+    fn test_format_patterns_routes_reviewer_advice() {
+        let pattern = Pattern {
+            pattern_id: "test-1".to_string(),
+            title: "Test Pattern".to_string(),
+            first_seen: String::new(),
+            last_seen: String::new(),
+            frequency: 1,
+            severity: Some("HIGH".to_string()),
+            keywords: vec!["test".to_string()],
+            tech_stack: vec![],
+            issue: Some("some issue".to_string()),
+            solution: Some(PatternSolution {
+                planner: "planner advice".to_string(),
+                reviewer: "reviewer advice".to_string(),
+            }),
+            auto_apply: false,
+            learned_from: None,
+        };
+        let patterns = vec![&pattern];
+
+        let reviewer_output = format_patterns_for_prompt(&patterns, "reviewer");
+        assert!(
+            reviewer_output.contains("reviewer advice"),
+            "reviewer role should get reviewer advice"
+        );
+
+        let planner_output = format_patterns_for_prompt(&patterns, "planner");
+        assert!(
+            planner_output.contains("planner advice"),
+            "planner role should get planner advice"
+        );
+    }
 }
