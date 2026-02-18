@@ -4,6 +4,11 @@ Autonomous build loop that plans, builds, reviews, and learns — forever.
 
 Foundry reads an `IMPL_PLAN.md` task list and works through it using Claude Code agents in a TUI, committing each completed task. When all tasks are done, it discovers new work and keeps going.
 
+## Demos
+
+- [Building a Second Brain with the Loop](https://youtu.be/VO_c2j0dPH0) — Foundry autonomously works through an implementation plan, building a second-brain app from a task list while the TUI streams each agent's output in real time.
+- [Enhancing the Second Brain with the Loop](https://youtu.be/wL0RLml2Tio) — A follow-up run where foundry picks up where it left off, discovering new work and iterating on the second-brain app with patterns learned from the first pass.
+
 ## Task Flow
 
 ```
