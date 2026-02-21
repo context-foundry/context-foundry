@@ -13,6 +13,8 @@ pub struct Config {
     pub pause_between_tasks_secs: u64,
     pub pause_between_cycles_secs: u64,
 
+    pub agent_timeout_secs: u64,
+
     pub patterns_dir: String,
 }
 
@@ -27,6 +29,8 @@ impl Default for Config {
 
             pause_between_tasks_secs: 5,
             pause_between_cycles_secs: 30,
+
+            agent_timeout_secs: 600, // 10 minutes
 
             patterns_dir: "~/.foundry/patterns".into(),
         }

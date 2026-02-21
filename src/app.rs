@@ -441,6 +441,7 @@ async fn build_loop(
                 agent_tx,
                 &log_dir,
                 None,
+                config.agent_timeout_secs,
             )
             .await;
 
@@ -542,6 +543,7 @@ async fn process_task(
         agent_tx,
         log_dir,
         None,
+        config.agent_timeout_secs,
     )
     .await;
 
@@ -579,6 +581,7 @@ async fn process_task(
         agent_tx,
         log_dir,
         None,
+        config.agent_timeout_secs,
     )
     .await;
 
@@ -711,6 +714,7 @@ async fn run_review_loop(
             agent_tx,
             log_dir,
             Some(reviewer_tools),
+            config.agent_timeout_secs,
         )
         .await;
 
@@ -762,6 +766,7 @@ async fn run_review_loop(
                 agent_tx,
                 log_dir,
                 None,
+                config.agent_timeout_secs,
             )
             .await;
 
@@ -823,6 +828,7 @@ async fn run_pattern_extraction(
         agent_tx,
         log_dir,
         Some(&["Read", "Write"]),
+        600, // pattern extraction is lightweight, 10min is generous
     )
     .await;
 

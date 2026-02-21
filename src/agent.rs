@@ -63,6 +63,7 @@ pub async fn run_agent(
     output_tx: mpsc::UnboundedSender<AgentOutputEvent>,
     log_dir: &Path,
     allowed_tools: Option<&[&str]>,
+    timeout_secs: u64,
 ) -> Result<AgentResult> {
     let timestamp = chrono::Utc::now().format("%Y%m%d-%H%M%S");
     let log_file_path = log_dir.join(format!("{}-{}.jsonl", role, timestamp));
@@ -107,6 +108,7 @@ pub async fn run_agent(
     // Use oneshot channel to get result back from blocking thread
     let (result_tx, result_rx) = tokio::sync::oneshot::channel();
 
+    let role_name = role.to_string();
     tokio::task::spawn_blocking(move || {
         let tx = output_tx;
         let mut child = child;
@@ -116,8 +118,34 @@ pub async fn run_agent(
             read_pty_output(reader, &tx, &log_file_path);
         });
 
-        // Wait for child process to exit
-        let status = child.wait();
+        // Wait for child process to exit with timeout
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(timeout_secs);
+        let mut success = false;
+
+        loop {
+            // Check if child has exited (non-blocking poll via short sleep + try)
+            match child.try_wait() {
+                Ok(Some(status)) => {
+                    success = status.success();
+                    break;
+                }
+                Ok(None) => {
+                    // Still running — check timeout
+                    if std::time::Instant::now() >= deadline {
+                        // Timeout — kill the child process
+                        let _ = child.kill();
+                        let _ = child.wait(); // Reap
+                        eprintln!(
+                            "[foundry] Agent {} timed out after {}s — killed",
+                            role_name, timeout_secs
+                        );
+                        break;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(500));
+                }
+                Err(_) => break,
+            }
+        }
 
         // Drop master to close PTY — triggers EOF on reader
         drop(master);
@@ -125,7 +153,6 @@ pub async fn run_agent(
         // Wait for reader to drain remaining output
         let _ = read_thread.join();
 
-        let success = status.map(|s| s.success()).unwrap_or(false);
         let _ = result_tx.send(success);
     });
 
