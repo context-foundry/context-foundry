@@ -109,13 +109,15 @@ pub async fn run_agent(
     let (result_tx, result_rx) = tokio::sync::oneshot::channel();
 
     let role_name = role.to_string();
+    let model_name = model.to_string();
     tokio::task::spawn_blocking(move || {
         let tx = output_tx;
         let mut child = child;
 
         // Spawn reader thread — reads PTY output line by line
+        let model_label = model_name.clone();
         let read_thread = std::thread::spawn(move || {
-            read_pty_output(reader, &tx, &log_file_path);
+            read_pty_output(reader, &tx, &log_file_path, &model_label);
         });
 
         // Wait for child process to exit with timeout
@@ -170,6 +172,7 @@ fn read_pty_output(
     reader: Box<dyn std::io::Read + Send>,
     tx: &mpsc::UnboundedSender<AgentOutputEvent>,
     log_path: &Path,
+    model_name: &str,
 ) {
     let mut buf_reader = std::io::BufReader::new(reader);
     let mut log_file = std::fs::File::create(log_path).ok();
@@ -210,10 +213,15 @@ fn read_pty_output(
                                     .get("subtype")
                                     .and_then(|s| s.as_str())
                                     .unwrap_or("");
-                                let label = if sub.is_empty() {
-                                    format!("[{}]", t)
+                                let display_type = if t == "assistant" {
+                                    model_name
                                 } else {
-                                    format!("[{}:{}]", t, sub)
+                                    t
+                                };
+                                let label = if sub.is_empty() {
+                                    format!("[{}]", display_type)
+                                } else {
+                                    format!("[{}:{}]", display_type, sub)
                                 };
                                 let _ = tx.send(AgentOutputEvent::Text(label));
                             }
