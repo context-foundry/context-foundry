@@ -19,26 +19,77 @@ YOUR TASK: Create a detailed implementation plan for:
 Task ID: {task_id}
 Task Description: {task_desc}
 
+CRITICAL CONTEXT: Your plan will be read and executed by an AI BUILDER agent, not a human.
+Write for machine consumption: be explicit, structured, and deterministic.
+Eliminate all ambiguity — the builder should never need to make judgment calls.
+
 INSTRUCTIONS:
 1. Read ARCHITECTURE.md thoroughly for the relevant sections
 2. Read CLAUDE.md for project conventions
 3. Read IMPL_PLAN.md to understand where this task fits
 4. Look at any existing code to understand what's already built
 5. Detect the project's tech stack from repo files (Cargo.toml → Rust, package.json → Node, pyproject.toml/requirements.txt → Python, etc.)
-6. Write a detailed implementation plan to .buildloop/current-plan.md
+6. Write a structured implementation plan to .buildloop/current-plan.md
 
-YOUR PLAN MUST INCLUDE:
-- Exact files to create or modify (with full paths)
-- For each file: what it should contain, key functions/classes, imports needed
-- Dependencies to install (using the stack's package manager)
-- Any Docker or config changes needed
-- Verification steps using stack-appropriate tools (cargo test, pytest, npm test, etc.)
+PLAN FORMAT — Use this exact structure in .buildloop/current-plan.md:
+
+```
+# Plan: {{task_id}}
+
+## Dependencies
+- list: [exact package names with versions to install]
+- commands: [exact install commands to run, e.g. "cargo add serde --features derive"]
+
+## File Operations (in execution order)
+
+### 1. [CREATE|MODIFY] path/to/file.ext
+- operation: CREATE or MODIFY
+- reason: one-line why this file needs to change
+- if MODIFY, anchor: the exact function/struct/block being changed (quote a unique line from the existing code so the builder can locate it)
+
+#### Imports / Dependencies
+- [exact import statements, one per line]
+
+#### Structs / Types (if applicable)
+- [exact struct/class definitions with all fields and types]
+
+#### Functions
+- signature: [exact function signature with types]
+  - purpose: [one line]
+  - logic: [numbered steps of what the function body does]
+  - calls: [other functions this calls, with expected args]
+  - returns: [exact return value/type]
+  - error handling: [what errors to handle and how]
+
+#### Wiring / Integration
+- [how this file connects to others — exact function calls, route registrations, config entries]
+
+### 2. [CREATE|MODIFY] path/to/next_file.ext
+[repeat structure above]
+
+## Verification
+- build: [exact build command, e.g. "cargo build" or "npm run build"]
+- lint: [exact lint command]
+- test: [exact test command, or "no existing tests" if none]
+- smoke: [specific manual check the builder should do, e.g. "run `curl localhost:8080/health` and expect 200"]
+
+## Constraints
+- [anything the builder must NOT do — e.g. "do not modify main.rs" or "do not add new dependencies beyond X"]
+```
+
+RULES FOR WRITING THE PLAN:
+- Every file operation must specify CREATE or MODIFY — never leave it ambiguous
+- For MODIFY operations, always include an anchor (a unique line from the existing file) so the builder knows exactly where to make changes
+- List file operations in dependency order — if file B imports from file A, list A first
+- Function signatures must include all parameter names, types, and return types — no ellipses or "etc."
+- Logic steps must be concrete: "call fetch_user(user_id) and match on the Result" not "handle the user lookup"
+- Do not use vague language: no "appropriate", "relevant", "necessary", "etc.", "as needed", "should contain"
+- Every verification command must be copy-paste ready — no placeholders
 
 IMPORTANT:
 - Do NOT implement the code — only write the plan
 - Do NOT modify ARCHITECTURE.md, CLAUDE.md, IMPL_PLAN.md, or .buildloop/ (except current-plan.md)
-- Write the plan to: .buildloop/current-plan.md
-- Be specific enough that a builder agent can implement without ambiguity{patterns_block}"#
+- Write the plan to: .buildloop/current-plan.md{patterns_block}"#
     )
 }
 
@@ -52,21 +103,31 @@ Task ID: {task_id}
 Task Description: {task_desc}
 
 INSTRUCTIONS:
-1. Read .buildloop/current-plan.md for the detailed implementation plan
+1. Read .buildloop/current-plan.md — this is your authoritative specification
 2. Read CLAUDE.md for project conventions
-3. Detect the tech stack from repo files (Cargo.toml, package.json, pyproject.toml, etc.)
-4. Implement every file and change specified in the plan
-5. Install any required dependencies using the appropriate package manager
-6. Run stack-appropriate syntax/build checks:
-   - Rust: cargo check, cargo build
-   - Python: python -c 'import ...'
-   - Node/TS: tsc --noEmit, npm run build
+3. Execute the plan's "Dependencies" section first — run the exact install commands listed
+4. Process each "File Operations" entry in the order listed:
+   - For CREATE operations: create the file with the exact imports, types, and function signatures specified
+   - For MODIFY operations: use the "anchor" field to locate the exact code block to change, then apply the specified changes
+5. Implement each function following its "logic" steps literally — these are your step-by-step instructions
+6. After all files are created/modified, run the exact commands from the plan's "Verification" section
+7. Respect everything in the plan's "Constraints" section
+
+HOW TO READ THE PLAN:
+- The plan is structured for you, not for a human. Each section is a direct instruction.
+- "File Operations" are ordered by dependency — follow the order exactly
+- "anchor" fields contain a unique line from existing code — use it to find the edit location
+- "signature" fields are the exact function signatures to implement
+- "logic" fields are numbered steps — implement them in order
+- "calls" fields tell you which functions to call and with what arguments
+- "Verification" commands are copy-paste ready — run them exactly as written
 
 IMPORTANT:
-- Follow the plan precisely — do not deviate or add unrequested features
+- Follow the plan precisely — do not deviate, interpret, or add unrequested features
 - Do NOT modify ARCHITECTURE.md, CLAUDE.md, IMPL_PLAN.md, or .buildloop/
-- If the plan references existing code, read it first before modifying
-- Ensure all imports are correct and all files are syntactically valid"#
+- If the plan says MODIFY, read the target file first and use the anchor to find the exact location
+- If a verification step fails, fix the issue before moving on
+- Do not add comments, docstrings, or type annotations beyond what the plan specifies"#
     )
 }
 
