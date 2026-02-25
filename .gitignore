@@ -16,8 +16,10 @@ Thumbs.db
 .env.*
 !.env.example
 
-# Claude Code
-.claude/
+# Claude Code (ignore all except shared rules)
+.claude/*
+!.claude/rules/
+!.claude/CLAUDE.md
 .claude-code/
 
 # Foundry runtime
