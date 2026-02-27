@@ -226,9 +226,14 @@ fn read_pty_output(
                                 let _ = tx.send(AgentOutputEvent::Text(label));
                             }
                         } else {
-                            // Non-JSON line (stderr merged through PTY)
+                            // Non-JSON line (stderr merged through PTY).
+                            // Strip ANSI escape sequences and drop lines that are
+                            // purely terminal control noise.
                             if !line.is_empty() {
-                                let _ = tx.send(AgentOutputEvent::Stderr(line.to_string()));
+                                let cleaned = strip_ansi(line);
+                                if !cleaned.is_empty() {
+                                    let _ = tx.send(AgentOutputEvent::Stderr(cleaned));
+                                }
                             }
                         }
                     }
@@ -365,6 +370,159 @@ fn parse_stream_event(line: &str) -> Option<AgentOutputEvent> {
             }
         }
 
+        // Rate limit event — Claude CLI got throttled by the API.
+        // Surface it so the TUI shows what's happening instead of a raw label.
+        "rate_limit_event" => {
+            let msg = v
+                .get("message")
+                .and_then(|m| m.as_str())
+                .unwrap_or("API rate limited — waiting for retry...");
+            Some(AgentOutputEvent::Text(format!("[rate limited] {}", msg)))
+        }
+
         _ => None,
+    }
+}
+
+/// Strip ANSI escape sequences and C0 control characters from PTY output.
+/// Handles CSI (`\x1b[...X`), OSC (`\x1b]...BEL` / `\x1b]...\x1b\\`),
+/// simple two-byte escapes (`\x1b X`), and stray control chars (BEL, etc.).
+/// Returns the cleaned string. Empty after trim means the line was pure noise.
+fn strip_ansi(line: &str) -> String {
+    let mut out = String::with_capacity(line.len());
+    let mut chars = line.chars().peekable();
+
+    while let Some(c) = chars.next() {
+        if c == '\x1b' {
+            match chars.peek() {
+                // CSI: \x1b[ ... final byte is 0x40..=0x7E per ECMA-48
+                Some('[') => {
+                    chars.next(); // consume '['
+                    while let Some(&ch) = chars.peek() {
+                        chars.next();
+                        if ('@'..='~').contains(&ch) {
+                            break;
+                        }
+                    }
+                }
+                // OSC: \x1b] ... terminated by BEL (\x07) or ST (\x1b\\)
+                Some(']') => {
+                    chars.next(); // consume ']'
+                    while let Some(&ch) = chars.peek() {
+                        if ch == '\x07' {
+                            chars.next();
+                            break;
+                        }
+                        if ch == '\x1b' {
+                            chars.next();
+                            if chars.peek() == Some(&'\\') {
+                                chars.next();
+                            }
+                            break;
+                        }
+                        chars.next();
+                    }
+                }
+                // Simple two-byte escape: \x1b + one character
+                Some(_) => {
+                    chars.next();
+                }
+                // Trailing lone ESC at end of line
+                None => {}
+            }
+        } else if c.is_control() && c != '\n' && c != '\t' {
+            // Drop stray C0 control characters (BEL, BS, etc.)
+        } else {
+            out.push(c);
+        }
+    }
+
+    // Return the stripped content as-is (preserving internal whitespace).
+    // Only consider it empty/noise if trimming yields nothing.
+    if out.trim().is_empty() {
+        String::new()
+    } else {
+        out
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn strip_ansi_csi_sequences() {
+        // Cursor visibility, bracketed paste mode
+        assert_eq!(strip_ansi("\x1b[?25h\x1b[?2004l"), "");
+        // CSI with content around it
+        assert_eq!(strip_ansi("hello\x1b[31mworld\x1b[0m"), "helloworld");
+    }
+
+    #[test]
+    fn strip_ansi_csi_at_terminator() {
+        // CSI with @ final byte (Insert Character) — must not eat 'b'
+        assert_eq!(strip_ansi("a\x1b[0@b"), "ab");
+    }
+
+    #[test]
+    fn strip_ansi_osc_bel_terminated() {
+        // OSC title set terminated by BEL
+        assert_eq!(strip_ansi("\x1b]0;title\x07hello"), "hello");
+    }
+
+    #[test]
+    fn strip_ansi_osc_st_terminated() {
+        // OSC terminated by ST (\x1b\\)
+        assert_eq!(strip_ansi("\x1b]0;title\x1b\\hello"), "hello");
+    }
+
+    #[test]
+    fn strip_ansi_mixed_noise() {
+        // Real PTY noise from screenshots: escape codes + semicolons + digits
+        let noise = "\x1b[<u\x1b[?1004l\x1b[?2004l\x1b[?25h\x1b]9;4;0;\x07\x1b[?25h";
+        assert_eq!(strip_ansi(noise), "");
+    }
+
+    #[test]
+    fn strip_ansi_preserves_plain_text() {
+        assert_eq!(strip_ansi("just plain text"), "just plain text");
+    }
+
+    #[test]
+    fn strip_ansi_preserves_leading_whitespace() {
+        // Indented stack frames must keep their formatting
+        assert_eq!(strip_ansi("    at main.rs:42"), "    at main.rs:42");
+        assert_eq!(strip_ansi("  \x1b[31merror\x1b[0m here"), "  error here");
+    }
+
+    #[test]
+    fn strip_ansi_stray_control_chars() {
+        // BEL and other control chars outside escape sequences
+        assert_eq!(strip_ansi("a\x07b\x08c"), "abc");
+    }
+
+    #[test]
+    fn parse_rate_limit_event() {
+        let json = r#"{"type":"rate_limit_event","message":"Rate limited, retrying in 5s"}"#;
+        let event = parse_stream_event(json);
+        match event {
+            Some(AgentOutputEvent::Text(t)) => {
+                assert!(t.contains("[rate limited]"));
+                assert!(t.contains("retrying in 5s"));
+            }
+            other => panic!("expected Text with rate limit message, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_rate_limit_event_no_message() {
+        let json = r#"{"type":"rate_limit_event"}"#;
+        let event = parse_stream_event(json);
+        match event {
+            Some(AgentOutputEvent::Text(t)) => {
+                assert_eq!(t, "[rate limited] API rate limited — waiting for retry...");
+            }
+            other => panic!("expected Text with rate limit fallback, got {:?}", other),
+        }
     }
 }

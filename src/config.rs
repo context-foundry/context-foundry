@@ -11,6 +11,7 @@ pub struct Config {
     pub discovery_model: String,
 
     pub pause_between_tasks_secs: u64,
+    pub pause_between_agents_secs: u64,
     pub pause_between_cycles_secs: u64,
 
     pub agent_timeout_secs: u64,
@@ -27,7 +28,8 @@ impl Default for Config {
             fixer_model: "opus".into(),
             discovery_model: "opus".into(),
 
-            pause_between_tasks_secs: 5,
+            pause_between_tasks_secs: 10,
+            pause_between_agents_secs: 3,
             pause_between_cycles_secs: 30,
 
             agent_timeout_secs: 600, // 10 minutes

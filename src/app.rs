@@ -558,6 +558,9 @@ async fn process_task(
         return false;
     }
 
+    // Pause between agents to avoid rate limiting
+    tokio::time::sleep(Duration::from_secs(config.pause_between_agents_secs)).await;
+
     // ── BUILDER ──
     let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
     let fwd_tx = tx.clone();
@@ -597,6 +600,9 @@ async fn process_task(
         return false;
     }
 
+    // Pause between agents to avoid rate limiting
+    tokio::time::sleep(Duration::from_secs(config.pause_between_agents_secs)).await;
+
     // ── REVIEW + FIX LOOP (2 passes max) ──
     let reviewer_pattern_context = patterns::format_patterns_for_prompt(&matched, "reviewer");
     let validated = run_review_loop(
@@ -625,6 +631,8 @@ async fn process_task(
 
     // ── PATTERN EXTRACTION ──
     if validated {
+        // Pause between agents to avoid rate limiting
+        tokio::time::sleep(Duration::from_secs(config.pause_between_agents_secs)).await;
         run_pattern_extraction(
             task_id,
             task_desc,
@@ -744,6 +752,8 @@ async fn run_review_loop(
 
         // Run Fixer (unless this is the last pass)
         if pass < 2 {
+            // Pause between agents to avoid rate limiting
+            tokio::time::sleep(Duration::from_secs(config.pause_between_agents_secs)).await;
             let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
             let fwd_tx = tx.clone();
             tokio::spawn(async move {
@@ -777,6 +787,9 @@ async fn run_review_loop(
             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
                 "Fixer completed, running second review pass...".to_string(),
             )));
+
+            // Pause between agents to avoid rate limiting
+            tokio::time::sleep(Duration::from_secs(config.pause_between_agents_secs)).await;
         } else {
             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
                 "Review pass 2 still has issues: {} high, {} medium — committing as-is",
@@ -809,8 +822,8 @@ async fn run_pattern_extraction(
         }
     });
 
-    // Reuse the builder model for pattern extraction (lightweight task)
-    let model = &config.builder_model;
+    // Pattern extraction is lightweight — use the discovery model, not builder
+    let model = &config.discovery_model;
     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::AgentStarted(
         AgentRole::Discovery, // Reuse Discovery role display for pattern extraction
         model.clone(),
