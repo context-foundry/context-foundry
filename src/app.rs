@@ -19,6 +19,7 @@ use crate::tui;
 // ─── App State ───────────────────────────────────────────────
 
 pub struct AppState {
+    pub buildloop_dir: PathBuf,
     pub current_task: Option<Task>,
     pub current_agent: Option<(AgentRole, DateTime<Utc>)>,
     pub current_agent_model: Option<String>,
@@ -37,8 +38,9 @@ pub struct AppState {
 }
 
 impl AppState {
-    fn new() -> Self {
+    fn new(buildloop_dir: PathBuf) -> Self {
         Self {
+            buildloop_dir,
             current_task: None,
             current_agent: None,
             current_agent_model: None,
@@ -117,7 +119,10 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
     which_claude()?;
 
     let config = Config::load(project_dir);
-    let mut state = AppState::new();
+    let buildloop_dir = project_dir.join(".buildloop");
+    let _ = std::fs::create_dir_all(&buildloop_dir);
+    let _ = std::fs::remove_file(buildloop_dir.join("stop"));
+    let mut state = AppState::new(buildloop_dir);
 
     // Initial task parse
     let tasks = task::parse_tasks(&plan_path)?;
@@ -299,14 +304,18 @@ fn handle_event(state: &mut AppState, event: AppEvent) {
         AppEvent::Key(key) => {
             match key.code {
                 KeyCode::Char('q') => {
+                    let _ = std::fs::remove_file(state.buildloop_dir.join("stop"));
                     state.should_quit = true;
                 }
                 KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                     if state.stop_after_task {
                         // Second Ctrl+C: quit immediately
+                        let _ = std::fs::remove_file(state.buildloop_dir.join("stop"));
                         state.should_quit = true;
                     } else {
                         state.stop_after_task = true;
+                        let _ = std::fs::create_dir_all(&state.buildloop_dir);
+                        let _ = std::fs::write(state.buildloop_dir.join("stop"), "");
                         state.log("Will stop after current task completes (Ctrl+C again to force quit)");
                     }
                 }

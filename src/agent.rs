@@ -3,6 +3,10 @@ use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 use serde_json::Value;
 use std::io::BufRead;
 use std::path::Path;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 
 use crate::utils::truncate_str;
 use tokio::sync::mpsc;
@@ -47,6 +51,185 @@ pub struct AgentResult {
     pub success: bool,
     #[allow(dead_code)]
     pub exit_code: i32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ModelProvider {
+    Claude,
+    Codex,
+}
+
+impl ModelProvider {
+    pub fn slug(self) -> &'static str {
+        match self {
+            ModelProvider::Claude => "claude",
+            ModelProvider::Codex => "codex",
+        }
+    }
+}
+
+impl std::fmt::Display for ModelProvider {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ModelProvider::Claude => write!(f, "Claude"),
+            ModelProvider::Codex => write!(f, "Codex"),
+        }
+    }
+}
+
+pub struct ProviderRunOptions<'a> {
+    pub provider: ModelProvider,
+    pub model: &'a str,
+    pub prompt: &'a str,
+    pub project_dir: &'a Path,
+    pub output_tx: mpsc::UnboundedSender<AgentOutputEvent>,
+    pub log_dir: &'a Path,
+    pub timeout_secs: u64,
+    pub skip_git_repo_check: bool,
+    pub cancel_flag: Option<Arc<AtomicBool>>,
+}
+
+pub async fn run_provider_session(options: ProviderRunOptions<'_>) -> Result<AgentResult> {
+    let timestamp = chrono::Utc::now().format("%Y%m%d-%H%M%S");
+    let log_file_path = options
+        .log_dir
+        .join(format!("studio-{}-{}.jsonl", options.provider.slug(), timestamp));
+    let final_message_path = options
+        .log_dir
+        .join(format!("studio-{}-{}-last.txt", options.provider.slug(), timestamp));
+    std::fs::create_dir_all(options.log_dir)?;
+
+    let mut cmd = match options.provider {
+        ModelProvider::Claude => {
+            let mut cmd = CommandBuilder::new("claude");
+            cmd.arg("-p");
+            cmd.arg(options.prompt);
+            if !options.model.trim().is_empty() {
+                cmd.arg("--model");
+                cmd.arg(options.model);
+            }
+            cmd.arg("--dangerously-skip-permissions");
+            cmd.arg("--output-format");
+            cmd.arg("stream-json");
+            cmd.arg("--verbose");
+            cmd.env("CLAUDECODE", "");
+            cmd
+        }
+        ModelProvider::Codex => {
+            let mut cmd = CommandBuilder::new("codex");
+            cmd.arg("exec");
+            cmd.arg("--json");
+            if !options.model.trim().is_empty() {
+                cmd.arg("--model");
+                cmd.arg(options.model);
+            }
+            cmd.arg("--full-auto");
+            cmd.arg("--output-last-message");
+            cmd.arg(final_message_path.to_string_lossy().to_string());
+            if options.skip_git_repo_check {
+                cmd.arg("--skip-git-repo-check");
+            }
+            cmd.arg(options.prompt);
+            cmd
+        }
+    };
+
+    cmd.cwd(options.project_dir);
+
+    let pty_system = native_pty_system();
+    let pair = pty_system.openpty(PtySize {
+        rows: 24,
+        cols: 80,
+        pixel_width: 0,
+        pixel_height: 0,
+    })?;
+
+    let child = pair.slave.spawn_command(cmd)?;
+    drop(pair.slave);
+
+    let reader = pair.master.try_clone_reader()?;
+    let master = pair.master;
+    let (result_tx, result_rx) = tokio::sync::oneshot::channel();
+    let provider = options.provider;
+    let model_name = options.model.to_string();
+    let timeout_secs = options.timeout_secs;
+    let output_tx = options.output_tx;
+    let cancel_flag = options.cancel_flag.clone();
+
+    tokio::task::spawn_blocking(move || {
+        let tx = output_tx;
+        let mut child = child;
+        let log_path = log_file_path.clone();
+        let model_label = model_name.clone();
+        let final_output_path = final_message_path.clone();
+        let read_tx = tx.clone();
+
+        let read_thread = std::thread::spawn(move || {
+            read_provider_output(reader, &read_tx, &log_path, provider, &model_label);
+        });
+
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(timeout_secs);
+        let mut success = false;
+
+        loop {
+            match child.try_wait() {
+                Ok(Some(status)) => {
+                    success = status.success();
+                    break;
+                }
+                Ok(None) => {
+                    if cancel_flag
+                        .as_ref()
+                        .is_some_and(|flag| flag.load(Ordering::Relaxed))
+                    {
+                        let _ = child.kill();
+                        let _ = child.wait();
+                        let _ = tx.send(AgentOutputEvent::Stderr(format!(
+                            "{} cancelled by studio shutdown",
+                            provider
+                        )));
+                        break;
+                    }
+                    if std::time::Instant::now() >= deadline {
+                        let _ = child.kill();
+                        let _ = child.wait();
+                        let _ = tx.send(AgentOutputEvent::Stderr(format!(
+                            "{} timed out after {}s",
+                            provider, timeout_secs
+                        )));
+                        break;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(500));
+                }
+                Err(err) => {
+                    let _ = tx.send(AgentOutputEvent::Stderr(format!(
+                        "{} failed while waiting on process: {}",
+                        provider, err
+                    )));
+                    break;
+                }
+            }
+        }
+
+        drop(master);
+        let _ = read_thread.join();
+
+        if provider == ModelProvider::Codex {
+            if let Ok(text) = std::fs::read_to_string(&final_output_path) {
+                if !text.trim().is_empty() {
+                    let _ = tx.send(AgentOutputEvent::Result(text));
+                }
+            }
+        }
+
+        let _ = result_tx.send(success);
+    });
+
+    let success = result_rx.await.unwrap_or(false);
+    Ok(AgentResult {
+        success,
+        exit_code: if success { 0 } else { 1 },
+    })
 }
 
 /// Spawn a claude CLI agent inside a PTY.
@@ -241,6 +424,217 @@ fn read_pty_output(
             }
             Err(_) => break,
         }
+    }
+}
+
+fn read_provider_output(
+    reader: Box<dyn std::io::Read + Send>,
+    tx: &mpsc::UnboundedSender<AgentOutputEvent>,
+    log_path: &Path,
+    provider: ModelProvider,
+    model_name: &str,
+) {
+    let mut buf_reader = std::io::BufReader::new(reader);
+    let mut log_file = std::fs::File::create(log_path).ok();
+    let mut buf = String::new();
+
+    loop {
+        buf.clear();
+        match buf_reader.read_line(&mut buf) {
+            Ok(0) => break,
+            Ok(_) => {
+                let line = buf.trim_end();
+                if line.is_empty() {
+                    continue;
+                }
+
+                if let Some(ref mut f) = log_file {
+                    use std::io::Write;
+                    let _ = writeln!(f, "{}", line);
+                }
+
+                let parsed = match provider {
+                    ModelProvider::Claude => parse_claude_provider_line(line, model_name),
+                    ModelProvider::Codex => parse_codex_event(line, model_name),
+                };
+
+                if let Some(event) = parsed {
+                    if tx.send(event).is_err() {
+                        return;
+                    }
+                    continue;
+                }
+
+                let cleaned = strip_ansi(line);
+                if !cleaned.is_empty() && tx.send(AgentOutputEvent::Stderr(cleaned)).is_err() {
+                    return;
+                }
+            }
+            Err(_) => break,
+        }
+    }
+}
+
+fn parse_claude_provider_line(line: &str, model_name: &str) -> Option<AgentOutputEvent> {
+    if let Some(event) = parse_stream_event(line) {
+        return Some(event);
+    }
+
+    if let Ok(v) = serde_json::from_str::<Value>(line) {
+        if let Some(t) = v.get("type").and_then(|t| t.as_str()) {
+            if matches!(t, "user" | "system") {
+                return None;
+            }
+            let sub = v.get("subtype").and_then(|s| s.as_str()).unwrap_or("");
+            let display_type = if t == "assistant" { model_name } else { t };
+            let label = if sub.is_empty() {
+                format!("[{}]", display_type)
+            } else {
+                format!("[{}:{}]", display_type, sub)
+            };
+            return Some(AgentOutputEvent::Text(label));
+        }
+    }
+
+    None
+}
+
+fn parse_codex_event(line: &str, model_name: &str) -> Option<AgentOutputEvent> {
+    let v: Value = serde_json::from_str(line).ok()?;
+    let kind = v
+        .get("type")
+        .and_then(|value| value.as_str())
+        .or_else(|| v.get("event").and_then(|value| value.as_str()))
+        .unwrap_or("");
+
+    if let Some(tool) = extract_string_by_keys(&v, &["tool", "tool_name", "name"]) {
+        if kind.contains("tool") || kind.contains("call") {
+            let input_preview = extract_string_by_keys(
+                &v,
+                &["input", "arguments", "command", "cmd", "preview", "description"],
+            )
+            .unwrap_or_default();
+            return Some(AgentOutputEvent::ToolUse {
+                tool,
+                input_preview: truncate_for_preview(&input_preview, 120),
+            });
+        }
+    }
+
+    if kind.contains("tool_result") || kind.contains("tool_output") {
+        let output = extract_string_by_keys(
+            &v,
+            &["output", "content", "result", "message", "text", "summary"],
+        )
+        .unwrap_or_default();
+        if output.is_empty() {
+            return None;
+        }
+        return Some(AgentOutputEvent::ToolResult {
+            output_preview: truncate_for_preview(&output, 200),
+        });
+    }
+
+    if kind.contains("error") || kind.contains("failed") {
+        let text = extract_string_by_keys(&v, &["message", "error", "text", "summary"])
+            .unwrap_or_else(|| line.to_string());
+        return Some(AgentOutputEvent::Stderr(text));
+    }
+
+    if kind.contains("completed") || kind == "result" || kind == "final" {
+        if let Some(text) = extract_string_by_keys(
+            &v,
+            &["result", "message", "content", "text", "summary"],
+        ) {
+            if !text.is_empty() {
+                return Some(AgentOutputEvent::Result(text));
+            }
+        }
+    }
+
+    if let Some(text) = extract_string_by_keys(
+        &v,
+        &[
+            "text",
+            "delta",
+            "message",
+            "content",
+            "summary",
+            "output",
+            "reason",
+        ],
+    ) {
+        if !text.is_empty() {
+            if kind.starts_with("message")
+                || kind.starts_with("response")
+                || kind.starts_with("content")
+                || kind.is_empty()
+            {
+                return Some(AgentOutputEvent::Text(text));
+            }
+
+            return Some(AgentOutputEvent::Text(format!(
+                "[{}:{}] {}",
+                model_name,
+                kind,
+                text
+            )));
+        }
+    }
+
+    if !kind.is_empty() {
+        return Some(AgentOutputEvent::Text(format!("[{}:{}]", model_name, kind)));
+    }
+
+    None
+}
+
+fn extract_string_by_keys(value: &Value, keys: &[&str]) -> Option<String> {
+    for key in keys {
+        if let Some(candidate) = value.get(*key).and_then(extract_first_string) {
+            if !candidate.trim().is_empty() {
+                return Some(candidate.to_string());
+            }
+        }
+    }
+
+    extract_first_string(value).map(|text| text.to_string())
+}
+
+fn extract_first_string(value: &Value) -> Option<&str> {
+    match value {
+        Value::String(text) => Some(text.as_str()),
+        Value::Array(items) => items.iter().find_map(extract_first_string),
+        Value::Object(map) => {
+            let preferred = [
+                "text",
+                "delta",
+                "message",
+                "content",
+                "output",
+                "summary",
+                "reason",
+                "error",
+                "command",
+            ];
+
+            for key in preferred {
+                if let Some(text) = map.get(key).and_then(extract_first_string) {
+                    return Some(text);
+                }
+            }
+
+            map.values().find_map(extract_first_string)
+        }
+        _ => None,
+    }
+}
+
+fn truncate_for_preview(text: &str, max_len: usize) -> String {
+    if text.len() > max_len {
+        format!("{}...", truncate_str(text, max_len))
+    } else {
+        text.to_string()
     }
 }
 
@@ -523,6 +917,32 @@ mod tests {
                 assert_eq!(t, "[rate limited] API rate limited — waiting for retry...");
             }
             other => panic!("expected Text with rate limit fallback, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_codex_tool_event() {
+        let json =
+            r#"{"type":"tool_call","tool":"shell","input":{"command":"cargo test --quiet"}}"#;
+        let event = parse_codex_event(json, "gpt-5.4");
+        match event {
+            Some(AgentOutputEvent::ToolUse { tool, input_preview }) => {
+                assert_eq!(tool, "shell");
+                assert!(input_preview.contains("cargo test"));
+            }
+            other => panic!("expected ToolUse, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_codex_message_event() {
+        let json = r#"{"type":"message","content":"Built a dashboard and wrote report.html"}"#;
+        let event = parse_codex_event(json, "gpt-5.4");
+        match event {
+            Some(AgentOutputEvent::Text(text)) => {
+                assert!(text.contains("Built a dashboard"));
+            }
+            other => panic!("expected Text, got {:?}", other),
         }
     }
 }

@@ -25,7 +25,7 @@ impl Task {
 
 pub fn parse_tasks(plan_path: &Path) -> Result<Vec<Task>> {
     let content = fs::read_to_string(plan_path)?;
-    let re_id = Regex::new(r"^([A-Za-z]\d+\.\d+):\s*")?;
+    let re_id = Regex::new(r"^([A-Za-z]?\d+\.\d+):\s*")?;
 
     let mut tasks = Vec::new();
 
@@ -81,4 +81,50 @@ pub fn count_completed(tasks: &[Task]) -> usize {
 
 pub fn count_pending(tasks: &[Task]) -> usize {
     tasks.iter().filter(|t| !t.completed).count()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn temp_plan_path(name: &str) -> std::path::PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time before unix epoch")
+            .as_nanos();
+        std::env::temp_dir().join(format!("{}-{}.md", name, unique))
+    }
+
+    #[test]
+    fn parse_numeric_task_ids_from_readme_style_tasks() -> Result<()> {
+        let plan_path = temp_plan_path("foundry-task-plan");
+        fs::write(
+            &plan_path,
+            "## Phase 1\n- [ ] 1.1: Set up project scaffolding\n- [x] 1.2: Implement auth\n",
+        )?;
+
+        let tasks = parse_tasks(&plan_path)?;
+        fs::remove_file(&plan_path)?;
+
+        assert_eq!(tasks.len(), 2);
+        assert_eq!(tasks[0].id, "1.1");
+        assert_eq!(tasks[1].id, "1.2");
+        assert!(!tasks[0].completed);
+        assert!(tasks[1].completed);
+        Ok(())
+    }
+
+    #[test]
+    fn parse_letter_prefixed_task_ids_still_works() -> Result<()> {
+        let plan_path = temp_plan_path("foundry-task-alpha-plan");
+        fs::write(&plan_path, "- [ ] A1.1: Review architecture\n")?;
+
+        let tasks = parse_tasks(&plan_path)?;
+        fs::remove_file(&plan_path)?;
+
+        assert_eq!(tasks.len(), 1);
+        assert_eq!(tasks[0].id, "A1.1");
+        Ok(())
+    }
 }

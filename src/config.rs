@@ -9,6 +9,8 @@ pub struct Config {
     pub reviewer_model: String,
     pub fixer_model: String,
     pub discovery_model: String,
+    pub studio_claude_model: String,
+    pub studio_codex_model: String,
 
     pub pause_between_tasks_secs: u64,
     pub pause_between_agents_secs: u64,
@@ -27,6 +29,8 @@ impl Default for Config {
             reviewer_model: "opus".into(),
             fixer_model: "opus".into(),
             discovery_model: "opus".into(),
+            studio_claude_model: "opus".into(),
+            studio_codex_model: String::new(),
 
             pause_between_tasks_secs: 10,
             pause_between_agents_secs: 3,

@@ -8,6 +8,7 @@ mod config;
 mod git;
 mod patterns;
 mod prompts;
+mod studio;
 mod task;
 mod tui;
 mod update;
@@ -40,6 +41,8 @@ enum Commands {
     Status,
     /// List all tasks from IMPL_PLAN.md
     Tasks,
+    /// Start the interactive multi-model studio
+    Studio,
     /// Update foundry to the latest version
     Update,
 }
@@ -66,6 +69,9 @@ async fn main() -> Result<()> {
         }
         Commands::Tasks => {
             app::show_tasks(&project_dir)?;
+        }
+        Commands::Studio => {
+            studio::run_tui(&project_dir).await?;
         }
         Commands::Update => {
             update::run_update()?;
