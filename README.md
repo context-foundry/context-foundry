@@ -95,6 +95,8 @@ foundry --dir /path/to/project tasks
 foundry update
 ```
 
+Studio is documented separately in [`docs/foundry-studio-readme.md`](docs/foundry-studio-readme.md) because it is a different workflow from the autonomous `run` loop.
+
 ## Project Setup
 
 A project needs two files to get started:

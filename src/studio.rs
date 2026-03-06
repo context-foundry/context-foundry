@@ -31,7 +31,9 @@ use crate::{
 };
 
 const STUDIO_ROOT_DIR: &str = ".foundry/studio";
-const DEFAULT_PROMPT: &str = "Describe the app, workflow, report, or dashboard you want built.";
+const STUDIO_CONTRACTS_DIR: &str = "contracts";
+const STUDIO_SELECTED_CONTRACT_FILE: &str = ".selected";
+const DEFAULT_PROMPT: &str = "";
 const LIVE_PROBE_TTL_SECS: i64 = 900;
 const LIVE_PROBE_TIMEOUT_SECS: u64 = 20;
 const FOLLOW_UP_CONTEXT_MAX_LINES: usize = 120;
@@ -42,6 +44,7 @@ const SHUTDOWN_GRACE_MILLIS: u64 = 1500;
 enum FocusedPane {
     Scan,
     Prompt,
+    Contracts,
     ExecutionBrief,
     Sessions,
     Output,
@@ -53,6 +56,7 @@ impl FocusedPane {
         match self {
             FocusedPane::Scan => "project scan",
             FocusedPane::Prompt => "prompt",
+            FocusedPane::Contracts => "contracts",
             FocusedPane::ExecutionBrief => "execution brief",
             FocusedPane::Sessions => "sessions",
             FocusedPane::Output => "output",
@@ -63,7 +67,8 @@ impl FocusedPane {
     fn next(self) -> Self {
         match self {
             FocusedPane::Scan => FocusedPane::Prompt,
-            FocusedPane::Prompt => FocusedPane::ExecutionBrief,
+            FocusedPane::Prompt => FocusedPane::Contracts,
+            FocusedPane::Contracts => FocusedPane::ExecutionBrief,
             FocusedPane::ExecutionBrief => FocusedPane::Sessions,
             FocusedPane::Sessions => FocusedPane::Output,
             FocusedPane::Output => FocusedPane::Activity,
@@ -75,7 +80,8 @@ impl FocusedPane {
         match self {
             FocusedPane::Scan => FocusedPane::Activity,
             FocusedPane::Prompt => FocusedPane::Scan,
-            FocusedPane::ExecutionBrief => FocusedPane::Prompt,
+            FocusedPane::Contracts => FocusedPane::Prompt,
+            FocusedPane::ExecutionBrief => FocusedPane::Contracts,
             FocusedPane::Sessions => FocusedPane::ExecutionBrief,
             FocusedPane::Output => FocusedPane::Sessions,
             FocusedPane::Activity => FocusedPane::Output,
@@ -87,6 +93,7 @@ struct StudioLayout {
     header: Rect,
     scan: Rect,
     prompt: Rect,
+    contracts: Rect,
     execution_brief: Rect,
     sessions: Rect,
     output: Rect,
@@ -235,6 +242,14 @@ struct SessionState {
 }
 
 #[derive(Clone)]
+struct ExecutionContract {
+    file_name: String,
+    path: PathBuf,
+    name: String,
+    body: String,
+}
+
+#[derive(Clone)]
 struct SessionLaunch {
     id: String,
     provider: ModelProvider,
@@ -244,9 +259,17 @@ struct SessionLaunch {
     workspace_dir: PathBuf,
     artifact_dir: PathBuf,
     prompt: String,
+    execution_contract: ExecutionContract,
     scan: ProjectScan,
     prior_context: Option<String>,
     prepare_workspace: bool,
+}
+
+enum PendingStudioAction {
+    EditExecutionContract {
+        path: PathBuf,
+        action_label: &'static str,
+    },
 }
 
 struct StudioState {
@@ -257,6 +280,8 @@ struct StudioState {
     provider_mode: ProviderMode,
     workspace_mode: WorkspaceMode,
     scan: ProjectScan,
+    execution_contracts: Vec<ExecutionContract>,
+    selected_execution_contract: usize,
     sessions: Vec<SessionState>,
     selected_session: usize,
     output_scroll: usize,
@@ -269,6 +294,7 @@ struct StudioState {
     claude_readiness: ProviderReadiness,
     codex_readiness: ProviderReadiness,
     session_controls: HashMap<String, SessionControl>,
+    pending_action: Option<PendingStudioAction>,
 }
 
 struct SessionControl {
@@ -368,6 +394,8 @@ impl StudioState {
         let claude_readiness = probe_claude_readiness(project_dir, &claude_model);
         let codex_readiness = probe_codex_readiness(project_dir, &codex_model);
         let provider_mode = default_provider_mode(&claude_readiness, &codex_readiness);
+        let (execution_contracts, selected_execution_contract) =
+            load_execution_contracts(project_dir)?;
         Ok(Self {
             project_dir: project_dir.to_path_buf(),
             prompt: DEFAULT_PROMPT.to_string(),
@@ -376,6 +404,8 @@ impl StudioState {
             provider_mode,
             workspace_mode: WorkspaceMode::Isolated,
             scan,
+            execution_contracts,
+            selected_execution_contract,
             sessions: Vec::new(),
             selected_session: 0,
             output_scroll: 0,
@@ -388,6 +418,7 @@ impl StudioState {
             claude_readiness,
             codex_readiness,
             session_controls: HashMap::new(),
+            pending_action: None,
         })
     }
 
@@ -425,6 +456,7 @@ impl StudioState {
         compose_smoothed_prompt(
             &provider_label,
             &self.prompt,
+            self.selected_execution_contract(),
             &self.scan,
             &workspace_dir,
             &artifact_dir,
@@ -434,6 +466,22 @@ impl StudioState {
 
     fn selected_session(&self) -> Option<&SessionState> {
         self.sessions.get(self.selected_session)
+    }
+
+    fn selected_execution_contract(&self) -> &ExecutionContract {
+        &self.execution_contracts[self.selected_execution_contract]
+    }
+
+    fn refresh_execution_contracts(&mut self) -> Result<()> {
+        let selected_file = self
+            .execution_contracts
+            .get(self.selected_execution_contract)
+            .map(|contract| contract.file_name.clone());
+        let (contracts, selected_index) =
+            load_execution_contracts_with_selection(&self.project_dir, selected_file.as_deref())?;
+        self.execution_contracts = contracts;
+        self.selected_execution_contract = selected_index;
+        Ok(())
     }
 
     fn model_for(&self, provider: ModelProvider) -> &str {
@@ -472,6 +520,10 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
     let config = Config::load(project_dir);
     let mut state = StudioState::new(project_dir, &config)?;
     state.log(format!("studio ready for {}", project_dir.display()));
+    state.log(format!(
+        "selected execution contract: {}",
+        state.selected_execution_contract().name
+    ));
     log_provider_probe(&mut state, ModelProvider::Claude);
     log_provider_probe(&mut state, ModelProvider::Codex);
 
@@ -530,6 +582,10 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
             }
             Some(event) => handle_event(&mut state, event, &event_tx),
             None => break,
+        }
+
+        if let Some(action) = state.pending_action.take() {
+            handle_pending_action(&mut terminal, &mut state, action)?;
         }
 
         if state.should_quit {
@@ -729,6 +785,22 @@ fn handle_global_key(
             state.is_editing_prompt = true;
             state.log("prompt edit mode on");
         }
+        KeyCode::Char('c') => {
+            cycle_execution_contract(state, true);
+        }
+        KeyCode::Char('a') => {
+            if let Err(err) = create_execution_contract(state) {
+                state.log(format!("contract creation failed: {}", err));
+            }
+        }
+        KeyCode::Char('x') => {
+            edit_selected_execution_contract(state);
+        }
+        KeyCode::Char('d') => {
+            if let Err(err) = delete_selected_execution_contract(state) {
+                state.log(format!("contract delete failed: {}", err));
+            }
+        }
         KeyCode::Tab => {
             let next_pane = state.focused_pane.next();
             set_focused_pane(state, next_pane);
@@ -791,7 +863,7 @@ fn handle_mouse_event(state: &mut StudioState, mouse: MouseEvent) {
     match mouse.kind {
         MouseEventKind::Down(MouseButton::Left) => {
             if let Some(pane) = pane_at_position(&layout, mouse.column, mouse.row) {
-                activate_pane_from_click(state, pane, layout.sessions, mouse.row);
+                activate_pane_from_click(state, pane, layout.sessions, layout.contracts, mouse.row);
             }
         }
         MouseEventKind::ScrollUp => {
@@ -814,10 +886,14 @@ fn activate_pane_from_click(
     state: &mut StudioState,
     pane: FocusedPane,
     sessions_area: Rect,
+    contracts_area: Rect,
     row: u16,
 ) {
     if pane == FocusedPane::Sessions {
         select_session_from_click(state, sessions_area, row);
+    }
+    if pane == FocusedPane::Contracts {
+        select_execution_contract_from_click(state, contracts_area, row);
     }
     set_focused_pane(state, pane);
     if pane == FocusedPane::Prompt && !state.is_editing_prompt {
@@ -893,6 +969,7 @@ fn start_sessions(state: &mut StudioState, tx: mpsc::UnboundedSender<StudioEvent
     let project_dir = state.project_dir.clone();
     let scan = state.scan.clone();
     let prompt = state.prompt.clone();
+    let execution_contract = state.selected_execution_contract().clone();
 
     for provider in requested {
         let prior_context = follow_up_seed
@@ -956,6 +1033,7 @@ fn start_sessions(state: &mut StudioState, tx: mpsc::UnboundedSender<StudioEvent
             workspace_dir,
             artifact_dir,
             prompt: prompt.clone(),
+            execution_contract: execution_contract.clone(),
             scan: scan.clone(),
             prior_context,
             prepare_workspace: !follow_up,
@@ -996,6 +1074,7 @@ async fn run_session(
     let smoothed_prompt = compose_smoothed_prompt(
         &launch.provider.to_string(),
         &launch.prompt,
+        &launch.execution_contract,
         &launch.scan,
         &launch.workspace_dir.display().to_string(),
         &launch.artifact_dir.display().to_string(),
@@ -1085,6 +1164,7 @@ fn render(frame: &mut ratatui::Frame, state: &StudioState) {
     render_header(frame, layout.header, state);
     render_scan(frame, layout.scan, state);
     render_prompt(frame, layout.prompt, state);
+    render_contracts(frame, layout.contracts, state);
     render_preview(frame, layout.execution_brief, state);
     render_sessions(frame, layout.sessions, state);
     render_output(frame, layout.output, state);
@@ -1110,9 +1190,10 @@ fn studio_layout(area: Rect) -> StudioLayout {
     let left = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
+            Constraint::Length(6),
             Constraint::Length(8),
-            Constraint::Length(10),
-            Constraint::Min(10),
+            Constraint::Length(8),
+            Constraint::Min(8),
         ])
         .split(body[0]);
 
@@ -1129,7 +1210,8 @@ fn studio_layout(area: Rect) -> StudioLayout {
         header: root[0],
         scan: left[0],
         prompt: left[1],
-        execution_brief: left[2],
+        contracts: left[2],
+        execution_brief: left[3],
         sessions: right[0],
         output: right[1],
         activity: right[2],
@@ -1163,6 +1245,10 @@ fn render_header(frame: &mut ratatui::Frame, area: ratatui::layout::Rect, state:
             Style::default().fg(Color::Cyan),
         ),
         Span::styled(
+            format!("contract={} ", state.selected_execution_contract().name),
+            Style::default().fg(Color::LightMagenta),
+        ),
+        Span::styled(
             format!(
                 "claude={} ({}) ",
                 display_model_name(&state.claude_model),
@@ -1180,7 +1266,7 @@ fn render_header(frame: &mut ratatui::Frame, area: ratatui::layout::Rect, state:
         ),
     ]));
     lines.push(Line::from(Span::styled(
-        "keys: e edit  s start  f follow-up  tab/shift-tab focus  click pane  p provider  w workspace  r rescan  j/k session  ↑/↓ scroll  q/ctrl-c quit",
+        "keys: e edit  c cycle contract  a add  x edit  d delete  s start  f follow-up  tab/shift-tab focus  click pane  p provider  w workspace  r rescan  j/k session  ↑/↓ scroll  q/ctrl-c quit",
         Style::default().fg(Color::DarkGray),
     )));
 
@@ -1245,6 +1331,53 @@ fn render_prompt(frame: &mut ratatui::Frame, area: ratatui::layout::Rect, state:
                 } else {
                     pane_border_type(state, FocusedPane::Prompt)
                 }),
+        );
+    frame.render_widget(paragraph, area);
+}
+
+fn render_contracts(frame: &mut ratatui::Frame, area: ratatui::layout::Rect, state: &StudioState) {
+    let selected = state.selected_execution_contract();
+    let mut lines = vec![Line::from(Span::styled(
+        format!("selected: {}", selected.name),
+        Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+    ))];
+
+    for (idx, contract) in state.execution_contracts.iter().enumerate() {
+        let prefix = if idx == state.selected_execution_contract {
+            ">"
+        } else {
+            " "
+        };
+        lines.push(Line::from(Span::styled(
+            format!("{} {}", prefix, truncate_str(&contract.name, area.width.saturating_sub(6) as usize)),
+            if idx == state.selected_execution_contract {
+                Style::default().fg(Color::White).add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(Color::Gray)
+            },
+        )));
+    }
+
+    lines.push(Line::from(Span::styled(
+        "vars: {{workspace_dir}} {{artifact_dir}} {{provider_label}}",
+        Style::default().fg(Color::DarkGray),
+    )));
+
+    let paragraph = Paragraph::new(lines)
+        .wrap(Wrap { trim: false })
+        .block(
+            Block::default()
+                .title(Span::styled(
+                    " Execution Contracts ",
+                    pane_title_style(state, FocusedPane::Contracts, Color::LightMagenta),
+                ))
+                .borders(Borders::ALL)
+                .border_style(pane_border_style(
+                    state,
+                    FocusedPane::Contracts,
+                    Color::LightMagenta,
+                ))
+                .border_type(pane_border_type(state, FocusedPane::Contracts)),
         );
     frame.render_widget(paragraph, area);
 }
@@ -1409,6 +1542,10 @@ fn render_activity(frame: &mut ratatui::Frame, area: ratatui::layout::Rect, stat
     )));
 
     if let Some(session) = state.selected_session() {
+        lines.push(ListItem::new(Span::styled(
+            format!("contract: {}", state.selected_execution_contract().name),
+            Style::default().fg(Color::DarkGray),
+        )));
         lines.push(ListItem::new(Span::styled(
             format!("workspace: {}", truncate_display_path(&session.workspace_dir, 72)),
             Style::default().fg(Color::DarkGray),
@@ -1634,6 +1771,7 @@ fn collect_output_targets(root: &Path) -> Result<Vec<String>> {
 fn compose_smoothed_prompt(
     provider_label: &str,
     raw_prompt: &str,
+    execution_contract: &ExecutionContract,
     scan: &ProjectScan,
     workspace_dir: &str,
     artifact_dir: &str,
@@ -1648,38 +1786,333 @@ fn compose_smoothed_prompt(
             )
         })
         .unwrap_or_default();
+    let rendered_contract = render_execution_contract_body(
+        &execution_contract.body,
+        provider_label,
+        workspace_dir,
+        artifact_dir,
+    );
     format!(
         r#"You are running inside Foundry Studio through the {provider_label} CLI.
 
 User objective:
 {raw_prompt}
 
-Execution contract:
-- Inspect the repository before editing anything.
-- Work only inside this workspace: {workspace_dir}
-- Prefer the existing stack, conventions, and architecture over rewrites.
-- Favor polished, production-quality results over placeholder output.
-- If the request implies analysis, reporting, dashboarding, or visualization, generate a self-contained HTML artifact.
-- Write primary generated artifacts to: {artifact_dir}
-- If you create an HTML report, use inline CSS/JS so the file can be opened directly in a browser.
-- End with a concise summary of assumptions, files changed, and the exact artifact path(s) to open.
+Execution contract: {contract_name}
+--- BEGIN EXECUTION CONTRACT ---
+{rendered_contract}
+--- END EXECUTION CONTRACT ---
 
 Project scan:
 - stack signals: {stack}
 - top-level entries: {top}
 - likely data/report inputs: {data}
 - likely output areas: {outputs}
-
-Delivery guidance:
-- When possible, make the result feel intentional and finished, not generic.
-- If data sources are ambiguous, inspect the repository and state what you found.
-- If the user asks for a dashboard or report, compute the answer from repository data and create the artifact instead of only describing it.
 - Keep changes scoped to the request and leave unrelated files untouched.{prior_context_block}"#,
+        contract_name = execution_contract.name,
         stack = join_or_none(&scan.stack_signals, ", "),
         top = join_or_none(&scan.top_level, ", "),
         data = join_or_none(&scan.data_candidates, ", "),
         outputs = join_or_none(&scan.output_targets, ", "),
     )
+}
+
+fn render_execution_contract_body(
+    body: &str,
+    provider_label: &str,
+    workspace_dir: &str,
+    artifact_dir: &str,
+) -> String {
+    body.replace("{{provider_label}}", provider_label)
+        .replace("{{workspace_dir}}", workspace_dir)
+        .replace("{{artifact_dir}}", artifact_dir)
+}
+
+fn execution_contracts_dir(project_dir: &Path) -> PathBuf {
+    project_dir.join(STUDIO_ROOT_DIR).join(STUDIO_CONTRACTS_DIR)
+}
+
+fn execution_contract_selection_path(project_dir: &Path) -> PathBuf {
+    execution_contracts_dir(project_dir).join(STUDIO_SELECTED_CONTRACT_FILE)
+}
+
+fn default_execution_contract_content() -> &'static str {
+    r#"# Standard Build Contract
+
+- Inspect the repository before editing anything.
+- Work only inside this workspace: {{workspace_dir}}
+- Prefer the existing stack, conventions, and architecture over rewrites.
+- Favor polished, production-quality results over placeholder output.
+- If the request implies analysis, reporting, dashboarding, or visualization, generate a self-contained HTML artifact.
+- Write primary generated artifacts to: {{artifact_dir}}
+- If you create an HTML report, use inline CSS/JS so the file can be opened directly in a browser.
+- End with a concise summary of assumptions, files changed, and the exact artifact path(s) to open.
+
+## Delivery Guidance
+
+- When possible, make the result feel intentional and finished, not generic.
+- If data sources are ambiguous, inspect the repository and state what you found.
+- If the user asks for a dashboard or report, compute the answer from repository data and create the artifact instead of only describing it.
+- Treat this contract as instructions layered on top of the user's objective, not a replacement for it."#
+}
+
+fn new_execution_contract_content(name: &str) -> String {
+    default_execution_contract_content().replacen(
+        "# Standard Build Contract",
+        &format!("# {}", name),
+        1,
+    )
+}
+
+fn ensure_execution_contracts_exist(project_dir: &Path) -> Result<()> {
+    let dir = execution_contracts_dir(project_dir);
+    fs::create_dir_all(&dir)?;
+
+    let has_visible_contract = fs::read_dir(&dir)?
+        .filter_map(|entry| entry.ok())
+        .any(|entry| {
+            let path = entry.path();
+            path.is_file()
+                && path.extension().and_then(|ext| ext.to_str()) == Some("md")
+                && !entry.file_name().to_string_lossy().starts_with('.')
+        });
+
+    if !has_visible_contract {
+        fs::write(dir.join("standard.md"), default_execution_contract_content())?;
+    }
+
+    Ok(())
+}
+
+fn load_execution_contracts(project_dir: &Path) -> Result<(Vec<ExecutionContract>, usize)> {
+    load_execution_contracts_with_selection(project_dir, None)
+}
+
+fn load_execution_contracts_with_selection(
+    project_dir: &Path,
+    preferred_file_name: Option<&str>,
+) -> Result<(Vec<ExecutionContract>, usize)> {
+    ensure_execution_contracts_exist(project_dir)?;
+    let dir = execution_contracts_dir(project_dir);
+    let selected_path = execution_contract_selection_path(project_dir);
+    let selected_file = preferred_file_name
+        .map(str::to_string)
+        .or_else(|| fs::read_to_string(&selected_path).ok().map(|value| value.trim().to_string()))
+        .filter(|value| !value.is_empty());
+
+    let mut contracts = Vec::new();
+    let mut entries: Vec<_> = fs::read_dir(&dir)?.filter_map(|entry| entry.ok()).collect();
+    entries.sort_by_key(|entry| entry.file_name());
+
+    for entry in entries {
+        let file_name = entry.file_name().to_string_lossy().to_string();
+        if file_name.starts_with('.') {
+            continue;
+        }
+        let path = entry.path();
+        if !path.is_file() || path.extension().and_then(|ext| ext.to_str()) != Some("md") {
+            continue;
+        }
+        let body = fs::read_to_string(&path)
+            .with_context(|| format!("failed to read execution contract {}", path.display()))?;
+        contracts.push(ExecutionContract {
+            name: execution_contract_name(&file_name, &body),
+            file_name,
+            path,
+            body,
+        });
+    }
+
+    if contracts.is_empty() {
+        anyhow::bail!("no execution contracts available");
+    }
+
+    let selected_index = selected_file
+        .as_deref()
+        .and_then(|wanted| contracts.iter().position(|contract| contract.file_name == wanted))
+        .unwrap_or(0);
+    persist_selected_execution_contract(project_dir, &contracts[selected_index].file_name)?;
+    Ok((contracts, selected_index))
+}
+
+fn execution_contract_name(file_name: &str, body: &str) -> String {
+    body.lines()
+        .find_map(|line| {
+            let trimmed = line.trim();
+            trimmed
+                .strip_prefix("# ")
+                .map(str::trim)
+                .filter(|name| !name.is_empty())
+                .map(ToOwned::to_owned)
+        })
+        .unwrap_or_else(|| file_name.trim_end_matches(".md").replace('-', " "))
+}
+
+fn persist_selected_execution_contract(project_dir: &Path, file_name: &str) -> Result<()> {
+    let path = execution_contract_selection_path(project_dir);
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(path, file_name)?;
+    Ok(())
+}
+
+fn cycle_execution_contract(state: &mut StudioState, forward: bool) {
+    if state.execution_contracts.is_empty() {
+        return;
+    }
+
+    let len = state.execution_contracts.len();
+    state.selected_execution_contract = if forward {
+        (state.selected_execution_contract + 1) % len
+    } else {
+        state.selected_execution_contract
+            .checked_sub(1)
+            .unwrap_or_else(|| len.saturating_sub(1))
+    };
+    if let Err(err) = persist_selected_execution_contract(
+        &state.project_dir,
+        &state.selected_execution_contract().file_name,
+    ) {
+        state.log(format!("failed to persist selected contract: {}", err));
+    } else {
+        state.log(format!(
+            "execution contract: {}",
+            state.selected_execution_contract().name
+        ));
+    }
+}
+
+fn create_execution_contract(state: &mut StudioState) -> Result<()> {
+    let dir = execution_contracts_dir(&state.project_dir);
+    fs::create_dir_all(&dir)?;
+    let contract_name = format!(
+        "Custom Contract {}",
+        Utc::now().format("%H:%M:%S")
+    );
+    let file_name = format!(
+        "contract-{}.md",
+        Utc::now().format("%Y%m%d-%H%M%S")
+    );
+    let path = dir.join(&file_name);
+    fs::write(&path, new_execution_contract_content(&contract_name))?;
+    let (contracts, selected_index) =
+        load_execution_contracts_with_selection(&state.project_dir, Some(&file_name))?;
+    state.execution_contracts = contracts;
+    state.selected_execution_contract = selected_index;
+    state.focused_pane = FocusedPane::Contracts;
+    state.pending_action = Some(PendingStudioAction::EditExecutionContract {
+        path,
+        action_label: "new contract",
+    });
+    state.log("created new execution contract");
+    Ok(())
+}
+
+fn edit_selected_execution_contract(state: &mut StudioState) {
+    let selected = state.selected_execution_contract().clone();
+    state.pending_action = Some(PendingStudioAction::EditExecutionContract {
+        path: selected.path,
+        action_label: "contract",
+    });
+    state.focused_pane = FocusedPane::Contracts;
+}
+
+fn delete_selected_execution_contract(state: &mut StudioState) -> Result<()> {
+    if state.execution_contracts.len() <= 1 {
+        anyhow::bail!("cannot delete the last execution contract");
+    }
+
+    let selected_index = state.selected_execution_contract;
+    let selected = state.selected_execution_contract().clone();
+    let trash_dir = execution_contracts_dir(&state.project_dir).join(".trash");
+    fs::create_dir_all(&trash_dir)?;
+    let trash_name = format!(
+        "{}-{}",
+        Utc::now().format("%Y%m%d-%H%M%S"),
+        selected.file_name
+    );
+    fs::rename(&selected.path, trash_dir.join(trash_name))?;
+
+    let preferred_file_name = state
+        .execution_contracts
+        .iter()
+        .enumerate()
+        .find_map(|(idx, contract)| {
+            (idx != selected_index
+                && (idx == selected_index.saturating_add(1)
+                    || idx == selected_index.saturating_sub(1)))
+            .then(|| contract.file_name.clone())
+        })
+        .or_else(|| {
+            state
+                .execution_contracts
+                .iter()
+                .enumerate()
+                .find_map(|(idx, contract)| {
+                    (idx != selected_index).then(|| contract.file_name.clone())
+                })
+        });
+    let (contracts, selected_index) = load_execution_contracts_with_selection(
+        &state.project_dir,
+        preferred_file_name.as_deref(),
+    )?;
+    let deleted_name = selected.name;
+    state.execution_contracts = contracts;
+    state.selected_execution_contract = selected_index;
+    persist_selected_execution_contract(
+        &state.project_dir,
+        &state.selected_execution_contract().file_name,
+    )?;
+    state.log(format!("deleted execution contract: {}", deleted_name));
+    Ok(())
+}
+
+fn handle_pending_action(
+    terminal: &mut tui::Tui,
+    state: &mut StudioState,
+    action: PendingStudioAction,
+) -> Result<()> {
+    match action {
+        PendingStudioAction::EditExecutionContract { path, action_label } => {
+            tui::restore_terminal(terminal)?;
+            let editor_result = open_file_in_editor(&path);
+            *terminal = tui::setup_terminal()?;
+            match editor_result {
+                Ok(()) => {
+                    state.refresh_execution_contracts()?;
+                    state.log(format!("updated {}", action_label));
+                }
+                Err(err) => {
+                    state.log(format!("failed to edit {}: {}", action_label, err));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+fn open_file_in_editor(path: &Path) -> Result<()> {
+    let editor = std::env::var("VISUAL")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .or_else(|| {
+            std::env::var("EDITOR")
+                .ok()
+                .filter(|value| !value.trim().is_empty())
+        })
+        .unwrap_or_else(|| "vi".to_string());
+    let status = Command::new("sh")
+        .arg("-c")
+        .arg("$FOUNDRY_EDITOR \"$FOUNDRY_TARGET_FILE\"")
+        .env("FOUNDRY_EDITOR", editor)
+        .env("FOUNDRY_TARGET_FILE", path)
+        .status()
+        .context("failed to launch editor")?;
+    if !status.success() {
+        anyhow::bail!("editor exited with status {}", status);
+    }
+    Ok(())
 }
 
 fn copy_workspace_snapshot(src_root: &Path, dst_root: &Path) -> Result<()> {
@@ -1849,6 +2282,7 @@ fn pane_at_position(layout: &StudioLayout, column: u16, row: u16) -> Option<Focu
     [
         (FocusedPane::Scan, layout.scan),
         (FocusedPane::Prompt, layout.prompt),
+        (FocusedPane::Contracts, layout.contracts),
         (FocusedPane::ExecutionBrief, layout.execution_brief),
         (FocusedPane::Sessions, layout.sessions),
         (FocusedPane::Output, layout.output),
@@ -1873,6 +2307,23 @@ fn select_session_from_click(state: &mut StudioState, area: Rect, row: u16) {
     if index < state.sessions.len() {
         state.selected_session = index;
         state.output_scroll = 0;
+    }
+}
+
+fn select_execution_contract_from_click(state: &mut StudioState, area: Rect, row: u16) {
+    if state.execution_contracts.is_empty() || row <= area.y + 1 || row >= area.y.saturating_add(area.height).saturating_sub(1) {
+        return;
+    }
+
+    let index = row.saturating_sub(area.y.saturating_add(2)) as usize;
+    if index < state.execution_contracts.len() {
+        state.selected_execution_contract = index;
+        if let Err(err) = persist_selected_execution_contract(
+            &state.project_dir,
+            &state.selected_execution_contract().file_name,
+        ) {
+            state.log(format!("failed to persist selected contract: {}", err));
+        }
     }
 }
 
@@ -2564,6 +3015,15 @@ mod tests {
         }
     }
 
+    fn test_contract() -> ExecutionContract {
+        ExecutionContract {
+            file_name: "standard.md".into(),
+            path: PathBuf::from("/tmp/project/.foundry/studio/contracts/standard.md"),
+            name: "Standard Build Contract".into(),
+            body: default_execution_contract_content().into(),
+        }
+    }
+
     fn test_state() -> StudioState {
         StudioState {
             project_dir: PathBuf::from("/tmp/project"),
@@ -2573,6 +3033,8 @@ mod tests {
             provider_mode: ProviderMode::Claude,
             workspace_mode: WorkspaceMode::Isolated,
             scan: test_scan(),
+            execution_contracts: vec![test_contract()],
+            selected_execution_contract: 0,
             sessions: Vec::new(),
             selected_session: 0,
             output_scroll: 0,
@@ -2585,6 +3047,7 @@ mod tests {
             claude_readiness: ProviderReadiness::ready("ready"),
             codex_readiness: ProviderReadiness::missing("missing"),
             session_controls: HashMap::new(),
+            pending_action: None,
         }
     }
 
@@ -2614,6 +3077,7 @@ mod tests {
         let prompt = compose_smoothed_prompt(
             "Claude",
             "Build me a usage dashboard.",
+            &test_contract(),
             &scan,
             "/tmp/workspace",
             "/tmp/workspace/.foundry/studio/artifacts/run/claude",
@@ -2621,7 +3085,7 @@ mod tests {
         );
 
         assert!(prompt.contains("Build me a usage dashboard."));
-        assert!(prompt.contains("self-contained HTML artifact"));
+        assert!(prompt.contains("BEGIN EXECUTION CONTRACT"));
         assert!(prompt.contains("/tmp/workspace/.foundry/studio/artifacts/run/claude"));
     }
 
@@ -2768,7 +3232,8 @@ Options:
     #[test]
     fn focused_pane_cycles_forward_and_backward() {
         assert_eq!(FocusedPane::Scan.next(), FocusedPane::Prompt);
-        assert_eq!(FocusedPane::Prompt.previous(), FocusedPane::Scan);
+        assert_eq!(FocusedPane::Prompt.next(), FocusedPane::Contracts);
+        assert_eq!(FocusedPane::Contracts.previous(), FocusedPane::Prompt);
         assert_eq!(FocusedPane::Activity.next(), FocusedPane::Scan);
         assert_eq!(FocusedPane::Scan.previous(), FocusedPane::Activity);
     }
@@ -2780,6 +3245,10 @@ Options:
         assert_eq!(
             pane_at_position(&layout, layout.scan.x + 1, layout.scan.y + 1),
             Some(FocusedPane::Scan)
+        );
+        assert_eq!(
+            pane_at_position(&layout, layout.contracts.x + 1, layout.contracts.y + 1),
+            Some(FocusedPane::Contracts)
         );
         assert_eq!(
             pane_at_position(&layout, layout.execution_brief.x + 1, layout.execution_brief.y + 1),
@@ -2807,10 +3276,65 @@ Options:
     fn clicking_prompt_enters_prompt_edit_mode() {
         let mut state = test_state();
 
-        activate_pane_from_click(&mut state, FocusedPane::Prompt, Rect::default(), 0);
+        activate_pane_from_click(
+            &mut state,
+            FocusedPane::Prompt,
+            Rect::default(),
+            Rect::default(),
+            0,
+        );
 
         assert_eq!(state.focused_pane, FocusedPane::Prompt);
         assert!(state.is_editing_prompt);
+    }
+
+    #[test]
+    fn execution_contract_body_renders_placeholders() {
+        let rendered = render_execution_contract_body(
+            "use {{provider_label}} in {{workspace_dir}} and write to {{artifact_dir}}",
+            "Claude",
+            "/tmp/workspace",
+            "/tmp/artifacts",
+        );
+
+        assert!(rendered.contains("Claude"));
+        assert!(rendered.contains("/tmp/workspace"));
+        assert!(rendered.contains("/tmp/artifacts"));
+    }
+
+    #[test]
+    fn load_execution_contracts_bootstraps_default_contract() -> Result<()> {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time before unix epoch")
+            .as_nanos();
+        let project_dir =
+            std::env::temp_dir().join(format!("foundry-studio-contracts-{}", unique));
+        fs::create_dir_all(&project_dir)?;
+
+        let (contracts, selected) = load_execution_contracts(&project_dir)?;
+        fs::remove_dir_all(&project_dir)?;
+
+        assert_eq!(selected, 0);
+        assert_eq!(contracts.len(), 1);
+        assert_eq!(contracts[0].file_name, "standard.md");
+        Ok(())
+    }
+
+    #[test]
+    fn clicking_contract_row_selects_it() {
+        let mut state = test_state();
+        state.execution_contracts.push(ExecutionContract {
+            file_name: "reporting.md".into(),
+            path: PathBuf::from("/tmp/project/.foundry/studio/contracts/reporting.md"),
+            name: "Reporting Contract".into(),
+            body: "# Reporting Contract".into(),
+        });
+        let area = Rect::new(0, 0, 40, 8);
+
+        select_execution_contract_from_click(&mut state, area, area.y + 3);
+
+        assert_eq!(state.selected_execution_contract, 1);
     }
 
     #[test]
