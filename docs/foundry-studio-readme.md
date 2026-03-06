@@ -113,7 +113,28 @@ Supported placeholders inside contract files:
 - `{{artifact_dir}}`
 - `{{provider_label}}`
 
-Editing uses your terminal editor via `$VISUAL`, then `$EDITOR`, then `vi`.
+Studio tracks an editor selection inside the app.
+
+- Press `v` to cycle editors between `system`, `nano`, `vi`, and `code --wait`
+- The current selection is shown in the header and contracts pane
+- The selection persists under `.foundry/studio/.editor`
+
+When the selection is `system`, Studio uses `$VISUAL`, then `$EDITOR`, then `vi`.
+
+When you add or edit a contract, Studio first shows a short help overlay that:
+
+- tells you which editor command will open
+- shows common save/exit shortcuts for that editor
+- lets you press `v` to switch editors, `Enter` to open, or `Esc` to cancel
+
+Deleting a contract now opens a confirmation prompt. Press `y` to confirm or `n` / `Esc` to cancel.
+
+If you keep the `system` selection and do not want the default `vi` fallback, set one of these before launching Studio:
+
+```bash
+export VISUAL="nano"
+export EDITOR="code --wait"
+```
 
 ## UI Layout
 
@@ -159,6 +180,7 @@ Keyboard:
 
 - `e` enter prompt edit mode
 - `c` cycle execution contract
+- `v` cycle editor
 - `a` add a new execution contract
 - `x` edit the selected execution contract
 - `d` delete the selected execution contract
@@ -168,8 +190,9 @@ Keyboard:
 - `w` cycle workspace mode
 - `r` rescan the project
 - `j` / `k` switch selected session
-- `Up` / `Down` scroll output
+- `Up` / `Down` move execution contracts when that pane is focused, or scroll output when the output pane is focused
 - `Tab` / `Shift+Tab` cycle pane focus
+- drag pane borders with the mouse to resize columns left/right and pane stacks up/down
 - `q` quit
 - `Ctrl+C` quit
 

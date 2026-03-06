@@ -6,7 +6,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, List, ListItem, Paragraph, Wrap},
+    widgets::{Block, BorderType, Borders, Clear, List, ListItem, Paragraph, Wrap},
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -22,6 +22,7 @@ use std::{
     time::{Duration, Instant, SystemTime},
 };
 use tokio::sync::mpsc;
+use tokio::task::JoinHandle;
 
 use crate::{
     agent::{self, AgentOutputEvent, ModelProvider, ProviderRunOptions},
@@ -33,12 +34,25 @@ use crate::{
 const STUDIO_ROOT_DIR: &str = ".foundry/studio";
 const STUDIO_CONTRACTS_DIR: &str = "contracts";
 const STUDIO_SELECTED_CONTRACT_FILE: &str = ".selected";
+const STUDIO_SELECTED_EDITOR_FILE: &str = ".editor";
 const DEFAULT_PROMPT: &str = "";
 const LIVE_PROBE_TTL_SECS: i64 = 900;
 const LIVE_PROBE_TIMEOUT_SECS: u64 = 20;
 const FOLLOW_UP_CONTEXT_MAX_LINES: usize = 120;
 const FOLLOW_UP_CONTEXT_MAX_CHARS: usize = 12_000;
 const SHUTDOWN_GRACE_MILLIS: u64 = 1500;
+const DEFAULT_LEFT_COLUMN_PERCENT: u16 = 44;
+const DEFAULT_LEFT_SCAN_HEIGHT: u16 = 6;
+const DEFAULT_LEFT_PROMPT_HEIGHT: u16 = 8;
+const DEFAULT_LEFT_CONTRACTS_HEIGHT: u16 = 8;
+const DEFAULT_RIGHT_SESSIONS_HEIGHT: u16 = 8;
+const DEFAULT_RIGHT_ACTIVITY_HEIGHT: u16 = 10;
+const MIN_LEFT_COLUMN_WIDTH: u16 = 28;
+const MIN_RIGHT_COLUMN_WIDTH: u16 = 36;
+const MIN_LEFT_SECTION_HEIGHT: u16 = 5;
+const MIN_LEFT_BRIEF_HEIGHT: u16 = 8;
+const MIN_RIGHT_SECTION_HEIGHT: u16 = 5;
+const MIN_OUTPUT_HEIGHT: u16 = 8;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum FocusedPane {
@@ -91,6 +105,9 @@ impl FocusedPane {
 
 struct StudioLayout {
     header: Rect,
+    body: Rect,
+    left_body: Rect,
+    right_body: Rect,
     scan: Rect,
     prompt: Rect,
     contracts: Rect,
@@ -99,6 +116,47 @@ struct StudioLayout {
     output: Rect,
     activity: Rect,
     status: Rect,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct StudioLayoutConfig {
+    left_column_percent: u16,
+    left_scan_height: u16,
+    left_prompt_height: u16,
+    left_contracts_height: u16,
+    right_sessions_height: u16,
+    right_activity_height: u16,
+}
+
+impl Default for StudioLayoutConfig {
+    fn default() -> Self {
+        Self {
+            left_column_percent: DEFAULT_LEFT_COLUMN_PERCENT,
+            left_scan_height: DEFAULT_LEFT_SCAN_HEIGHT,
+            left_prompt_height: DEFAULT_LEFT_PROMPT_HEIGHT,
+            left_contracts_height: DEFAULT_LEFT_CONTRACTS_HEIGHT,
+            right_sessions_height: DEFAULT_RIGHT_SESSIONS_HEIGHT,
+            right_activity_height: DEFAULT_RIGHT_ACTIVITY_HEIGHT,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ResizeHandle {
+    ColumnSplit,
+    LeftScanPrompt,
+    LeftPromptContracts,
+    LeftContractsBrief,
+    RightSessionsOutput,
+    RightOutputActivity,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct ResizeDragState {
+    handle: ResizeHandle,
+    start_column: u16,
+    start_row: u16,
+    initial_layout: StudioLayoutConfig,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -272,6 +330,52 @@ enum PendingStudioAction {
     },
 }
 
+struct EditorGuideState {
+    action: PendingStudioAction,
+}
+
+struct DeleteConfirmationState {
+    contract_name: String,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum EditorChoice {
+    System,
+    Vi,
+    Nano,
+    CodeWait,
+}
+
+impl EditorChoice {
+    fn next(self) -> Self {
+        match self {
+            Self::System => Self::Nano,
+            Self::Nano => Self::Vi,
+            Self::Vi => Self::CodeWait,
+            Self::CodeWait => Self::System,
+        }
+    }
+
+    fn persist_value(self) -> &'static str {
+        match self {
+            Self::System => "system",
+            Self::Vi => "vi",
+            Self::Nano => "nano",
+            Self::CodeWait => "code-wait",
+        }
+    }
+
+    fn from_persisted(value: &str) -> Option<Self> {
+        match value {
+            "system" => Some(Self::System),
+            "vi" => Some(Self::Vi),
+            "nano" => Some(Self::Nano),
+            "code-wait" => Some(Self::CodeWait),
+            _ => None,
+        }
+    }
+}
+
 struct StudioState {
     project_dir: PathBuf,
     prompt: String,
@@ -289,12 +393,17 @@ struct StudioState {
     tick_count: usize,
     should_quit: bool,
     shutdown_initiated: bool,
+    layout_config: StudioLayoutConfig,
+    active_resize: Option<ResizeDragState>,
     claude_model: String,
     codex_model: String,
     claude_readiness: ProviderReadiness,
     codex_readiness: ProviderReadiness,
+    editor_choice: EditorChoice,
     session_controls: HashMap<String, SessionControl>,
     pending_action: Option<PendingStudioAction>,
+    editor_guide: Option<EditorGuideState>,
+    delete_confirmation: Option<DeleteConfirmationState>,
 }
 
 struct SessionControl {
@@ -396,6 +505,7 @@ impl StudioState {
         let provider_mode = default_provider_mode(&claude_readiness, &codex_readiness);
         let (execution_contracts, selected_execution_contract) =
             load_execution_contracts(project_dir)?;
+        let editor_choice = load_editor_choice(project_dir);
         Ok(Self {
             project_dir: project_dir.to_path_buf(),
             prompt: DEFAULT_PROMPT.to_string(),
@@ -413,12 +523,17 @@ impl StudioState {
             tick_count: 0,
             should_quit: false,
             shutdown_initiated: false,
+            layout_config: StudioLayoutConfig::default(),
+            active_resize: None,
             claude_model,
             codex_model,
             claude_readiness,
             codex_readiness,
+            editor_choice,
             session_controls: HashMap::new(),
             pending_action: None,
+            editor_guide: None,
+            delete_confirmation: None,
         })
     }
 
@@ -516,6 +631,28 @@ enum StudioEvent {
     },
 }
 
+fn spawn_terminal_event_reader(
+    event_tx: mpsc::UnboundedSender<StudioEvent>,
+) -> JoinHandle<()> {
+    tokio::spawn(async move {
+        let mut reader = crossterm::event::EventStream::new();
+        loop {
+            if let Some(Ok(event)) = reader.next().await {
+                let studio_event = match event {
+                    Event::Key(key) => Some(StudioEvent::Key(key)),
+                    Event::Mouse(mouse) => Some(StudioEvent::Mouse(mouse)),
+                    _ => None,
+                };
+                if let Some(studio_event) = studio_event {
+                    if event_tx.send(studio_event).is_err() {
+                        break;
+                    }
+                }
+            }
+        }
+    })
+}
+
 pub async fn run_tui(project_dir: &Path) -> Result<()> {
     let config = Config::load(project_dir);
     let mut state = StudioState::new(project_dir, &config)?;
@@ -541,24 +678,7 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
         }
     });
 
-    let key_tx = event_tx.clone();
-    tokio::spawn(async move {
-        let mut reader = crossterm::event::EventStream::new();
-        loop {
-            if let Some(Ok(event)) = reader.next().await {
-                let studio_event = match event {
-                    Event::Key(key) => Some(StudioEvent::Key(key)),
-                    Event::Mouse(mouse) => Some(StudioEvent::Mouse(mouse)),
-                    _ => None,
-                };
-                if let Some(studio_event) = studio_event {
-                    if key_tx.send(studio_event).is_err() {
-                        break;
-                    }
-                }
-            }
-        }
-    });
+    let mut terminal_event_reader = spawn_terminal_event_reader(event_tx.clone());
 
     let quit_tx = event_tx.clone();
     tokio::spawn(async move {
@@ -585,7 +705,13 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
         }
 
         if let Some(action) = state.pending_action.take() {
-            handle_pending_action(&mut terminal, &mut state, action)?;
+            handle_pending_action(
+                &mut terminal,
+                &mut state,
+                action,
+                &event_tx,
+                &mut terminal_event_reader,
+            )?;
         }
 
         if state.should_quit {
@@ -594,6 +720,7 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
     }
 
     shutdown_active_sessions(&mut state).await;
+    terminal_event_reader.abort();
     tui::restore_terminal(&mut terminal)?;
     println!("Foundry Studio closed.");
     Ok(())
@@ -609,7 +736,11 @@ fn handle_event(
             state.tick_count = state.tick_count.wrapping_add(1);
         }
         StudioEvent::Key(key) => {
-            if is_quit_key(key) {
+            if state.delete_confirmation.is_some() {
+                handle_delete_confirmation_key(state, key);
+            } else if state.editor_guide.is_some() {
+                handle_editor_guide_key(state, key);
+            } else if is_quit_key(key) {
                 request_quit(state);
             } else if state.is_editing_prompt {
                 handle_prompt_edit_key(state, key);
@@ -617,7 +748,11 @@ fn handle_event(
                 handle_global_key(state, key, tx);
             }
         }
-        StudioEvent::Mouse(mouse) => handle_mouse_event(state, mouse),
+        StudioEvent::Mouse(mouse) => {
+            if state.editor_guide.is_none() && state.delete_confirmation.is_none() {
+                handle_mouse_event(state, mouse)
+            }
+        }
         StudioEvent::Quit => {
             request_quit(state);
         }
@@ -686,6 +821,44 @@ fn handle_event(
                 }
             }
         }
+    }
+}
+
+fn handle_editor_guide_key(state: &mut StudioState, key: event::KeyEvent) {
+    match key.code {
+        KeyCode::Enter => {
+            if let Some(guide) = state.editor_guide.take() {
+                state.pending_action = Some(guide.action);
+            }
+        }
+        KeyCode::Char('v') => {
+            cycle_editor_choice(state);
+        }
+        KeyCode::Esc | KeyCode::Char('q') => {
+            state.editor_guide = None;
+            state.log("editor launch canceled");
+        }
+        _ => {}
+    }
+}
+
+fn handle_delete_confirmation_key(state: &mut StudioState, key: event::KeyEvent) {
+    match key.code {
+        KeyCode::Char(c) if c.eq_ignore_ascii_case(&'y') => {
+            state.delete_confirmation = None;
+            if let Err(err) = delete_selected_execution_contract(state) {
+                state.log(format!("contract delete failed: {}", err));
+            }
+        }
+        KeyCode::Char(c) if c.eq_ignore_ascii_case(&'n') => {
+            state.delete_confirmation = None;
+            state.log("contract delete canceled");
+        }
+        KeyCode::Esc => {
+            state.delete_confirmation = None;
+            state.log("contract delete canceled");
+        }
+        _ => {}
     }
 }
 
@@ -797,9 +970,10 @@ fn handle_global_key(
             edit_selected_execution_contract(state);
         }
         KeyCode::Char('d') => {
-            if let Err(err) = delete_selected_execution_contract(state) {
-                state.log(format!("contract delete failed: {}", err));
-            }
+            request_delete_selected_execution_contract(state);
+        }
+        KeyCode::Char('v') => {
+            cycle_editor_choice(state);
         }
         KeyCode::Tab => {
             let next_pane = state.focused_pane.next();
@@ -846,25 +1020,54 @@ fn handle_global_key(
             }
         }
         KeyCode::Up => {
-            state.output_scroll = state.output_scroll.saturating_add(3);
+            match state.focused_pane {
+                FocusedPane::Contracts => cycle_execution_contract(state, false),
+                FocusedPane::Output => {
+                    state.output_scroll = state.output_scroll.saturating_add(3);
+                }
+                _ => {}
+            }
         }
         KeyCode::Down => {
-            state.output_scroll = state.output_scroll.saturating_sub(3);
+            match state.focused_pane {
+                FocusedPane::Contracts => cycle_execution_contract(state, true),
+                FocusedPane::Output => {
+                    state.output_scroll = state.output_scroll.saturating_sub(3);
+                }
+                _ => {}
+            }
         }
         _ => {}
     }
 }
 
 fn handle_mouse_event(state: &mut StudioState, mouse: MouseEvent) {
-    let Some(layout) = current_studio_layout() else {
+    let Some(layout) = current_studio_layout(state) else {
         return;
     };
 
     match mouse.kind {
         MouseEventKind::Down(MouseButton::Left) => {
+            if let Some(handle) = resize_handle_at(&layout, mouse.column, mouse.row) {
+                state.active_resize = Some(ResizeDragState {
+                    handle,
+                    start_column: mouse.column,
+                    start_row: mouse.row,
+                    initial_layout: state.layout_config,
+                });
+                return;
+            }
             if let Some(pane) = pane_at_position(&layout, mouse.column, mouse.row) {
                 activate_pane_from_click(state, pane, layout.sessions, layout.contracts, mouse.row);
             }
+        }
+        MouseEventKind::Drag(MouseButton::Left) => {
+            if let Some(drag) = state.active_resize {
+                apply_resize_drag(state, &layout, drag, mouse.column, mouse.row);
+            }
+        }
+        MouseEventKind::Up(MouseButton::Left) => {
+            state.active_resize = None;
         }
         MouseEventKind::ScrollUp => {
             if rect_contains(layout.output, mouse.column, mouse.row) {
@@ -1159,7 +1362,7 @@ fn prepare_workspace(launch: &SessionLaunch) -> Result<()> {
 }
 
 fn render(frame: &mut ratatui::Frame, state: &StudioState) {
-    let layout = studio_layout(frame.area());
+    let layout = studio_layout(frame.area(), state.layout_config);
 
     render_header(frame, layout.header, state);
     render_scan(frame, layout.scan, state);
@@ -1170,9 +1373,11 @@ fn render(frame: &mut ratatui::Frame, state: &StudioState) {
     render_output(frame, layout.output, state);
     render_activity(frame, layout.activity, state);
     render_status(frame, layout.status, state);
+    render_editor_guide(frame, state);
+    render_delete_confirmation(frame, state);
 }
 
-fn studio_layout(area: Rect) -> StudioLayout {
+fn studio_layout(area: Rect, config: StudioLayoutConfig) -> StudioLayout {
     let root = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -1182,32 +1387,90 @@ fn studio_layout(area: Rect) -> StudioLayout {
         ])
         .split(area);
 
+    let body_area = root[1];
+    let body_width = body_area.width.max(1);
+    let left_width = if body_width > MIN_LEFT_COLUMN_WIDTH + MIN_RIGHT_COLUMN_WIDTH {
+        ((body_width as u32 * config.left_column_percent as u32) / 100)
+            .clamp(
+                MIN_LEFT_COLUMN_WIDTH as u32,
+                body_width.saturating_sub(MIN_RIGHT_COLUMN_WIDTH) as u32,
+            ) as u16
+    } else {
+        body_width / 2
+    }
+    .max(1);
+
     let body = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(44), Constraint::Percentage(56)])
-        .split(root[1]);
+        .constraints([
+            Constraint::Length(left_width),
+            Constraint::Min(body_width.saturating_sub(left_width).max(1)),
+        ])
+        .split(body_area);
+
+    let left_height = body[0].height.max(1);
+    let mut left_scan_height = config.left_scan_height.max(MIN_LEFT_SECTION_HEIGHT);
+    let mut left_prompt_height = config.left_prompt_height.max(MIN_LEFT_SECTION_HEIGHT);
+    let mut left_contracts_height = config.left_contracts_height.max(MIN_LEFT_SECTION_HEIGHT);
+    let left_brief_min = MIN_LEFT_BRIEF_HEIGHT.min(left_height.saturating_sub(3));
+    let left_scan_max = left_height
+        .saturating_sub(left_prompt_height)
+        .saturating_sub(left_contracts_height)
+        .saturating_sub(left_brief_min)
+        .max(MIN_LEFT_SECTION_HEIGHT);
+    left_scan_height = left_scan_height.min(left_scan_max);
+    let left_prompt_max = left_height
+        .saturating_sub(left_scan_height)
+        .saturating_sub(left_contracts_height)
+        .saturating_sub(left_brief_min)
+        .max(MIN_LEFT_SECTION_HEIGHT);
+    left_prompt_height = left_prompt_height.min(left_prompt_max);
+    let left_contracts_max = left_height
+        .saturating_sub(left_scan_height)
+        .saturating_sub(left_prompt_height)
+        .saturating_sub(left_brief_min)
+        .max(MIN_LEFT_SECTION_HEIGHT);
+    left_contracts_height = left_contracts_height.min(left_contracts_max);
 
     let left = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(6),
-            Constraint::Length(8),
-            Constraint::Length(8),
-            Constraint::Min(8),
+            Constraint::Length(left_scan_height),
+            Constraint::Length(left_prompt_height),
+            Constraint::Length(left_contracts_height),
+            Constraint::Min(left_brief_min.max(1)),
         ])
         .split(body[0]);
+
+    let right_height = body[1].height.max(1);
+    let mut right_sessions_height = config.right_sessions_height.max(MIN_RIGHT_SECTION_HEIGHT);
+    let mut right_activity_height = config.right_activity_height.max(MIN_RIGHT_SECTION_HEIGHT);
+    let output_min = MIN_OUTPUT_HEIGHT.min(right_height.saturating_sub(2));
+    let right_sessions_max = right_height
+        .saturating_sub(right_activity_height)
+        .saturating_sub(output_min)
+        .max(MIN_RIGHT_SECTION_HEIGHT);
+    right_sessions_height = right_sessions_height.min(right_sessions_max);
+    let right_activity_max = right_height
+        .saturating_sub(right_sessions_height)
+        .saturating_sub(output_min)
+        .max(MIN_RIGHT_SECTION_HEIGHT);
+    right_activity_height = right_activity_height.min(right_activity_max);
 
     let right = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(8),
-            Constraint::Min(10),
-            Constraint::Length(10),
+            Constraint::Length(right_sessions_height),
+            Constraint::Min(output_min.max(1)),
+            Constraint::Length(right_activity_height),
         ])
         .split(body[1]);
 
     StudioLayout {
         header: root[0],
+        body: body_area,
+        left_body: body[0],
+        right_body: body[1],
         scan: left[0],
         prompt: left[1],
         contracts: left[2],
@@ -1249,6 +1512,10 @@ fn render_header(frame: &mut ratatui::Frame, area: ratatui::layout::Rect, state:
             Style::default().fg(Color::LightMagenta),
         ),
         Span::styled(
+            format!("editor={} ", editor_choice_summary(state.editor_choice)),
+            Style::default().fg(Color::LightCyan),
+        ),
+        Span::styled(
             format!(
                 "claude={} ({}) ",
                 display_model_name(&state.claude_model),
@@ -1266,7 +1533,7 @@ fn render_header(frame: &mut ratatui::Frame, area: ratatui::layout::Rect, state:
         ),
     ]));
     lines.push(Line::from(Span::styled(
-        "keys: e edit  c cycle contract  a add  x edit  d delete  s start  f follow-up  tab/shift-tab focus  click pane  p provider  w workspace  r rescan  j/k session  ↑/↓ scroll  q/ctrl-c quit",
+        "keys: e edit  c cycle contract  v cycle editor  a add  x edit  d delete  s start  f follow-up  tab/shift-tab focus  click pane  drag borders resize  p provider  w workspace  r rescan  j/k session  ↑/↓ contracts|output  q/ctrl-c quit",
         Style::default().fg(Color::DarkGray),
     )));
 
@@ -1361,6 +1628,10 @@ fn render_contracts(frame: &mut ratatui::Frame, area: ratatui::layout::Rect, sta
     lines.push(Line::from(Span::styled(
         "vars: {{workspace_dir}} {{artifact_dir}} {{provider_label}}",
         Style::default().fg(Color::DarkGray),
+    )));
+    lines.push(Line::from(Span::styled(
+        format!("editor: {} (press v to change)", editor_choice_summary(state.editor_choice)),
+        Style::default().fg(Color::LightCyan),
     )));
 
     let paragraph = Paragraph::new(lines)
@@ -1636,6 +1907,94 @@ fn render_status(frame: &mut ratatui::Frame, area: ratatui::layout::Rect, state:
     frame.render_widget(paragraph, area);
 }
 
+fn render_editor_guide(frame: &mut ratatui::Frame, state: &StudioState) {
+    let Some(_) = &state.editor_guide else {
+        return;
+    };
+
+    let editor_command = resolve_editor_command(state.editor_choice);
+    let editor_name = editor_command_name(&editor_command);
+    let area = centered_rect(68, 14, frame.area());
+    let mut lines = vec![
+        Line::from(Span::styled(
+            format!("Editor: {}", editor_choice_summary(state.editor_choice)),
+            Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+        )),
+        Line::from(Span::styled(
+            "Studio will temporarily leave the TUI while the editor is open.",
+            Style::default().fg(Color::Gray),
+        )),
+        Line::from(""),
+    ];
+
+    for tip in editor_help_lines(&editor_name) {
+        lines.push(Line::from(Span::styled(
+            tip,
+            Style::default().fg(Color::White),
+        )));
+    }
+
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        "V cycle editor  Enter open editor  Esc cancel",
+        Style::default().fg(Color::LightGreen),
+    )));
+
+    frame.render_widget(Clear, area);
+    let paragraph = Paragraph::new(lines)
+        .wrap(Wrap { trim: false })
+        .block(
+            Block::default()
+                .title(Span::styled(
+                    " Edit Contract ",
+                    Style::default().fg(Color::LightCyan).add_modifier(Modifier::BOLD),
+                ))
+                .borders(Borders::ALL)
+                .border_type(BorderType::Thick)
+                .border_style(Style::default().fg(Color::LightCyan)),
+        );
+    frame.render_widget(paragraph, area);
+}
+
+fn render_delete_confirmation(frame: &mut ratatui::Frame, state: &StudioState) {
+    let Some(confirm) = &state.delete_confirmation else {
+        return;
+    };
+
+    let area = centered_rect(60, 8, frame.area());
+    let lines = vec![
+        Line::from(Span::styled(
+            format!("Delete contract: {}", confirm.contract_name),
+            Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+        )),
+        Line::from(""),
+        Line::from(Span::styled(
+            "Are you sure? Y/N",
+            Style::default().fg(Color::LightRed).add_modifier(Modifier::BOLD),
+        )),
+        Line::from(""),
+        Line::from(Span::styled(
+            "Y delete permanently (moved to .trash)  N cancel",
+            Style::default().fg(Color::Gray),
+        )),
+    ];
+
+    frame.render_widget(Clear, area);
+    let paragraph = Paragraph::new(lines)
+        .wrap(Wrap { trim: false })
+        .block(
+            Block::default()
+                .title(Span::styled(
+                    " Confirm Delete ",
+                    Style::default().fg(Color::LightRed).add_modifier(Modifier::BOLD),
+                ))
+                .borders(Borders::ALL)
+                .border_type(BorderType::Thick)
+                .border_style(Style::default().fg(Color::LightRed)),
+        );
+    frame.render_widget(paragraph, area);
+}
+
 fn scan_project(project_dir: &Path) -> Result<ProjectScan> {
     let mut top_level = Vec::new();
     for entry in fs::read_dir(project_dir)? {
@@ -1828,12 +2187,115 @@ fn render_execution_contract_body(
         .replace("{{artifact_dir}}", artifact_dir)
 }
 
+fn resolve_system_editor_command() -> String {
+    std::env::var("VISUAL")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .or_else(|| {
+            std::env::var("EDITOR")
+                .ok()
+                .filter(|value| !value.trim().is_empty())
+        })
+        .unwrap_or_else(|| "vi".to_string())
+}
+
+fn resolve_editor_command(choice: EditorChoice) -> String {
+    match choice {
+        EditorChoice::System => resolve_system_editor_command(),
+        EditorChoice::Vi => "vi".to_string(),
+        EditorChoice::Nano => "nano".to_string(),
+        EditorChoice::CodeWait => "code --wait".to_string(),
+    }
+}
+
+fn editor_choice_summary(choice: EditorChoice) -> String {
+    match choice {
+        EditorChoice::System => format!("system -> {}", resolve_editor_command(choice)),
+        _ => resolve_editor_command(choice),
+    }
+}
+
+fn editor_command_name(editor_command: &str) -> String {
+    let first = editor_command
+        .split_whitespace()
+        .next()
+        .unwrap_or(editor_command);
+    Path::new(first)
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or(first)
+        .to_string()
+}
+
+fn editor_help_lines(editor_name: &str) -> Vec<&'static str> {
+    match editor_name {
+        "vi" | "vim" | "nvim" => vec![
+            "Press `i` to enter insert mode.",
+            "Press `Esc`, then type `:wq` and press Enter to save and exit.",
+            "Press `Esc`, then type `:q!` and press Enter to discard changes.",
+        ],
+        "nano" => vec![
+            "Edit directly in the buffer.",
+            "Press `Ctrl+O`, then Enter to save.",
+            "Press `Ctrl+X` to exit.",
+        ],
+        "emacs" => vec![
+            "Edit directly in the buffer.",
+            "Press `Ctrl+X Ctrl+S` to save.",
+            "Press `Ctrl+X Ctrl+C` to exit.",
+        ],
+        "code" | "code-insiders" => vec![
+            "Edit the file in VS Code.",
+            "Save in the editor, then close the editor window/tab when done.",
+            "If VS Code was launched with `--wait`, Studio will resume after close.",
+        ],
+        _ => vec![
+            "Edit the file in your configured editor.",
+            "Save and close the editor to return to Studio.",
+            "If you want different behavior, set `$VISUAL` or `$EDITOR`.",
+        ],
+    }
+}
+
+fn centered_rect(width: u16, height: u16, area: Rect) -> Rect {
+    let popup_width = width.min(area.width.saturating_sub(2)).max(1);
+    let popup_height = height.min(area.height.saturating_sub(2)).max(1);
+    Rect::new(
+        area.x + area.width.saturating_sub(popup_width) / 2,
+        area.y + area.height.saturating_sub(popup_height) / 2,
+        popup_width,
+        popup_height,
+    )
+}
+
 fn execution_contracts_dir(project_dir: &Path) -> PathBuf {
     project_dir.join(STUDIO_ROOT_DIR).join(STUDIO_CONTRACTS_DIR)
 }
 
 fn execution_contract_selection_path(project_dir: &Path) -> PathBuf {
     execution_contracts_dir(project_dir).join(STUDIO_SELECTED_CONTRACT_FILE)
+}
+
+fn editor_selection_path(project_dir: &Path) -> PathBuf {
+    project_dir.join(STUDIO_ROOT_DIR).join(STUDIO_SELECTED_EDITOR_FILE)
+}
+
+fn load_editor_choice(project_dir: &Path) -> EditorChoice {
+    fs::read_to_string(editor_selection_path(project_dir))
+        .ok()
+        .map(|value| value.trim().to_string())
+        .as_deref()
+        .and_then(EditorChoice::from_persisted)
+        .unwrap_or(EditorChoice::System)
+}
+
+fn persist_editor_choice(project_dir: &Path, choice: EditorChoice) -> Result<()> {
+    let path = editor_selection_path(project_dir);
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(path, choice.persist_value())?;
+    Ok(())
 }
 
 fn default_execution_contract_content() -> &'static str {
@@ -1983,6 +2445,29 @@ fn cycle_execution_contract(state: &mut StudioState, forward: bool) {
     }
 }
 
+fn cycle_editor_choice(state: &mut StudioState) {
+    state.editor_choice = state.editor_choice.next();
+    if let Err(err) = persist_editor_choice(&state.project_dir, state.editor_choice) {
+        state.log(format!("failed to persist editor choice: {}", err));
+    } else {
+        state.log(format!(
+            "editor: {}",
+            editor_choice_summary(state.editor_choice)
+        ));
+    }
+}
+
+fn request_delete_selected_execution_contract(state: &mut StudioState) {
+    if state.execution_contracts.len() <= 1 {
+        state.log("contract delete failed: cannot delete the last execution contract");
+        return;
+    }
+
+    state.delete_confirmation = Some(DeleteConfirmationState {
+        contract_name: state.selected_execution_contract().name.clone(),
+    });
+}
+
 fn create_execution_contract(state: &mut StudioState) -> Result<()> {
     let dir = execution_contracts_dir(&state.project_dir);
     fs::create_dir_all(&dir)?;
@@ -2001,21 +2486,31 @@ fn create_execution_contract(state: &mut StudioState) -> Result<()> {
     state.execution_contracts = contracts;
     state.selected_execution_contract = selected_index;
     state.focused_pane = FocusedPane::Contracts;
-    state.pending_action = Some(PendingStudioAction::EditExecutionContract {
-        path,
-        action_label: "new contract",
-    });
+    queue_editor_action(
+        state,
+        PendingStudioAction::EditExecutionContract {
+            path,
+            action_label: "new contract",
+        },
+    );
     state.log("created new execution contract");
     Ok(())
 }
 
 fn edit_selected_execution_contract(state: &mut StudioState) {
     let selected = state.selected_execution_contract().clone();
-    state.pending_action = Some(PendingStudioAction::EditExecutionContract {
-        path: selected.path,
-        action_label: "contract",
-    });
+    queue_editor_action(
+        state,
+        PendingStudioAction::EditExecutionContract {
+            path: selected.path,
+            action_label: "contract",
+        },
+    );
     state.focused_pane = FocusedPane::Contracts;
+}
+
+fn queue_editor_action(state: &mut StudioState, action: PendingStudioAction) {
+    state.editor_guide = Some(EditorGuideState { action });
 }
 
 fn delete_selected_execution_contract(state: &mut StudioState) -> Result<()> {
@@ -2072,12 +2567,16 @@ fn handle_pending_action(
     terminal: &mut tui::Tui,
     state: &mut StudioState,
     action: PendingStudioAction,
+    event_tx: &mpsc::UnboundedSender<StudioEvent>,
+    terminal_event_reader: &mut JoinHandle<()>,
 ) -> Result<()> {
     match action {
         PendingStudioAction::EditExecutionContract { path, action_label } => {
+            terminal_event_reader.abort();
             tui::restore_terminal(terminal)?;
-            let editor_result = open_file_in_editor(&path);
+            let editor_result = open_file_in_editor(&path, &resolve_editor_command(state.editor_choice));
             *terminal = tui::setup_terminal()?;
+            *terminal_event_reader = spawn_terminal_event_reader(event_tx.clone());
             match editor_result {
                 Ok(()) => {
                     state.refresh_execution_contracts()?;
@@ -2092,16 +2591,7 @@ fn handle_pending_action(
     Ok(())
 }
 
-fn open_file_in_editor(path: &Path) -> Result<()> {
-    let editor = std::env::var("VISUAL")
-        .ok()
-        .filter(|value| !value.trim().is_empty())
-        .or_else(|| {
-            std::env::var("EDITOR")
-                .ok()
-                .filter(|value| !value.trim().is_empty())
-        })
-        .unwrap_or_else(|| "vi".to_string());
+fn open_file_in_editor(path: &Path, editor: &str) -> Result<()> {
     let status = Command::new("sh")
         .arg("-c")
         .arg("$FOUNDRY_EDITOR \"$FOUNDRY_TARGET_FILE\"")
@@ -2271,11 +2761,164 @@ fn output_style(line: &str) -> Style {
     }
 }
 
-fn current_studio_layout() -> Option<StudioLayout> {
+fn current_studio_layout(state: &StudioState) -> Option<StudioLayout> {
     let Ok((width, height)) = crossterm::terminal::size() else {
         return None;
     };
-    Some(studio_layout(Rect::new(0, 0, width, height)))
+    Some(studio_layout(Rect::new(0, 0, width, height), state.layout_config))
+}
+
+fn clamped_left_column_width(body_width: u16, percent: u16) -> u16 {
+    if body_width > MIN_LEFT_COLUMN_WIDTH + MIN_RIGHT_COLUMN_WIDTH {
+        ((body_width as u32 * percent as u32) / 100)
+            .clamp(
+                MIN_LEFT_COLUMN_WIDTH as u32,
+                body_width.saturating_sub(MIN_RIGHT_COLUMN_WIDTH) as u32,
+            ) as u16
+    } else {
+        (body_width / 2).max(1)
+    }
+}
+
+fn resize_handle_at(layout: &StudioLayout, column: u16, row: u16) -> Option<ResizeHandle> {
+    let left_right_border = layout
+        .left_body
+        .x
+        .saturating_add(layout.left_body.width.saturating_sub(1));
+    if row >= layout.body.y
+        && row < layout.body.y.saturating_add(layout.body.height)
+        && (column == left_right_border || column == layout.right_body.x)
+    {
+        return Some(ResizeHandle::ColumnSplit);
+    }
+
+    if column >= layout.left_body.x
+        && column < layout.left_body.x.saturating_add(layout.left_body.width)
+    {
+        let scan_prompt_rows = [
+            layout.scan.y.saturating_add(layout.scan.height.saturating_sub(1)),
+            layout.prompt.y,
+        ];
+        if scan_prompt_rows.contains(&row) {
+            return Some(ResizeHandle::LeftScanPrompt);
+        }
+        let prompt_contract_rows = [
+            layout.prompt.y.saturating_add(layout.prompt.height.saturating_sub(1)),
+            layout.contracts.y,
+        ];
+        if prompt_contract_rows.contains(&row) {
+            return Some(ResizeHandle::LeftPromptContracts);
+        }
+        let contracts_brief_rows = [
+            layout
+                .contracts
+                .y
+                .saturating_add(layout.contracts.height.saturating_sub(1)),
+            layout.execution_brief.y,
+        ];
+        if contracts_brief_rows.contains(&row) {
+            return Some(ResizeHandle::LeftContractsBrief);
+        }
+    }
+
+    if column >= layout.right_body.x
+        && column < layout.right_body.x.saturating_add(layout.right_body.width)
+    {
+        let sessions_output_rows = [
+            layout
+                .sessions
+                .y
+                .saturating_add(layout.sessions.height.saturating_sub(1)),
+            layout.output.y,
+        ];
+        if sessions_output_rows.contains(&row) {
+            return Some(ResizeHandle::RightSessionsOutput);
+        }
+        let output_activity_rows = [
+            layout.output.y.saturating_add(layout.output.height.saturating_sub(1)),
+            layout.activity.y,
+        ];
+        if output_activity_rows.contains(&row) {
+            return Some(ResizeHandle::RightOutputActivity);
+        }
+    }
+
+    None
+}
+
+fn apply_resize_drag(
+    state: &mut StudioState,
+    layout: &StudioLayout,
+    drag: ResizeDragState,
+    column: u16,
+    row: u16,
+) {
+    let delta_columns = column as i32 - drag.start_column as i32;
+    let delta_rows = row as i32 - drag.start_row as i32;
+    let mut config = drag.initial_layout;
+
+    match drag.handle {
+        ResizeHandle::ColumnSplit => {
+            let initial_left_width =
+                clamped_left_column_width(layout.body.width, drag.initial_layout.left_column_percent)
+                    as i32;
+            let min_left = 1.max(MIN_LEFT_COLUMN_WIDTH.min(layout.body.width / 2)) as i32;
+            let min_right = 1.max(MIN_RIGHT_COLUMN_WIDTH.min(layout.body.width / 2)) as i32;
+            let max_left = layout.body.width.saturating_sub(min_right as u16).max(1) as i32;
+            let new_left_width = (initial_left_width + delta_columns).clamp(min_left, max_left);
+            config.left_column_percent = ((new_left_width * 100) / layout.body.width.max(1) as i32)
+                .clamp(1, 99) as u16;
+        }
+        ResizeHandle::LeftScanPrompt => {
+            let max_height = (layout.left_body.height as i32
+                - drag.initial_layout.left_prompt_height as i32
+                - drag.initial_layout.left_contracts_height as i32
+                - MIN_LEFT_BRIEF_HEIGHT as i32)
+                .max(MIN_LEFT_SECTION_HEIGHT as i32);
+            config.left_scan_height = (drag.initial_layout.left_scan_height as i32 + delta_rows)
+                .clamp(MIN_LEFT_SECTION_HEIGHT as i32, max_height) as u16;
+        }
+        ResizeHandle::LeftPromptContracts => {
+            let max_height = (layout.left_body.height as i32
+                - drag.initial_layout.left_scan_height as i32
+                - drag.initial_layout.left_contracts_height as i32
+                - MIN_LEFT_BRIEF_HEIGHT as i32)
+                .max(MIN_LEFT_SECTION_HEIGHT as i32);
+            config.left_prompt_height =
+                (drag.initial_layout.left_prompt_height as i32 + delta_rows)
+                    .clamp(MIN_LEFT_SECTION_HEIGHT as i32, max_height) as u16;
+        }
+        ResizeHandle::LeftContractsBrief => {
+            let max_height = (layout.left_body.height as i32
+                - drag.initial_layout.left_scan_height as i32
+                - drag.initial_layout.left_prompt_height as i32
+                - MIN_LEFT_BRIEF_HEIGHT as i32)
+                .max(MIN_LEFT_SECTION_HEIGHT as i32);
+            config.left_contracts_height =
+                (drag.initial_layout.left_contracts_height as i32 + delta_rows)
+                    .clamp(MIN_LEFT_SECTION_HEIGHT as i32, max_height) as u16;
+        }
+        ResizeHandle::RightSessionsOutput => {
+            let max_height = (layout.right_body.height as i32
+                - drag.initial_layout.right_activity_height as i32
+                - MIN_OUTPUT_HEIGHT as i32)
+                .max(MIN_RIGHT_SECTION_HEIGHT as i32);
+            config.right_sessions_height =
+                (drag.initial_layout.right_sessions_height as i32 + delta_rows)
+                    .clamp(MIN_RIGHT_SECTION_HEIGHT as i32, max_height) as u16;
+        }
+        ResizeHandle::RightOutputActivity => {
+            let max_height = (layout.right_body.height as i32
+                - drag.initial_layout.right_sessions_height as i32
+                - MIN_OUTPUT_HEIGHT as i32)
+                .max(MIN_RIGHT_SECTION_HEIGHT as i32);
+            config.right_activity_height =
+                (drag.initial_layout.right_activity_height as i32 - delta_rows)
+                    .clamp(MIN_RIGHT_SECTION_HEIGHT as i32, max_height) as u16;
+        }
+    }
+
+    state.layout_config = config;
 }
 
 fn pane_at_position(layout: &StudioLayout, column: u16, row: u16) -> Option<FocusedPane> {
@@ -3042,12 +3685,17 @@ mod tests {
             tick_count: 0,
             should_quit: false,
             shutdown_initiated: false,
+            layout_config: StudioLayoutConfig::default(),
+            active_resize: None,
             claude_model: "opus".into(),
             codex_model: String::new(),
             claude_readiness: ProviderReadiness::ready("ready"),
             codex_readiness: ProviderReadiness::missing("missing"),
+            editor_choice: EditorChoice::System,
             session_controls: HashMap::new(),
             pending_action: None,
+            editor_guide: None,
+            delete_confirmation: None,
         }
     }
 
@@ -3240,7 +3888,7 @@ Options:
 
     #[test]
     fn pane_hit_testing_maps_points_to_expected_panes() {
-        let layout = studio_layout(Rect::new(0, 0, 120, 40));
+        let layout = studio_layout(Rect::new(0, 0, 120, 40), StudioLayoutConfig::default());
 
         assert_eq!(
             pane_at_position(&layout, layout.scan.x + 1, layout.scan.y + 1),
@@ -3289,6 +3937,289 @@ Options:
     }
 
     #[test]
+    fn queue_editor_action_opens_guide_instead_of_immediate_launch() {
+        let mut state = test_state();
+
+        queue_editor_action(
+            &mut state,
+            PendingStudioAction::EditExecutionContract {
+                path: PathBuf::from("/tmp/contract.md"),
+                action_label: "contract",
+            },
+        );
+
+        assert!(state.editor_guide.is_some());
+        assert!(state.pending_action.is_none());
+    }
+
+    #[test]
+    fn editor_guide_can_cycle_editor_choice() {
+        let mut state = test_state();
+
+        queue_editor_action(
+            &mut state,
+            PendingStudioAction::EditExecutionContract {
+                path: PathBuf::from("/tmp/contract.md"),
+                action_label: "contract",
+            },
+        );
+
+        handle_editor_guide_key(
+            &mut state,
+            event::KeyEvent::new(KeyCode::Char('v'), KeyModifiers::NONE),
+        );
+
+        assert_eq!(state.editor_choice, EditorChoice::Nano);
+        assert!(state.editor_guide.is_some());
+    }
+
+    #[test]
+    fn request_delete_opens_confirmation() {
+        let mut state = test_state();
+        state.execution_contracts.push(ExecutionContract {
+            file_name: "reporting.md".into(),
+            path: PathBuf::from("/tmp/project/.foundry/studio/contracts/reporting.md"),
+            name: "Reporting Contract".into(),
+            body: "# Reporting Contract".into(),
+        });
+        state.selected_execution_contract = 1;
+
+        request_delete_selected_execution_contract(&mut state);
+
+        assert!(state.delete_confirmation.is_some());
+    }
+
+    #[test]
+    fn resize_handle_hit_testing_identifies_all_splitters() {
+        let layout = studio_layout(Rect::new(0, 0, 120, 40), StudioLayoutConfig::default());
+
+        assert_eq!(
+            resize_handle_at(&layout, layout.right_body.x, layout.body.y + 1),
+            Some(ResizeHandle::ColumnSplit)
+        );
+        assert_eq!(
+            resize_handle_at(&layout, layout.left_body.x + 1, layout.prompt.y),
+            Some(ResizeHandle::LeftScanPrompt)
+        );
+        assert_eq!(
+            resize_handle_at(&layout, layout.left_body.x + 1, layout.contracts.y),
+            Some(ResizeHandle::LeftPromptContracts)
+        );
+        assert_eq!(
+            resize_handle_at(&layout, layout.left_body.x + 1, layout.execution_brief.y),
+            Some(ResizeHandle::LeftContractsBrief)
+        );
+        assert_eq!(
+            resize_handle_at(&layout, layout.right_body.x + 1, layout.output.y),
+            Some(ResizeHandle::RightSessionsOutput)
+        );
+        assert_eq!(
+            resize_handle_at(&layout, layout.right_body.x + 1, layout.activity.y),
+            Some(ResizeHandle::RightOutputActivity)
+        );
+        assert_eq!(
+            resize_handle_at(&layout, layout.scan.x + 2, layout.scan.y + 2),
+            None
+        );
+    }
+
+    #[test]
+    fn dragging_column_split_updates_layout_width() {
+        let mut state = test_state();
+        let layout = studio_layout(Rect::new(0, 0, 120, 40), state.layout_config);
+        let drag = ResizeDragState {
+            handle: ResizeHandle::ColumnSplit,
+            start_column: layout.right_body.x,
+            start_row: layout.body.y,
+            initial_layout: state.layout_config,
+        };
+
+        apply_resize_drag(
+            &mut state,
+            &layout,
+            drag,
+            layout.right_body.x.saturating_add(8),
+            layout.body.y,
+        );
+
+        assert!(state.layout_config.left_column_percent > DEFAULT_LEFT_COLUMN_PERCENT);
+    }
+
+    #[test]
+    fn dragging_scan_prompt_split_updates_scan_height() {
+        let mut state = test_state();
+        let layout = studio_layout(Rect::new(0, 0, 120, 40), state.layout_config);
+        let drag = ResizeDragState {
+            handle: ResizeHandle::LeftScanPrompt,
+            start_column: layout.left_body.x + 1,
+            start_row: layout.prompt.y,
+            initial_layout: state.layout_config,
+        };
+
+        apply_resize_drag(
+            &mut state,
+            &layout,
+            drag,
+            layout.left_body.x + 1,
+            layout.prompt.y.saturating_add(2),
+        );
+
+        assert!(state.layout_config.left_scan_height > DEFAULT_LEFT_SCAN_HEIGHT);
+    }
+
+    #[test]
+    fn dragging_prompt_contracts_split_updates_prompt_height() {
+        let mut state = test_state();
+        let layout = studio_layout(Rect::new(0, 0, 120, 40), state.layout_config);
+        let drag = ResizeDragState {
+            handle: ResizeHandle::LeftPromptContracts,
+            start_column: layout.left_body.x + 1,
+            start_row: layout.contracts.y,
+            initial_layout: state.layout_config,
+        };
+
+        apply_resize_drag(
+            &mut state,
+            &layout,
+            drag,
+            layout.left_body.x + 1,
+            layout.contracts.y.saturating_add(2),
+        );
+
+        assert!(state.layout_config.left_prompt_height > DEFAULT_LEFT_PROMPT_HEIGHT);
+    }
+
+    #[test]
+    fn dragging_contracts_brief_split_updates_contracts_height() {
+        let mut state = test_state();
+        let layout = studio_layout(Rect::new(0, 0, 120, 40), state.layout_config);
+        let drag = ResizeDragState {
+            handle: ResizeHandle::LeftContractsBrief,
+            start_column: layout.left_body.x + 1,
+            start_row: layout.execution_brief.y,
+            initial_layout: state.layout_config,
+        };
+
+        apply_resize_drag(
+            &mut state,
+            &layout,
+            drag,
+            layout.left_body.x + 1,
+            layout.execution_brief.y.saturating_add(2),
+        );
+
+        assert!(state.layout_config.left_contracts_height > DEFAULT_LEFT_CONTRACTS_HEIGHT);
+    }
+
+    #[test]
+    fn dragging_sessions_output_split_updates_sessions_height() {
+        let mut state = test_state();
+        let layout = studio_layout(Rect::new(0, 0, 120, 40), state.layout_config);
+        let drag = ResizeDragState {
+            handle: ResizeHandle::RightSessionsOutput,
+            start_column: layout.right_body.x + 1,
+            start_row: layout.output.y,
+            initial_layout: state.layout_config,
+        };
+
+        apply_resize_drag(
+            &mut state,
+            &layout,
+            drag,
+            layout.right_body.x + 1,
+            layout.output.y.saturating_add(2),
+        );
+
+        assert!(state.layout_config.right_sessions_height > DEFAULT_RIGHT_SESSIONS_HEIGHT);
+    }
+
+    #[test]
+    fn dragging_output_activity_split_down_shrinks_activity_height() {
+        let mut state = test_state();
+        let layout = studio_layout(Rect::new(0, 0, 120, 40), state.layout_config);
+        let drag = ResizeDragState {
+            handle: ResizeHandle::RightOutputActivity,
+            start_column: layout.right_body.x + 1,
+            start_row: layout.activity.y,
+            initial_layout: state.layout_config,
+        };
+
+        apply_resize_drag(
+            &mut state,
+            &layout,
+            drag,
+            layout.right_body.x + 1,
+            layout.activity.y.saturating_add(2),
+        );
+
+        assert!(state.layout_config.right_activity_height < DEFAULT_RIGHT_ACTIVITY_HEIGHT);
+    }
+
+    #[test]
+    fn dragging_output_activity_split_up_grows_activity_height() {
+        let mut state = test_state();
+        let layout = studio_layout(Rect::new(0, 0, 120, 40), state.layout_config);
+        let drag = ResizeDragState {
+            handle: ResizeHandle::RightOutputActivity,
+            start_column: layout.right_body.x + 1,
+            start_row: layout.activity.y,
+            initial_layout: state.layout_config,
+        };
+
+        apply_resize_drag(
+            &mut state,
+            &layout,
+            drag,
+            layout.right_body.x + 1,
+            layout.activity.y.saturating_sub(2),
+        );
+
+        assert!(state.layout_config.right_activity_height > DEFAULT_RIGHT_ACTIVITY_HEIGHT);
+    }
+
+    #[test]
+    fn arrow_keys_move_contract_selection_when_contracts_pane_is_focused() {
+        let mut state = test_state();
+        state.focused_pane = FocusedPane::Contracts;
+        state.execution_contracts.push(ExecutionContract {
+            file_name: "reporting.md".into(),
+            path: PathBuf::from("/tmp/project/.foundry/studio/contracts/reporting.md"),
+            name: "Reporting Contract".into(),
+            body: "# Reporting Contract".into(),
+        });
+
+        let (tx, _rx) = mpsc::unbounded_channel();
+        handle_global_key(
+            &mut state,
+            event::KeyEvent::new(KeyCode::Down, KeyModifiers::NONE),
+            &tx,
+        );
+        assert_eq!(state.selected_execution_contract, 1);
+
+        handle_global_key(
+            &mut state,
+            event::KeyEvent::new(KeyCode::Up, KeyModifiers::NONE),
+            &tx,
+        );
+        assert_eq!(state.selected_execution_contract, 0);
+    }
+
+    #[test]
+    fn delete_confirmation_can_cancel() {
+        let mut state = test_state();
+        state.delete_confirmation = Some(DeleteConfirmationState {
+            contract_name: "Standard Build Contract".into(),
+        });
+
+        handle_delete_confirmation_key(
+            &mut state,
+            event::KeyEvent::new(KeyCode::Char('n'), KeyModifiers::NONE),
+        );
+
+        assert!(state.delete_confirmation.is_none());
+    }
+
+    #[test]
     fn execution_contract_body_renders_placeholders() {
         let rendered = render_execution_contract_body(
             "use {{provider_label}} in {{workspace_dir}} and write to {{artifact_dir}}",
@@ -3318,6 +4249,60 @@ Options:
         assert_eq!(selected, 0);
         assert_eq!(contracts.len(), 1);
         assert_eq!(contracts[0].file_name, "standard.md");
+        Ok(())
+    }
+
+    #[test]
+    fn editor_choice_persists_round_trip() -> Result<()> {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time before unix epoch")
+            .as_nanos();
+        let project_dir = std::env::temp_dir().join(format!("foundry-studio-editor-{}", unique));
+        fs::create_dir_all(project_dir.join(STUDIO_ROOT_DIR))?;
+
+        persist_editor_choice(&project_dir, EditorChoice::Nano)?;
+        let loaded = load_editor_choice(&project_dir);
+        fs::remove_dir_all(&project_dir)?;
+
+        assert_eq!(loaded, EditorChoice::Nano);
+        Ok(())
+    }
+
+    #[test]
+    fn delete_confirmation_yes_deletes_selected_contract() -> Result<()> {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time before unix epoch")
+            .as_nanos();
+        let project_dir =
+            std::env::temp_dir().join(format!("foundry-studio-delete-confirm-{}", unique));
+        let contracts_dir = project_dir.join(STUDIO_ROOT_DIR).join(STUDIO_CONTRACTS_DIR);
+        fs::create_dir_all(&contracts_dir)?;
+        fs::write(contracts_dir.join("standard.md"), "# Standard Build Contract\n")?;
+        fs::write(contracts_dir.join("reporting.md"), "# Reporting Contract\n")?;
+
+        let (contracts, selected_index) =
+            load_execution_contracts_with_selection(&project_dir, Some("reporting.md"))?;
+        let mut state = test_state();
+        state.project_dir = project_dir.clone();
+        state.execution_contracts = contracts;
+        state.selected_execution_contract = selected_index;
+        state.delete_confirmation = Some(DeleteConfirmationState {
+            contract_name: "Reporting Contract".into(),
+        });
+
+        handle_delete_confirmation_key(
+            &mut state,
+            event::KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE),
+        );
+
+        assert!(state.delete_confirmation.is_none());
+        assert_eq!(state.execution_contracts.len(), 1);
+        assert_eq!(state.execution_contracts[0].file_name, "standard.md");
+        assert!(contracts_dir.join(".trash").exists());
+
+        fs::remove_dir_all(&project_dir)?;
         Ok(())
     }
 

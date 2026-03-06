@@ -1,5 +1,5 @@
 use crossterm::{
-    event::{DisableMouseCapture, EnableMouseCapture},
+    event::{DisableBracketedPaste, DisableMouseCapture, EnableMouseCapture},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -29,12 +29,13 @@ pub fn setup_terminal() -> anyhow::Result<Tui> {
 }
 
 pub fn restore_terminal(terminal: &mut Tui) -> anyhow::Result<()> {
-    disable_raw_mode()?;
     execute!(
         terminal.backend_mut(),
+        DisableBracketedPaste,
+        DisableMouseCapture,
         LeaveAlternateScreen,
-        DisableMouseCapture
     )?;
+    disable_raw_mode()?;
     terminal.show_cursor()?;
     Ok(())
 }
