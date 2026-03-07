@@ -321,7 +321,7 @@ struct AttachmentSpec {
     label: Option<String>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 enum AttachmentMode {
     InlineFile,
@@ -372,6 +372,9 @@ enum PendingStudioAction {
         path: PathBuf,
         action_label: &'static str,
     },
+    PickExecutionContractAttachment {
+        contract_path: PathBuf,
+    },
 }
 
 struct EditorGuideState {
@@ -380,6 +383,12 @@ struct EditorGuideState {
 
 struct DeleteConfirmationState {
     contract_name: String,
+}
+
+#[derive(Clone, Debug, Default)]
+struct AttachmentManagerState {
+    selected_attachment: usize,
+    marked_attachments: BTreeSet<usize>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -450,6 +459,7 @@ struct StudioState {
     pending_action: Option<PendingStudioAction>,
     editor_guide: Option<EditorGuideState>,
     delete_confirmation: Option<DeleteConfirmationState>,
+    attachment_manager: Option<AttachmentManagerState>,
 }
 
 struct SessionControl {
@@ -582,6 +592,7 @@ impl StudioState {
             pending_action: None,
             editor_guide: None,
             delete_confirmation: None,
+            attachment_manager: None,
         })
     }
 
@@ -655,6 +666,7 @@ impl StudioState {
         self.selected_execution_contract = index;
         self.preview_scroll = 0;
         self.invalidate_preview_cache();
+        self.sync_attachment_manager_selection();
     }
 
     fn refresh_execution_contracts(&mut self) -> Result<()> {
@@ -667,6 +679,29 @@ impl StudioState {
         self.execution_contracts = contracts;
         self.set_selected_execution_contract_index(selected_index);
         Ok(())
+    }
+
+    fn sync_attachment_manager_selection(&mut self) {
+        let attachment_len = self
+            .execution_contracts
+            .get(self.selected_execution_contract)
+            .map(|contract| contract.attachments.len())
+            .unwrap_or(0);
+        if let Some(manager) = self.attachment_manager.as_mut() {
+            manager.marked_attachments = manager
+                .marked_attachments
+                .iter()
+                .copied()
+                .filter(|idx| *idx < attachment_len)
+                .collect();
+            if attachment_len == 0 {
+                manager.selected_attachment = 0;
+            } else {
+                manager.selected_attachment = manager
+                    .selected_attachment
+                    .min(attachment_len.saturating_sub(1));
+            }
+        }
     }
 
     fn model_for(&self, provider: ModelProvider) -> &str {
@@ -808,6 +843,8 @@ fn handle_event(
                 handle_delete_confirmation_key(state, key);
             } else if state.editor_guide.is_some() {
                 handle_editor_guide_key(state, key);
+            } else if state.attachment_manager.is_some() {
+                handle_attachment_manager_key(state, key);
             } else if is_quit_key(key) {
                 request_quit(state);
             } else if state.is_editing_prompt {
@@ -817,7 +854,10 @@ fn handle_event(
             }
         }
         StudioEvent::Mouse(mouse) => {
-            if state.editor_guide.is_none() && state.delete_confirmation.is_none() {
+            if state.editor_guide.is_none()
+                && state.delete_confirmation.is_none()
+                && state.attachment_manager.is_none()
+            {
                 handle_mouse_event(state, mouse)
             }
         }
@@ -929,6 +969,28 @@ fn handle_delete_confirmation_key(state: &mut StudioState, key: event::KeyEvent)
             state.delete_confirmation = None;
             state.log("contract delete canceled");
         }
+        _ => {}
+    }
+}
+
+fn handle_attachment_manager_key(state: &mut StudioState, key: event::KeyEvent) {
+    match key.code {
+        KeyCode::Esc | KeyCode::Enter | KeyCode::Char('q') => {
+            state.attachment_manager = None;
+        }
+        KeyCode::Char('a') => {
+            if let Err(err) = queue_selected_execution_contract_attachment_action(state) {
+                state.log(format!("contract attachment edit failed: {}", err));
+            }
+        }
+        KeyCode::Char('d') => {
+            if let Err(err) = remove_selected_execution_contract_attachments(state) {
+                state.log(format!("attachment delete failed: {}", err));
+            }
+        }
+        KeyCode::Char(' ') => toggle_selected_attachment_mark(state),
+        KeyCode::Up => cycle_attachment_manager_selection(state, false),
+        KeyCode::Down => cycle_attachment_manager_selection(state, true),
         _ => {}
     }
 }
@@ -1057,9 +1119,7 @@ fn handle_global_key(
         }
         KeyCode::Char('t') => {
             if state.focused_pane == FocusedPane::Contracts {
-                if let Err(err) = edit_selected_execution_contract_attachments(state) {
-                    state.log(format!("contract attachment edit failed: {}", err));
-                }
+                open_attachment_manager(state);
             }
         }
         KeyCode::Char('v') => {
@@ -1508,6 +1568,7 @@ fn render(frame: &mut ratatui::Frame, state: &mut StudioState) {
     render_resize_handles(frame, &layout, state);
     render_editor_guide(frame, state);
     render_delete_confirmation(frame, state);
+    render_attachment_manager(frame, state);
 }
 
 fn studio_layout(area: Rect, config: StudioLayoutConfig) -> StudioLayout {
@@ -1876,7 +1937,7 @@ fn render_contracts(frame: &mut ratatui::Frame, area: ratatui::layout::Rect, sta
         Style::default().fg(Color::LightCyan),
     )));
     lines.push(Line::from(Span::styled(
-        "actions: enter edit contract  t edit attachments",
+        "actions: enter edit contract  t manage attachments",
         Style::default().fg(Color::DarkGray),
     )));
 
@@ -2268,6 +2329,105 @@ fn render_delete_confirmation(frame: &mut ratatui::Frame, state: &StudioState) {
             .borders(Borders::ALL)
             .border_type(BorderType::Thick)
             .border_style(Style::default().fg(Color::LightRed)),
+    );
+    frame.render_widget(paragraph, area);
+}
+
+fn render_attachment_manager(frame: &mut ratatui::Frame, state: &StudioState) {
+    let Some(manager) = &state.attachment_manager else {
+        return;
+    };
+
+    let contract = state.selected_execution_contract();
+    let area = centered_rect(76, 18, frame.area());
+    let mut lines = vec![
+        Line::from(Span::styled(
+            format!("Contract: {}", contract.name),
+            Style::default()
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Line::from(Span::styled(
+            format!("{} attachment(s)", contract.attachments.len()),
+            Style::default().fg(Color::LightCyan),
+        )),
+        Line::from(""),
+    ];
+
+    if contract.attachments.is_empty() {
+        lines.push(Line::from(Span::styled(
+            "No attachments yet. Press `a` to add file(s) or folder(s).",
+            Style::default().fg(Color::Gray),
+        )));
+    } else {
+        for (idx, attachment) in contract.attachments.iter().enumerate() {
+            let prefix = if idx == manager.selected_attachment {
+                ">"
+            } else {
+                " "
+            };
+            let marked = if manager.marked_attachments.contains(&idx) {
+                "[x]"
+            } else {
+                "[ ]"
+            };
+            let style = if idx == manager.selected_attachment {
+                Style::default()
+                    .fg(Color::White)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(Color::Gray)
+            };
+            let mode_style = Style::default().fg(Color::LightMagenta);
+            let path_width = area.width.saturating_sub(20) as usize;
+            lines.push(Line::from(vec![
+                Span::styled(format!("{} {} ", prefix, marked), style),
+                Span::styled(truncate_str(&attachment.path, path_width), style),
+                Span::styled(
+                    format!(" ({})", attachment_mode_summary(attachment.mode)),
+                    mode_style,
+                ),
+            ]));
+        }
+
+        let selected = &contract.attachments[manager
+            .selected_attachment
+            .min(contract.attachments.len().saturating_sub(1))];
+        lines.push(Line::from(""));
+        lines.push(Line::from(Span::styled(
+            format!("selected: {}", selected.path),
+            Style::default().fg(Color::LightCyan),
+        )));
+        lines.push(Line::from(Span::styled(
+            format!("type: {}", attachment_mode_summary(selected.mode)),
+            Style::default().fg(Color::Gray),
+        )));
+        if let Some(label) = &selected.label {
+            lines.push(Line::from(Span::styled(
+                format!("label: {}", label),
+                Style::default().fg(Color::Gray),
+            )));
+        }
+    }
+
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        "a add  d delete marked, else selected  space mark  ↑/↓ move  enter/esc close",
+        Style::default().fg(Color::DarkGray),
+    )));
+
+    frame.render_widget(Clear, area);
+    let paragraph = Paragraph::new(lines).wrap(Wrap { trim: false }).block(
+        Block::default()
+            .title(Span::styled(
+                " Manage Attachments ",
+                Style::default()
+                    .fg(Color::LightMagenta)
+                    .add_modifier(Modifier::BOLD),
+            ))
+            .borders(Borders::ALL)
+            .border_type(BorderType::Thick)
+            .border_style(Style::default().fg(Color::LightMagenta)),
     );
     frame.render_widget(paragraph, area);
 }
@@ -3038,6 +3198,13 @@ fn execution_contract_list_label(contract: &ExecutionContract) -> String {
     }
 }
 
+fn attachment_mode_summary(mode: AttachmentMode) -> &'static str {
+    match mode {
+        AttachmentMode::InlineFile => "file",
+        AttachmentMode::DirectoryTree => "folder",
+    }
+}
+
 fn execution_contract_selection_path(project_dir: &Path) -> PathBuf {
     execution_contracts_dir(project_dir).join(STUDIO_SELECTED_CONTRACT_FILE)
 }
@@ -3143,6 +3310,16 @@ fn load_attachment_specs(contract_path: &Path) -> Vec<AttachmentSpec> {
             Vec::new()
         }
     }
+}
+
+fn persist_attachment_specs(contract_path: &Path, specs: &[AttachmentSpec]) -> Result<()> {
+    let sidecar_path = attachment_sidecar_path(contract_path);
+    if let Some(parent) = sidecar_path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let serialized = serde_json::to_string_pretty(specs)?;
+    fs::write(sidecar_path, format!("{}\n", serialized))?;
+    Ok(())
 }
 
 fn load_execution_contracts(project_dir: &Path) -> Result<(Vec<ExecutionContract>, usize)> {
@@ -3256,6 +3433,46 @@ fn cycle_execution_contract(state: &mut StudioState, forward: bool) {
     }
 }
 
+fn open_attachment_manager(state: &mut StudioState) {
+    state.attachment_manager = Some(AttachmentManagerState::default());
+    state.sync_attachment_manager_selection();
+    state.focused_pane = FocusedPane::Contracts;
+}
+
+fn cycle_attachment_manager_selection(state: &mut StudioState, forward: bool) {
+    let attachment_len = state.selected_execution_contract().attachments.len();
+    if attachment_len == 0 {
+        return;
+    }
+
+    if let Some(manager) = state.attachment_manager.as_mut() {
+        manager.selected_attachment = if forward {
+            (manager.selected_attachment + 1) % attachment_len
+        } else {
+            manager
+                .selected_attachment
+                .checked_sub(1)
+                .unwrap_or_else(|| attachment_len.saturating_sub(1))
+        };
+    }
+}
+
+fn toggle_selected_attachment_mark(state: &mut StudioState) {
+    let attachment_len = state.selected_execution_contract().attachments.len();
+    if attachment_len == 0 {
+        return;
+    }
+
+    if let Some(manager) = state.attachment_manager.as_mut() {
+        let selected = manager
+            .selected_attachment
+            .min(attachment_len.saturating_sub(1));
+        if !manager.marked_attachments.insert(selected) {
+            manager.marked_attachments.remove(&selected);
+        }
+    }
+}
+
 fn cycle_editor_choice(state: &mut StudioState) {
     state.editor_choice = state.editor_choice.next();
     if let Err(err) = persist_editor_choice(&state.project_dir, state.editor_choice) {
@@ -3315,6 +3532,7 @@ fn edit_selected_execution_contract(state: &mut StudioState) {
     state.focused_pane = FocusedPane::Contracts;
 }
 
+#[cfg(not(target_os = "macos"))]
 fn edit_selected_execution_contract_attachments(state: &mut StudioState) -> Result<()> {
     let selected = state.selected_execution_contract().clone();
     let sidecar_path = attachment_sidecar_path(&selected.path);
@@ -3332,14 +3550,227 @@ fn edit_selected_execution_contract_attachments(state: &mut StudioState) -> Resu
     Ok(())
 }
 
+fn queue_selected_execution_contract_attachment_action(state: &mut StudioState) -> Result<()> {
+    #[cfg(target_os = "macos")]
+    {
+        let selected = state.selected_execution_contract().clone();
+        state.pending_action = Some(PendingStudioAction::PickExecutionContractAttachment {
+            contract_path: selected.path,
+        });
+        state.focused_pane = FocusedPane::Contracts;
+        Ok(())
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        edit_selected_execution_contract_attachments(state)
+    }
+}
+
 fn queue_editor_action(state: &mut StudioState, action: PendingStudioAction) {
     state.editor_guide = Some(EditorGuideState { action });
+}
+
+fn remove_selected_execution_contract_attachments(state: &mut StudioState) -> Result<()> {
+    let attachment_len = state.selected_execution_contract().attachments.len();
+    if attachment_len == 0 {
+        state.log("contract has no attachments");
+        return Ok(());
+    }
+
+    let indices = {
+        let manager = state
+            .attachment_manager
+            .as_ref()
+            .context("attachment manager is not open")?;
+        if manager.marked_attachments.is_empty() {
+            BTreeSet::from([manager
+                .selected_attachment
+                .min(attachment_len.saturating_sub(1))])
+        } else {
+            manager
+                .marked_attachments
+                .iter()
+                .copied()
+                .filter(|idx| *idx < attachment_len)
+                .collect()
+        }
+    };
+
+    let contract_path = state.selected_execution_contract().path.clone();
+    let existing = load_attachment_specs(&contract_path);
+    let removed_paths: Vec<String> = existing
+        .iter()
+        .enumerate()
+        .filter(|(idx, _)| indices.contains(idx))
+        .map(|(_, spec)| spec.path.clone())
+        .collect();
+    let retained: Vec<AttachmentSpec> = existing
+        .into_iter()
+        .enumerate()
+        .filter(|(idx, _)| !indices.contains(idx))
+        .map(|(_, spec)| spec)
+        .collect();
+
+    persist_attachment_specs(&contract_path, &retained)?;
+    state.refresh_execution_contracts()?;
+    if let Some(manager) = state.attachment_manager.as_mut() {
+        manager.marked_attachments.clear();
+        if retained.is_empty() {
+            manager.selected_attachment = 0;
+        } else {
+            manager.selected_attachment = manager
+                .selected_attachment
+                .min(retained.len().saturating_sub(1));
+        }
+    }
+    state.log(format!(
+        "removed {} attachment(s){}",
+        removed_paths.len(),
+        if removed_paths.is_empty() {
+            String::new()
+        } else {
+            format!(": {}", removed_paths.join(", "))
+        }
+    ));
+    Ok(())
 }
 
 fn pending_action_label(action: &PendingStudioAction) -> &'static str {
     match action {
         PendingStudioAction::EditExecutionContract { action_label, .. } => action_label,
+        PendingStudioAction::PickExecutionContractAttachment { .. } => "contract attachment",
     }
+}
+
+fn infer_attachment_spec_from_selected_path(
+    selected_path: &Path,
+    project_dir: &Path,
+) -> Result<AttachmentSpec> {
+    let canonical_project = fs::canonicalize(project_dir).with_context(|| {
+        format!(
+            "failed to resolve project root for attachment picker: {}",
+            project_dir.display()
+        )
+    })?;
+    let canonical_selected = fs::canonicalize(selected_path).with_context(|| {
+        format!(
+            "failed to resolve selected attachment path: {}",
+            selected_path.display()
+        )
+    })?;
+    let relative = canonical_selected
+        .strip_prefix(&canonical_project)
+        .map_err(|_| {
+            anyhow::anyhow!(
+                "selected attachment must be inside the project root: {}",
+                project_dir.display()
+            )
+        })?
+        .to_path_buf();
+    let mode = if canonical_selected.is_dir() {
+        AttachmentMode::DirectoryTree
+    } else if canonical_selected.is_file() {
+        AttachmentMode::InlineFile
+    } else {
+        anyhow::bail!(
+            "selected attachment is neither a file nor a directory: {}",
+            selected_path.display()
+        );
+    };
+
+    Ok(AttachmentSpec {
+        path: normalize_relative_display_path(&relative),
+        mode,
+        label: None,
+    })
+}
+
+fn append_attachment_specs_for_paths(
+    contract_path: &Path,
+    project_dir: &Path,
+    selected_paths: &[PathBuf],
+) -> Result<Vec<AttachmentSpec>> {
+    let mut specs = load_attachment_specs(contract_path);
+    let mut changed = false;
+
+    for selected_path in selected_paths {
+        let spec = infer_attachment_spec_from_selected_path(selected_path, project_dir)?;
+        if specs
+            .iter()
+            .any(|existing| existing.path == spec.path && existing.mode == spec.mode)
+        {
+            continue;
+        }
+        specs.push(spec);
+        changed = true;
+    }
+
+    if changed || !attachment_sidecar_path(contract_path).exists() {
+        persist_attachment_specs(contract_path, &specs)?;
+    }
+
+    Ok(specs)
+}
+
+#[cfg(target_os = "macos")]
+fn pick_attachment_paths(project_dir: &Path) -> Result<Vec<PathBuf>> {
+    let script = r#"
+ObjC.import("AppKit");
+ObjC.import("Foundation");
+var app = $.NSApplication.sharedApplication;
+app.setActivationPolicy($.NSApplicationActivationPolicyRegular);
+var panel = $.NSOpenPanel.openPanel;
+panel.setCanChooseFiles(true);
+panel.setCanChooseDirectories(true);
+panel.setAllowsMultipleSelection(true);
+panel.setCanCreateDirectories(false);
+panel.setResolvesAliases(true);
+panel.setPrompt($("Attach"));
+panel.setMessage($("Choose file(s) or folder(s) to attach"));
+var projectDir = $.NSProcessInfo.processInfo.environment.objectForKey("FOUNDRY_PROJECT_DIR");
+if (projectDir) {
+    panel.setDirectoryURL($.NSURL.fileURLWithPath($(ObjC.unwrap(projectDir))));
+}
+$.NSRunningApplication.currentApplication.activateWithOptions($.NSApplicationActivateIgnoringOtherApps);
+app.activateIgnoringOtherApps(true);
+panel.orderFrontRegardless;
+var response = panel.runModal;
+if (response !== $.NSModalResponseOK) { ""; }
+else {
+    var urls = panel.URLs;
+    var out = [];
+    for (var i = 0; i < urls.count; i++) {
+        out.push(ObjC.unwrap(urls.objectAtIndex(i).path));
+    }
+    out.join("\n");
+}
+"#;
+
+    let output = Command::new("osascript")
+        .args(["-l", "JavaScript", "-e", script])
+        .env("FOUNDRY_PROJECT_DIR", project_dir)
+        .output()
+        .context("failed to open macOS attachment picker")?;
+
+    if !output.status.success() {
+        anyhow::bail!(
+            "attachment picker failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+    }
+
+    Ok(String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .map(PathBuf::from)
+        .collect())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn pick_attachment_paths(_project_dir: &Path) -> Result<Vec<PathBuf>> {
+    anyhow::bail!("native attachment picker is only available on macOS");
 }
 
 fn delete_selected_execution_contract(state: &mut StudioState) -> Result<()> {
@@ -3424,6 +3855,53 @@ fn handle_pending_action(
                 }
                 Err(err) => {
                     state.log(format!("failed to edit {}: {}", action_label, err));
+                }
+            }
+        }
+        PendingStudioAction::PickExecutionContractAttachment { contract_path } => {
+            terminal_event_reader.abort();
+            tui::restore_terminal(terminal)?;
+            let picker_result = pick_attachment_paths(&state.project_dir);
+            *terminal = tui::setup_terminal()?;
+            *terminal_event_reader = spawn_terminal_event_reader(event_tx.clone());
+            match picker_result {
+                Ok(paths) if paths.is_empty() => {
+                    state.log("attachment picker canceled");
+                }
+                Ok(paths) => match append_attachment_specs_for_paths(
+                    &contract_path,
+                    &state.project_dir,
+                    &paths,
+                ) {
+                    Ok(specs) => {
+                        state.refresh_execution_contracts()?;
+                        let selected_paths = paths
+                            .iter()
+                            .filter_map(|path| {
+                                infer_attachment_spec_from_selected_path(path, &state.project_dir)
+                                    .ok()
+                                    .map(|spec| spec.path)
+                            })
+                            .collect::<Vec<_>>();
+                        state.log(format!(
+                            "attached {} item(s) to contract{}",
+                            selected_paths.len(),
+                            if selected_paths.is_empty() {
+                                "".to_string()
+                            } else {
+                                format!(": {}", selected_paths.join(", "))
+                            }
+                        ));
+                        if specs.is_empty() {
+                            state.log("contract has no attachments");
+                        }
+                    }
+                    Err(err) => {
+                        state.log(format!("failed to add attachment: {}", err));
+                    }
+                },
+                Err(err) => {
+                    state.log(format!("attachment picker failed: {}", err));
                 }
             }
         }
@@ -4582,6 +5060,7 @@ mod tests {
             pending_action: None,
             editor_guide: None,
             delete_confirmation: None,
+            attachment_manager: None,
         }
     }
 
@@ -4657,6 +5136,37 @@ mod tests {
             execution_contract_list_label(&contract),
             "Standard Build Contract [2 attached]"
         );
+    }
+
+    #[test]
+    fn append_attachment_specs_for_paths_writes_relative_paths_and_modes() -> Result<()> {
+        let project_dir = temp_test_dir("foundry-append-attachments");
+        let contracts_dir = project_dir.join(STUDIO_ROOT_DIR).join(STUDIO_CONTRACTS_DIR);
+        fs::create_dir_all(project_dir.join("docs"))?;
+        fs::create_dir_all(&contracts_dir)?;
+        fs::write(
+            project_dir.join("Cargo.toml"),
+            "[package]\nname = \"demo\"\n",
+        )?;
+        fs::write(project_dir.join("docs/readme.md"), "# Docs\n")?;
+        let contract_path = contracts_dir.join("standard.md");
+        fs::write(&contract_path, "# Standard Build Contract\n")?;
+
+        let specs = append_attachment_specs_for_paths(
+            &contract_path,
+            &project_dir,
+            &[project_dir.join("Cargo.toml"), project_dir.join("docs")],
+        )?;
+        let loaded_specs = load_attachment_specs(&contract_path);
+
+        fs::remove_dir_all(&project_dir)?;
+        assert_eq!(specs, loaded_specs);
+        assert_eq!(specs.len(), 2);
+        assert_eq!(specs[0].path, "Cargo.toml");
+        assert_eq!(specs[0].mode, AttachmentMode::InlineFile);
+        assert_eq!(specs[1].path, "docs");
+        assert_eq!(specs[1].mode, AttachmentMode::DirectoryTree);
+        Ok(())
     }
 
     #[test]
@@ -5560,7 +6070,7 @@ Options:
     }
 
     #[test]
-    fn t_edits_selected_contract_attachments_when_contracts_pane_is_focused() -> Result<()> {
+    fn t_opens_attachment_manager_when_contracts_pane_is_focused() -> Result<()> {
         let project_dir = temp_test_dir("foundry-edit-attachments-keybind");
         fs::create_dir_all(project_dir.join(STUDIO_ROOT_DIR))?;
 
@@ -5571,7 +6081,6 @@ Options:
         state.selected_execution_contract = selected_index;
         state.focused_pane = FocusedPane::Contracts;
 
-        let sidecar_path = attachment_sidecar_path(&state.selected_execution_contract().path);
         let (tx, _rx) = mpsc::unbounded_channel();
         handle_global_key(
             &mut state,
@@ -5579,7 +6088,73 @@ Options:
             &tx,
         );
 
-        assert!(sidecar_path.exists());
+        assert!(state.attachment_manager.is_some());
+        assert!(state.pending_action.is_none());
+        assert!(state.editor_guide.is_none());
+        assert_eq!(state.focused_pane, FocusedPane::Contracts);
+
+        fs::remove_dir_all(&project_dir)?;
+        Ok(())
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn attachment_manager_a_queues_picker_on_macos() -> Result<()> {
+        let project_dir = temp_test_dir("foundry-attachment-manager-add");
+        fs::create_dir_all(project_dir.join(STUDIO_ROOT_DIR))?;
+
+        let mut state = test_state();
+        state.project_dir = project_dir.clone();
+        let (contracts, selected_index) = load_execution_contracts(&project_dir)?;
+        state.execution_contracts = contracts;
+        state.selected_execution_contract = selected_index;
+        state.focused_pane = FocusedPane::Contracts;
+        open_attachment_manager(&mut state);
+
+        let selected_contract_path = state.selected_execution_contract().path.clone();
+        handle_attachment_manager_key(
+            &mut state,
+            event::KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE),
+        );
+
+        match state
+            .pending_action
+            .as_ref()
+            .expect("pending picker action")
+        {
+            PendingStudioAction::PickExecutionContractAttachment { contract_path } => {
+                assert_eq!(contract_path, &selected_contract_path);
+            }
+            PendingStudioAction::EditExecutionContract { .. } => {
+                panic!("expected native picker action");
+            }
+        }
+        assert!(state.attachment_manager.is_some());
+
+        fs::remove_dir_all(&project_dir)?;
+        Ok(())
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    #[test]
+    fn attachment_manager_a_opens_editor_on_non_macos() -> Result<()> {
+        let project_dir = temp_test_dir("foundry-attachment-manager-add");
+        fs::create_dir_all(project_dir.join(STUDIO_ROOT_DIR))?;
+
+        let mut state = test_state();
+        state.project_dir = project_dir.clone();
+        let (contracts, selected_index) = load_execution_contracts(&project_dir)?;
+        state.execution_contracts = contracts;
+        state.selected_execution_contract = selected_index;
+        state.focused_pane = FocusedPane::Contracts;
+        open_attachment_manager(&mut state);
+
+        let sidecar_path = attachment_sidecar_path(&state.selected_execution_contract().path);
+        handle_attachment_manager_key(
+            &mut state,
+            event::KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE),
+        );
+
         let guide = state
             .editor_guide
             .as_ref()
@@ -5589,9 +6164,118 @@ Options:
                 assert_eq!(path, &sidecar_path);
                 assert_eq!(*action_label, "contract attachments");
             }
+            PendingStudioAction::PickExecutionContractAttachment { .. } => {
+                panic!("expected editor fallback action");
+            }
         }
+        assert!(state.attachment_manager.is_some());
 
         fs::remove_dir_all(&project_dir)?;
+        Ok(())
+    }
+
+    #[test]
+    fn attachment_manager_d_removes_only_marked_attachments() -> Result<()> {
+        let project_dir = temp_test_dir("foundry-attachment-manager-delete");
+        let contracts_dir = project_dir.join(STUDIO_ROOT_DIR).join(STUDIO_CONTRACTS_DIR);
+        fs::create_dir_all(&contracts_dir)?;
+        let contract_path = contracts_dir.join("standard.md");
+        fs::write(&contract_path, "# Standard Build Contract\n")?;
+        persist_attachment_specs(
+            &contract_path,
+            &[
+                AttachmentSpec {
+                    path: "Cargo.toml".into(),
+                    mode: AttachmentMode::InlineFile,
+                    label: None,
+                },
+                AttachmentSpec {
+                    path: "src".into(),
+                    mode: AttachmentMode::DirectoryTree,
+                    label: None,
+                },
+            ],
+        )?;
+
+        let mut state = test_state();
+        state.project_dir = project_dir.clone();
+        let (contracts, selected_index) = load_execution_contracts(&project_dir)?;
+        state.execution_contracts = contracts;
+        state.selected_execution_contract = selected_index;
+        open_attachment_manager(&mut state);
+        handle_attachment_manager_key(
+            &mut state,
+            event::KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE),
+        );
+        handle_attachment_manager_key(
+            &mut state,
+            event::KeyEvent::new(KeyCode::Down, KeyModifiers::NONE),
+        );
+        handle_attachment_manager_key(
+            &mut state,
+            event::KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE),
+        );
+
+        let remaining = load_attachment_specs(&contract_path);
+        fs::remove_dir_all(&project_dir)?;
+        assert_eq!(remaining.len(), 1);
+        assert_eq!(remaining[0].path, "src");
+        assert!(state.attachment_manager.is_some());
+        assert!(state
+            .logs
+            .last()
+            .is_some_and(|(_, line)| { line.contains("removed 1 attachment(s): Cargo.toml") }));
+        Ok(())
+    }
+
+    #[test]
+    fn attachment_manager_d_removes_selected_and_clamps_selection_when_unmarked() -> Result<()> {
+        let project_dir = temp_test_dir("foundry-attachment-manager-delete-selected");
+        let contracts_dir = project_dir.join(STUDIO_ROOT_DIR).join(STUDIO_CONTRACTS_DIR);
+        fs::create_dir_all(&contracts_dir)?;
+        let contract_path = contracts_dir.join("standard.md");
+        fs::write(&contract_path, "# Standard Build Contract\n")?;
+        persist_attachment_specs(
+            &contract_path,
+            &[
+                AttachmentSpec {
+                    path: "Cargo.toml".into(),
+                    mode: AttachmentMode::InlineFile,
+                    label: None,
+                },
+                AttachmentSpec {
+                    path: "src".into(),
+                    mode: AttachmentMode::DirectoryTree,
+                    label: None,
+                },
+            ],
+        )?;
+
+        let mut state = test_state();
+        state.project_dir = project_dir.clone();
+        let (contracts, selected_index) = load_execution_contracts(&project_dir)?;
+        state.execution_contracts = contracts;
+        state.selected_execution_contract = selected_index;
+        open_attachment_manager(&mut state);
+        handle_attachment_manager_key(
+            &mut state,
+            event::KeyEvent::new(KeyCode::Down, KeyModifiers::NONE),
+        );
+        handle_attachment_manager_key(
+            &mut state,
+            event::KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE),
+        );
+
+        let remaining = load_attachment_specs(&contract_path);
+        let selected_attachment = state
+            .attachment_manager
+            .as_ref()
+            .map(|manager| manager.selected_attachment)
+            .unwrap_or(usize::MAX);
+        fs::remove_dir_all(&project_dir)?;
+        assert_eq!(remaining.len(), 1);
+        assert_eq!(remaining[0].path, "Cargo.toml");
+        assert_eq!(selected_attachment, 0);
         Ok(())
     }
 
