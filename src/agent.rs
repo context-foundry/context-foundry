@@ -1,5 +1,5 @@
 use anyhow::Result;
-use portable_pty::{CommandBuilder, PtySize, native_pty_system};
+use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use serde_json::Value;
 use std::io::BufRead;
 use std::path::Path;
@@ -91,12 +91,16 @@ pub struct ProviderRunOptions<'a> {
 
 pub async fn run_provider_session(options: ProviderRunOptions<'_>) -> Result<AgentResult> {
     let timestamp = chrono::Utc::now().format("%Y%m%d-%H%M%S");
-    let log_file_path = options
-        .log_dir
-        .join(format!("studio-{}-{}.jsonl", options.provider.slug(), timestamp));
-    let final_message_path = options
-        .log_dir
-        .join(format!("studio-{}-{}-last.txt", options.provider.slug(), timestamp));
+    let log_file_path = options.log_dir.join(format!(
+        "studio-{}-{}.jsonl",
+        options.provider.slug(),
+        timestamp
+    ));
+    let final_message_path = options.log_dir.join(format!(
+        "studio-{}-{}-last.txt",
+        options.provider.slug(),
+        timestamp
+    ));
     std::fs::create_dir_all(options.log_dir)?;
 
     let mut cmd = match options.provider {
@@ -238,6 +242,7 @@ pub async fn run_provider_session(options: ProviderRunOptions<'_>) -> Result<Age
 /// By spawning inside a PTY, Node.js sees a terminal and uses line-buffered
 /// (synchronous) writes — each JSON event flushes immediately, giving us
 /// true real-time streaming in the TUI.
+#[allow(clippy::too_many_arguments)]
 pub async fn run_agent(
     role: &AgentRole,
     model: &str,
@@ -392,15 +397,8 @@ fn read_pty_output(
                                 if matches!(t, "user" | "system") {
                                     continue;
                                 }
-                                let sub = v
-                                    .get("subtype")
-                                    .and_then(|s| s.as_str())
-                                    .unwrap_or("");
-                                let display_type = if t == "assistant" {
-                                    model_name
-                                } else {
-                                    t
-                                };
+                                let sub = v.get("subtype").and_then(|s| s.as_str()).unwrap_or("");
+                                let display_type = if t == "assistant" { model_name } else { t };
                                 let label = if sub.is_empty() {
                                     format!("[{}]", display_type)
                                 } else {
@@ -511,7 +509,14 @@ fn parse_codex_event(line: &str, model_name: &str) -> Option<AgentOutputEvent> {
         if kind.contains("tool") || kind.contains("call") {
             let input_preview = extract_string_by_keys(
                 &v,
-                &["input", "arguments", "command", "cmd", "preview", "description"],
+                &[
+                    "input",
+                    "arguments",
+                    "command",
+                    "cmd",
+                    "preview",
+                    "description",
+                ],
             )
             .unwrap_or_default();
             return Some(AgentOutputEvent::ToolUse {
@@ -542,10 +547,9 @@ fn parse_codex_event(line: &str, model_name: &str) -> Option<AgentOutputEvent> {
     }
 
     if kind.contains("completed") || kind == "result" || kind == "final" {
-        if let Some(text) = extract_string_by_keys(
-            &v,
-            &["result", "message", "content", "text", "summary"],
-        ) {
+        if let Some(text) =
+            extract_string_by_keys(&v, &["result", "message", "content", "text", "summary"])
+        {
             if !text.is_empty() {
                 return Some(AgentOutputEvent::Result(text));
             }
@@ -555,13 +559,7 @@ fn parse_codex_event(line: &str, model_name: &str) -> Option<AgentOutputEvent> {
     if let Some(text) = extract_string_by_keys(
         &v,
         &[
-            "text",
-            "delta",
-            "message",
-            "content",
-            "summary",
-            "output",
-            "reason",
+            "text", "delta", "message", "content", "summary", "output", "reason",
         ],
     ) {
         if !text.is_empty() {
@@ -575,9 +573,7 @@ fn parse_codex_event(line: &str, model_name: &str) -> Option<AgentOutputEvent> {
 
             return Some(AgentOutputEvent::Text(format!(
                 "[{}:{}] {}",
-                model_name,
-                kind,
-                text
+                model_name, kind, text
             )));
         }
     }
@@ -607,14 +603,7 @@ fn extract_first_string(value: &Value) -> Option<&str> {
         Value::Array(items) => items.iter().find_map(extract_first_string),
         Value::Object(map) => {
             let preferred = [
-                "text",
-                "delta",
-                "message",
-                "content",
-                "output",
-                "summary",
-                "reason",
-                "error",
+                "text", "delta", "message", "content", "output", "summary", "reason", "error",
                 "command",
             ];
 
@@ -926,7 +915,10 @@ mod tests {
             r#"{"type":"tool_call","tool":"shell","input":{"command":"cargo test --quiet"}}"#;
         let event = parse_codex_event(json, "gpt-5.4");
         match event {
-            Some(AgentOutputEvent::ToolUse { tool, input_preview }) => {
+            Some(AgentOutputEvent::ToolUse {
+                tool,
+                input_preview,
+            }) => {
                 assert_eq!(tool, "shell");
                 assert!(input_preview.contains("cargo test"));
             }

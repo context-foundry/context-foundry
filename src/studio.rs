@@ -1334,7 +1334,7 @@ fn start_sessions(
     let requested: Vec<ModelProvider> = if let Some((provider, _, _)) = &follow_up_seed {
         vec![*provider]
     } else {
-        state.provider_mode.providers().iter().copied().collect()
+        state.provider_mode.providers().to_vec()
     };
     let blocked: Vec<String> = requested
         .iter()
@@ -1755,9 +1755,7 @@ fn render_resize_handle(
     } else {
         Style::default().fg(Color::DarkGray)
     };
-    let row = std::iter::repeat(fill)
-        .take(area.width as usize)
-        .collect::<String>();
+    let row = std::iter::repeat_n(fill, area.width as usize).collect::<String>();
     let lines = (0..area.height)
         .map(|_| Line::from(Span::styled(row.clone(), style)))
         .collect::<Vec<_>>();
@@ -2569,6 +2567,7 @@ fn collect_output_targets(root: &Path) -> Result<Vec<String>> {
     Ok(found)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn compose_smoothed_prompt(
     provider_label: &str,
     raw_prompt: &str,
@@ -2989,6 +2988,7 @@ fn resolve_attachment_with_root(
     }
 }
 
+#[allow(dead_code)]
 fn resolve_attachment(spec: &AttachmentSpec, project_dir: &Path) -> ResolvedAttachment {
     let requested_path = attachment_requested_display_path(spec);
     let canonical_project = match fs::canonicalize(project_dir) {

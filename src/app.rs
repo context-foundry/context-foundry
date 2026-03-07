@@ -7,14 +7,14 @@ use std::time::Duration;
 use tokio::sync::mpsc;
 
 use crate::agent::{self, AgentOutputEvent, AgentRole};
-use crate::update;
-use crate::utils::truncate_str;
 use crate::config::Config;
 use crate::git;
 use crate::patterns;
 use crate::prompts;
 use crate::task::{self, Task};
 use crate::tui;
+use crate::update;
+use crate::utils::truncate_str;
 
 // ─── App State ───────────────────────────────────────────────
 
@@ -214,7 +214,10 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
     // Restore terminal
     tui::restore_terminal(&mut terminal)?;
 
-    println!("\nFoundry stopped. {} tasks completed.", state.completed_count);
+    println!(
+        "\nFoundry stopped. {} tasks completed.",
+        state.completed_count
+    );
     Ok(())
 }
 
@@ -223,40 +226,44 @@ fn handle_event(state: &mut AppState, event: AppEvent) {
         AppEvent::AgentOutput(output) => {
             state.events_received += 1;
             match output {
-            AgentOutputEvent::Text(text) => {
-                // Streaming text — append to current line or start new
-                state.agent_output.push(text);
-            }
-            AgentOutputEvent::ToolUse { tool, input_preview } => {
-                let msg = if input_preview.is_empty() {
-                    format!("[tool] {}", tool)
-                } else {
-                    format!("[tool] {} — {}", tool, input_preview)
-                };
-                state.agent_output.push(msg);
-            }
-            AgentOutputEvent::ToolResult { output_preview } => {
-                if !output_preview.is_empty() {
-                    // Show first line only to avoid flooding
-                    let first_line = output_preview.lines().next().unwrap_or("");
-                    let display = if first_line.len() > 100 {
-                        format!("[result] {}...", truncate_str(first_line, 100))
+                AgentOutputEvent::Text(text) => {
+                    // Streaming text — append to current line or start new
+                    state.agent_output.push(text);
+                }
+                AgentOutputEvent::ToolUse {
+                    tool,
+                    input_preview,
+                } => {
+                    let msg = if input_preview.is_empty() {
+                        format!("[tool] {}", tool)
                     } else {
-                        format!("[result] {}", first_line)
+                        format!("[tool] {} — {}", tool, input_preview)
                     };
-                    state.agent_output.push(display);
+                    state.agent_output.push(msg);
+                }
+                AgentOutputEvent::ToolResult { output_preview } => {
+                    if !output_preview.is_empty() {
+                        // Show first line only to avoid flooding
+                        let first_line = output_preview.lines().next().unwrap_or("");
+                        let display = if first_line.len() > 100 {
+                            format!("[result] {}...", truncate_str(first_line, 100))
+                        } else {
+                            format!("[result] {}", first_line)
+                        };
+                        state.agent_output.push(display);
+                    }
+                }
+                AgentOutputEvent::Stderr(line) => {
+                    state.agent_output.push(format!("[stderr] {}", line));
+                }
+                AgentOutputEvent::Result(text) => {
+                    state.agent_output.push(String::new());
+                    for line in text.lines().take(10) {
+                        state.agent_output.push(line.to_string());
+                    }
                 }
             }
-            AgentOutputEvent::Stderr(line) => {
-                state.agent_output.push(format!("[stderr] {}", line));
-            }
-            AgentOutputEvent::Result(text) => {
-                state.agent_output.push(String::new());
-                for line in text.lines().take(10) {
-                    state.agent_output.push(line.to_string());
-                }
-            }
-        }},
+        }
         AppEvent::AgentDone(success) => {
             if let Some((ref role, _)) = state.current_agent {
                 let status = if success { "completed" } else { "FAILED" };
@@ -316,7 +323,9 @@ fn handle_event(state: &mut AppState, event: AppEvent) {
                         state.stop_after_task = true;
                         let _ = std::fs::create_dir_all(&state.buildloop_dir);
                         let _ = std::fs::write(state.buildloop_dir.join("stop"), "");
-                        state.log("Will stop after current task completes (Ctrl+C again to force quit)");
+                        state.log(
+                            "Will stop after current task completes (Ctrl+C again to force quit)",
+                        );
                     }
                 }
                 KeyCode::Up => {
@@ -339,11 +348,7 @@ fn handle_event(state: &mut AppState, event: AppEvent) {
 
 // ─── Build Loop (runs in background task) ────────────────────
 
-async fn build_loop(
-    project_dir: PathBuf,
-    config: Config,
-    tx: mpsc::UnboundedSender<AppEvent>,
-) {
+async fn build_loop(project_dir: PathBuf, config: Config, tx: mpsc::UnboundedSender<AppEvent>) {
     let plan_path = project_dir.join("IMPL_PLAN.md");
     let buildloop_dir = project_dir.join(".buildloop");
     let log_dir = buildloop_dir.join("logs");
@@ -464,7 +469,9 @@ async fn build_loop(
                 Err(_) => 0,
             };
 
-            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::DiscoveryCompleted(new_tasks)));
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::DiscoveryCompleted(
+                new_tasks,
+            )));
 
             if new_tasks == 0 {
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
@@ -476,7 +483,10 @@ async fn build_loop(
                 let _ = git::commit_and_push(
                     &project_dir,
                     &format!("D{}", discovery_round),
-                    &format!("Discovery round {} — {} new tasks", discovery_round, new_tasks),
+                    &format!(
+                        "Discovery round {} — {} new tasks",
+                        discovery_round, new_tasks
+                    ),
                     false,
                 );
             }
@@ -492,6 +502,7 @@ async fn build_loop(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn process_task(
     task_info: &Task,
     project_dir: &Path,
@@ -627,8 +638,8 @@ async fn process_task(
     .await;
 
     // ── COMMIT ──
-    let committed = git::commit_and_push(project_dir, task_id, task_desc, !validated)
-        .unwrap_or(false);
+    let committed =
+        git::commit_and_push(project_dir, task_id, task_desc, !validated).unwrap_or(false);
 
     if committed {
         let prefix = if validated { "feat" } else { "WIP" };
@@ -678,6 +689,7 @@ async fn process_task(
 
 // ─── Review Loop (unified validator + auditor) ───────────────
 
+#[allow(clippy::too_many_arguments)]
 async fn run_review_loop(
     task_id: &str,
     task_desc: &str,
@@ -716,13 +728,8 @@ async fn run_review_loop(
             config.reviewer_model.clone(),
         )));
 
-        let prompt = prompts::reviewer_prompt(
-            task_id,
-            task_desc,
-            &files_list,
-            pass,
-            pattern_context,
-        );
+        let prompt =
+            prompts::reviewer_prompt(task_id, task_desc, &files_list, pass, pattern_context);
         let review_result = agent::run_agent(
             &AgentRole::Reviewer,
             &config.reviewer_model,
@@ -813,6 +820,7 @@ async fn run_review_loop(
 
 // ─── Pattern Extraction ──────────────────────────────────────
 
+#[allow(clippy::too_many_arguments)]
 async fn run_pattern_extraction(
     task_id: &str,
     task_desc: &str,
@@ -953,13 +961,28 @@ fn parse_audit_findings(report_path: &Path) -> (usize, usize, usize) {
 
     match serde_json::from_str::<serde_json::Value>(&json_str) {
         Ok(v) => {
-            let high = v.get("high").and_then(|a| a.as_array()).map(|a| a.len()).unwrap_or(0);
-            let medium = v.get("medium").and_then(|a| a.as_array()).map(|a| a.len()).unwrap_or(0);
-            let low = v.get("low").and_then(|a| a.as_array()).map(|a| a.len()).unwrap_or(0);
+            let high = v
+                .get("high")
+                .and_then(|a| a.as_array())
+                .map(|a| a.len())
+                .unwrap_or(0);
+            let medium = v
+                .get("medium")
+                .and_then(|a| a.as_array())
+                .map(|a| a.len())
+                .unwrap_or(0);
+            let low = v
+                .get("low")
+                .and_then(|a| a.as_array())
+                .map(|a| a.len())
+                .unwrap_or(0);
             (high, medium, low)
         }
         Err(e) => {
-            eprintln!("warning: failed to parse audit JSON: {}, treating as 1 high finding", e);
+            eprintln!(
+                "warning: failed to parse audit JSON: {}, treating as 1 high finding",
+                e
+            );
             (1, 0, 0)
         }
     }
@@ -1055,7 +1078,10 @@ pub async fn run_headless(project_dir: &Path) -> Result<()> {
             AppEvent::AgentOutput(AgentOutputEvent::Text(text)) => {
                 println!("{}", text);
             }
-            AppEvent::AgentOutput(AgentOutputEvent::ToolUse { tool, input_preview }) => {
+            AppEvent::AgentOutput(AgentOutputEvent::ToolUse {
+                tool,
+                input_preview,
+            }) => {
                 eprintln!("[tool] {} {}", tool, input_preview);
             }
             AppEvent::AgentOutput(AgentOutputEvent::ToolResult { output_preview }) => {

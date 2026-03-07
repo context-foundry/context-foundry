@@ -71,10 +71,7 @@ pub fn load_patterns(dir: &Path) -> Vec<Pattern> {
                 } else if let Ok(p) = serde_json::from_str::<Pattern>(&content) {
                     patterns.push(p);
                 } else {
-                    eprintln!(
-                        "warning: failed to parse patterns file: {}",
-                        path.display()
-                    );
+                    eprintln!("warning: failed to parse patterns file: {}", path.display());
                 }
             }
         }
@@ -109,9 +106,7 @@ pub fn match_patterns<'a>(patterns: &'a [Pattern], task_desc: &str) -> Vec<&'a P
             // Tech stack matches
             for tech in &p.tech_stack {
                 let tech_lower = tech.to_lowercase();
-                if desc_words.iter().any(|w| *w == tech_lower) {
-                    score += 1;
-                } else if desc_lower.contains(&tech_lower) {
+                if desc_words.iter().any(|w| *w == tech_lower) || desc_lower.contains(&tech_lower) {
                     score += 1;
                 }
             }

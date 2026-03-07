@@ -137,10 +137,18 @@ fn fetch_latest_binary_release() -> Result<Option<BinaryRelease>> {
 
     for release in &releases {
         // Skip drafts and pre-releases
-        if release.get("draft").and_then(|d| d.as_bool()).unwrap_or(false) {
+        if release
+            .get("draft")
+            .and_then(|d| d.as_bool())
+            .unwrap_or(false)
+        {
             continue;
         }
-        if release.get("prerelease").and_then(|p| p.as_bool()).unwrap_or(false) {
+        if release
+            .get("prerelease")
+            .and_then(|p| p.as_bool())
+            .unwrap_or(false)
+        {
             continue;
         }
 
@@ -218,13 +226,19 @@ pub fn run_update() -> Result<()> {
         Ok(None) => {
             println!("No binary releases found (only Python packages exist).");
             println!("Install from source:");
-            println!("  cargo install --git https://github.com/{} foundry", GITHUB_REPO);
+            println!(
+                "  cargo install --git https://github.com/{} foundry",
+                GITHUB_REPO
+            );
             return Ok(());
         }
         Err(e) => {
             println!("Failed to check for updates: {}", e);
             println!("Install from source:");
-            println!("  cargo install --git https://github.com/{} foundry", GITHUB_REPO);
+            println!(
+                "  cargo install --git https://github.com/{} foundry",
+                GITHUB_REPO
+            );
             return Ok(());
         }
     };
@@ -250,7 +264,10 @@ pub fn run_update() -> Result<()> {
                 std::env::consts::ARCH
             );
             println!("Install from source:");
-            println!("  cargo install --git https://github.com/{} foundry", GITHUB_REPO);
+            println!(
+                "  cargo install --git https://github.com/{} foundry",
+                GITHUB_REPO
+            );
             return Ok(());
         }
     };
@@ -272,13 +289,19 @@ pub fn run_update() -> Result<()> {
     let tarball_url = match tarball_url {
         Some(url) => url,
         None => {
-            println!("No binary found for target {} in release v{}.", target, latest);
+            println!(
+                "No binary found for target {} in release v{}.",
+                target, latest
+            );
             println!("Available assets:");
             for (name, _) in &assets {
                 println!("  - {}", name);
             }
             println!("\nInstall from source:");
-            println!("  cargo install --git https://github.com/{} foundry", GITHUB_REPO);
+            println!(
+                "  cargo install --git https://github.com/{} foundry",
+                GITHUB_REPO
+            );
             return Ok(());
         }
     };
@@ -334,7 +357,7 @@ pub fn run_update() -> Result<()> {
 
     // Update cache
     if let Ok(dir) = foundry_cache_dir() {
-        let _ = fs::write(dir.join("last-update-check"), &latest);
+        let _ = fs::write(dir.join("last-update-check"), latest);
     }
 
     println!("Updated to v{}!", latest);
@@ -399,8 +422,7 @@ fn replace_binary(target: &Path, source: &Path) -> Result<()> {
 
     // Rename current → .old
     if target.exists() {
-        fs::rename(target, &backup)
-            .context("failed to backup current binary")?;
+        fs::rename(target, &backup).context("failed to backup current binary")?;
     }
 
     // Copy new binary into place
@@ -447,10 +469,7 @@ mod tests {
     #[test]
     fn test_get_target_triple() {
         let triple = get_target_triple();
-        assert!(triple.is_some() || cfg!(not(any(
-            target_os = "macos",
-            target_os = "linux"
-        ))));
+        assert!(triple.is_some() || cfg!(not(any(target_os = "macos", target_os = "linux"))));
     }
 
     #[test]
