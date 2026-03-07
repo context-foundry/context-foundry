@@ -1,6 +1,8 @@
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
-use crossterm::event::{self, Event, KeyCode, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+use crossterm::event::{
+    self, Event, KeyCode, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
+};
 use futures::{future::join_all, StreamExt};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
@@ -13,7 +15,7 @@ use std::{
     collections::{BTreeSet, HashMap},
     fs,
     io::Read,
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
     process::{Command, Stdio},
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -53,6 +55,15 @@ const MIN_LEFT_SECTION_HEIGHT: u16 = 5;
 const MIN_LEFT_BRIEF_HEIGHT: u16 = 8;
 const MIN_RIGHT_SECTION_HEIGHT: u16 = 5;
 const MIN_OUTPUT_HEIGHT: u16 = 8;
+const COLUMN_SPLIT_WIDTH: u16 = 1;
+const ROW_SPLIT_HEIGHT: u16 = 1;
+const LEFT_SPLIT_COUNT: u16 = 3;
+const RIGHT_SPLIT_COUNT: u16 = 2;
+const COLUMN_RESIZE_HIT_MARGIN: u16 = 2;
+const MAX_INLINE_FILE_BYTES: usize = 64 * 1024;
+const MAX_TREE_DEPTH: usize = 3;
+const MAX_TREE_FILES: usize = 50;
+const MAX_TOTAL_ATTACHMENT_CHARS: usize = 100_000;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum FocusedPane {
@@ -108,6 +119,12 @@ struct StudioLayout {
     body: Rect,
     left_body: Rect,
     right_body: Rect,
+    column_split: Rect,
+    left_scan_prompt_split: Rect,
+    left_prompt_contracts_split: Rect,
+    left_contracts_brief_split: Rect,
+    right_sessions_output_split: Rect,
+    right_output_activity_split: Rect,
     scan: Rect,
     prompt: Rect,
     contracts: Rect,
@@ -266,10 +283,7 @@ impl ProjectScan {
             "stack: {}",
             join_or_none(&self.stack_signals, ", ")
         ));
-        lines.push(format!(
-            "top: {}",
-            join_or_none(&self.top_level, ", ")
-        ));
+        lines.push(format!("top: {}", join_or_none(&self.top_level, ", ")));
         lines.push(format!(
             "data: {}",
             join_or_none(&self.data_candidates, ", ")
@@ -299,12 +313,42 @@ struct SessionState {
     prompt_path: Option<PathBuf>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+struct AttachmentSpec {
+    path: String,
+    mode: AttachmentMode,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    label: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+enum AttachmentMode {
+    InlineFile,
+    DirectoryTree,
+}
+
+#[derive(Clone, Debug)]
+struct ResolvedAttachment {
+    spec: AttachmentSpec,
+    label: String,
+    content: String,
+    truncated: bool,
+    error: Option<String>,
+}
+
+#[derive(Clone, Debug)]
+struct PreviewPromptCache {
+    rendered_prompt: String,
+}
+
+#[derive(Clone, Debug)]
 struct ExecutionContract {
     file_name: String,
     path: PathBuf,
     name: String,
     body: String,
+    attachments: Vec<AttachmentSpec>,
 }
 
 #[derive(Clone)]
@@ -389,6 +433,8 @@ struct StudioState {
     sessions: Vec<SessionState>,
     selected_session: usize,
     output_scroll: usize,
+    preview_scroll: usize,
+    preview_cache: Option<PreviewPromptCache>,
     logs: Vec<(DateTime<Utc>, String)>,
     tick_count: usize,
     should_quit: bool,
@@ -519,6 +565,8 @@ impl StudioState {
             sessions: Vec::new(),
             selected_session: 0,
             output_scroll: 0,
+            preview_scroll: 0,
+            preview_cache: None,
             logs: Vec::new(),
             tick_count: 0,
             should_quit: false,
@@ -541,18 +589,27 @@ impl StudioState {
         self.logs.push((Utc::now(), message.into()));
     }
 
+    fn invalidate_preview_cache(&mut self) {
+        self.preview_cache = None;
+    }
+
     fn has_running_sessions(&self) -> bool {
         self.sessions
             .iter()
             .any(|session| session.status == SessionStatus::Running)
     }
 
-    fn preview_prompt(&self) -> String {
+    fn preview_prompt(&mut self) -> String {
+        if let Some(cache) = &self.preview_cache {
+            return cache.rendered_prompt.clone();
+        }
+
         let provider_label = match self.provider_mode {
             ProviderMode::Both => "Claude + Codex".to_string(),
             ProviderMode::Claude => "Claude".to_string(),
             ProviderMode::Codex => "Codex".to_string(),
         };
+        let execution_contract = self.selected_execution_contract().clone();
         let workspace_dir = match self.workspace_mode {
             WorkspaceMode::Shared => self.project_dir.display().to_string(),
             WorkspaceMode::Isolated => "<isolated-workspace-per-provider>".to_string(),
@@ -568,15 +625,22 @@ impl StudioState {
                 "<workspace>/.foundry/studio/artifacts/<run>/<provider>".to_string()
             }
         };
-        compose_smoothed_prompt(
+        let attachments =
+            resolve_all_attachments(&execution_contract.attachments, &self.project_dir);
+        let prompt = compose_smoothed_prompt(
             &provider_label,
             &self.prompt,
-            self.selected_execution_contract(),
+            &execution_contract,
+            &attachments,
             &self.scan,
             &workspace_dir,
             &artifact_dir,
             None,
-        )
+        );
+        self.preview_cache = Some(PreviewPromptCache {
+            rendered_prompt: prompt.clone(),
+        });
+        prompt
     }
 
     fn selected_session(&self) -> Option<&SessionState> {
@@ -587,6 +651,12 @@ impl StudioState {
         &self.execution_contracts[self.selected_execution_contract]
     }
 
+    fn set_selected_execution_contract_index(&mut self, index: usize) {
+        self.selected_execution_contract = index;
+        self.preview_scroll = 0;
+        self.invalidate_preview_cache();
+    }
+
     fn refresh_execution_contracts(&mut self) -> Result<()> {
         let selected_file = self
             .execution_contracts
@@ -595,7 +665,7 @@ impl StudioState {
         let (contracts, selected_index) =
             load_execution_contracts_with_selection(&self.project_dir, selected_file.as_deref())?;
         self.execution_contracts = contracts;
-        self.selected_execution_contract = selected_index;
+        self.set_selected_execution_contract_index(selected_index);
         Ok(())
     }
 
@@ -631,9 +701,7 @@ enum StudioEvent {
     },
 }
 
-fn spawn_terminal_event_reader(
-    event_tx: mpsc::UnboundedSender<StudioEvent>,
-) -> JoinHandle<()> {
+fn spawn_terminal_event_reader(event_tx: mpsc::UnboundedSender<StudioEvent>) -> JoinHandle<()> {
     tokio::spawn(async move {
         let mut reader = crossterm::event::EventStream::new();
         loop {
@@ -688,7 +756,7 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
     });
 
     loop {
-        terminal.draw(|frame| render(frame, &state))?;
+        terminal.draw(|frame| render(frame, &mut state))?;
 
         match event_rx.recv().await {
             Some(StudioEvent::Tick) => {
@@ -762,7 +830,10 @@ fn handle_event(
                 session.last_event_at = Some(Utc::now());
                 match event {
                     AgentOutputEvent::Text(text) => session.output.push(text),
-                    AgentOutputEvent::ToolUse { tool, input_preview } => {
+                    AgentOutputEvent::ToolUse {
+                        tool,
+                        input_preview,
+                    } => {
                         if input_preview.is_empty() {
                             session.output.push(format!("[tool] {}", tool));
                         } else {
@@ -892,20 +963,22 @@ async fn shutdown_active_sessions(state: &mut StudioState) {
 
     cancel_running_sessions(state);
     let controls = std::mem::take(&mut state.session_controls);
-    let shutdowns = controls.into_iter().map(|(session_id, mut control)| async move {
-        let finished = tokio::time::timeout(
-            Duration::from_millis(SHUTDOWN_GRACE_MILLIS),
-            &mut control.task,
-        )
-        .await;
-        if finished.is_err() {
-            control.task.abort();
-            eprintln!(
-                "Foundry Studio: forced shutdown for session {} after {}ms",
-                session_id, SHUTDOWN_GRACE_MILLIS
-            );
-        }
-    });
+    let shutdowns = controls
+        .into_iter()
+        .map(|(session_id, mut control)| async move {
+            let finished = tokio::time::timeout(
+                Duration::from_millis(SHUTDOWN_GRACE_MILLIS),
+                &mut control.task,
+            )
+            .await;
+            if finished.is_err() {
+                control.task.abort();
+                eprintln!(
+                    "Foundry Studio: forced shutdown for session {} after {}ms",
+                    session_id, SHUTDOWN_GRACE_MILLIS
+                );
+            }
+        });
     join_all(shutdowns).await;
 }
 
@@ -930,18 +1003,23 @@ fn handle_prompt_edit_key(state: &mut StudioState, key: event::KeyEvent) {
         }
         KeyCode::Backspace => {
             state.prompt.pop();
+            state.invalidate_preview_cache();
         }
         KeyCode::Enter => {
             state.prompt.push('\n');
+            state.invalidate_preview_cache();
         }
         KeyCode::Tab => {
             state.prompt.push_str("    ");
+            state.invalidate_preview_cache();
         }
         KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
             state.prompt.clear();
+            state.invalidate_preview_cache();
         }
         KeyCode::Char(c) if key.modifiers.is_empty() || key.modifiers == KeyModifiers::SHIFT => {
             state.prompt.push(c);
+            state.invalidate_preview_cache();
         }
         _ => {}
     }
@@ -953,6 +1031,11 @@ fn handle_global_key(
     tx: &mpsc::UnboundedSender<StudioEvent>,
 ) {
     match key.code {
+        KeyCode::Enter => {
+            if state.focused_pane == FocusedPane::Contracts {
+                edit_selected_execution_contract(state);
+            }
+        }
         KeyCode::Char('e') => {
             set_focused_pane(state, FocusedPane::Prompt);
             state.is_editing_prompt = true;
@@ -972,6 +1055,13 @@ fn handle_global_key(
         KeyCode::Char('d') => {
             request_delete_selected_execution_contract(state);
         }
+        KeyCode::Char('t') => {
+            if state.focused_pane == FocusedPane::Contracts {
+                if let Err(err) = edit_selected_execution_contract_attachments(state) {
+                    state.log(format!("contract attachment edit failed: {}", err));
+                }
+            }
+        }
         KeyCode::Char('v') => {
             cycle_editor_choice(state);
         }
@@ -985,16 +1075,27 @@ fn handle_global_key(
         }
         KeyCode::Char('p') => {
             state.provider_mode = state.provider_mode.next();
+            state.invalidate_preview_cache();
             state.log(format!("provider mode: {}", state.provider_mode));
         }
         KeyCode::Char('w') => {
             state.workspace_mode = state.workspace_mode.next();
+            state.invalidate_preview_cache();
             state.log(format!("workspace mode: {}", state.workspace_mode));
         }
         KeyCode::Char('r') => match scan_project(&state.project_dir) {
             Ok(scan) => {
                 state.scan = scan;
-                state.log("project scan refreshed");
+                match state.refresh_execution_contracts() {
+                    Ok(()) => {
+                        state.invalidate_preview_cache();
+                        state.log("project scan refreshed");
+                    }
+                    Err(err) => state.log(format!(
+                        "project scan refreshed, but contract reload failed: {}",
+                        err
+                    )),
+                }
             }
             Err(err) => state.log(format!("scan refresh failed: {}", err)),
         },
@@ -1019,24 +1120,20 @@ fn handle_global_key(
                 state.output_scroll = 0;
             }
         }
-        KeyCode::Up => {
-            match state.focused_pane {
-                FocusedPane::Contracts => cycle_execution_contract(state, false),
-                FocusedPane::Output => {
-                    state.output_scroll = state.output_scroll.saturating_add(3);
-                }
-                _ => {}
+        KeyCode::Up => match state.focused_pane {
+            FocusedPane::Contracts => cycle_execution_contract(state, false),
+            FocusedPane::Output => {
+                state.output_scroll = state.output_scroll.saturating_add(3);
             }
-        }
-        KeyCode::Down => {
-            match state.focused_pane {
-                FocusedPane::Contracts => cycle_execution_contract(state, true),
-                FocusedPane::Output => {
-                    state.output_scroll = state.output_scroll.saturating_sub(3);
-                }
-                _ => {}
+            _ => {}
+        },
+        KeyCode::Down => match state.focused_pane {
+            FocusedPane::Contracts => cycle_execution_contract(state, true),
+            FocusedPane::Output => {
+                state.output_scroll = state.output_scroll.saturating_sub(3);
             }
-        }
+            _ => {}
+        },
         _ => {}
     }
 }
@@ -1070,15 +1167,13 @@ fn handle_mouse_event(state: &mut StudioState, mouse: MouseEvent) {
             state.active_resize = None;
         }
         MouseEventKind::ScrollUp => {
-            if rect_contains(layout.output, mouse.column, mouse.row) {
-                set_focused_pane(state, FocusedPane::Output);
-                state.output_scroll = state.output_scroll.saturating_add(3);
+            if let Some(pane) = pane_at_position(&layout, mouse.column, mouse.row) {
+                scroll_pane_by_mouse(state, pane, &layout, true);
             }
         }
         MouseEventKind::ScrollDown => {
-            if rect_contains(layout.output, mouse.column, mouse.row) {
-                set_focused_pane(state, FocusedPane::Output);
-                state.output_scroll = state.output_scroll.saturating_sub(3);
+            if let Some(pane) = pane_at_position(&layout, mouse.column, mouse.row) {
+                scroll_pane_by_mouse(state, pane, &layout, false);
             }
         }
         _ => {}
@@ -1105,7 +1200,44 @@ fn activate_pane_from_click(
     }
 }
 
-fn start_sessions(state: &mut StudioState, tx: mpsc::UnboundedSender<StudioEvent>, follow_up: bool) {
+fn scroll_pane_by_mouse(
+    state: &mut StudioState,
+    pane: FocusedPane,
+    layout: &StudioLayout,
+    scroll_up: bool,
+) {
+    match pane {
+        FocusedPane::ExecutionBrief => {
+            set_focused_pane(state, FocusedPane::ExecutionBrief);
+            let delta = if scroll_up { -3 } else { 3 };
+            scroll_preview(state, layout.execution_brief, delta);
+        }
+        FocusedPane::Output => {
+            set_focused_pane(state, FocusedPane::Output);
+            if scroll_up {
+                state.output_scroll = state.output_scroll.saturating_add(3);
+            } else {
+                state.output_scroll = state.output_scroll.saturating_sub(3);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn scroll_preview(state: &mut StudioState, area: Rect, delta: i32) {
+    let preview = state.preview_prompt();
+    let wrapped = wrap_text_lines(&preview, area.width.saturating_sub(2) as usize);
+    let max_lines = area.height.saturating_sub(2) as usize;
+    let max_scroll = wrapped.len().saturating_sub(max_lines);
+    let next = (state.preview_scroll as i32 + delta).clamp(0, max_scroll as i32);
+    state.preview_scroll = next as usize;
+}
+
+fn start_sessions(
+    state: &mut StudioState,
+    tx: mpsc::UnboundedSender<StudioEvent>,
+    follow_up: bool,
+) {
     if state.has_running_sessions() {
         state.log("wait for the current run to finish before starting another");
         return;
@@ -1157,10 +1289,7 @@ fn start_sessions(state: &mut StudioState, tx: mpsc::UnboundedSender<StudioEvent
         .collect();
 
     if !blocked.is_empty() {
-        state.log(format!(
-            "run blocked: {}",
-            blocked.join(" | ")
-        ));
+        state.log(format!("run blocked: {}", blocked.join(" | ")));
         return;
     }
 
@@ -1274,10 +1403,13 @@ async fn run_session(
         return;
     }
 
+    let attachments =
+        resolve_all_attachments(&launch.execution_contract.attachments, &launch.project_dir);
     let smoothed_prompt = compose_smoothed_prompt(
         &launch.provider.to_string(),
         &launch.prompt,
         &launch.execution_contract,
+        &attachments,
         &launch.scan,
         &launch.workspace_dir.display().to_string(),
         &launch.artifact_dir.display().to_string(),
@@ -1361,7 +1493,7 @@ fn prepare_workspace(launch: &SessionLaunch) -> Result<()> {
     copy_workspace_snapshot(&launch.project_dir, &launch.workspace_dir)
 }
 
-fn render(frame: &mut ratatui::Frame, state: &StudioState) {
+fn render(frame: &mut ratatui::Frame, state: &mut StudioState) {
     let layout = studio_layout(frame.area(), state.layout_config);
 
     render_header(frame, layout.header, state);
@@ -1373,6 +1505,7 @@ fn render(frame: &mut ratatui::Frame, state: &StudioState) {
     render_output(frame, layout.output, state);
     render_activity(frame, layout.activity, state);
     render_status(frame, layout.status, state);
+    render_resize_handles(frame, &layout, state);
     render_editor_guide(frame, state);
     render_delete_confirmation(frame, state);
 }
@@ -1388,27 +1521,28 @@ fn studio_layout(area: Rect, config: StudioLayoutConfig) -> StudioLayout {
         .split(area);
 
     let body_area = root[1];
-    let body_width = body_area.width.max(1);
-    let left_width = if body_width > MIN_LEFT_COLUMN_WIDTH + MIN_RIGHT_COLUMN_WIDTH {
-        ((body_width as u32 * config.left_column_percent as u32) / 100)
-            .clamp(
-                MIN_LEFT_COLUMN_WIDTH as u32,
-                body_width.saturating_sub(MIN_RIGHT_COLUMN_WIDTH) as u32,
-            ) as u16
+    let left_width = clamped_left_column_width(body_area.width, config.left_column_percent);
+    let column_split_width = if body_area.width >= 3 {
+        COLUMN_SPLIT_WIDTH
     } else {
-        body_width / 2
-    }
-    .max(1);
+        0
+    };
+    let right_width = body_area
+        .width
+        .saturating_sub(left_width)
+        .saturating_sub(column_split_width)
+        .max(1);
 
     let body = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
             Constraint::Length(left_width),
-            Constraint::Min(body_width.saturating_sub(left_width).max(1)),
+            Constraint::Length(column_split_width),
+            Constraint::Min(right_width),
         ])
         .split(body_area);
 
-    let left_height = body[0].height.max(1);
+    let left_height = left_content_height(body[0]).max(1);
     let mut left_scan_height = config.left_scan_height.max(MIN_LEFT_SECTION_HEIGHT);
     let mut left_prompt_height = config.left_prompt_height.max(MIN_LEFT_SECTION_HEIGHT);
     let mut left_contracts_height = config.left_contracts_height.max(MIN_LEFT_SECTION_HEIGHT);
@@ -1436,13 +1570,16 @@ fn studio_layout(area: Rect, config: StudioLayoutConfig) -> StudioLayout {
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(left_scan_height),
+            Constraint::Length(ROW_SPLIT_HEIGHT),
             Constraint::Length(left_prompt_height),
+            Constraint::Length(ROW_SPLIT_HEIGHT),
             Constraint::Length(left_contracts_height),
+            Constraint::Length(ROW_SPLIT_HEIGHT),
             Constraint::Min(left_brief_min.max(1)),
         ])
         .split(body[0]);
 
-    let right_height = body[1].height.max(1);
+    let right_height = right_content_height(body[2]).max(1);
     let mut right_sessions_height = config.right_sessions_height.max(MIN_RIGHT_SECTION_HEIGHT);
     let mut right_activity_height = config.right_activity_height.max(MIN_RIGHT_SECTION_HEIGHT);
     let output_min = MIN_OUTPUT_HEIGHT.min(right_height.saturating_sub(2));
@@ -1461,25 +1598,110 @@ fn studio_layout(area: Rect, config: StudioLayoutConfig) -> StudioLayout {
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(right_sessions_height),
+            Constraint::Length(ROW_SPLIT_HEIGHT),
             Constraint::Min(output_min.max(1)),
+            Constraint::Length(ROW_SPLIT_HEIGHT),
             Constraint::Length(right_activity_height),
         ])
-        .split(body[1]);
+        .split(body[2]);
 
     StudioLayout {
         header: root[0],
         body: body_area,
         left_body: body[0],
-        right_body: body[1],
+        right_body: body[2],
+        column_split: body[1],
+        left_scan_prompt_split: left[1],
+        left_prompt_contracts_split: left[3],
+        left_contracts_brief_split: left[5],
+        right_sessions_output_split: right[1],
+        right_output_activity_split: right[3],
         scan: left[0],
-        prompt: left[1],
-        contracts: left[2],
-        execution_brief: left[3],
+        prompt: left[2],
+        contracts: left[4],
+        execution_brief: left[6],
         sessions: right[0],
-        output: right[1],
-        activity: right[2],
+        output: right[2],
+        activity: right[4],
         status: root[2],
     }
+}
+
+fn render_resize_handles(frame: &mut ratatui::Frame, layout: &StudioLayout, state: &StudioState) {
+    render_resize_handle(
+        frame,
+        layout.column_split,
+        state,
+        ResizeHandle::ColumnSplit,
+        '│',
+    );
+    render_resize_handle(
+        frame,
+        layout.left_scan_prompt_split,
+        state,
+        ResizeHandle::LeftScanPrompt,
+        '─',
+    );
+    render_resize_handle(
+        frame,
+        layout.left_prompt_contracts_split,
+        state,
+        ResizeHandle::LeftPromptContracts,
+        '─',
+    );
+    render_resize_handle(
+        frame,
+        layout.left_contracts_brief_split,
+        state,
+        ResizeHandle::LeftContractsBrief,
+        '─',
+    );
+    render_resize_handle(
+        frame,
+        layout.right_sessions_output_split,
+        state,
+        ResizeHandle::RightSessionsOutput,
+        '─',
+    );
+    render_resize_handle(
+        frame,
+        layout.right_output_activity_split,
+        state,
+        ResizeHandle::RightOutputActivity,
+        '─',
+    );
+}
+
+fn render_resize_handle(
+    frame: &mut ratatui::Frame,
+    area: Rect,
+    state: &StudioState,
+    handle: ResizeHandle,
+    fill: char,
+) {
+    if area.width == 0 || area.height == 0 {
+        return;
+    }
+
+    let is_active = state
+        .active_resize
+        .map(|drag| drag.handle == handle)
+        .unwrap_or(false);
+    let style = if is_active {
+        Style::default()
+            .fg(Color::Cyan)
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(Color::DarkGray)
+    };
+    let row = std::iter::repeat(fill)
+        .take(area.width as usize)
+        .collect::<String>();
+    let lines = (0..area.height)
+        .map(|_| Line::from(Span::styled(row.clone(), style)))
+        .collect::<Vec<_>>();
+
+    frame.render_widget(Paragraph::new(lines), area);
 }
 
 fn render_header(frame: &mut ratatui::Frame, area: ratatui::layout::Rect, state: &StudioState) {
@@ -1495,7 +1717,9 @@ fn render_header(frame: &mut ratatui::Frame, area: ratatui::layout::Rect, state:
         Span::raw("  "),
         Span::styled(
             truncate_display_path(&state.project_dir, 72),
-            Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD),
         ),
     ]));
     lines.push(Line::from(vec![
@@ -1519,7 +1743,7 @@ fn render_header(frame: &mut ratatui::Frame, area: ratatui::layout::Rect, state:
             format!(
                 "claude={} ({}) ",
                 display_model_name(&state.claude_model),
-                state.claude_readiness.short_label()
+                header_readiness_label(&state.claude_readiness)
             ),
             Style::default().fg(provider_color(ModelProvider::Claude)),
         ),
@@ -1527,13 +1751,13 @@ fn render_header(frame: &mut ratatui::Frame, area: ratatui::layout::Rect, state:
             format!(
                 "codex={} ({})",
                 display_model_name(&state.codex_model),
-                state.codex_readiness.short_label()
+                header_readiness_label(&state.codex_readiness)
             ),
             Style::default().fg(provider_color(ModelProvider::Codex)),
         ),
     ]));
     lines.push(Line::from(Span::styled(
-        "keys: e edit  c cycle contract  v cycle editor  a add  x edit  d delete  s start  f follow-up  tab/shift-tab focus  click pane  drag borders resize  p provider  w workspace  r rescan  j/k session  ↑/↓ contracts|output  q/ctrl-c quit",
+        "keys: e edit  c cycle contract  v cycle editor  a add  d delete  s start  f follow-up  tab/shift-tab focus  click pane  drag split bars resize  p provider  w workspace  r rescan  j/k session  ↑/↓ contracts|output  enter edit contract  q/ctrl-c quit",
         Style::default().fg(Color::DarkGray),
     )));
 
@@ -1560,7 +1784,11 @@ fn render_scan(frame: &mut ratatui::Frame, area: ratatui::layout::Rect, state: &
                 pane_title_style(state, FocusedPane::Scan, Color::LightYellow),
             ))
             .borders(Borders::ALL)
-            .border_style(pane_border_style(state, FocusedPane::Scan, Color::LightYellow))
+            .border_style(pane_border_style(
+                state,
+                FocusedPane::Scan,
+                Color::LightYellow,
+            ))
             .border_type(pane_border_type(state, FocusedPane::Scan)),
     );
     frame.render_widget(list, area);
@@ -1589,7 +1817,9 @@ fn render_prompt(frame: &mut ratatui::Frame, area: ratatui::layout::Rect, state:
                 ))
                 .borders(Borders::ALL)
                 .border_style(if state.is_editing_prompt {
-                    Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)
+                    Style::default()
+                        .fg(Color::Green)
+                        .add_modifier(Modifier::BOLD)
                 } else {
                     pane_border_style(state, FocusedPane::Prompt, Color::LightGreen)
                 })
@@ -1605,8 +1835,10 @@ fn render_prompt(frame: &mut ratatui::Frame, area: ratatui::layout::Rect, state:
 fn render_contracts(frame: &mut ratatui::Frame, area: ratatui::layout::Rect, state: &StudioState) {
     let selected = state.selected_execution_contract();
     let mut lines = vec![Line::from(Span::styled(
-        format!("selected: {}", selected.name),
-        Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+        format!("selected: {}", execution_contract_list_label(selected)),
+        Style::default()
+            .fg(Color::White)
+            .add_modifier(Modifier::BOLD),
     ))];
 
     for (idx, contract) in state.execution_contracts.iter().enumerate() {
@@ -1615,10 +1847,17 @@ fn render_contracts(frame: &mut ratatui::Frame, area: ratatui::layout::Rect, sta
         } else {
             " "
         };
+        let contract_label = execution_contract_list_label(contract);
         lines.push(Line::from(Span::styled(
-            format!("{} {}", prefix, truncate_str(&contract.name, area.width.saturating_sub(6) as usize)),
+            format!(
+                "{} {}",
+                prefix,
+                truncate_str(&contract_label, area.width.saturating_sub(6) as usize)
+            ),
             if idx == state.selected_execution_contract {
-                Style::default().fg(Color::White).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(Color::White)
+                    .add_modifier(Modifier::BOLD)
             } else {
                 Style::default().fg(Color::Gray)
             },
@@ -1630,34 +1869,48 @@ fn render_contracts(frame: &mut ratatui::Frame, area: ratatui::layout::Rect, sta
         Style::default().fg(Color::DarkGray),
     )));
     lines.push(Line::from(Span::styled(
-        format!("editor: {} (press v to change)", editor_choice_summary(state.editor_choice)),
+        format!(
+            "editor: {} (press v to change)",
+            editor_choice_summary(state.editor_choice)
+        ),
         Style::default().fg(Color::LightCyan),
     )));
+    lines.push(Line::from(Span::styled(
+        "actions: enter edit contract  t edit attachments",
+        Style::default().fg(Color::DarkGray),
+    )));
 
-    let paragraph = Paragraph::new(lines)
-        .wrap(Wrap { trim: false })
-        .block(
-            Block::default()
-                .title(Span::styled(
-                    " Execution Contracts ",
-                    pane_title_style(state, FocusedPane::Contracts, Color::LightMagenta),
-                ))
-                .borders(Borders::ALL)
-                .border_style(pane_border_style(
-                    state,
-                    FocusedPane::Contracts,
-                    Color::LightMagenta,
-                ))
-                .border_type(pane_border_type(state, FocusedPane::Contracts)),
-        );
+    let paragraph = Paragraph::new(lines).wrap(Wrap { trim: false }).block(
+        Block::default()
+            .title(Span::styled(
+                " Execution Contracts ",
+                pane_title_style(state, FocusedPane::Contracts, Color::LightMagenta),
+            ))
+            .borders(Borders::ALL)
+            .border_style(pane_border_style(
+                state,
+                FocusedPane::Contracts,
+                Color::LightMagenta,
+            ))
+            .border_type(pane_border_type(state, FocusedPane::Contracts)),
+    );
     frame.render_widget(paragraph, area);
 }
 
-fn render_preview(frame: &mut ratatui::Frame, area: ratatui::layout::Rect, state: &StudioState) {
+fn render_preview(
+    frame: &mut ratatui::Frame,
+    area: ratatui::layout::Rect,
+    state: &mut StudioState,
+) {
     let preview = state.preview_prompt();
-    let items: Vec<ListItem> = wrap_text_lines(&preview, area.width.saturating_sub(2) as usize)
-        .into_iter()
-        .take(area.height.saturating_sub(2) as usize)
+    let wrapped = wrap_text_lines(&preview, area.width.saturating_sub(2) as usize);
+    let max_lines = area.height.saturating_sub(2) as usize;
+    let max_scroll = wrapped.len().saturating_sub(max_lines);
+    let start = state.preview_scroll.min(max_scroll);
+    let end = (start + max_lines).min(wrapped.len());
+    let items: Vec<ListItem> = wrapped[start..end]
+        .iter()
+        .cloned()
         .map(|line| ListItem::new(Span::styled(line, Style::default().fg(Color::Gray))))
         .collect();
 
@@ -1690,7 +1943,11 @@ fn render_sessions(frame: &mut ratatui::Frame, area: ratatui::layout::Rect, stat
             .iter()
             .enumerate()
             .map(|(idx, session)| {
-                let prefix = if idx == state.selected_session { ">" } else { " " };
+                let prefix = if idx == state.selected_session {
+                    ">"
+                } else {
+                    " "
+                };
                 let running_marker = if session.status == SessionStatus::Running {
                     studio_spinner(state.tick_count)
                 } else {
@@ -1734,7 +1991,11 @@ fn render_sessions(frame: &mut ratatui::Frame, area: ratatui::layout::Rect, stat
                 pane_title_style(state, FocusedPane::Sessions, Color::LightBlue),
             ))
             .borders(Borders::ALL)
-            .border_style(pane_border_style(state, FocusedPane::Sessions, Color::LightBlue))
+            .border_style(pane_border_style(
+                state,
+                FocusedPane::Sessions,
+                Color::LightBlue,
+            ))
             .border_type(pane_border_type(state, FocusedPane::Sessions)),
     );
     frame.render_widget(list, area);
@@ -1788,7 +2049,11 @@ fn render_output(frame: &mut ratatui::Frame, area: ratatui::layout::Rect, state:
                 pane_title_style(state, FocusedPane::Output, Color::LightCyan),
             ))
             .borders(Borders::ALL)
-            .border_style(pane_border_style(state, FocusedPane::Output, Color::LightCyan))
+            .border_style(pane_border_style(
+                state,
+                FocusedPane::Output,
+                Color::LightCyan,
+            ))
             .border_type(pane_border_type(state, FocusedPane::Output)),
     );
     frame.render_widget(list, area);
@@ -1798,17 +2063,11 @@ fn render_activity(frame: &mut ratatui::Frame, area: ratatui::layout::Rect, stat
     let mut lines: Vec<ListItem> = Vec::new();
 
     lines.push(ListItem::new(Span::styled(
-        format!(
-            "Claude: {}",
-            readiness_summary(&state.claude_readiness)
-        ),
+        format!("Claude: {}", readiness_summary(&state.claude_readiness)),
         Style::default().fg(provider_color(ModelProvider::Claude)),
     )));
     lines.push(ListItem::new(Span::styled(
-        format!(
-            "Codex: {}",
-            readiness_summary(&state.codex_readiness)
-        ),
+        format!("Codex: {}", readiness_summary(&state.codex_readiness)),
         Style::default().fg(provider_color(ModelProvider::Codex)),
     )));
 
@@ -1818,7 +2077,10 @@ fn render_activity(frame: &mut ratatui::Frame, area: ratatui::layout::Rect, stat
             Style::default().fg(Color::DarkGray),
         )));
         lines.push(ListItem::new(Span::styled(
-            format!("workspace: {}", truncate_display_path(&session.workspace_dir, 72)),
+            format!(
+                "workspace: {}",
+                truncate_display_path(&session.workspace_dir, 72)
+            ),
             Style::default().fg(Color::DarkGray),
         )));
         if let Some(prompt_path) = &session.prompt_path {
@@ -1828,14 +2090,14 @@ fn render_activity(frame: &mut ratatui::Frame, area: ratatui::layout::Rect, stat
             )));
         }
         lines.push(ListItem::new(Span::styled(
-            format!("artifacts: {}", truncate_display_path(&session.artifact_dir, 72)),
+            format!(
+                "artifacts: {}",
+                truncate_display_path(&session.artifact_dir, 72)
+            ),
             Style::default().fg(Color::DarkGray),
         )));
         lines.push(ListItem::new(Span::styled(
-            format!(
-                "started: {}",
-                session.started_at.format("%H:%M:%S UTC")
-            ),
+            format!("started: {}", session.started_at.format("%H:%M:%S UTC")),
             Style::default().fg(Color::DarkGray),
         )));
         lines.push(ListItem::new(Span::styled(
@@ -1882,7 +2144,11 @@ fn render_activity(frame: &mut ratatui::Frame, area: ratatui::layout::Rect, stat
                 pane_title_style(state, FocusedPane::Activity, Color::LightGreen),
             ))
             .borders(Borders::ALL)
-            .border_style(pane_border_style(state, FocusedPane::Activity, Color::LightGreen))
+            .border_style(pane_border_style(
+                state,
+                FocusedPane::Activity,
+                Color::LightGreen,
+            ))
             .border_type(pane_border_type(state, FocusedPane::Activity)),
     );
     frame.render_widget(list, area);
@@ -1908,17 +2174,24 @@ fn render_status(frame: &mut ratatui::Frame, area: ratatui::layout::Rect, state:
 }
 
 fn render_editor_guide(frame: &mut ratatui::Frame, state: &StudioState) {
-    let Some(_) = &state.editor_guide else {
+    let Some(guide) = &state.editor_guide else {
         return;
     };
 
     let editor_command = resolve_editor_command(state.editor_choice);
     let editor_name = editor_command_name(&editor_command);
+    let action_label = pending_action_label(&guide.action);
     let area = centered_rect(68, 14, frame.area());
     let mut lines = vec![
         Line::from(Span::styled(
             format!("Editor: {}", editor_choice_summary(state.editor_choice)),
-            Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Line::from(Span::styled(
+            format!("Target: {}", action_label),
+            Style::default().fg(Color::LightCyan),
         )),
         Line::from(Span::styled(
             "Studio will temporarily leave the TUI while the editor is open.",
@@ -1941,18 +2214,18 @@ fn render_editor_guide(frame: &mut ratatui::Frame, state: &StudioState) {
     )));
 
     frame.render_widget(Clear, area);
-    let paragraph = Paragraph::new(lines)
-        .wrap(Wrap { trim: false })
-        .block(
-            Block::default()
-                .title(Span::styled(
-                    " Edit Contract ",
-                    Style::default().fg(Color::LightCyan).add_modifier(Modifier::BOLD),
-                ))
-                .borders(Borders::ALL)
-                .border_type(BorderType::Thick)
-                .border_style(Style::default().fg(Color::LightCyan)),
-        );
+    let paragraph = Paragraph::new(lines).wrap(Wrap { trim: false }).block(
+        Block::default()
+            .title(Span::styled(
+                " Open Editor ",
+                Style::default()
+                    .fg(Color::LightCyan)
+                    .add_modifier(Modifier::BOLD),
+            ))
+            .borders(Borders::ALL)
+            .border_type(BorderType::Thick)
+            .border_style(Style::default().fg(Color::LightCyan)),
+    );
     frame.render_widget(paragraph, area);
 }
 
@@ -1965,12 +2238,16 @@ fn render_delete_confirmation(frame: &mut ratatui::Frame, state: &StudioState) {
     let lines = vec![
         Line::from(Span::styled(
             format!("Delete contract: {}", confirm.contract_name),
-            Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD),
         )),
         Line::from(""),
         Line::from(Span::styled(
             "Are you sure? Y/N",
-            Style::default().fg(Color::LightRed).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(Color::LightRed)
+                .add_modifier(Modifier::BOLD),
         )),
         Line::from(""),
         Line::from(Span::styled(
@@ -1980,18 +2257,18 @@ fn render_delete_confirmation(frame: &mut ratatui::Frame, state: &StudioState) {
     ];
 
     frame.render_widget(Clear, area);
-    let paragraph = Paragraph::new(lines)
-        .wrap(Wrap { trim: false })
-        .block(
-            Block::default()
-                .title(Span::styled(
-                    " Confirm Delete ",
-                    Style::default().fg(Color::LightRed).add_modifier(Modifier::BOLD),
-                ))
-                .borders(Borders::ALL)
-                .border_type(BorderType::Thick)
-                .border_style(Style::default().fg(Color::LightRed)),
-        );
+    let paragraph = Paragraph::new(lines).wrap(Wrap { trim: false }).block(
+        Block::default()
+            .title(Span::styled(
+                " Confirm Delete ",
+                Style::default()
+                    .fg(Color::LightRed)
+                    .add_modifier(Modifier::BOLD),
+            ))
+            .borders(Borders::ALL)
+            .border_type(BorderType::Thick)
+            .border_style(Style::default().fg(Color::LightRed)),
+    );
     frame.render_widget(paragraph, area);
 }
 
@@ -2070,7 +2347,9 @@ fn collect_matching_paths_inner(
         return Ok(());
     }
 
-    let mut entries: Vec<_> = fs::read_dir(current)?.filter_map(|entry| entry.ok()).collect();
+    let mut entries: Vec<_> = fs::read_dir(current)?
+        .filter_map(|entry| entry.ok())
+        .collect();
     entries.sort_by_key(|entry| entry.file_name());
 
     for entry in entries {
@@ -2102,7 +2381,10 @@ fn collect_matching_paths_inner(
         }
 
         if let Some(ext) = path.extension().and_then(|ext| ext.to_str()) {
-            if extensions.iter().any(|wanted| ext.eq_ignore_ascii_case(wanted)) {
+            if extensions
+                .iter()
+                .any(|wanted| ext.eq_ignore_ascii_case(wanted))
+            {
                 results.push(rel);
             }
         }
@@ -2131,6 +2413,7 @@ fn compose_smoothed_prompt(
     provider_label: &str,
     raw_prompt: &str,
     execution_contract: &ExecutionContract,
+    attachments: &[ResolvedAttachment],
     scan: &ProjectScan,
     workspace_dir: &str,
     artifact_dir: &str,
@@ -2151,6 +2434,7 @@ fn compose_smoothed_prompt(
         workspace_dir,
         artifact_dir,
     );
+    let attachments_block = format_attachments_block(attachments);
     format!(
         r#"You are running inside Foundry Studio through the {provider_label} CLI.
 
@@ -2160,7 +2444,7 @@ User objective:
 Execution contract: {contract_name}
 --- BEGIN EXECUTION CONTRACT ---
 {rendered_contract}
---- END EXECUTION CONTRACT ---
+--- END EXECUTION CONTRACT ---{attachments_block}
 
 Project scan:
 - stack signals: {stack}
@@ -2185,6 +2469,472 @@ fn render_execution_contract_body(
     body.replace("{{provider_label}}", provider_label)
         .replace("{{workspace_dir}}", workspace_dir)
         .replace("{{artifact_dir}}", artifact_dir)
+}
+
+fn attachment_requested_display_path(spec: &AttachmentSpec) -> String {
+    let trimmed = spec.path.trim().replace('\\', "/");
+    trimmed
+        .trim_end_matches('/')
+        .trim_end_matches('\\')
+        .to_string()
+}
+
+fn attachment_path_has_parent_reference(path: &Path) -> bool {
+    path.components()
+        .any(|component| matches!(component, Component::ParentDir))
+}
+
+fn normalize_relative_display_path(path: &Path) -> String {
+    let mut parts = Vec::new();
+    for component in path.components() {
+        match component {
+            Component::CurDir => {}
+            Component::Normal(value) => parts.push(value.to_string_lossy().to_string()),
+            Component::ParentDir => {
+                if !parts.is_empty() {
+                    parts.pop();
+                } else {
+                    parts.push("..".to_string());
+                }
+            }
+            Component::RootDir | Component::Prefix(_) => {}
+        }
+    }
+
+    if parts.is_empty() {
+        ".".to_string()
+    } else {
+        parts.join("/")
+    }
+}
+
+fn attachment_display_label(spec: &AttachmentSpec, display_path: &str) -> String {
+    let custom_label = spec
+        .label
+        .as_deref()
+        .map(str::trim)
+        .filter(|label| !label.is_empty());
+    match custom_label {
+        Some(label) if label != display_path => format!("{} [{}]", label, display_path),
+        Some(label) => label.to_string(),
+        None => display_path.to_string(),
+    }
+}
+
+fn attachment_mode_label(mode: &AttachmentMode) -> &'static str {
+    match mode {
+        AttachmentMode::InlineFile => "inline file",
+        AttachmentMode::DirectoryTree => "directory tree",
+    }
+}
+
+fn attachment_error(
+    spec: &AttachmentSpec,
+    display_path: &str,
+    message: String,
+) -> ResolvedAttachment {
+    ResolvedAttachment {
+        spec: spec.clone(),
+        label: attachment_display_label(spec, display_path),
+        content: format!("[ATTACHMENT ERROR: {}]", message),
+        truncated: false,
+        error: Some(message),
+    }
+}
+
+fn truncate_with_notice(text: &str, max_chars: usize, notice: &str) -> String {
+    if text.chars().count() <= max_chars {
+        return text.to_string();
+    }
+    if max_chars == 0 {
+        return String::new();
+    }
+
+    let notice_chars = notice.chars().count();
+    if max_chars <= notice_chars {
+        return notice.chars().take(max_chars).collect();
+    }
+
+    let prefix_chars = max_chars - notice_chars;
+    let cutoff = text
+        .char_indices()
+        .nth(prefix_chars)
+        .map(|(idx, _)| idx)
+        .unwrap_or(text.len());
+    format!("{}{}", &text[..cutoff], notice)
+}
+
+fn human_readable_bytes(size: u64) -> String {
+    if size >= 1024 * 1024 {
+        format!("{:.1} MB", size as f64 / (1024.0 * 1024.0))
+    } else if size >= 1024 {
+        format!("{:.1} KB", size as f64 / 1024.0)
+    } else {
+        format!("{} B", size)
+    }
+}
+
+fn directory_has_children(path: &Path) -> bool {
+    fs::read_dir(path)
+        .ok()
+        .and_then(|mut entries| entries.next())
+        .is_some()
+}
+
+fn collect_directory_tree_lines(
+    current_abs: &Path,
+    current_rel: &Path,
+    depth: usize,
+    lines: &mut Vec<String>,
+    entry_count: &mut usize,
+    truncated: &mut bool,
+) -> Result<()> {
+    let mut entries: Vec<_> = fs::read_dir(current_abs)?
+        .filter_map(|entry| entry.ok())
+        .collect();
+    entries.sort_by_key(|entry| entry.file_name());
+
+    for entry in entries {
+        if *entry_count >= MAX_TREE_FILES {
+            lines.push(format!(
+                "{}[truncated: max {} entries reached]",
+                "  ".repeat(depth + 1),
+                MAX_TREE_FILES
+            ));
+            *truncated = true;
+            break;
+        }
+
+        let name = entry.file_name().to_string_lossy().to_string();
+        let child_rel = current_rel.join(&name);
+        let indent = "  ".repeat(depth + 1);
+        *entry_count += 1;
+
+        if should_skip_snapshot_path(&child_rel) {
+            lines.push(format!("{}{} [snapshot-excluded]", indent, name));
+            continue;
+        }
+
+        let file_type = match entry.file_type() {
+            Ok(file_type) => file_type,
+            Err(err) => {
+                lines.push(format!("{}{} [error: {}]", indent, name, err));
+                continue;
+            }
+        };
+
+        if file_type.is_symlink() {
+            lines.push(format!("{}{} [symlink omitted]", indent, name));
+            continue;
+        }
+
+        if file_type.is_file() {
+            let size = entry
+                .metadata()
+                .map(|metadata| metadata.len())
+                .unwrap_or_default();
+            lines.push(format!(
+                "{}{} ({})",
+                indent,
+                name,
+                human_readable_bytes(size)
+            ));
+            continue;
+        }
+
+        if file_type.is_dir() {
+            lines.push(format!("{}{}/", indent, name));
+            if depth + 1 >= MAX_TREE_DEPTH {
+                if directory_has_children(&entry.path()) {
+                    lines.push(format!(
+                        "{}  [truncated: max depth {} reached]",
+                        indent, MAX_TREE_DEPTH
+                    ));
+                    *truncated = true;
+                }
+                continue;
+            }
+            collect_directory_tree_lines(
+                &entry.path(),
+                &child_rel,
+                depth + 1,
+                lines,
+                entry_count,
+                truncated,
+            )?;
+            continue;
+        }
+
+        lines.push(format!("{}{}", indent, name));
+    }
+
+    Ok(())
+}
+
+fn render_directory_tree(root_abs: &Path, root_rel: &Path) -> Result<(String, bool)> {
+    let mut lines = vec![format!("{}/", normalize_relative_display_path(root_rel))];
+    let mut entry_count = 0usize;
+    let mut truncated = false;
+
+    if should_skip_snapshot_path(root_rel) {
+        lines.push("[warning] path is excluded from isolated workspace snapshots".to_string());
+    }
+
+    collect_directory_tree_lines(
+        root_abs,
+        root_rel,
+        0,
+        &mut lines,
+        &mut entry_count,
+        &mut truncated,
+    )?;
+
+    Ok((lines.join("\n"), truncated))
+}
+
+fn resolve_attachment_with_root(
+    spec: &AttachmentSpec,
+    project_dir: &Path,
+    canonical_project: &Path,
+) -> ResolvedAttachment {
+    let requested_path = attachment_requested_display_path(spec);
+    if requested_path.is_empty() {
+        return attachment_error(
+            spec,
+            "<empty attachment path>",
+            "attachment path is empty".to_string(),
+        );
+    }
+
+    let requested = Path::new(spec.path.trim());
+    if requested.is_absolute() {
+        return attachment_error(
+            spec,
+            &requested_path,
+            format!(
+                "absolute attachment paths are not supported: {}",
+                requested_path
+            ),
+        );
+    }
+    if attachment_path_has_parent_reference(requested) {
+        return attachment_error(
+            spec,
+            &requested_path,
+            format!(
+                "attachment path cannot contain '..' components: {}",
+                requested_path
+            ),
+        );
+    }
+
+    let joined = project_dir.join(requested);
+    let canonical_target = match fs::canonicalize(&joined) {
+        Ok(path) => path,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            return attachment_error(
+                spec,
+                &requested_path,
+                format!("attachment path does not exist: {}", requested_path),
+            );
+        }
+        Err(err) => {
+            return attachment_error(
+                spec,
+                &requested_path,
+                format!("failed to resolve attachment {}: {}", requested_path, err),
+            );
+        }
+    };
+
+    let relative = match canonical_target.strip_prefix(canonical_project) {
+        Ok(path) => path.to_path_buf(),
+        Err(_) => {
+            return attachment_error(
+                spec,
+                &requested_path,
+                format!(
+                    "attachment path escapes the project root: {}",
+                    requested_path
+                ),
+            );
+        }
+    };
+    let display_path = normalize_relative_display_path(&relative);
+
+    match spec.mode {
+        AttachmentMode::InlineFile => {
+            if !canonical_target.is_file() {
+                return attachment_error(
+                    spec,
+                    &display_path,
+                    format!("attachment is not a file: {}", display_path),
+                );
+            }
+
+            let bytes = match fs::read(&canonical_target) {
+                Ok(bytes) => bytes,
+                Err(err) => {
+                    return attachment_error(
+                        spec,
+                        &display_path,
+                        format!("failed to read attachment {}: {}", display_path, err),
+                    );
+                }
+            };
+
+            let truncated = bytes.len() > MAX_INLINE_FILE_BYTES;
+            let content = if truncated {
+                format!(
+                    "{}\n[truncated: file exceeds {} bytes]",
+                    String::from_utf8_lossy(&bytes[..MAX_INLINE_FILE_BYTES]),
+                    MAX_INLINE_FILE_BYTES
+                )
+            } else {
+                String::from_utf8_lossy(&bytes).to_string()
+            };
+
+            ResolvedAttachment {
+                spec: spec.clone(),
+                label: attachment_display_label(spec, &display_path),
+                content,
+                truncated,
+                error: None,
+            }
+        }
+        AttachmentMode::DirectoryTree => {
+            if !canonical_target.is_dir() {
+                return attachment_error(
+                    spec,
+                    &display_path,
+                    format!("attachment is not a directory: {}", display_path),
+                );
+            }
+
+            match render_directory_tree(&canonical_target, &relative) {
+                Ok((content, truncated)) => ResolvedAttachment {
+                    spec: spec.clone(),
+                    label: attachment_display_label(spec, &display_path),
+                    content,
+                    truncated,
+                    error: None,
+                },
+                Err(err) => attachment_error(
+                    spec,
+                    &display_path,
+                    format!("failed to list attachment {}: {}", display_path, err),
+                ),
+            }
+        }
+    }
+}
+
+fn resolve_attachment(spec: &AttachmentSpec, project_dir: &Path) -> ResolvedAttachment {
+    let requested_path = attachment_requested_display_path(spec);
+    let canonical_project = match fs::canonicalize(project_dir) {
+        Ok(path) => path,
+        Err(err) => {
+            return attachment_error(
+                spec,
+                requested_path.as_str(),
+                format!(
+                    "failed to resolve project root {}: {}",
+                    project_dir.display(),
+                    err
+                ),
+            );
+        }
+    };
+
+    resolve_attachment_with_root(spec, project_dir, &canonical_project)
+}
+
+fn resolve_all_attachments(
+    specs: &[AttachmentSpec],
+    project_dir: &Path,
+) -> Vec<ResolvedAttachment> {
+    if specs.is_empty() {
+        return Vec::new();
+    }
+
+    let canonical_project = match fs::canonicalize(project_dir) {
+        Ok(path) => path,
+        Err(err) => {
+            return specs
+                .iter()
+                .map(|spec| {
+                    attachment_error(
+                        spec,
+                        attachment_requested_display_path(spec).as_str(),
+                        format!(
+                            "failed to resolve project root {}: {}",
+                            project_dir.display(),
+                            err
+                        ),
+                    )
+                })
+                .collect();
+        }
+    };
+
+    let mut remaining_chars = MAX_TOTAL_ATTACHMENT_CHARS;
+    let mut resolved = Vec::with_capacity(specs.len());
+
+    for spec in specs {
+        let mut attachment = resolve_attachment_with_root(spec, project_dir, &canonical_project);
+        let content_chars = attachment.content.chars().count();
+        if content_chars > remaining_chars {
+            attachment.content = truncate_with_notice(
+                &attachment.content,
+                remaining_chars,
+                "\n[truncated: total attachment size budget reached]",
+            );
+            attachment.truncated = true;
+        }
+        remaining_chars = remaining_chars.saturating_sub(attachment.content.chars().count());
+        resolved.push(attachment);
+    }
+
+    resolved
+}
+
+fn format_attachments_block(resolved: &[ResolvedAttachment]) -> String {
+    if resolved.is_empty() {
+        return String::new();
+    }
+
+    let mut blocks = Vec::with_capacity(resolved.len() + 1);
+    blocks.push("Attached context:".to_string());
+
+    for attachment in resolved {
+        let line_count = if attachment.content.is_empty() {
+            0
+        } else {
+            attachment.content.lines().count()
+        };
+        let mut meta = vec![
+            attachment_mode_label(&attachment.spec.mode).to_string(),
+            format!(
+                "{} {}",
+                line_count,
+                if line_count == 1 { "line" } else { "lines" }
+            ),
+        ];
+        if attachment.error.is_some() {
+            meta.push("error".to_string());
+        } else if attachment.truncated {
+            meta.push("truncated".to_string());
+        }
+        blocks.push(format!(
+            "--- BEGIN ATTACHMENT: {} ({}) ---\n{}\n--- END ATTACHMENT: {} ---",
+            attachment.label,
+            meta.join(", "),
+            attachment.content,
+            attachment.label
+        ));
+    }
+
+    format!("\n\n{}", blocks.join("\n\n"))
 }
 
 fn resolve_system_editor_command() -> String {
@@ -2272,12 +3022,30 @@ fn execution_contracts_dir(project_dir: &Path) -> PathBuf {
     project_dir.join(STUDIO_ROOT_DIR).join(STUDIO_CONTRACTS_DIR)
 }
 
+fn attachment_sidecar_path(contract_path: &Path) -> PathBuf {
+    contract_path.with_extension("attachments.json")
+}
+
+fn execution_contract_list_label(contract: &ExecutionContract) -> String {
+    if contract.attachments.is_empty() {
+        contract.name.clone()
+    } else {
+        format!(
+            "{} [{} attached]",
+            contract.name,
+            contract.attachments.len()
+        )
+    }
+}
+
 fn execution_contract_selection_path(project_dir: &Path) -> PathBuf {
     execution_contracts_dir(project_dir).join(STUDIO_SELECTED_CONTRACT_FILE)
 }
 
 fn editor_selection_path(project_dir: &Path) -> PathBuf {
-    project_dir.join(STUDIO_ROOT_DIR).join(STUDIO_SELECTED_EDITOR_FILE)
+    project_dir
+        .join(STUDIO_ROOT_DIR)
+        .join(STUDIO_SELECTED_EDITOR_FILE)
 }
 
 fn load_editor_choice(project_dir: &Path) -> EditorChoice {
@@ -2340,10 +3108,41 @@ fn ensure_execution_contracts_exist(project_dir: &Path) -> Result<()> {
         });
 
     if !has_visible_contract {
-        fs::write(dir.join("standard.md"), default_execution_contract_content())?;
+        fs::write(
+            dir.join("standard.md"),
+            default_execution_contract_content(),
+        )?;
     }
 
     Ok(())
+}
+
+fn load_attachment_specs(contract_path: &Path) -> Vec<AttachmentSpec> {
+    let sidecar_path = attachment_sidecar_path(contract_path);
+    let content = match fs::read_to_string(&sidecar_path) {
+        Ok(content) => content,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Vec::new(),
+        Err(err) => {
+            eprintln!(
+                "Foundry Studio: failed to read attachment sidecar {}: {}",
+                sidecar_path.display(),
+                err
+            );
+            return Vec::new();
+        }
+    };
+
+    match serde_json::from_str::<Vec<AttachmentSpec>>(&content) {
+        Ok(specs) => specs,
+        Err(err) => {
+            eprintln!(
+                "Foundry Studio: failed to parse attachment sidecar {}: {}",
+                sidecar_path.display(),
+                err
+            );
+            Vec::new()
+        }
+    }
 }
 
 fn load_execution_contracts(project_dir: &Path) -> Result<(Vec<ExecutionContract>, usize)> {
@@ -2359,7 +3158,11 @@ fn load_execution_contracts_with_selection(
     let selected_path = execution_contract_selection_path(project_dir);
     let selected_file = preferred_file_name
         .map(str::to_string)
-        .or_else(|| fs::read_to_string(&selected_path).ok().map(|value| value.trim().to_string()))
+        .or_else(|| {
+            fs::read_to_string(&selected_path)
+                .ok()
+                .map(|value| value.trim().to_string())
+        })
         .filter(|value| !value.is_empty());
 
     let mut contracts = Vec::new();
@@ -2377,11 +3180,13 @@ fn load_execution_contracts_with_selection(
         }
         let body = fs::read_to_string(&path)
             .with_context(|| format!("failed to read execution contract {}", path.display()))?;
+        let attachments = load_attachment_specs(&path);
         contracts.push(ExecutionContract {
             name: execution_contract_name(&file_name, &body),
             file_name,
             path,
             body,
+            attachments,
         });
     }
 
@@ -2391,7 +3196,11 @@ fn load_execution_contracts_with_selection(
 
     let selected_index = selected_file
         .as_deref()
-        .and_then(|wanted| contracts.iter().position(|contract| contract.file_name == wanted))
+        .and_then(|wanted| {
+            contracts
+                .iter()
+                .position(|contract| contract.file_name == wanted)
+        })
         .unwrap_or(0);
     persist_selected_execution_contract(project_dir, &contracts[selected_index].file_name)?;
     Ok((contracts, selected_index))
@@ -2425,13 +3234,15 @@ fn cycle_execution_contract(state: &mut StudioState, forward: bool) {
     }
 
     let len = state.execution_contracts.len();
-    state.selected_execution_contract = if forward {
+    let selected_index = if forward {
         (state.selected_execution_contract + 1) % len
     } else {
-        state.selected_execution_contract
+        state
+            .selected_execution_contract
             .checked_sub(1)
             .unwrap_or_else(|| len.saturating_sub(1))
     };
+    state.set_selected_execution_contract_index(selected_index);
     if let Err(err) = persist_selected_execution_contract(
         &state.project_dir,
         &state.selected_execution_contract().file_name,
@@ -2471,20 +3282,15 @@ fn request_delete_selected_execution_contract(state: &mut StudioState) {
 fn create_execution_contract(state: &mut StudioState) -> Result<()> {
     let dir = execution_contracts_dir(&state.project_dir);
     fs::create_dir_all(&dir)?;
-    let contract_name = format!(
-        "Custom Contract {}",
-        Utc::now().format("%H:%M:%S")
-    );
-    let file_name = format!(
-        "contract-{}.md",
-        Utc::now().format("%Y%m%d-%H%M%S")
-    );
+    let contract_name = format!("Custom Contract {}", Utc::now().format("%H:%M:%S"));
+    let file_name = format!("contract-{}.md", Utc::now().format("%Y%m%d-%H%M%S"));
     let path = dir.join(&file_name);
     fs::write(&path, new_execution_contract_content(&contract_name))?;
+    fs::write(attachment_sidecar_path(&path), "[]\n")?;
     let (contracts, selected_index) =
         load_execution_contracts_with_selection(&state.project_dir, Some(&file_name))?;
     state.execution_contracts = contracts;
-    state.selected_execution_contract = selected_index;
+    state.set_selected_execution_contract_index(selected_index);
     state.focused_pane = FocusedPane::Contracts;
     queue_editor_action(
         state,
@@ -2509,8 +3315,31 @@ fn edit_selected_execution_contract(state: &mut StudioState) {
     state.focused_pane = FocusedPane::Contracts;
 }
 
+fn edit_selected_execution_contract_attachments(state: &mut StudioState) -> Result<()> {
+    let selected = state.selected_execution_contract().clone();
+    let sidecar_path = attachment_sidecar_path(&selected.path);
+    if !sidecar_path.exists() {
+        fs::write(&sidecar_path, "[]\n")?;
+    }
+    queue_editor_action(
+        state,
+        PendingStudioAction::EditExecutionContract {
+            path: sidecar_path,
+            action_label: "contract attachments",
+        },
+    );
+    state.focused_pane = FocusedPane::Contracts;
+    Ok(())
+}
+
 fn queue_editor_action(state: &mut StudioState, action: PendingStudioAction) {
     state.editor_guide = Some(EditorGuideState { action });
+}
+
+fn pending_action_label(action: &PendingStudioAction) -> &'static str {
+    match action {
+        PendingStudioAction::EditExecutionContract { action_label, .. } => action_label,
+    }
 }
 
 fn delete_selected_execution_contract(state: &mut StudioState) -> Result<()> {
@@ -2528,6 +3357,16 @@ fn delete_selected_execution_contract(state: &mut StudioState) -> Result<()> {
         selected.file_name
     );
     fs::rename(&selected.path, trash_dir.join(trash_name))?;
+    let sidecar_path = attachment_sidecar_path(&selected.path);
+    if sidecar_path.exists() {
+        let sidecar_name = sidecar_path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("contract.attachments.json");
+        let trashed_sidecar_name =
+            format!("{}-{}", Utc::now().format("%Y%m%d-%H%M%S"), sidecar_name);
+        fs::rename(&sidecar_path, trash_dir.join(trashed_sidecar_name))?;
+    }
 
     let preferred_file_name = state
         .execution_contracts
@@ -2554,7 +3393,7 @@ fn delete_selected_execution_contract(state: &mut StudioState) -> Result<()> {
     )?;
     let deleted_name = selected.name;
     state.execution_contracts = contracts;
-    state.selected_execution_contract = selected_index;
+    state.set_selected_execution_contract_index(selected_index);
     persist_selected_execution_contract(
         &state.project_dir,
         &state.selected_execution_contract().file_name,
@@ -2574,7 +3413,8 @@ fn handle_pending_action(
         PendingStudioAction::EditExecutionContract { path, action_label } => {
             terminal_event_reader.abort();
             tui::restore_terminal(terminal)?;
-            let editor_result = open_file_in_editor(&path, &resolve_editor_command(state.editor_choice));
+            let editor_result =
+                open_file_in_editor(&path, &resolve_editor_command(state.editor_choice));
             *terminal = tui::setup_terminal()?;
             *terminal_event_reader = spawn_terminal_event_reader(event_tx.clone());
             match editor_result {
@@ -2617,7 +3457,9 @@ fn copy_workspace_snapshot_inner(src_root: &Path, dst_root: &Path, rel: &Path) -
         src_root.join(rel)
     };
 
-    let mut entries: Vec<_> = fs::read_dir(&current_src)?.filter_map(|entry| entry.ok()).collect();
+    let mut entries: Vec<_> = fs::read_dir(&current_src)?
+        .filter_map(|entry| entry.ok())
+        .collect();
     entries.sort_by_key(|entry| entry.file_name());
 
     for entry in entries {
@@ -2685,7 +3527,11 @@ fn should_skip_snapshot_path(rel: &Path) -> bool {
     components.len() >= 2 && components[0] == ".foundry" && components[1] == "studio"
 }
 
-fn discover_artifacts(workspace_dir: &Path, artifact_dir: &Path, started_at: SystemTime) -> Vec<PathBuf> {
+fn discover_artifacts(
+    workspace_dir: &Path,
+    artifact_dir: &Path,
+    started_at: SystemTime,
+) -> Vec<PathBuf> {
     let mut paths = BTreeSet::new();
     collect_recent_artifacts(artifact_dir, artifact_dir, started_at, &mut paths, 12);
     if paths.is_empty() {
@@ -2765,82 +3611,70 @@ fn current_studio_layout(state: &StudioState) -> Option<StudioLayout> {
     let Ok((width, height)) = crossterm::terminal::size() else {
         return None;
     };
-    Some(studio_layout(Rect::new(0, 0, width, height), state.layout_config))
+    Some(studio_layout(
+        Rect::new(0, 0, width, height),
+        state.layout_config,
+    ))
 }
 
 fn clamped_left_column_width(body_width: u16, percent: u16) -> u16 {
-    if body_width > MIN_LEFT_COLUMN_WIDTH + MIN_RIGHT_COLUMN_WIDTH {
-        ((body_width as u32 * percent as u32) / 100)
-            .clamp(
-                MIN_LEFT_COLUMN_WIDTH as u32,
-                body_width.saturating_sub(MIN_RIGHT_COLUMN_WIDTH) as u32,
-            ) as u16
+    let content_width = body_width.saturating_sub(COLUMN_SPLIT_WIDTH);
+    if content_width > MIN_LEFT_COLUMN_WIDTH + MIN_RIGHT_COLUMN_WIDTH {
+        ((content_width as u32 * percent as u32) / 100).clamp(
+            MIN_LEFT_COLUMN_WIDTH as u32,
+            content_width.saturating_sub(MIN_RIGHT_COLUMN_WIDTH) as u32,
+        ) as u16
     } else {
-        (body_width / 2).max(1)
+        (content_width / 2).max(1)
     }
 }
 
+fn left_content_height(area: Rect) -> u16 {
+    area.height
+        .saturating_sub(ROW_SPLIT_HEIGHT.saturating_mul(LEFT_SPLIT_COUNT))
+}
+
+fn right_content_height(area: Rect) -> u16 {
+    area.height
+        .saturating_sub(ROW_SPLIT_HEIGHT.saturating_mul(RIGHT_SPLIT_COUNT))
+}
+
 fn resize_handle_at(layout: &StudioLayout, column: u16, row: u16) -> Option<ResizeHandle> {
-    let left_right_border = layout
-        .left_body
+    if rect_contains(layout.left_scan_prompt_split, column, row) {
+        return Some(ResizeHandle::LeftScanPrompt);
+    }
+    if rect_contains(layout.left_prompt_contracts_split, column, row) {
+        return Some(ResizeHandle::LeftPromptContracts);
+    }
+    if rect_contains(layout.left_contracts_brief_split, column, row) {
+        return Some(ResizeHandle::LeftContractsBrief);
+    }
+    if rect_contains(layout.right_sessions_output_split, column, row) {
+        return Some(ResizeHandle::RightSessionsOutput);
+    }
+    if rect_contains(layout.right_output_activity_split, column, row) {
+        return Some(ResizeHandle::RightOutputActivity);
+    }
+
+    let min_column = layout
+        .column_split
         .x
-        .saturating_add(layout.left_body.width.saturating_sub(1));
-    if row >= layout.body.y
-        && row < layout.body.y.saturating_add(layout.body.height)
-        && (column == left_right_border || column == layout.right_body.x)
+        .saturating_sub(COLUMN_RESIZE_HIT_MARGIN);
+    let max_column = layout
+        .column_split
+        .x
+        .saturating_add(layout.column_split.width.saturating_sub(1))
+        .saturating_add(COLUMN_RESIZE_HIT_MARGIN);
+    if row >= layout.column_split.y
+        && row
+            < layout
+                .column_split
+                .y
+                .saturating_add(layout.column_split.height)
+        && column >= min_column
+        && column <= max_column
     {
         return Some(ResizeHandle::ColumnSplit);
-    }
-
-    if column >= layout.left_body.x
-        && column < layout.left_body.x.saturating_add(layout.left_body.width)
-    {
-        let scan_prompt_rows = [
-            layout.scan.y.saturating_add(layout.scan.height.saturating_sub(1)),
-            layout.prompt.y,
-        ];
-        if scan_prompt_rows.contains(&row) {
-            return Some(ResizeHandle::LeftScanPrompt);
-        }
-        let prompt_contract_rows = [
-            layout.prompt.y.saturating_add(layout.prompt.height.saturating_sub(1)),
-            layout.contracts.y,
-        ];
-        if prompt_contract_rows.contains(&row) {
-            return Some(ResizeHandle::LeftPromptContracts);
-        }
-        let contracts_brief_rows = [
-            layout
-                .contracts
-                .y
-                .saturating_add(layout.contracts.height.saturating_sub(1)),
-            layout.execution_brief.y,
-        ];
-        if contracts_brief_rows.contains(&row) {
-            return Some(ResizeHandle::LeftContractsBrief);
-        }
-    }
-
-    if column >= layout.right_body.x
-        && column < layout.right_body.x.saturating_add(layout.right_body.width)
-    {
-        let sessions_output_rows = [
-            layout
-                .sessions
-                .y
-                .saturating_add(layout.sessions.height.saturating_sub(1)),
-            layout.output.y,
-        ];
-        if sessions_output_rows.contains(&row) {
-            return Some(ResizeHandle::RightSessionsOutput);
-        }
-        let output_activity_rows = [
-            layout.output.y.saturating_add(layout.output.height.saturating_sub(1)),
-            layout.activity.y,
-        ];
-        if output_activity_rows.contains(&row) {
-            return Some(ResizeHandle::RightOutputActivity);
-        }
     }
 
     None
@@ -2859,37 +3693,40 @@ fn apply_resize_drag(
 
     match drag.handle {
         ResizeHandle::ColumnSplit => {
-            let initial_left_width =
-                clamped_left_column_width(layout.body.width, drag.initial_layout.left_column_percent)
-                    as i32;
+            let initial_left_width = clamped_left_column_width(
+                layout.body.width,
+                drag.initial_layout.left_column_percent,
+            ) as i32;
             let min_left = 1.max(MIN_LEFT_COLUMN_WIDTH.min(layout.body.width / 2)) as i32;
             let min_right = 1.max(MIN_RIGHT_COLUMN_WIDTH.min(layout.body.width / 2)) as i32;
-            let max_left = layout.body.width.saturating_sub(min_right as u16).max(1) as i32;
+            let content_width = layout.body.width.saturating_sub(COLUMN_SPLIT_WIDTH);
+            let max_left = content_width.saturating_sub(min_right as u16).max(1) as i32;
             let new_left_width = (initial_left_width + delta_columns).clamp(min_left, max_left);
-            config.left_column_percent = ((new_left_width * 100) / layout.body.width.max(1) as i32)
-                .clamp(1, 99) as u16;
+            config.left_column_percent =
+                ((new_left_width * 100) / content_width.max(1) as i32).clamp(1, 99) as u16;
         }
         ResizeHandle::LeftScanPrompt => {
-            let max_height = (layout.left_body.height as i32
+            let max_height = (left_content_height(layout.left_body) as i32
                 - drag.initial_layout.left_prompt_height as i32
                 - drag.initial_layout.left_contracts_height as i32
                 - MIN_LEFT_BRIEF_HEIGHT as i32)
                 .max(MIN_LEFT_SECTION_HEIGHT as i32);
             config.left_scan_height = (drag.initial_layout.left_scan_height as i32 + delta_rows)
-                .clamp(MIN_LEFT_SECTION_HEIGHT as i32, max_height) as u16;
+                .clamp(MIN_LEFT_SECTION_HEIGHT as i32, max_height)
+                as u16;
         }
         ResizeHandle::LeftPromptContracts => {
-            let max_height = (layout.left_body.height as i32
+            let max_height = (left_content_height(layout.left_body) as i32
                 - drag.initial_layout.left_scan_height as i32
                 - drag.initial_layout.left_contracts_height as i32
                 - MIN_LEFT_BRIEF_HEIGHT as i32)
                 .max(MIN_LEFT_SECTION_HEIGHT as i32);
-            config.left_prompt_height =
-                (drag.initial_layout.left_prompt_height as i32 + delta_rows)
-                    .clamp(MIN_LEFT_SECTION_HEIGHT as i32, max_height) as u16;
+            config.left_prompt_height = (drag.initial_layout.left_prompt_height as i32 + delta_rows)
+                .clamp(MIN_LEFT_SECTION_HEIGHT as i32, max_height)
+                as u16;
         }
         ResizeHandle::LeftContractsBrief => {
-            let max_height = (layout.left_body.height as i32
+            let max_height = (left_content_height(layout.left_body) as i32
                 - drag.initial_layout.left_scan_height as i32
                 - drag.initial_layout.left_prompt_height as i32
                 - MIN_LEFT_BRIEF_HEIGHT as i32)
@@ -2899,7 +3736,7 @@ fn apply_resize_drag(
                     .clamp(MIN_LEFT_SECTION_HEIGHT as i32, max_height) as u16;
         }
         ResizeHandle::RightSessionsOutput => {
-            let max_height = (layout.right_body.height as i32
+            let max_height = (right_content_height(layout.right_body) as i32
                 - drag.initial_layout.right_activity_height as i32
                 - MIN_OUTPUT_HEIGHT as i32)
                 .max(MIN_RIGHT_SECTION_HEIGHT as i32);
@@ -2908,7 +3745,7 @@ fn apply_resize_drag(
                     .clamp(MIN_RIGHT_SECTION_HEIGHT as i32, max_height) as u16;
         }
         ResizeHandle::RightOutputActivity => {
-            let max_height = (layout.right_body.height as i32
+            let max_height = (right_content_height(layout.right_body) as i32
                 - drag.initial_layout.right_sessions_height as i32
                 - MIN_OUTPUT_HEIGHT as i32)
                 .max(MIN_RIGHT_SECTION_HEIGHT as i32);
@@ -2942,7 +3779,10 @@ fn rect_contains(area: Rect, column: u16, row: u16) -> bool {
 }
 
 fn select_session_from_click(state: &mut StudioState, area: Rect, row: u16) {
-    if state.sessions.is_empty() || row <= area.y || row >= area.y.saturating_add(area.height).saturating_sub(1) {
+    if state.sessions.is_empty()
+        || row <= area.y
+        || row >= area.y.saturating_add(area.height).saturating_sub(1)
+    {
         return;
     }
 
@@ -2954,13 +3794,16 @@ fn select_session_from_click(state: &mut StudioState, area: Rect, row: u16) {
 }
 
 fn select_execution_contract_from_click(state: &mut StudioState, area: Rect, row: u16) {
-    if state.execution_contracts.is_empty() || row <= area.y + 1 || row >= area.y.saturating_add(area.height).saturating_sub(1) {
+    if state.execution_contracts.is_empty()
+        || row <= area.y + 1
+        || row >= area.y.saturating_add(area.height).saturating_sub(1)
+    {
         return;
     }
 
     let index = row.saturating_sub(area.y.saturating_add(2)) as usize;
     if index < state.execution_contracts.len() {
-        state.selected_execution_contract = index;
+        state.set_selected_execution_contract_index(index);
         if let Err(err) = persist_selected_execution_contract(
             &state.project_dir,
             &state.selected_execution_contract().file_name,
@@ -3140,10 +3983,7 @@ fn probe_claude_readiness(project_dir: &Path, model: &str) -> ProviderReadiness 
     let output = match output {
         Ok(output) => output,
         Err(err) => {
-            return ProviderReadiness::blocked(format!(
-                "failed to run `claude --help`: {}",
-                err
-            ));
+            return ProviderReadiness::blocked(format!("failed to run `claude --help`: {}", err));
         }
     };
 
@@ -3171,10 +4011,7 @@ fn probe_claude_readiness(project_dir: &Path, model: &str) -> ProviderReadiness 
     let auth = match check_claude_auth() {
         Ok(auth) => auth,
         Err(err) => {
-            return ProviderReadiness::blocked(format!(
-                "Claude auth status check failed: {}",
-                err
-            ));
+            return ProviderReadiness::blocked(format!("Claude auth status check failed: {}", err));
         }
     };
 
@@ -3182,7 +4019,9 @@ fn probe_claude_readiness(project_dir: &Path, model: &str) -> ProviderReadiness 
         return ProviderReadiness::blocked(auth.detail);
     }
 
-    if let Some(detail) = load_cached_live_probe(project_dir, ModelProvider::Claude, model, &auth.detail) {
+    if let Some(detail) =
+        load_cached_live_probe(project_dir, ModelProvider::Claude, model, &auth.detail)
+    {
         return ProviderReadiness::ready(detail);
     }
 
@@ -3238,10 +4077,7 @@ fn probe_codex_readiness(project_dir: &Path, model: &str) -> ProviderReadiness {
     let auth = match check_codex_auth() {
         Ok(auth) => auth,
         Err(err) => {
-            return ProviderReadiness::blocked(format!(
-                "Codex login status check failed: {}",
-                err
-            ));
+            return ProviderReadiness::blocked(format!("Codex login status check failed: {}", err));
         }
     };
 
@@ -3249,7 +4085,9 @@ fn probe_codex_readiness(project_dir: &Path, model: &str) -> ProviderReadiness {
         return ProviderReadiness::blocked(auth.detail);
     }
 
-    if let Some(detail) = load_cached_live_probe(project_dir, ModelProvider::Codex, model, &auth.detail) {
+    if let Some(detail) =
+        load_cached_live_probe(project_dir, ModelProvider::Codex, model, &auth.detail)
+    {
         return ProviderReadiness::ready(detail);
     }
 
@@ -3271,6 +4109,7 @@ fn assess_claude_help(help_text: &str) -> ProviderReadiness {
         ("--print", "--print"),
         ("--output-format", "--output-format"),
         ("stream-json", "stream-json"),
+        ("--verbose", "--verbose"),
         (
             "--dangerously-skip-permissions",
             "--dangerously-skip-permissions",
@@ -3284,7 +4123,7 @@ fn assess_claude_help(help_text: &str) -> ProviderReadiness {
 
     if missing.is_empty() {
         ProviderReadiness::ready(
-            "--print, --output-format=stream-json, and --dangerously-skip-permissions supported",
+            "--print, --output-format=stream-json, --verbose, and --dangerously-skip-permissions supported",
         )
     } else {
         ProviderReadiness::blocked(format!(
@@ -3327,8 +4166,8 @@ fn check_claude_auth() -> Result<AuthCheck> {
         .context("failed to run `claude auth status --json`")?;
 
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-    let status: ClaudeAuthStatus = serde_json::from_str(&stdout)
-        .context("failed to parse Claude auth status JSON")?;
+    let status: ClaudeAuthStatus =
+        serde_json::from_str(&stdout).context("failed to parse Claude auth status JSON")?;
 
     if status.logged_in {
         let auth_method = status.auth_method.as_deref().unwrap_or("unknown");
@@ -3353,11 +4192,7 @@ fn check_codex_auth() -> Result<AuthCheck> {
 
     let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-    let text = if !stdout.is_empty() {
-        stdout
-    } else {
-        stderr
-    };
+    let text = if !stdout.is_empty() { stdout } else { stderr };
 
     let normalized = text.to_lowercase();
     if normalized.contains("logged in") {
@@ -3405,6 +4240,7 @@ fn run_claude_live_probe(model: &str) -> Result<()> {
     cmd.args([
         "--output-format",
         "stream-json",
+        "--verbose",
         "--dangerously-skip-permissions",
         "--no-session-persistence",
         "--tools",
@@ -3473,7 +4309,10 @@ fn run_command_with_timeout(mut cmd: Command, timeout: Duration) -> Result<Captu
             anyhow::bail!("timed out after {}s", timeout.as_secs());
         }
 
-        match child.try_wait().context("failed while waiting for probe command")? {
+        match child
+            .try_wait()
+            .context("failed while waiting for probe command")?
+        {
             Some(status) => {
                 let mut stdout = String::new();
                 let mut stderr = String::new();
@@ -3562,17 +4401,21 @@ fn load_cached_live_probe(
     let now = Utc::now();
 
     cache.entries.iter().find_map(|entry| {
-        let fresh = now
-            .signed_duration_since(entry.checked_at)
-            .num_seconds()
-            <= LIVE_PROBE_TTL_SECS;
+        let fresh =
+            now.signed_duration_since(entry.checked_at).num_seconds() <= LIVE_PROBE_TTL_SECS;
         if entry.provider == provider.slug()
             && entry.model == model
             && entry.auth_detail == auth_detail
             && fresh
         {
-            let age = now.signed_duration_since(entry.checked_at).num_seconds().max(0);
-            Some(format!("authenticated; cached live smoke OK ({}s old)", age))
+            let age = now
+                .signed_duration_since(entry.checked_at)
+                .num_seconds()
+                .max(0);
+            Some(format!(
+                "authenticated; cached live smoke OK ({}s old)",
+                age
+            ))
         } else {
             None
         }
@@ -3588,7 +4431,9 @@ fn save_cached_live_probe(
     let path = probe_cache_path(project_dir);
     let mut cache = load_probe_cache(&path).unwrap_or_default();
     cache.entries.retain(|entry| {
-        !(entry.provider == provider.slug() && entry.model == model && entry.auth_detail == auth_detail)
+        !(entry.provider == provider.slug()
+            && entry.model == model
+            && entry.auth_detail == auth_detail)
     });
     cache.entries.push(CachedProbeEntry {
         provider: provider.slug().to_string(),
@@ -3619,6 +4464,34 @@ fn readiness_summary(readiness: &ProviderReadiness) -> String {
     }
 }
 
+fn header_readiness_label(readiness: &ProviderReadiness) -> String {
+    if readiness.is_available() {
+        return "ready".to_string();
+    }
+
+    let detail = readiness.detail.trim();
+    let concise = detail
+        .strip_prefix("missing required Claude features: ")
+        .or_else(|| detail.strip_prefix("missing required Codex features: "))
+        .or_else(|| detail.strip_prefix("authenticated but live Claude smoke failed: "))
+        .or_else(|| detail.strip_prefix("authenticated but live Codex smoke failed: "))
+        .or_else(|| detail.strip_prefix("Claude auth status check failed: "))
+        .or_else(|| detail.strip_prefix("Codex login status check failed: "))
+        .unwrap_or(detail);
+
+    let label = if detail.contains("CLI not found in PATH") {
+        "CLI missing".to_string()
+    } else {
+        concise.to_string()
+    };
+
+    if label.len() > 32 {
+        format!("{}...", truncate_str(&label, 29))
+    } else {
+        label
+    }
+}
+
 fn log_provider_probe(state: &mut StudioState, provider: ModelProvider) {
     let message = {
         let readiness = state.provider_readiness(provider);
@@ -3646,6 +4519,8 @@ fn command_exists(command: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
+    use std::os::unix::fs::symlink;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn test_scan() -> ProjectScan {
@@ -3664,7 +4539,16 @@ mod tests {
             path: PathBuf::from("/tmp/project/.foundry/studio/contracts/standard.md"),
             name: "Standard Build Contract".into(),
             body: default_execution_contract_content().into(),
+            attachments: Vec::new(),
         }
+    }
+
+    fn temp_test_dir(prefix: &str) -> PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time before unix epoch")
+            .as_nanos();
+        std::env::temp_dir().join(format!("{}-{}", prefix, unique))
     }
 
     fn test_state() -> StudioState {
@@ -3681,6 +4565,8 @@ mod tests {
             sessions: Vec::new(),
             selected_session: 0,
             output_scroll: 0,
+            preview_scroll: 0,
+            preview_cache: None,
             logs: Vec::new(),
             tick_count: 0,
             should_quit: false,
@@ -3726,6 +4612,7 @@ mod tests {
             "Claude",
             "Build me a usage dashboard.",
             &test_contract(),
+            &[],
             &scan,
             "/tmp/workspace",
             "/tmp/workspace/.foundry/studio/artifacts/run/claude",
@@ -3735,6 +4622,323 @@ mod tests {
         assert!(prompt.contains("Build me a usage dashboard."));
         assert!(prompt.contains("BEGIN EXECUTION CONTRACT"));
         assert!(prompt.contains("/tmp/workspace/.foundry/studio/artifacts/run/claude"));
+    }
+
+    #[test]
+    fn attachment_sidecar_path_rewrites_md_extension() {
+        let contract_path = Path::new("/tmp/project/.foundry/studio/contracts/standard.md");
+        assert_eq!(
+            attachment_sidecar_path(contract_path),
+            PathBuf::from("/tmp/project/.foundry/studio/contracts/standard.attachments.json")
+        );
+    }
+
+    #[test]
+    fn execution_contract_list_label_includes_attachment_count() {
+        let mut contract = test_contract();
+        assert_eq!(
+            execution_contract_list_label(&contract),
+            "Standard Build Contract"
+        );
+
+        contract.attachments = vec![
+            AttachmentSpec {
+                path: "docs/one.md".into(),
+                mode: AttachmentMode::InlineFile,
+                label: None,
+            },
+            AttachmentSpec {
+                path: "docs/two.md".into(),
+                mode: AttachmentMode::InlineFile,
+                label: None,
+            },
+        ];
+        assert_eq!(
+            execution_contract_list_label(&contract),
+            "Standard Build Contract [2 attached]"
+        );
+    }
+
+    #[test]
+    fn load_attachment_specs_missing_file_returns_empty() -> Result<()> {
+        let project_dir = temp_test_dir("foundry-attachment-missing");
+        let contracts_dir = project_dir.join(STUDIO_ROOT_DIR).join(STUDIO_CONTRACTS_DIR);
+        fs::create_dir_all(&contracts_dir)?;
+        let contract_path = contracts_dir.join("standard.md");
+        fs::write(&contract_path, "# Standard Build Contract\n")?;
+
+        let specs = load_attachment_specs(&contract_path);
+
+        fs::remove_dir_all(&project_dir)?;
+        assert!(specs.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn load_attachment_specs_malformed_json_returns_empty() -> Result<()> {
+        let project_dir = temp_test_dir("foundry-attachment-malformed");
+        let contracts_dir = project_dir.join(STUDIO_ROOT_DIR).join(STUDIO_CONTRACTS_DIR);
+        fs::create_dir_all(&contracts_dir)?;
+        let contract_path = contracts_dir.join("standard.md");
+        fs::write(&contract_path, "# Standard Build Contract\n")?;
+        fs::write(attachment_sidecar_path(&contract_path), "{not json")?;
+
+        let specs = load_attachment_specs(&contract_path);
+
+        fs::remove_dir_all(&project_dir)?;
+        assert!(specs.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn resolve_attachment_inline_file_reads_content() -> Result<()> {
+        let project_dir = temp_test_dir("foundry-attachment-inline");
+        fs::create_dir_all(project_dir.join("docs"))?;
+        fs::write(project_dir.join("docs/api.md"), "# API\nline two\n")?;
+
+        let resolved = resolve_attachment(
+            &AttachmentSpec {
+                path: "docs/api.md".into(),
+                mode: AttachmentMode::InlineFile,
+                label: None,
+            },
+            &project_dir,
+        );
+
+        fs::remove_dir_all(&project_dir)?;
+        assert_eq!(resolved.label, "docs/api.md");
+        assert!(resolved.content.contains("# API"));
+        assert!(resolved.error.is_none());
+        assert!(!resolved.truncated);
+        Ok(())
+    }
+
+    #[test]
+    fn resolve_attachment_rejects_absolute_path() -> Result<()> {
+        let project_dir = temp_test_dir("foundry-attachment-absolute");
+        fs::create_dir_all(&project_dir)?;
+
+        let resolved = resolve_attachment(
+            &AttachmentSpec {
+                path: "/tmp/outside.md".into(),
+                mode: AttachmentMode::InlineFile,
+                label: None,
+            },
+            &project_dir,
+        );
+
+        fs::remove_dir_all(&project_dir)?;
+        assert!(resolved.error.is_some());
+        assert!(resolved
+            .content
+            .contains("absolute attachment paths are not supported"));
+        Ok(())
+    }
+
+    #[test]
+    fn resolve_attachment_rejects_escape_path() -> Result<()> {
+        let temp_root = temp_test_dir("foundry-attachment-escape");
+        let project_dir = temp_root.join("project");
+        fs::create_dir_all(&project_dir)?;
+        fs::write(temp_root.join("outside.md"), "secret\n")?;
+
+        let resolved = resolve_attachment(
+            &AttachmentSpec {
+                path: "../outside.md".into(),
+                mode: AttachmentMode::InlineFile,
+                label: None,
+            },
+            &project_dir,
+        );
+
+        fs::remove_dir_all(&temp_root)?;
+        assert!(resolved.error.is_some());
+        assert!(resolved.content.contains("cannot contain '..' components"));
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn resolve_attachment_rejects_symlink_escape() -> Result<()> {
+        let temp_root = temp_test_dir("foundry-attachment-symlink");
+        let project_dir = temp_root.join("project");
+        fs::create_dir_all(&project_dir)?;
+        let outside_path = temp_root.join("outside.md");
+        fs::write(&outside_path, "secret\n")?;
+        symlink(&outside_path, project_dir.join("leak.md"))?;
+
+        let resolved = resolve_attachment(
+            &AttachmentSpec {
+                path: "leak.md".into(),
+                mode: AttachmentMode::InlineFile,
+                label: None,
+            },
+            &project_dir,
+        );
+
+        fs::remove_dir_all(&temp_root)?;
+        assert!(resolved.error.is_some());
+        assert!(resolved.content.contains("escapes the project root"));
+        Ok(())
+    }
+
+    #[test]
+    fn resolve_attachment_directory_tree_marks_snapshot_excluded_paths() -> Result<()> {
+        let project_dir = temp_test_dir("foundry-attachment-tree");
+        fs::create_dir_all(project_dir.join(".foundry/studio/logs"))?;
+        fs::create_dir_all(project_dir.join("src"))?;
+        fs::write(project_dir.join("src/main.rs"), "fn main() {}\n")?;
+        fs::write(project_dir.join(".foundry/studio/logs/run.log"), "log\n")?;
+
+        let resolved = resolve_attachment(
+            &AttachmentSpec {
+                path: ".".into(),
+                mode: AttachmentMode::DirectoryTree,
+                label: None,
+            },
+            &project_dir,
+        );
+
+        fs::remove_dir_all(&project_dir)?;
+        assert!(resolved.error.is_none());
+        assert!(resolved.content.contains("studio [snapshot-excluded]"));
+        assert!(resolved.content.contains("src/"));
+        Ok(())
+    }
+
+    #[test]
+    fn resolve_attachment_inline_file_truncates_large_files() -> Result<()> {
+        let project_dir = temp_test_dir("foundry-attachment-large-inline");
+        fs::create_dir_all(project_dir.join("docs"))?;
+        fs::write(
+            project_dir.join("docs/big.txt"),
+            "a".repeat(MAX_INLINE_FILE_BYTES + 1024),
+        )?;
+
+        let resolved = resolve_attachment(
+            &AttachmentSpec {
+                path: "docs/big.txt".into(),
+                mode: AttachmentMode::InlineFile,
+                label: None,
+            },
+            &project_dir,
+        );
+
+        fs::remove_dir_all(&project_dir)?;
+        assert!(resolved.error.is_none());
+        assert!(resolved.truncated);
+        assert!(resolved.content.contains("file exceeds"));
+        Ok(())
+    }
+
+    #[test]
+    fn resolve_all_attachments_truncates_when_total_budget_is_exceeded() -> Result<()> {
+        let project_dir = temp_test_dir("foundry-attachment-budget");
+        fs::create_dir_all(project_dir.join("docs"))?;
+        fs::write(project_dir.join("docs/one.txt"), "a".repeat(60_000))?;
+        fs::write(project_dir.join("docs/two.txt"), "b".repeat(60_000))?;
+
+        let resolved = resolve_all_attachments(
+            &[
+                AttachmentSpec {
+                    path: "docs/one.txt".into(),
+                    mode: AttachmentMode::InlineFile,
+                    label: None,
+                },
+                AttachmentSpec {
+                    path: "docs/two.txt".into(),
+                    mode: AttachmentMode::InlineFile,
+                    label: None,
+                },
+            ],
+            &project_dir,
+        );
+
+        fs::remove_dir_all(&project_dir)?;
+        assert_eq!(resolved.len(), 2);
+        assert!(!resolved[0].truncated);
+        assert!(resolved[1].truncated);
+        assert!(resolved[1]
+            .content
+            .contains("total attachment size budget reached"));
+        Ok(())
+    }
+
+    #[test]
+    fn format_attachments_block_is_empty_for_no_attachments() {
+        assert!(format_attachments_block(&[]).is_empty());
+    }
+
+    #[test]
+    fn compose_smoothed_prompt_places_attachments_between_contract_and_scan() {
+        let attachment = ResolvedAttachment {
+            spec: AttachmentSpec {
+                path: "docs/api.md".into(),
+                mode: AttachmentMode::InlineFile,
+                label: None,
+            },
+            label: "docs/api.md".into(),
+            content: "# API".into(),
+            truncated: false,
+            error: None,
+        };
+
+        let prompt = compose_smoothed_prompt(
+            "Claude",
+            "Build me a usage dashboard.",
+            &test_contract(),
+            &[attachment],
+            &test_scan(),
+            "/tmp/workspace",
+            "/tmp/workspace/.foundry/studio/artifacts/run/claude",
+            None,
+        );
+
+        let contract_end = prompt
+            .find("--- END EXECUTION CONTRACT ---")
+            .expect("missing contract end marker");
+        let attachment_start = prompt
+            .find("--- BEGIN ATTACHMENT: docs/api.md")
+            .expect("missing attachment block");
+        let scan_start = prompt.find("Project scan:").expect("missing project scan");
+
+        assert!(contract_end < attachment_start);
+        assert!(attachment_start < scan_start);
+    }
+
+    #[test]
+    fn preview_prompt_uses_cache_until_invalidated() -> Result<()> {
+        let project_dir = temp_test_dir("foundry-preview-cache");
+        fs::create_dir_all(project_dir.join("docs"))?;
+        let attachment_path = project_dir.join("docs/api.md");
+        fs::write(&attachment_path, "first version\n")?;
+
+        let mut state = test_state();
+        state.project_dir = project_dir.clone();
+        state.execution_contracts = vec![ExecutionContract {
+            file_name: "standard.md".into(),
+            path: project_dir.join(".foundry/studio/contracts/standard.md"),
+            name: "Standard Build Contract".into(),
+            body: default_execution_contract_content().into(),
+            attachments: vec![AttachmentSpec {
+                path: "docs/api.md".into(),
+                mode: AttachmentMode::InlineFile,
+                label: None,
+            }],
+        }];
+
+        let first = state.preview_prompt();
+        fs::write(&attachment_path, "second version\n")?;
+        let cached = state.preview_prompt();
+        state.invalidate_preview_cache();
+        let refreshed = state.preview_prompt();
+
+        fs::remove_dir_all(&project_dir)?;
+        assert!(first.contains("first version"));
+        assert!(cached.contains("first version"));
+        assert!(!cached.contains("second version"));
+        assert!(refreshed.contains("second version"));
+        Ok(())
     }
 
     #[test]
@@ -3760,7 +4964,10 @@ mod tests {
 
         let scan = scan_project(&temp_dir)?;
         assert!(scan.stack_signals.iter().any(|item| item == "Rust"));
-        assert!(scan.data_candidates.iter().any(|item| item == "metrics.json"));
+        assert!(scan
+            .data_candidates
+            .iter()
+            .any(|item| item == "metrics.json"));
         assert!(scan.output_targets.iter().any(|item| item == "public"));
 
         fs::remove_dir_all(&temp_dir)?;
@@ -3811,6 +5018,7 @@ Usage: claude [options] [command] [prompt]
 Options:
   -p, --print
   --output-format <format> text json stream-json
+  --verbose
   --dangerously-skip-permissions
 "#;
 
@@ -3831,6 +5039,7 @@ Options:
         let readiness = assess_claude_help(help);
         assert_eq!(readiness.state, ProviderState::Blocked);
         assert!(readiness.detail.contains("stream-json"));
+        assert!(readiness.detail.contains("--verbose"));
         assert!(readiness.detail.contains("--dangerously-skip-permissions"));
     }
 
@@ -3840,6 +5049,26 @@ Options:
         let codex = ProviderReadiness::missing("codex missing");
 
         assert_eq!(default_provider_mode(&claude, &codex), ProviderMode::Claude);
+    }
+
+    #[test]
+    fn header_readiness_label_shows_real_auth_reason() {
+        let readiness = ProviderReadiness::blocked("not logged in");
+        assert_eq!(header_readiness_label(&readiness), "not logged in");
+    }
+
+    #[test]
+    fn header_readiness_label_strips_verbose_feature_prefix() {
+        let readiness = ProviderReadiness::blocked(
+            "missing required Claude features: stream-json, --verbose, --dangerously-skip-permissions",
+        );
+        assert!(header_readiness_label(&readiness).contains("stream-json"));
+    }
+
+    #[test]
+    fn header_readiness_label_keeps_ready_short() {
+        let readiness = ProviderReadiness::ready("authenticated; live smoke OK");
+        assert_eq!(header_readiness_label(&readiness), "ready");
     }
 
     #[test]
@@ -3899,7 +5128,11 @@ Options:
             Some(FocusedPane::Contracts)
         );
         assert_eq!(
-            pane_at_position(&layout, layout.execution_brief.x + 1, layout.execution_brief.y + 1),
+            pane_at_position(
+                &layout,
+                layout.execution_brief.x + 1,
+                layout.execution_brief.y + 1
+            ),
             Some(FocusedPane::ExecutionBrief)
         );
         assert_eq!(
@@ -3981,6 +5214,7 @@ Options:
             path: PathBuf::from("/tmp/project/.foundry/studio/contracts/reporting.md"),
             name: "Reporting Contract".into(),
             body: "# Reporting Contract".into(),
+            attachments: Vec::new(),
         });
         state.selected_execution_contract = 1;
 
@@ -3994,31 +5228,101 @@ Options:
         let layout = studio_layout(Rect::new(0, 0, 120, 40), StudioLayoutConfig::default());
 
         assert_eq!(
-            resize_handle_at(&layout, layout.right_body.x, layout.body.y + 1),
+            resize_handle_at(&layout, layout.column_split.x, layout.column_split.y + 1),
             Some(ResizeHandle::ColumnSplit)
         );
         assert_eq!(
-            resize_handle_at(&layout, layout.left_body.x + 1, layout.prompt.y),
+            resize_handle_at(
+                &layout,
+                layout.left_scan_prompt_split.x + 1,
+                layout.left_scan_prompt_split.y,
+            ),
             Some(ResizeHandle::LeftScanPrompt)
         );
         assert_eq!(
-            resize_handle_at(&layout, layout.left_body.x + 1, layout.contracts.y),
+            resize_handle_at(
+                &layout,
+                layout.left_prompt_contracts_split.x + 1,
+                layout.left_prompt_contracts_split.y,
+            ),
             Some(ResizeHandle::LeftPromptContracts)
         );
         assert_eq!(
-            resize_handle_at(&layout, layout.left_body.x + 1, layout.execution_brief.y),
+            resize_handle_at(
+                &layout,
+                layout.left_contracts_brief_split.x + 1,
+                layout.left_contracts_brief_split.y,
+            ),
             Some(ResizeHandle::LeftContractsBrief)
         );
         assert_eq!(
-            resize_handle_at(&layout, layout.right_body.x + 1, layout.output.y),
+            resize_handle_at(
+                &layout,
+                layout.right_sessions_output_split.x + 1,
+                layout.right_sessions_output_split.y,
+            ),
             Some(ResizeHandle::RightSessionsOutput)
         );
         assert_eq!(
-            resize_handle_at(&layout, layout.right_body.x + 1, layout.activity.y),
+            resize_handle_at(
+                &layout,
+                layout.right_output_activity_split.x + 1,
+                layout.right_output_activity_split.y,
+            ),
             Some(ResizeHandle::RightOutputActivity)
         );
         assert_eq!(
             resize_handle_at(&layout, layout.scan.x + 2, layout.scan.y + 2),
+            None
+        );
+    }
+
+    #[test]
+    fn column_split_hit_testing_respects_grab_zone_boundaries() {
+        let layout = studio_layout(Rect::new(0, 0, 120, 40), StudioLayoutConfig::default());
+
+        assert_eq!(
+            resize_handle_at(
+                &layout,
+                layout
+                    .column_split
+                    .x
+                    .saturating_sub(COLUMN_RESIZE_HIT_MARGIN),
+                layout.column_split.y + 1,
+            ),
+            Some(ResizeHandle::ColumnSplit)
+        );
+        assert_eq!(
+            resize_handle_at(
+                &layout,
+                layout
+                    .column_split
+                    .x
+                    .saturating_add(COLUMN_RESIZE_HIT_MARGIN),
+                layout.column_split.y + 1,
+            ),
+            Some(ResizeHandle::ColumnSplit)
+        );
+        assert_eq!(
+            resize_handle_at(
+                &layout,
+                layout
+                    .column_split
+                    .x
+                    .saturating_sub(COLUMN_RESIZE_HIT_MARGIN.saturating_add(1)),
+                layout.column_split.y + 1,
+            ),
+            None
+        );
+        assert_eq!(
+            resize_handle_at(
+                &layout,
+                layout
+                    .column_split
+                    .x
+                    .saturating_add(COLUMN_RESIZE_HIT_MARGIN.saturating_add(1)),
+                layout.column_split.y + 1,
+            ),
             None
         );
     }
@@ -4029,8 +5333,8 @@ Options:
         let layout = studio_layout(Rect::new(0, 0, 120, 40), state.layout_config);
         let drag = ResizeDragState {
             handle: ResizeHandle::ColumnSplit,
-            start_column: layout.right_body.x,
-            start_row: layout.body.y,
+            start_column: layout.column_split.x,
+            start_row: layout.column_split.y,
             initial_layout: state.layout_config,
         };
 
@@ -4038,11 +5342,45 @@ Options:
             &mut state,
             &layout,
             drag,
-            layout.right_body.x.saturating_add(8),
-            layout.body.y,
+            layout.column_split.x.saturating_add(8),
+            layout.column_split.y,
         );
 
         assert!(state.layout_config.left_column_percent > DEFAULT_LEFT_COLUMN_PERCENT);
+    }
+
+    #[test]
+    fn scrolling_preview_updates_preview_scroll() {
+        let mut state = test_state();
+        state.prompt = (0..40)
+            .map(|idx| format!("line {}", idx))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let area = Rect::new(0, 0, 30, 8);
+
+        scroll_preview(&mut state, area, 3);
+        assert!(state.preview_scroll > 0);
+
+        scroll_preview(&mut state, area, -3);
+        assert_eq!(state.preview_scroll, 0);
+    }
+
+    #[test]
+    fn cycling_execution_contract_resets_preview_scroll() {
+        let mut state = test_state();
+        state.execution_contracts.push(ExecutionContract {
+            file_name: "reporting.md".into(),
+            path: PathBuf::from("/tmp/project/.foundry/studio/contracts/reporting.md"),
+            name: "Reporting Contract".into(),
+            body: "# Reporting Contract".into(),
+            attachments: Vec::new(),
+        });
+        state.preview_scroll = 9;
+
+        cycle_execution_contract(&mut state, true);
+
+        assert_eq!(state.selected_execution_contract, 1);
+        assert_eq!(state.preview_scroll, 0);
     }
 
     #[test]
@@ -4051,8 +5389,8 @@ Options:
         let layout = studio_layout(Rect::new(0, 0, 120, 40), state.layout_config);
         let drag = ResizeDragState {
             handle: ResizeHandle::LeftScanPrompt,
-            start_column: layout.left_body.x + 1,
-            start_row: layout.prompt.y,
+            start_column: layout.left_scan_prompt_split.x + 1,
+            start_row: layout.left_scan_prompt_split.y,
             initial_layout: state.layout_config,
         };
 
@@ -4060,8 +5398,8 @@ Options:
             &mut state,
             &layout,
             drag,
-            layout.left_body.x + 1,
-            layout.prompt.y.saturating_add(2),
+            layout.left_scan_prompt_split.x + 1,
+            layout.left_scan_prompt_split.y.saturating_add(2),
         );
 
         assert!(state.layout_config.left_scan_height > DEFAULT_LEFT_SCAN_HEIGHT);
@@ -4073,8 +5411,8 @@ Options:
         let layout = studio_layout(Rect::new(0, 0, 120, 40), state.layout_config);
         let drag = ResizeDragState {
             handle: ResizeHandle::LeftPromptContracts,
-            start_column: layout.left_body.x + 1,
-            start_row: layout.contracts.y,
+            start_column: layout.left_prompt_contracts_split.x + 1,
+            start_row: layout.left_prompt_contracts_split.y,
             initial_layout: state.layout_config,
         };
 
@@ -4082,8 +5420,8 @@ Options:
             &mut state,
             &layout,
             drag,
-            layout.left_body.x + 1,
-            layout.contracts.y.saturating_add(2),
+            layout.left_prompt_contracts_split.x + 1,
+            layout.left_prompt_contracts_split.y.saturating_add(2),
         );
 
         assert!(state.layout_config.left_prompt_height > DEFAULT_LEFT_PROMPT_HEIGHT);
@@ -4095,8 +5433,8 @@ Options:
         let layout = studio_layout(Rect::new(0, 0, 120, 40), state.layout_config);
         let drag = ResizeDragState {
             handle: ResizeHandle::LeftContractsBrief,
-            start_column: layout.left_body.x + 1,
-            start_row: layout.execution_brief.y,
+            start_column: layout.left_contracts_brief_split.x + 1,
+            start_row: layout.left_contracts_brief_split.y,
             initial_layout: state.layout_config,
         };
 
@@ -4104,8 +5442,8 @@ Options:
             &mut state,
             &layout,
             drag,
-            layout.left_body.x + 1,
-            layout.execution_brief.y.saturating_add(2),
+            layout.left_contracts_brief_split.x + 1,
+            layout.left_contracts_brief_split.y.saturating_add(2),
         );
 
         assert!(state.layout_config.left_contracts_height > DEFAULT_LEFT_CONTRACTS_HEIGHT);
@@ -4117,8 +5455,8 @@ Options:
         let layout = studio_layout(Rect::new(0, 0, 120, 40), state.layout_config);
         let drag = ResizeDragState {
             handle: ResizeHandle::RightSessionsOutput,
-            start_column: layout.right_body.x + 1,
-            start_row: layout.output.y,
+            start_column: layout.right_sessions_output_split.x + 1,
+            start_row: layout.right_sessions_output_split.y,
             initial_layout: state.layout_config,
         };
 
@@ -4126,8 +5464,8 @@ Options:
             &mut state,
             &layout,
             drag,
-            layout.right_body.x + 1,
-            layout.output.y.saturating_add(2),
+            layout.right_sessions_output_split.x + 1,
+            layout.right_sessions_output_split.y.saturating_add(2),
         );
 
         assert!(state.layout_config.right_sessions_height > DEFAULT_RIGHT_SESSIONS_HEIGHT);
@@ -4139,8 +5477,8 @@ Options:
         let layout = studio_layout(Rect::new(0, 0, 120, 40), state.layout_config);
         let drag = ResizeDragState {
             handle: ResizeHandle::RightOutputActivity,
-            start_column: layout.right_body.x + 1,
-            start_row: layout.activity.y,
+            start_column: layout.right_output_activity_split.x + 1,
+            start_row: layout.right_output_activity_split.y,
             initial_layout: state.layout_config,
         };
 
@@ -4148,8 +5486,8 @@ Options:
             &mut state,
             &layout,
             drag,
-            layout.right_body.x + 1,
-            layout.activity.y.saturating_add(2),
+            layout.right_output_activity_split.x + 1,
+            layout.right_output_activity_split.y.saturating_add(2),
         );
 
         assert!(state.layout_config.right_activity_height < DEFAULT_RIGHT_ACTIVITY_HEIGHT);
@@ -4161,8 +5499,8 @@ Options:
         let layout = studio_layout(Rect::new(0, 0, 120, 40), state.layout_config);
         let drag = ResizeDragState {
             handle: ResizeHandle::RightOutputActivity,
-            start_column: layout.right_body.x + 1,
-            start_row: layout.activity.y,
+            start_column: layout.right_output_activity_split.x + 1,
+            start_row: layout.right_output_activity_split.y,
             initial_layout: state.layout_config,
         };
 
@@ -4170,8 +5508,8 @@ Options:
             &mut state,
             &layout,
             drag,
-            layout.right_body.x + 1,
-            layout.activity.y.saturating_sub(2),
+            layout.right_output_activity_split.x + 1,
+            layout.right_output_activity_split.y.saturating_sub(2),
         );
 
         assert!(state.layout_config.right_activity_height > DEFAULT_RIGHT_ACTIVITY_HEIGHT);
@@ -4186,6 +5524,7 @@ Options:
             path: PathBuf::from("/tmp/project/.foundry/studio/contracts/reporting.md"),
             name: "Reporting Contract".into(),
             body: "# Reporting Contract".into(),
+            attachments: Vec::new(),
         });
 
         let (tx, _rx) = mpsc::unbounded_channel();
@@ -4202,6 +5541,58 @@ Options:
             &tx,
         );
         assert_eq!(state.selected_execution_contract, 0);
+    }
+
+    #[test]
+    fn enter_edits_selected_contract_when_contracts_pane_is_focused() {
+        let mut state = test_state();
+        state.focused_pane = FocusedPane::Contracts;
+
+        let (tx, _rx) = mpsc::unbounded_channel();
+        handle_global_key(
+            &mut state,
+            event::KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+            &tx,
+        );
+
+        assert!(state.editor_guide.is_some());
+        assert_eq!(state.focused_pane, FocusedPane::Contracts);
+    }
+
+    #[test]
+    fn t_edits_selected_contract_attachments_when_contracts_pane_is_focused() -> Result<()> {
+        let project_dir = temp_test_dir("foundry-edit-attachments-keybind");
+        fs::create_dir_all(project_dir.join(STUDIO_ROOT_DIR))?;
+
+        let mut state = test_state();
+        state.project_dir = project_dir.clone();
+        let (contracts, selected_index) = load_execution_contracts(&project_dir)?;
+        state.execution_contracts = contracts;
+        state.selected_execution_contract = selected_index;
+        state.focused_pane = FocusedPane::Contracts;
+
+        let sidecar_path = attachment_sidecar_path(&state.selected_execution_contract().path);
+        let (tx, _rx) = mpsc::unbounded_channel();
+        handle_global_key(
+            &mut state,
+            event::KeyEvent::new(KeyCode::Char('t'), KeyModifiers::NONE),
+            &tx,
+        );
+
+        assert!(sidecar_path.exists());
+        let guide = state
+            .editor_guide
+            .as_ref()
+            .expect("editor guide should be open");
+        match &guide.action {
+            PendingStudioAction::EditExecutionContract { path, action_label } => {
+                assert_eq!(path, &sidecar_path);
+                assert_eq!(*action_label, "contract attachments");
+            }
+        }
+
+        fs::remove_dir_all(&project_dir)?;
+        Ok(())
     }
 
     #[test]
@@ -4239,8 +5630,7 @@ Options:
             .duration_since(UNIX_EPOCH)
             .expect("system time before unix epoch")
             .as_nanos();
-        let project_dir =
-            std::env::temp_dir().join(format!("foundry-studio-contracts-{}", unique));
+        let project_dir = std::env::temp_dir().join(format!("foundry-studio-contracts-{}", unique));
         fs::create_dir_all(&project_dir)?;
 
         let (contracts, selected) = load_execution_contracts(&project_dir)?;
@@ -4249,6 +5639,27 @@ Options:
         assert_eq!(selected, 0);
         assert_eq!(contracts.len(), 1);
         assert_eq!(contracts[0].file_name, "standard.md");
+        Ok(())
+    }
+
+    #[test]
+    fn create_execution_contract_creates_empty_attachment_sidecar() -> Result<()> {
+        let project_dir = temp_test_dir("foundry-create-contract-sidecar");
+        fs::create_dir_all(project_dir.join(STUDIO_ROOT_DIR))?;
+
+        let mut state = test_state();
+        state.project_dir = project_dir.clone();
+        let (contracts, selected_index) = load_execution_contracts(&project_dir)?;
+        state.execution_contracts = contracts;
+        state.selected_execution_contract = selected_index;
+
+        create_execution_contract(&mut state)?;
+
+        let sidecar_path = attachment_sidecar_path(&state.selected_execution_contract().path);
+        let sidecar = fs::read_to_string(&sidecar_path)?;
+
+        fs::remove_dir_all(&project_dir)?;
+        assert_eq!(sidecar, "[]\n");
         Ok(())
     }
 
@@ -4279,8 +5690,15 @@ Options:
             std::env::temp_dir().join(format!("foundry-studio-delete-confirm-{}", unique));
         let contracts_dir = project_dir.join(STUDIO_ROOT_DIR).join(STUDIO_CONTRACTS_DIR);
         fs::create_dir_all(&contracts_dir)?;
-        fs::write(contracts_dir.join("standard.md"), "# Standard Build Contract\n")?;
+        fs::write(
+            contracts_dir.join("standard.md"),
+            "# Standard Build Contract\n",
+        )?;
         fs::write(contracts_dir.join("reporting.md"), "# Reporting Contract\n")?;
+        fs::write(
+            contracts_dir.join("reporting.attachments.json"),
+            r#"[{"path":"docs/report.md","mode":"inline_file"}]"#,
+        )?;
 
         let (contracts, selected_index) =
             load_execution_contracts_with_selection(&project_dir, Some("reporting.md"))?;
@@ -4301,6 +5719,14 @@ Options:
         assert_eq!(state.execution_contracts.len(), 1);
         assert_eq!(state.execution_contracts[0].file_name, "standard.md");
         assert!(contracts_dir.join(".trash").exists());
+        assert!(!contracts_dir.join("reporting.attachments.json").exists());
+        let trashed_entries = fs::read_dir(contracts_dir.join(".trash"))?
+            .filter_map(|entry| entry.ok())
+            .map(|entry| entry.file_name().to_string_lossy().to_string())
+            .collect::<Vec<_>>();
+        assert!(trashed_entries
+            .iter()
+            .any(|name| name.ends_with("reporting.attachments.json")));
 
         fs::remove_dir_all(&project_dir)?;
         Ok(())
@@ -4314,6 +5740,7 @@ Options:
             path: PathBuf::from("/tmp/project/.foundry/studio/contracts/reporting.md"),
             name: "Reporting Contract".into(),
             body: "# Reporting Contract".into(),
+            attachments: Vec::new(),
         });
         let area = Rect::new(0, 0, 40, 8);
 
@@ -4367,9 +5794,13 @@ Options:
                 tokio::task::yield_now().await;
             }
         });
-        state
-            .session_controls
-            .insert("session".into(), SessionControl { cancel_flag: cancel_flag.clone(), task });
+        state.session_controls.insert(
+            "session".into(),
+            SessionControl {
+                cancel_flag: cancel_flag.clone(),
+                task,
+            },
+        );
         state.sessions.push(test_session(SessionStatus::Running));
 
         request_quit(&mut state);
