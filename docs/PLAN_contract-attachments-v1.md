@@ -155,8 +155,8 @@ Why sidecar over frontmatter: keeps contracts as pure markdown. Users edit them 
 
 - [x] T6.1: Update `render_contracts` (`studio.rs:1753`) to show attachment count: `> standard [2 attached]` or just `> standard` when zero
 - [x] T6.2: The Execution Brief pane (`render_preview`) already renders the full prompt, so attachments will appear naturally after the contract. No separate rendering needed.
-- [x] T6.3: Add `t` keybind when Contracts pane is focused: opens/creates the sidecar JSON for the selected contract in the editor (same pattern as `edit_selected_execution_contract`)
-- [x] T6.4: After the editor closes for `t`, reload attachments for the edited contract and invalidate the preview cache
+- [x] T6.3: Add `t` keybind when Contracts pane is focused: on macOS, leave the TUI and open a native file/folder picker that appends attachment entries to the selected contract; on other platforms, fall back to opening the sidecar JSON in the editor
+- [x] T6.4: After the picker/editor returns for `t`, reload attachments for the edited contract and invalidate the preview cache
 
 ### Step 7: Tests
 
@@ -219,7 +219,7 @@ Why sidecar over frontmatter: keeps contracts as pure markdown. Users edit them 
 
 4. **Symlink canonicalization on missing targets.** `fs::canonicalize` requires the target to exist. If an attached path doesn't exist yet (e.g. an output directory), canonicalization fails. `resolve_attachment` should handle this: first check `Path::is_relative()` and no `..` components (string-level), then attempt canonicalization only if the path exists. If it doesn't exist, report a file-not-found error in the `ResolvedAttachment`.
 
-5. **JSON editing UX.** The `t` keybind opens raw JSON. Users must write valid JSON. This is acceptable for v1 because the target audience (you) is comfortable with JSON. A TUI inline editor for attachments would be a better UX for phase 2.
+5. **Cross-platform attachment UX.** On macOS, `t` uses a native picker and writes the sidecar automatically. On other platforms, the fallback is still raw JSON editing. A fully inline TUI attachment manager would still be a better phase 2 UX.
 
 6. **Cache staleness window.** The preview cache is invalidated on explicit user actions (contract cycle, edit, rescan) but not on external file changes. If the user modifies an attached file outside Studio, the preview won't update until the next invalidation event. This is acceptable -- `r` (rescan) is the escape hatch and is already wired.
 

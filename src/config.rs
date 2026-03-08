@@ -1,5 +1,36 @@
 use serde::Deserialize;
-use std::path::Path;
+use std::{collections::BTreeMap, path::Path};
+
+#[derive(Debug, Clone, Deserialize, Default)]
+#[serde(default)]
+pub struct StudioThemeConfig {
+    pub base: Option<String>,
+    pub background: Option<String>,
+    pub surface: Option<String>,
+    pub text: Option<String>,
+    pub text_dim: Option<String>,
+    pub text_muted: Option<String>,
+    pub border: Option<String>,
+    pub info: Option<String>,
+    pub success: Option<String>,
+    pub warning: Option<String>,
+    pub error: Option<String>,
+    pub claude: Option<String>,
+    pub codex: Option<String>,
+    pub scan: Option<String>,
+    pub prompt: Option<String>,
+    pub contracts: Option<String>,
+    pub brief: Option<String>,
+    pub sessions: Option<String>,
+    pub output: Option<String>,
+    pub activity: Option<String>,
+    pub badge_fg: Option<String>,
+    pub badge_bg: Option<String>,
+    pub status_fg: Option<String>,
+    pub status_bg: Option<String>,
+    pub tool: Option<String>,
+    pub tool_result: Option<String>,
+}
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
@@ -11,6 +42,8 @@ pub struct Config {
     pub discovery_model: String,
     pub studio_claude_model: String,
     pub studio_codex_model: String,
+    pub studio_theme: String,
+    pub studio_custom_themes: BTreeMap<String, StudioThemeConfig>,
 
     pub pause_between_tasks_secs: u64,
     pub pause_between_agents_secs: u64,
@@ -31,6 +64,8 @@ impl Default for Config {
             discovery_model: "opus".into(),
             studio_claude_model: "opus".into(),
             studio_codex_model: String::new(),
+            studio_theme: "foundry".into(),
+            studio_custom_themes: BTreeMap::new(),
 
             pause_between_tasks_secs: 10,
             pause_between_agents_secs: 3,

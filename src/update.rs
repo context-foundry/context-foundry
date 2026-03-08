@@ -37,15 +37,42 @@ pub fn get_target_triple() -> Option<&'static str> {
         ("macos", "x86_64") => Some("x86_64-apple-darwin"),
         ("linux", "x86_64") => Some("x86_64-unknown-linux-gnu"),
         ("linux", "aarch64") => Some("aarch64-unknown-linux-gnu"),
+        ("windows", "x86_64") => Some("x86_64-pc-windows-msvc"),
         _ => None,
+    }
+}
+
+fn is_windows() -> bool {
+    std::env::consts::OS == "windows"
+}
+
+fn archive_extension() -> &'static str {
+    if is_windows() {
+        ".zip"
+    } else {
+        ".tar.gz"
+    }
+}
+
+fn binary_name() -> &'static str {
+    if is_windows() {
+        "foundry.exe"
+    } else {
+        "foundry"
     }
 }
 
 // ─── Cache dir ───────────────────────────────────────────────
 
 fn foundry_cache_dir() -> Result<PathBuf> {
-    let home = std::env::var("HOME").context("HOME not set")?;
-    let dir = PathBuf::from(home).join(".foundry");
+    let base = if is_windows() {
+        std::env::var("LOCALAPPDATA")
+            .or_else(|_| std::env::var("USERPROFILE"))
+            .context("LOCALAPPDATA or USERPROFILE not set")?
+    } else {
+        std::env::var("HOME").context("HOME not set")?
+    };
+    let dir = PathBuf::from(base).join(".foundry");
     fs::create_dir_all(&dir)?;
     Ok(dir)
 }
@@ -157,12 +184,15 @@ fn fetch_latest_binary_release() -> Result<Option<BinaryRelease>> {
             None => continue,
         };
 
-        // Check if any asset looks like a foundry binary tarball
+        // Check if any asset looks like a foundry binary (tarball or zip)
         let has_binary = assets.iter().any(|asset| {
             asset
                 .get("name")
                 .and_then(|n| n.as_str())
-                .map(|name| name.starts_with(ASSET_PREFIX) && name.ends_with(".tar.gz"))
+                .map(|name| {
+                    name.starts_with(ASSET_PREFIX)
+                        && (name.ends_with(".tar.gz") || name.ends_with(".zip"))
+                })
                 .unwrap_or(false)
         });
 
@@ -273,12 +303,12 @@ pub fn run_update() -> Result<()> {
     };
 
     let assets = extract_assets(&release.body)?;
-    let tarball_name = format!("foundry-v{}-{}.tar.gz", latest, target);
+    let archive_name = format!("foundry-v{}-{}{}", latest, target, archive_extension());
     let checksums_name = format!("foundry-v{}-checksums.txt", latest);
 
-    let tarball_url = assets
+    let archive_url = assets
         .iter()
-        .find(|(name, _)| name == &tarball_name)
+        .find(|(name, _)| name == &archive_name)
         .map(|(_, url)| url.clone());
 
     let checksums_url = assets
@@ -286,7 +316,7 @@ pub fn run_update() -> Result<()> {
         .find(|(name, _)| name == &checksums_name)
         .map(|(_, url)| url.clone());
 
-    let tarball_url = match tarball_url {
+    let archive_url = match archive_url {
         Some(url) => url,
         None => {
             println!(
@@ -311,34 +341,30 @@ pub fn run_update() -> Result<()> {
     let _ = fs::remove_dir_all(&tmp_dir);
     fs::create_dir_all(&tmp_dir)?;
 
-    // Download tarball
-    println!("Downloading {}...", tarball_name);
-    let tarball_path = tmp_dir.join(&tarball_name);
-    download_file(&tarball_url, &tarball_path)?;
+    // Download archive
+    println!("Downloading {}...", archive_name);
+    let archive_path = tmp_dir.join(&archive_name);
+    download_file(&archive_url, &archive_path)?;
 
     // Verify checksum if available
     if let Some(checksums_url) = checksums_url {
         println!("Verifying checksum...");
         let checksums_path = tmp_dir.join(&checksums_name);
         download_file(&checksums_url, &checksums_path)?;
-        verify_checksum(&tarball_path, &tarball_name, &checksums_path)?;
+        verify_checksum(&archive_path, &archive_name, &checksums_path)?;
         println!("Checksum verified.");
     }
 
     // Extract
     println!("Extracting...");
-    let status = Command::new("tar")
-        .args(["-xzf", &tarball_path.to_string_lossy()])
-        .current_dir(&tmp_dir)
-        .status()
-        .context("failed to extract tarball")?;
-    if !status.success() {
-        bail!("tar extraction failed");
-    }
+    extract_archive(&archive_path, &tmp_dir)?;
 
-    let new_binary = tmp_dir.join("foundry");
+    let new_binary = tmp_dir.join(binary_name());
     if !new_binary.exists() {
-        bail!("extracted archive does not contain 'foundry' binary");
+        bail!(
+            "extracted archive does not contain '{}' binary",
+            binary_name()
+        );
     }
 
     // Replace using backup + rollback strategy
@@ -367,19 +393,35 @@ pub fn run_update() -> Result<()> {
 // ─── Helpers ─────────────────────────────────────────────────
 
 fn download_file(url: &str, dest: &Path) -> Result<()> {
-    let status = Command::new("curl")
-        .args([
-            "-fSL",
-            "--max-time",
-            "120",
-            "-o",
-            &dest.to_string_lossy(),
+    if is_windows() {
+        let script = format!(
+            "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; \
+             Invoke-WebRequest -Uri '{}' -OutFile '{}' -UseBasicParsing",
             url,
-        ])
-        .status()
-        .context("failed to run curl")?;
-    if !status.success() {
-        bail!("download failed: {}", url);
+            dest.to_string_lossy()
+        );
+        let status = Command::new("powershell")
+            .args(["-NoProfile", "-Command", &script])
+            .status()
+            .context("failed to run powershell for download")?;
+        if !status.success() {
+            bail!("download failed: {}", url);
+        }
+    } else {
+        let status = Command::new("curl")
+            .args([
+                "-fSL",
+                "--max-time",
+                "120",
+                "-o",
+                &dest.to_string_lossy(),
+                url,
+            ])
+            .status()
+            .context("failed to run curl")?;
+        if !status.success() {
+            bail!("download failed: {}", url);
+        }
     }
     Ok(())
 }
@@ -394,13 +436,25 @@ fn verify_checksum(file: &Path, file_name: &str, checksums_path: &Path) -> Resul
         .context("checksum not found for this binary")?;
 
     // Compute SHA256
-    let output = Command::new("shasum")
-        .args(["-a", "256", &file.to_string_lossy()])
-        .output()
-        .context("failed to run shasum")?;
-
-    let actual = String::from_utf8_lossy(&output.stdout);
-    let actual = actual.split_whitespace().next().unwrap_or("");
+    let actual = if is_windows() {
+        let output = Command::new("certutil")
+            .args(["-hashfile", &file.to_string_lossy(), "SHA256"])
+            .output()
+            .context("failed to run certutil")?;
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        // certutil outputs: hash on the second line
+        stdout.lines().nth(1).unwrap_or("").trim().to_lowercase()
+    } else {
+        let output = Command::new("shasum")
+            .args(["-a", "256", &file.to_string_lossy()])
+            .output()
+            .context("failed to run shasum")?;
+        String::from_utf8_lossy(&output.stdout)
+            .split_whitespace()
+            .next()
+            .unwrap_or("")
+            .to_string()
+    };
 
     if actual != expected {
         bail!(
@@ -408,6 +462,33 @@ fn verify_checksum(file: &Path, file_name: &str, checksums_path: &Path) -> Resul
             expected,
             actual
         );
+    }
+    Ok(())
+}
+
+fn extract_archive(archive: &Path, dest: &Path) -> Result<()> {
+    if is_windows() {
+        let script = format!(
+            "Expand-Archive -Path '{}' -DestinationPath '{}' -Force",
+            archive.to_string_lossy(),
+            dest.to_string_lossy()
+        );
+        let status = Command::new("powershell")
+            .args(["-NoProfile", "-Command", &script])
+            .status()
+            .context("failed to run powershell for extraction")?;
+        if !status.success() {
+            bail!("zip extraction failed");
+        }
+    } else {
+        let status = Command::new("tar")
+            .args(["-xzf", &archive.to_string_lossy()])
+            .current_dir(dest)
+            .status()
+            .context("failed to extract tarball")?;
+        if !status.success() {
+            bail!("tar extraction failed");
+        }
     }
     Ok(())
 }
@@ -469,7 +550,14 @@ mod tests {
     #[test]
     fn test_get_target_triple() {
         let triple = get_target_triple();
-        assert!(triple.is_some() || cfg!(not(any(target_os = "macos", target_os = "linux"))));
+        assert!(
+            triple.is_some()
+                || cfg!(not(any(
+                    target_os = "macos",
+                    target_os = "linux",
+                    target_os = "windows"
+                )))
+        );
     }
 
     #[test]
@@ -483,9 +571,36 @@ mod tests {
         }"#;
         let assets = extract_assets(json).unwrap();
         assert_eq!(assets.len(), 2);
-        // The binary asset starts with ASSET_PREFIX
         assert!(assets[0].0.starts_with(ASSET_PREFIX));
-        // The Python asset does not
         assert!(!assets[1].0.starts_with(ASSET_PREFIX));
+    }
+
+    #[test]
+    fn test_extract_assets_includes_windows_zip() {
+        let json = r#"{
+            "tag_name": "v0.3.0",
+            "assets": [
+                {"name": "foundry-v0.3.0-aarch64-apple-darwin.tar.gz", "browser_download_url": "https://example.com/a"},
+                {"name": "foundry-v0.3.0-x86_64-pc-windows-msvc.zip", "browser_download_url": "https://example.com/b"}
+            ]
+        }"#;
+        let assets = extract_assets(json).unwrap();
+        assert_eq!(assets.len(), 2);
+        assert!(assets[0].0.starts_with(ASSET_PREFIX));
+        assert!(assets[1].0.starts_with(ASSET_PREFIX));
+        assert!(assets[1].0.ends_with(".zip"));
+    }
+
+    #[test]
+    fn test_archive_extension() {
+        // On the host platform this should return one of the two
+        let ext = archive_extension();
+        assert!(ext == ".tar.gz" || ext == ".zip");
+    }
+
+    #[test]
+    fn test_binary_name() {
+        let name = binary_name();
+        assert!(name == "foundry" || name == "foundry.exe");
     }
 }

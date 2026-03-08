@@ -192,7 +192,8 @@ Keyboard:
 - `j` / `k` switch selected session
 - `Up` / `Down` move execution contracts when that pane is focused, or scroll output when the output pane is focused
 - `Tab` / `Shift+Tab` cycle pane focus
-- drag pane borders with the mouse to resize columns left/right and pane stacks up/down
+- drag the visible split bars with the mouse to resize columns left/right and pane stacks up/down
+- use the mouse wheel or trackpad over `Execution Brief` or `Output` to scroll that pane
 - `q` quit
 - `Ctrl+C` quit
 
@@ -201,7 +202,8 @@ Mouse:
 - click a pane to focus it
 - click the prompt pane to enter edit mode
 - click a session row to select it
-- scroll in the output pane
+- drag the visible split bars between panes to resize them
+- scroll in the `Execution Brief` or `Output` pane
 
 ## Follow-Up Runs
 
@@ -274,7 +276,7 @@ Studio is not a lighter skin over `foundry run`. It is a different workflow.
 `foundry studio`:
 
 - starts from a free-form user prompt
-- uses the Studio execution brief in `src/studio.rs`
+- uses the Studio execution brief built from the `src/studio/` prompt/state modules
 - does not run the plan/review/fix loop
 - does not commit or push automatically
 - is designed for interactive exploration and artifact generation
@@ -290,7 +292,7 @@ Studio currently does not:
 
 ## Related Files
 
-- `src/studio.rs` — Studio TUI, workspace handling, provider probes, and execution brief composition
+- `src/studio/` — Studio TUI app shell, state/model modules, provider/session logic, and UI rendering/input
 - `src/agent.rs` — Claude/Codex provider execution and stream parsing
 - `docs/multi-model-studio-plan.md` — implementation plan and design notes
 - `README.md` — top-level Foundry loop documentation

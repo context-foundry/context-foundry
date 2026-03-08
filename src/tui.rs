@@ -1,5 +1,5 @@
 use crossterm::{
-    event::{DisableBracketedPaste, DisableMouseCapture, EnableMouseCapture},
+    event::{DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -22,7 +22,12 @@ pub type Tui = Terminal<ratatui::backend::CrosstermBackend<io::Stdout>>;
 pub fn setup_terminal() -> anyhow::Result<Tui> {
     enable_raw_mode()?;
     let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+    execute!(
+        stdout,
+        EnterAlternateScreen,
+        EnableMouseCapture,
+        EnableBracketedPaste
+    )?;
     let backend = ratatui::backend::CrosstermBackend::new(stdout);
     let terminal = Terminal::new(backend)?;
     Ok(terminal)
@@ -44,7 +49,7 @@ pub fn render(frame: &mut Frame, state: &AppState) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(4),  // Header: task + progress
+            Constraint::Length(4), // Header: task + progress
             Constraint::Min(10),   // Agent output
             Constraint::Length(8), // Log
             Constraint::Length(1), // Status bar
@@ -100,16 +105,26 @@ fn render_header(frame: &mut Frame, area: Rect, state: &AppState) {
 
     let header_text = vec![
         Line::from(vec![
-            Span::styled("  FOUNDRY ", Style::default().fg(Color::Black).bg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "  FOUNDRY ",
+                Style::default()
+                    .fg(Color::Black)
+                    .bg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            ),
             Span::raw("  "),
             Span::styled(
                 format!("[{}/{}] {:.0}%", completed, total, pct),
-                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
             ),
         ]),
         Line::from(Span::styled(
             task_line,
-            Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD),
         )),
         Line::from(Span::styled(
             agent_line,
@@ -117,8 +132,11 @@ fn render_header(frame: &mut Frame, area: Rect, state: &AppState) {
         )),
     ];
 
-    let header = Paragraph::new(header_text)
-        .block(Block::default().borders(Borders::BOTTOM).border_style(Style::default().fg(Color::DarkGray)));
+    let header = Paragraph::new(header_text).block(
+        Block::default()
+            .borders(Borders::BOTTOM)
+            .border_style(Style::default().fg(Color::DarkGray)),
+    );
     frame.render_widget(header, area);
 }
 
@@ -138,11 +156,7 @@ fn wrap_line(line: &str, width: usize) -> Vec<String> {
         // Guarantee forward progress: if we can't fit even one char,
         // push the first character and advance past it.
         if safe_width == 0 {
-            let first_char_len = remaining
-                .chars()
-                .next()
-                .map(|c| c.len_utf8())
-                .unwrap_or(1);
+            let first_char_len = remaining.chars().next().map(|c| c.len_utf8()).unwrap_or(1);
             result.push(remaining[..first_char_len].to_string());
             remaining = &remaining[first_char_len..];
             continue;
@@ -162,9 +176,13 @@ fn style_for_line(line: &str) -> Style {
     if line.starts_with("[stderr]") {
         Style::default().fg(Color::Red)
     } else if line.starts_with("[tool]") {
-        Style::default().fg(Color::Yellow)
+        Style::default().fg(Color::Cyan)
     } else if line.starts_with("[result]") {
         Style::default().fg(Color::DarkGray)
+    } else if line.starts_with("[rate limited]") {
+        Style::default().fg(Color::Yellow)
+    } else if line.starts_with("[studio]") {
+        Style::default().fg(Color::Cyan)
     } else {
         Style::default().fg(Color::White)
     }
@@ -230,10 +248,7 @@ fn render_log(frame: &mut Frame, area: Rect, state: &AppState) {
         .map(|(ts, msg)| {
             let time = ts.format("%H:%M:%S").to_string();
             ListItem::new(Line::from(vec![
-                Span::styled(
-                    format!(" {} ", time),
-                    Style::default().fg(Color::DarkGray),
-                ),
+                Span::styled(format!(" {} ", time), Style::default().fg(Color::DarkGray)),
                 Span::styled(msg.as_str(), Style::default().fg(Color::Gray)),
             ]))
         })
@@ -243,10 +258,7 @@ fn render_log(frame: &mut Frame, area: Rect, state: &AppState) {
         Block::default()
             .borders(Borders::ALL)
             .border_style(Style::default().fg(Color::DarkGray))
-            .title(Span::styled(
-                " Log ",
-                Style::default().fg(Color::DarkGray),
-            )),
+            .title(Span::styled(" Log ", Style::default().fg(Color::DarkGray))),
     );
 
     frame.render_widget(list, area);
@@ -299,4 +311,22 @@ fn render_status_bar(frame: &mut Frame, area: Rect, state: &AppState) {
     let status = Line::from(spans);
     let bar = Paragraph::new(status);
     frame.render_widget(bar, area);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn style_for_line_uses_expected_semantic_colors() {
+        assert_eq!(style_for_line("[stderr] boom").fg, Some(Color::Red));
+        assert_eq!(style_for_line("[tool] read").fg, Some(Color::Cyan));
+        assert_eq!(style_for_line("[result] ok").fg, Some(Color::DarkGray));
+        assert_eq!(
+            style_for_line("[rate limited] wait").fg,
+            Some(Color::Yellow)
+        );
+        assert_eq!(style_for_line("[studio] note").fg, Some(Color::Cyan));
+        assert_eq!(style_for_line("plain text").fg, Some(Color::White));
+    }
 }

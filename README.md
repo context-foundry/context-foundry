@@ -64,6 +64,8 @@ brew tap context-foundry/tap
 brew install foundry
 ```
 
+Prebuilt GitHub Release binaries are published for macOS, Linux, and Windows x86_64. `foundry update` uses those release assets directly.
+
 Or build locally:
 
 ```bash
@@ -158,7 +160,7 @@ To use an extension, copy its `CLAUDE.md` and relevant docs into your project, o
 - **agent.rs** — Spawns Claude CLI in a PTY for real-time streaming
 - **patterns.rs** — Load, match, format, merge, and extract learned patterns
 - **prompts.rs** — Agent prompts (planner, builder, reviewer, fixer, discovery, pattern extractor)
-- **studio.rs** — Prompt-driven multi-model TUI with workspace isolation and artifact capture
+- **studio/** — Prompt-driven multi-model TUI with workspace isolation, artifact capture, and modular Studio app/state/UI code
 - **update.rs** — Self-update from GitHub Releases with checksum verification
 - **app.rs** — Build loop orchestration, review loop, pattern extraction
 - **tui.rs** — Ratatui terminal UI with live agent output

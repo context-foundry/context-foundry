@@ -189,7 +189,7 @@ pub async fn run_provider_session(options: ProviderRunOptions<'_>) -> Result<Age
                         let _ = child.kill();
                         let _ = child.wait();
                         let _ = tx.send(AgentOutputEvent::Stderr(format!(
-                            "{} cancelled by studio shutdown",
+                            "{} cancelled by studio",
                             provider
                         )));
                         break;
@@ -356,6 +356,13 @@ pub async fn run_agent(
 
 /// Read PTY output line by line, parse stream-json events, send to TUI.
 /// Also writes raw lines to the log file.
+#[derive(Debug)]
+enum ParsedClaudeLine {
+    Event(AgentOutputEvent),
+    Ignore,
+    Unparsed,
+}
+
 fn read_pty_output(
     reader: Box<dyn std::io::Read + Send>,
     tx: &mpsc::UnboundedSender<AgentOutputEvent>,
@@ -382,40 +389,19 @@ fn read_pty_output(
                     let _ = writeln!(f, "{}", line);
                 }
 
-                // Try to parse as a stream-json event
-                match parse_stream_event(line) {
-                    Some(event) => {
+                match parse_claude_provider_line(line, model_name) {
+                    ParsedClaudeLine::Event(event) => {
                         if tx.send(event).is_err() {
                             return; // Channel closed
                         }
                     }
-                    None => {
-                        // Check if it's a JSON event type we don't handle
-                        if let Ok(v) = serde_json::from_str::<Value>(line) {
-                            if let Some(t) = v.get("type").and_then(|t| t.as_str()) {
-                                // Skip turn-marker events that have no displayable content
-                                if matches!(t, "user" | "system") {
-                                    continue;
-                                }
-                                let sub = v.get("subtype").and_then(|s| s.as_str()).unwrap_or("");
-                                let display_type = if t == "assistant" { model_name } else { t };
-                                let label = if sub.is_empty() {
-                                    format!("[{}]", display_type)
-                                } else {
-                                    format!("[{}:{}]", display_type, sub)
-                                };
-                                let _ = tx.send(AgentOutputEvent::Text(label));
-                            }
-                        } else {
-                            // Non-JSON line (stderr merged through PTY).
-                            // Strip ANSI escape sequences and drop lines that are
-                            // purely terminal control noise.
-                            if !line.is_empty() {
-                                let cleaned = strip_ansi(line);
-                                if !cleaned.is_empty() {
-                                    let _ = tx.send(AgentOutputEvent::Stderr(cleaned));
-                                }
-                            }
+                    ParsedClaudeLine::Ignore => continue,
+                    ParsedClaudeLine::Unparsed => {
+                        let cleaned = strip_ansi(line);
+                        if !cleaned.is_empty()
+                            && tx.send(AgentOutputEvent::Stderr(cleaned)).is_err()
+                        {
+                            return;
                         }
                     }
                 }
@@ -451,16 +437,25 @@ fn read_provider_output(
                     let _ = writeln!(f, "{}", line);
                 }
 
-                let parsed = match provider {
-                    ModelProvider::Claude => parse_claude_provider_line(line, model_name),
-                    ModelProvider::Codex => parse_codex_event(line, model_name),
-                };
-
-                if let Some(event) = parsed {
-                    if tx.send(event).is_err() {
-                        return;
+                match provider {
+                    ModelProvider::Claude => match parse_claude_provider_line(line, model_name) {
+                        ParsedClaudeLine::Event(event) => {
+                            if tx.send(event).is_err() {
+                                return;
+                            }
+                            continue;
+                        }
+                        ParsedClaudeLine::Ignore => continue,
+                        ParsedClaudeLine::Unparsed => {}
+                    },
+                    ModelProvider::Codex => {
+                        if let Some(event) = parse_codex_event(line, model_name) {
+                            if tx.send(event).is_err() {
+                                return;
+                            }
+                            continue;
+                        }
                     }
-                    continue;
                 }
 
                 let cleaned = strip_ansi(line);
@@ -473,24 +468,320 @@ fn read_provider_output(
     }
 }
 
-fn parse_claude_provider_line(line: &str, model_name: &str) -> Option<AgentOutputEvent> {
-    if let Some(event) = parse_stream_event(line) {
-        return Some(event);
-    }
+fn parse_claude_provider_line(line: &str, model_name: &str) -> ParsedClaudeLine {
+    let v: Value = match serde_json::from_str(line) {
+        Ok(v) => v,
+        Err(_) => return ParsedClaudeLine::Unparsed,
+    };
+    parse_claude_json(&v, model_name)
+}
 
-    if let Ok(v) = serde_json::from_str::<Value>(line) {
-        if let Some(t) = v.get("type").and_then(|t| t.as_str()) {
-            if matches!(t, "user" | "system") {
-                return None;
-            }
-            let sub = v.get("subtype").and_then(|s| s.as_str()).unwrap_or("");
-            let display_type = if t == "assistant" { model_name } else { t };
-            let label = if sub.is_empty() {
+fn parse_claude_json(v: &Value, model_name: &str) -> ParsedClaudeLine {
+    let Some(kind) = v.get("type").and_then(|value| value.as_str()) else {
+        return ParsedClaudeLine::Unparsed;
+    };
+
+    match kind {
+        "assistant" => parse_claude_assistant_message(v)
+            .map(ParsedClaudeLine::Event)
+            .unwrap_or(ParsedClaudeLine::Ignore),
+        "user" => parse_claude_user_message(v)
+            .map(ParsedClaudeLine::Event)
+            .unwrap_or(ParsedClaudeLine::Ignore),
+        "system" => parse_claude_system_event(v)
+            .map(ParsedClaudeLine::Event)
+            .unwrap_or(ParsedClaudeLine::Ignore),
+        "result" => parse_claude_result_event(v)
+            .map(ParsedClaudeLine::Event)
+            .unwrap_or(ParsedClaudeLine::Ignore),
+        "rate_limit_event" => {
+            let message = v
+                .get("message")
+                .and_then(|value| value.as_str())
+                .unwrap_or("API rate limited — waiting for retry...");
+            ParsedClaudeLine::Event(AgentOutputEvent::Text(format!(
+                "[rate limited] {}",
+                message
+            )))
+        }
+        "error" => ParsedClaudeLine::Event(AgentOutputEvent::Stderr(
+            extract_string_by_keys(v, &["message", "error", "text", "summary"])
+                .unwrap_or_else(|| "Claude emitted an error event".to_string()),
+        )),
+        _ => {
+            let subtype = v
+                .get("subtype")
+                .and_then(|value| value.as_str())
+                .unwrap_or("");
+            let display_type = if kind == "assistant" {
+                model_name
+            } else {
+                kind
+            };
+            let label = if subtype.is_empty() {
                 format!("[{}]", display_type)
             } else {
-                format!("[{}:{}]", display_type, sub)
+                format!("[{}:{}]", display_type, subtype)
             };
-            return Some(AgentOutputEvent::Text(label));
+            if let Some(text) = extract_string_by_keys(v, &["message", "text", "summary", "detail"])
+            {
+                let text = truncate_for_preview(&text, 160);
+                if text.is_empty() {
+                    ParsedClaudeLine::Event(AgentOutputEvent::Text(label))
+                } else {
+                    ParsedClaudeLine::Event(AgentOutputEvent::Text(format!("{} {}", label, text)))
+                }
+            } else {
+                ParsedClaudeLine::Event(AgentOutputEvent::Text(label))
+            }
+        }
+    }
+}
+
+fn parse_claude_assistant_message(v: &Value) -> Option<AgentOutputEvent> {
+    let content = v.get("message")?.get("content")?.as_array()?;
+    content.iter().find_map(parse_claude_content_block)
+}
+
+fn parse_claude_content_block(block: &Value) -> Option<AgentOutputEvent> {
+    match block.get("type").and_then(|value| value.as_str()) {
+        Some("text") => {
+            let text = block.get("text").and_then(|value| value.as_str())?;
+            (!text.is_empty()).then(|| AgentOutputEvent::Text(text.to_string()))
+        }
+        Some("tool_use") => {
+            let tool = block
+                .get("name")
+                .and_then(|value| value.as_str())
+                .unwrap_or("unknown")
+                .to_string();
+            let input_preview = block
+                .get("input")
+                .map(|input| parse_claude_tool_use_preview(&tool, input))
+                .unwrap_or_default();
+            Some(AgentOutputEvent::ToolUse {
+                tool,
+                input_preview,
+            })
+        }
+        Some("thinking") | Some("redacted_thinking") => None,
+        Some(kind) if kind.contains("tool_use") => {
+            let tool = block
+                .get("name")
+                .and_then(|value| value.as_str())
+                .unwrap_or(kind)
+                .to_string();
+            let input_preview = block
+                .get("input")
+                .map(|input| parse_claude_tool_use_preview(&tool, input))
+                .unwrap_or_default();
+            Some(AgentOutputEvent::ToolUse {
+                tool,
+                input_preview,
+            })
+        }
+        _ => None,
+    }
+}
+
+fn parse_claude_tool_use_preview(tool: &str, input: &Value) -> String {
+    let preview = match tool {
+        "Read" | "Write" | "Edit" => input
+            .get("file_path")
+            .and_then(|value| value.as_str())
+            .unwrap_or("")
+            .to_string(),
+        "Bash" => input
+            .get("command")
+            .and_then(|value| value.as_str())
+            .unwrap_or("")
+            .to_string(),
+        "Glob" | "Grep" => input
+            .get("pattern")
+            .and_then(|value| value.as_str())
+            .unwrap_or("")
+            .to_string(),
+        _ => extract_string_by_keys(
+            input,
+            &[
+                "file_path",
+                "command",
+                "pattern",
+                "path",
+                "query",
+                "description",
+                "input",
+            ],
+        )
+        .unwrap_or_else(|| input.to_string()),
+    };
+
+    truncate_for_preview(&preview, 120)
+}
+
+fn parse_claude_user_message(v: &Value) -> Option<AgentOutputEvent> {
+    let content = v.get("message")?.get("content")?.as_array()?;
+    for block in content {
+        if block.get("type").and_then(|value| value.as_str()) != Some("tool_result") {
+            continue;
+        }
+
+        let tool_use_result = v.get("tool_use_result");
+        let stderr = tool_use_result
+            .and_then(|value| value.get("stderr"))
+            .and_then(|value| value.as_str())
+            .unwrap_or("");
+        let is_error = block
+            .get("is_error")
+            .and_then(|value| value.as_bool())
+            .unwrap_or(false)
+            || tool_use_result
+                .and_then(|value| value.get("is_error"))
+                .and_then(|value| value.as_bool())
+                .unwrap_or(false)
+            || !stderr.trim().is_empty();
+        let text = parse_claude_tool_result_text(block, tool_use_result);
+        if text.trim().is_empty() {
+            return None;
+        }
+        return Some(if is_error {
+            AgentOutputEvent::Stderr(truncate_for_preview(&text, 200))
+        } else {
+            AgentOutputEvent::ToolResult {
+                output_preview: truncate_for_preview(&text, 200),
+            }
+        });
+    }
+
+    None
+}
+
+fn parse_claude_tool_result_text(block: &Value, tool_use_result: Option<&Value>) -> String {
+    if let Some(tool_use_result) = tool_use_result {
+        if let Some(stderr) = tool_use_result
+            .get("stderr")
+            .and_then(|value| value.as_str())
+            .filter(|value| !value.trim().is_empty())
+        {
+            return stderr.to_string();
+        }
+        if let Some(stdout) = tool_use_result
+            .get("stdout")
+            .and_then(|value| value.as_str())
+            .filter(|value| !value.trim().is_empty())
+        {
+            return stdout.to_string();
+        }
+        if let Some(matches) = tool_use_result
+            .get("matches")
+            .and_then(|value| value.as_array())
+        {
+            let joined = matches
+                .iter()
+                .filter_map(|item| item.as_str())
+                .collect::<Vec<_>>()
+                .join(", ");
+            if !joined.is_empty() {
+                return joined;
+            }
+        }
+        if let Some(text) = extract_string_by_keys(
+            tool_use_result,
+            &["content", "result", "message", "summary", "query"],
+        ) {
+            if !text.trim().is_empty() {
+                return text;
+            }
+        }
+    }
+
+    if let Some(content) = block.get("content") {
+        if let Some(text) = extract_first_string(content) {
+            if !text.trim().is_empty() {
+                return text.to_string();
+            }
+        }
+        if let Some(items) = content.as_array() {
+            let joined = items
+                .iter()
+                .filter_map(|item| item.get("tool_name").and_then(|value| value.as_str()))
+                .collect::<Vec<_>>()
+                .join(", ");
+            if !joined.is_empty() {
+                return joined;
+            }
+        }
+    }
+
+    String::new()
+}
+
+fn parse_claude_result_event(v: &Value) -> Option<AgentOutputEvent> {
+    let subtype = v
+        .get("subtype")
+        .and_then(|value| value.as_str())
+        .unwrap_or("");
+    let is_error = v
+        .get("is_error")
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false)
+        || subtype.contains("error")
+        || subtype.contains("fail");
+    let text =
+        extract_string_by_keys(v, &["result", "message", "text", "summary"]).unwrap_or_default();
+
+    if text.trim().is_empty() {
+        return if is_error {
+            Some(AgentOutputEvent::Stderr(format!(
+                "Claude session ended with {}",
+                if subtype.is_empty() {
+                    "an error"
+                } else {
+                    subtype
+                }
+            )))
+        } else {
+            None
+        };
+    }
+
+    Some(if is_error {
+        AgentOutputEvent::Stderr(text)
+    } else {
+        AgentOutputEvent::Result(text)
+    })
+}
+
+fn parse_claude_system_event(v: &Value) -> Option<AgentOutputEvent> {
+    let subtype = v
+        .get("subtype")
+        .and_then(|value| value.as_str())
+        .unwrap_or("");
+    let stderr = v
+        .get("stderr")
+        .and_then(|value| value.as_str())
+        .unwrap_or("")
+        .trim();
+
+    if !stderr.is_empty() {
+        return Some(AgentOutputEvent::Stderr(stderr.to_string()));
+    }
+
+    if subtype.contains("error") {
+        let text = extract_string_by_keys(v, &["message", "output", "stdout", "summary"])
+            .unwrap_or_else(|| format!("Claude system event failed: {}", subtype));
+        return Some(AgentOutputEvent::Stderr(text));
+    }
+
+    if subtype == "hook_response" {
+        let outcome = v
+            .get("outcome")
+            .and_then(|value| value.as_str())
+            .unwrap_or("");
+        if !outcome.is_empty() && outcome != "success" {
+            let text = extract_string_by_keys(v, &["output", "stdout", "message", "summary"])
+                .unwrap_or_else(|| format!("Claude hook failed: {}", outcome));
+            return Some(AgentOutputEvent::Stderr(truncate_for_preview(&text, 200)));
         }
     }
 
@@ -628,142 +919,12 @@ fn truncate_for_preview(text: &str, max_len: usize) -> String {
 }
 
 /// Parse a single line of claude's stream-json NDJSON output.
+#[cfg(test)]
 fn parse_stream_event(line: &str) -> Option<AgentOutputEvent> {
     let v: Value = serde_json::from_str(line).ok()?;
-
-    match v.get("type")?.as_str()? {
-        // Assistant message — contains text and/or tool_use content blocks
-        "assistant" => {
-            let content = v.get("message")?.get("content")?.as_array()?;
-
-            for block in content {
-                match block.get("type").and_then(|t| t.as_str()) {
-                    Some("text") => {
-                        if let Some(text) = block.get("text").and_then(|t| t.as_str()) {
-                            if !text.is_empty() {
-                                return Some(AgentOutputEvent::Text(text.to_string()));
-                            }
-                        }
-                    }
-                    Some("tool_use") => {
-                        let tool = block
-                            .get("name")
-                            .and_then(|n| n.as_str())
-                            .unwrap_or("unknown")
-                            .to_string();
-
-                        let input_preview = if let Some(input) = block.get("input") {
-                            match tool.as_str() {
-                                "Read" => input
-                                    .get("file_path")
-                                    .and_then(|p| p.as_str())
-                                    .unwrap_or("")
-                                    .to_string(),
-                                "Write" => input
-                                    .get("file_path")
-                                    .and_then(|p| p.as_str())
-                                    .unwrap_or("")
-                                    .to_string(),
-                                "Edit" => input
-                                    .get("file_path")
-                                    .and_then(|p| p.as_str())
-                                    .unwrap_or("")
-                                    .to_string(),
-                                "Bash" => input
-                                    .get("command")
-                                    .and_then(|c| c.as_str())
-                                    .map(|c| {
-                                        if c.len() > 80 {
-                                            format!("{}...", truncate_str(c, 80))
-                                        } else {
-                                            c.to_string()
-                                        }
-                                    })
-                                    .unwrap_or_default(),
-                                "Glob" => input
-                                    .get("pattern")
-                                    .and_then(|p| p.as_str())
-                                    .unwrap_or("")
-                                    .to_string(),
-                                "Grep" => input
-                                    .get("pattern")
-                                    .and_then(|p| p.as_str())
-                                    .unwrap_or("")
-                                    .to_string(),
-                                _ => {
-                                    let s = input.to_string();
-                                    if s.len() > 100 {
-                                        format!("{}...", truncate_str(&s, 100))
-                                    } else {
-                                        s
-                                    }
-                                }
-                            }
-                        } else {
-                            String::new()
-                        };
-
-                        return Some(AgentOutputEvent::ToolUse {
-                            tool,
-                            input_preview,
-                        });
-                    }
-                    _ => {}
-                }
-            }
-            None
-        }
-
-        // Tool result
-        "tool_result" | "tool_output" => {
-            let output = v
-                .get("output")
-                .or_else(|| v.get("content"))
-                .and_then(|o| o.as_str())
-                .unwrap_or("")
-                .to_string();
-
-            if output.is_empty() {
-                return None;
-            }
-
-            let preview = if output.len() > 200 {
-                format!("{}...", truncate_str(&output, 200))
-            } else {
-                output
-            };
-
-            Some(AgentOutputEvent::ToolResult {
-                output_preview: preview,
-            })
-        }
-
-        // Final result
-        "result" => {
-            let text = v
-                .get("result")
-                .and_then(|r| r.as_str())
-                .unwrap_or("")
-                .to_string();
-
-            if !text.is_empty() {
-                Some(AgentOutputEvent::Result(text))
-            } else {
-                None
-            }
-        }
-
-        // Rate limit event — Claude CLI got throttled by the API.
-        // Surface it so the TUI shows what's happening instead of a raw label.
-        "rate_limit_event" => {
-            let msg = v
-                .get("message")
-                .and_then(|m| m.as_str())
-                .unwrap_or("API rate limited — waiting for retry...");
-            Some(AgentOutputEvent::Text(format!("[rate limited] {}", msg)))
-        }
-
-        _ => None,
+    match parse_claude_json(&v, "claude") {
+        ParsedClaudeLine::Event(event) => Some(event),
+        ParsedClaudeLine::Ignore | ParsedClaudeLine::Unparsed => None,
     }
 }
 
@@ -935,6 +1096,79 @@ mod tests {
                 assert!(text.contains("Built a dashboard"));
             }
             other => panic!("expected Text, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_claude_tool_use_event() {
+        let json = r#"{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Read","input":{"file_path":"/tmp/demo.rs"}}]}}"#;
+        let event = parse_stream_event(json);
+        match event {
+            Some(AgentOutputEvent::ToolUse {
+                tool,
+                input_preview,
+            }) => {
+                assert_eq!(tool, "Read");
+                assert_eq!(input_preview, "/tmp/demo.rs");
+            }
+            other => panic!("expected ToolUse, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_claude_user_tool_result_event() {
+        let json = r#"{"type":"user","message":{"content":[{"type":"tool_result","content":"Todos updated","is_error":false}]},"tool_use_result":{"stdout":"Todos updated","stderr":"","is_error":false}}"#;
+        let event = parse_stream_event(json);
+        match event {
+            Some(AgentOutputEvent::ToolResult { output_preview }) => {
+                assert_eq!(output_preview, "Todos updated");
+            }
+            other => panic!("expected ToolResult, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_claude_error_result_event() {
+        let json = r#"{"type":"result","subtype":"error_max_turns","is_error":true,"result":"Max turns reached"}"#;
+        let event = parse_stream_event(json);
+        match event {
+            Some(AgentOutputEvent::Stderr(text)) => {
+                assert!(text.contains("Max turns reached"));
+            }
+            other => panic!("expected Stderr, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_claude_thinking_message_is_ignored() {
+        let json = r#"{"type":"assistant","message":{"content":[{"type":"thinking","thinking":"hidden"}]}}"#;
+        assert!(matches!(
+            parse_claude_provider_line(json, "claude-opus"),
+            ParsedClaudeLine::Ignore
+        ));
+    }
+
+    #[test]
+    fn parse_claude_system_stderr_event() {
+        let json = r#"{"type":"system","subtype":"hook_response","stderr":"permission denied"}"#;
+        let event = parse_claude_provider_line(json, "claude-opus");
+        match event {
+            ParsedClaudeLine::Event(AgentOutputEvent::Stderr(text)) => {
+                assert!(text.contains("permission denied"));
+            }
+            other => panic!("expected stderr event, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_claude_system_hook_failure_event() {
+        let json = r#"{"type":"system","subtype":"hook_response","outcome":"failure","output":"hook failed"}"#;
+        let event = parse_claude_provider_line(json, "claude-opus");
+        match event {
+            ParsedClaudeLine::Event(AgentOutputEvent::Stderr(text)) => {
+                assert!(text.contains("hook failed"));
+            }
+            other => panic!("expected hook failure stderr, got {:?}", other),
         }
     }
 }

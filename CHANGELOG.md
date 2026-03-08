@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-03-07
+
+### Added
+- Foundry Studio session-stop confirmation with selected-session-only cancellation
+- Smart Studio stream coloring for Claude Code protocol events, tool calls, results, and real errors
+- Built-in Studio theme system with 8 bundled themes plus custom JSON themes and live theme cycling
+- Windows x86_64 GitHub Release artifacts and Windows self-update support (`.zip`, PowerShell download/extract, `certutil` checksum verification)
+- Bracketed-paste handling and prompt-size guards for very large pastes in Studio
+
+### Changed
+- Refactored Studio from a single `src/studio.rs` file into focused `src/studio/` modules (`app`, `state`, `model`, `ui`, and domain slices)
+- Updated Studio documentation and README references to match the modular `src/studio/` layout
+- Release workflow now packages Unix targets as `.tar.gz` and Windows targets as `.zip`
+
+### Fixed
+- Studio session elapsed timers now stop when a session finishes
+- Studio prompt/preview rendering truncates oversized content instead of repeatedly rendering unbounded text
+- `x stop` only appears for the selected running session in the Studio keybinding bar
+
 ## [0.2.0] - 2026-02-16
 
 ### Added

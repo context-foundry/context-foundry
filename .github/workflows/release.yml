@@ -31,6 +31,9 @@ jobs:
           - target: aarch64-unknown-linux-gnu
             runner: ubuntu-latest
             cross: true
+          - target: x86_64-pc-windows-msvc
+            runner: windows-latest
+            cross: false
 
     steps:
       - uses: actions/checkout@v4
@@ -51,18 +54,28 @@ jobs:
           else
             cargo build --release --target ${{ matrix.target }}
           fi
+        shell: bash
 
-      - name: Package binary
+      - name: Package binary (unix)
+        if: runner.os != 'Windows'
         run: |
           cd target/${{ matrix.target }}/release
           tar czf ../../../foundry-${{ matrix.target }}.tar.gz foundry
           cd ../../..
 
+      - name: Package binary (windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "target/${{ matrix.target }}/release/foundry.exe" -DestinationPath "foundry-${{ matrix.target }}.zip"
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: foundry-${{ matrix.target }}
-          path: foundry-${{ matrix.target }}.tar.gz
+          path: |
+            foundry-${{ matrix.target }}.tar.gz
+            foundry-${{ matrix.target }}.zip
 
   release:
     name: Create Release
@@ -87,11 +100,20 @@ jobs:
 
           for dir in artifacts/foundry-*/; do
             target=$(basename "$dir" | sed 's/^foundry-//')
-            cp "$dir"/*.tar.gz "release/foundry-v${VERSION}-${target}.tar.gz"
+            # Copy tarballs (unix) or zips (windows)
+            for f in "$dir"/*.tar.gz "$dir"/*.zip; do
+              [ -f "$f" ] || continue
+              ext="${f##*.}"
+              if [ "$ext" = "gz" ]; then
+                cp "$f" "release/foundry-v${VERSION}-${target}.tar.gz"
+              else
+                cp "$f" "release/foundry-v${VERSION}-${target}.zip"
+              fi
+            done
           done
 
           cd release
-          shasum -a 256 *.tar.gz > "foundry-v${VERSION}-checksums.txt"
+          shasum -a 256 *.tar.gz *.zip 2>/dev/null > "foundry-v${VERSION}-checksums.txt"
           cat "foundry-v${VERSION}-checksums.txt"
 
       - name: Extract changelog for this version
