@@ -1,6 +1,7 @@
 mod app;
 mod attachments;
 mod contracts;
+mod history;
 mod model;
 mod prompt;
 mod providers;

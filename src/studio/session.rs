@@ -9,7 +9,7 @@ use std::{
 };
 use tokio::sync::mpsc;
 
-use crate::agent::{self, AgentOutputEvent, ProviderRunOptions};
+use crate::agent::{self, AgentOutputEvent, AgentResult, ModelProvider, ProviderRunOptions};
 
 use super::{
     attachments::{external_attachment_count, resolve_all_attachments},
@@ -21,6 +21,26 @@ use super::{
     shared::should_skip_snapshot_path,
     state::{SessionControl, StudioState},
 };
+
+const STUDIO_PROVIDER_TIMEOUT_SECS: u64 = 900;
+const CODEX_MAX_ATTEMPTS: usize = 2;
+
+fn max_provider_attempts(provider: ModelProvider) -> usize {
+    if provider == ModelProvider::Codex {
+        CODEX_MAX_ATTEMPTS
+    } else {
+        1
+    }
+}
+
+fn should_retry_provider_attempt(
+    provider: ModelProvider,
+    outcome: &AgentResult,
+    attempt: usize,
+    max_attempts: usize,
+) -> bool {
+    provider == ModelProvider::Codex && attempt < max_attempts && outcome.should_retry()
+}
 
 pub(super) fn start_sessions(
     state: &mut StudioState,
@@ -84,6 +104,10 @@ pub(super) fn start_sessions(
 
     if !follow_up && state.workspace_mode == WorkspaceMode::Shared && requested.len() > 1 {
         state.log("shared mode with both providers can cause overlapping edits");
+    }
+
+    if let Err(err) = state.record_prompt_history_entry(follow_up) {
+        state.log(format!("prompt history persist failed: {}", err));
     }
 
     let run_id = Utc::now().format("%Y%m%d-%H%M%S").to_string();
@@ -238,22 +262,47 @@ async fn run_session(
         }
     });
 
-    let result = agent::run_provider_session(ProviderRunOptions {
-        provider: launch.provider,
-        model: &launch.model,
-        prompt: &smoothed_prompt,
-        project_dir: &launch.workspace_dir,
-        output_tx: agent_tx,
-        log_dir: &log_dir,
-        timeout_secs: 900,
-        skip_git_repo_check: launch.workspace_mode == WorkspaceMode::Isolated,
-        cancel_flag: Some(cancel_flag),
-    })
-    .await;
+    let max_attempts = max_provider_attempts(launch.provider);
+    let mut attempt = 1;
+    let result = loop {
+        let result = agent::run_provider_session(ProviderRunOptions {
+            provider: launch.provider,
+            model: &launch.model,
+            prompt: &smoothed_prompt,
+            project_dir: &launch.workspace_dir,
+            output_tx: agent_tx.clone(),
+            log_dir: &log_dir,
+            timeout_secs: STUDIO_PROVIDER_TIMEOUT_SECS,
+            skip_git_repo_check: launch.workspace_mode == WorkspaceMode::Isolated,
+            cancel_flag: Some(cancel_flag.clone()),
+        })
+        .await;
+
+        match result {
+            Ok(outcome)
+                if should_retry_provider_attempt(
+                    launch.provider,
+                    &outcome,
+                    attempt,
+                    max_attempts,
+                ) =>
+            {
+                attempt += 1;
+                let _ = tx.send(StudioEvent::SessionOutput {
+                    session_id: launch.id.clone(),
+                    event: AgentOutputEvent::Text(format!(
+                        "[studio] {} transport stalled; retrying attempt {}/{}",
+                        launch.provider, attempt, max_attempts
+                    )),
+                });
+            }
+            other => break other,
+        }
+    };
 
     let artifacts = discover_artifacts(&launch.workspace_dir, &launch.artifact_dir, started_at);
     let (success, error) = match result {
-        Ok(outcome) => (outcome.success, None),
+        Ok(outcome) => (outcome.success, outcome.failure_message),
         Err(err) => (false, Some(err.to_string())),
     };
 
@@ -423,13 +472,16 @@ mod tests {
     };
     use tokio::sync::mpsc;
 
-    use crate::agent::ModelProvider;
+    use crate::agent::{AgentExitKind, AgentResult, ModelProvider};
 
     use super::super::{
         model::{ProviderMode, SessionLaunch, StudioEvent, WorkspaceMode, STUDIO_ROOT_DIR},
         test_helpers::{temp_test_dir, test_contract, test_scan, test_state},
     };
-    use super::{discover_artifacts, prepare_workspace, run_session, start_sessions};
+    use super::{
+        discover_artifacts, prepare_workspace, run_session, should_retry_provider_attempt,
+        start_sessions, CODEX_MAX_ATTEMPTS,
+    };
 
     fn test_launch(
         project_dir: &Path,
@@ -556,6 +608,52 @@ mod tests {
         assert_eq!(artifacts, vec![workspace_path]);
         fs::remove_dir_all(&root)?;
         Ok(())
+    }
+
+    #[test]
+    fn codex_transport_stalls_are_retryable_once() {
+        let outcome = AgentResult {
+            success: false,
+            exit_code: 1,
+            exit_kind: AgentExitKind::TransportStall,
+            failure_message: Some("Codex stalled after websocket reconnects".into()),
+        };
+
+        assert!(should_retry_provider_attempt(
+            ModelProvider::Codex,
+            &outcome,
+            1,
+            CODEX_MAX_ATTEMPTS
+        ));
+        assert!(!should_retry_provider_attempt(
+            ModelProvider::Codex,
+            &outcome,
+            CODEX_MAX_ATTEMPTS,
+            CODEX_MAX_ATTEMPTS
+        ));
+        assert!(!should_retry_provider_attempt(
+            ModelProvider::Claude,
+            &outcome,
+            1,
+            CODEX_MAX_ATTEMPTS
+        ));
+    }
+
+    #[test]
+    fn non_transport_failures_are_not_retried() {
+        let outcome = AgentResult {
+            success: false,
+            exit_code: 1,
+            exit_kind: AgentExitKind::Failed,
+            failure_message: Some("tool failed".into()),
+        };
+
+        assert!(!should_retry_provider_attempt(
+            ModelProvider::Codex,
+            &outcome,
+            1,
+            CODEX_MAX_ATTEMPTS
+        ));
     }
 
     #[tokio::test]

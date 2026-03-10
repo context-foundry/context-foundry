@@ -17,11 +17,13 @@ use crate::{
 use super::{
     attachments::{resolve_all_attachments, AttachmentManagerState},
     contracts::{load_execution_contracts, load_execution_contracts_with_selection},
+    history::{load_prompt_history, persist_prompt_history},
     model::{
         DeleteConfirmationState, EditorChoice, EditorGuideState, ExecutionContract, FocusedPane,
-        PendingStudioAction, PreviewPromptCache, PromptAppendOutcome, ProviderMode,
-        ProviderReadiness, SessionState, SessionStatus, SessionStopConfirmationState, StudioTheme,
-        WorkspaceMode, DEFAULT_PROMPT, MAX_PROMPT_BYTES, STUDIO_ROOT_DIR,
+        PendingStudioAction, PreviewPromptCache, PromptAppendOutcome, PromptHistoryEntry,
+        ProviderMode, ProviderReadiness, SessionState, SessionStatus, SessionStopConfirmationState,
+        StudioTheme, WorkspaceMode, DEFAULT_PROMPT, MAX_PROMPT_BYTES, MAX_PROMPT_HISTORY_ENTRIES,
+        STUDIO_ROOT_DIR,
     },
     prompt::compose_smoothed_prompt,
     providers::{default_provider_mode, probe_claude_readiness, probe_codex_readiness},
@@ -468,6 +470,9 @@ pub(super) struct StudioState {
     pub(super) selected_execution_contract: usize,
     pub(super) sessions: Vec<SessionState>,
     pub(super) selected_session: usize,
+    pub(super) prompt_history: Vec<PromptHistoryEntry>,
+    pub(super) selected_prompt_history: usize,
+    pub(super) prompt_history_scroll: usize,
     pub(super) output_scroll: usize,
     pub(super) preview_scroll: usize,
     pub(super) preview_cache: Option<PreviewPromptCache>,
@@ -510,6 +515,7 @@ impl StudioState {
         let (execution_contracts, selected_execution_contract) =
             load_execution_contracts(project_dir)?;
         let editor_choice = load_editor_choice(project_dir);
+        let prompt_history = load_prompt_history(project_dir);
         let theme_catalog = build_theme_catalog(config);
         let theme = theme_catalog
             .themes
@@ -529,6 +535,9 @@ impl StudioState {
             selected_execution_contract,
             sessions: Vec::new(),
             selected_session: 0,
+            prompt_history,
+            selected_prompt_history: 0,
+            prompt_history_scroll: 0,
             output_scroll: 0,
             preview_scroll: 0,
             preview_cache: None,
@@ -631,6 +640,18 @@ impl StudioState {
         self.sessions.get(self.selected_session)
     }
 
+    pub(super) fn selected_prompt_history_index(&self) -> Option<usize> {
+        (!self.prompt_history.is_empty()).then_some(
+            self.selected_prompt_history
+                .min(self.prompt_history.len() - 1),
+        )
+    }
+
+    pub(super) fn selected_prompt_history_entry(&self) -> Option<&PromptHistoryEntry> {
+        self.selected_prompt_history_index()
+            .and_then(|index| self.prompt_history.get(index))
+    }
+
     pub(super) fn selected_execution_contract(&self) -> &ExecutionContract {
         &self.execution_contracts[self.selected_execution_contract]
     }
@@ -682,6 +703,91 @@ impl StudioState {
             ModelProvider::Claude => &self.claude_model,
             ModelProvider::Codex => &self.codex_model,
         }
+    }
+
+    pub(super) fn set_selected_prompt_history_index(&mut self, index: usize) {
+        if self.prompt_history.is_empty() {
+            self.selected_prompt_history = 0;
+            self.prompt_history_scroll = 0;
+            return;
+        }
+        self.selected_prompt_history = index.min(self.prompt_history.len().saturating_sub(1));
+        self.prompt_history_scroll = self
+            .prompt_history_scroll
+            .min(self.prompt_history.len().saturating_sub(1));
+    }
+
+    pub(super) fn ensure_selected_prompt_history_visible(&mut self, visible_rows: usize) {
+        if self.prompt_history.is_empty() || visible_rows == 0 {
+            self.prompt_history_scroll = 0;
+            return;
+        }
+
+        let max_scroll = self.prompt_history.len().saturating_sub(visible_rows);
+        self.prompt_history_scroll = self.prompt_history_scroll.min(max_scroll);
+
+        if self.selected_prompt_history < self.prompt_history_scroll {
+            self.prompt_history_scroll = self.selected_prompt_history;
+            return;
+        }
+
+        let visible_end = self.prompt_history_scroll.saturating_add(visible_rows);
+        if self.selected_prompt_history >= visible_end {
+            self.prompt_history_scroll = self
+                .selected_prompt_history
+                .saturating_add(1)
+                .saturating_sub(visible_rows);
+        }
+    }
+
+    pub(super) fn scroll_prompt_history(&mut self, delta: i32, visible_rows: usize) {
+        if self.prompt_history.is_empty() || visible_rows == 0 {
+            self.prompt_history_scroll = 0;
+            return;
+        }
+
+        let max_scroll = self.prompt_history.len().saturating_sub(visible_rows);
+        let next_scroll = (self.prompt_history_scroll as i32 + delta).clamp(0, max_scroll as i32);
+        self.prompt_history_scroll = next_scroll as usize;
+    }
+
+    pub(super) fn load_selected_prompt_history_into_prompt(&mut self) -> bool {
+        let Some(prompt) = self
+            .selected_prompt_history_entry()
+            .map(|entry| entry.prompt.clone())
+        else {
+            return false;
+        };
+        if self.prompt == prompt {
+            return true;
+        }
+        self.prompt = prompt;
+        self.preview_scroll = 0;
+        self.invalidate_preview_cache();
+        true
+    }
+
+    pub(super) fn record_prompt_history_entry(&mut self, follow_up: bool) -> Result<()> {
+        let provider_mode = if follow_up {
+            self.selected_session()
+                .map(|session| session.provider.to_string())
+                .unwrap_or_else(|| self.provider_mode.to_string())
+        } else {
+            self.provider_mode.to_string()
+        };
+        let entry = PromptHistoryEntry {
+            created_at: Utc::now(),
+            prompt: self.prompt.clone(),
+            provider_mode,
+            workspace_mode: self.workspace_mode.to_string(),
+            contract_name: self.selected_execution_contract().name.clone(),
+            follow_up,
+        };
+        self.prompt_history.insert(0, entry);
+        self.prompt_history.truncate(MAX_PROMPT_HISTORY_ENTRIES);
+        self.set_selected_prompt_history_index(0);
+        self.prompt_history_scroll = 0;
+        persist_prompt_history(&self.project_dir, &self.prompt_history)
     }
 
     pub(super) fn provider_readiness(&self, provider: ModelProvider) -> &ProviderReadiness {
@@ -759,16 +865,21 @@ pub(in crate::studio) fn format_byte_count(bytes: usize) -> String {
 #[cfg(test)]
 mod tests {
     use anyhow::Result;
+    use chrono::Utc;
     use ratatui::style::Color;
     use std::{fs, path::PathBuf};
 
     use super::super::{
         attachments::{AttachmentMode, AttachmentSpec},
         contracts::{cycle_execution_contract, default_execution_contract_content},
-        model::ExecutionContract,
-        test_helpers::{temp_test_dir, test_state},
+        history::load_prompt_history,
+        model::{
+            ExecutionContract, PreviewPromptCache, PromptHistoryEntry, SessionStatus,
+            MAX_PROMPT_HISTORY_ENTRIES,
+        },
+        test_helpers::{temp_test_dir, test_session, test_state},
     };
-    use super::{build_theme_catalog, builtin_themes, cycle_theme};
+    use super::{build_theme_catalog, builtin_themes, cycle_theme, StudioState};
     use crate::config::{Config, StudioThemeConfig as StudioThemeOverrides};
 
     #[test]
@@ -870,5 +981,163 @@ mod tests {
             .expect("theme order should not be empty");
         cycle_theme(&mut state, true);
         assert_eq!(state.theme.id, last_theme);
+    }
+
+    #[test]
+    fn record_prompt_history_entry_persists_newest_first() -> Result<()> {
+        let project_dir = temp_test_dir("foundry-prompt-history-record");
+        fs::create_dir_all(&project_dir)?;
+        let mut state = StudioState::new(&project_dir, &Config::default())?;
+
+        state.prompt = "first prompt".into();
+        state.record_prompt_history_entry(false)?;
+        state.prompt = "second prompt".into();
+        state.record_prompt_history_entry(true)?;
+
+        let loaded = load_prompt_history(&project_dir);
+
+        fs::remove_dir_all(&project_dir)?;
+        assert_eq!(loaded.len(), 2);
+        assert_eq!(loaded[0].prompt, "second prompt");
+        assert!(loaded[0].follow_up);
+        assert_eq!(loaded[1].prompt, "first prompt");
+        Ok(())
+    }
+
+    #[test]
+    fn loading_selected_prompt_history_replaces_prompt_and_invalidates_preview() {
+        let mut state = test_state();
+        state.prompt = "current prompt".into();
+        state.preview_scroll = 11;
+        state.preview_cache = Some(PreviewPromptCache {
+            rendered_prompt: "cached preview".into(),
+            display_preview: "cached preview".into(),
+        });
+        state.prompt_history = vec![
+            PromptHistoryEntry {
+                created_at: Utc::now(),
+                prompt: "older prompt".into(),
+                provider_mode: "claude".into(),
+                workspace_mode: "isolated".into(),
+                contract_name: "Standard Build Contract".into(),
+                follow_up: false,
+            },
+            PromptHistoryEntry {
+                created_at: Utc::now(),
+                prompt: "newest prompt".into(),
+                provider_mode: "both".into(),
+                workspace_mode: "shared".into(),
+                contract_name: "Standard Build Contract".into(),
+                follow_up: true,
+            },
+        ];
+        state.set_selected_prompt_history_index(1);
+
+        assert!(state.load_selected_prompt_history_into_prompt());
+        assert_eq!(state.prompt, "newest prompt");
+        assert_eq!(state.preview_scroll, 0);
+        assert!(state.preview_cache.is_none());
+    }
+
+    #[test]
+    fn selected_prompt_history_visibility_clamps_scroll_window() {
+        let mut state = test_state();
+        state.prompt_history = (0..8)
+            .map(|idx| PromptHistoryEntry {
+                created_at: Utc::now(),
+                prompt: format!("prompt {}", idx),
+                provider_mode: "both".into(),
+                workspace_mode: "isolated".into(),
+                contract_name: "Standard Build Contract".into(),
+                follow_up: false,
+            })
+            .collect();
+        state.selected_prompt_history = 6;
+        state.prompt_history_scroll = 0;
+
+        state.ensure_selected_prompt_history_visible(3);
+        assert_eq!(state.prompt_history_scroll, 4);
+
+        state.selected_prompt_history = 1;
+        state.ensure_selected_prompt_history_visible(3);
+        assert_eq!(state.prompt_history_scroll, 1);
+    }
+
+    #[test]
+    fn scroll_prompt_history_clamps_at_bounds() {
+        let mut state = test_state();
+        state.prompt_history = (0..8)
+            .map(|idx| PromptHistoryEntry {
+                created_at: Utc::now(),
+                prompt: format!("prompt {}", idx),
+                provider_mode: "both".into(),
+                workspace_mode: "isolated".into(),
+                contract_name: "Standard Build Contract".into(),
+                follow_up: false,
+            })
+            .collect();
+
+        state.scroll_prompt_history(99, 2);
+        assert_eq!(state.prompt_history_scroll, 6);
+
+        state.scroll_prompt_history(-99, 2);
+        assert_eq!(state.prompt_history_scroll, 0);
+    }
+
+    #[test]
+    fn follow_up_prompt_history_uses_selected_session_provider() -> Result<()> {
+        let project_dir = temp_test_dir("foundry-prompt-history-follow-up-provider");
+        fs::create_dir_all(&project_dir)?;
+        let mut state = StudioState::new(&project_dir, &Config::default())?;
+        state.prompt = "follow up prompt".into();
+        state.sessions = vec![test_session(SessionStatus::Succeeded)];
+        state.sessions[0].provider = crate::agent::ModelProvider::Codex;
+        state.selected_session = 0;
+
+        state.record_prompt_history_entry(true)?;
+
+        let loaded = load_prompt_history(&project_dir);
+        fs::remove_dir_all(&project_dir)?;
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(
+            loaded[0].provider_mode,
+            crate::agent::ModelProvider::Codex.to_string()
+        );
+        assert!(loaded[0].follow_up);
+        Ok(())
+    }
+
+    #[test]
+    fn recording_prompt_history_drops_oldest_entry_at_cap() {
+        let mut state = test_state();
+        state.prompt_history = (0..MAX_PROMPT_HISTORY_ENTRIES)
+            .map(|idx| PromptHistoryEntry {
+                created_at: Utc::now(),
+                prompt: format!("existing {}", idx),
+                provider_mode: "both".into(),
+                workspace_mode: "isolated".into(),
+                contract_name: "Standard Build Contract".into(),
+                follow_up: false,
+            })
+            .collect();
+        state.prompt = "new prompt".into();
+
+        state
+            .record_prompt_history_entry(false)
+            .expect("record history");
+
+        assert_eq!(state.prompt_history.len(), MAX_PROMPT_HISTORY_ENTRIES);
+        assert_eq!(state.prompt_history[0].prompt, "new prompt");
+        assert_eq!(
+            state
+                .prompt_history
+                .last()
+                .map(|entry| entry.prompt.as_str()),
+            Some("existing 198")
+        );
+        assert!(!state
+            .prompt_history
+            .iter()
+            .any(|entry| entry.prompt == "existing 199"));
     }
 }

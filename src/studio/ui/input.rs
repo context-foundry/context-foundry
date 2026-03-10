@@ -37,8 +37,8 @@ use super::{
         state::{append_prompt_text, cycle_theme, format_byte_count, StudioState},
     },
     layout::{
-        apply_resize_drag, current_studio_layout, pane_at_position, resize_handle_at,
-        wrap_text_lines, ResizeDragState, StudioLayout,
+        apply_resize_drag, current_studio_layout, pane_at_position, prompt_pane_layout,
+        resize_handle_at, wrap_text_lines, ResizeDragState, StudioLayout,
     },
 };
 
@@ -487,6 +487,9 @@ fn handle_global_key(
         }
         KeyCode::Up => match state.focused_pane {
             FocusedPane::Contracts => cycle_execution_contract(state, false),
+            FocusedPane::Prompt => {
+                move_prompt_history_selection(state, false);
+            }
             FocusedPane::Output => {
                 state.output_scroll = state.output_scroll.saturating_add(3);
             }
@@ -494,6 +497,9 @@ fn handle_global_key(
         },
         KeyCode::Down => match state.focused_pane {
             FocusedPane::Contracts => cycle_execution_contract(state, true),
+            FocusedPane::Prompt => {
+                move_prompt_history_selection(state, true);
+            }
             FocusedPane::Output => {
                 state.output_scroll = state.output_scroll.saturating_sub(3);
             }
@@ -520,7 +526,17 @@ fn handle_mouse_event(state: &mut StudioState, mouse: MouseEvent) {
                 return;
             }
             if let Some(pane) = pane_at_position(&layout, mouse.column, mouse.row) {
-                activate_pane_from_click(state, pane, layout.sessions, layout.contracts, mouse.row);
+                if pane == FocusedPane::Prompt {
+                    activate_prompt_from_click(state, layout.prompt, mouse.column, mouse.row);
+                } else {
+                    activate_pane_from_click(
+                        state,
+                        pane,
+                        layout.sessions,
+                        layout.contracts,
+                        mouse.row,
+                    );
+                }
             }
         }
         MouseEventKind::Drag(MouseButton::Left) => {
@@ -533,12 +549,12 @@ fn handle_mouse_event(state: &mut StudioState, mouse: MouseEvent) {
         }
         MouseEventKind::ScrollUp => {
             if let Some(pane) = pane_at_position(&layout, mouse.column, mouse.row) {
-                scroll_pane_by_mouse(state, pane, &layout, true);
+                scroll_pane_by_mouse(state, pane, &layout, mouse.column, mouse.row, true);
             }
         }
         MouseEventKind::ScrollDown => {
             if let Some(pane) = pane_at_position(&layout, mouse.column, mouse.row) {
-                scroll_pane_by_mouse(state, pane, &layout, false);
+                scroll_pane_by_mouse(state, pane, &layout, mouse.column, mouse.row, false);
             }
         }
         _ => {}
@@ -565,13 +581,55 @@ fn activate_pane_from_click(
     }
 }
 
+fn activate_prompt_from_click(state: &mut StudioState, area: Rect, column: u16, row: u16) {
+    set_focused_pane(state, FocusedPane::Prompt);
+    if select_prompt_history_from_click(state, area, column, row) {
+        if state.is_editing_prompt {
+            state.is_editing_prompt = false;
+            state.log("prompt edit mode off");
+        }
+        let _ = state.load_selected_prompt_history_into_prompt();
+        state.log("loaded prompt from history");
+        return;
+    }
+
+    if !state.is_editing_prompt {
+        state.is_editing_prompt = true;
+        state.log("prompt edit mode on");
+    }
+}
+
 fn scroll_pane_by_mouse(
     state: &mut StudioState,
     pane: FocusedPane,
     layout: &StudioLayout,
+    column: u16,
+    row: u16,
     scroll_up: bool,
 ) {
     match pane {
+        FocusedPane::Prompt => {
+            let prompt_layout = prompt_pane_layout(layout.prompt, !state.prompt_history.is_empty());
+            if prompt_layout.history_list.height == 0
+                || row < prompt_layout.history_list.y
+                || row
+                    >= prompt_layout
+                        .history_list
+                        .y
+                        .saturating_add(prompt_layout.history_list.height)
+                || column < prompt_layout.history_list.x
+                || column
+                    >= prompt_layout
+                        .history_list
+                        .x
+                        .saturating_add(prompt_layout.history_list.width)
+            {
+                return;
+            }
+            set_focused_pane(state, FocusedPane::Prompt);
+            let delta = if scroll_up { -3 } else { 3 };
+            state.scroll_prompt_history(delta, prompt_layout.history_list.height as usize);
+        }
         FocusedPane::ExecutionBrief => {
             set_focused_pane(state, FocusedPane::ExecutionBrief);
             let delta = if scroll_up { -3 } else { 3 };
@@ -853,6 +911,68 @@ fn select_execution_contract_from_click(state: &mut StudioState, area: Rect, row
     }
 }
 
+fn prompt_history_visible_rows(state: &StudioState) -> usize {
+    current_studio_layout(state)
+        .map(|layout| prompt_pane_layout(layout.prompt, !state.prompt_history.is_empty()))
+        .map(|layout| layout.history_list.height as usize)
+        .unwrap_or(0)
+}
+
+fn move_prompt_history_selection(state: &mut StudioState, toward_older: bool) {
+    if state.prompt_history.is_empty() {
+        return;
+    }
+
+    let current_index = state.selected_prompt_history_index().unwrap_or(0);
+    let next_index = if toward_older {
+        current_index.saturating_add(1)
+    } else {
+        current_index.saturating_sub(1)
+    }
+    .min(state.prompt_history.len().saturating_sub(1));
+
+    state.set_selected_prompt_history_index(next_index);
+    state.ensure_selected_prompt_history_visible(prompt_history_visible_rows(state));
+    let _ = state.load_selected_prompt_history_into_prompt();
+}
+
+fn select_prompt_history_from_click(
+    state: &mut StudioState,
+    area: Rect,
+    column: u16,
+    row: u16,
+) -> bool {
+    let layout = prompt_pane_layout(area, !state.prompt_history.is_empty());
+    if layout.history_list.height == 0
+        || column < layout.history_list.x
+        || column
+            >= layout
+                .history_list
+                .x
+                .saturating_add(layout.history_list.width)
+        || row < layout.history_list.y
+        || row
+            >= layout
+                .history_list
+                .y
+                .saturating_add(layout.history_list.height)
+    {
+        return false;
+    }
+
+    let visible_rows = layout.history_list.height as usize;
+    let max_scroll = state.prompt_history.len().saturating_sub(visible_rows);
+    let scroll = state.prompt_history_scroll.min(max_scroll);
+    let index = scroll + row.saturating_sub(layout.history_list.y) as usize;
+    if index >= state.prompt_history.len() {
+        return false;
+    }
+
+    state.set_selected_prompt_history_index(index);
+    state.ensure_selected_prompt_history_visible(visible_rows);
+    true
+}
+
 #[cfg(test)]
 mod tests {
     use std::{
@@ -863,7 +983,8 @@ mod tests {
         time::{SystemTime, UNIX_EPOCH},
     };
 
-    use crossterm::event::{self, KeyCode, KeyModifiers};
+    use chrono::Utc;
+    use crossterm::event::{self, KeyCode, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
     use ratatui::layout::Rect;
     use tokio::sync::mpsc;
 
@@ -873,9 +994,9 @@ mod tests {
         app::shutdown_active_sessions,
         contracts::{load_execution_contracts, load_execution_contracts_with_selection},
         model::{
-            DeleteConfirmationState, EditorChoice, ExecutionContract, FocusedPane,
-            PendingStudioAction, SessionStatus, SessionStopConfirmationState, StudioEvent,
-            STUDIO_CONTRACTS_DIR, STUDIO_ROOT_DIR,
+            DeleteConfirmationState, EditorChoice, EditorGuideState, ExecutionContract,
+            FocusedPane, PendingStudioAction, PromptHistoryEntry, SessionStatus,
+            SessionStopConfirmationState, StudioEvent, STUDIO_CONTRACTS_DIR, STUDIO_ROOT_DIR,
         },
         state::SessionControl,
         test_helpers::{temp_test_dir, test_session, test_state},
@@ -908,6 +1029,125 @@ mod tests {
 
         assert_eq!(state.focused_pane, FocusedPane::Prompt);
         assert!(state.is_editing_prompt);
+    }
+
+    #[test]
+    fn clicking_prompt_history_row_loads_prompt_and_exits_edit_mode() {
+        let mut state = test_state();
+        state.is_editing_prompt = true;
+        state.prompt = "current prompt".into();
+        state.prompt_history = vec![
+            PromptHistoryEntry {
+                created_at: Utc::now(),
+                prompt: "newest prompt".into(),
+                provider_mode: "both".into(),
+                workspace_mode: "isolated".into(),
+                contract_name: "Standard Build Contract".into(),
+                follow_up: false,
+            },
+            PromptHistoryEntry {
+                created_at: Utc::now(),
+                prompt: "older prompt".into(),
+                provider_mode: "claude".into(),
+                workspace_mode: "shared".into(),
+                contract_name: "Standard Build Contract".into(),
+                follow_up: true,
+            },
+        ];
+        let area = Rect::new(0, 0, 48, 8);
+        let prompt_layout = prompt_pane_layout(area, true);
+
+        activate_prompt_from_click(
+            &mut state,
+            area,
+            prompt_layout.history_list.x,
+            prompt_layout.history_list.y.saturating_add(1),
+        );
+
+        assert_eq!(state.prompt, "older prompt");
+        assert_eq!(state.selected_prompt_history, 1);
+        assert!(!state.is_editing_prompt);
+    }
+
+    #[test]
+    fn handle_event_dispatches_prompt_history_clicks() {
+        let mut state = test_state();
+        let (tx, _rx) = mpsc::unbounded_channel();
+        state.is_editing_prompt = true;
+        state.prompt = "current prompt".into();
+        state.prompt_history = vec![
+            PromptHistoryEntry {
+                created_at: Utc::now(),
+                prompt: "newest prompt".into(),
+                provider_mode: "both".into(),
+                workspace_mode: "isolated".into(),
+                contract_name: "Standard Build Contract".into(),
+                follow_up: false,
+            },
+            PromptHistoryEntry {
+                created_at: Utc::now(),
+                prompt: "older prompt".into(),
+                provider_mode: "claude".into(),
+                workspace_mode: "shared".into(),
+                contract_name: "Standard Build Contract".into(),
+                follow_up: true,
+            },
+        ];
+        let layout = current_studio_layout(&state).expect("test layout");
+        let prompt_layout = prompt_pane_layout(layout.prompt, true);
+
+        handle_event(
+            &mut state,
+            StudioEvent::Mouse(MouseEvent {
+                kind: MouseEventKind::Down(MouseButton::Left),
+                column: prompt_layout.history_list.x,
+                row: prompt_layout.history_list.y.saturating_add(1),
+                modifiers: KeyModifiers::NONE,
+            }),
+            &tx,
+        );
+
+        assert_eq!(state.prompt, "older prompt");
+        assert_eq!(state.selected_prompt_history, 1);
+        assert!(!state.is_editing_prompt);
+    }
+
+    #[test]
+    fn handle_event_blocks_prompt_history_clicks_while_modal_is_open() {
+        let mut state = test_state();
+        let (tx, _rx) = mpsc::unbounded_channel();
+        state.prompt = "current prompt".into();
+        state.prompt_history = vec![PromptHistoryEntry {
+            created_at: Utc::now(),
+            prompt: "history prompt".into(),
+            provider_mode: "both".into(),
+            workspace_mode: "isolated".into(),
+            contract_name: "Standard Build Contract".into(),
+            follow_up: false,
+        }];
+        state.editor_guide = Some(EditorGuideState {
+            action: PendingStudioAction::EditExecutionContract {
+                path: PathBuf::from("/tmp/contract.md"),
+                action_label: "contract",
+            },
+        });
+        let layout = current_studio_layout(&state).expect("test layout");
+        let prompt_layout = prompt_pane_layout(layout.prompt, true);
+
+        handle_event(
+            &mut state,
+            StudioEvent::Mouse(MouseEvent {
+                kind: MouseEventKind::Down(MouseButton::Left),
+                column: prompt_layout.history_list.x,
+                row: prompt_layout.history_list.y,
+                modifiers: KeyModifiers::NONE,
+            }),
+            &tx,
+        );
+
+        assert_eq!(state.prompt, "current prompt");
+        assert_eq!(state.selected_prompt_history, 0);
+        assert!(state.editor_guide.is_some());
     }
 
     #[test]
@@ -978,6 +1218,117 @@ mod tests {
 
         scroll_preview(&mut state, area, -3);
         assert_eq!(state.preview_scroll, 0);
+    }
+
+    #[test]
+    fn prompt_history_scrolls_with_mouse_wheel() {
+        let mut state = test_state();
+        state.prompt_history = (0..8)
+            .map(|idx| PromptHistoryEntry {
+                created_at: Utc::now(),
+                prompt: format!("prompt {}", idx),
+                provider_mode: "both".into(),
+                workspace_mode: "isolated".into(),
+                contract_name: "Standard Build Contract".into(),
+                follow_up: false,
+            })
+            .collect();
+        let layout = StudioLayout {
+            header: Rect::default(),
+            body: Rect::default(),
+            left_body: Rect::default(),
+            right_body: Rect::default(),
+            column_split: Rect::default(),
+            left_scan_prompt_split: Rect::default(),
+            left_prompt_contracts_split: Rect::default(),
+            left_contracts_brief_split: Rect::default(),
+            right_sessions_output_split: Rect::default(),
+            right_output_activity_split: Rect::default(),
+            scan: Rect::default(),
+            prompt: Rect::new(0, 0, 48, 8),
+            contracts: Rect::default(),
+            execution_brief: Rect::default(),
+            sessions: Rect::default(),
+            output: Rect::default(),
+            activity: Rect::default(),
+            status: Rect::default(),
+        };
+        let prompt_layout = prompt_pane_layout(layout.prompt, true);
+
+        scroll_pane_by_mouse(
+            &mut state,
+            FocusedPane::Prompt,
+            &layout,
+            prompt_layout.history_list.x,
+            prompt_layout.history_list.y,
+            false,
+        );
+
+        assert!(state.prompt_history_scroll > 0);
+    }
+
+    #[test]
+    fn prompt_history_arrow_keys_load_selected_entry() {
+        let mut state = test_state();
+        let (tx, _rx) = mpsc::unbounded_channel();
+        state.focused_pane = FocusedPane::Prompt;
+        state.prompt = "current prompt".into();
+        state.prompt_history = vec![
+            PromptHistoryEntry {
+                created_at: Utc::now(),
+                prompt: "newest prompt".into(),
+                provider_mode: "both".into(),
+                workspace_mode: "isolated".into(),
+                contract_name: "Standard Build Contract".into(),
+                follow_up: false,
+            },
+            PromptHistoryEntry {
+                created_at: Utc::now(),
+                prompt: "older prompt".into(),
+                provider_mode: "claude".into(),
+                workspace_mode: "shared".into(),
+                contract_name: "Standard Build Contract".into(),
+                follow_up: true,
+            },
+        ];
+
+        handle_global_key(
+            &mut state,
+            event::KeyEvent::new(KeyCode::Down, KeyModifiers::NONE),
+            &tx,
+        );
+
+        assert_eq!(state.selected_prompt_history, 1);
+        assert_eq!(state.prompt, "older prompt");
+    }
+
+    #[test]
+    fn prompt_history_arrow_keys_scroll_selection_into_view() {
+        let mut state = test_state();
+        let (tx, _rx) = mpsc::unbounded_channel();
+        state.focused_pane = FocusedPane::Prompt;
+        state.prompt_history = (0..8)
+            .map(|idx| PromptHistoryEntry {
+                created_at: Utc::now(),
+                prompt: format!("prompt {}", idx),
+                provider_mode: "both".into(),
+                workspace_mode: "isolated".into(),
+                contract_name: "Standard Build Contract".into(),
+                follow_up: false,
+            })
+            .collect();
+
+        for _ in 0..6 {
+            handle_global_key(
+                &mut state,
+                event::KeyEvent::new(KeyCode::Down, KeyModifiers::NONE),
+                &tx,
+            );
+        }
+
+        assert_eq!(state.selected_prompt_history, 6);
+        assert_eq!(state.prompt_history_scroll, 5);
+        assert_eq!(state.prompt, "prompt 6");
     }
 
     #[test]

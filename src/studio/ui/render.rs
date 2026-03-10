@@ -16,16 +16,16 @@ use super::{
     super::attachments::external_attachment_count,
     super::contracts::execution_contract_list_label,
     super::model::{
-        panel_style, root_style, FocusedPane, SessionState, SessionStatus, StudioTheme,
-        MAX_PREVIEW_RENDER_BYTES, MAX_PROMPT_RENDER_BYTES,
+        panel_style, root_style, FocusedPane, PromptHistoryEntry, SessionState, SessionStatus,
+        StudioTheme, MAX_PREVIEW_RENDER_BYTES, MAX_PROMPT_RENDER_BYTES,
     },
     super::providers::{display_model_name, header_readiness_label, readiness_summary},
     super::state::StudioState,
     input::{can_stop_selected_session, editor_choice_summary},
     layout::{
-        output_style, pane_border_style, pane_border_type, pane_title_style, provider_color,
-        studio_layout, studio_spinner, truncate_display_path, wrap_text_lines, ResizeHandle,
-        StudioLayout,
+        output_style, pane_border_style, pane_border_type, pane_title_style, prompt_pane_layout,
+        provider_color, studio_layout, studio_spinner, truncate_display_path, wrap_text_lines,
+        ResizeHandle, StudioLayout,
     },
     modals::{
         render_attachment_manager, render_delete_confirmation, render_editor_guide,
@@ -255,31 +255,91 @@ fn render_prompt(frame: &mut Frame, area: Rect, state: &StudioState) {
         " Prompt "
     };
 
-    let paragraph = Paragraph::new(prompt_text)
+    let block = Block::default()
         .style(panel_style(theme))
-        .wrap(Wrap { trim: false })
-        .block(
-            Block::default()
+        .title(Span::styled(
+            title,
+            pane_title_style(state, FocusedPane::Prompt, theme.prompt),
+        ))
+        .borders(Borders::ALL)
+        .border_style(if state.is_editing_prompt {
+            Style::default()
+                .fg(theme.prompt)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            pane_border_style(state, FocusedPane::Prompt, theme.prompt)
+        })
+        .border_type(if state.is_editing_prompt {
+            BorderType::Thick
+        } else {
+            pane_border_type(state, FocusedPane::Prompt)
+        });
+    frame.render_widget(block, area);
+
+    let prompt_layout = prompt_pane_layout(area, !state.prompt_history.is_empty());
+    if prompt_layout.editor.height > 0 {
+        frame.render_widget(
+            Paragraph::new(prompt_text)
                 .style(panel_style(theme))
-                .title(Span::styled(
-                    title,
-                    pane_title_style(state, FocusedPane::Prompt, theme.prompt),
-                ))
-                .borders(Borders::ALL)
-                .border_style(if state.is_editing_prompt {
-                    Style::default()
-                        .fg(theme.prompt)
-                        .add_modifier(Modifier::BOLD)
-                } else {
-                    pane_border_style(state, FocusedPane::Prompt, theme.prompt)
-                })
-                .border_type(if state.is_editing_prompt {
-                    BorderType::Thick
-                } else {
-                    pane_border_type(state, FocusedPane::Prompt)
-                }),
+                .wrap(Wrap { trim: false }),
+            prompt_layout.editor,
         );
-    frame.render_widget(paragraph, area);
+    }
+
+    if prompt_layout.history_label.height > 0 {
+        frame.render_widget(
+            Paragraph::new(Line::from(vec![
+                Span::styled("Recent prompts", Style::default().fg(theme.text_muted)),
+                Span::styled(
+                    format!(" ({})", state.prompt_history.len()),
+                    Style::default().fg(theme.text_muted),
+                ),
+            ]))
+            .style(panel_style(theme)),
+            prompt_layout.history_label,
+        );
+    }
+
+    if prompt_layout.history_list.height > 0 {
+        let width = prompt_layout.history_list.width as usize;
+        let visible_rows = prompt_layout.history_list.height as usize;
+        let max_scroll = state.prompt_history.len().saturating_sub(visible_rows);
+        let start = state.prompt_history_scroll.min(max_scroll);
+        let end = (start + visible_rows).min(state.prompt_history.len());
+        let selected_history_index = state.selected_prompt_history_index();
+        let items = if state.prompt_history.is_empty() {
+            vec![ListItem::new(Span::styled(
+                "No prompt history yet.",
+                Style::default().fg(theme.text_muted),
+            ))]
+        } else {
+            state.prompt_history[start..end]
+                .iter()
+                .enumerate()
+                .map(|(offset, entry)| {
+                    let index = start + offset;
+                    let is_selected = selected_history_index == Some(index);
+                    let style = if is_selected {
+                        Style::default()
+                            .fg(theme.prompt)
+                            .add_modifier(Modifier::BOLD)
+                    } else if entry.follow_up {
+                        Style::default().fg(theme.info)
+                    } else {
+                        Style::default().fg(theme.text_dim)
+                    };
+                    ListItem::new(Span::styled(
+                        format_prompt_history_line(entry, is_selected, width),
+                        style,
+                    ))
+                })
+                .collect()
+        };
+        frame.render_widget(
+            List::new(items).style(panel_style(theme)),
+            prompt_layout.history_list,
+        );
+    }
 }
 
 fn render_contracts(frame: &mut Frame, area: Rect, state: &StudioState) {
@@ -686,6 +746,41 @@ fn prompt_text_for_display(prompt: &str, is_editing_prompt: bool) -> String {
     text
 }
 
+fn format_prompt_history_line(
+    entry: &PromptHistoryEntry,
+    is_selected: bool,
+    width: usize,
+) -> String {
+    let prefix = if is_selected { ">" } else { " " };
+    let kind = if entry.follow_up { "fup" } else { "run" };
+    let summary = prompt_history_summary(&entry.prompt, width.saturating_sub(18));
+    truncate_str(
+        &format!(
+            "{} {} {} {}",
+            prefix,
+            entry.created_at.format("%m-%d %H:%M"),
+            kind,
+            summary
+        ),
+        width.max(1),
+    )
+    .to_string()
+}
+
+fn prompt_history_summary(prompt: &str, max_len: usize) -> String {
+    let compact = prompt
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>()
+        .join(" / ");
+    if compact.is_empty() {
+        "<empty prompt>".to_string()
+    } else {
+        truncate_str(&compact, max_len.max(1)).to_string()
+    }
+}
+
 pub(in crate::studio) fn preview_text_for_display(preview: &str) -> String {
     if preview.len() <= MAX_PREVIEW_RENDER_BYTES {
         return preview.to_string();
@@ -713,10 +808,15 @@ mod tests {
     use chrono::Utc;
 
     use super::super::super::{
-        model::{SessionStatus, MAX_PREVIEW_RENDER_BYTES, MAX_PROMPT_RENDER_BYTES},
+        model::{
+            PromptHistoryEntry, SessionStatus, MAX_PREVIEW_RENDER_BYTES, MAX_PROMPT_RENDER_BYTES,
+        },
         test_helpers::test_session,
     };
-    use super::{format_session_list_line, preview_text_for_display, prompt_text_for_display};
+    use super::{
+        format_prompt_history_line, format_session_list_line, preview_text_for_display,
+        prompt_text_for_display,
+    };
 
     #[test]
     fn prompt_text_for_display_truncates_large_prompts() {
@@ -763,5 +863,23 @@ mod tests {
         );
 
         assert!(line.contains("done 3ev 12s"));
+    }
+
+    #[test]
+    fn prompt_history_lines_include_kind_and_summary() {
+        let entry = PromptHistoryEntry {
+            created_at: Utc::now(),
+            prompt: "Build dashboard\nwith reusable cards".into(),
+            provider_mode: "both".into(),
+            workspace_mode: "isolated".into(),
+            contract_name: "Standard Build Contract".into(),
+            follow_up: true,
+        };
+
+        let line = format_prompt_history_line(&entry, true, 80);
+
+        assert!(line.starts_with("> "));
+        assert!(line.contains("fup"));
+        assert!(line.contains("Build dashboard / with reusable cards"));
     }
 }

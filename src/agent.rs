@@ -5,8 +5,9 @@ use std::io::BufRead;
 use std::path::Path;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
-    Arc,
+    Arc, Mutex,
 };
+use std::time::{Duration, Instant};
 
 use crate::utils::truncate_str;
 use tokio::sync::mpsc;
@@ -51,6 +52,23 @@ pub struct AgentResult {
     pub success: bool,
     #[allow(dead_code)]
     pub exit_code: i32,
+    pub exit_kind: AgentExitKind,
+    pub failure_message: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AgentExitKind {
+    Completed,
+    Failed,
+    Cancelled,
+    TimedOut,
+    TransportStall,
+}
+
+impl AgentResult {
+    pub fn should_retry(&self) -> bool {
+        matches!(self.exit_kind, AgentExitKind::TransportStall)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -87,6 +105,100 @@ pub struct ProviderRunOptions<'a> {
     pub timeout_secs: u64,
     pub skip_git_repo_check: bool,
     pub cancel_flag: Option<Arc<AtomicBool>>,
+}
+
+const PROVIDER_POLL_INTERVAL: Duration = Duration::from_millis(500);
+const PROVIDER_HARD_TIMEOUT_MULTIPLIER: u64 = 4;
+const CODEX_STALL_GRACE_SECS: u64 = 90;
+const CODEX_FAST_STALL_SECS: u64 = 45;
+
+#[derive(Debug)]
+struct ProviderProgressState {
+    last_progress_at: Instant,
+    last_transport_issue_at: Option<Instant>,
+    transport_issue_count: usize,
+}
+
+impl ProviderProgressState {
+    fn new(now: Instant) -> Self {
+        Self {
+            last_progress_at: now,
+            last_transport_issue_at: None,
+            transport_issue_count: 0,
+        }
+    }
+
+    fn record_progress_at(&mut self, now: Instant) {
+        self.last_progress_at = now;
+        self.last_transport_issue_at = None;
+        self.transport_issue_count = 0;
+    }
+
+    fn record_transport_issue_at(&mut self, now: Instant) {
+        self.last_transport_issue_at = Some(now);
+        self.transport_issue_count += 1;
+    }
+
+    fn no_progress_for(&self, now: Instant) -> Duration {
+        now.saturating_duration_since(self.last_progress_at)
+    }
+
+    fn transport_stalled(&self, now: Instant) -> bool {
+        let Some(last_issue_at) = self.last_transport_issue_at else {
+            return false;
+        };
+
+        if last_issue_at <= self.last_progress_at {
+            return false;
+        }
+
+        let since_progress = self.no_progress_for(now);
+        since_progress >= Duration::from_secs(CODEX_STALL_GRACE_SECS)
+            || (self.transport_issue_count >= 2
+                && since_progress >= Duration::from_secs(CODEX_FAST_STALL_SECS))
+    }
+}
+
+fn is_codex_transport_issue(text: &str) -> bool {
+    let lower = text.to_ascii_lowercase();
+    lower.contains("stream disconnected before completion")
+        || lower.contains("idle timeout waiting for websocket")
+        || lower.contains("reconnecting...")
+        || ((lower.contains("websocket") || lower.contains("stream"))
+            && (lower.contains("disconnect")
+                || lower.contains("timeout")
+                || lower.contains("reconnect")))
+}
+
+fn note_provider_event(
+    provider: ModelProvider,
+    event: &AgentOutputEvent,
+    progress: &Arc<Mutex<ProviderProgressState>>,
+) {
+    let mut guard = progress.lock().expect("provider progress lock poisoned");
+    let now = Instant::now();
+    match event {
+        AgentOutputEvent::Stderr(text)
+            if provider == ModelProvider::Codex && is_codex_transport_issue(text) =>
+        {
+            guard.record_transport_issue_at(now);
+        }
+        _ => guard.record_progress_at(now),
+    }
+}
+
+fn note_provider_stderr_line(
+    provider: ModelProvider,
+    line: &str,
+    progress: &Arc<Mutex<ProviderProgressState>>,
+) {
+    let mut guard = progress.lock().expect("provider progress lock poisoned");
+    let now = Instant::now();
+    if provider == ModelProvider::Codex && is_codex_transport_issue(line) {
+        guard.record_transport_issue_at(now);
+    } else {
+        guard.record_progress_at(now);
+    }
 }
 
 pub async fn run_provider_session(options: ProviderRunOptions<'_>) -> Result<AgentResult> {
@@ -159,6 +271,7 @@ pub async fn run_provider_session(options: ProviderRunOptions<'_>) -> Result<Age
     let timeout_secs = options.timeout_secs;
     let output_tx = options.output_tx;
     let cancel_flag = options.cancel_flag.clone();
+    let progress = Arc::new(Mutex::new(ProviderProgressState::new(Instant::now())));
 
     tokio::task::spawn_blocking(move || {
         let tx = output_tx;
@@ -167,18 +280,42 @@ pub async fn run_provider_session(options: ProviderRunOptions<'_>) -> Result<Age
         let model_label = model_name.clone();
         let final_output_path = final_message_path.clone();
         let read_tx = tx.clone();
+        let read_progress = progress.clone();
 
         let read_thread = std::thread::spawn(move || {
-            read_provider_output(reader, &read_tx, &log_path, provider, &model_label);
+            read_provider_output(
+                reader,
+                &read_tx,
+                &log_path,
+                provider,
+                &model_label,
+                &read_progress,
+            );
         });
 
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(timeout_secs);
-        let mut success = false;
+        let hard_timeout_secs = timeout_secs.saturating_mul(PROVIDER_HARD_TIMEOUT_MULTIPLIER);
+        let hard_deadline = Instant::now() + Duration::from_secs(hard_timeout_secs);
+        let mut result = AgentResult {
+            success: false,
+            exit_code: 1,
+            exit_kind: AgentExitKind::Failed,
+            failure_message: None,
+        };
 
         loop {
             match child.try_wait() {
                 Ok(Some(status)) => {
-                    success = status.success();
+                    result.success = status.success();
+                    result.exit_code = if status.success() { 0 } else { 1 };
+                    result.exit_kind = if status.success() {
+                        AgentExitKind::Completed
+                    } else {
+                        AgentExitKind::Failed
+                    };
+                    if !status.success() {
+                        result.failure_message =
+                            Some(format!("{} exited unsuccessfully", provider));
+                    }
                     break;
                 }
                 Ok(None) => {
@@ -188,28 +325,64 @@ pub async fn run_provider_session(options: ProviderRunOptions<'_>) -> Result<Age
                     {
                         let _ = child.kill();
                         let _ = child.wait();
-                        let _ = tx.send(AgentOutputEvent::Stderr(format!(
-                            "{} cancelled by studio",
-                            provider
-                        )));
+                        let message = format!("{} cancelled by studio", provider);
+                        let _ = tx.send(AgentOutputEvent::Stderr(message.clone()));
+                        result.exit_kind = AgentExitKind::Cancelled;
+                        result.failure_message = Some(message);
                         break;
                     }
-                    if std::time::Instant::now() >= deadline {
+
+                    let now = Instant::now();
+                    let progress_snapshot =
+                        progress.lock().expect("provider progress lock poisoned");
+
+                    if provider == ModelProvider::Codex && progress_snapshot.transport_stalled(now)
+                    {
                         let _ = child.kill();
                         let _ = child.wait();
-                        let _ = tx.send(AgentOutputEvent::Stderr(format!(
-                            "{} timed out after {}s",
-                            provider, timeout_secs
-                        )));
+                        let message = format!(
+                            "{} stalled after websocket reconnects; aborting this attempt",
+                            provider
+                        );
+                        let _ = tx.send(AgentOutputEvent::Stderr(message.clone()));
+                        result.exit_kind = AgentExitKind::TransportStall;
+                        result.failure_message = Some(message);
                         break;
                     }
-                    std::thread::sleep(std::time::Duration::from_millis(500));
+
+                    if progress_snapshot.no_progress_for(now) >= Duration::from_secs(timeout_secs) {
+                        let _ = child.kill();
+                        let _ = child.wait();
+                        let message = format!(
+                            "{} timed out after {}s without progress",
+                            provider, timeout_secs
+                        );
+                        let _ = tx.send(AgentOutputEvent::Stderr(message.clone()));
+                        result.exit_kind = AgentExitKind::TimedOut;
+                        result.failure_message = Some(message);
+                        break;
+                    }
+
+                    if now >= hard_deadline {
+                        let _ = child.kill();
+                        let _ = child.wait();
+                        let message = format!(
+                            "{} timed out after {}s total runtime",
+                            provider, hard_timeout_secs
+                        );
+                        let _ = tx.send(AgentOutputEvent::Stderr(message.clone()));
+                        result.exit_kind = AgentExitKind::TimedOut;
+                        result.failure_message = Some(message);
+                        break;
+                    }
+                    drop(progress_snapshot);
+                    std::thread::sleep(PROVIDER_POLL_INTERVAL);
                 }
                 Err(err) => {
-                    let _ = tx.send(AgentOutputEvent::Stderr(format!(
-                        "{} failed while waiting on process: {}",
-                        provider, err
-                    )));
+                    let message = format!("{} failed while waiting on process: {}", provider, err);
+                    let _ = tx.send(AgentOutputEvent::Stderr(message.clone()));
+                    result.exit_kind = AgentExitKind::Failed;
+                    result.failure_message = Some(message);
                     break;
                 }
             }
@@ -218,7 +391,12 @@ pub async fn run_provider_session(options: ProviderRunOptions<'_>) -> Result<Age
         drop(master);
         let _ = read_thread.join();
 
-        if provider == ModelProvider::Codex {
+        if provider == ModelProvider::Codex
+            && matches!(
+                result.exit_kind,
+                AgentExitKind::Completed | AgentExitKind::Failed
+            )
+        {
             if let Ok(text) = std::fs::read_to_string(&final_output_path) {
                 if !text.trim().is_empty() {
                     let _ = tx.send(AgentOutputEvent::Result(text));
@@ -226,14 +404,15 @@ pub async fn run_provider_session(options: ProviderRunOptions<'_>) -> Result<Age
             }
         }
 
-        let _ = result_tx.send(success);
+        let _ = result_tx.send(result);
     });
 
-    let success = result_rx.await.unwrap_or(false);
-    Ok(AgentResult {
-        success,
-        exit_code: if success { 0 } else { 1 },
-    })
+    Ok(result_rx.await.unwrap_or(AgentResult {
+        success: false,
+        exit_code: 1,
+        exit_kind: AgentExitKind::Failed,
+        failure_message: Some("provider session result channel closed".to_string()),
+    }))
 }
 
 /// Spawn a claude CLI agent inside a PTY.
@@ -309,31 +488,53 @@ pub async fn run_agent(
         });
 
         // Wait for child process to exit with timeout
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(timeout_secs);
-        let mut success = false;
+        let deadline = Instant::now() + Duration::from_secs(timeout_secs);
+        let mut result = AgentResult {
+            success: false,
+            exit_code: 1,
+            exit_kind: AgentExitKind::Failed,
+            failure_message: None,
+        };
 
         loop {
             // Check if child has exited (non-blocking poll via short sleep + try)
             match child.try_wait() {
                 Ok(Some(status)) => {
-                    success = status.success();
+                    result.success = status.success();
+                    result.exit_code = if status.success() { 0 } else { 1 };
+                    result.exit_kind = if status.success() {
+                        AgentExitKind::Completed
+                    } else {
+                        AgentExitKind::Failed
+                    };
+                    if !status.success() {
+                        result.failure_message =
+                            Some(format!("Agent {} exited unsuccessfully", role_name));
+                    }
                     break;
                 }
                 Ok(None) => {
                     // Still running — check timeout
-                    if std::time::Instant::now() >= deadline {
+                    if Instant::now() >= deadline {
                         // Timeout — kill the child process
                         let _ = child.kill();
                         let _ = child.wait(); // Reap
-                        eprintln!(
-                            "[foundry] Agent {} timed out after {}s — killed",
-                            role_name, timeout_secs
-                        );
+                        let message =
+                            format!("Agent {} timed out after {}s", role_name, timeout_secs);
+                        eprintln!("[foundry] {} — killed", message);
+                        result.exit_kind = AgentExitKind::TimedOut;
+                        result.failure_message = Some(message);
                         break;
                     }
-                    std::thread::sleep(std::time::Duration::from_millis(500));
+                    std::thread::sleep(PROVIDER_POLL_INTERVAL);
                 }
-                Err(_) => break,
+                Err(err) => {
+                    result.failure_message = Some(format!(
+                        "Agent {} failed while waiting on process: {}",
+                        role_name, err
+                    ));
+                    break;
+                }
             }
         }
 
@@ -343,15 +544,15 @@ pub async fn run_agent(
         // Wait for reader to drain remaining output
         let _ = read_thread.join();
 
-        let _ = result_tx.send(success);
+        let _ = result_tx.send(result);
     });
 
-    let success = result_rx.await.unwrap_or(false);
-
-    Ok(AgentResult {
-        success,
-        exit_code: if success { 0 } else { 1 },
-    })
+    Ok(result_rx.await.unwrap_or(AgentResult {
+        success: false,
+        exit_code: 1,
+        exit_kind: AgentExitKind::Failed,
+        failure_message: Some(format!("Agent {} result channel closed", role)),
+    }))
 }
 
 /// Read PTY output line by line, parse stream-json events, send to TUI.
@@ -417,6 +618,7 @@ fn read_provider_output(
     log_path: &Path,
     provider: ModelProvider,
     model_name: &str,
+    progress: &Arc<Mutex<ProviderProgressState>>,
 ) {
     let mut buf_reader = std::io::BufReader::new(reader);
     let mut log_file = std::fs::File::create(log_path).ok();
@@ -440,6 +642,7 @@ fn read_provider_output(
                 match provider {
                     ModelProvider::Claude => match parse_claude_provider_line(line, model_name) {
                         ParsedClaudeLine::Event(event) => {
+                            note_provider_event(provider, &event, progress);
                             if tx.send(event).is_err() {
                                 return;
                             }
@@ -450,6 +653,7 @@ fn read_provider_output(
                     },
                     ModelProvider::Codex => {
                         if let Some(event) = parse_codex_event(line, model_name) {
+                            note_provider_event(provider, &event, progress);
                             if tx.send(event).is_err() {
                                 return;
                             }
@@ -459,8 +663,11 @@ fn read_provider_output(
                 }
 
                 let cleaned = strip_ansi(line);
-                if !cleaned.is_empty() && tx.send(AgentOutputEvent::Stderr(cleaned)).is_err() {
-                    return;
+                if !cleaned.is_empty() {
+                    note_provider_stderr_line(provider, &cleaned, progress);
+                    if tx.send(AgentOutputEvent::Stderr(cleaned)).is_err() {
+                        return;
+                    }
                 }
             }
             Err(_) => break,
@@ -1043,6 +1250,36 @@ mod tests {
     fn strip_ansi_stray_control_chars() {
         // BEL and other control chars outside escape sequences
         assert_eq!(strip_ansi("a\x07b\x08c"), "abc");
+    }
+
+    #[test]
+    fn codex_transport_issue_detection_matches_reconnect_timeout_lines() {
+        assert!(is_codex_transport_issue(
+            "Reconnecting... 2/5 (stream disconnected before completion: idle timeout waiting for websocket)"
+        ));
+        assert!(!is_codex_transport_issue("tool stderr: permission denied"));
+    }
+
+    #[test]
+    fn provider_progress_state_flags_codex_transport_stalls() {
+        let start = Instant::now();
+        let mut state = ProviderProgressState::new(start);
+
+        state.record_progress_at(start);
+        state.record_transport_issue_at(start + Duration::from_secs(5));
+        assert!(!state.transport_stalled(start + Duration::from_secs(30)));
+        assert!(state.transport_stalled(start + Duration::from_secs(96)));
+    }
+
+    #[test]
+    fn provider_progress_state_clears_transport_stall_after_progress_resumes() {
+        let start = Instant::now();
+        let mut state = ProviderProgressState::new(start);
+
+        state.record_transport_issue_at(start + Duration::from_secs(5));
+        state.record_progress_at(start + Duration::from_secs(20));
+
+        assert!(!state.transport_stalled(start + Duration::from_secs(120)));
     }
 
     #[test]

@@ -12,7 +12,9 @@ pub(super) const STUDIO_ROOT_DIR: &str = ".foundry/studio";
 pub(super) const STUDIO_CONTRACTS_DIR: &str = "contracts";
 pub(super) const STUDIO_SELECTED_CONTRACT_FILE: &str = ".selected";
 pub(super) const STUDIO_SELECTED_EDITOR_FILE: &str = ".editor";
+pub(super) const STUDIO_PROMPT_HISTORY_FILE: &str = "prompt-history.json";
 pub(super) const DEFAULT_PROMPT: &str = "";
+pub(super) const MAX_PROMPT_HISTORY_ENTRIES: usize = 200;
 pub(super) const LIVE_PROBE_TTL_SECS: i64 = 900;
 pub(super) const LIVE_PROBE_TIMEOUT_SECS: u64 = 20;
 pub(super) const FOLLOW_UP_CONTEXT_MAX_LINES: usize = 120;
@@ -234,6 +236,16 @@ pub(super) struct PreviewPromptCache {
     #[cfg(test)]
     pub(super) rendered_prompt: String,
     pub(super) display_preview: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub(super) struct PromptHistoryEntry {
+    pub(super) created_at: DateTime<Utc>,
+    pub(super) prompt: String,
+    pub(super) provider_mode: String,
+    pub(super) workspace_mode: String,
+    pub(super) contract_name: String,
+    pub(super) follow_up: bool,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

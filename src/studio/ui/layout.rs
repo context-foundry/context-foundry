@@ -1,4 +1,3 @@
-use crossterm::terminal;
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -37,6 +36,13 @@ pub(in crate::studio) struct StudioLayout {
     pub(in crate::studio) output: Rect,
     pub(in crate::studio) activity: Rect,
     pub(in crate::studio) status: Rect,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(in crate::studio) struct PromptPaneLayout {
+    pub(in crate::studio) editor: Rect,
+    pub(in crate::studio) history_label: Rect,
+    pub(in crate::studio) history_list: Rect,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -208,6 +214,48 @@ pub(in crate::studio) fn centered_rect(width: u16, height: u16, area: Rect) -> R
     )
 }
 
+pub(in crate::studio) fn prompt_pane_layout(area: Rect, has_history: bool) -> PromptPaneLayout {
+    let inner = bordered_inner(area);
+    if inner.width == 0 || inner.height == 0 {
+        return PromptPaneLayout::default();
+    }
+
+    if !has_history || inner.height < 5 {
+        return PromptPaneLayout {
+            editor: inner,
+            history_label: Rect::default(),
+            history_list: Rect::default(),
+        };
+    }
+
+    let editor_height = inner.height.saturating_sub(3).clamp(3, 4);
+    let history_height = inner.height.saturating_sub(editor_height).saturating_sub(1);
+
+    if history_height == 0 {
+        return PromptPaneLayout {
+            editor: inner,
+            history_label: Rect::default(),
+            history_list: Rect::default(),
+        };
+    }
+
+    PromptPaneLayout {
+        editor: Rect::new(inner.x, inner.y, inner.width, editor_height),
+        history_label: Rect::new(
+            inner.x,
+            inner.y.saturating_add(editor_height),
+            inner.width,
+            1,
+        ),
+        history_list: Rect::new(
+            inner.x,
+            inner.y.saturating_add(editor_height).saturating_add(1),
+            inner.width,
+            history_height,
+        ),
+    }
+}
+
 pub(in crate::studio) fn output_style(line: &str, theme: &StudioTheme) -> Style {
     if line.starts_with("[stderr]") {
         Style::default().fg(theme.error)
@@ -225,9 +273,10 @@ pub(in crate::studio) fn output_style(line: &str, theme: &StudioTheme) -> Style 
 }
 
 pub(in crate::studio) fn current_studio_layout(state: &StudioState) -> Option<StudioLayout> {
-    let Ok((width, height)) = terminal::size() else {
-        return None;
-    };
+    #[cfg(test)]
+    let (width, height) = (120, 40);
+    #[cfg(not(test))]
+    let (width, height) = crossterm::terminal::size().ok()?;
     Some(studio_layout(
         Rect::new(0, 0, width, height),
         state.layout_config,
@@ -403,6 +452,19 @@ pub(in crate::studio) fn rect_contains(area: Rect, column: u16, row: u16) -> boo
     column >= area.x && column < max_x && row >= area.y && row < max_y
 }
 
+fn bordered_inner(area: Rect) -> Rect {
+    if area.width <= 2 || area.height <= 2 {
+        Rect::default()
+    } else {
+        Rect::new(
+            area.x.saturating_add(1),
+            area.y.saturating_add(1),
+            area.width.saturating_sub(2),
+            area.height.saturating_sub(2),
+        )
+    }
+}
+
 pub(in crate::studio) fn pane_border_style(
     state: &StudioState,
     pane: FocusedPane,
@@ -522,8 +584,8 @@ mod tests {
         test_helpers::test_state,
     };
     use super::{
-        apply_resize_drag, output_style, pane_at_position, resize_handle_at, studio_layout,
-        ResizeDragState, ResizeHandle, StudioLayoutConfig,
+        apply_resize_drag, output_style, pane_at_position, prompt_pane_layout, resize_handle_at,
+        studio_layout, ResizeDragState, ResizeHandle, StudioLayoutConfig,
     };
 
     #[test]
@@ -827,5 +889,22 @@ mod tests {
             Some(theme.warning)
         );
         assert_eq!(output_style("plain text", &theme).fg, Some(theme.text));
+    }
+
+    #[test]
+    fn prompt_pane_layout_splits_editor_and_history_regions() {
+        let layout = prompt_pane_layout(Rect::new(0, 0, 48, 8), true);
+
+        assert_eq!(layout.editor.height, 3);
+        assert_eq!(layout.history_label.height, 1);
+        assert_eq!(layout.history_list.height, 2);
+        assert_eq!(
+            layout.history_label.y,
+            layout.editor.y + layout.editor.height
+        );
+        assert_eq!(
+            layout.history_list.y,
+            layout.history_label.y + layout.history_label.height
+        );
     }
 }
