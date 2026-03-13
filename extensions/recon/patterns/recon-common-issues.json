@@ -1,0 +1,76 @@
+{
+  "pattern_type": "common-issues",
+  "domain": "recon",
+  "version": "1.0.0",
+  "last_updated": "2026-03-12",
+  "patterns": [
+    {
+      "pattern_id": "grep-substring-match",
+      "title": "grep without -w matches substrings",
+      "first_seen": "manual",
+      "last_seen": "manual",
+      "frequency": 1,
+      "severity": "MEDIUM",
+      "keywords": ["grep", "hostname", "csv", "lookup"],
+      "tech_stack": ["bash"],
+      "issue": "grep 'web1' also matches web10, web11, web100 in CSV lookups",
+      "solution": {
+        "planner": "Always use grep -w for hostname lookups in CSV files",
+        "reviewer": "Check all grep calls against CSV for whole-word matching"
+      },
+      "auto_apply": true,
+      "learned_from": "manual"
+    },
+    {
+      "pattern_id": "idrac-ssh-hang",
+      "title": "SSH to unreachable iDRAC hangs the entire loop",
+      "first_seen": "manual",
+      "last_seen": "manual",
+      "frequency": 1,
+      "severity": "HIGH",
+      "keywords": ["ssh", "idrac", "timeout", "hang"],
+      "tech_stack": ["bash", "ssh"],
+      "issue": "SSH without ConnectTimeout blocks indefinitely when an iDRAC is unreachable, stalling the batch loop",
+      "solution": {
+        "planner": "Always include -o ConnectTimeout=5 in SSH commands to iDRAC",
+        "reviewer": "Verify all SSH calls in loops have a connect timeout set"
+      },
+      "auto_apply": true,
+      "learned_from": "manual"
+    },
+    {
+      "pattern_id": "unlabeled-batch-output",
+      "title": "Batch output without host labels is unreadable",
+      "first_seen": "manual",
+      "last_seen": "manual",
+      "frequency": 1,
+      "severity": "LOW",
+      "keywords": ["echo", "output", "label", "batch", "loop"],
+      "tech_stack": ["bash"],
+      "issue": "Running commands across hosts without echoing the hostname makes output impossible to correlate",
+      "solution": {
+        "planner": "Always echo hostname before command output in batch loops",
+        "reviewer": "Check that all batch loops label their output with the current host"
+      },
+      "auto_apply": true,
+      "learned_from": "manual"
+    },
+    {
+      "pattern_id": "cpld-firmware-not-in-ome",
+      "title": "CPLD firmware updates are not supported by Dell OME",
+      "first_seen": "manual",
+      "last_seen": "manual",
+      "frequency": 1,
+      "severity": "HIGH",
+      "keywords": ["cpld", "firmware", "ome", "power", "sequencing", "strange", "intermittent", "glitch"],
+      "tech_stack": ["bash", "racadm", "dell"],
+      "issue": "Dell OpenManage Enterprise does not support CPLD (Complex Programmable Logic Device) firmware updates. CPLD sits BELOW the iDRAC -- it controls power sequencing, signal routing, and interface logic at the board level. Updating CPLD reboots the iDRAC itself since iDRAC depends on CPLD for its own power sequencing. Symptoms of outdated CPLD include intermittent power issues, unexplained fan behavior, and board-level glitches that don't appear in standard logs. Must use custom tooling or manual DUP methods. High resistance to running the update because: loss of out-of-band access during update, risk of physical truck roll if it fails.",
+      "solution": {
+        "planner": "When diagnosing unexplained hardware behavior (power, fans, board-level), consider CPLD firmware as a root cause. Use the custom CPLD update tool, not OME.",
+        "reviewer": "Verify CPLD firmware version is checked during hardware troubleshooting. Confirm OME is not being relied on for CPLD updates."
+      },
+      "auto_apply": false,
+      "learned_from": "manual"
+    }
+  ]
+}

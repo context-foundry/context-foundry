@@ -1,0 +1,15 @@
+{
+  "description": "Maps sourceoftruth.csv columns to field names. Update this to match your actual CSV.",
+  "file": "~/sourceoftruth.csv",
+  "delimiter": ",",
+  "columns": {
+    "1": "hostname",
+    "11": "idrac_ip"
+  },
+  "host_files": {
+    "pattern": "hosts.r{N}",
+    "meaning": "Hostnames in rack N, one per line",
+    "location": "~/"
+  },
+  "_note": "Fill in remaining columns from your actual sourceoftruth.csv headers. Run: head -1 ~/sourceoftruth.csv | awk -F, '{for(i=1;i<=NF;i++) print i\": \"$i}' to see them all."
+}
