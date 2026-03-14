@@ -648,17 +648,19 @@ fn handle_event(state: &mut AppState, event: AppEvent) {
             LoopEvent::TaskCompleted(id, success) => {
                 let status = if success { "done" } else { "WIP" };
                 state.log(format!("Task {} — {}", id, status));
-                if success {
-                    state.session_feat_commits += 1;
-                } else {
-                    state.session_wip_commits += 1;
-                }
+                // Git commit counts are refreshed from git history when
+                // returning to startup -- no need to increment here.
                 // Save stages into history (review result may arrive separately)
                 if !state.task_history.contains_key(&id) {
                     state.task_history_order.push(id.clone());
                 }
                 let history = state.task_history.entry(id.clone()).or_default();
                 history.stages_seen = state.task_stages_seen.clone();
+                // If task succeeded and no TaskReviewResult arrived yet,
+                // mark as passed so the icon shows green (not default false)
+                if success && history.fix_passes == 0 {
+                    history.passed_review = true;
+                }
                 state.cap_task_history();
                 state.current_task = None;
                 state.task_start = None;

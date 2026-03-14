@@ -125,7 +125,7 @@ Examples:
 
 - Discovery:
   - Current: `You are the DISCOVERY agent...`
-  - Safer: `Discovery stage for an autonomous build loop. Identify credible new tasks and append them to IMPL_PLAN.md.`
+  - Safer: `Discovery stage for an autonomous build loop. Identify credible new tasks and append them to TASKS.md.`
 
 - Pattern Extractor:
   - Current: `You are the PATTERN EXTRACTOR agent...`

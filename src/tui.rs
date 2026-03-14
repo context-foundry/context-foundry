@@ -1556,7 +1556,16 @@ fn render_task_queue(frame: &mut Frame, area: Rect, state: &AppState) {
                 Color::White
             };
 
-            let (icon, style) = if task.completed {
+            let was_wip = state
+                .task_history
+                .get(&task.id)
+                .map(|h| !h.passed_review)
+                .unwrap_or(false);
+
+            let (icon, style) = if task.completed && was_wip {
+                // WIP commit -- review failed
+                ("\u{2717}", Style::default().fg(Color::Yellow))
+            } else if task.completed {
                 ("\u{25cf}", Style::default().fg(Color::Green))
             } else if is_current {
                 (
@@ -1643,7 +1652,10 @@ fn render_task_queue(frame: &mut Frame, area: Rect, state: &AppState) {
                 spans
             } else if task.completed {
                 // Completed in a prior session -- no live pipeline data
-                vec![Span::styled(" \u{2714}", Style::default().fg(Color::Green))]
+                vec![Span::styled(
+                    if was_wip { " \u{2717}" } else { " \u{2714}" },
+                    Style::default().fg(if was_wip { Color::Yellow } else { Color::Green }),
+                )]
             } else {
                 // Pending: show anticipated pipeline in gray
                 vec![Span::styled(" ....", Style::default().fg(Color::DarkGray))]

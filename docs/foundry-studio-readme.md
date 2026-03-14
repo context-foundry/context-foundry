@@ -2,7 +2,7 @@
 
 Foundry Studio is a separate mode from the autonomous `foundry run` loop.
 
-The loop works from `IMPL_PLAN.md`, runs a fixed multi-stage workflow, reviews the result, and commits progress automatically.
+The loop works from `TASKS.md`, runs a fixed multi-stage workflow, reviews the result, and commits progress automatically.
 
 Studio is interactive and prompt-driven. You point it at a repository, describe what you want, and run Claude, Codex, or both against that request inside the current project or isolated snapshots.
 
@@ -21,7 +21,7 @@ Use `foundry studio` when you want:
 Use `foundry run` when you want:
 
 - the autonomous plan/build/review/fix/discover loop
-- progress tracked from `IMPL_PLAN.md`
+- progress tracked from `TASKS.md`
 - automatic review gating and git commits
 - pattern learning integrated into the loop
 
@@ -268,7 +268,7 @@ Studio is not a lighter skin over `foundry run`. It is a different workflow.
 
 `foundry run`:
 
-- works from `IMPL_PLAN.md`
+- works from `TASKS.md`
 - uses the fixed loop prompts in `src/prompts.rs`
 - runs planning, implementation, review, fixing, and discovery
 - can commit and push work
