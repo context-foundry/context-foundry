@@ -838,11 +838,11 @@ async fn run_pattern_extraction(
 ) {
     let (agent_tx, _agent_rx) = mpsc::unbounded_channel();
 
-    let model = &ctx.config.discovery_model;
+    let model = &ctx.config.pattern_extraction_model;
     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BackgroundLog(
         format!(
-            "Background pattern extraction started ({})",
-            Config::display_provider_model(&ctx.config.discovery_provider, model),
+            "Background pattern extraction started (Claude {})",
+            model,
         ),
     )));
     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BackgroundLog(
@@ -852,7 +852,7 @@ async fn run_pattern_extraction(
     let prompt = prompts::pattern_extraction_prompt(task_id, task_desc);
     let result = agent::run_agent(
         &AgentRole::Discovery,
-        Config::parse_provider(&ctx.config.discovery_provider),
+        agent::ModelProvider::Claude,
         model,
         &prompt,
         &ctx.project_dir,

@@ -125,6 +125,9 @@ pub struct Config {
     /// Spawn the planner for task N+1 while the builder is running task N.
     /// The pre-computed plan is reused when the loop advances to that task.
     pub planner_lookahead: bool,
+
+    /// Model for pattern extraction (lightweight JSON output, doesn't need Opus).
+    pub pattern_extraction_model: String,
 }
 
 impl Default for Config {
@@ -176,6 +179,7 @@ impl Default for Config {
             skip_planner_for_simple: true,
             discovery_cooldown_minutes: 5,
             planner_lookahead: true,
+            pattern_extraction_model: "sonnet".into(),
         }
     }
 }
