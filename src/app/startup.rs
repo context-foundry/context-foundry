@@ -227,6 +227,9 @@ pub(super) fn handle_startup_key(state: &mut AppState, key: event::KeyEvent) {
     }
 
     match key.code {
+        KeyCode::Tab | KeyCode::BackTab => {
+            state.show_run_view = !state.show_run_view;
+        }
         KeyCode::Char('f') if state.last_orchestrator_outcome.is_some() => {
             state.show_findings = !state.show_findings;
             state.findings_scroll = 0;

@@ -1165,9 +1165,8 @@ fn running_p_toggles_patterns_view_and_returns_to_previous() {
     let mut state = AppState::new(PathBuf::from(".buildloop"));
     state.phase = AppPhase::Running;
 
-    // Start on output
+    // Start on main view
     assert!(!state.show_patterns);
-    assert!(!state.show_dashboard);
 
     // p -> patterns
     handle_event(
@@ -1176,42 +1175,12 @@ fn running_p_toggles_patterns_view_and_returns_to_previous() {
     );
     assert!(state.show_patterns);
 
-    // p -> back to output
+    // p -> back to main view
     handle_event(
         &mut state,
         AppEvent::Key(event::KeyEvent::new(KeyCode::Char('p'), KeyModifiers::NONE)),
     );
     assert!(!state.show_patterns);
-    assert!(!state.show_dashboard);
-}
-
-#[test]
-fn running_p_from_dashboard_returns_to_dashboard() {
-    let mut state = AppState::new(PathBuf::from(".buildloop"));
-    state.phase = AppPhase::Running;
-
-    // d -> dashboard
-    handle_event(
-        &mut state,
-        AppEvent::Key(event::KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE)),
-    );
-    assert!(state.show_dashboard);
-
-    // p -> patterns (dashboard preserved underneath)
-    handle_event(
-        &mut state,
-        AppEvent::Key(event::KeyEvent::new(KeyCode::Char('p'), KeyModifiers::NONE)),
-    );
-    assert!(state.show_patterns);
-    assert!(state.show_dashboard);
-
-    // p -> back to dashboard
-    handle_event(
-        &mut state,
-        AppEvent::Key(event::KeyEvent::new(KeyCode::Char('p'), KeyModifiers::NONE)),
-    );
-    assert!(!state.show_patterns);
-    assert!(state.show_dashboard);
 }
 
 #[test]

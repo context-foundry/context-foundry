@@ -7,7 +7,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Cell, Gauge, List, ListItem, Paragraph, Row, Table, Wrap},
+    widgets::{Block, Borders, Cell, List, ListItem, Paragraph, Row, Table, Wrap},
     Frame, Terminal,
 };
 use std::io;
@@ -59,25 +59,52 @@ pub fn restore_terminal(terminal: &mut Tui) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn render(frame: &mut Frame, state: &AppState) {
+pub fn render(frame: &mut Frame, state: &AppState, config: &Config) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(5), // Header: task + progress + agent + next
-            Constraint::Min(10),   // Agent output
-            Constraint::Length(8), // Task queue
+            Constraint::Length(5),  // Header
+            Constraint::Length(6),  // Pipeline map
+            Constraint::Min(10),   // Middle: agent output + task queue
+            Constraint::Length(9), // Bottom: build config + stats + doubt config
             Constraint::Length(1), // Status bar
         ])
         .split(frame.area());
 
     render_header(frame, chunks[0], state);
-    render_agent_output(frame, chunks[1], state);
-    render_task_queue(frame, chunks[2], state);
-    render_status_bar(frame, chunks[3], state);
+    render_pipeline_map(frame, chunks[1], state, config);
+
+    // Middle: split horizontally 60/40
+    let middle_cols = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
+        .split(chunks[2]);
+    render_agent_output(frame, middle_cols[0], state);
+    render_task_queue(frame, middle_cols[1], state);
+
+    // Bottom: split into 3 columns
+    let bottom_cols = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage(35),
+            Constraint::Percentage(30),
+            Constraint::Percentage(35),
+        ])
+        .split(chunks[3]);
+    render_session_config(frame, bottom_cols[0], config);
+    render_dashboard_stats(frame, bottom_cols[1], state, config);
+    render_orchestrator_config(frame, bottom_cols[2], config);
+
+    // Use startup status bar when viewing dashboard from startup (Tab toggle)
+    if matches!(state.phase, AppPhase::Startup) {
+        render_startup_status_bar(frame, chunks[4], state);
+    } else {
+        render_status_bar(frame, chunks[4], state);
+    }
 
     // Overlay inject input bar at bottom of agent output area
     if let Some(ref input) = state.inject_input {
-        let output_area = chunks[1];
+        let output_area = middle_cols[0];
         if output_area.height >= 3 {
             // Hint line above the input
             let hint_area = Rect::new(
@@ -132,26 +159,7 @@ pub fn render(frame: &mut Frame, state: &AppState) {
     }
 }
 
-// ─── Dashboard View ──────────────────────────────────────────
-
-pub fn render_dashboard(frame: &mut Frame, state: &AppState, config: &Config) {
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(7), // Pipeline subway map
-            Constraint::Min(10),   // Middle: progress + stats
-            Constraint::Length(8), // Build Loop config
-            Constraint::Length(6), // Doubt Loop config
-            Constraint::Length(1), // Status bar
-        ])
-        .split(frame.area());
-
-    render_pipeline_map(frame, chunks[0], state, config);
-    render_dashboard_middle(frame, chunks[1], state, config);
-    render_session_config(frame, chunks[2], config);
-    render_orchestrator_config(frame, chunks[3], config);
-    render_dashboard_status_bar(frame, chunks[4], state);
-}
+// ─── Pipeline & Dashboard Widgets ─────────────────────────────
 
 fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppState, config: &Config) {
     let active_role = state.current_agent.as_ref().map(|(role, _)| role.clone());
@@ -195,7 +203,7 @@ fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppState, config: 
                 } else {
                     format!("{} {}", p, m)
                 };
-                truncate_str(&display, 12).to_string()
+                truncate_str(&display, 14).to_string()
             } else {
                 String::new()
             }
@@ -223,7 +231,7 @@ fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppState, config: 
     .collect();
 
     // Build styled lines for the subway map
-    let box_width = 12usize; // Fixed box interior width for uniform look
+    let box_width = 14usize; // Fits "Claude sonnet" (13 chars) with padding
 
     let pipe_color = Color::Rgb(227, 115, 75); // Claude Code orange (#E3734B)
 
@@ -339,63 +347,34 @@ fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppState, config: 
     frame.render_widget(pipeline, area);
 }
 
-fn render_dashboard_middle(frame: &mut Frame, area: Rect, state: &AppState, config: &Config) {
-    let columns = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(55), Constraint::Percentage(45)])
-        .split(area);
-
-    render_dashboard_queue(frame, columns[0], state);
-    render_dashboard_stats(frame, columns[1], state, config);
-}
-
-fn render_dashboard_queue(frame: &mut Frame, area: Rect, state: &AppState) {
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(3), // Gauge
-            Constraint::Min(3),    // Task queue
-        ])
-        .split(area);
-
-    // Progress gauge
-    let completed = state.completed_count;
-    let total = state.total_count;
-    let ratio = if total > 0 {
-        completed as f64 / total as f64
-    } else {
-        0.0
-    };
-    let pct_label = format!("{:.0}% ({}/{})", ratio * 100.0, completed, total);
-
-    let gauge = Gauge::default()
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::DarkGray))
-                .title(Span::styled(
-                    " Progress ",
-                    Style::default()
-                        .fg(Color::Cyan)
-                        .add_modifier(Modifier::BOLD),
-                )),
-        )
-        .gauge_style(Style::default().fg(Color::Green).bg(Color::DarkGray))
-        .ratio(ratio.min(1.0))
-        .label(Span::styled(
-            pct_label,
-            Style::default()
-                .fg(Color::White)
-                .add_modifier(Modifier::BOLD),
-        ));
-    frame.render_widget(gauge, chunks[0]);
-
-    // Task queue
-    render_task_queue(frame, chunks[1], state);
-}
-
 fn render_dashboard_stats(frame: &mut Frame, area: Rect, state: &AppState, _config: &Config) {
     let mut lines = Vec::new();
+
+    // Progress bar
+    let completed = state.completed_count;
+    let total = state.total_count;
+    let bar_width = area.width.saturating_sub(6) as usize; // leave room for borders + label
+    let filled = if total > 0 {
+        (completed as f64 / total as f64 * bar_width as f64) as usize
+    } else {
+        0
+    };
+    let empty = bar_width.saturating_sub(filled);
+    let pct = if total > 0 { completed * 100 / total } else { 0 };
+    lines.push(Line::from(vec![
+        Span::styled(
+            "\u{2588}".repeat(filled),
+            Style::default().fg(Color::Green),
+        ),
+        Span::styled(
+            "\u{2591}".repeat(empty),
+            Style::default().fg(Color::DarkGray),
+        ),
+        Span::styled(
+            format!(" {}%", pct),
+            Style::default().fg(Color::White),
+        ),
+    ]));
 
     // Git stats
     lines.push(Line::from(vec![
@@ -414,16 +393,12 @@ fn render_dashboard_stats(frame: &mut Frame, area: Rect, state: &AppState, _conf
 
     lines.push(Line::from(""));
 
-    // Patterns
-    let match_mode = state
-        .last_pattern_match_mode
-        .as_deref()
-        .unwrap_or("--");
-    let match_color = match match_mode {
-        "semantic" => Color::Green,
-        "keyword-only" => Color::Yellow,
-        "cooldown" => Color::Red,
-        _ => Color::DarkGray,
+    // Patterns + Ollama status
+    let (ollama_label, ollama_color) = match state.last_pattern_match_mode.as_deref() {
+        Some("semantic") => ("Ollama: connected", Color::Green),
+        Some("cooldown") => ("Ollama: down", Color::Red),
+        Some("keyword-only") => ("Ollama: off", Color::Yellow),
+        _ => ("Ollama: --", Color::DarkGray),
     };
     lines.push(Line::from(vec![
         Span::styled("  Patterns ", Style::default().fg(Color::Cyan)),
@@ -432,8 +407,10 @@ fn render_dashboard_stats(frame: &mut Frame, area: Rect, state: &AppState, _conf
             format!("{}", state.session_patterns_learned),
             Style::default().fg(Color::White),
         ),
-        Span::styled("  match: ", Style::default().fg(Color::DarkGray)),
-        Span::styled(match_mode, Style::default().fg(match_color)),
+    ]));
+    lines.push(Line::from(vec![
+        Span::styled("           ", Style::default()),
+        Span::styled(ollama_label, Style::default().fg(ollama_color)),
     ]));
 
     lines.push(Line::from(""));
@@ -705,61 +682,6 @@ fn render_orchestrator_config(frame: &mut Frame, area: Rect, config: &Config) {
             )),
     );
     frame.render_widget(table, area);
-}
-
-fn render_dashboard_status_bar(frame: &mut Frame, area: Rect, state: &AppState) {
-    let mut spans = vec![
-        Span::styled(
-            " d ",
-            Style::default()
-                .fg(Color::Black)
-                .bg(Color::Cyan)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::raw(" back to output  "),
-        Span::styled(
-            " p ",
-            Style::default()
-                .fg(Color::Black)
-                .bg(Color::DarkGray)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::raw(" patterns  "),
-        Span::styled(
-            " q ",
-            Style::default()
-                .fg(Color::Black)
-                .bg(Color::DarkGray)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::raw(" quit  "),
-        Span::styled(
-            " Ctrl+C ",
-            Style::default()
-                .fg(Color::Black)
-                .bg(Color::DarkGray)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::raw(" stop after task"),
-    ];
-
-    if let Some((_ts, msg)) = state.log_messages.last() {
-        spans.push(Span::styled(
-            format!("  {}", truncate_str(msg, 60)),
-            Style::default().fg(Color::DarkGray),
-        ));
-    }
-
-    if let Some(ref version) = state.update_available {
-        spans.push(Span::styled(
-            format!(" | v{} available", version),
-            Style::default()
-                .fg(Color::Green)
-                .add_modifier(Modifier::BOLD),
-        ));
-    }
-
-    frame.render_widget(Paragraph::new(Line::from(spans)), area);
 }
 
 // ─── Patterns View ────────────────────────────────────────────
@@ -1129,11 +1051,7 @@ fn render_patterns_list(frame: &mut Frame, area: Rect, state: &AppState, config:
 }
 
 fn render_patterns_status_bar(frame: &mut Frame, area: Rect, state: &AppState) {
-    let back_label = if state.show_dashboard {
-        " back to dashboard  "
-    } else {
-        " back  "
-    };
+    let back_label = " back  ";
     let mut spans = vec![
         Span::styled(
             " p ",
@@ -1394,32 +1312,39 @@ fn render_header(frame: &mut Frame, area: Rect, state: &AppState) {
         String::new()
     };
 
-    let project_label = if state.project_name.is_empty() {
-        String::new()
+    let brand = if state.project_name.is_empty() {
+        "  FOUNDRY ".to_string()
     } else {
-        format!("  {} ", truncate_str(&state.project_name, 40))
+        format!("  {} ", state.project_name)
     };
 
     let mut header_text = vec![
         Line::from(vec![
             Span::styled(
-                "  FOUNDRY ",
+                &brand,
                 Style::default()
                     .fg(Color::Black)
                     .bg(Color::Cyan)
                     .add_modifier(Modifier::BOLD),
             ),
+            Span::raw(" "),
             Span::styled(
-                &project_label,
-                Style::default()
-                    .fg(Color::White)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(
-                " RUNNING ",
+                if matches!(state.phase, AppPhase::Startup) {
+                    " STOPPED "
+                } else if state.stop_after_task {
+                    " STOPPING "
+                } else {
+                    " RUNNING "
+                },
                 Style::default()
                     .fg(Color::Black)
-                    .bg(Color::Green)
+                    .bg(if matches!(state.phase, AppPhase::Startup) {
+                        Color::DarkGray
+                    } else if state.stop_after_task {
+                        Color::Yellow
+                    } else {
+                        Color::Green
+                    })
                     .add_modifier(Modifier::BOLD),
             ),
             Span::raw("  "),
@@ -1757,7 +1682,7 @@ fn render_status_bar(frame: &mut Frame, area: Rect, state: &AppState) {
                 .bg(Color::DarkGray)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::raw(" quit  "),
+        Span::raw(" stop  "),
         Span::styled(
             " Ctrl+C ",
             Style::default()
@@ -1765,7 +1690,7 @@ fn render_status_bar(frame: &mut Frame, area: Rect, state: &AppState) {
                 .bg(Color::DarkGray)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::raw(" stop after current task  "),
+        Span::raw(" force quit  "),
         Span::styled(
             " ↑↓ ",
             Style::default()
@@ -1783,13 +1708,13 @@ fn render_status_bar(frame: &mut Frame, area: Rect, state: &AppState) {
         ),
         Span::raw(" inject  "),
         Span::styled(
-            " d ",
+            " PgUp/PgDn ",
             Style::default()
                 .fg(Color::Black)
                 .bg(Color::DarkGray)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::raw(" dashboard  "),
+        Span::raw(" queue  "),
         Span::styled(
             " p ",
             Style::default()
@@ -1846,14 +1771,6 @@ fn render_planning_status_bar(frame: &mut Frame, area: Rect, state: &AppState) {
         ),
         Span::raw(" scroll  "),
         Span::styled(
-            " d ",
-            Style::default()
-                .fg(Color::Black)
-                .bg(Color::DarkGray)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::raw(" dashboard  "),
-        Span::styled(
             " p ",
             Style::default()
                 .fg(Color::Black)
@@ -1907,22 +1824,17 @@ fn render_startup_summary(frame: &mut Frame, area: Rect, state: &AppState) {
     let mut lines = vec![
         Line::from(vec![
             Span::styled(
-                "  FOUNDRY ",
+                if state.project_name.is_empty() {
+                    "  FOUNDRY ".to_string()
+                } else {
+                    format!("  {} ", state.project_name)
+                },
                 Style::default()
                     .fg(Color::Black)
                     .bg(Color::Cyan)
                     .add_modifier(Modifier::BOLD),
             ),
-            Span::styled(
-                if state.project_name.is_empty() {
-                    String::new()
-                } else {
-                    format!("  {} ", truncate_str(&state.project_name, 40))
-                },
-                Style::default()
-                    .fg(Color::White)
-                    .add_modifier(Modifier::BOLD),
-            ),
+            Span::raw(" "),
             Span::styled(
                 " STOPPED ",
                 Style::default()
@@ -2668,6 +2580,19 @@ fn render_startup_status_bar(frame: &mut Frame, area: Rect, state: &AppState) {
             spans
         }
     };
+
+    spans.push(Span::styled(
+        "  Tab ",
+        Style::default()
+            .fg(Color::Black)
+            .bg(Color::Rgb(227, 115, 75))
+            .add_modifier(Modifier::BOLD),
+    ));
+    spans.push(Span::raw(if state.show_run_view {
+        " actions"
+    } else {
+        " dashboard"
+    }));
 
     if let Some(ref version) = state.update_available {
         spans.push(Span::styled(

@@ -53,6 +53,24 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
         state.log(msg);
     }
 
+    // Ollama connectivity check (quick probe, non-blocking)
+    if config.semantic_match_enabled {
+        let ollama_url = config.ollama_url.clone();
+        let probe = std::process::Command::new("curl")
+            .args(["-s", "--max-time", "1", &format!("{}/api/tags", ollama_url)])
+            .output();
+        match probe {
+            Ok(output) if output.status.success() => {
+                state.last_pattern_match_mode = Some("semantic".to_string());
+                state.log(format!("Ollama connected at {}", ollama_url));
+            }
+            _ => {
+                state.last_pattern_match_mode = Some("keyword-only".to_string());
+                state.log(format!("Ollama not available at {} -- using keyword matching", ollama_url));
+            }
+        }
+    }
+
     enter_home_surface(project_dir, &mut state, None);
 
     // Setup terminal
@@ -93,6 +111,8 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
             AppPhase::Startup => {
                 if state.show_findings {
                     tui::render_findings(frame, &state);
+                } else if state.show_run_view {
+                    tui::render(frame, &state, &config);
                 } else {
                     tui::render_startup(frame, &state);
                 }
@@ -102,10 +122,8 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
                     tui::render_findings(frame, &state);
                 } else if state.show_patterns {
                     tui::render_patterns(frame, &state, &config);
-                } else if state.show_dashboard {
-                    tui::render_dashboard(frame, &state, &config);
                 } else {
-                    tui::render(frame, &state);
+                    tui::render(frame, &state, &config);
                 }
             }
         })?;
@@ -558,10 +576,6 @@ fn handle_planning_key(state: &mut AppState, key: event::KeyEvent) {
         KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
             state.should_quit = true;
         }
-        KeyCode::Char('d') => {
-            state.show_dashboard = !state.show_dashboard;
-            state.show_patterns = false;
-        }
         KeyCode::Char('f') => {
             if state.last_orchestrator_outcome.is_some() {
                 state.show_findings = !state.show_findings;
@@ -710,7 +724,8 @@ fn handle_event(state: &mut AppState, event: AppEvent) {
             }
             LoopEvent::Finished => {
                 state.log("All work complete — loop finished");
-                state.should_quit = true;
+                let project_dir = state.buildloop_dir.parent().unwrap_or(std::path::Path::new(".")).to_path_buf();
+                enter_home_surface(&project_dir, state, Some("Build loop finished.".to_string()));
             }
         },
         AppEvent::Key(key) => {
@@ -719,8 +734,18 @@ fn handle_event(state: &mut AppState, event: AppEvent) {
             } else {
                 match key.code {
                     KeyCode::Char('q') => {
-                        let _ = std::fs::remove_file(state.buildloop_dir.join("stop"));
-                        state.should_quit = true;
+                        if state.stop_after_task {
+                            // Cancel stop -- resume running
+                            state.stop_after_task = false;
+                            let _ = std::fs::remove_file(state.buildloop_dir.join("stop"));
+                            state.log("Stop cancelled -- resuming build");
+                        } else {
+                            // Request stop after current task
+                            state.stop_after_task = true;
+                            let _ = std::fs::create_dir_all(&state.buildloop_dir);
+                            let _ = std::fs::write(state.buildloop_dir.join("stop"), "");
+                            state.log("Stopping after current task (q again to cancel, Ctrl+C to force quit)");
+                        }
                     }
                     KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                         if state.stop_after_task {
@@ -736,10 +761,6 @@ fn handle_event(state: &mut AppState, event: AppEvent) {
                             );
                         }
                     }
-                    KeyCode::Char('d') => {
-                        state.show_dashboard = !state.show_dashboard;
-                        state.show_patterns = false;
-                    }
                     KeyCode::Char('f') => {
                         if state.last_orchestrator_outcome.is_some() {
                             state.show_findings = !state.show_findings;
@@ -752,7 +773,7 @@ fn handle_event(state: &mut AppState, event: AppEvent) {
                             state.show_patterns = false;
                         } else {
                             state.show_patterns = true;
-                            // Don't clear show_dashboard -- it's restored when p toggles off
+                            // p toggles the patterns overlay on/off
                         }
                     }
                     KeyCode::Char('i') => {

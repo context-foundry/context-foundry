@@ -146,7 +146,7 @@ pub struct AppState {
     pub tick_count: usize,
     pub update_available: Option<String>,
     pub inject_input: Option<String>,
-    pub show_dashboard: bool,
+    pub show_run_view: bool, // Tab toggle: startup shows run view (pipeline+queue+config)
     pub show_patterns: bool,
     pub show_findings: bool,
     pub findings_scroll: usize,
@@ -193,7 +193,7 @@ impl AppState {
             tick_count: 0,
             update_available: None,
             inject_input: None,
-            show_dashboard: false,
+            show_run_view: false,
             show_patterns: false,
             show_findings: false,
             findings_scroll: 0,
