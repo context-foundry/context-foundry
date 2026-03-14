@@ -213,13 +213,13 @@ fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppState, config: 
 
         let style = match active_index {
             Some(ai) if i == ai => Style::default()
-                .fg(Color::Yellow)
+                .fg(Color::White)
                 .add_modifier(Modifier::BOLD),
             Some(ai) if i < ai => {
                 // Completed stage (stages always run in strict order)
                 Style::default().fg(Color::Green)
             }
-            _ => Style::default().fg(Color::White),
+            _ => Style::default().fg(Color::DarkGray),
         };
 
         StageInfo {
@@ -235,13 +235,24 @@ fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppState, config: 
 
     let pipe_color = Color::Rgb(227, 115, 75); // Claude Code orange (#E3734B)
 
+    // Per-stage border color: active stage gets orange highlight, completed green, rest dim.
+    let border_colors: Vec<Color> = stages
+        .iter()
+        .enumerate()
+        .map(|(i, _)| match active_index {
+            Some(ai) if i == ai => pipe_color,     // Orange for active
+            Some(ai) if i < ai => Color::Green,
+            _ => Color::DarkGray,
+        })
+        .collect();
+
     // Top border line
     let top_spans: Vec<Span> = {
         let mut s = vec![Span::raw("  ")];
         for (i, _stage) in stages.iter().enumerate() {
             s.push(Span::styled(
                 format!("\u{256d}{}\u{256e}", "\u{2500}".repeat(box_width)),
-                Style::default().fg(pipe_color),
+                Style::default().fg(border_colors[i]),
             ));
             if i < stages.len() - 1 {
                 s.push(Span::raw("    "));
@@ -259,7 +270,7 @@ fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppState, config: 
             let right = pad_total - left;
             s.push(Span::styled(
                 "\u{2502}",
-                Style::default().fg(pipe_color),
+                Style::default().fg(border_colors[i]),
             ));
             s.push(Span::styled(
                 format!("{}{}{}", " ".repeat(left), stage.label, " ".repeat(right)),
@@ -267,7 +278,7 @@ fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppState, config: 
             ));
             s.push(Span::styled(
                 "\u{2502}",
-                Style::default().fg(pipe_color),
+                Style::default().fg(border_colors[i]),
             ));
             if i < stages.len() - 1 {
                 let arrow = if i == 2 {
@@ -294,7 +305,7 @@ fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppState, config: 
             let right = pad_total - left;
             s.push(Span::styled(
                 "\u{2502}",
-                Style::default().fg(pipe_color),
+                Style::default().fg(border_colors[i]),
             ));
             s.push(Span::styled(
                 format!(
@@ -307,7 +318,7 @@ fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppState, config: 
             ));
             s.push(Span::styled(
                 "\u{2502}",
-                Style::default().fg(pipe_color),
+                Style::default().fg(border_colors[i]),
             ));
             if i < stages.len() - 1 {
                 s.push(Span::raw("    "));
@@ -322,7 +333,7 @@ fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppState, config: 
         for (i, _stage) in stages.iter().enumerate() {
             s.push(Span::styled(
                 format!("\u{2570}{}\u{256f}", "\u{2500}".repeat(box_width)),
-                Style::default().fg(pipe_color),
+                Style::default().fg(border_colors[i]),
             ));
             if i < stages.len() - 1 {
                 s.push(Span::raw("    "));
