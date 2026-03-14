@@ -9,8 +9,96 @@ use crate::{
     task::{self, Task},
 };
 
+use std::collections::HashMap;
+use std::path::PathBuf;
+
 use super::context::RunContext;
 use super::{review, AppEvent, LoopEvent};
+
+// ─── State File Backup/Restore ───────────────────────────────
+// Scaffold tools (e.g. `npm create vite --overwrite`) can delete
+// SPEC.md, TASKS.md, and .buildloop/ during a build. We back up
+// critical files before each task and restore them if missing.
+
+struct StateBackup {
+    files: HashMap<PathBuf, Vec<u8>>,
+}
+
+fn backup_state_files(ctx: &RunContext) -> StateBackup {
+    // Critical state files: task queue, spec, build plan, and project conventions.
+    // CLAUDE.md is read by every agent; its deletion degrades all agent behavior.
+    let critical = [
+        ctx.plan_path.clone(),
+        ctx.spec_path.clone(),
+        ctx.current_plan.clone(),
+        ctx.project_dir.join("CLAUDE.md"),
+    ];
+
+    let mut files = HashMap::new();
+    for path in &critical {
+        if let Ok(content) = std::fs::read(path) {
+            files.insert(path.clone(), content);
+        }
+    }
+    files.insert(
+        ctx.buildloop_dir.clone(),
+        Vec::new(), // marker: directory existed
+    );
+    StateBackup { files }
+}
+
+fn restore_state_files(
+    ctx: &RunContext,
+    backup: &StateBackup,
+    tx: &mpsc::UnboundedSender<AppEvent>,
+) -> usize {
+    let mut restored = 0;
+
+    // Ensure .buildloop dir exists
+    if !ctx.buildloop_dir.exists() {
+        let _ = std::fs::create_dir_all(&ctx.buildloop_dir);
+        let _ = std::fs::create_dir_all(&ctx.log_dir);
+    }
+
+    // Files where truncation (exists but empty/tiny) should also trigger restore.
+    // Excludes current_plan which is legitimately deleted and rewritten each task.
+    let truncation_protected = [&ctx.plan_path, &ctx.spec_path];
+
+    for (path, content) in &backup.files {
+        // Skip the directory marker and empty backups
+        if *path == ctx.buildloop_dir || content.is_empty() {
+            continue;
+        }
+
+        let needs_restore = if !path.exists() {
+            true
+        } else if truncation_protected.contains(&path) {
+            // Detect truncation: file exists but is much smaller than backup
+            let current_size = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
+            current_size < 10 && content.len() > 10
+        } else {
+            false
+        };
+
+        if needs_restore {
+            if let Some(parent) = path.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            match std::fs::write(path, content) {
+                Ok(()) => restored += 1,
+                Err(e) => {
+                    let name = path.file_name().unwrap_or_default().to_string_lossy();
+                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                        "Warning: failed to restore {}: {}",
+                        name, e
+                    ))));
+                }
+            }
+        }
+    }
+
+    restored
+}
 
 pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEvent>) {
     ctx.ensure_runtime_dirs();
@@ -44,7 +132,20 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                 .map(|task| format!("{} — {}", task.id, task.short_desc(72)));
             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::NextTaskUpdated(queue_next)));
 
+            // Backup state files before the builder runs -- scaffold tools
+            // with --overwrite can delete everything in the project root.
+            let state_backup = backup_state_files(&ctx);
+
             let success = process_task(&task_info, &ctx, &tx).await;
+
+            // Restore state files if the builder deleted or truncated them
+            let restored = restore_state_files(&ctx, &state_backup, &tx);
+            if restored > 0 {
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                    "Restored {} state file(s) deleted during build",
+                    restored
+                ))));
+            }
 
             if success {
                 let _ = task::mark_done(&ctx.plan_path, task_info.line_number);

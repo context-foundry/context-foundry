@@ -7,6 +7,7 @@ mod app;
 mod config;
 mod embeddings;
 mod git;
+mod orchestrator;
 mod patterns;
 mod prompts;
 mod studio;
@@ -48,6 +49,11 @@ enum Commands {
         #[arg(short = 'n', long)]
         iterations: Option<u64>,
     },
+    /// Design with cross-model review (proposer + reviewer loop)
+    Design {
+        /// What you want designed or reviewed
+        intent: Vec<String>,
+    },
     /// Start the interactive multi-model studio
     Studio,
     /// Update foundry to the latest version
@@ -79,6 +85,13 @@ async fn main() -> Result<()> {
         }
         Commands::Tasks => {
             app::show_tasks(&project_dir)?;
+        }
+        Commands::Design { intent } => {
+            let intent = intent.join(" ");
+            if intent.is_empty() {
+                anyhow::bail!("Usage: foundry design <intent>");
+            }
+            orchestrator::run_design_command(&project_dir, &intent).await?;
         }
         Commands::Studio => {
             studio::run_tui(&project_dir).await?;

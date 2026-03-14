@@ -249,6 +249,7 @@ VERDICT RULES:
 
 IMPORTANT:
 - You are READ-ONLY — do NOT modify any project files except .buildloop/review-report.md
+- Do NOT read files in .buildloop/logs/ — these are internal agent logs, not review inputs
 - Every finding must cite file, line number, and concrete evidence — no speculation
 - Only flag real issues, not style preferences
 - HIGH = will cause incorrect behavior, security breach, or crash in production

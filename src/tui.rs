@@ -1086,15 +1086,27 @@ fn render_header(frame: &mut Frame, area: Rect, state: &AppState) {
         )));
     }
 
-    // Most recent log line
+    // Most recent log line -- skip if it would duplicate content already in the header
     if let Some((_ts, msg)) = state.log_messages.last() {
-        header_text.push(Line::from(Span::styled(
-            format!(
-                "  {}",
-                truncate_str(msg, area.width.saturating_sub(4) as usize)
-            ),
-            Style::default().fg(Color::DarkGray),
-        )));
+        let dominated_by_header = state
+            .planning
+            .as_ref()
+            .map(|p| msg.contains(&p.label))
+            .unwrap_or(false)
+            || state
+                .current_task
+                .as_ref()
+                .map(|t| msg.contains(&t.id))
+                .unwrap_or(false);
+        if !dominated_by_header {
+            header_text.push(Line::from(Span::styled(
+                format!(
+                    "  {}",
+                    truncate_str(msg, area.width.saturating_sub(4) as usize)
+                ),
+                Style::default().fg(Color::DarkGray),
+            )));
+        }
     }
 
     let header = Paragraph::new(header_text).block(

@@ -85,6 +85,19 @@ pub struct Config {
 
     /// Timeout for Ollama embedding requests (in milliseconds, rounded to whole seconds for curl).
     pub embedding_timeout_ms: u64,
+
+    /// Orchestrator: proposer model provider.
+    pub orchestrator_proposer_provider: String,
+    /// Orchestrator: proposer model name.
+    pub orchestrator_proposer_model: String,
+    /// Orchestrator: reviewer model provider.
+    pub orchestrator_reviewer_provider: String,
+    /// Orchestrator: reviewer model name.
+    pub orchestrator_reviewer_model: String,
+    /// Orchestrator: max proposal/review iterations.
+    pub orchestrator_max_iterations: usize,
+    /// Orchestrator: acceptance policy ("no-high", "no-high-medium", "no-findings").
+    pub orchestrator_accept_policy: String,
 }
 
 impl Default for Config {
@@ -122,6 +135,12 @@ impl Default for Config {
             semantic_match_enabled: true,
             embedding_model: "nomic-embed-text".into(),
             embedding_timeout_ms: 2000,
+            orchestrator_proposer_provider: "claude".into(),
+            orchestrator_proposer_model: "opus".into(),
+            orchestrator_reviewer_provider: "claude".into(),
+            orchestrator_reviewer_model: "opus".into(),
+            orchestrator_max_iterations: 3,
+            orchestrator_accept_policy: "no-high-medium".into(),
         }
     }
 }

@@ -26,3 +26,38 @@
 - [x] D1.1: Fix unchecked indexing panic in studio/state.rs:656 -- selected_execution_contract() uses direct array index which panics if execution_contracts is empty or index is stale; use .get() with expect or return Result, and add bounds validation in set_selected_execution_contract_index() at line 660
 - [x] D1.2: Replace hardcoded 'push origin main' in git.rs:111 with dynamic branch/remote detection -- use 'git symbolic-ref --short HEAD' for current branch and 'git remote' to detect the configured remote, preventing silent push failures for non-main branches or missing origin
 - [x] D1.3: Replace .expect() on mutex locks in agent.rs (lines 178, 195, 337) with unwrap_or_else(|p| p.into_inner()) to prevent cascade panics when a thread panics while holding the provider progress lock
+
+## Phase 4: Interactive Loop Explainer Page
+
+- [ ] T4.1: Create a self-contained HTML file at loop-explainer.html with a dark-themed interactive visualization of the Context Foundry build loop. Include all CSS and JS inline with no external dependencies. Read the source files (app.rs, agent.rs, prompts.rs, config.rs, task.rs, git.rs, patterns.rs) to extract accurate descriptions of each stage and module before building the page.
+- [ ] T4.2: Add an animated pipeline diagram showing the full build loop sequence (Load Patterns, Planner, Builder, Reviewer, Fixer up to 2 passes, Git Commit, Discovery) with clickable stage nodes that expand to show what each stage does, its inputs, outputs, and which source module drives it.
+- [ ] T4.3: Add a step-through simulation mode where the user can click Next/Back to walk through the loop one stage at a time, with the active stage highlighted and a detail panel showing the prompt template, model provider, timeout, and example output for that stage.
+- [ ] T4.4: Add an interactive pattern injection visualization showing how patterns are loaded, matched by keyword score, and injected into planner and reviewer prompts. Include a mock keyword input that lets the user type keywords and see which patterns would match with their scores.
+- [ ] T4.5: Add a task lifecycle section showing how TASKS.md is parsed, tasks are picked up, marked complete or WIP, and how Discovery generates new tasks. Include a sample TASKS.md editor where users can add or check off tasks and see how the loop would process them.
+- [ ] T4.6: Add a review gate explainer showing the pass/fail logic (PASS verdict with no HIGH/MEDIUM findings), the fixer retry flow (up to 2 passes), and convergence detection. Include an interactive mock where users can toggle finding severities and see whether the gate passes or fails.
+
+## Phase 5: Doubt Loop TUI Integration
+
+- [ ] T5.1: Add a "Design with review" startup action (available in all scenarios except EmptyProject). When selected, open the intent input. On Enter, run the orchestrator loop (src/orchestrator.rs) through the TUI Planning phase -- showing proposer/reviewer iterations in the agent output panel, iteration count and finding count in the header, and the final artifact in a preview on completion. Return to startup with the output in .buildloop/orchestrator-output.md. Do not auto-write to TASKS.md or SPEC.md.
+
+- [ ] T5.2: Update the Planning phase header to show the orchestrator iteration count and role (e.g. "Iteration 2/3: Reviewing with Codex codex-5.4" or "Iteration 1/3: Proposing with Claude opus"). The existing planning header shows "Planning -- label" and "PLANNER (model) | time | events". For orchestrator mode, replace "Planning" with "Design" and show which sub-agent (proposer or reviewer) is active. Use a new field in PlanningState to distinguish orchestrator mode from regular planning.
+
+- [ ] T5.3: Add a "Review findings" panel to the TUI that appears when the orchestrator completes with unresolved findings. Show the findings list with severity colors (high=red, medium=yellow, low=gray), the validated claims in green, and the iteration history. This panel should be scrollable and accessible via a new key hint in the status bar.
+
+- [ ] T5.4: Wire the orchestrator's on_event callback into the TUI event system so proposer/reviewer agent output streams live to the agent output panel during the design loop. Currently the orchestrator uses run_agent_and_capture() which collects output silently. Instead, forward AgentOutputEvent to the TUI's event_tx channel, and add a separator line between proposer and reviewer output (e.g. "--- Reviewer pass ---").
+
+- [ ] T5.5: Add the orchestrator config fields (orchestrator_proposer_provider, orchestrator_proposer_model, orchestrator_reviewer_provider, orchestrator_reviewer_model, orchestrator_max_iterations, orchestrator_accept_policy) to the Session Config table on the dashboard view. Show them in a separate "Orchestrator" section below the existing role table.
+
+- [ ] T5.6: Add test coverage for the orchestrator TUI integration: startup action creates the right transition, planning header shows orchestrator mode, iteration count updates correctly, findings panel renders severity colors, and agent output forwarding produces visible events.
+
+## Phase 6: Cleanup and Hardening
+
+- [ ] T6.1: Remove the header log line duplication during Planning phase. Currently the header shows the planning label on line 2 AND the most recent log message on line 4, which repeats the same "Planning started" text. The log line should be suppressed during Planning phase since the header already provides that context. (Fix is already in tui.rs but needs the build loop to pick it up.)
+
+- [ ] T6.2: Add regression tests for the state file backup/restore in build.rs: test that backup captures TASKS.md, SPEC.md, CLAUDE.md, and .buildloop/current-plan.md; test that restore recovers deleted files; test that restore recovers truncated files (under 10 bytes); test that restore does NOT overwrite current-plan.md when it was legitimately rewritten by the planner; test that write failures produce warning log messages.
+
+- [ ] T6.3: Add regression tests for the semantic pattern matcher in embeddings.rs: test duplicate pattern_id cache collision does not occur with model:hash keys; test empty patterns list skips Ollama; test circuit breaker cooldown and recovery; test that match_patterns_semantic returns keyword-only results when Ollama is unavailable.
+
+- [ ] T6.4: Add regression tests for the orchestrator in orchestrator.rs: test that is_accepted does not trust status="clean" when findings exist; test case-insensitive severity matching; test the full orchestration loop with mock agent responses; test max iterations termination; test JSON extraction from markdown-fenced responses.
+
+- [ ] T6.5: Tighten the embeddings.rs stale cache test: instead of just comparing strings, exercise the actual cache load/discard logic by writing a cache file with a wrong model name, loading it, and verifying the stale entry is discarded and re-embedded.
