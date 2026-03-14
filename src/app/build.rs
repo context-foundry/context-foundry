@@ -334,10 +334,9 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                 ))));
             }
 
-            if success {
-                let _lock = ctx.tasks_file_lock.lock().unwrap_or_else(|e| e.into_inner());
-                let _ = task::mark_done(&ctx.plan_path, task_info.line_number);
-            }
+            // mark_done is now called inside process_task, right before
+            // commit_and_push, so the commit includes both the [x] mark
+            // and the [PBRF] indicator in one atomic operation.
 
             // Track when H-prefixed (human-injected) tasks complete for discovery cooldown
             if task_info.id.starts_with('H') {
@@ -657,6 +656,10 @@ async fn process_task(
             let _ = tx.send(AppEvent::AgentDone(plan_ok));
 
             if !plan_ok || !ctx.current_plan.exists() {
+                {
+                    let _lock = ctx.tasks_file_lock.lock().unwrap_or_else(|e| e.into_inner());
+                    let _ = task::update_task_progress(&ctx.plan_path, task_id, "P--!");
+                }
                 let committed =
                     git::commit_and_push(&ctx.project_dir, &ctx.config, task_id, task_desc, true)
                         .unwrap_or(false);
@@ -685,6 +688,10 @@ async fn process_task(
                     "Stop requested after PLANNER for {} -- skipping remaining stages",
                     task_id
                 ))));
+                {
+                    let _lock = ctx.tasks_file_lock.lock().unwrap_or_else(|e| e.into_inner());
+                    let _ = task::update_task_progress(&ctx.plan_path, task_id, "P...");
+                }
                 let _ =
                     git::commit_and_push(&ctx.project_dir, &ctx.config, task_id, task_desc, true);
                 return (false, last_rate_limited);
@@ -750,6 +757,10 @@ async fn process_task(
             "BUILDER failed for {} — committing WIP",
             task_id
         ))));
+        {
+            let _lock = ctx.tasks_file_lock.lock().unwrap_or_else(|e| e.into_inner());
+            let _ = task::update_task_progress(&ctx.plan_path, task_id, &format!("{}B-!", planner_char));
+        }
         let _ = git::commit_and_push(&ctx.project_dir, &ctx.config, task_id, task_desc, true);
         return (false, last_rate_limited);
     }
@@ -768,6 +779,7 @@ async fn process_task(
             "Stop requested after BUILDER for {} — skipping review",
             task_id
         ))));
+        // Progress indicator already written at [PB..] above; commit preserves it.
         let _ = git::commit_and_push(&ctx.project_dir, &ctx.config, task_id, task_desc, true);
         return (false, last_rate_limited);
     }
@@ -786,13 +798,19 @@ async fn process_task(
         review::run_review_loop(task_id, task_desc, ctx, &reviewer_pattern_context, tx).await
     };
 
-    // Persist final pipeline progress indicator.
+    // Persist final pipeline progress indicator and mark done BEFORE committing.
+    // Both writes must happen before git add -A so the commit captures them.
+    // Agents may overwrite TASKS.md during their run, stripping intermediate
+    // indicators, so the final write must be the last mutation before commit.
     {
         let fixer_char = if fix_passes > 0 { "F" } else { "-" };
         let fail_char = if !validated { "!" } else { "" };
         let progress = format!("{}BR{}{}", planner_char, fixer_char, fail_char);
         let _lock = ctx.tasks_file_lock.lock().unwrap_or_else(|e| e.into_inner());
         let _ = task::update_task_progress(&ctx.plan_path, task_id, &progress);
+        if validated {
+            let _ = task::mark_done(&ctx.plan_path, task_info.line_number);
+        }
     }
 
     let committed = git::commit_and_push(

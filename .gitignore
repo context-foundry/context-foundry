@@ -24,6 +24,7 @@ Thumbs.db
 
 # Foundry runtime
 .buildloop/
+.foundry/
 
 # Private extensions (uncomment to track)
 # extensions/roblox/
