@@ -1,8 +1,10 @@
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use tokio::sync::mpsc;
+use tokio::task::JoinHandle;
 
-use crate::agent::{self, AgentRole};
+use crate::agent::{self, AgentResult, AgentRole};
+use crate::complexity::{self, TaskComplexity};
 use crate::config::Config;
 use crate::{
     git, patterns, prompts,
@@ -15,6 +17,118 @@ use std::path::PathBuf;
 use super::context::RunContext;
 use super::{review, AppEvent, LoopEvent};
 use crate::utils::atomic_write_file;
+
+// ─── Planner Look-Ahead ────────────────────────────────────────
+
+/// Build the plan filename for a look-ahead task: `plan-{task_id}.md`.
+fn lookahead_plan_filename(task_id: &str) -> String {
+    format!("plan-{}.md", task_id)
+}
+
+/// Full path to a look-ahead plan file inside `.buildloop/`.
+fn lookahead_plan_path(ctx: &RunContext, task_id: &str) -> PathBuf {
+    ctx.buildloop_dir.join(lookahead_plan_filename(task_id))
+}
+
+/// Tracks an in-flight look-ahead planner task.
+struct LookaheadHandle {
+    task_id: String,
+    handle: JoinHandle<()>,
+}
+
+/// Spawn a look-ahead planner for `next_task` in the background.
+/// Returns a [`LookaheadHandle`] the caller can use to cancel or wait.
+fn spawn_lookahead_planner(
+    next_task: &Task,
+    ctx: &RunContext,
+    tx: &mpsc::UnboundedSender<AppEvent>,
+) -> LookaheadHandle {
+    let task_id = next_task.id.clone();
+    let task_desc = next_task.description.clone();
+    let ctx = ctx.clone();
+    let tx = tx.clone();
+
+    let handle = tokio::spawn(async move {
+        let plan_file = lookahead_plan_filename(&task_id);
+        let plan_path = ctx.buildloop_dir.join(&plan_file);
+
+        // If the plan already exists (from a previous look-ahead), skip.
+        if plan_path.exists() {
+            return;
+        }
+
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+            "Look-ahead: planning {} in background",
+            task_id
+        ))));
+
+        // Match patterns for the look-ahead task.
+        let patterns_dir = patterns::resolve_patterns_dir(&ctx.config.patterns_dir);
+        let all_patterns = patterns::load_patterns(&patterns_dir);
+
+        let matched = if ctx.config.semantic_match_enabled {
+            let keyword_scores = patterns::keyword_scores(&all_patterns, &task_desc);
+            let (scored, _result) = crate::embeddings::match_patterns_semantic(
+                &all_patterns,
+                &task_desc,
+                &ctx.config.embedding_model,
+                ctx.config.embedding_timeout_ms,
+                &keyword_scores,
+            )
+            .await;
+            scored.into_iter().map(|(p, _)| p).collect::<Vec<_>>()
+        } else {
+            patterns::match_patterns(&all_patterns, &task_desc)
+        };
+
+        let pattern_context =
+            patterns::format_patterns_for_prompt(&matched, "planner", ctx.config.max_pattern_injection);
+
+        let prompt = prompts::planner_lookahead_prompt(
+            &task_id,
+            &task_desc,
+            &pattern_context,
+            &ctx.spec_file_name(),
+            &ctx.tasks_file_name(),
+            &plan_file,
+        );
+
+        let (agent_tx, _agent_rx) = mpsc::unbounded_channel();
+        let result = agent::run_agent(
+            &AgentRole::Planner,
+            Config::parse_provider(&ctx.config.planner_provider),
+            &ctx.config.planner_model,
+            &prompt,
+            &ctx.project_dir,
+            agent_tx,
+            &ctx.log_dir,
+            None,
+            ctx.config.agent_timeout_secs,
+            Some(ctx.shutdown.clone()),
+        )
+        .await;
+
+        let ok = result.map(|r| r.success).unwrap_or(false);
+        if ok && plan_path.exists() {
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                "Look-ahead: plan ready for {}",
+                task_id
+            ))));
+        } else {
+            // Clean up partial plan file on failure.
+            let _ = std::fs::remove_file(&plan_path);
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                "Look-ahead: planning failed for {} (will plan normally)",
+                task_id
+            ))));
+        }
+    });
+
+    LookaheadHandle {
+        task_id: next_task.id.clone(),
+        handle,
+    }
+}
 
 // ─── State File Backup/Restore ───────────────────────────────
 // Scaffold tools (e.g. `npm create vite --overwrite`) can delete
@@ -101,10 +215,52 @@ fn restore_state_files(
     restored
 }
 
+// ─── Adaptive Pause Helpers ──────────────────────────────────
+// When adaptive_pauses is enabled, skip the full inter-agent sleep
+// unless the last agent run encountered rate limiting. A minimal
+// 500ms pause is still applied to avoid hammering the API.
+
+const ADAPTIVE_PAUSE_MIN_MS: u64 = 500;
+
+/// Check whether an agent result indicates rate limiting occurred.
+fn was_rate_limited(result: &anyhow::Result<AgentResult>) -> bool {
+    match result {
+        Ok(r) => {
+            if let Some(ref msg) = r.failure_message {
+                let lower = msg.to_ascii_lowercase();
+                lower.contains("rate") || lower.contains("limit")
+            } else {
+                false
+            }
+        }
+        Err(_) => false,
+    }
+}
+
+/// Sleep adaptively: use the full configured pause when rate-limited or
+/// when adaptive_pauses is disabled; otherwise use a minimal 500ms pause.
+async fn adaptive_sleep(config: &Config, rate_limited: bool, full_secs: u64) {
+    if !config.adaptive_pauses || rate_limited {
+        tokio::time::sleep(Duration::from_secs(full_secs)).await;
+    } else {
+        tokio::time::sleep(Duration::from_millis(ADAPTIVE_PAUSE_MIN_MS)).await;
+    }
+}
+
 pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEvent>) {
     ctx.ensure_runtime_dirs();
 
     let mut discovery_round: usize = task::highest_discovery_round(&ctx.plan_path);
+
+    // ─── Discovery Cooldown State ────────────────────────────────
+    // After a human-injected (H-prefix) task completes, delay discovery
+    // to give the user time to inject more tasks manually.
+    let mut last_h_task_completion: Option<Instant> = None;
+    let mut effective_cooldown_minutes: u64 = ctx.config.discovery_cooldown_minutes;
+    const MAX_COOLDOWN_MINUTES: u64 = 30;
+
+    // ─── Planner Look-Ahead State ────────────────────────────────
+    let mut lookahead: Option<LookaheadHandle> = None;
 
     loop {
         let tasks = match task::parse_tasks(&ctx.plan_path) {
@@ -133,11 +289,40 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                 .map(|task| format!("{} — {}", task.id, task.short_desc(72)));
             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::NextTaskUpdated(queue_next)));
 
+            // ─── Spawn Look-Ahead Planner ────────────────────────
+            // While processing task N, pre-plan task N+1 in the background.
+            // Only if: look-ahead enabled, next task exists, and it's not Simple.
+            if ctx.config.planner_lookahead {
+                // Cancel stale look-ahead if the target task changed (queue reordered).
+                // But preserve the plan file if the look-ahead produced a plan for the
+                // current task -- process_task will consume it.
+                if let Some(ref la) = lookahead {
+                    let next_next_id = task::nth_pending(&tasks, 1).map(|t| t.id.as_str());
+                    if next_next_id != Some(la.task_id.as_str()) {
+                        la.handle.abort();
+                        // Only delete the plan file if it was NOT for the current task.
+                        if la.task_id != task_info.id {
+                            let _ = std::fs::remove_file(lookahead_plan_path(&ctx, &la.task_id));
+                        }
+                        lookahead = None;
+                    }
+                }
+
+                if lookahead.is_none() {
+                    if let Some(next_task) = task::nth_pending(&tasks, 1) {
+                        let next_complexity = complexity::classify_task(&next_task.description);
+                        if next_complexity != TaskComplexity::Simple {
+                            lookahead = Some(spawn_lookahead_planner(next_task, &ctx, &tx));
+                        }
+                    }
+                }
+            }
+
             // Backup state files before the builder runs -- scaffold tools
             // with --overwrite can delete everything in the project root.
             let state_backup = backup_state_files(&ctx);
 
-            let success = process_task(&task_info, &ctx, &tx).await;
+            let (success, task_rate_limited) = process_task(&task_info, &ctx, &tx).await;
 
             // Restore state files if the builder deleted or truncated them
             let restored = restore_state_files(&ctx, &state_backup, &tx);
@@ -151,6 +336,12 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
             if success {
                 let _lock = ctx.tasks_file_lock.lock().unwrap_or_else(|e| e.into_inner());
                 let _ = task::mark_done(&ctx.plan_path, task_info.line_number);
+            }
+
+            // Track when H-prefixed (human-injected) tasks complete for discovery cooldown
+            if task_info.id.starts_with('H') {
+                last_h_task_completion = Some(Instant::now());
+                effective_cooldown_minutes = ctx.config.discovery_cooldown_minutes;
             }
 
             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::TaskCompleted(
@@ -168,14 +359,48 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
 
             let stop_file = ctx.stop_file();
             if stop_file.exists() {
+                // Cancel any in-flight look-ahead before exiting.
+                if let Some(la) = lookahead.take() {
+                    la.handle.abort();
+                    let _ = std::fs::remove_file(lookahead_plan_path(&ctx, &la.task_id));
+                }
                 let _ = std::fs::remove_file(stop_file);
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Finished));
                 return;
             }
 
-            tokio::time::sleep(Duration::from_secs(ctx.config.pause_between_tasks_secs)).await;
+            adaptive_sleep(&ctx.config, task_rate_limited, ctx.config.pause_between_tasks_secs).await;
         } else {
             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::NextTaskUpdated(None)));
+
+            // ─── Discovery Cooldown Check ────────────────────────
+            // Skip discovery if an H-prefixed task completed recently.
+            if let Some(completed_at) = last_h_task_completion {
+                let elapsed = completed_at.elapsed();
+                let cooldown = Duration::from_secs(effective_cooldown_minutes * 60);
+                if elapsed < cooldown {
+                    let remaining_secs = (cooldown - elapsed).as_secs();
+                    let remaining_mins = remaining_secs.div_ceil(60);
+                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                        "Skipping discovery (cooldown: {} minutes remaining)",
+                        remaining_mins
+                    ))));
+                    tokio::time::sleep(Duration::from_secs(ctx.config.pause_between_cycles_secs)).await;
+                    if ctx.is_stop_requested() {
+                        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+                            "Stop requested during discovery cooldown -- shutting down".to_string(),
+                        )));
+                        let stop_file = ctx.stop_file();
+                        if stop_file.exists() {
+                            let _ = std::fs::remove_file(stop_file);
+                        }
+                        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Finished));
+                        return;
+                    }
+                    continue;
+                }
+            }
+
             discovery_round += 1;
 
             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::DiscoveryStarted(discovery_round)));
@@ -244,6 +469,9 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
             )));
 
             if new_tasks == 0 {
+                // Double the discovery cooldown (up to 30 min) when discovery finds nothing
+                effective_cooldown_minutes = (effective_cooldown_minutes * 2).min(MAX_COOLDOWN_MINUTES);
+
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
                     "No new tasks found — waiting before next scan...".to_string(),
                 )));
@@ -297,11 +525,12 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
     }
 }
 
+/// Returns (success, rate_limited) so the caller can decide on adaptive pauses.
 async fn process_task(
     task_info: &Task,
     ctx: &RunContext,
     tx: &mpsc::UnboundedSender<AppEvent>,
-) -> bool {
+) -> (bool, bool) {
     let task_id = &task_info.id;
     let task_desc = &task_info.description;
     let patterns_extracted = ctx.buildloop_dir.join("patterns-extracted.json");
@@ -346,71 +575,119 @@ async fn process_task(
         ))));
     }
 
-    let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
-    let fwd_tx = tx.clone();
-    tokio::spawn(async move {
-        while let Some(evt) = agent_rx.recv().await {
-            let _ = fwd_tx.send(AppEvent::AgentOutput(evt));
-        }
-    });
+    // Classify task complexity to decide whether to skip the planner.
+    let task_complexity = complexity::classify_task(task_desc);
+    let skip_planner =
+        task_complexity == TaskComplexity::Simple && ctx.config.skip_planner_for_simple;
 
-    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::AgentStarted(
-        AgentRole::Planner,
-        Config::display_provider_model(&ctx.config.planner_provider, &ctx.config.planner_model),
-    )));
+    // Track rate limiting across agents; starts false when planner is skipped.
+    #[allow(unused_assignments)]
+    let mut last_rate_limited = false;
 
-    let prompt = prompts::planner_prompt(
-        task_id,
-        task_desc,
-        &pattern_context,
-        &ctx.spec_file_name(),
-        &ctx.tasks_file_name(),
-    );
-    let plan_result = agent::run_agent(
-        &AgentRole::Planner,
-        Config::parse_provider(&ctx.config.planner_provider),
-        &ctx.config.planner_model,
-        &prompt,
-        &ctx.project_dir,
-        agent_tx,
-        &ctx.log_dir,
-        None,
-        ctx.config.agent_timeout_secs,
-        Some(ctx.shutdown.clone()),
-    )
-    .await;
-
-    let plan_ok = plan_result.map(|r| r.success).unwrap_or(false);
-    let _ = tx.send(AppEvent::AgentDone(plan_ok));
-
-    if !plan_ok || !ctx.current_plan.exists() {
-        let committed =
-            git::commit_and_push(&ctx.project_dir, &ctx.config, task_id, task_desc, true)
-                .unwrap_or(false);
-        let message = if committed {
-            format!("PLANNER failed for {} — committed WIP changes", task_id)
+    if skip_planner {
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+            "Skipping planner for simple task".to_string(),
+        )));
+    } else {
+        // ─── Check for Look-Ahead Plan ───────────────────────────
+        let la_plan = lookahead_plan_path(ctx, task_id);
+        if la_plan.exists() {
+            // A look-ahead planner already produced a plan for this task.
+            // Promote it to current-plan.md and skip the planner stage.
+            if std::fs::rename(&la_plan, &ctx.current_plan).is_ok() {
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                    "Using pre-planned plan for {}",
+                    task_id
+                ))));
+            } else {
+                // rename failed (cross-device?), try copy+delete
+                let _ = std::fs::copy(&la_plan, &ctx.current_plan);
+                let _ = std::fs::remove_file(&la_plan);
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                    "Using pre-planned plan for {}",
+                    task_id
+                ))));
+            }
         } else {
-            format!(
-                "PLANNER failed for {} — no repository changes to commit",
-                task_id
+            // ─── Run Planner ─────────────────────────────────────────
+            let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
+            let fwd_tx = tx.clone();
+            tokio::spawn(async move {
+                while let Some(evt) = agent_rx.recv().await {
+                    let _ = fwd_tx.send(AppEvent::AgentOutput(evt));
+                }
+            });
+
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::AgentStarted(
+                AgentRole::Planner,
+                Config::display_provider_model(
+                    &ctx.config.planner_provider,
+                    &ctx.config.planner_model,
+                ),
+            )));
+
+            let prompt = prompts::planner_prompt(
+                task_id,
+                task_desc,
+                &pattern_context,
+                &ctx.spec_file_name(),
+                &ctx.tasks_file_name(),
+            );
+            let plan_result = agent::run_agent(
+                &AgentRole::Planner,
+                Config::parse_provider(&ctx.config.planner_provider),
+                &ctx.config.planner_model,
+                &prompt,
+                &ctx.project_dir,
+                agent_tx,
+                &ctx.log_dir,
+                None,
+                ctx.config.agent_timeout_secs,
+                Some(ctx.shutdown.clone()),
             )
-        };
-        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(message)));
-        return false;
+            .await;
+
+            last_rate_limited = was_rate_limited(&plan_result);
+            let plan_ok = plan_result.map(|r| r.success).unwrap_or(false);
+            let _ = tx.send(AppEvent::AgentDone(plan_ok));
+
+            if !plan_ok || !ctx.current_plan.exists() {
+                let committed =
+                    git::commit_and_push(&ctx.project_dir, &ctx.config, task_id, task_desc, true)
+                        .unwrap_or(false);
+                let message = if committed {
+                    format!("PLANNER failed for {} -- committed WIP changes", task_id)
+                } else {
+                    format!(
+                        "PLANNER failed for {} -- no repository changes to commit",
+                        task_id
+                    )
+                };
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(message)));
+                return (false, last_rate_limited);
+            }
+
+            adaptive_sleep(
+                &ctx.config,
+                last_rate_limited,
+                ctx.config.pause_between_agents_secs,
+            )
+            .await;
+
+            // Check stop between planner and builder
+            if ctx.is_stop_requested() {
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                    "Stop requested after PLANNER for {} -- skipping remaining stages",
+                    task_id
+                ))));
+                let _ =
+                    git::commit_and_push(&ctx.project_dir, &ctx.config, task_id, task_desc, true);
+                return (false, last_rate_limited);
+            }
+        }
     }
 
-    tokio::time::sleep(Duration::from_secs(ctx.config.pause_between_agents_secs)).await;
-
-    // Check stop between planner and builder
-    if ctx.is_stop_requested() {
-        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-            "Stop requested after PLANNER for {} — skipping remaining stages",
-            task_id
-        ))));
-        let _ = git::commit_and_push(&ctx.project_dir, &ctx.config, task_id, task_desc, true);
-        return false;
-    }
-
+    // ─── Run Builder ─────────────────────────────────────────
     let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
     let fwd_tx = tx.clone();
     tokio::spawn(async move {
@@ -424,12 +701,21 @@ async fn process_task(
         Config::display_provider_model(&ctx.config.builder_provider, &ctx.config.builder_model),
     )));
 
-    let prompt = prompts::builder_prompt(
-        task_id,
-        task_desc,
-        &ctx.spec_file_name(),
-        &ctx.tasks_file_name(),
-    );
+    let prompt = if skip_planner {
+        prompts::builder_direct_prompt(
+            task_id,
+            task_desc,
+            &ctx.spec_file_name(),
+            &ctx.tasks_file_name(),
+        )
+    } else {
+        prompts::builder_prompt(
+            task_id,
+            task_desc,
+            &ctx.spec_file_name(),
+            &ctx.tasks_file_name(),
+        )
+    };
     let build_result = agent::run_agent(
         &AgentRole::Builder,
         Config::parse_provider(&ctx.config.builder_provider),
@@ -444,6 +730,7 @@ async fn process_task(
     )
     .await;
 
+    last_rate_limited = was_rate_limited(&build_result);
     let build_ok = build_result.map(|r| r.success).unwrap_or(false);
     let _ = tx.send(AppEvent::AgentDone(build_ok));
 
@@ -453,10 +740,10 @@ async fn process_task(
             task_id
         ))));
         let _ = git::commit_and_push(&ctx.project_dir, &ctx.config, task_id, task_desc, true);
-        return false;
+        return (false, last_rate_limited);
     }
 
-    tokio::time::sleep(Duration::from_secs(ctx.config.pause_between_agents_secs)).await;
+    adaptive_sleep(&ctx.config, last_rate_limited, ctx.config.pause_between_agents_secs).await;
 
     // Check stop between builder and reviewer
     if ctx.is_stop_requested() {
@@ -465,7 +752,7 @@ async fn process_task(
             task_id
         ))));
         let _ = git::commit_and_push(&ctx.project_dir, &ctx.config, task_id, task_desc, true);
-        return false;
+        return (false, last_rate_limited);
     }
 
     let validated = if ctx.config.backpressure_only {
@@ -538,7 +825,7 @@ async fn process_task(
             .output();
     }
 
-    validated
+    (validated, last_rate_limited)
 }
 
 async fn run_pattern_extraction(

@@ -25,6 +25,25 @@ pub(super) async fn run_review_loop(
     }
 
     let files_list = files_changed.join("\n");
+
+    // Determine whether to pass a diff or file list to the reviewer.
+    let diff_for_review = if ctx.config.review_mode == "diff-only" {
+        let diff = get_diff_for_review(&ctx.project_dir);
+        if diff.is_empty() {
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+                "Diff is empty, falling back to file list for review".to_string(),
+            )));
+            None
+        } else {
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+                "Using diff-only review mode".to_string(),
+            )));
+            Some(diff)
+        }
+    } else {
+        None
+    };
+
     let reviewer_tools: &[&str] = &["Read", "Glob", "Grep", "Write", "Bash"];
 
     for pass in 1..=2 {
@@ -46,8 +65,14 @@ pub(super) async fn run_review_loop(
             ),
         )));
 
-        let prompt =
-            prompts::reviewer_prompt(task_id, task_desc, &files_list, pass, pattern_context);
+        let prompt = prompts::reviewer_prompt(
+            task_id,
+            task_desc,
+            &files_list,
+            pass,
+            pattern_context,
+            diff_for_review.as_deref(),
+        );
         let review_result = agent::run_agent(
             &AgentRole::Reviewer,
             Config::parse_provider(&ctx.config.reviewer_provider),
@@ -218,6 +243,36 @@ pub(super) async fn run_review_loop(
     }
 
     unreachable!("all paths return inside the review loop")
+}
+
+fn get_diff_for_review(project_dir: &Path) -> String {
+    // Try unstaged changes first (git diff HEAD).
+    let output = std::process::Command::new("git")
+        .args(["diff", "HEAD"])
+        .current_dir(project_dir)
+        .output();
+    if let Ok(out) = &output {
+        let diff = String::from_utf8_lossy(&out.stdout);
+        let trimmed = diff.trim();
+        if !trimmed.is_empty() {
+            return trimmed.to_string();
+        }
+    }
+
+    // Fall back to staged-only changes.
+    let output = std::process::Command::new("git")
+        .args(["diff", "--cached"])
+        .current_dir(project_dir)
+        .output();
+    if let Ok(out) = &output {
+        let diff = String::from_utf8_lossy(&out.stdout);
+        let trimmed = diff.trim();
+        if !trimmed.is_empty() {
+            return trimmed.to_string();
+        }
+    }
+
+    String::new()
 }
 
 fn get_changed_files(project_dir: &Path) -> Vec<String> {

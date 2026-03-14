@@ -63,7 +63,7 @@ pub fn render(frame: &mut Frame, state: &AppState) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(6), // Header: task + progress + queue + log
+            Constraint::Length(5), // Header: task + progress + agent + next
             Constraint::Min(10),   // Agent output
             Constraint::Length(8), // Task queue
             Constraint::Length(1), // Status bar
@@ -1321,8 +1321,9 @@ fn render_header(frame: &mut Frame, area: Rect, state: &AppState) {
         0.0
     };
 
+    let desc_width = area.width.saturating_sub(10) as usize;
     let task_line = if let Some(ref task) = state.current_task {
-        format!("  {} — {}", task.id, task.short_desc(60))
+        format!("  {} — {}", task.id, task.short_desc(desc_width))
     } else if let Some(ref planning) = state.planning {
         if planning.orchestrator_mode {
             let iter_label = if planning.orchestrator_iteration > 0 {
@@ -1431,28 +1432,8 @@ fn render_header(frame: &mut Frame, area: Rect, state: &AppState) {
         )));
     }
 
-    // Most recent log line -- skip if it would duplicate content already in the header
-    if let Some((_ts, msg)) = state.log_messages.last() {
-        let dominated_by_header = state
-            .planning
-            .as_ref()
-            .map(|p| msg.contains(&p.label))
-            .unwrap_or(false)
-            || state
-                .current_task
-                .as_ref()
-                .map(|t| msg.contains(&t.id))
-                .unwrap_or(false);
-        if !dominated_by_header {
-            header_text.push(Line::from(Span::styled(
-                format!(
-                    "  {}",
-                    truncate_str(msg, area.width.saturating_sub(4) as usize)
-                ),
-                Style::default().fg(Color::DarkGray),
-            )));
-        }
-    }
+    // Log line removed from header -- the agent name + timer on line 3 already
+    // conveys the same info. The status bar at the bottom shows the latest log.
 
     let header = Paragraph::new(header_text).block(
         Block::default()

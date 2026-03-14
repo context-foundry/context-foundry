@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 mod agent;
 mod app;
+mod complexity;
 mod config;
 mod embeddings;
 mod git;

@@ -67,11 +67,22 @@ pub struct Config {
     /// Relies on deterministic backpressure (tests, lints, type checks) instead of LLM review.
     pub backpressure_only: bool,
 
+    /// Model overrides for Simple-complexity tasks.
+    /// When a task is classified as Simple, these override the default role models.
+    pub simple_planner_model: String,
+    pub simple_builder_model: String,
+    /// Empty string means use backpressure_only (skip LLM review).
+    pub simple_reviewer_model: String,
+
     /// Max number of patterns injected into agent prompts (protects context "smart zone").
     pub max_pattern_injection: usize,
 
     /// Max iterations for `foundry plan` mode (0 = unlimited).
     pub planning_iterations: u64,
+
+    /// Use adaptive inter-agent pauses: skip the full sleep when the last
+    /// agent was not rate-limited, using a minimal 500ms pause instead.
+    pub adaptive_pauses: bool,
 
     /// Optional git remote name to auto-push after successful commits.
     /// Defaults to None so Foundry commits locally only.
@@ -98,6 +109,22 @@ pub struct Config {
     pub orchestrator_max_iterations: usize,
     /// Orchestrator: acceptance policy ("no-high", "no-high-medium", "no-findings").
     pub orchestrator_accept_policy: String,
+
+    /// Review mode: "diff-only" passes git diff to reviewer, "file-list" uses changed file list.
+    pub review_mode: String,
+
+    /// Skip the planner stage for Simple-complexity tasks and pass the task
+    /// description directly to the builder.
+    pub skip_planner_for_simple: bool,
+
+    /// Minutes to wait before running discovery after the last H-prefixed
+    /// (human-injected) task completes. Doubles (up to 30 min) when discovery
+    /// finds 0 new tasks.
+    pub discovery_cooldown_minutes: u64,
+
+    /// Spawn the planner for task N+1 while the builder is running task N.
+    /// The pre-computed plan is reused when the loop advances to that task.
+    pub planner_lookahead: bool,
 }
 
 impl Default for Config {
@@ -129,8 +156,12 @@ impl Default for Config {
             patterns_dir: "~/.foundry/patterns".into(),
 
             backpressure_only: false,
+            simple_planner_model: "sonnet".into(),
+            simple_builder_model: "sonnet".into(),
+            simple_reviewer_model: String::new(),
             max_pattern_injection: 10,
             planning_iterations: 0,
+            adaptive_pauses: true,
             auto_push_remote: None,
             semantic_match_enabled: true,
             embedding_model: "nomic-embed-text".into(),
@@ -141,6 +172,10 @@ impl Default for Config {
             orchestrator_reviewer_model: "opus".into(),
             orchestrator_max_iterations: 3,
             orchestrator_accept_policy: "no-high-medium".into(),
+            review_mode: "diff-only".into(),
+            skip_planner_for_simple: true,
+            discovery_cooldown_minutes: 5,
+            planner_lookahead: true,
         }
     }
 }
