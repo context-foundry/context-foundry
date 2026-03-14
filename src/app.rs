@@ -53,23 +53,7 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
         state.log(msg);
     }
 
-    // Ollama connectivity check (quick probe, non-blocking)
-    if config.semantic_match_enabled {
-        let ollama_url = config.ollama_url.clone();
-        let probe = std::process::Command::new("curl")
-            .args(["-s", "--max-time", "1", &format!("{}/api/tags", ollama_url)])
-            .output();
-        match probe {
-            Ok(output) if output.status.success() => {
-                state.last_pattern_match_mode = Some("semantic".to_string());
-                state.log(format!("Ollama connected at {}", ollama_url));
-            }
-            _ => {
-                state.last_pattern_match_mode = Some("keyword-only".to_string());
-                state.log(format!("Ollama not available at {} -- using keyword matching", ollama_url));
-            }
-        }
-    }
+    // Ollama status is checked by the background health checker (every 10s)
 
     enter_home_surface(project_dir, &mut state, None);
 
@@ -90,6 +74,30 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
             }
         }
     });
+
+    // Background Ollama health check (every 10 seconds)
+    if config.semantic_match_enabled {
+        let ollama_tx = event_tx.clone();
+        let ollama_url = config.ollama_url.clone();
+        tokio::spawn(async move {
+            loop {
+                let url = format!("{}/api/tags", ollama_url);
+                let connected = tokio::task::spawn_blocking(move || {
+                    std::process::Command::new("curl")
+                        .args(["-s", "--max-time", "2", &url])
+                        .output()
+                        .map(|o| o.status.success())
+                        .unwrap_or(false)
+                })
+                .await
+                .unwrap_or(false);
+                if ollama_tx.send(AppEvent::OllamaStatus(connected)).is_err() {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_secs(10)).await;
+            }
+        });
+    }
 
     // Spawn keyboard reader (keep handle so we can abort it for external editors)
     let mut terminal_reader_handle = spawn_terminal_event_reader(event_tx.clone());
@@ -564,6 +572,11 @@ fn handle_planning_event(state: &mut AppState, event: AppEvent) {
         AppEvent::UpdateAvailable(version) => {
             state.update_available = Some(version);
         }
+        AppEvent::OllamaStatus(connected) => {
+            state.last_pattern_match_mode = Some(
+                if connected { "semantic" } else { "keyword-only" }.to_string(),
+            );
+        }
         AppEvent::LoopEvent(_) => {}
     }
 }
@@ -674,6 +687,24 @@ fn handle_event(state: &mut AppState, event: AppEvent) {
                     {
                         if let Ok(n) = count_str.parse::<usize>() {
                             state.session_patterns_learned += n;
+                        }
+                    }
+                }
+                // Track review findings from "Review pass N/2: verdict=X, N high, N medium findings"
+                if msg.starts_with("Review pass ") {
+                    if let Some(rest) = msg.split("verdict=").nth(1) {
+                        // Parse "FAIL, 2 high, 1 medium findings"
+                        for part in rest.split(',') {
+                            let trimmed = part.trim();
+                            if trimmed.ends_with("high") {
+                                if let Ok(n) = trimmed.split_whitespace().next().unwrap_or("0").parse::<usize>() {
+                                    state.session_review_high += n;
+                                }
+                            } else if trimmed.ends_with("medium") {
+                                if let Ok(n) = trimmed.split_whitespace().next().unwrap_or("0").parse::<usize>() {
+                                    state.session_review_medium += n;
+                                }
+                            }
                         }
                     }
                 }
@@ -812,6 +843,11 @@ fn handle_event(state: &mut AppState, event: AppEvent) {
         }
         AppEvent::UpdateAvailable(version) => {
             state.update_available = Some(version);
+        }
+        AppEvent::OllamaStatus(connected) => {
+            state.last_pattern_match_mode = Some(
+                if connected { "semantic" } else { "keyword-only" }.to_string(),
+            );
         }
         AppEvent::Mouse(mouse) => {
             use crossterm::event::{MouseButton, MouseEventKind};

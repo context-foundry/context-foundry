@@ -214,6 +214,7 @@ pub(super) async fn run_headless(project_dir: &Path) -> Result<()> {
             | AppEvent::Key(_)
             | AppEvent::Mouse(_)
             | AppEvent::Paste(_)
+            | AppEvent::OllamaStatus(_)
             | AppEvent::Tick => {}
         }
     }

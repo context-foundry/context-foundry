@@ -156,6 +156,9 @@ pub struct AppState {
     pub session_feat_commits: usize,
     pub session_wip_commits: usize,
     pub session_patterns_learned: usize,
+    pub session_review_high: usize,
+    pub session_review_medium: usize,
+    pub session_review_low: usize,
     pub session_start: DateTime<Utc>,
     pub task_start: Option<DateTime<Utc>>,
     pub task_stages_seen: Vec<AgentRole>,
@@ -203,6 +206,9 @@ impl AppState {
             session_feat_commits: 0,
             session_wip_commits: 0,
             session_patterns_learned: 0,
+            session_review_high: 0,
+            session_review_medium: 0,
+            session_review_low: 0,
             session_start: Utc::now(),
             task_start: None,
             task_stages_seen: Vec::new(),
@@ -273,6 +279,7 @@ pub(super) enum AppEvent {
     Paste(String),
     Tick,
     UpdateAvailable(String),
+    OllamaStatus(bool), // true = connected, false = unreachable
 }
 
 pub(super) enum LoopEvent {

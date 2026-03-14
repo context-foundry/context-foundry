@@ -270,8 +270,14 @@ fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppState, config: 
                 Style::default().fg(pipe_color),
             ));
             if i < stages.len() - 1 {
+                let arrow = if i == 2 {
+                    // Reviewer <-> Fixer: bidirectional (review gate loop)
+                    "\u{25c0}\u{2500}\u{25b6}\u{2500}"
+                } else {
+                    "\u{2500}\u{2500}\u{25b6}\u{2500}"
+                };
                 s.push(Span::styled(
-                    "\u{2500}\u{2500}\u{25b6}\u{2500}",
+                    arrow,
                     Style::default().fg(pipe_color),
                 ));
             }
@@ -413,7 +419,22 @@ fn render_dashboard_stats(frame: &mut Frame, area: Rect, state: &AppState, _conf
         Span::styled(ollama_label, Style::default().fg(ollama_color)),
     ]));
 
-    lines.push(Line::from(""));
+    // Review findings
+    if state.session_review_high > 0 || state.session_review_medium > 0 || state.session_review_low > 0 {
+        lines.push(Line::from(vec![
+            Span::styled("  Review   ", Style::default().fg(Color::Cyan)),
+            Span::styled(
+                format!("{}", state.session_review_high),
+                Style::default().fg(if state.session_review_high > 0 { Color::Red } else { Color::DarkGray }),
+            ),
+            Span::styled(" high  ", Style::default().fg(Color::DarkGray)),
+            Span::styled(
+                format!("{}", state.session_review_medium),
+                Style::default().fg(if state.session_review_medium > 0 { Color::Yellow } else { Color::DarkGray }),
+            ),
+            Span::styled(" med", Style::default().fg(Color::DarkGray)),
+        ]));
+    }
 
     // Timing
     let now = chrono::Utc::now();
@@ -1305,7 +1326,7 @@ fn render_header(frame: &mut Frame, area: Rect, state: &AppState) {
         };
 
         format!(
-            "    {} ({}) | {}m {}s | {}",
+            "  ⎿ {} ({}) | {}m {}s | {}",
             role, model, mins, secs, activity
         )
     } else {

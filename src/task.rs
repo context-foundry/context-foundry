@@ -28,10 +28,7 @@ impl Task {
         if self.description.len() <= max_len {
             self.description.clone()
         } else {
-            format!(
-                "{}...",
-                truncate_str(&self.description, max_len.saturating_sub(3))
-            )
+            truncate_str(&self.description, max_len).to_string()
         }
     }
 }

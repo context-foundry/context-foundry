@@ -194,6 +194,11 @@ pub(super) fn handle_startup_event(state: &mut AppState, event: AppEvent) {
         AppEvent::UpdateAvailable(version) => {
             state.update_available = Some(version);
         }
+        AppEvent::OllamaStatus(connected) => {
+            state.last_pattern_match_mode = Some(
+                if connected { "semantic" } else { "keyword-only" }.to_string(),
+            );
+        }
         _ => {}
     }
 }
