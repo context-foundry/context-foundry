@@ -95,6 +95,7 @@ RULES FOR WRITING THE PLAN:
 IMPORTANT:
 - Do NOT implement the code — only write the plan
 - Do NOT modify {spec_file}, CLAUDE.md, {tasks_file}, or .buildloop/ (except current-plan.md)
+- Do NOT read files in .buildloop/logs/ -- these are internal agent logs, not project files
 - Write the plan to: .buildloop/current-plan.md{patterns_block}"#
     )
 }
@@ -200,6 +201,7 @@ RULES FOR WRITING THE PLAN:
 IMPORTANT:
 - Do NOT implement the code -- only write the plan
 - Do NOT modify {spec_file}, CLAUDE.md, {tasks_file}, or .buildloop/ (except .buildloop/{plan_filename})
+- Do NOT read files in .buildloop/logs/
 - Write the plan to: .buildloop/{plan_filename}{patterns_block}"#
     )
 }
@@ -222,6 +224,7 @@ INSTRUCTIONS:
 RULES:
 - Follow the plan precisely -- do not deviate or add unrequested features
 - Do NOT modify {spec_file}, CLAUDE.md, {tasks_file}, or .buildloop/
+- Do NOT read files in .buildloop/logs/
 - If a verification step fails, fix it before moving on"#
     )
 }
@@ -419,6 +422,7 @@ INSTRUCTIONS:
 IMPORTANT:
 - Fix EVERY high and medium issue in the report
 - Do NOT modify {spec_file}, CLAUDE.md, {tasks_file}, or .buildloop/
+- Do NOT read files in .buildloop/logs/
 - After fixing, verify your fixes compile/parse correctly
 - Be surgical — fix only what the review identified, don't refactor surrounding code"#
     )
@@ -468,6 +472,7 @@ RULES:
 - Do NOT duplicate tasks already in {tasks_file}
 - Do NOT use markdown bold/italic in task lines -- the parser is strict
 - Do NOT modify {spec_file}, CLAUDE.md, or .buildloop/
+- Do NOT read files in .buildloop/logs/
 - Do NOT implement any fixes -- only discover and document"#
     )
 }
