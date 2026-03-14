@@ -5,6 +5,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use crate::utils::atomic_write_file;
+
 use super::{
     attachments::{attachment_sidecar_path, external_attachment_count, load_attachment_specs},
     model::{
@@ -155,7 +157,13 @@ pub(super) fn load_execution_contracts_with_selection(
                 .position(|contract| contract.file_name == wanted)
         })
         .unwrap_or(0);
-    persist_selected_execution_contract(project_dir, &contracts[selected_index].file_name)?;
+    persist_selected_execution_contract(
+        project_dir,
+        &contracts
+            .get(selected_index)
+            .context("selected execution contract index out of bounds")?
+            .file_name,
+    )?;
     Ok((contracts, selected_index))
 }
 
@@ -180,7 +188,7 @@ pub(super) fn persist_selected_execution_contract(
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
-    fs::write(path, file_name)?;
+    atomic_write_file(&path, file_name.as_bytes())?;
     Ok(())
 }
 
@@ -190,25 +198,23 @@ pub(super) fn cycle_execution_contract(state: &mut StudioState, forward: bool) {
     }
 
     let len = state.execution_contracts.len();
+    let current = state.selected_execution_contract_index();
     let selected_index = if forward {
-        (state.selected_execution_contract + 1) % len
+        (current + 1) % len
     } else {
-        state
-            .selected_execution_contract
+        current
             .checked_sub(1)
             .unwrap_or_else(|| len.saturating_sub(1))
     };
     state.set_selected_execution_contract_index(selected_index);
-    if let Err(err) = persist_selected_execution_contract(
-        &state.project_dir,
-        &state.selected_execution_contract().file_name,
-    ) {
-        state.log(format!("failed to persist selected contract: {}", err));
-    } else {
-        state.log(format!(
-            "execution contract: {}",
-            state.selected_execution_contract().name
-        ));
+    if let Some(contract) = state.selected_execution_contract() {
+        if let Err(err) =
+            persist_selected_execution_contract(&state.project_dir, &contract.file_name)
+        {
+            state.log(format!("failed to persist selected contract: {}", err));
+        } else {
+            state.log(format!("execution contract: {}", contract.name));
+        }
     }
 }
 
@@ -218,8 +224,8 @@ pub(super) fn create_execution_contract(state: &mut StudioState) -> Result<()> {
     let contract_name = format!("Custom Contract {}", Utc::now().format("%H:%M:%S"));
     let file_name = format!("contract-{}.md", Utc::now().format("%Y%m%d-%H%M%S"));
     let path = dir.join(&file_name);
-    fs::write(&path, new_execution_contract_content(&contract_name))?;
-    fs::write(attachment_sidecar_path(&path), "[]\n")?;
+    atomic_write_file(&path, new_execution_contract_content(&contract_name).as_bytes())?;
+    atomic_write_file(&attachment_sidecar_path(&path), b"[]\n")?;
     let (contracts, selected_index) =
         load_execution_contracts_with_selection(&state.project_dir, Some(&file_name))?;
     state.execution_contracts = contracts;
@@ -237,7 +243,10 @@ pub(super) fn create_execution_contract(state: &mut StudioState) -> Result<()> {
 }
 
 pub(super) fn edit_selected_execution_contract(state: &mut StudioState) {
-    let selected = state.selected_execution_contract().clone();
+    let Some(selected) = state.selected_execution_contract().cloned() else {
+        state.log("no execution contract to edit");
+        return;
+    };
     queue_editor_action(
         state,
         PendingStudioAction::EditExecutionContract {
@@ -253,8 +262,11 @@ pub(super) fn delete_selected_execution_contract(state: &mut StudioState) -> Res
         anyhow::bail!("cannot delete the last execution contract");
     }
 
-    let selected_index = state.selected_execution_contract;
-    let selected = state.selected_execution_contract().clone();
+    let selected_index = state.selected_execution_contract_index();
+    let selected = state
+        .selected_execution_contract()
+        .cloned()
+        .context("no execution contract selected")?;
     let trash_dir = execution_contracts_dir(&state.project_dir).join(".trash");
     fs::create_dir_all(&trash_dir)?;
     let trash_name = format!(
@@ -300,10 +312,9 @@ pub(super) fn delete_selected_execution_contract(state: &mut StudioState) -> Res
     let deleted_name = selected.name;
     state.execution_contracts = contracts;
     state.set_selected_execution_contract_index(selected_index);
-    persist_selected_execution_contract(
-        &state.project_dir,
-        &state.selected_execution_contract().file_name,
-    )?;
+    if let Some(contract) = state.selected_execution_contract() {
+        persist_selected_execution_contract(&state.project_dir, &contract.file_name)?;
+    }
     state.log(format!("deleted execution contract: {}", deleted_name));
     Ok(())
 }
@@ -394,7 +405,8 @@ mod tests {
 
         create_execution_contract(&mut state)?;
 
-        let sidecar_path = attachment_sidecar_path(&state.selected_execution_contract().path);
+        let sidecar_path =
+            attachment_sidecar_path(&state.selected_execution_contract().unwrap().path);
         let sidecar = fs::read_to_string(&sidecar_path)?;
 
         fs::remove_dir_all(&project_dir)?;

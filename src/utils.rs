@@ -1,3 +1,6 @@
+use std::io;
+use std::path::Path;
+
 /// Truncate a string to at most `max_bytes` bytes, ensuring the cut
 /// lands on a UTF-8 character boundary. Returns a `&str` that is
 /// always valid UTF-8 and at most `max_bytes` bytes long.
@@ -25,4 +28,18 @@ pub fn truncate_str_from_end(s: &str, max_bytes: usize) -> &str {
         start += 1;
     }
     &s[start..]
+}
+
+pub fn atomic_write_file(path: &Path, contents: &[u8]) -> io::Result<()> {
+    let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("file");
+    let tmp = path.with_file_name(format!(".{}.tmp", file_name));
+    std::fs::write(&tmp, contents)?;
+    std::fs::rename(&tmp, path).inspect_err(|_| {
+        let _ = std::fs::remove_file(&tmp);
+    })?;
+    Ok(())
+}
+
+pub fn atomic_write_file_best_effort(path: &Path, contents: &[u8]) {
+    let _ = atomic_write_file(path, contents);
 }

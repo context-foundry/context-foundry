@@ -514,7 +514,7 @@ pub async fn run_agent(
             // Retries exhausted -- check if we should fall back to Claude
             if should_fallback_to_claude(&outcome) {
                 let _ = output_tx.send(AgentOutputEvent::Stderr(format!(
-                    "Codex {} failed ({}); falling back to Claude opus",
+                    "Codex {} failed ({}); falling back to Claude default model",
                     role,
                     outcome
                         .failure_message
@@ -524,7 +524,7 @@ pub async fn run_agent(
                 return Box::pin(run_agent(
                     role,
                     ModelProvider::Claude,
-                    "opus",
+                    "",
                     prompt,
                     project_dir,
                     output_tx,
@@ -548,8 +548,10 @@ pub async fn run_agent(
     let mut cmd = CommandBuilder::new("claude");
     cmd.arg("-p");
     cmd.arg(prompt);
-    cmd.arg("--model");
-    cmd.arg(model);
+    if !model.trim().is_empty() {
+        cmd.arg("--model");
+        cmd.arg(model);
+    }
     cmd.arg("--dangerously-skip-permissions");
     cmd.arg("--output-format");
     cmd.arg("stream-json");
@@ -591,12 +593,15 @@ pub async fn run_agent(
 
         // Spawn reader thread — reads PTY output line by line
         let model_label = model_name.clone();
+        let progress = Arc::new(Mutex::new(ProviderProgressState::new(Instant::now())));
+        let read_progress = progress.clone();
         let read_thread = std::thread::spawn(move || {
-            read_pty_output(reader, &tx, &log_file_path, &model_label);
+            read_pty_output(reader, &tx, &log_file_path, &model_label, &read_progress);
         });
 
         // Wait for child process to exit with timeout
-        let deadline = Instant::now() + Duration::from_secs(timeout_secs);
+        let hard_timeout_secs = timeout_secs.saturating_mul(PROVIDER_HARD_TIMEOUT_MULTIPLIER);
+        let hard_deadline = Instant::now() + Duration::from_secs(hard_timeout_secs);
         let mut result = AgentResult {
             success: false,
             exit_code: 1,
@@ -634,18 +639,43 @@ pub async fn run_agent(
                             Some(format!("Agent {} cancelled by shutdown", role_name));
                         break;
                     }
-                    // Still running — check timeout
-                    if Instant::now() >= deadline {
-                        // Timeout — kill the child process
+                    // Still running — check idle timeout then hard deadline
+                    let now = Instant::now();
+                    let progress_snapshot = progress
+                        .lock()
+                        .unwrap_or_else(|poisoned| poisoned.into_inner());
+
+                    if progress_snapshot.no_progress_for(now)
+                        >= Duration::from_secs(timeout_secs)
+                    {
+                        drop(progress_snapshot);
                         let _ = child.kill();
-                        let _ = child.wait(); // Reap
-                        let message =
-                            format!("Agent {} timed out after {}s", role_name, timeout_secs);
+                        let _ = child.wait();
+                        let message = format!(
+                            "Agent {} timed out after {}s without progress",
+                            role_name, timeout_secs
+                        );
                         eprintln!("[foundry] {} — killed", message);
                         result.exit_kind = AgentExitKind::TimedOut;
                         result.failure_message = Some(message);
                         break;
                     }
+
+                    if now >= hard_deadline {
+                        drop(progress_snapshot);
+                        let _ = child.kill();
+                        let _ = child.wait();
+                        let message = format!(
+                            "Agent {} timed out after {}s total runtime",
+                            role_name, hard_timeout_secs
+                        );
+                        eprintln!("[foundry] {} — killed", message);
+                        result.exit_kind = AgentExitKind::TimedOut;
+                        result.failure_message = Some(message);
+                        break;
+                    }
+
+                    drop(progress_snapshot);
                     std::thread::sleep(PROVIDER_POLL_INTERVAL);
                 }
                 Err(err) => {
@@ -689,6 +719,7 @@ fn read_pty_output(
     tx: &mpsc::UnboundedSender<AgentOutputEvent>,
     log_path: &Path,
     model_name: &str,
+    progress: &Arc<Mutex<ProviderProgressState>>,
 ) {
     let mut buf_reader = std::io::BufReader::new(reader);
     let mut log_file = std::fs::File::create(log_path).ok();
@@ -712,6 +743,7 @@ fn read_pty_output(
 
                 match parse_claude_provider_line(line, model_name) {
                     ParsedClaudeLine::Event(event) => {
+                        note_provider_event(ModelProvider::Claude, &event, progress);
                         if tx.send(event).is_err() {
                             return; // Channel closed
                         }
@@ -719,10 +751,11 @@ fn read_pty_output(
                     ParsedClaudeLine::Ignore => continue,
                     ParsedClaudeLine::Unparsed => {
                         let cleaned = strip_ansi(line);
-                        if !cleaned.is_empty()
-                            && tx.send(AgentOutputEvent::Stderr(cleaned)).is_err()
-                        {
-                            return;
+                        if !cleaned.is_empty() {
+                            note_provider_stderr_line(ModelProvider::Claude, &cleaned, progress);
+                            if tx.send(AgentOutputEvent::Stderr(cleaned)).is_err() {
+                                return;
+                            }
                         }
                     }
                 }

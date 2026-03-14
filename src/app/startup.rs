@@ -26,17 +26,20 @@ impl StartupState {
             }
             StartupScenario::NeedsQueue => vec![
                 StartupAction::DescribeWork,
+                StartupAction::DesignWithReview,
                 StartupAction::ScanProject,
                 StartupAction::EditSpec,
             ],
             StartupScenario::QueueReady => vec![
                 StartupAction::Continue,
                 StartupAction::DescribeWork,
+                StartupAction::DesignWithReview,
                 StartupAction::ViewTasks,
                 StartupAction::EditSpec,
             ],
             StartupScenario::QueueComplete => vec![
                 StartupAction::DescribeWork,
+                StartupAction::DesignWithReview,
                 StartupAction::ScanProject,
                 StartupAction::ViewTasks,
                 StartupAction::EditSpec,
@@ -73,6 +76,7 @@ impl StartupState {
                 StartupScenario::QueueReady => "Describe more work".to_string(),
                 StartupScenario::QueueComplete => "Describe next work".to_string(),
             },
+            StartupAction::DesignWithReview => "Design with review".to_string(),
             StartupAction::ScanProject => "Scan project".to_string(),
             StartupAction::ViewTasks => self.tasks_file_name.clone(),
             StartupAction::EditSpec => self.spec_file_name.clone(),
@@ -102,6 +106,9 @@ impl StartupState {
                     self.tasks_file_name
                 ),
             },
+            StartupAction::DesignWithReview => {
+                "Cross-model design loop. Proposer drafts, reviewer validates, iterates until accepted.".to_string()
+            }
             StartupAction::ScanProject => format!(
                 "Inspect the codebase and append tasks to {}. {} is optional context.",
                 self.tasks_file_name, self.spec_file_name
@@ -160,7 +167,7 @@ impl StartupState {
 fn startup_action_uses_intent(action: StartupAction) -> bool {
     matches!(
         action,
-        StartupAction::DescribeWork | StartupAction::ScanProject
+        StartupAction::DescribeWork | StartupAction::ScanProject | StartupAction::DesignWithReview
     )
 }
 
@@ -220,6 +227,10 @@ pub(super) fn handle_startup_key(state: &mut AppState, key: event::KeyEvent) {
     }
 
     match key.code {
+        KeyCode::Char('f') if state.last_orchestrator_outcome.is_some() => {
+            state.show_findings = !state.show_findings;
+            state.findings_scroll = 0;
+        }
         KeyCode::Esc | KeyCode::Char('q') => {
             state.should_quit = true;
         }
@@ -358,6 +369,19 @@ pub(super) fn handle_startup_intent_input(state: &mut AppState, key: event::KeyE
                     state.pending_transition =
                         Some(PendingTransition::StartPlanning { user_intent, label });
                 }
+                Some(StartupAction::DesignWithReview) => {
+                    if text.is_empty() {
+                        startup.status_message =
+                            Some("Describe what you want designed first.".to_string());
+                        return;
+                    }
+                    startup.entering_intent = false;
+                    startup.status_message = None;
+                    startup.intent_input.clear();
+                    state.pending_transition = Some(PendingTransition::StartDesign {
+                        user_intent: text,
+                    });
+                }
                 _ => {}
             }
         }
@@ -402,7 +426,9 @@ pub(super) fn scroll_startup_content(state: &mut AppState, delta: isize) {
     };
 
     match action {
-        Some(StartupAction::DescribeWork) | Some(StartupAction::ScanProject) => {}
+        Some(StartupAction::DescribeWork)
+        | Some(StartupAction::ScanProject)
+        | Some(StartupAction::DesignWithReview) => {}
         Some(StartupAction::EditSpec) => {
             adjust_scroll_offset(&mut startup.spec_scroll_offset, delta);
         }
@@ -477,6 +503,23 @@ pub(super) fn activate_startup_action(state: &mut AppState, action: StartupActio
                             StartupScenario::EmptyProject
                         ),
                     }));
+            }
+        }
+        StartupAction::DesignWithReview => {
+            if let Some(startup) = state.startup.as_mut() {
+                let text = startup.intent_input.trim().to_string();
+                if text.is_empty() {
+                    startup.entering_intent = true;
+                    startup.status_message =
+                        Some("Describe what you want designed first.".to_string());
+                    return;
+                }
+                startup.entering_intent = false;
+                startup.status_message = None;
+                startup.intent_input.clear();
+                state.pending_transition = Some(PendingTransition::StartDesign {
+                    user_intent: text,
+                });
             }
         }
         StartupAction::ViewTasks => {

@@ -2,8 +2,18 @@ use anyhow::Result;
 use regex::Regex;
 use std::fs;
 use std::path::Path;
+use std::sync::LazyLock;
 
-use crate::utils::truncate_str;
+use crate::utils::{atomic_write_file, truncate_str};
+
+static RE_TASK_ID: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^([A-Za-z]?\d+\.\d+):\s*").unwrap());
+
+static RE_DISCOVERY_HEADER: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"## Discovery Round (\d+)").unwrap());
+
+static RE_DISCOVERY_TASK_ID: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"D(\d+)\.\d+").unwrap());
 
 #[derive(Debug, Clone)]
 pub struct Task {
@@ -28,7 +38,6 @@ impl Task {
 
 pub fn parse_tasks(plan_path: &Path) -> Result<Vec<Task>> {
     let content = fs::read_to_string(plan_path)?;
-    let re_id = Regex::new(r"^([A-Za-z]?\d+\.\d+):\s*")?;
 
     let mut tasks = Vec::new();
 
@@ -43,7 +52,7 @@ pub fn parse_tasks(plan_path: &Path) -> Result<Vec<Task>> {
             continue;
         };
 
-        let (id, description) = if let Some(caps) = re_id.captures(&text) {
+        let (id, description) = if let Some(caps) = RE_TASK_ID.captures(&text) {
             let id = caps[1].to_string();
             let desc = text[caps[0].len()..].to_string();
             (id, desc)
@@ -78,7 +87,7 @@ pub fn mark_done(plan_path: &Path, line_number: usize) -> Result<()> {
         lines[line_number - 1] = lines[line_number - 1].replace("- [ ]", "- [x]");
     }
 
-    fs::write(plan_path, lines.join("\n") + "\n")?;
+    atomic_write_file(plan_path, (lines.join("\n") + "\n").as_bytes())?;
     Ok(())
 }
 
@@ -88,6 +97,34 @@ pub fn count_completed(tasks: &[Task]) -> usize {
 
 pub fn count_pending(tasks: &[Task]) -> usize {
     tasks.iter().filter(|t| !t.completed).count()
+}
+
+pub fn highest_discovery_round(plan_path: &Path) -> usize {
+    let content = match fs::read_to_string(plan_path) {
+        Ok(c) => c,
+        Err(_) => return 0,
+    };
+
+    let mut max_round: usize = 0;
+
+    for line in content.lines() {
+        if let Some(caps) = RE_DISCOVERY_HEADER.captures(line) {
+            if let Ok(n) = caps[1].parse::<usize>() {
+                if n > max_round {
+                    max_round = n;
+                }
+            }
+        }
+        if let Some(caps) = RE_DISCOVERY_TASK_ID.captures(line) {
+            if let Ok(n) = caps[1].parse::<usize>() {
+                if n > max_round {
+                    max_round = n;
+                }
+            }
+        }
+    }
+
+    max_round
 }
 
 #[cfg(test)]
@@ -133,5 +170,47 @@ mod tests {
         assert_eq!(tasks.len(), 1);
         assert_eq!(tasks[0].id, "A1.1");
         Ok(())
+    }
+
+    #[test]
+    fn test_highest_discovery_round_empty_file() {
+        let plan_path = temp_plan_path("foundry-disc-empty");
+        fs::write(&plan_path, "## Phase 1\n- [ ] T1.1: Do stuff\n").unwrap();
+        let result = highest_discovery_round(&plan_path);
+        fs::remove_file(&plan_path).unwrap();
+        assert_eq!(result, 0);
+    }
+
+    #[test]
+    fn test_highest_discovery_round_multiple_rounds() {
+        let plan_path = temp_plan_path("foundry-disc-multi");
+        fs::write(
+            &plan_path,
+            "## Discovery Round 1\n- [x] D1.1: Fix bug\n\n## Discovery Round 5\n- [x] D5.1: Another fix\n\n## Discovery Round 3\n- [x] D3.1: Old fix\n",
+        )
+        .unwrap();
+        let result = highest_discovery_round(&plan_path);
+        fs::remove_file(&plan_path).unwrap();
+        assert_eq!(result, 5);
+    }
+
+    #[test]
+    fn test_highest_discovery_round_from_task_ids() {
+        let plan_path = temp_plan_path("foundry-disc-taskid");
+        fs::write(
+            &plan_path,
+            "## Phase 1\n- [x] D12.3: Found by task ID regex\n",
+        )
+        .unwrap();
+        let result = highest_discovery_round(&plan_path);
+        fs::remove_file(&plan_path).unwrap();
+        assert_eq!(result, 12);
+    }
+
+    #[test]
+    fn test_highest_discovery_round_missing_file() {
+        let plan_path = temp_plan_path("foundry-disc-missing-nonexistent");
+        let result = highest_discovery_round(&plan_path);
+        assert_eq!(result, 0);
     }
 }

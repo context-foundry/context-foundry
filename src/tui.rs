@@ -13,7 +13,7 @@ use ratatui::{
 use std::io;
 
 use crate::config::Config;
-use crate::utils::truncate_str;
+use crate::utils::{truncate_str, truncate_str_from_end};
 
 use crate::agent::AgentRole;
 use crate::app::{AppPhase, AppState, StartupAction, StartupScenario};
@@ -110,11 +110,7 @@ pub fn render(frame: &mut Frame, state: &AppState) {
                 " task> "
             };
             let max_text = inject_area.width.saturating_sub(10) as usize;
-            let display = if input.len() > max_text {
-                &input[input.len() - max_text..]
-            } else {
-                input.as_str()
-            };
+            let display = truncate_str_from_end(input, max_text);
             let bar = Paragraph::new(Line::from(vec![
                 Span::styled(
                     prompt_label,
@@ -145,6 +141,7 @@ pub fn render_dashboard(frame: &mut Frame, state: &AppState, config: &Config) {
             Constraint::Length(7), // Pipeline subway map
             Constraint::Min(10),   // Middle: progress + stats
             Constraint::Length(8), // Session config table
+            Constraint::Length(6), // Orchestrator config
             Constraint::Length(1), // Status bar
         ])
         .split(frame.area());
@@ -152,7 +149,8 @@ pub fn render_dashboard(frame: &mut Frame, state: &AppState, config: &Config) {
     render_pipeline_map(frame, chunks[0], state, config);
     render_dashboard_middle(frame, chunks[1], state, config);
     render_session_config(frame, chunks[2], config);
-    render_dashboard_status_bar(frame, chunks[3], state);
+    render_orchestrator_config(frame, chunks[3], config);
+    render_dashboard_status_bar(frame, chunks[4], state);
 }
 
 fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppState, config: &Config) {
@@ -197,11 +195,7 @@ fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppState, config: 
                 } else {
                     format!("{} {}", p, m)
                 };
-                if display.len() > 10 {
-                    display[..10].to_string()
-                } else {
-                    display
-                }
+                truncate_str(&display, 12).to_string()
             } else {
                 String::new()
             }
@@ -229,7 +223,9 @@ fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppState, config: 
     .collect();
 
     // Build styled lines for the subway map
-    let box_width = 10usize; // Fixed box interior width for uniform look
+    let box_width = 12usize; // Fixed box interior width for uniform look
+
+    let pipe_color = Color::Rgb(227, 115, 75); // Claude Code orange (#E3734B)
 
     // Top border line
     let top_spans: Vec<Span> = {
@@ -237,7 +233,7 @@ fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppState, config: 
         for (i, _stage) in stages.iter().enumerate() {
             s.push(Span::styled(
                 format!("\u{256d}{}\u{256e}", "\u{2500}".repeat(box_width)),
-                Style::default().fg(Color::DarkGray),
+                Style::default().fg(pipe_color),
             ));
             if i < stages.len() - 1 {
                 s.push(Span::raw("    "));
@@ -255,7 +251,7 @@ fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppState, config: 
             let right = pad_total - left;
             s.push(Span::styled(
                 "\u{2502}",
-                Style::default().fg(Color::DarkGray),
+                Style::default().fg(pipe_color),
             ));
             s.push(Span::styled(
                 format!("{}{}{}", " ".repeat(left), stage.label, " ".repeat(right)),
@@ -263,12 +259,12 @@ fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppState, config: 
             ));
             s.push(Span::styled(
                 "\u{2502}",
-                Style::default().fg(Color::DarkGray),
+                Style::default().fg(pipe_color),
             ));
             if i < stages.len() - 1 {
                 s.push(Span::styled(
                     "\u{2500}\u{2500}\u{25b6}\u{2500}",
-                    Style::default().fg(Color::DarkGray),
+                    Style::default().fg(pipe_color),
                 ));
             }
         }
@@ -284,7 +280,7 @@ fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppState, config: 
             let right = pad_total - left;
             s.push(Span::styled(
                 "\u{2502}",
-                Style::default().fg(Color::DarkGray),
+                Style::default().fg(pipe_color),
             ));
             s.push(Span::styled(
                 format!(
@@ -297,7 +293,7 @@ fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppState, config: 
             ));
             s.push(Span::styled(
                 "\u{2502}",
-                Style::default().fg(Color::DarkGray),
+                Style::default().fg(pipe_color),
             ));
             if i < stages.len() - 1 {
                 s.push(Span::raw("    "));
@@ -312,7 +308,7 @@ fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppState, config: 
         for (i, _stage) in stages.iter().enumerate() {
             s.push(Span::styled(
                 format!("\u{2570}{}\u{256f}", "\u{2500}".repeat(box_width)),
-                Style::default().fg(Color::DarkGray),
+                Style::default().fg(pipe_color),
             ));
             if i < stages.len() - 1 {
                 s.push(Span::raw("    "));
@@ -600,6 +596,105 @@ fn render_session_config(frame: &mut Frame, area: Rect, config: &Config) {
     frame.render_widget(table, area);
 }
 
+fn render_orchestrator_config(frame: &mut Frame, area: Rect, config: &Config) {
+    let header = Row::new(vec![
+        Cell::from(Span::styled(
+            "Role",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Cell::from(Span::styled(
+            "Provider",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Cell::from(Span::styled(
+            "Model",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Cell::from(Span::styled(
+            "Max Iters",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Cell::from(Span::styled(
+            "Accept Policy",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        )),
+    ]);
+
+    let rows = vec![
+        Row::new(vec![
+            Cell::from(Span::styled("Proposer", Style::default().fg(Color::White))),
+            Cell::from(Span::styled(
+                Config::parse_provider(&config.orchestrator_proposer_provider).to_string(),
+                Style::default().fg(Color::Gray),
+            )),
+            Cell::from(Span::styled(
+                if config.orchestrator_proposer_model.is_empty() {
+                    "(default)"
+                } else {
+                    &config.orchestrator_proposer_model
+                },
+                Style::default().fg(Color::Gray),
+            )),
+            Cell::from(Span::styled(
+                format!("{}", config.orchestrator_max_iterations),
+                Style::default().fg(Color::DarkGray),
+            )),
+            Cell::from(Span::styled(
+                &config.orchestrator_accept_policy,
+                Style::default().fg(Color::DarkGray),
+            )),
+        ]),
+        Row::new(vec![
+            Cell::from(Span::styled("Reviewer", Style::default().fg(Color::White))),
+            Cell::from(Span::styled(
+                Config::parse_provider(&config.orchestrator_reviewer_provider).to_string(),
+                Style::default().fg(Color::Gray),
+            )),
+            Cell::from(Span::styled(
+                if config.orchestrator_reviewer_model.is_empty() {
+                    "(default)"
+                } else {
+                    &config.orchestrator_reviewer_model
+                },
+                Style::default().fg(Color::Gray),
+            )),
+            Cell::from(Span::styled("", Style::default())),
+            Cell::from(Span::styled("", Style::default())),
+        ]),
+    ];
+
+    let widths = [
+        Constraint::Length(12),
+        Constraint::Length(10),
+        Constraint::Length(14),
+        Constraint::Length(10),
+        Constraint::Length(16),
+    ];
+
+    let table = Table::new(rows, widths).header(header).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::DarkGray))
+            .title(Span::styled(
+                " Orchestrator ",
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            )),
+    );
+    frame.render_widget(table, area);
+}
+
 fn render_dashboard_status_bar(frame: &mut Frame, area: Rect, state: &AppState) {
     let mut spans = vec![
         Span::styled(
@@ -668,6 +763,230 @@ pub fn render_patterns(frame: &mut Frame, state: &AppState, config: &Config) {
 
     render_patterns_list(frame, chunks[0], state, config);
     render_patterns_status_bar(frame, chunks[1], state);
+}
+
+// ─── Findings View ────────────────────────────────────────────
+
+pub fn render_findings(frame: &mut Frame, state: &AppState) {
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Min(10),   // Findings list
+            Constraint::Length(1), // Status bar
+        ])
+        .split(frame.area());
+
+    render_findings_list(frame, chunks[0], state);
+    render_findings_status_bar(frame, chunks[1], state);
+}
+
+fn render_findings_list(frame: &mut Frame, area: Rect, state: &AppState) {
+    let Some(ref outcome) = state.last_orchestrator_outcome else {
+        let empty = Paragraph::new(vec![
+            Line::from(""),
+            Line::from(Span::styled(
+                "  No review findings available.",
+                Style::default().fg(Color::DarkGray),
+            )),
+        ])
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::DarkGray))
+                .title(Span::styled(
+                    " Review Findings ",
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                )),
+        );
+        frame.render_widget(empty, area);
+        return;
+    };
+
+    let max_lines = area.height.saturating_sub(2) as usize;
+    let inner_width = area.width.saturating_sub(4) as usize;
+    let mut display_lines: Vec<Line> = Vec::new();
+
+    // Summary
+    let status_color = if outcome.accepted {
+        Color::Green
+    } else {
+        Color::Yellow
+    };
+    let status_label = if outcome.accepted {
+        "accepted"
+    } else {
+        "unresolved findings"
+    };
+    display_lines.push(Line::from(vec![
+        Span::styled("  Status: ", Style::default().fg(Color::White)),
+        Span::styled(
+            status_label,
+            Style::default()
+                .fg(status_color)
+                .add_modifier(Modifier::BOLD),
+        ),
+    ]));
+    display_lines.push(Line::from(Span::styled(
+        format!("  Iterations: {}", outcome.iterations),
+        Style::default().fg(Color::White),
+    )));
+    display_lines.push(Line::from(""));
+
+    // Findings section
+    let finding_count = outcome.final_review.findings.len();
+    display_lines.push(Line::from(Span::styled(
+        format!("  Findings ({})", finding_count),
+        Style::default()
+            .fg(Color::White)
+            .add_modifier(Modifier::BOLD),
+    )));
+    display_lines.push(Line::from(""));
+
+    if outcome.final_review.findings.is_empty() {
+        display_lines.push(Line::from(Span::styled(
+            "  No findings.",
+            Style::default().fg(Color::DarkGray),
+        )));
+        display_lines.push(Line::from(""));
+    } else {
+        for finding in &outcome.final_review.findings {
+            let severity_style = match finding.severity.to_ascii_lowercase().as_str() {
+                "high" => Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+                "medium" => Style::default().fg(Color::Yellow),
+                _ => Style::default().fg(Color::Gray),
+            };
+            let severity_label = finding.severity.to_ascii_uppercase();
+            let desc_width = inner_width.saturating_sub(severity_label.len() + 4);
+
+            display_lines.push(Line::from(vec![
+                Span::styled(format!(" {} ", severity_label), severity_style),
+                Span::styled(
+                    truncate_str(&finding.description, desc_width).to_string(),
+                    Style::default().fg(Color::White),
+                ),
+            ]));
+
+            if !finding.location.is_empty() {
+                display_lines.push(Line::from(Span::styled(
+                    format!(
+                        "      at {}",
+                        truncate_str(&finding.location, inner_width.saturating_sub(9))
+                    ),
+                    Style::default().fg(Color::DarkGray),
+                )));
+            }
+
+            if !finding.suggestion.is_empty() {
+                display_lines.push(Line::from(Span::styled(
+                    format!(
+                        "      Suggestion: {}",
+                        truncate_str(&finding.suggestion, inner_width.saturating_sub(18))
+                    ),
+                    Style::default().fg(Color::Cyan),
+                )));
+            }
+
+            display_lines.push(Line::from(""));
+        }
+    }
+
+    // Validated claims section
+    let validated_count = outcome.final_review.validated.len();
+    display_lines.push(Line::from(Span::styled(
+        format!("  Validated Claims ({})", validated_count),
+        Style::default()
+            .fg(Color::Green)
+            .add_modifier(Modifier::BOLD),
+    )));
+    display_lines.push(Line::from(""));
+
+    if outcome.final_review.validated.is_empty() {
+        display_lines.push(Line::from(Span::styled(
+            "  No claims validated.",
+            Style::default().fg(Color::DarkGray),
+        )));
+    } else {
+        for claim in &outcome.final_review.validated {
+            display_lines.push(Line::from(Span::styled(
+                format!(
+                    "  \u{2713} {}",
+                    truncate_str(claim, inner_width.saturating_sub(4))
+                ),
+                Style::default().fg(Color::Green),
+            )));
+        }
+    }
+
+    let total_lines = display_lines.len();
+    let scroll = state
+        .findings_scroll
+        .min(total_lines.saturating_sub(max_lines));
+    let visible: Vec<Line> = display_lines
+        .into_iter()
+        .skip(scroll)
+        .take(max_lines)
+        .collect();
+
+    let title = if outcome.accepted {
+        " Review Findings "
+    } else {
+        " Review Findings (unresolved) "
+    };
+
+    let paragraph = Paragraph::new(visible).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::DarkGray))
+            .title(Span::styled(
+                title,
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            )),
+    );
+    frame.render_widget(paragraph, area);
+}
+
+fn render_findings_status_bar(frame: &mut Frame, area: Rect, state: &AppState) {
+    let mut spans = vec![
+        Span::styled(
+            " f ",
+            Style::default()
+                .fg(Color::Black)
+                .bg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(" back  "),
+        Span::styled(
+            " \u{2191}\u{2193} ",
+            Style::default()
+                .fg(Color::Black)
+                .bg(Color::DarkGray)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(" scroll  "),
+        Span::styled(
+            " q ",
+            Style::default()
+                .fg(Color::Black)
+                .bg(Color::DarkGray)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(" quit"),
+    ];
+
+    if let Some(ref version) = state.update_available {
+        spans.push(Span::styled(
+            format!(" | v{} available", version),
+            Style::default()
+                .fg(Color::Green)
+                .add_modifier(Modifier::BOLD),
+        ));
+    }
+
+    frame.render_widget(Paragraph::new(Line::from(spans)), area);
 }
 
 fn render_patterns_list(frame: &mut Frame, area: Rect, state: &AppState, config: &Config) {
@@ -1005,7 +1324,33 @@ fn render_header(frame: &mut Frame, area: Rect, state: &AppState) {
     let task_line = if let Some(ref task) = state.current_task {
         format!("  {} — {}", task.id, task.short_desc(60))
     } else if let Some(ref planning) = state.planning {
-        format!("  Planning — {}", planning.label)
+        if planning.orchestrator_mode {
+            let iter_label = if planning.orchestrator_iteration > 0 {
+                format!(
+                    "Iteration {}/{}",
+                    planning.orchestrator_iteration, planning.orchestrator_max_iterations
+                )
+            } else {
+                "Starting...".to_string()
+            };
+            let role = planning
+                .orchestrator_role_label
+                .as_deref()
+                .unwrap_or("Preparing");
+            let model_suffix = if let Some(ref model) = planning.orchestrator_role_model {
+                format!(" with {}", model)
+            } else {
+                String::new()
+            };
+            let findings = if planning.orchestrator_finding_count > 0 {
+                format!(" | {} finding(s)", planning.orchestrator_finding_count)
+            } else {
+                String::new()
+            };
+            format!("  Design — {}: {}{}{}", iter_label, role, model_suffix, findings)
+        } else {
+            format!("  Planning — {}", planning.label)
+        }
     } else if state.is_discovering {
         "  Discovery — scanning for new work...".to_string()
     } else {
@@ -1452,8 +1797,20 @@ fn render_status_bar(frame: &mut Frame, area: Rect, state: &AppState) {
                 .add_modifier(Modifier::BOLD),
         ),
         Span::raw(" patterns"),
-        Span::styled(discovery_info, Style::default().fg(Color::DarkGray)),
     ];
+
+    if state.last_orchestrator_outcome.is_some() {
+        spans.push(Span::styled(
+            "  f ",
+            Style::default()
+                .fg(Color::Black)
+                .bg(Color::DarkGray)
+                .add_modifier(Modifier::BOLD),
+        ));
+        spans.push(Span::raw("findings"));
+    }
+
+    spans.push(Span::styled(discovery_info, Style::default().fg(Color::DarkGray)));
 
     if let Some(ref version) = state.update_available {
         spans.push(Span::styled(
@@ -1504,6 +1861,17 @@ fn render_planning_status_bar(frame: &mut Frame, area: Rect, state: &AppState) {
         ),
         Span::raw(" patterns"),
     ];
+
+    if state.last_orchestrator_outcome.is_some() {
+        spans.push(Span::styled(
+            "  f ",
+            Style::default()
+                .fg(Color::Black)
+                .bg(Color::DarkGray)
+                .add_modifier(Modifier::BOLD),
+        ));
+        spans.push(Span::raw("findings"));
+    }
 
     if let Some((_ts, msg)) = state.log_messages.last() {
         spans.push(Span::styled(
@@ -2279,6 +2647,16 @@ fn render_startup_status_bar(frame: &mut Frame, area: Rect, state: &AppState) {
                     .add_modifier(Modifier::BOLD),
             ));
             spans.push(Span::raw(" quit"));
+            if state.last_orchestrator_outcome.is_some() {
+                spans.push(Span::styled(
+                    "  f ",
+                    Style::default()
+                        .fg(Color::Black)
+                        .bg(Color::DarkGray)
+                        .add_modifier(Modifier::BOLD),
+                ));
+                spans.push(Span::raw("findings"));
+            }
             spans
         }
     };

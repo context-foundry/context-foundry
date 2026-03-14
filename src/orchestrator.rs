@@ -1,11 +1,15 @@
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 
 use crate::agent::{self, AgentOutputEvent, AgentRole, ModelProvider};
+use crate::app::commands::{ensure_required_providers_available, ProviderCommandMode};
 use crate::config::Config;
+use crate::utils::{atomic_write_file, truncate_str};
 
 // ─── Data Model ──────────────────────────────────────────────
 
@@ -55,6 +59,7 @@ pub struct OrchestratorConfig {
     pub reviewer_model: String,
     pub max_iterations: usize,
     pub accept_policy: AcceptPolicy,
+    pub agent_timeout_secs: u64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -68,6 +73,7 @@ impl OrchestratorConfig {
     pub fn from_config(config: &Config) -> Self {
         let accept_policy = match config.orchestrator_accept_policy.as_str() {
             "no-high" => AcceptPolicy::AllowLowAndMedium,
+            "no-high-medium" => AcceptPolicy::AllowLowOnly,
             "no-findings" => AcceptPolicy::RequireClean,
             _ => AcceptPolicy::AllowLowOnly,
         };
@@ -79,6 +85,7 @@ impl OrchestratorConfig {
             reviewer_model: config.orchestrator_reviewer_model.clone(),
             max_iterations: config.orchestrator_max_iterations,
             accept_policy,
+            agent_timeout_secs: config.agent_timeout_secs,
         }
     }
 }
@@ -218,7 +225,7 @@ fn parse_reviewer_output(response: &str) -> ReviewerOutput {
         status: "findings".to_string(),
         findings: vec![Finding {
             severity: "high".to_string(),
-            description: format!("Reviewer output was not valid JSON: {}", &response[..response.len().min(200)]),
+            description: format!("Reviewer output was not valid JSON: {}", truncate_str(response, 200)),
             location: String::new(),
             suggestion: "Review the raw reviewer output manually.".to_string(),
         }],
@@ -232,21 +239,36 @@ fn extract_json<T: serde::de::DeserializeOwned>(text: &str) -> Option<T> {
         return Some(parsed);
     }
 
-    // Try to find JSON object boundaries
+    // Try to find JSON object boundaries, skipping braces inside string values
     let start = text.find('{')?;
-    let mut depth = 0i32;
-    let mut end = None;
+    let mut depth: i32 = 0;
+    let mut end: Option<usize> = None;
+    let mut in_string: bool = false;
+    let mut escape_next: bool = false;
     for (i, ch) in text[start..].char_indices() {
-        match ch {
-            '{' => depth += 1,
-            '}' => {
-                depth -= 1;
-                if depth == 0 {
-                    end = Some(start + i + 1);
-                    break;
-                }
+        if escape_next {
+            escape_next = false;
+            continue;
+        }
+        if in_string {
+            match ch {
+                '\\' => escape_next = true,
+                '"' => in_string = false,
+                _ => {}
             }
-            _ => {}
+        } else {
+            match ch {
+                '"' => in_string = true,
+                '{' => depth += 1,
+                '}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        end = Some(start + i + 1);
+                        break;
+                    }
+                }
+                _ => {}
+            }
         }
     }
 
@@ -302,6 +324,8 @@ pub async fn orchestrate(
     project_dir: &Path,
     log_dir: &Path,
     on_event: impl Fn(&str),
+    event_tx: Option<mpsc::UnboundedSender<AgentOutputEvent>>,
+    shutdown: Option<Arc<AtomicBool>>,
 ) -> Result<OrchestratorOutcome> {
     let _ = std::fs::create_dir_all(log_dir);
 
@@ -309,7 +333,39 @@ pub async fn orchestrate(
     let mut last_review = None;
     let mut findings_text: Option<String> = None;
 
+    // Helper closure to send separator lines to the TUI
+    let send_separator = |tx: &Option<mpsc::UnboundedSender<AgentOutputEvent>>, text: &str| {
+        if let Some(tx) = tx {
+            let _ = tx.send(AgentOutputEvent::Text(String::new()));
+            let _ = tx.send(AgentOutputEvent::Text(text.to_string()));
+            let _ = tx.send(AgentOutputEvent::Text(String::new()));
+        }
+    };
+
     for iteration in 1..=config.max_iterations {
+        // Check shutdown flag before starting next iteration
+        if shutdown
+            .as_ref()
+            .is_some_and(|flag| flag.load(Ordering::Relaxed))
+        {
+            on_event("Shutdown requested, aborting design loop.");
+            return Ok(OrchestratorOutcome {
+                artifact: last_artifact.unwrap_or(ProposerOutput {
+                    artifact_type: "analysis".to_string(),
+                    artifact_text: "Design loop cancelled by shutdown.".to_string(),
+                    rationale: String::new(),
+                    claims: Vec::new(),
+                }),
+                final_review: last_review.unwrap_or(ReviewerOutput {
+                    status: "findings".to_string(),
+                    findings: Vec::new(),
+                    validated: Vec::new(),
+                }),
+                iterations: iteration.saturating_sub(1),
+                accepted: false,
+            });
+        }
+
         on_event(&format!(
             "Iteration {}/{}: proposer ({} {})...",
             iteration,
@@ -319,6 +375,10 @@ pub async fn orchestrate(
         ));
 
         // Run proposer
+        send_separator(
+            &event_tx,
+            &format!("--- Proposer pass (iteration {}/{}) ---", iteration, config.max_iterations),
+        );
         let prompt = proposer_prompt(intent, findings_text.as_deref());
         let proposer_result = run_agent_and_capture(
             &AgentRole::Planner,
@@ -327,6 +387,9 @@ pub async fn orchestrate(
             &prompt,
             project_dir,
             log_dir,
+            event_tx.as_ref(),
+            config.agent_timeout_secs,
+            shutdown.clone(),
         )
         .await?;
 
@@ -344,6 +407,7 @@ pub async fn orchestrate(
         ));
 
         let review_prompt = reviewer_prompt(&artifact);
+        send_separator(&event_tx, "--- Reviewer pass ---");
         let reviewer_result = run_agent_and_capture(
             &AgentRole::Reviewer,
             config.reviewer_provider,
@@ -351,13 +415,16 @@ pub async fn orchestrate(
             &review_prompt,
             project_dir,
             log_dir,
+            event_tx.as_ref(),
+            config.agent_timeout_secs,
+            shutdown.clone(),
         )
         .await?;
 
         let review = parse_reviewer_output(&reviewer_result);
         let finding_count = review.findings.len();
-        let high_count = review.findings.iter().filter(|f| f.severity == "high").count();
-        let medium_count = review.findings.iter().filter(|f| f.severity == "medium").count();
+        let high_count = review.findings.iter().filter(|f| f.severity.eq_ignore_ascii_case("high")).count();
+        let medium_count = review.findings.iter().filter(|f| f.severity.eq_ignore_ascii_case("medium")).count();
 
         on_event(&format!(
             "Review: {} ({} findings: {} high, {} medium, {} low, {} validated)",
@@ -419,6 +486,7 @@ pub async fn orchestrate(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn run_agent_and_capture(
     role: &AgentRole,
     provider: ModelProvider,
@@ -426,14 +494,25 @@ async fn run_agent_and_capture(
     prompt: &str,
     project_dir: &Path,
     log_dir: &Path,
+    tui_tx: Option<&mpsc::UnboundedSender<AgentOutputEvent>>,
+    timeout_secs: u64,
+    shutdown: Option<Arc<AtomicBool>>,
 ) -> Result<String> {
     let (output_tx, mut output_rx) = mpsc::unbounded_channel::<AgentOutputEvent>();
 
-    // Spawn a task to collect agent output events
+    // Clone the TUI forwarder for the spawned task
+    let tui_forward = tui_tx.cloned();
+
+    // Spawn a task to collect agent output events and forward to TUI
     let collector = tokio::spawn(async move {
         let mut final_text = String::new();
         let mut all_text = Vec::new();
         while let Some(evt) = output_rx.recv().await {
+            // Forward to TUI if channel is available
+            if let Some(ref tx) = tui_forward {
+                let _ = tx.send(evt.clone());
+            }
+            // Collect for text extraction
             match evt {
                 AgentOutputEvent::Result(text) => final_text = text,
                 AgentOutputEvent::Text(text) => all_text.push(text),
@@ -456,8 +535,8 @@ async fn run_agent_and_capture(
         output_tx,
         log_dir,
         None,
-        600,
-        None,
+        timeout_secs,
+        shutdown,
     )
     .await
     .context("agent execution failed")?;
@@ -471,36 +550,12 @@ async fn run_agent_and_capture(
     Ok(final_text)
 }
 
-// ─── CLI Entry Point ─────────────────────────────────────────
+// ─── Output Writing ──────────────────────────────────────────
 
-pub async fn run_design_command(project_dir: &Path, intent: &str) -> Result<()> {
-    let config = Config::load(project_dir);
-    let orch_config = OrchestratorConfig::from_config(&config);
-    let buildloop_dir = project_dir.join(".buildloop");
-    let log_dir = buildloop_dir.join("logs");
-
-    eprintln!("Foundry design mode");
-    eprintln!("Intent: {}", intent);
-    eprintln!(
-        "Proposer: {} {} | Reviewer: {} {}",
-        orch_config.proposer_provider,
-        orch_config.proposer_model,
-        orch_config.reviewer_provider,
-        orch_config.reviewer_model,
-    );
-    eprintln!("Max iterations: {}", orch_config.max_iterations);
-    eprintln!();
-
-    let outcome = orchestrate(
-        intent,
-        &orch_config,
-        project_dir,
-        &log_dir,
-        |msg| eprintln!("[orchestrator] {}", msg),
-    )
-    .await?;
-
-    // Write artifact to .buildloop/
+pub fn write_orchestrator_output(
+    buildloop_dir: &Path,
+    outcome: &OrchestratorOutcome,
+) -> std::io::Result<()> {
     let output_path = buildloop_dir.join("orchestrator-output.md");
     let output_content = format!(
         "# Orchestrator Output\n\n\
@@ -514,7 +569,11 @@ pub async fn run_design_command(project_dir: &Path, intent: &str) -> Result<()> 
          ### Validated\n{}\n",
         outcome.artifact.artifact_type,
         outcome.iterations,
-        if outcome.accepted { "accepted" } else { "unresolved findings" },
+        if outcome.accepted {
+            "accepted"
+        } else {
+            "unresolved findings"
+        },
         outcome.artifact.artifact_text,
         outcome.artifact.rationale,
         outcome.final_review.status,
@@ -533,7 +592,50 @@ pub async fn run_design_command(project_dir: &Path, intent: &str) -> Result<()> 
             .collect::<Vec<_>>()
             .join("\n"),
     );
-    std::fs::write(&output_path, &output_content)?;
+    atomic_write_file(&output_path, output_content.as_bytes())
+}
+
+// ─── CLI Entry Point ─────────────────────────────────────────
+
+pub async fn run_design_command(project_dir: &Path, intent: &str) -> Result<()> {
+    let config = Config::load(project_dir);
+    ensure_required_providers_available(&config, ProviderCommandMode::Design)?;
+    let orch_config = OrchestratorConfig::from_config(&config);
+    let buildloop_dir = project_dir.join(".buildloop");
+    let log_dir = buildloop_dir.join("logs");
+
+    eprintln!("Foundry design mode");
+    eprintln!("Intent: {}", intent);
+    eprintln!(
+        "Proposer: {} {} | Reviewer: {} {}",
+        orch_config.proposer_provider,
+        orch_config.proposer_model,
+        orch_config.reviewer_provider,
+        orch_config.reviewer_model,
+    );
+    eprintln!("Max iterations: {}", orch_config.max_iterations);
+    eprintln!();
+
+    let shutdown = Arc::new(AtomicBool::new(false));
+    let shutdown_signal = shutdown.clone();
+    tokio::spawn(async move {
+        let _ = tokio::signal::ctrl_c().await;
+        shutdown_signal.store(true, Ordering::Relaxed);
+    });
+
+    let outcome = orchestrate(
+        intent,
+        &orch_config,
+        project_dir,
+        &log_dir,
+        |msg| eprintln!("[orchestrator] {}", msg),
+        None,
+        Some(shutdown),
+    )
+    .await?;
+
+    write_orchestrator_output(&buildloop_dir, &outcome)?;
+    let output_path = buildloop_dir.join("orchestrator-output.md");
 
     eprintln!();
     if outcome.accepted {
@@ -725,8 +827,400 @@ mod tests {
             reviewer_model: "opus".to_string(),
             max_iterations: 0, // zero = immediate termination
             accept_policy: AcceptPolicy::AllowLowOnly,
+            agent_timeout_secs: 600,
         };
         // With max_iterations=0, the loop body never runs
         assert_eq!(config.max_iterations, 0);
+    }
+
+    #[test]
+    fn is_accepted_rejects_clean_status_with_findings() {
+        let review = ReviewerOutput {
+            status: "clean".to_string(),
+            findings: vec![Finding {
+                severity: "high".to_string(),
+                description: "Missed bug".to_string(),
+                location: "main.rs:1".to_string(),
+                suggestion: "Fix it".to_string(),
+            }],
+            validated: Vec::new(),
+        };
+        assert!(!is_accepted(&review, AcceptPolicy::AllowLowAndMedium));
+        assert!(!is_accepted(&review, AcceptPolicy::AllowLowOnly));
+        assert!(!is_accepted(&review, AcceptPolicy::RequireClean));
+    }
+
+    #[test]
+    fn is_accepted_allows_clean_status_with_low_findings_under_low_policy() {
+        let review = ReviewerOutput {
+            status: "clean".to_string(),
+            findings: vec![Finding {
+                severity: "low".to_string(),
+                description: "Nit".to_string(),
+                location: String::new(),
+                suggestion: String::new(),
+            }],
+            validated: Vec::new(),
+        };
+        assert!(is_accepted(&review, AcceptPolicy::AllowLowOnly));
+        assert!(is_accepted(&review, AcceptPolicy::AllowLowAndMedium));
+        assert!(!is_accepted(&review, AcceptPolicy::RequireClean));
+    }
+
+    #[test]
+    fn severity_matching_is_case_insensitive() {
+        let review_high_upper = ReviewerOutput {
+            status: "findings".to_string(),
+            findings: vec![Finding {
+                severity: "HIGH".to_string(),
+                description: "Bug".to_string(),
+                location: String::new(),
+                suggestion: String::new(),
+            }],
+            validated: Vec::new(),
+        };
+        assert!(!is_accepted(&review_high_upper, AcceptPolicy::AllowLowAndMedium));
+
+        let review_high_title = ReviewerOutput {
+            status: "findings".to_string(),
+            findings: vec![Finding {
+                severity: "High".to_string(),
+                description: "Bug".to_string(),
+                location: String::new(),
+                suggestion: String::new(),
+            }],
+            validated: Vec::new(),
+        };
+        assert!(!is_accepted(&review_high_title, AcceptPolicy::AllowLowAndMedium));
+
+        let review_medium_upper = ReviewerOutput {
+            status: "findings".to_string(),
+            findings: vec![Finding {
+                severity: "MEDIUM".to_string(),
+                description: "Issue".to_string(),
+                location: String::new(),
+                suggestion: String::new(),
+            }],
+            validated: Vec::new(),
+        };
+        assert!(!is_accepted(&review_medium_upper, AcceptPolicy::AllowLowOnly));
+
+        let review_medium_title = ReviewerOutput {
+            status: "findings".to_string(),
+            findings: vec![Finding {
+                severity: "Medium".to_string(),
+                description: "Issue".to_string(),
+                location: String::new(),
+                suggestion: String::new(),
+            }],
+            validated: Vec::new(),
+        };
+        assert!(!is_accepted(&review_medium_title, AcceptPolicy::AllowLowOnly));
+
+        let review_low_upper = ReviewerOutput {
+            status: "findings".to_string(),
+            findings: vec![Finding {
+                severity: "LOW".to_string(),
+                description: "Nit".to_string(),
+                location: String::new(),
+                suggestion: String::new(),
+            }],
+            validated: Vec::new(),
+        };
+        assert!(is_accepted(&review_low_upper, AcceptPolicy::AllowLowOnly));
+
+        let review_low_title = ReviewerOutput {
+            status: "findings".to_string(),
+            findings: vec![Finding {
+                severity: "Low".to_string(),
+                description: "Nit".to_string(),
+                location: String::new(),
+                suggestion: String::new(),
+            }],
+            validated: Vec::new(),
+        };
+        assert!(is_accepted(&review_low_title, AcceptPolicy::AllowLowOnly));
+    }
+
+    #[test]
+    fn extract_json_from_triple_backtick_fenced_block() {
+        let input = "Here is the output:\n```json\n{\"status\":\"findings\",\"findings\":[{\"severity\":\"high\",\"description\":\"Bug\",\"location\":\"x.rs\",\"suggestion\":\"fix\"}],\"validated\":[\"claim1\"]}\n```\nDone.";
+        let result = extract_json::<ReviewerOutput>(input);
+        assert!(result.is_some());
+        let parsed = result.unwrap();
+        assert_eq!(parsed.status, "findings");
+        assert_eq!(parsed.findings.len(), 1);
+        assert_eq!(parsed.findings[0].severity, "high");
+        assert_eq!(parsed.validated.len(), 1);
+        assert_eq!(parsed.validated[0], "claim1");
+    }
+
+    #[test]
+    fn extract_json_from_backtick_fenced_without_language_tag() {
+        let input = "```\n{\"artifact_type\":\"plan\",\"artifact_text\":\"Do X\",\"rationale\":\"Y\",\"claims\":[]}\n```";
+        let result = extract_json::<ProposerOutput>(input);
+        assert!(result.is_some());
+        let parsed = result.unwrap();
+        assert_eq!(parsed.artifact_type, "plan");
+        assert_eq!(parsed.artifact_text, "Do X");
+    }
+
+    #[test]
+    fn extract_json_returns_none_for_no_json() {
+        let input = "This is plain text with no braces or JSON";
+        let result = extract_json::<ReviewerOutput>(input);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn extract_json_handles_nested_braces() {
+        let input = "Result: {\"artifact_type\":\"code_change\",\"artifact_text\":\"fn main() { println!(\\\"hello\\\"); }\",\"rationale\":\"test\",\"claims\":[]}";
+        let result = extract_json::<ProposerOutput>(input);
+        assert!(result.is_some());
+        let parsed = result.unwrap();
+        assert_eq!(parsed.artifact_type, "code_change");
+        assert!(parsed.artifact_text.contains("println"));
+    }
+
+    #[test]
+    fn extract_json_skips_braces_inside_string_values() {
+        let input = r#"{"artifact_type":"code","artifact_text":"x } y","rationale":"test","claims":[]}"#;
+        let result = extract_json::<ProposerOutput>(input);
+        assert!(result.is_some());
+        let parsed = result.unwrap();
+        assert_eq!(parsed.artifact_type, "code");
+        assert_eq!(parsed.artifact_text, "x } y");
+    }
+
+    #[test]
+    fn extract_json_skips_braces_in_multiline_code_artifact() {
+        let input = r#"{"artifact_type":"code_change","artifact_text":"fn main() {\n    println!(\"hello\");\n}\nfn helper() {","rationale":"partial","claims":[]}"#;
+        let result = extract_json::<ProposerOutput>(input);
+        assert!(result.is_some());
+        let parsed = result.unwrap();
+        assert_eq!(parsed.artifact_type, "code_change");
+        assert!(parsed.artifact_text.contains("fn helper()"));
+    }
+
+    #[test]
+    fn extract_json_handles_escaped_quotes_in_strings() {
+        let input = r#"{"artifact_type":"test","artifact_text":"she said \"hello\" and {left}","rationale":"r","claims":[]}"#;
+        let result = extract_json::<ProposerOutput>(input);
+        assert!(result.is_some());
+        let parsed = result.unwrap();
+        assert_eq!(parsed.artifact_text, r#"she said "hello" and {left}"#);
+    }
+
+    #[test]
+    fn extract_json_handles_escaped_backslash_before_quote() {
+        let input = r#"{"status":"clean","findings":[],"validated":["path is C:\\"]}"#;
+        let result = extract_json::<ReviewerOutput>(input);
+        assert!(result.is_some());
+        let parsed = result.unwrap();
+        assert_eq!(parsed.status, "clean");
+        assert_eq!(parsed.validated.len(), 1);
+        assert_eq!(parsed.validated[0], r#"path is C:\"#);
+    }
+
+    #[test]
+    fn extract_json_with_only_opening_brace_in_string() {
+        let input = r#"Preamble text {"artifact_type":"analysis","artifact_text":"{ { {","rationale":"test","claims":[]}"#;
+        let result = extract_json::<ProposerOutput>(input);
+        assert!(result.is_some());
+        let parsed = result.unwrap();
+        assert_eq!(parsed.artifact_type, "analysis");
+        assert_eq!(parsed.artifact_text, "{ { {");
+    }
+
+    #[test]
+    fn format_findings_omits_empty_location_and_suggestion() {
+        let review = ReviewerOutput {
+            status: "findings".to_string(),
+            findings: vec![Finding {
+                severity: "medium".to_string(),
+                description: "Something wrong".to_string(),
+                location: String::new(),
+                suggestion: String::new(),
+            }],
+            validated: Vec::new(),
+        };
+        let formatted = format_findings_for_proposer(&review);
+        assert!(formatted.contains("Something wrong"));
+        assert!(formatted.contains("[medium]"));
+        assert!(!formatted.contains(" at "));
+        assert!(!formatted.contains("Suggestion:"));
+    }
+
+    #[test]
+    fn write_orchestrator_output_creates_file() {
+        let unique_nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("foundry-orch-write-{}", unique_nanos));
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let outcome = OrchestratorOutcome {
+            artifact: ProposerOutput {
+                artifact_type: "plan".to_string(),
+                artifact_text: "Build the thing".to_string(),
+                rationale: "Because reasons".to_string(),
+                claims: vec!["claim1".to_string()],
+            },
+            final_review: ReviewerOutput {
+                status: "clean".to_string(),
+                findings: Vec::new(),
+                validated: vec!["claim1".to_string()],
+            },
+            iterations: 2,
+            accepted: true,
+        };
+
+        let result = write_orchestrator_output(&dir, &outcome);
+        assert!(result.is_ok());
+
+        let content = std::fs::read_to_string(dir.join("orchestrator-output.md")).unwrap();
+        assert!(content.contains("Type: plan"));
+        assert!(content.contains("Iterations: 2"));
+        assert!(content.contains("Status: accepted"));
+        assert!(content.contains("Build the thing"));
+        assert!(content.contains("Because reasons"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn write_orchestrator_output_unresolved_shows_findings() {
+        let unique_nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("foundry-orch-unresolved-{}", unique_nanos));
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let outcome = OrchestratorOutcome {
+            artifact: ProposerOutput {
+                artifact_type: "analysis".to_string(),
+                artifact_text: "Incomplete result".to_string(),
+                rationale: String::new(),
+                claims: Vec::new(),
+            },
+            final_review: ReviewerOutput {
+                status: "findings".to_string(),
+                findings: vec![Finding {
+                    severity: "high".to_string(),
+                    description: "Critical bug".to_string(),
+                    location: "main.rs:5".to_string(),
+                    suggestion: "Fix it".to_string(),
+                }],
+                validated: Vec::new(),
+            },
+            iterations: 3,
+            accepted: false,
+        };
+
+        let result = write_orchestrator_output(&dir, &outcome);
+        assert!(result.is_ok());
+
+        let content = std::fs::read_to_string(dir.join("orchestrator-output.md")).unwrap();
+        assert!(content.contains("Status: unresolved findings"));
+        assert!(content.contains("Critical bug"));
+        assert!(content.contains("[high]"));
+        assert!(content.contains("main.rs:5"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn from_config_parses_accept_policy() {
+        // "no-high-medium" (the default) maps to AllowLowOnly
+        let mut config = Config::default();
+        config.orchestrator_accept_policy = "no-high-medium".into();
+        let orch = OrchestratorConfig::from_config(&config);
+        assert_eq!(orch.accept_policy, AcceptPolicy::AllowLowOnly);
+
+        // "no-high" maps to AllowLowAndMedium
+        config.orchestrator_accept_policy = "no-high".into();
+        let orch = OrchestratorConfig::from_config(&config);
+        assert_eq!(orch.accept_policy, AcceptPolicy::AllowLowAndMedium);
+
+        // "no-findings" maps to RequireClean
+        config.orchestrator_accept_policy = "no-findings".into();
+        let orch = OrchestratorConfig::from_config(&config);
+        assert_eq!(orch.accept_policy, AcceptPolicy::RequireClean);
+
+        // Unknown string falls back to AllowLowOnly
+        config.orchestrator_accept_policy = "unknown-value".into();
+        let orch = OrchestratorConfig::from_config(&config);
+        assert_eq!(orch.accept_policy, AcceptPolicy::AllowLowOnly);
+    }
+
+    #[test]
+    fn finding_count_log_matches_acceptance_for_mixed_case_severity() {
+        // Simulate the same counting logic used in the orchestrate() log line (lines 424-425)
+        // to verify it agrees with is_accepted() for all casing variants.
+        let cases: Vec<(&str, &str)> = vec![
+            ("high", "medium"),
+            ("HIGH", "MEDIUM"),
+            ("High", "Medium"),
+            ("hIgH", "mEdIuM"),
+        ];
+
+        for (high_str, medium_str) in &cases {
+            let review = ReviewerOutput {
+                status: "findings".to_string(),
+                findings: vec![
+                    Finding {
+                        severity: high_str.to_string(),
+                        description: "Bug".to_string(),
+                        location: String::new(),
+                        suggestion: String::new(),
+                    },
+                    Finding {
+                        severity: medium_str.to_string(),
+                        description: "Issue".to_string(),
+                        location: String::new(),
+                        suggestion: String::new(),
+                    },
+                ],
+                validated: Vec::new(),
+            };
+
+            // Replicate the counting logic from orchestrate()
+            let high_count = review
+                .findings
+                .iter()
+                .filter(|f| f.severity.eq_ignore_ascii_case("high"))
+                .count();
+            let medium_count = review
+                .findings
+                .iter()
+                .filter(|f| f.severity.eq_ignore_ascii_case("medium"))
+                .count();
+
+            assert_eq!(
+                high_count, 1,
+                "high_count should be 1 for severity='{}' but got {}",
+                high_str, high_count
+            );
+            assert_eq!(
+                medium_count, 1,
+                "medium_count should be 1 for severity='{}' but got {}",
+                medium_str, medium_count
+            );
+
+            // Verify log counts agree with is_accepted
+            assert!(
+                !is_accepted(&review, AcceptPolicy::AllowLowAndMedium),
+                "is_accepted should reject when high='{}' is present",
+                high_str
+            );
+            assert!(
+                !is_accepted(&review, AcceptPolicy::AllowLowOnly),
+                "is_accepted should reject when high='{}' or medium='{}' is present",
+                high_str,
+                medium_str
+            );
+        }
     }
 }

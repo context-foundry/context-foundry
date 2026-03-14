@@ -172,7 +172,9 @@ pub(in crate::studio) fn render_attachment_manager(frame: &mut Frame, state: &St
     };
 
     let theme = &state.theme;
-    let contract = state.selected_execution_contract();
+    let Some(contract) = state.selected_execution_contract() else {
+        return;
+    };
     let area = centered_rect(76, 18, frame.area());
     let mut lines = vec![
         Line::from(Span::styled(

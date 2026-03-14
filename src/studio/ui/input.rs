@@ -10,7 +10,7 @@ use std::{
 };
 use tokio::{sync::mpsc, task::JoinHandle};
 
-use crate::{agent::AgentOutputEvent, tui};
+use crate::{agent::AgentOutputEvent, tui, utils::atomic_write_file};
 
 use super::{
     super::{
@@ -748,7 +748,7 @@ fn persist_editor_choice(project_dir: &Path, choice: EditorChoice) -> Result<()>
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
-    fs::write(path, choice.persist_value())?;
+    atomic_write_file(&path, choice.persist_value().as_bytes())?;
     Ok(())
 }
 
@@ -771,7 +771,10 @@ fn request_delete_selected_execution_contract(state: &mut StudioState) {
     }
 
     state.delete_confirmation = Some(DeleteConfirmationState {
-        contract_name: state.selected_execution_contract().name.clone(),
+        contract_name: state
+            .selected_execution_contract()
+            .map(|c| c.name.clone())
+            .unwrap_or_default(),
     });
 }
 
@@ -902,11 +905,12 @@ fn select_execution_contract_from_click(state: &mut StudioState, area: Rect, row
     let index = row.saturating_sub(area.y.saturating_add(2)) as usize;
     if index < state.execution_contracts.len() {
         state.set_selected_execution_contract_index(index);
-        if let Err(err) = persist_selected_execution_contract(
-            &state.project_dir,
-            &state.selected_execution_contract().file_name,
-        ) {
-            state.log(format!("failed to persist selected contract: {}", err));
+        if let Some(contract) = state.selected_execution_contract() {
+            if let Err(err) =
+                persist_selected_execution_contract(&state.project_dir, &contract.file_name)
+            {
+                state.log(format!("failed to persist selected contract: {}", err));
+            }
         }
     }
 }

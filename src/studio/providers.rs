@@ -8,7 +8,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::{agent::ModelProvider, utils::truncate_str};
+use crate::{agent::ModelProvider, utils::{atomic_write_file_best_effort, truncate_str}};
 
 use super::{
     model::{
@@ -505,7 +505,7 @@ fn save_cached_live_probe(
         let _ = fs::create_dir_all(parent);
     }
     if let Ok(content) = serde_json::to_string_pretty(&cache) {
-        let _ = fs::write(path, content);
+        atomic_write_file_best_effort(&path, content.as_bytes());
     }
 }
 
@@ -568,7 +568,8 @@ pub(super) fn display_model_name(model: &str) -> &str {
 }
 
 fn command_exists(command: &str) -> bool {
-    std::process::Command::new("which")
+    let lookup_cmd = if cfg!(target_os = "windows") { "where" } else { "which" };
+    std::process::Command::new(lookup_cmd)
         .arg(command)
         .output()
         .map(|output| output.status.success())

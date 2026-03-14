@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use anyhow::Result;
@@ -90,7 +91,7 @@ pub(super) async fn run_append_tasks(
         agent_tx,
         &ctx.log_dir,
         Some(&["Read", "Write"]),
-        300,
+        ctx.config.agent_timeout_secs,
         Some(ctx.shutdown.clone()),
     )
     .await;
@@ -133,7 +134,15 @@ pub(super) async fn run_plan_mode(project_dir: &Path, max_iterations: u64) -> Re
         project_dir,
         crate::config::Config::load(project_dir),
         std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        std::sync::Arc::new(std::sync::Mutex::new(())),
     );
+
+    let shutdown_signal = ctx.shutdown.clone();
+    tokio::spawn(async move {
+        let _ = tokio::signal::ctrl_c().await;
+        shutdown_signal.store(true, Ordering::Relaxed);
+    });
+
     super::commands::ensure_required_providers_available(
         &ctx.config,
         super::commands::ProviderCommandMode::Plan,
@@ -173,6 +182,11 @@ pub(super) async fn run_plan_mode(project_dir: &Path, max_iterations: u64) -> Re
         if stop_file.exists() {
             let _ = std::fs::remove_file(stop_file);
             eprintln!("Stop signal received");
+            break;
+        }
+
+        if ctx.shutdown.load(Ordering::Relaxed) {
+            eprintln!("Shutdown signal received");
             break;
         }
 
@@ -356,6 +370,7 @@ mod tests {
             &dir,
             config,
             std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            std::sync::Arc::new(std::sync::Mutex::new(())),
         );
 
         assert_eq!(load_gap_analysis_pattern_context(&ctx), "");
@@ -390,6 +405,7 @@ mod tests {
             &dir,
             config,
             std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            std::sync::Arc::new(std::sync::Mutex::new(())),
         );
         let context = load_gap_analysis_pattern_context(&ctx);
 

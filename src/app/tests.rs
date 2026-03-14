@@ -5,13 +5,15 @@ use super::startup::{
 };
 use super::state::{
     AppEvent, AppPhase, AppState, LoopEvent, PendingTransition, PlanStatus, PlanningOutcome,
-    StartupAction, StartupScenario, StartupState,
+    PlanningState, StartupAction, StartupScenario, StartupState,
 };
 use super::{
-    apply_pending_transition, apply_planning_outcome, handle_event, prepare_append_tasks_start,
-    process_received_event, seed_spec_from_brief,
+    apply_orchestrator_outcome, apply_pending_transition, apply_planning_outcome, handle_event,
+    prepare_append_tasks_start, process_received_event, seed_spec_from_brief,
 };
 use crate::config::Config;
+use crate::agent::{AgentOutputEvent, AgentRole};
+use crate::orchestrator::{Finding, OrchestratorOutcome, ProposerOutput, ReviewerOutput};
 use crossterm::event::{self, KeyCode, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -710,8 +712,8 @@ fn startup_scroll_events_are_debounced_immediately_after_click() {
         PlanStatus::Pending(1),
         None,
     ));
-    // EditSpec is now at index 3 (after ViewTasks)
-    set_startup_selected_action(&mut state, 3);
+    // EditSpec is now at index 4 (after DesignWithReview and ViewTasks)
+    set_startup_selected_action(&mut state, 4);
 
     handle_startup_mouse_at(
         &mut state,
@@ -1013,7 +1015,7 @@ fn startup_scan_project_accepts_empty_input() {
         PlanStatus::Missing,
         None,
     ));
-    set_startup_selected_action(&mut state, 1);
+    set_startup_selected_action(&mut state, 2);
 
     // Press Enter with empty input -- should work for ScanProject
     handle_startup_key(
@@ -1047,7 +1049,7 @@ fn startup_scan_project_uses_focus_text() {
         PlanStatus::Missing,
         None,
     ));
-    set_startup_selected_action(&mut state, 1);
+    set_startup_selected_action(&mut state, 2);
 
     // Type focus text
     for c in "auth bugs".chars() {
@@ -1261,4 +1263,708 @@ fn running_queue_updated_event_populates_task_queue() {
     assert_eq!(state.task_queue.len(), 2);
     assert!(state.task_queue[0].completed);
     assert!(!state.task_queue[1].completed);
+}
+
+// ─── Design with review tests ────────────────────────────────
+
+#[test]
+fn test_design_with_review_not_in_empty_project() {
+    let dir = temp_project_dir("foundry-design-empty");
+    let startup = StartupState::new(&dir, StartupScenario::EmptyProject, PlanStatus::Missing, None);
+    assert!(!startup.actions.contains(&StartupAction::DesignWithReview));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn test_design_with_review_in_needs_queue() {
+    let dir = temp_project_dir("foundry-design-needs-queue");
+    write_file(
+        &dir.join("Cargo.toml"),
+        "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n",
+    );
+    let startup = StartupState::new(&dir, StartupScenario::NeedsQueue, PlanStatus::Missing, None);
+    assert!(startup.actions.contains(&StartupAction::DesignWithReview));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn test_design_with_review_in_queue_ready() {
+    let dir = temp_project_dir("foundry-design-queue-ready");
+    write_file(
+        &dir.join("TASKS.md"),
+        "# Plan\n\n- [ ] T1.1: Pending task\n",
+    );
+    let startup =
+        StartupState::new(&dir, StartupScenario::QueueReady, PlanStatus::Pending(1), None);
+    assert!(startup.actions.contains(&StartupAction::DesignWithReview));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn test_design_with_review_action_sets_start_design_transition() {
+    let dir = temp_project_dir("foundry-design-transition");
+    write_file(
+        &dir.join("Cargo.toml"),
+        "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n",
+    );
+    let mut state = AppState::new(dir.join(".buildloop"));
+    state.startup = Some(StartupState::new(
+        &dir,
+        StartupScenario::NeedsQueue,
+        PlanStatus::Missing,
+        None,
+    ));
+    let startup = state.startup.as_mut().unwrap();
+    let idx = startup
+        .actions
+        .iter()
+        .position(|a| *a == StartupAction::DesignWithReview)
+        .expect("DesignWithReview should be in actions");
+    startup.selected_action = idx;
+    startup.intent_input = "design a REST API".to_string();
+
+    activate_startup_action(&mut state, StartupAction::DesignWithReview);
+
+    match &state.pending_transition {
+        Some(PendingTransition::StartDesign { user_intent }) => {
+            assert_eq!(user_intent, "design a REST API");
+        }
+        other => panic!("expected StartDesign transition, got {:?}", other),
+    }
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn test_design_with_review_empty_intent_shows_message() {
+    let dir = temp_project_dir("foundry-design-empty-intent");
+    write_file(
+        &dir.join("Cargo.toml"),
+        "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n",
+    );
+    let mut state = AppState::new(dir.join(".buildloop"));
+    state.startup = Some(StartupState::new(
+        &dir,
+        StartupScenario::NeedsQueue,
+        PlanStatus::Missing,
+        None,
+    ));
+    let startup = state.startup.as_mut().unwrap();
+    startup.intent_input = "".to_string();
+
+    activate_startup_action(&mut state, StartupAction::DesignWithReview);
+
+    assert!(state.pending_transition.is_none());
+    assert!(state
+        .startup
+        .as_ref()
+        .unwrap()
+        .status_message
+        .as_ref()
+        .unwrap()
+        .contains("Describe what you want designed first."));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn test_orchestrator_outcome_accepted_shows_startup() {
+    let dir = temp_project_dir("foundry-orch-accepted");
+    let mut state = AppState::new(dir.join(".buildloop"));
+    state.phase = AppPhase::Planning;
+
+    let outcome = OrchestratorOutcome {
+        artifact: ProposerOutput {
+            artifact_type: "plan".to_string(),
+            artifact_text: "Build X".to_string(),
+            rationale: "Because".to_string(),
+            claims: Vec::new(),
+        },
+        final_review: ReviewerOutput {
+            status: "clean".to_string(),
+            findings: Vec::new(),
+            validated: Vec::new(),
+        },
+        iterations: 2,
+        accepted: true,
+    };
+
+    apply_orchestrator_outcome(&mut state, outcome);
+
+    match &state.pending_transition {
+        Some(PendingTransition::ShowStartup { message: Some(m) }) => {
+            assert!(m.contains("accepted"), "message should contain 'accepted': {}", m);
+            assert!(m.contains("2 iteration(s)"), "message should contain '2 iteration(s)': {}", m);
+        }
+        other => panic!("expected ShowStartup transition, got {:?}", other),
+    }
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn test_orchestrator_outcome_unresolved_shows_startup() {
+    let dir = temp_project_dir("foundry-orch-unresolved");
+    let mut state = AppState::new(dir.join(".buildloop"));
+    state.phase = AppPhase::Planning;
+
+    let outcome = OrchestratorOutcome {
+        artifact: ProposerOutput {
+            artifact_type: "plan".to_string(),
+            artifact_text: "Build X".to_string(),
+            rationale: "Because".to_string(),
+            claims: Vec::new(),
+        },
+        final_review: ReviewerOutput {
+            status: "findings".to_string(),
+            findings: Vec::new(),
+            validated: Vec::new(),
+        },
+        iterations: 3,
+        accepted: false,
+    };
+
+    apply_orchestrator_outcome(&mut state, outcome);
+
+    match &state.pending_transition {
+        Some(PendingTransition::ShowStartup { message: Some(m) }) => {
+            assert!(
+                m.contains("unresolved findings"),
+                "message should contain 'unresolved findings': {}",
+                m
+            );
+            assert!(
+                m.contains("3 iteration(s)"),
+                "message should contain '3 iteration(s)': {}",
+                m
+            );
+        }
+        other => panic!("expected ShowStartup transition, got {:?}", other),
+    }
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+// ─── Orchestrator TUI integration tests ──────────────────────
+
+#[test]
+fn test_design_with_review_intent_enter_creates_start_design_transition() {
+    let dir = temp_project_dir("foundry-design-intent-enter");
+    write_file(
+        &dir.join("Cargo.toml"),
+        "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n",
+    );
+    let mut state = AppState::new(dir.join(".buildloop"));
+    state.startup = Some(StartupState::new(
+        &dir,
+        StartupScenario::NeedsQueue,
+        PlanStatus::Missing,
+        None,
+    ));
+    let idx = state
+        .startup
+        .as_ref()
+        .unwrap()
+        .actions
+        .iter()
+        .position(|a| *a == StartupAction::DesignWithReview)
+        .expect("DesignWithReview action not found");
+    set_startup_selected_action(&mut state, idx);
+    assert!(state.startup.as_ref().unwrap().entering_intent);
+    for c in "design a CLI tool".chars() {
+        handle_startup_key(
+            &mut state,
+            event::KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE),
+        );
+    }
+    handle_startup_key(
+        &mut state,
+        event::KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+    );
+    match &state.pending_transition {
+        Some(PendingTransition::StartDesign { user_intent }) => {
+            assert_eq!(user_intent, "design a CLI tool");
+        }
+        other => panic!("expected StartDesign transition, got {:?}", other),
+    }
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn test_design_with_review_intent_enter_rejects_empty() {
+    let dir = temp_project_dir("foundry-design-intent-empty");
+    write_file(
+        &dir.join("Cargo.toml"),
+        "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n",
+    );
+    let mut state = AppState::new(dir.join(".buildloop"));
+    state.startup = Some(StartupState::new(
+        &dir,
+        StartupScenario::NeedsQueue,
+        PlanStatus::Missing,
+        None,
+    ));
+    let idx = state
+        .startup
+        .as_ref()
+        .unwrap()
+        .actions
+        .iter()
+        .position(|a| *a == StartupAction::DesignWithReview)
+        .expect("DesignWithReview action not found");
+    set_startup_selected_action(&mut state, idx);
+    handle_startup_key(
+        &mut state,
+        event::KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+    );
+    assert!(state.pending_transition.is_none());
+    assert!(
+        state
+            .startup
+            .as_ref()
+            .unwrap()
+            .status_message
+            .as_ref()
+            .unwrap()
+            .contains("Describe what you want designed first.")
+    );
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn test_planning_header_orchestrator_mode_initial_state() {
+    let mut state = AppState::new(PathBuf::from(".buildloop"));
+    state.phase = AppPhase::Planning;
+    state.planning = Some(PlanningState {
+        label: "Design: build API".to_string(),
+        user_intent: Some("build API".to_string()),
+        orchestrator_mode: true,
+        orchestrator_iteration: 0,
+        orchestrator_max_iterations: 3,
+        orchestrator_finding_count: 0,
+        orchestrator_role_label: None,
+        orchestrator_role_model: None,
+    });
+    let planning = state.planning.as_ref().unwrap();
+    assert!(planning.orchestrator_mode);
+    assert_eq!(planning.orchestrator_iteration, 0);
+    assert_eq!(planning.orchestrator_max_iterations, 3);
+    assert!(planning.orchestrator_role_label.is_none());
+    assert_eq!(planning.orchestrator_finding_count, 0);
+}
+
+#[test]
+fn test_planning_event_iteration_line_updates_iteration_count() {
+    let mut state = AppState::new(PathBuf::from(".buildloop"));
+    state.phase = AppPhase::Planning;
+    state.planning = Some(PlanningState {
+        label: "Design: test".to_string(),
+        user_intent: None,
+        orchestrator_mode: true,
+        orchestrator_iteration: 0,
+        orchestrator_max_iterations: 3,
+        orchestrator_finding_count: 0,
+        orchestrator_role_label: None,
+        orchestrator_role_model: None,
+    });
+    let (_event_tx, mut event_rx) = mpsc::unbounded_channel::<AppEvent>();
+    process_received_event(
+        &mut state,
+        AppEvent::AgentOutput(AgentOutputEvent::Text(
+            "[orchestrator] Iteration 2/3: proposer (Claude opus)".to_string(),
+        )),
+        &mut event_rx,
+    );
+    let planning = state.planning.as_ref().unwrap();
+    assert_eq!(planning.orchestrator_iteration, 2);
+    assert_eq!(planning.orchestrator_role_label.as_deref(), Some("Proposing"));
+    assert_eq!(planning.orchestrator_role_model.as_deref(), Some("Claude opus"));
+}
+
+#[test]
+fn test_planning_event_reviewing_line_updates_role() {
+    let mut state = AppState::new(PathBuf::from(".buildloop"));
+    state.phase = AppPhase::Planning;
+    state.planning = Some(PlanningState {
+        label: "Design: test".to_string(),
+        user_intent: None,
+        orchestrator_mode: true,
+        orchestrator_iteration: 1,
+        orchestrator_max_iterations: 3,
+        orchestrator_finding_count: 0,
+        orchestrator_role_label: None,
+        orchestrator_role_model: None,
+    });
+    let (_event_tx, mut event_rx) = mpsc::unbounded_channel::<AppEvent>();
+    process_received_event(
+        &mut state,
+        AppEvent::AgentOutput(AgentOutputEvent::Text(
+            "[orchestrator] Reviewing with Codex codex-5.4...".to_string(),
+        )),
+        &mut event_rx,
+    );
+    let planning = state.planning.as_ref().unwrap();
+    assert_eq!(planning.orchestrator_role_label.as_deref(), Some("Reviewing"));
+    assert_eq!(planning.orchestrator_role_model.as_deref(), Some("Codex codex-5.4"));
+}
+
+#[test]
+fn test_planning_event_review_line_updates_finding_count() {
+    let mut state = AppState::new(PathBuf::from(".buildloop"));
+    state.phase = AppPhase::Planning;
+    state.planning = Some(PlanningState {
+        label: "Design: test".to_string(),
+        user_intent: None,
+        orchestrator_mode: true,
+        orchestrator_iteration: 0,
+        orchestrator_max_iterations: 0,
+        orchestrator_finding_count: 0,
+        orchestrator_role_label: None,
+        orchestrator_role_model: None,
+    });
+    let (_event_tx, mut event_rx) = mpsc::unbounded_channel::<AppEvent>();
+    process_received_event(
+        &mut state,
+        AppEvent::AgentOutput(AgentOutputEvent::Text(
+            "[orchestrator] Review: findings (3 issues found)".to_string(),
+        )),
+        &mut event_rx,
+    );
+    assert_eq!(state.planning.as_ref().unwrap().orchestrator_finding_count, 3);
+}
+
+#[test]
+fn test_planning_event_non_orchestrator_mode_ignores_orchestrator_lines() {
+    let mut state = AppState::new(PathBuf::from(".buildloop"));
+    state.phase = AppPhase::Planning;
+    state.planning = Some(PlanningState {
+        label: "Planning: scan".to_string(),
+        user_intent: None,
+        orchestrator_mode: false,
+        orchestrator_iteration: 0,
+        orchestrator_max_iterations: 0,
+        orchestrator_finding_count: 0,
+        orchestrator_role_label: None,
+        orchestrator_role_model: None,
+    });
+    let (_event_tx, mut event_rx) = mpsc::unbounded_channel::<AppEvent>();
+    process_received_event(
+        &mut state,
+        AppEvent::AgentOutput(AgentOutputEvent::Text(
+            "[orchestrator] Iteration 2/3: proposer (Claude opus)".to_string(),
+        )),
+        &mut event_rx,
+    );
+    let planning = state.planning.as_ref().unwrap();
+    assert_eq!(planning.orchestrator_iteration, 0);
+    assert!(planning.orchestrator_role_label.is_none());
+}
+
+#[test]
+fn test_orchestrator_outcome_with_findings_enables_findings_panel() {
+    let mut state = AppState::new(PathBuf::from(".buildloop"));
+    state.phase = AppPhase::Planning;
+    let outcome = OrchestratorOutcome {
+        artifact: ProposerOutput {
+            artifact_type: "plan".to_string(),
+            artifact_text: "Build API".to_string(),
+            rationale: "Because".to_string(),
+            claims: Vec::new(),
+        },
+        final_review: ReviewerOutput {
+            status: "findings".to_string(),
+            findings: vec![
+                Finding {
+                    severity: "high".to_string(),
+                    description: "Missing error handling".to_string(),
+                    location: "src/main.rs:42".to_string(),
+                    suggestion: "Add Result return type".to_string(),
+                },
+                Finding {
+                    severity: "medium".to_string(),
+                    description: "No input validation".to_string(),
+                    location: "src/api.rs:10".to_string(),
+                    suggestion: "Add bounds check".to_string(),
+                },
+            ],
+            validated: Vec::new(),
+        },
+        iterations: 2,
+        accepted: false,
+    };
+    apply_orchestrator_outcome(&mut state, outcome);
+    assert!(state.show_findings);
+    assert_eq!(state.findings_scroll, 0);
+    assert!(state.last_orchestrator_outcome.is_some());
+    let saved = state.last_orchestrator_outcome.as_ref().unwrap();
+    assert_eq!(saved.final_review.findings.len(), 2);
+    assert_eq!(saved.final_review.findings[0].severity, "high");
+    assert_eq!(saved.final_review.findings[1].severity, "medium");
+    assert!(!saved.accepted);
+}
+
+#[test]
+fn test_orchestrator_outcome_accepted_does_not_enable_findings_panel() {
+    let mut state = AppState::new(PathBuf::from(".buildloop"));
+    state.phase = AppPhase::Planning;
+    let outcome = OrchestratorOutcome {
+        artifact: ProposerOutput {
+            artifact_type: "plan".to_string(),
+            artifact_text: "Build API".to_string(),
+            rationale: "Done".to_string(),
+            claims: Vec::new(),
+        },
+        final_review: ReviewerOutput {
+            status: "pass".to_string(),
+            findings: Vec::new(),
+            validated: vec!["Claim A".to_string(), "Claim B".to_string()],
+        },
+        iterations: 1,
+        accepted: true,
+    };
+    apply_orchestrator_outcome(&mut state, outcome);
+    assert!(!state.show_findings);
+    assert!(state.last_orchestrator_outcome.is_some());
+    assert_eq!(
+        state
+            .last_orchestrator_outcome
+            .as_ref()
+            .unwrap()
+            .final_review
+            .validated
+            .len(),
+        2
+    );
+}
+
+#[test]
+fn test_agent_output_forwarding_produces_visible_events() {
+    let mut state = AppState::new(PathBuf::from(".buildloop"));
+    state.phase = AppPhase::Planning;
+    state.planning = Some(PlanningState {
+        label: "Design: test".to_string(),
+        user_intent: None,
+        orchestrator_mode: true,
+        orchestrator_iteration: 1,
+        orchestrator_max_iterations: 3,
+        orchestrator_finding_count: 0,
+        orchestrator_role_label: None,
+        orchestrator_role_model: None,
+    });
+    let (_event_tx, mut event_rx) = mpsc::unbounded_channel::<AppEvent>();
+
+    process_received_event(
+        &mut state,
+        AppEvent::AgentOutput(AgentOutputEvent::Text("Hello from proposer".to_string())),
+        &mut event_rx,
+    );
+    assert_eq!(state.agent_output.len(), 1);
+    assert_eq!(state.agent_output[0], "Hello from proposer");
+    assert_eq!(state.events_received, 1);
+
+    process_received_event(
+        &mut state,
+        AppEvent::AgentOutput(AgentOutputEvent::ToolUse {
+            tool: "Read".to_string(),
+            input_preview: "src/main.rs".to_string(),
+        }),
+        &mut event_rx,
+    );
+    assert_eq!(state.agent_output.len(), 2);
+    assert!(state.agent_output[1].contains("[tool] Read"));
+    assert_eq!(state.events_received, 2);
+
+    process_received_event(
+        &mut state,
+        AppEvent::AgentOutput(AgentOutputEvent::ToolResult {
+            output_preview: "fn main() {}".to_string(),
+        }),
+        &mut event_rx,
+    );
+    assert_eq!(state.agent_output.len(), 3);
+    assert!(state.agent_output[2].contains("[result]"));
+    assert_eq!(state.events_received, 3);
+}
+
+#[test]
+fn test_planning_log_line_suppressed_when_dominated_by_header() {
+    let mut state = AppState::new(PathBuf::from(".buildloop"));
+    state.phase = AppPhase::Planning;
+    state.planning = Some(PlanningState {
+        label: "Generate SPEC.md".to_string(),
+        user_intent: Some("build an API".to_string()),
+        orchestrator_mode: false,
+        orchestrator_iteration: 0,
+        orchestrator_max_iterations: 0,
+        orchestrator_finding_count: 0,
+        orchestrator_role_label: None,
+        orchestrator_role_model: None,
+    });
+    state.log("Planning started — Generate SPEC.md".to_string());
+    let (_ts, msg) = state.log_messages.last().unwrap();
+    let dominated_by_header = state
+        .planning
+        .as_ref()
+        .map(|p| msg.contains(&p.label))
+        .unwrap_or(false)
+        || state
+            .current_task
+            .as_ref()
+            .map(|t| msg.contains(&t.id))
+            .unwrap_or(false);
+    assert!(
+        dominated_by_header,
+        "Log line containing planning label should be suppressed"
+    );
+}
+
+#[test]
+fn test_planning_log_line_shown_when_not_dominated() {
+    let mut state = AppState::new(PathBuf::from(".buildloop"));
+    state.phase = AppPhase::Planning;
+    state.planning = Some(PlanningState {
+        label: "Generate SPEC.md".to_string(),
+        user_intent: Some("build an API".to_string()),
+        orchestrator_mode: false,
+        orchestrator_iteration: 0,
+        orchestrator_max_iterations: 0,
+        orchestrator_finding_count: 0,
+        orchestrator_role_label: None,
+        orchestrator_role_model: None,
+    });
+    state.log("Matched 3 patterns for task".to_string());
+    let (_ts, msg) = state.log_messages.last().unwrap();
+    let dominated_by_header = state
+        .planning
+        .as_ref()
+        .map(|p| msg.contains(&p.label))
+        .unwrap_or(false)
+        || state
+            .current_task
+            .as_ref()
+            .map(|t| msg.contains(&t.id))
+            .unwrap_or(false);
+    assert!(
+        !dominated_by_header,
+        "Unrelated log line should not be suppressed"
+    );
+}
+
+#[test]
+fn test_design_log_line_suppressed_when_dominated_by_header() {
+    let mut state = AppState::new(PathBuf::from(".buildloop"));
+    state.phase = AppPhase::Planning;
+    state.planning = Some(PlanningState {
+        label: "Design: build API".to_string(),
+        user_intent: Some("build API".to_string()),
+        orchestrator_mode: true,
+        orchestrator_iteration: 0,
+        orchestrator_max_iterations: 3,
+        orchestrator_finding_count: 0,
+        orchestrator_role_label: None,
+        orchestrator_role_model: None,
+    });
+    state.log("Design started — Design: build API".to_string());
+    let (_ts, msg) = state.log_messages.last().unwrap();
+    let dominated_by_header = state
+        .planning
+        .as_ref()
+        .map(|p| msg.contains(&p.label))
+        .unwrap_or(false)
+        || state
+            .current_task
+            .as_ref()
+            .map(|t| msg.contains(&t.id))
+            .unwrap_or(false);
+    assert!(
+        dominated_by_header,
+        "Design log line containing planning label should be suppressed"
+    );
+}
+
+#[test]
+fn test_running_task_log_line_suppressed_when_dominated_by_task_id() {
+    let mut state = AppState::new(PathBuf::from(".buildloop"));
+    state.phase = AppPhase::Running;
+    state.current_task = Some(crate::task::Task {
+        id: "T6.1".to_string(),
+        description: "Fix header duplication".to_string(),
+        line_number: 47,
+        completed: false,
+    });
+    state.log("Task T6.1 started".to_string());
+    let (_ts, msg) = state.log_messages.last().unwrap();
+    let dominated_by_header = state
+        .planning
+        .as_ref()
+        .map(|p| msg.contains(&p.label))
+        .unwrap_or(false)
+        || state
+            .current_task
+            .as_ref()
+            .map(|t| msg.contains(&t.id))
+            .unwrap_or(false);
+    assert!(
+        dominated_by_header,
+        "Log line containing current task ID should be suppressed"
+    );
+}
+
+#[test]
+fn test_background_log_does_not_overwrite_agent_state() {
+    let mut state = AppState::new(PathBuf::from("/tmp/test"));
+    state.set_agent(AgentRole::Builder, "opus");
+    state.agent_output.push("builder output line".to_string());
+    state.task_stages_seen = vec![AgentRole::Planner, AgentRole::Builder];
+
+    handle_event(
+        &mut state,
+        AppEvent::LoopEvent(LoopEvent::BackgroundLog(
+            "Background pattern extraction started".to_string(),
+        )),
+    );
+
+    assert!(matches!(state.current_agent, Some((AgentRole::Builder, _))));
+    assert_eq!(state.agent_output.len(), 1);
+    assert_eq!(state.agent_output[0], "builder output line");
+    assert_eq!(
+        state.task_stages_seen,
+        vec![AgentRole::Planner, AgentRole::Builder]
+    );
+    let (_ts, msg) = state.log_messages.last().unwrap();
+    assert!(msg.contains("Background pattern extraction started"));
+}
+
+#[test]
+fn test_background_log_tracks_pattern_count() {
+    let mut state = AppState::new(PathBuf::from("/tmp/test"));
+    assert_eq!(state.session_patterns_learned, 0);
+
+    handle_event(
+        &mut state,
+        AppEvent::LoopEvent(LoopEvent::BackgroundLog(
+            "Merged patterns: 3 new added to /path".to_string(),
+        )),
+    );
+
+    assert_eq!(state.session_patterns_learned, 3);
+}
+
+#[test]
+fn test_agent_started_discovery_overwrites_agent_state() {
+    let mut state = AppState::new(PathBuf::from("/tmp/test"));
+    state.set_agent(AgentRole::Builder, "opus");
+    state.agent_output.push("builder output line".to_string());
+    state.task_stages_seen = vec![AgentRole::Planner, AgentRole::Builder];
+
+    handle_event(
+        &mut state,
+        AppEvent::LoopEvent(LoopEvent::AgentStarted(
+            AgentRole::Discovery,
+            "opus".to_string(),
+        )),
+    );
+
+    assert!(matches!(
+        state.current_agent,
+        Some((AgentRole::Discovery, _))
+    ));
+    assert!(state.agent_output.is_empty());
+    assert!(state.task_stages_seen.contains(&AgentRole::Discovery));
 }

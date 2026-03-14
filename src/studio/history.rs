@@ -4,6 +4,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use crate::utils::atomic_write_file;
+
 use super::model::{
     PromptHistoryEntry, MAX_PROMPT_HISTORY_ENTRIES, STUDIO_PROMPT_HISTORY_FILE, STUDIO_ROOT_DIR,
 };
@@ -42,7 +44,7 @@ pub(super) fn persist_prompt_history(
     }
     let mut trimmed = entries.to_vec();
     trim_prompt_history(&mut trimmed);
-    fs::write(path, serde_json::to_string_pretty(&trimmed)?)?;
+    atomic_write_file(&path, serde_json::to_string_pretty(&trimmed)?.as_bytes())?;
     Ok(())
 }
 

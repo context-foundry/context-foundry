@@ -467,6 +467,10 @@ pub(super) struct StudioState {
     pub(super) workspace_mode: WorkspaceMode,
     pub(super) scan: ProjectScan,
     pub(super) execution_contracts: Vec<ExecutionContract>,
+    /// Index into `execution_contracts`. Use `set_selected_execution_contract_index()` for
+    /// mutations outside tests -- it clamps to valid bounds. Accessor methods
+    /// `selected_execution_contract()` and `selected_execution_contract_index()` also
+    /// clamp, so stale values never cause panics.
     pub(super) selected_execution_contract: usize,
     pub(super) sessions: Vec<SessionState>,
     pub(super) selected_session: usize,
@@ -575,12 +579,19 @@ impl StudioState {
 
     fn ensure_preview_cache(&mut self) -> &PreviewPromptCache {
         if self.preview_cache.is_none() {
+            let Some(execution_contract) = self.selected_execution_contract().cloned() else {
+                self.preview_cache = Some(PreviewPromptCache {
+                    #[cfg(test)]
+                    rendered_prompt: String::new(),
+                    display_preview: "(no contract selected)".to_string(),
+                });
+                return self.preview_cache.as_ref().expect("just set");
+            };
             let provider_label = match self.provider_mode {
                 ProviderMode::Both => "Claude + Codex".to_string(),
                 ProviderMode::Claude => "Claude".to_string(),
                 ProviderMode::Codex => "Codex".to_string(),
             };
-            let execution_contract = self.selected_execution_contract().clone();
             let workspace_dir = match self.workspace_mode {
                 WorkspaceMode::Shared => self.project_dir.display().to_string(),
                 WorkspaceMode::Isolated => "<isolated-workspace-per-provider>".to_string(),
@@ -652,12 +663,26 @@ impl StudioState {
             .and_then(|index| self.prompt_history.get(index))
     }
 
-    pub(super) fn selected_execution_contract(&self) -> &ExecutionContract {
-        &self.execution_contracts[self.selected_execution_contract]
+    pub(super) fn selected_execution_contract_index(&self) -> usize {
+        if self.execution_contracts.is_empty() {
+            0
+        } else {
+            self.selected_execution_contract
+                .min(self.execution_contracts.len() - 1)
+        }
+    }
+
+    pub(super) fn selected_execution_contract(&self) -> Option<&ExecutionContract> {
+        self.execution_contracts
+            .get(self.selected_execution_contract_index())
     }
 
     pub(super) fn set_selected_execution_contract_index(&mut self, index: usize) {
-        self.selected_execution_contract = index;
+        if self.execution_contracts.is_empty() {
+            self.selected_execution_contract = 0;
+        } else {
+            self.selected_execution_contract = index.min(self.execution_contracts.len() - 1);
+        }
         self.preview_scroll = 0;
         self.invalidate_preview_cache();
         self.sync_attachment_manager_selection();
@@ -665,8 +690,7 @@ impl StudioState {
 
     pub(super) fn refresh_execution_contracts(&mut self) -> Result<()> {
         let selected_file = self
-            .execution_contracts
-            .get(self.selected_execution_contract)
+            .selected_execution_contract()
             .map(|contract| contract.file_name.clone());
         let (contracts, selected_index) =
             load_execution_contracts_with_selection(&self.project_dir, selected_file.as_deref())?;
@@ -677,8 +701,7 @@ impl StudioState {
 
     pub(super) fn sync_attachment_manager_selection(&mut self) {
         let attachment_len = self
-            .execution_contracts
-            .get(self.selected_execution_contract)
+            .selected_execution_contract()
             .map(|contract| contract.attachments.len())
             .unwrap_or(0);
         if let Some(manager) = self.attachment_manager.as_mut() {
@@ -780,7 +803,10 @@ impl StudioState {
             prompt: self.prompt.clone(),
             provider_mode,
             workspace_mode: self.workspace_mode.to_string(),
-            contract_name: self.selected_execution_contract().name.clone(),
+            contract_name: self
+                .selected_execution_contract()
+                .map(|c| c.name.clone())
+                .unwrap_or_default(),
             follow_up,
         };
         self.prompt_history.insert(0, entry);
@@ -933,6 +959,46 @@ mod tests {
 
         assert_eq!(state.selected_execution_contract, 1);
         assert_eq!(state.preview_scroll, 0);
+    }
+
+    #[test]
+    fn selected_execution_contract_returns_none_when_empty() {
+        let mut state = test_state();
+        state.execution_contracts = Vec::new();
+        state.selected_execution_contract = 5;
+
+        assert_eq!(state.selected_execution_contract_index(), 0);
+        assert!(state.selected_execution_contract().is_none());
+    }
+
+    #[test]
+    fn selected_execution_contract_clamps_stale_index() {
+        let mut state = test_state();
+        assert_eq!(state.execution_contracts.len(), 1);
+        state.selected_execution_contract = 99;
+
+        assert_eq!(state.selected_execution_contract_index(), 0);
+        assert!(state.selected_execution_contract().is_some());
+    }
+
+    #[test]
+    fn set_selected_execution_contract_index_clamps_out_of_bounds() {
+        let mut state = test_state();
+        assert_eq!(state.execution_contracts.len(), 1);
+
+        state.set_selected_execution_contract_index(99);
+        assert_eq!(state.selected_execution_contract_index(), 0);
+        assert!(state.selected_execution_contract().is_some());
+    }
+
+    #[test]
+    fn set_selected_execution_contract_index_handles_empty() {
+        let mut state = test_state();
+        state.execution_contracts = Vec::new();
+
+        state.set_selected_execution_contract_index(5);
+        assert_eq!(state.selected_execution_contract_index(), 0);
+        assert!(state.selected_execution_contract().is_none());
     }
 
     #[test]

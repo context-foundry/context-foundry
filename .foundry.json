@@ -1,0 +1,25 @@
+{
+  "planner_provider": "claude",
+  "planner_model": "opus",
+
+  "builder_provider": "claude",
+  "builder_model": "opus",
+
+  "reviewer_provider": "claude",
+  "reviewer_model": "opus",
+
+  "fixer_provider": "claude",
+  "fixer_model": "opus",
+
+  "discovery_provider": "claude",
+  "discovery_model": "opus",
+
+  "pause_between_tasks_secs": 10,
+  "pause_between_agents_secs": 5,
+  "pause_between_cycles_secs": 60,
+
+  "agent_timeout_secs": 900,
+
+  "backpressure_only": false,
+  "max_pattern_injection": 10
+}

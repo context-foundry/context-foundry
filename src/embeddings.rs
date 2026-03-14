@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::OnceLock;
@@ -7,6 +7,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 
 use crate::patterns::Pattern;
+use crate::utils::atomic_write_file_best_effort;
 
 // ─── Config ──────────────────────────────────────────────────
 
@@ -43,6 +44,20 @@ fn mark_failed() {
     state()
         .cooldown_until_ms
         .store(now_ms() + COOLDOWN_MS, Ordering::Relaxed);
+}
+
+#[cfg(test)]
+fn force_cooldown(until_ms: u64) {
+    state()
+        .cooldown_until_ms
+        .store(until_ms, Ordering::Relaxed);
+}
+
+#[cfg(test)]
+fn clear_cooldown() {
+    state()
+        .cooldown_until_ms
+        .store(0, Ordering::Relaxed);
 }
 
 // ─── Canonical Text ──────────────────────────────────────────
@@ -170,8 +185,15 @@ struct CacheEntry {
 }
 
 fn cache_dir() -> PathBuf {
-    if let Ok(home) = std::env::var("HOME") {
-        PathBuf::from(home).join(".foundry/cache")
+    let base = if cfg!(target_os = "windows") {
+        std::env::var("LOCALAPPDATA")
+            .or_else(|_| std::env::var("USERPROFILE"))
+            .ok()
+    } else {
+        std::env::var("HOME").ok()
+    };
+    if let Some(base) = base {
+        PathBuf::from(base).join(".foundry/cache")
     } else {
         eprintln!("warning: HOME not set, using /tmp/.foundry/cache for embedding cache");
         PathBuf::from("/tmp/.foundry/cache")
@@ -186,9 +208,8 @@ fn content_hash(text: &str) -> String {
     blake3::hash(text.as_bytes()).to_hex().to_string()
 }
 
-fn load_cache() -> EmbeddingCache {
-    let path = cache_path();
-    match std::fs::read_to_string(&path) {
+fn load_cache_from(path: &std::path::Path) -> EmbeddingCache {
+    match std::fs::read_to_string(path) {
         Ok(data) => serde_json::from_str(&data).unwrap_or(EmbeddingCache {
             schema_version: CACHE_SCHEMA_VERSION,
             entries: HashMap::new(),
@@ -200,12 +221,36 @@ fn load_cache() -> EmbeddingCache {
     }
 }
 
-fn save_cache(cache: &EmbeddingCache) {
-    let dir = cache_dir();
-    let _ = std::fs::create_dir_all(&dir);
-    if let Ok(data) = serde_json::to_string_pretty(cache) {
-        let _ = std::fs::write(cache_path(), data);
+fn load_cache() -> EmbeddingCache {
+    load_cache_from(&cache_path())
+}
+
+fn save_cache_to(path: &std::path::Path, cache: &EmbeddingCache, current_patterns: &[Pattern]) {
+    let valid_hashes: HashSet<String> = current_patterns
+        .iter()
+        .map(|p| content_hash(&pattern_embedding_text(p)))
+        .collect();
+
+    let pruned = EmbeddingCache {
+        schema_version: cache.schema_version,
+        entries: cache
+            .entries
+            .iter()
+            .filter(|(_, entry)| valid_hashes.contains(&entry.content_hash))
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect(),
+    };
+
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
     }
+    if let Ok(data) = serde_json::to_string_pretty(&pruned) {
+        atomic_write_file_best_effort(path, data.as_bytes());
+    }
+}
+
+fn save_cache(cache: &EmbeddingCache, current_patterns: &[Pattern]) {
+    save_cache_to(&cache_path(), cache, current_patterns);
 }
 
 // ─── Semantic Matcher ────────────────────────────────────────
@@ -299,7 +344,7 @@ pub async fn match_patterns_semantic<'a>(
                     );
                     cached_embeddings.push((*idx, normalized));
                 }
-                save_cache(&cache);
+                save_cache(&cache, patterns);
             }
             Err(_) => {
                 mark_failed();
@@ -374,6 +419,7 @@ fn finalize_scores<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
 
     #[test]
     fn pattern_embedding_text_combines_title_and_issue() {
@@ -461,6 +507,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn circuit_breaker_starts_available() {
         assert!(is_available());
     }
@@ -492,13 +539,317 @@ mod tests {
 
     #[test]
     fn stale_cache_entry_discarded_on_model_mismatch() {
-        let entry = CacheEntry {
-            model: "old-model".into(),
-            content_hash: "abc".into(),
-            embedding: vec![0.1],
+        // Setup: create a temp dir with a cache file
+        let tmp = tempfile::tempdir().expect("create tempdir");
+        let cache_file = tmp.path().join("pattern-embeddings.json");
+
+        // Create a pattern and compute its canonical text + hash
+        let pattern = Pattern {
+            pattern_id: "stale-test".into(),
+            title: "Auth redirect bug".into(),
+            issue: Some("Login fails on callback".into()),
+            ..default_test_pattern()
         };
-        // Simulate: current model is different
-        assert_ne!(entry.model, "nomic-embed-text");
+        let text = pattern_embedding_text(&pattern);
+        let hash = content_hash(&text);
+
+        // Write a cache file with an entry under the WRONG model name
+        let stale_key = format!("old-model:{}", hash);
+        let stale_embedding: Vec<f32> = vec![0.9, 0.1, 0.0];
+        let mut stale_entries = HashMap::new();
+        stale_entries.insert(
+            stale_key.clone(),
+            CacheEntry {
+                model: "old-model".into(),
+                content_hash: hash.clone(),
+                embedding: stale_embedding.clone(),
+            },
+        );
+        let stale_cache = EmbeddingCache {
+            schema_version: CACHE_SCHEMA_VERSION,
+            entries: stale_entries,
+        };
+        let json = serde_json::to_string_pretty(&stale_cache).expect("serialize cache");
+        std::fs::write(&cache_file, &json).expect("write cache file");
+
+        // Load the cache from disk (exercises real file I/O + deserialization)
+        let loaded = load_cache_from(&cache_file);
+        assert_eq!(loaded.entries.len(), 1, "cache file should load with 1 entry");
+        assert!(loaded.entries.contains_key(&stale_key), "stale key should exist in loaded cache");
+
+        // Exercise the lookup logic from match_patterns_semantic (lines 280-294):
+        // Current model is "nomic-embed-text", so the cache key differs from "old-model:hash"
+        let current_model = "nomic-embed-text";
+        let lookup_key = format!("{}:{}", current_model, hash);
+
+        // The stale entry should NOT be found under the current model's key
+        assert!(
+            loaded.entries.get(&lookup_key).is_none(),
+            "stale entry under wrong model key must not match current model lookup"
+        );
+
+        // Simulate the full cache-hit check: even if we look up by the stale key,
+        // the model mismatch in the inner check must reject it
+        let entry = loaded.entries.get(&stale_key).expect("stale key exists");
+        let model_matches = entry.model == current_model;
+        assert!(!model_matches, "entry.model 'old-model' must not match current model 'nomic-embed-text'");
+
+        // Now write a VALID cache entry under the correct model and verify it IS a hit
+        let mut valid_cache = loaded;
+        let valid_key = format!("{}:{}", current_model, hash);
+        let valid_embedding: Vec<f32> = vec![0.5, 0.5, 0.0];
+        valid_cache.entries.insert(
+            valid_key.clone(),
+            CacheEntry {
+                model: current_model.into(),
+                content_hash: hash.clone(),
+                embedding: valid_embedding.clone(),
+            },
+        );
+
+        // Save and reload to exercise full round-trip
+        let json2 = serde_json::to_string_pretty(&valid_cache).expect("serialize valid cache");
+        std::fs::write(&cache_file, &json2).expect("write valid cache file");
+        let reloaded = load_cache_from(&cache_file);
+
+        // Valid entry lookup succeeds
+        let hit = reloaded.entries.get(&valid_key);
+        assert!(hit.is_some(), "valid entry must be found under correct model key");
+        let hit = hit.unwrap();
+        assert_eq!(hit.model, current_model);
+        assert_eq!(hit.content_hash, hash);
+        assert_eq!(hit.embedding, valid_embedding);
+
+        // Stale entry still exists but is ignored by the lookup logic
+        assert!(reloaded.entries.contains_key(&stale_key), "stale entry persists in cache file");
+        assert_eq!(reloaded.entries.len(), 2, "cache has both stale and valid entries");
+    }
+
+    #[test]
+    fn test_cache_key_uses_model_hash_not_pattern_id() {
+        let pattern_a = Pattern {
+            pattern_id: "duplicate-id".into(),
+            title: "Auth flow error".into(),
+            issue: Some("Token expired".into()),
+            ..default_test_pattern()
+        };
+        let pattern_b = Pattern {
+            pattern_id: "duplicate-id".into(),
+            title: "Database timeout".into(),
+            issue: Some("Connection pool exhausted".into()),
+            ..default_test_pattern()
+        };
+
+        let text_a = pattern_embedding_text(&pattern_a);
+        let text_b = pattern_embedding_text(&pattern_b);
+        let hash_a = content_hash(&text_a);
+        let hash_b = content_hash(&text_b);
+        assert_ne!(hash_a, hash_b);
+
+        let cache_key_a = format!("{}:{}", "nomic-embed-text", hash_a);
+        let cache_key_b = format!("{}:{}", "nomic-embed-text", hash_b);
+        assert_ne!(cache_key_a, cache_key_b);
+
+        let mut cache = EmbeddingCache {
+            schema_version: CACHE_SCHEMA_VERSION,
+            entries: HashMap::new(),
+        };
+        cache.entries.insert(
+            cache_key_a.clone(),
+            CacheEntry {
+                model: "nomic-embed-text".into(),
+                content_hash: hash_a.clone(),
+                embedding: vec![0.1, 0.2, 0.3],
+            },
+        );
+        cache.entries.insert(
+            cache_key_b.clone(),
+            CacheEntry {
+                model: "nomic-embed-text".into(),
+                content_hash: hash_b.clone(),
+                embedding: vec![0.4, 0.5, 0.6],
+            },
+        );
+        assert_eq!(cache.entries.len(), 2);
+        assert_eq!(cache.entries[&cache_key_a].content_hash, hash_a);
+        assert_eq!(cache.entries[&cache_key_b].content_hash, hash_b);
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_empty_patterns_skips_ollama() {
+        clear_cooldown();
+        let patterns: Vec<Pattern> = Vec::new();
+        let keyword_scores: Vec<(usize, usize)> = Vec::new();
+        let (results, info) = match_patterns_semantic(
+            &patterns,
+            "T1.1: Build something",
+            "nomic-embed-text",
+            5000,
+            &keyword_scores,
+        )
+        .await;
+        assert!(results.is_empty());
+        assert_eq!(info.mode, "keyword-only");
+        assert_eq!(info.cache_hits, 0);
+        assert_eq!(info.cache_misses, 0);
+    }
+
+    #[test]
+    #[serial]
+    fn test_circuit_breaker_cooldown_and_recovery() {
+        clear_cooldown();
+        assert!(is_available());
+
+        force_cooldown(now_ms() + 60_000);
+        assert!(!is_available());
+
+        force_cooldown(now_ms().saturating_sub(1));
+        assert!(is_available());
+
+        clear_cooldown();
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_match_patterns_semantic_returns_keyword_only_when_ollama_unavailable() {
+        force_cooldown(now_ms() + 300_000);
+
+        let patterns = vec![
+            Pattern {
+                pattern_id: "pat-a".into(),
+                title: "Fix auth flow".into(),
+                issue: Some("Login redirect broken".into()),
+                ..default_test_pattern()
+            },
+            Pattern {
+                pattern_id: "pat-b".into(),
+                title: "Database retry logic".into(),
+                issue: Some("Connection drops".into()),
+                ..default_test_pattern()
+            },
+        ];
+        let keyword_scores: Vec<(usize, usize)> = vec![(0, 5), (1, 3)];
+        let (results, info) = match_patterns_semantic(
+            &patterns,
+            "T1.1: Fix the auth login redirect",
+            "nomic-embed-text",
+            5000,
+            &keyword_scores,
+        )
+        .await;
+        assert_eq!(info.mode, "cooldown");
+        assert_eq!(info.cache_hits, 0);
+        assert_eq!(info.cache_misses, 0);
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0].0.pattern_id, "pat-a");
+        assert_eq!(results[0].1, 5);
+        assert_eq!(results[1].0.pattern_id, "pat-b");
+        assert_eq!(results[1].1, 3);
+
+        clear_cooldown();
+    }
+
+    #[test]
+    fn test_save_cache_prunes_stale_entries() {
+        let tmp = tempfile::tempdir().expect("create tempdir");
+        let cache_file = tmp.path().join("pattern-embeddings.json");
+
+        // Two current patterns
+        let patterns = vec![
+            Pattern {
+                pattern_id: "active-1".into(),
+                title: "Auth redirect bug".into(),
+                issue: Some("Login fails on callback".into()),
+                ..default_test_pattern()
+            },
+            Pattern {
+                pattern_id: "active-2".into(),
+                title: "Database timeout".into(),
+                issue: None,
+                ..default_test_pattern()
+            },
+        ];
+
+        let text_1 = pattern_embedding_text(&patterns[0]);
+        let hash_1 = content_hash(&text_1);
+        let text_2 = pattern_embedding_text(&patterns[1]);
+        let hash_2 = content_hash(&text_2);
+
+        // Build a cache with 3 entries: 2 valid, 1 stale
+        let model = "nomic-embed-text";
+        let mut entries = HashMap::new();
+        entries.insert(
+            format!("{}:{}", model, hash_1),
+            CacheEntry {
+                model: model.into(),
+                content_hash: hash_1.clone(),
+                embedding: vec![0.1, 0.2, 0.3],
+            },
+        );
+        entries.insert(
+            format!("{}:{}", model, hash_2),
+            CacheEntry {
+                model: model.into(),
+                content_hash: hash_2.clone(),
+                embedding: vec![0.4, 0.5, 0.6],
+            },
+        );
+        // Stale entry: hash for a pattern that no longer exists
+        let stale_hash = content_hash("Deleted pattern. This was removed");
+        entries.insert(
+            format!("{}:{}", model, stale_hash),
+            CacheEntry {
+                model: model.into(),
+                content_hash: stale_hash.clone(),
+                embedding: vec![0.9, 0.9, 0.9],
+            },
+        );
+
+        let cache = EmbeddingCache {
+            schema_version: CACHE_SCHEMA_VERSION,
+            entries,
+        };
+
+        assert_eq!(cache.entries.len(), 3);
+
+        // Save with pruning
+        save_cache_to(&cache_file, &cache, &patterns);
+
+        // Reload and verify stale entry was removed
+        let reloaded = load_cache_from(&cache_file);
+        assert_eq!(reloaded.entries.len(), 2);
+        assert!(reloaded.entries.contains_key(&format!("{}:{}", model, hash_1)));
+        assert!(reloaded.entries.contains_key(&format!("{}:{}", model, hash_2)));
+        assert!(!reloaded.entries.contains_key(&format!("{}:{}", model, stale_hash)));
+    }
+
+    #[test]
+    fn test_save_cache_with_empty_patterns_clears_all_entries() {
+        let tmp = tempfile::tempdir().expect("create tempdir");
+        let cache_file = tmp.path().join("pattern-embeddings.json");
+
+        let mut entries = HashMap::new();
+        entries.insert(
+            "nomic-embed-text:somehash".into(),
+            CacheEntry {
+                model: "nomic-embed-text".into(),
+                content_hash: "somehash".into(),
+                embedding: vec![0.1, 0.2],
+            },
+        );
+
+        let cache = EmbeddingCache {
+            schema_version: CACHE_SCHEMA_VERSION,
+            entries,
+        };
+
+        let empty_patterns: Vec<Pattern> = Vec::new();
+        save_cache_to(&cache_file, &cache, &empty_patterns);
+
+        let reloaded = load_cache_from(&cache_file);
+        assert_eq!(reloaded.entries.len(), 0);
+        assert_eq!(reloaded.schema_version, CACHE_SCHEMA_VERSION);
     }
 
     fn default_test_pattern() -> Pattern {

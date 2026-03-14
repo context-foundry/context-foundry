@@ -6,6 +6,8 @@ use std::{
     path::{Component, Path, PathBuf},
 };
 
+use crate::utils::atomic_write_file;
+
 #[cfg(target_os = "macos")]
 use std::process::Command;
 
@@ -603,7 +605,7 @@ pub(super) fn persist_attachment_specs(
         fs::create_dir_all(parent)?;
     }
     let serialized = serde_json::to_string_pretty(specs)?;
-    fs::write(sidecar_path, format!("{}\n", serialized))?;
+    atomic_write_file(&sidecar_path, format!("{}\n", serialized).as_bytes())?;
     Ok(())
 }
 
@@ -614,7 +616,10 @@ pub(super) fn open_attachment_manager(state: &mut StudioState) {
 }
 
 pub(super) fn cycle_attachment_manager_selection(state: &mut StudioState, forward: bool) {
-    let attachment_len = state.selected_execution_contract().attachments.len();
+    let attachment_len = state
+        .selected_execution_contract()
+        .map(|c| c.attachments.len())
+        .unwrap_or(0);
     if attachment_len == 0 {
         return;
     }
@@ -632,7 +637,10 @@ pub(super) fn cycle_attachment_manager_selection(state: &mut StudioState, forwar
 }
 
 pub(super) fn toggle_selected_attachment_mark(state: &mut StudioState) {
-    let attachment_len = state.selected_execution_contract().attachments.len();
+    let attachment_len = state
+        .selected_execution_contract()
+        .map(|c| c.attachments.len())
+        .unwrap_or(0);
     if attachment_len == 0 {
         return;
     }
@@ -649,7 +657,10 @@ pub(super) fn toggle_selected_attachment_mark(state: &mut StudioState) {
 
 #[cfg(not(target_os = "macos"))]
 fn edit_selected_execution_contract_attachments(state: &mut StudioState) -> Result<()> {
-    let selected = state.selected_execution_contract().clone();
+    let selected = state
+        .selected_execution_contract()
+        .cloned()
+        .context("no execution contract selected")?;
     let sidecar_path = attachment_sidecar_path(&selected.path);
     if !sidecar_path.exists() {
         fs::write(&sidecar_path, "[]\n")?;
@@ -670,7 +681,10 @@ pub(super) fn queue_selected_execution_contract_attachment_action(
 ) -> Result<()> {
     #[cfg(target_os = "macos")]
     {
-        let selected = state.selected_execution_contract().clone();
+        let selected = state
+            .selected_execution_contract()
+            .cloned()
+            .context("no execution contract selected")?;
         state.pending_action = Some(PendingStudioAction::PickExecutionContractAttachment {
             contract_path: selected.path,
         });
@@ -687,7 +701,10 @@ pub(super) fn queue_selected_execution_contract_attachment_action(
 pub(super) fn remove_selected_execution_contract_attachments(
     state: &mut StudioState,
 ) -> Result<()> {
-    let attachment_len = state.selected_execution_contract().attachments.len();
+    let attachment_len = state
+        .selected_execution_contract()
+        .map(|c| c.attachments.len())
+        .unwrap_or(0);
     if attachment_len == 0 {
         state.log("contract has no attachments");
         return Ok(());
@@ -712,7 +729,10 @@ pub(super) fn remove_selected_execution_contract_attachments(
         }
     };
 
-    let contract_path = state.selected_execution_contract().path.clone();
+    let contract_path = state
+        .selected_execution_contract()
+        .map(|c| c.path.clone())
+        .context("no execution contract selected")?;
     let existing = load_attachment_specs(&contract_path);
     let removed_paths: Vec<String> = existing
         .iter()
@@ -1243,7 +1263,7 @@ mod tests {
         state.focused_pane = FocusedPane::Contracts;
         open_attachment_manager(&mut state);
 
-        let selected_contract_path = state.selected_execution_contract().path.clone();
+        let selected_contract_path = state.selected_execution_contract().unwrap().path.clone();
         queue_selected_execution_contract_attachment_action(&mut state)?;
 
         match state
@@ -1279,7 +1299,8 @@ mod tests {
         state.focused_pane = FocusedPane::Contracts;
         open_attachment_manager(&mut state);
 
-        let sidecar_path = attachment_sidecar_path(&state.selected_execution_contract().path);
+        let sidecar_path =
+            attachment_sidecar_path(&state.selected_execution_contract().unwrap().path);
         queue_selected_execution_contract_attachment_action(&mut state)?;
 
         let guide = state

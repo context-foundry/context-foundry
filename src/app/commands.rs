@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::path::Path;
+use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use anyhow::Result;
@@ -16,12 +17,13 @@ use super::contract::ContractPaths;
 use super::{AppEvent, LoopEvent};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum ProviderCommandMode {
+pub(crate) enum ProviderCommandMode {
     Run,
     Plan,
+    Design,
 }
 
-pub(super) fn ensure_required_providers_available(
+pub(crate) fn ensure_required_providers_available(
     config: &Config,
     mode: ProviderCommandMode,
 ) -> Result<()> {
@@ -42,8 +44,9 @@ pub(super) fn ensure_required_providers_available(
     );
 }
 
-pub(super) fn provider_binary_is_available(provider: ModelProvider) -> bool {
-    std::process::Command::new("which")
+pub(crate) fn provider_binary_is_available(provider: ModelProvider) -> bool {
+    let lookup_cmd = if cfg!(target_os = "windows") { "where" } else { "which" };
+    std::process::Command::new(lookup_cmd)
         .arg(provider.slug())
         .output()
         .map(|output| output.status.success())
@@ -84,6 +87,16 @@ fn required_providers(
                 Config::parse_provider(&config.discovery_provider),
             ),
         ],
+        ProviderCommandMode::Design => vec![
+            (
+                "orchestrator-proposer",
+                Config::parse_provider(&config.orchestrator_proposer_provider),
+            ),
+            (
+                "orchestrator-reviewer",
+                Config::parse_provider(&config.orchestrator_reviewer_provider),
+            ),
+        ],
     };
 
     if matches!(mode, ProviderCommandMode::Run) && !config.backpressure_only {
@@ -103,7 +116,15 @@ pub(super) async fn run_headless(project_dir: &Path) -> Result<()> {
         project_dir,
         Config::load(project_dir),
         std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        std::sync::Arc::new(std::sync::Mutex::new(())),
     );
+
+    let shutdown_signal = run_context.shutdown.clone();
+    tokio::spawn(async move {
+        let _ = tokio::signal::ctrl_c().await;
+        shutdown_signal.store(true, Ordering::Relaxed);
+    });
+
     for message in contract_paths.warnings() {
         eprintln!("[warn] {}", message);
     }
@@ -169,13 +190,13 @@ pub(super) async fn run_headless(project_dir: &Path) -> Result<()> {
                     let status = if ok { "DONE" } else { "WIP" };
                     eprintln!("=== {} {} ===\n", id, status);
                 }
-                LoopEvent::DiscoveryStarted => {
-                    eprintln!("\n=== DISCOVERY ===");
+                LoopEvent::DiscoveryStarted(round) => {
+                    eprintln!("\n=== DISCOVERY ROUND {} ===", round);
                 }
                 LoopEvent::DiscoveryCompleted(new_tasks) => {
                     eprintln!("=== Discovery found {} new tasks ===\n", new_tasks);
                 }
-                LoopEvent::Log(message) => {
+                LoopEvent::Log(message) | LoopEvent::BackgroundLog(message) => {
                     eprintln!("[log] {}", message);
                 }
                 LoopEvent::Finished => break,
@@ -189,6 +210,7 @@ pub(super) async fn run_headless(project_dir: &Path) -> Result<()> {
             }
             AppEvent::AgentDone(_)
             | AppEvent::PlanningFinished(_)
+            | AppEvent::OrchestratorFinished(_)
             | AppEvent::Key(_)
             | AppEvent::Mouse(_)
             | AppEvent::Paste(_)
@@ -386,5 +408,41 @@ mod tests {
 
         assert_eq!(missing.get("codex"), Some(&vec!["planner"]));
         assert_eq!(missing.len(), 1);
+    }
+
+    #[test]
+    fn design_mode_requires_orchestrator_proposer_and_reviewer() {
+        let config = Config {
+            orchestrator_proposer_provider: "codex".into(),
+            orchestrator_reviewer_provider: "claude".into(),
+            ..Config::default()
+        };
+
+        let missing =
+            missing_provider_commands(&config, ProviderCommandMode::Design, |provider| {
+                provider == ModelProvider::Claude
+            });
+
+        assert_eq!(
+            missing.get("codex"),
+            Some(&vec!["orchestrator-proposer"])
+        );
+        assert!(!missing.contains_key("claude"));
+    }
+
+    #[test]
+    fn design_mode_does_not_check_builder_or_planner() {
+        let config = Config {
+            planner_provider: "codex".into(),
+            builder_provider: "codex".into(),
+            orchestrator_proposer_provider: "claude".into(),
+            orchestrator_reviewer_provider: "claude".into(),
+            ..Config::default()
+        };
+
+        let missing =
+            missing_provider_commands(&config, ProviderCommandMode::Design, |_| true);
+
+        assert!(missing.is_empty());
     }
 }

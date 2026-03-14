@@ -149,8 +149,26 @@ impl Config {
     pub fn load(project_dir: &Path) -> Self {
         let config_path = project_dir.join(".foundry.json");
         if config_path.exists() {
-            let content = std::fs::read_to_string(&config_path).unwrap_or_default();
-            serde_json::from_str(&content).unwrap_or_default()
+            let content = match std::fs::read_to_string(&config_path) {
+                Ok(c) => c,
+                Err(e) => {
+                    eprintln!(
+                        "warning: failed to read {}: {e} -- using default config",
+                        config_path.display(),
+                    );
+                    return Self::default();
+                }
+            };
+            match serde_json::from_str(&content) {
+                Ok(config) => config,
+                Err(e) => {
+                    eprintln!(
+                        "warning: failed to parse {}: {e} -- using default config",
+                        config_path.display(),
+                    );
+                    Self::default()
+                }
+            }
         } else {
             Self::default()
         }
@@ -191,6 +209,7 @@ impl Config {
 mod tests {
     use super::Config;
     use crate::agent::ModelProvider;
+    use std::fs;
 
     #[test]
     fn default_config_disables_auto_push() {
@@ -239,5 +258,28 @@ mod tests {
         assert_eq!(config.reviewer_provider, "claude");
         assert_eq!(config.fixer_provider, "codex");
         assert_eq!(config.discovery_provider, "claude");
+    }
+
+    #[test]
+    fn load_warns_on_invalid_json() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join(".foundry.json"), "{ not valid json").unwrap();
+        let config = Config::load(dir.path());
+        assert_eq!(config.agent_timeout_secs, Config::default().agent_timeout_secs);
+        assert_eq!(config.planner_model, Config::default().planner_model);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn load_warns_on_unreadable_file() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join(".foundry.json");
+        fs::write(&path, "{}").unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o000)).unwrap();
+        let config = Config::load(dir.path());
+        assert_eq!(config.agent_timeout_secs, Config::default().agent_timeout_secs);
+        // Restore permissions so tempdir cleanup succeeds
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();
     }
 }

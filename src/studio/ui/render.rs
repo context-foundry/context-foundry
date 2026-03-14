@@ -181,7 +181,13 @@ fn render_header(frame: &mut Frame, area: Rect, state: &StudioState) {
             Style::default().fg(theme.info),
         ),
         Span::styled(
-            format!("contract={} ", state.selected_execution_contract().name),
+            format!(
+                "contract={} ",
+                state
+                    .selected_execution_contract()
+                    .map(|c| c.name.as_str())
+                    .unwrap_or("<none>")
+            ),
             Style::default().fg(theme.contracts),
         ),
         Span::styled(
@@ -344,18 +350,18 @@ fn render_prompt(frame: &mut Frame, area: Rect, state: &StudioState) {
 
 fn render_contracts(frame: &mut Frame, area: Rect, state: &StudioState) {
     let theme = &state.theme;
-    let selected = state.selected_execution_contract();
+    let selected_label = state
+        .selected_execution_contract()
+        .map(execution_contract_list_label)
+        .unwrap_or_else(|| "<none>".to_string());
     let mut lines = vec![Line::from(Span::styled(
-        format!("selected: {}", execution_contract_list_label(selected)),
+        format!("selected: {}", selected_label),
         Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
     ))];
 
+    let selected_idx = state.selected_execution_contract_index();
     for (idx, contract) in state.execution_contracts.iter().enumerate() {
-        let prefix = if idx == state.selected_execution_contract {
-            ">"
-        } else {
-            " "
-        };
+        let prefix = if idx == selected_idx { ">" } else { " " };
         let contract_label = execution_contract_list_label(contract);
         lines.push(Line::from(Span::styled(
             format!(
@@ -363,7 +369,7 @@ fn render_contracts(frame: &mut Frame, area: Rect, state: &StudioState) {
                 prefix,
                 truncate_str(&contract_label, area.width.saturating_sub(6) as usize)
             ),
-            if idx == state.selected_execution_contract {
+            if idx == selected_idx {
                 Style::default().fg(theme.text).add_modifier(Modifier::BOLD)
             } else {
                 Style::default().fg(theme.text_dim)
@@ -382,7 +388,10 @@ fn render_contracts(frame: &mut Frame, area: Rect, state: &StudioState) {
         ),
         Style::default().fg(theme.info),
     )));
-    let external_count = external_attachment_count(&selected.attachments);
+    let external_count = state
+        .selected_execution_contract()
+        .map(|c| external_attachment_count(&c.attachments))
+        .unwrap_or(0);
     if external_count > 0 {
         lines.push(Line::from(Span::styled(
             format!(
@@ -612,7 +621,13 @@ fn render_activity(frame: &mut Frame, area: Rect, state: &StudioState) {
 
     if let Some(session) = state.selected_session() {
         lines.push(ListItem::new(Span::styled(
-            format!("contract: {}", state.selected_execution_contract().name),
+            format!(
+                "contract: {}",
+                state
+                    .selected_execution_contract()
+                    .map(|c| c.name.as_str())
+                    .unwrap_or("<none>")
+            ),
             Style::default().fg(theme.text_muted),
         )));
         lines.push(ListItem::new(Span::styled(

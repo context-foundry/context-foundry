@@ -66,6 +66,41 @@ pub(super) async fn run_review_loop(
             review_result.as_ref().map(|r| r.success).unwrap_or(false),
         ));
 
+        let reviewer_succeeded = review_result.as_ref().map(|r| r.success).unwrap_or(false);
+        if !reviewer_succeeded {
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                "Reviewer agent failed on pass {}/2 — treating as review failure",
+                pass
+            ))));
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::TaskReviewResult {
+                task_id: task_id.to_string(),
+                fix_passes: pass.saturating_sub(1),
+                passed: false,
+            }));
+            return false;
+        }
+
+        // Guard: reviewer agent succeeded but report file is missing or empty.
+        // Without this check, parse_audit_findings returns (0,0,0) for missing/empty
+        // files and the condition (high == 0 && medium == 0) silently passes review.
+        let report_has_content = ctx.review_report.exists()
+            && std::fs::metadata(&ctx.review_report)
+                .map(|m| m.len() > 0)
+                .unwrap_or(false);
+
+        if !report_has_content {
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                "Reviewer agent succeeded on pass {}/2 but review-report.md is missing or empty — treating as review failure",
+                pass
+            ))));
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::TaskReviewResult {
+                task_id: task_id.to_string(),
+                fix_passes: pass.saturating_sub(1),
+                passed: false,
+            }));
+            return false;
+        }
+
         let verdict_pass = check_review_passed(&ctx.review_report);
         let (high, medium, _low) = parse_audit_findings(&ctx.review_report);
 
@@ -133,6 +168,19 @@ pub(super) async fn run_review_loop(
                 fix_result.map(|r| r.success).unwrap_or(false),
             ));
 
+            // Check stop after fixer completion
+            if ctx.is_stop_requested() {
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+                    "Stop requested after FIXER — skipping second review pass".to_string(),
+                )));
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::TaskReviewResult {
+                    task_id: task_id.to_string(),
+                    fix_passes: 1,
+                    passed: false,
+                }));
+                return false;
+            }
+
             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
                 "Fixer completed, running second review pass...".to_string(),
             )));
@@ -141,6 +189,19 @@ pub(super) async fn run_review_loop(
                 ctx.config.pause_between_agents_secs,
             ))
             .await;
+
+            // Check stop after inter-pass sleep
+            if ctx.is_stop_requested() {
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+                    "Stop requested during inter-pass pause — skipping second review pass".to_string(),
+                )));
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::TaskReviewResult {
+                    task_id: task_id.to_string(),
+                    fix_passes: 1,
+                    passed: false,
+                }));
+                return false;
+            }
         } else {
             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
                 "Review pass 2 still has issues: {} high, {} medium — committing as-is",
@@ -152,10 +213,11 @@ pub(super) async fn run_review_loop(
                 fix_passes: 1,
                 passed: false,
             }));
+            return false;
         }
     }
 
-    check_review_passed(&ctx.review_report)
+    unreachable!("all paths return inside the review loop")
 }
 
 fn get_changed_files(project_dir: &Path) -> Vec<String> {
@@ -192,11 +254,11 @@ fn get_changed_files(project_dir: &Path) -> Vec<String> {
 fn parse_audit_findings(report_path: &Path) -> (usize, usize, usize) {
     let content = match std::fs::read_to_string(report_path) {
         Ok(c) => c,
-        Err(_) => return (0, 0, 0),
+        Err(_) => return (1, 0, 0),
     };
 
     if content.trim().is_empty() {
-        return (0, 0, 0);
+        return (1, 0, 0);
     }
 
     let json_str = extract_json_from_report(&content);
@@ -257,8 +319,8 @@ fn extract_json_from_report(content: &str) -> String {
 
 fn check_review_passed(report_path: &Path) -> bool {
     if let Ok(content) = std::fs::read_to_string(report_path) {
-        content.to_lowercase().contains("verdict: pass")
-            || content.to_lowercase().contains("verdict:pass")
+        let lower = content.to_lowercase();
+        lower.contains("verdict: pass") || lower.contains("verdict:pass")
     } else {
         false
     }
@@ -350,5 +412,39 @@ mod tests {
         assert_eq!(changed, vec!["src.txt".to_string()]);
 
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn parse_audit_findings_returns_high_for_missing_file() {
+        let path = PathBuf::from("/tmp/nonexistent-review-report-foundry.md");
+        assert_eq!(parse_audit_findings(&path), (1, 0, 0));
+    }
+
+    #[test]
+    fn parse_audit_findings_returns_high_for_empty_file() {
+        let dir = temp_dir("foundry-review-empty");
+        let report = dir.join("report.md");
+        std::fs::write(&report, "").expect("failed to write report");
+
+        assert_eq!(parse_audit_findings(&report), (1, 0, 0));
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn parse_audit_findings_returns_high_for_whitespace_only_file() {
+        let dir = temp_dir("foundry-review-whitespace");
+        let report = dir.join("report.md");
+        std::fs::write(&report, "   \n  \n").expect("failed to write report");
+
+        assert_eq!(parse_audit_findings(&report), (1, 0, 0));
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn check_review_passed_returns_false_for_missing_file() {
+        let path = PathBuf::from("/tmp/nonexistent-review-report-foundry.md");
+        assert!(!check_review_passed(&path));
     }
 }

@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 
 use chrono::{DateTime, Utc};
 use crossterm::event::{self, MouseEvent};
@@ -6,7 +7,11 @@ use std::path::PathBuf;
 
 use crate::agent::{AgentOutputEvent, AgentRole};
 use crate::git;
+use crate::orchestrator::OrchestratorOutcome;
 use crate::task::{self, Task};
+
+const LOG_MESSAGES_CAP: usize = 500;
+const TASK_HISTORY_CAP: usize = 200;
 
 // ─── App State ───────────────────────────────────────────────
 
@@ -38,6 +43,7 @@ pub enum StartupScenario {
 pub enum StartupAction {
     Continue,
     DescribeWork,
+    DesignWithReview,
     ScanProject,
     ViewTasks,
     EditSpec,
@@ -68,6 +74,12 @@ pub struct PlanningState {
     pub label: String,
     #[allow(dead_code)]
     pub user_intent: Option<String>,
+    pub orchestrator_mode: bool,
+    pub orchestrator_iteration: usize,
+    pub orchestrator_max_iterations: usize,
+    pub orchestrator_finding_count: usize,
+    pub orchestrator_role_label: Option<String>,
+    pub orchestrator_role_model: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -94,6 +106,9 @@ pub(super) enum PendingTransition {
     StartPlanning {
         user_intent: Option<String>,
         label: String,
+    },
+    StartDesign {
+        user_intent: String,
     },
     AppendTasks(AppendTasksRequest),
     OpenExternalEditor {
@@ -122,6 +137,7 @@ pub struct AppState {
     pub task_queue: Vec<Task>,
     pub task_queue_scroll: usize,
     pub task_history: HashMap<String, TaskPipelineHistory>,
+    pub task_history_order: Vec<String>,
     pub discovery_round: usize,
     pub is_discovering: bool,
     pub should_quit: bool,
@@ -132,6 +148,9 @@ pub struct AppState {
     pub inject_input: Option<String>,
     pub show_dashboard: bool,
     pub show_patterns: bool,
+    pub show_findings: bool,
+    pub findings_scroll: usize,
+    pub last_orchestrator_outcome: Option<OrchestratorOutcome>,
     pub patterns_scroll: usize,
     pub session_feat_commits: usize,
     pub session_wip_commits: usize,
@@ -141,6 +160,7 @@ pub struct AppState {
     pub task_stages_seen: Vec<AgentRole>,
     pub(super) startup_scroll_debounce_ticks: u8,
     pub(super) pending_transition: Option<PendingTransition>,
+    pub(super) tasks_file_lock: Arc<Mutex<()>>,
 }
 
 impl AppState {
@@ -163,6 +183,7 @@ impl AppState {
             task_queue: Vec::new(),
             task_queue_scroll: 0,
             task_history: HashMap::new(),
+            task_history_order: Vec::new(),
             discovery_round: 0,
             is_discovering: false,
             should_quit: false,
@@ -173,6 +194,9 @@ impl AppState {
             inject_input: None,
             show_dashboard: false,
             show_patterns: false,
+            show_findings: false,
+            findings_scroll: 0,
+            last_orchestrator_outcome: None,
             patterns_scroll: 0,
             session_feat_commits: 0,
             session_wip_commits: 0,
@@ -182,11 +206,16 @@ impl AppState {
             task_stages_seen: Vec::new(),
             startup_scroll_debounce_ticks: 0,
             pending_transition: None,
+            tasks_file_lock: Arc::new(Mutex::new(())),
         }
     }
 
     pub(super) fn log(&mut self, msg: impl Into<String>) {
         self.log_messages.push((Utc::now(), msg.into()));
+        if self.log_messages.len() > LOG_MESSAGES_CAP {
+            let excess = self.log_messages.len() - LOG_MESSAGES_CAP;
+            self.log_messages.drain(..excess);
+        }
     }
 
     pub(super) fn clear_agent(&mut self) {
@@ -208,6 +237,16 @@ impl AppState {
         self.total_count = tasks.len();
         self.completed_count = task::count_completed(tasks);
     }
+
+    pub(super) fn cap_task_history(&mut self) {
+        if self.task_history_order.len() <= TASK_HISTORY_CAP {
+            return;
+        }
+        let excess = self.task_history_order.len() - TASK_HISTORY_CAP;
+        for key in self.task_history_order.drain(..excess) {
+            self.task_history.remove(&key);
+        }
+    }
 }
 
 // ─── Task Pipeline History ────────────────────────────────────
@@ -225,6 +264,7 @@ pub(super) enum AppEvent {
     AgentOutput(AgentOutputEvent),
     AgentDone(bool),
     PlanningFinished(PlanningOutcome),
+    OrchestratorFinished(crate::orchestrator::OrchestratorOutcome),
     LoopEvent(LoopEvent),
     Key(event::KeyEvent),
     Mouse(MouseEvent),
@@ -238,9 +278,10 @@ pub(super) enum LoopEvent {
     AgentStarted(AgentRole, String),
     TaskCompleted(String, bool),
     NextTaskUpdated(Option<String>),
-    DiscoveryStarted,
+    DiscoveryStarted(usize),
     DiscoveryCompleted(usize),
     Log(String),
+    BackgroundLog(String),
     CountsUpdated(usize, usize),
     QueueUpdated(Vec<Task>),
     TaskReviewResult {

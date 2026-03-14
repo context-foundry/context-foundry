@@ -14,6 +14,7 @@ use std::path::PathBuf;
 
 use super::context::RunContext;
 use super::{review, AppEvent, LoopEvent};
+use crate::utils::atomic_write_file;
 
 // ─── State File Backup/Restore ───────────────────────────────
 // Scaffold tools (e.g. `npm create vite --overwrite`) can delete
@@ -84,7 +85,7 @@ fn restore_state_files(
             if let Some(parent) = path.parent() {
                 let _ = std::fs::create_dir_all(parent);
             }
-            match std::fs::write(path, content) {
+            match atomic_write_file(path, content) {
                 Ok(()) => restored += 1,
                 Err(e) => {
                     let name = path.file_name().unwrap_or_default().to_string_lossy();
@@ -103,7 +104,7 @@ fn restore_state_files(
 pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEvent>) {
     ctx.ensure_runtime_dirs();
 
-    let mut discovery_round: usize = 0;
+    let mut discovery_round: usize = task::highest_discovery_round(&ctx.plan_path);
 
     loop {
         let tasks = match task::parse_tasks(&ctx.plan_path) {
@@ -148,6 +149,7 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
             }
 
             if success {
+                let _lock = ctx.tasks_file_lock.lock().unwrap_or_else(|e| e.into_inner());
                 let _ = task::mark_done(&ctx.plan_path, task_info.line_number);
             }
 
@@ -176,7 +178,7 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::NextTaskUpdated(None)));
             discovery_round += 1;
 
-            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::DiscoveryStarted));
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::DiscoveryStarted(discovery_round)));
 
             let pre_count = tasks.len();
 
@@ -219,6 +221,19 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                 result.as_ref().map(|r| r.success).unwrap_or(false),
             ));
 
+            // Check stop after discovery agent completion
+            if ctx.is_stop_requested() {
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+                    "Stop requested after DISCOVERY agent — shutting down".to_string(),
+                )));
+                let stop_file = ctx.stop_file();
+                if stop_file.exists() {
+                    let _ = std::fs::remove_file(stop_file);
+                }
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Finished));
+                return;
+            }
+
             let new_tasks = match task::parse_tasks(&ctx.plan_path) {
                 Ok(t) => t.len().saturating_sub(pre_count),
                 Err(_) => 0,
@@ -233,6 +248,18 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                     "No new tasks found — waiting before next scan...".to_string(),
                 )));
                 tokio::time::sleep(Duration::from_secs(ctx.config.pause_between_cycles_secs)).await;
+                // Check stop after inter-cycle sleep
+                if ctx.is_stop_requested() {
+                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+                        "Stop requested during discovery pause — shutting down".to_string(),
+                    )));
+                    let stop_file = ctx.stop_file();
+                    if stop_file.exists() {
+                        let _ = std::fs::remove_file(stop_file);
+                    }
+                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Finished));
+                    return;
+                }
             } else {
                 let _ = git::commit_and_push(
                     &ctx.project_dir,
@@ -244,6 +271,19 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                     ),
                     false,
                 );
+            }
+
+            // Check stop after discovery commit
+            if ctx.is_stop_requested() {
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+                    "Stop requested after discovery commit — shutting down".to_string(),
+                )));
+                let stop_file = ctx.stop_file();
+                if stop_file.exists() {
+                    let _ = std::fs::remove_file(stop_file);
+                }
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Finished));
+                return;
             }
 
             if let Ok(tasks) = task::parse_tasks(&ctx.plan_path) {
@@ -361,6 +401,16 @@ async fn process_task(
 
     tokio::time::sleep(Duration::from_secs(ctx.config.pause_between_agents_secs)).await;
 
+    // Check stop between planner and builder
+    if ctx.is_stop_requested() {
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+            "Stop requested after PLANNER for {} — skipping remaining stages",
+            task_id
+        ))));
+        let _ = git::commit_and_push(&ctx.project_dir, &ctx.config, task_id, task_desc, true);
+        return false;
+    }
+
     let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
     let fwd_tx = tx.clone();
     tokio::spawn(async move {
@@ -407,6 +457,16 @@ async fn process_task(
     }
 
     tokio::time::sleep(Duration::from_secs(ctx.config.pause_between_agents_secs)).await;
+
+    // Check stop between builder and reviewer
+    if ctx.is_stop_requested() {
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+            "Stop requested after BUILDER for {} — skipping review",
+            task_id
+        ))));
+        let _ = git::commit_and_push(&ctx.project_dir, &ctx.config, task_id, task_desc, true);
+        return false;
+    }
 
     let validated = if ctx.config.backpressure_only {
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
@@ -489,20 +549,16 @@ async fn run_pattern_extraction(
     patterns_extracted: &std::path::Path,
     tx: &mpsc::UnboundedSender<AppEvent>,
 ) {
-    let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
-    let fwd_tx = tx.clone();
-    tokio::spawn(async move {
-        while let Some(evt) = agent_rx.recv().await {
-            let _ = fwd_tx.send(AppEvent::AgentOutput(evt));
-        }
-    });
+    let (agent_tx, _agent_rx) = mpsc::unbounded_channel();
 
     let model = &ctx.config.discovery_model;
-    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::AgentStarted(
-        AgentRole::Discovery,
-        Config::display_provider_model(&ctx.config.discovery_provider, model),
+    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BackgroundLog(
+        format!(
+            "Background pattern extraction started ({})",
+            Config::display_provider_model(&ctx.config.discovery_provider, model),
+        ),
     )));
-    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BackgroundLog(
         "Extracting patterns from build artifacts...".to_string(),
     )));
 
@@ -516,28 +572,32 @@ async fn run_pattern_extraction(
         agent_tx,
         &ctx.log_dir,
         Some(&["Read", "Write"]),
-        600,
+        ctx.config.agent_timeout_secs,
         Some(ctx.shutdown.clone()),
     )
     .await;
 
-    let _ = tx.send(AppEvent::AgentDone(
-        result.as_ref().map(|r| r.success).unwrap_or(false),
-    ));
+    let success = result.as_ref().map(|r| r.success).unwrap_or(false);
+    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BackgroundLog(
+        format!(
+            "Background pattern extraction {}",
+            if success { "completed" } else { "failed" },
+        ),
+    )));
 
     if patterns_extracted.exists() {
         match patterns::extract_patterns_from_file(patterns_extracted) {
             Ok(new_patterns) if !new_patterns.is_empty() => {
                 match patterns::merge_patterns(patterns_dir, new_patterns) {
                     Ok(added) => {
-                        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BackgroundLog(format!(
                             "Merged patterns: {} new added to {}",
                             added,
                             patterns_dir.display()
                         ))));
                     }
                     Err(e) => {
-                        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BackgroundLog(format!(
                             "Failed to merge patterns: {}",
                             e
                         ))));
@@ -545,12 +605,12 @@ async fn run_pattern_extraction(
                 }
             }
             Ok(_) => {
-                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BackgroundLog(
                     "No patterns extracted for this task".to_string(),
                 )));
             }
             Err(e) => {
-                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BackgroundLog(format!(
                     "Failed to parse extracted patterns: {}",
                     e
                 ))));
@@ -561,23 +621,275 @@ async fn run_pattern_extraction(
 
 fn should_restart_docker(task_desc: &str) -> bool {
     let lower = task_desc.to_lowercase();
-    lower.contains("docker")
-        || lower.contains("compose")
+    let has_docker_word = lower.contains("docker")
         || lower.contains("dockerfile")
-        || lower.contains("caddy")
-        || lower.contains("integration")
-        || lower.contains("scaffold")
+        || lower.contains("caddy");
+    if has_docker_word {
+        return true;
+    }
+    let infra_qualifiers = ["docker", "container", "service", "environment"];
+    let broad_keywords = ["integration", "scaffold", "compose"];
+    for kw in &broad_keywords {
+        if lower.contains(kw) {
+            for qual in &infra_qualifiers {
+                if lower.contains(qual) {
+                    return true;
+                }
+            }
+        }
+    }
+    false
 }
 
 #[cfg(test)]
 mod tests {
     use super::should_restart_docker;
+    use super::{backup_state_files, restore_state_files};
+    use crate::app::context::RunContext;
+    use crate::app::state::{AppEvent, LoopEvent};
+    use crate::config::Config;
+    use std::path::PathBuf;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::{Arc, Mutex};
+    use tokio::sync::mpsc;
 
     #[test]
     fn should_restart_docker_matches_expected_keywords() {
+        // Primary Docker keywords -- always trigger
         assert!(should_restart_docker("Update docker compose stack"));
+        assert!(should_restart_docker("Fix Dockerfile build stage"));
+        assert!(should_restart_docker("Update caddy reverse proxy"));
+
+        // Broad keywords WITH infrastructure qualifier -- trigger
         assert!(should_restart_docker("Fix caddy integration issue"));
-        assert!(should_restart_docker("Scaffold local environment"));
+        assert!(should_restart_docker("Scaffold docker environment"));
+        assert!(should_restart_docker("Scaffold container setup"));
+        assert!(should_restart_docker("Integration service config"));
+        assert!(should_restart_docker("Rebuild compose services"));
+        assert!(should_restart_docker("Compose container networking"));
+        assert!(should_restart_docker("Update compose docker config"));
+
+        // Broad keywords WITHOUT infrastructure qualifier -- do NOT trigger
+        assert!(!should_restart_docker("Add integration tests"));
+        assert!(!should_restart_docker("Scaffold test fixtures"));
+        assert!(!should_restart_docker("Scaffold auth module"));
+        assert!(!should_restart_docker("Fix integration callback parser"));
+        assert!(!should_restart_docker("Compose validation error messages"));
+        assert!(!should_restart_docker("Compose a response template"));
+
+        // Unrelated tasks -- do NOT trigger
         assert!(!should_restart_docker("Refactor auth callback parser"));
+        assert!(!should_restart_docker("Add unit tests for parser"));
+    }
+
+    fn make_test_ctx(name: &str) -> (RunContext, PathBuf) {
+        let unique = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("foundry-backup-{}-{}", name, unique));
+        std::fs::create_dir_all(&dir).expect("create temp dir");
+        std::fs::write(
+            dir.join("TASKS.md"),
+            "- [ ] T1.1: Test task\n- [ ] T1.2: Another task\n",
+        )
+        .expect("write TASKS.md");
+        std::fs::write(
+            dir.join("SPEC.md"),
+            "# Test Spec\n\nThis is the spec.\n",
+        )
+        .expect("write SPEC.md");
+        std::fs::write(
+            dir.join("CLAUDE.md"),
+            "# CLAUDE.md\n\nProject instructions.\n",
+        )
+        .expect("write CLAUDE.md");
+        std::fs::create_dir_all(dir.join(".buildloop")).expect("create .buildloop");
+        std::fs::write(
+            dir.join(".buildloop/current-plan.md"),
+            "# Plan: T1.1\n\n## Steps\n1. Do the thing\n",
+        )
+        .expect("write current-plan.md");
+        let ctx = RunContext::new(&dir, Config::default(), Arc::new(AtomicBool::new(false)), Arc::new(Mutex::new(())));
+        (ctx, dir)
+    }
+
+    fn drain_events(rx: &mut mpsc::UnboundedReceiver<AppEvent>) -> Vec<String> {
+        let mut msgs = Vec::new();
+        while let Ok(evt) = rx.try_recv() {
+            if let AppEvent::LoopEvent(LoopEvent::Log(msg)) = evt {
+                msgs.push(msg);
+            }
+        }
+        msgs
+    }
+
+    #[test]
+    fn test_backup_captures_all_state_files() {
+        let (ctx, dir) = make_test_ctx("capture");
+        let backup = backup_state_files(&ctx);
+
+        assert!(backup.files.contains_key(&ctx.plan_path));
+        assert!(backup.files.contains_key(&ctx.spec_path));
+        assert!(backup.files.contains_key(&ctx.current_plan));
+        assert!(backup.files.contains_key(&ctx.project_dir.join("CLAUDE.md")));
+        assert_eq!(
+            backup.files.get(&ctx.plan_path).unwrap(),
+            b"- [ ] T1.1: Test task\n- [ ] T1.2: Another task\n"
+        );
+        assert_eq!(
+            backup.files.get(&ctx.spec_path).unwrap(),
+            b"# Test Spec\n\nThis is the spec.\n"
+        );
+        assert!(backup.files.contains_key(&ctx.buildloop_dir));
+        assert!(backup.files.get(&ctx.buildloop_dir).unwrap().is_empty());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_restore_recovers_deleted_files() {
+        let (ctx, dir) = make_test_ctx("restore-deleted");
+        let backup = backup_state_files(&ctx);
+
+        std::fs::remove_file(&ctx.plan_path).unwrap();
+        std::fs::remove_file(&ctx.spec_path).unwrap();
+        std::fs::remove_file(ctx.project_dir.join("CLAUDE.md")).unwrap();
+
+        assert!(!ctx.plan_path.exists());
+        assert!(!ctx.spec_path.exists());
+
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        let restored = restore_state_files(&ctx, &backup, &tx);
+
+        assert_eq!(restored, 3);
+        assert!(ctx.plan_path.exists());
+        assert!(ctx.spec_path.exists());
+        assert!(ctx.project_dir.join("CLAUDE.md").exists());
+        assert_eq!(
+            std::fs::read_to_string(&ctx.plan_path).unwrap(),
+            "- [ ] T1.1: Test task\n- [ ] T1.2: Another task\n"
+        );
+
+        let _ = drain_events(&mut rx);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_restore_recovers_truncated_files() {
+        let (ctx, dir) = make_test_ctx("restore-truncated");
+        let backup = backup_state_files(&ctx);
+
+        std::fs::write(&ctx.plan_path, "").unwrap();
+        std::fs::write(&ctx.spec_path, "short").unwrap();
+
+        assert!(ctx.plan_path.exists());
+        assert!(ctx.spec_path.exists());
+
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        let restored = restore_state_files(&ctx, &backup, &tx);
+
+        assert_eq!(restored, 2);
+        assert_eq!(
+            std::fs::read_to_string(&ctx.plan_path).unwrap(),
+            "- [ ] T1.1: Test task\n- [ ] T1.2: Another task\n"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&ctx.spec_path).unwrap(),
+            "# Test Spec\n\nThis is the spec.\n"
+        );
+
+        let _ = drain_events(&mut rx);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_restore_does_not_overwrite_rewritten_current_plan() {
+        let (ctx, dir) = make_test_ctx("no-overwrite-plan");
+        let backup = backup_state_files(&ctx);
+
+        std::fs::write(
+            &ctx.current_plan,
+            "# Plan: T1.2\n\nNew plan content written by planner.\n",
+        )
+        .unwrap();
+
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        let restored = restore_state_files(&ctx, &backup, &tx);
+
+        assert_eq!(restored, 0);
+        assert_eq!(
+            std::fs::read_to_string(&ctx.current_plan).unwrap(),
+            "# Plan: T1.2\n\nNew plan content written by planner.\n"
+        );
+
+        let _ = drain_events(&mut rx);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_restore_recovers_deleted_current_plan() {
+        let (ctx, dir) = make_test_ctx("deleted-plan");
+        let backup = backup_state_files(&ctx);
+
+        std::fs::remove_file(&ctx.current_plan).unwrap();
+        assert!(!ctx.current_plan.exists());
+
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        let restored = restore_state_files(&ctx, &backup, &tx);
+
+        assert_eq!(restored, 1);
+        assert!(ctx.current_plan.exists());
+        assert_eq!(
+            std::fs::read_to_string(&ctx.current_plan).unwrap(),
+            "# Plan: T1.1\n\n## Steps\n1. Do the thing\n"
+        );
+
+        let _ = drain_events(&mut rx);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_restore_write_failure_produces_warning_log() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let (ctx, dir) = make_test_ctx("write-fail");
+        let backup = backup_state_files(&ctx);
+
+        std::fs::remove_file(&ctx.plan_path).unwrap();
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o444)).unwrap();
+
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        let restored = restore_state_files(&ctx, &backup, &tx);
+
+        assert_eq!(restored, 0);
+
+        let msgs = drain_events(&mut rx);
+        assert!(msgs.len() >= 1);
+        assert!(msgs.iter().any(|m| m.contains("Warning") && m.contains("TASKS.md")));
+
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_is_stop_requested_detects_stop_file() {
+        let (ctx, dir) = make_test_ctx("stop-file");
+        assert!(!ctx.is_stop_requested());
+        std::fs::write(ctx.stop_file(), "").unwrap();
+        assert!(ctx.is_stop_requested());
+        std::fs::remove_file(ctx.stop_file()).unwrap();
+        assert!(!ctx.is_stop_requested());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_is_stop_requested_detects_shutdown_flag() {
+        let (ctx, dir) = make_test_ctx("shutdown-flag");
+        assert!(!ctx.is_stop_requested());
+        ctx.shutdown.store(true, Ordering::Relaxed);
+        assert!(ctx.is_stop_requested());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

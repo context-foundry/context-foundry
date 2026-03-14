@@ -10,6 +10,7 @@ use std::{
 use tokio::sync::mpsc;
 
 use crate::agent::{self, AgentOutputEvent, AgentResult, ModelProvider, ProviderRunOptions};
+use crate::utils::atomic_write_file_best_effort;
 
 use super::{
     attachments::{external_attachment_count, resolve_all_attachments},
@@ -114,7 +115,10 @@ pub(super) fn start_sessions(
     let project_dir = state.project_dir.clone();
     let scan = state.scan.clone();
     let prompt = state.prompt.clone();
-    let execution_contract = state.selected_execution_contract().clone();
+    let Some(execution_contract) = state.selected_execution_contract().cloned() else {
+        state.log("no execution contract selected");
+        return;
+    };
     let external_count = external_attachment_count(&execution_contract.attachments);
     if external_count > 0 {
         state.log(format!(
@@ -238,7 +242,7 @@ async fn run_session(
         launch.prior_context.as_deref(),
     );
     let prompt_path = launch.artifact_dir.join("execution-brief.md");
-    let _ = fs::write(&prompt_path, &smoothed_prompt);
+    atomic_write_file_best_effort(&prompt_path, smoothed_prompt.as_bytes());
     let _ = tx.send(StudioEvent::SessionOutput {
         session_id: launch.id.clone(),
         event: AgentOutputEvent::Text(format!(
@@ -324,6 +328,12 @@ fn prepare_workspace(launch: &SessionLaunch) -> Result<()> {
         return Ok(());
     }
 
+    // Try git worktree first for git repos
+    if is_git_repo(&launch.project_dir) {
+        return create_worktree(&launch.project_dir, &launch.workspace_dir, &launch.id);
+    }
+
+    // Fallback: copy snapshot for non-git projects
     if launch.workspace_dir.exists() {
         fs::remove_dir_all(&launch.workspace_dir).with_context(|| {
             format!(
@@ -338,6 +348,179 @@ fn prepare_workspace(launch: &SessionLaunch) -> Result<()> {
     }
 
     copy_workspace_snapshot(&launch.project_dir, &launch.workspace_dir)
+}
+
+fn is_git_repo(dir: &Path) -> bool {
+    std::process::Command::new("git")
+        .args(["rev-parse", "--is-inside-work-tree"])
+        .current_dir(dir)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+}
+
+fn create_worktree(project_dir: &Path, workspace_dir: &Path, session_id: &str) -> Result<()> {
+    // 1. Snapshot dirty state (tracked + untracked) without disturbing the user's index.
+    //    Save the index file, stage everything, create a stash ref, then restore.
+    let git_dir_output = std::process::Command::new("git")
+        .args(["rev-parse", "--git-dir"])
+        .current_dir(project_dir)
+        .output()
+        .context("failed to locate git dir")?;
+    let git_dir_raw = String::from_utf8_lossy(&git_dir_output.stdout)
+        .trim()
+        .to_string();
+    let git_dir = if Path::new(&git_dir_raw).is_absolute() {
+        PathBuf::from(&git_dir_raw)
+    } else {
+        project_dir.join(&git_dir_raw)
+    };
+    let index_path = git_dir.join("index");
+    let index_backup = index_backup_path(&git_dir, session_id);
+
+    // Save current index
+    let had_index = index_path.exists();
+    if had_index {
+        fs::copy(&index_path, &index_backup).context("failed to back up git index")?;
+    }
+
+    // Stage all files (including untracked) and snapshot
+    let _ = std::process::Command::new("git")
+        .args(["add", "-A"])
+        .current_dir(project_dir)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status();
+    let stash_output = std::process::Command::new("git")
+        .args(["stash", "create"])
+        .current_dir(project_dir)
+        .output()
+        .context("failed to run git stash create")?;
+
+    // Restore original index state
+    if had_index {
+        fs::rename(&index_backup, &index_path).with_context(|| {
+            format!(
+                "failed to restore git index from backup {}",
+                index_backup.display()
+            )
+        })?;
+    } else if index_path.exists() {
+        fs::remove_file(&index_path).with_context(|| {
+            format!(
+                "failed to remove temporary git index {}",
+                index_path.display()
+            )
+        })?;
+    }
+    if index_backup.exists() {
+        let _ = fs::remove_file(&index_backup);
+    }
+
+    let stash_ref = String::from_utf8_lossy(&stash_output.stdout)
+        .trim()
+        .to_string();
+    let checkout_ref = if stash_ref.is_empty() {
+        "HEAD".to_string()
+    } else {
+        stash_ref
+    };
+
+    // 2. Clean up existing worktree at this path
+    let _ = std::process::Command::new("git")
+        .args([
+            "worktree",
+            "remove",
+            "--force",
+            &workspace_dir.display().to_string(),
+        ])
+        .current_dir(project_dir)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status();
+
+    if workspace_dir.exists() {
+        let _ = fs::remove_dir_all(workspace_dir);
+    }
+
+    let _ = std::process::Command::new("git")
+        .args(["worktree", "prune"])
+        .current_dir(project_dir)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status();
+
+    // 3. Ensure parent dir exists
+    if let Some(parent) = workspace_dir.parent() {
+        fs::create_dir_all(parent)?;
+    }
+
+    // 4. Create the worktree
+    let result = std::process::Command::new("git")
+        .args([
+            "worktree",
+            "add",
+            "--detach",
+            &workspace_dir.display().to_string(),
+            &checkout_ref,
+        ])
+        .current_dir(project_dir)
+        .output()
+        .context("failed to run git worktree add")?;
+
+    if !result.status.success() {
+        let stderr = String::from_utf8_lossy(&result.stderr);
+        anyhow::bail!("git worktree add failed: {}", stderr.trim());
+    }
+
+    Ok(())
+}
+
+fn index_backup_path(git_dir: &Path, session_id: &str) -> PathBuf {
+    let sanitized: String = session_id
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' {
+                ch
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    let suffix = if sanitized.is_empty() {
+        "session".to_string()
+    } else {
+        sanitized
+    };
+    git_dir.join(format!("index.foundry-backup-{}", suffix))
+}
+
+#[allow(dead_code)]
+fn remove_worktree(project_dir: &Path, workspace_dir: &Path) {
+    let _ = std::process::Command::new("git")
+        .args([
+            "worktree",
+            "remove",
+            "--force",
+            &workspace_dir.display().to_string(),
+        ])
+        .current_dir(project_dir)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status();
+
+    if workspace_dir.exists() {
+        let _ = fs::remove_dir_all(workspace_dir);
+    }
+
+    let _ = std::process::Command::new("git")
+        .args(["worktree", "prune"])
+        .current_dir(project_dir)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status();
 }
 
 fn copy_workspace_snapshot(src_root: &Path, dst_root: &Path) -> Result<()> {
@@ -479,8 +662,8 @@ mod tests {
         test_helpers::{temp_test_dir, test_contract, test_scan, test_state},
     };
     use super::{
-        discover_artifacts, prepare_workspace, run_session, should_retry_provider_attempt,
-        start_sessions, CODEX_MAX_ATTEMPTS,
+        discover_artifacts, index_backup_path, prepare_workspace, remove_worktree, run_session,
+        should_retry_provider_attempt, start_sessions, CODEX_MAX_ATTEMPTS,
     };
 
     fn test_launch(
@@ -568,6 +751,206 @@ mod tests {
 
         fs::remove_dir_all(&project_dir)?;
         Ok(())
+    }
+
+    fn git_init(dir: &Path) {
+        std::process::Command::new("git")
+            .args(["init"])
+            .current_dir(dir)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .expect("git init");
+        std::process::Command::new("git")
+            .args(["add", "-A"])
+            .current_dir(dir)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .expect("git add");
+        std::process::Command::new("git")
+            .args([
+                "-c",
+                "user.email=test@test.com",
+                "-c",
+                "user.name=Test",
+                "commit",
+                "--allow-empty",
+                "-m",
+                "init",
+            ])
+            .current_dir(dir)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .expect("git commit");
+    }
+
+    #[test]
+    fn prepare_workspace_creates_worktree_for_git_repos() -> Result<()> {
+        let project_dir = temp_test_dir("foundry-session-worktree");
+        fs::create_dir_all(project_dir.join("src"))?;
+        fs::write(project_dir.join("src/main.rs"), "fn main() {}\n")?;
+        git_init(&project_dir);
+
+        let workspace_dir = project_dir.join(STUDIO_ROOT_DIR).join("workspaces/claude");
+        let launch = test_launch(&project_dir, &workspace_dir, WorkspaceMode::Isolated, true);
+        prepare_workspace(&launch)?;
+
+        // Worktree marker: .git is a file (not a directory) pointing to the main repo
+        assert!(workspace_dir.join(".git").exists());
+        assert!(workspace_dir.join(".git").is_file());
+        // Source files should be present
+        assert!(workspace_dir.join("src/main.rs").exists());
+
+        remove_worktree(&project_dir, &workspace_dir);
+        fs::remove_dir_all(&project_dir)?;
+        Ok(())
+    }
+
+    #[test]
+    fn prepare_workspace_worktree_captures_dirty_state() -> Result<()> {
+        let project_dir = temp_test_dir("foundry-session-worktree-dirty");
+        fs::create_dir_all(project_dir.join("src"))?;
+        fs::write(project_dir.join("src/main.rs"), "fn main() {}\n")?;
+        git_init(&project_dir);
+
+        // Make an uncommitted change
+        fs::write(
+            project_dir.join("src/main.rs"),
+            "fn main() { println!(\"dirty\"); }\n",
+        )?;
+
+        let workspace_dir = project_dir.join(STUDIO_ROOT_DIR).join("workspaces/claude");
+        let launch = test_launch(&project_dir, &workspace_dir, WorkspaceMode::Isolated, true);
+        prepare_workspace(&launch)?;
+
+        let content = fs::read_to_string(workspace_dir.join("src/main.rs"))?;
+        assert!(
+            content.contains("dirty"),
+            "worktree should contain uncommitted changes: {}",
+            content
+        );
+
+        remove_worktree(&project_dir, &workspace_dir);
+        fs::remove_dir_all(&project_dir)?;
+        Ok(())
+    }
+
+    #[test]
+    fn prepare_workspace_worktree_preserves_staged_state() -> Result<()> {
+        let project_dir = temp_test_dir("foundry-session-worktree-staged");
+        fs::create_dir_all(project_dir.join("src"))?;
+        fs::write(project_dir.join("src/main.rs"), "fn main() {}\n")?;
+        git_init(&project_dir);
+
+        // Stage a change
+        fs::write(
+            project_dir.join("src/main.rs"),
+            "fn main() { /* staged */ }\n",
+        )?;
+        std::process::Command::new("git")
+            .args(["add", "src/main.rs"])
+            .current_dir(&project_dir)
+            .status()
+            .expect("git add");
+
+        // Verify something is staged
+        let before = std::process::Command::new("git")
+            .args(["diff", "--cached", "--name-only"])
+            .current_dir(&project_dir)
+            .output()
+            .expect("git diff --cached");
+        let staged_before = String::from_utf8_lossy(&before.stdout).trim().to_string();
+        assert!(
+            staged_before.contains("main.rs"),
+            "file should be staged before worktree creation"
+        );
+
+        let workspace_dir = project_dir.join(STUDIO_ROOT_DIR).join("workspaces/claude");
+        let launch = test_launch(&project_dir, &workspace_dir, WorkspaceMode::Isolated, true);
+        prepare_workspace(&launch)?;
+
+        // Verify the staged state is still intact
+        let after = std::process::Command::new("git")
+            .args(["diff", "--cached", "--name-only"])
+            .current_dir(&project_dir)
+            .output()
+            .expect("git diff --cached");
+        let staged_after = String::from_utf8_lossy(&after.stdout).trim().to_string();
+        assert_eq!(
+            staged_before, staged_after,
+            "staged files should be preserved after worktree creation"
+        );
+
+        remove_worktree(&project_dir, &workspace_dir);
+        fs::remove_dir_all(&project_dir)?;
+        Ok(())
+    }
+
+    #[test]
+    fn prepare_workspace_worktree_captures_untracked_files() -> Result<()> {
+        let project_dir = temp_test_dir("foundry-session-worktree-untracked");
+        fs::create_dir_all(project_dir.join("src"))?;
+        fs::write(project_dir.join("src/main.rs"), "fn main() {}\n")?;
+        git_init(&project_dir);
+
+        // Add an untracked file after the initial commit
+        fs::write(project_dir.join("src/new_module.rs"), "pub fn hello() {}\n")?;
+
+        let workspace_dir = project_dir.join(STUDIO_ROOT_DIR).join("workspaces/claude");
+        let launch = test_launch(&project_dir, &workspace_dir, WorkspaceMode::Isolated, true);
+        prepare_workspace(&launch)?;
+
+        assert!(
+            workspace_dir.join("src/new_module.rs").exists(),
+            "worktree should contain untracked files"
+        );
+        let content = fs::read_to_string(workspace_dir.join("src/new_module.rs"))?;
+        assert!(
+            content.contains("hello"),
+            "untracked file should have expected content: {}",
+            content
+        );
+
+        remove_worktree(&project_dir, &workspace_dir);
+        fs::remove_dir_all(&project_dir)?;
+        Ok(())
+    }
+
+    #[test]
+    fn prepare_workspace_replaces_existing_worktree() -> Result<()> {
+        let project_dir = temp_test_dir("foundry-session-worktree-replace");
+        fs::create_dir_all(project_dir.join("src"))?;
+        fs::write(project_dir.join("src/main.rs"), "fn main() {}\n")?;
+        git_init(&project_dir);
+
+        let workspace_dir = project_dir.join(STUDIO_ROOT_DIR).join("workspaces/claude");
+
+        // Create worktree twice -- second run should replace the first
+        let launch = test_launch(&project_dir, &workspace_dir, WorkspaceMode::Isolated, true);
+        prepare_workspace(&launch)?;
+        assert!(workspace_dir.join("src/main.rs").exists());
+
+        let launch = test_launch(&project_dir, &workspace_dir, WorkspaceMode::Isolated, true);
+        prepare_workspace(&launch)?;
+        assert!(workspace_dir.join("src/main.rs").exists());
+        assert!(workspace_dir.join(".git").is_file());
+
+        remove_worktree(&project_dir, &workspace_dir);
+        fs::remove_dir_all(&project_dir)?;
+        Ok(())
+    }
+
+    #[test]
+    fn index_backup_path_is_unique_per_session() {
+        let git_dir = Path::new("/tmp/foundry-git-dir");
+        let first = index_backup_path(git_dir, "session-1");
+        let second = index_backup_path(git_dir, "session-2");
+        let sanitized = index_backup_path(git_dir, "session/with spaces");
+
+        assert_ne!(first, second);
+        assert!(sanitized.ends_with("index.foundry-backup-session_with_spaces"));
     }
 
     #[test]

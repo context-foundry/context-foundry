@@ -8,7 +8,7 @@ use std::time::Duration;
 use tokio::sync::mpsc;
 
 mod build;
-mod commands;
+pub(crate) mod commands;
 mod context;
 mod contract;
 mod planning;
@@ -28,10 +28,11 @@ pub use self::state::{
 use crate::agent::{AgentOutputEvent, AgentRole};
 use crate::config::Config;
 use crate::git;
+use crate::orchestrator::{self, OrchestratorConfig, OrchestratorOutcome};
 use crate::task;
 use crate::tui;
 use crate::update;
-use crate::utils::truncate_str;
+use crate::utils::{atomic_write_file, truncate_str};
 
 // ─── TUI Mode ────────────────────────────────────────────────
 
@@ -89,9 +90,17 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
     loop {
         // Draw based on phase
         terminal.draw(|frame| match state.phase {
-            AppPhase::Startup => tui::render_startup(frame, &state),
+            AppPhase::Startup => {
+                if state.show_findings {
+                    tui::render_findings(frame, &state);
+                } else {
+                    tui::render_startup(frame, &state);
+                }
+            }
             AppPhase::Planning | AppPhase::Running => {
-                if state.show_patterns {
+                if state.show_findings {
+                    tui::render_findings(frame, &state);
+                } else if state.show_patterns {
                     tui::render_patterns(frame, &state, &config);
                 } else if state.show_dashboard {
                     tui::render_dashboard(frame, &state, &config);
@@ -236,6 +245,9 @@ fn apply_pending_transition(
                     shutdown,
                 );
             }
+            PendingTransition::StartDesign { user_intent } => {
+                spawn_design_loop(project_dir, config, event_tx, state, user_intent, shutdown);
+            }
             PendingTransition::AppendTasks(request) => {
                 spawn_append_tasks(project_dir, config, event_tx, state, request, shutdown);
             }
@@ -270,13 +282,21 @@ fn launch_external_editor(file_path: &Path) -> Result<()> {
         .filter(|v| !v.trim().is_empty())
         .unwrap_or_else(|| "nano".to_string());
 
-    let status = std::process::Command::new("sh")
-        .arg("-c")
-        .arg("$FOUNDRY_EDITOR \"$FOUNDRY_TARGET_FILE\"")
-        .env("FOUNDRY_EDITOR", &editor)
-        .env("FOUNDRY_TARGET_FILE", file_path)
-        .status()
-        .context("failed to launch editor")?;
+    let status = if cfg!(target_os = "windows") {
+        std::process::Command::new("cmd")
+            .arg("/C")
+            .arg(&editor)
+            .arg(file_path)
+            .status()
+            .context("failed to launch editor")?
+    } else {
+        std::process::Command::new("sh")
+            .arg("-c")
+            .arg(format!("{} \"$FOUNDRY_TARGET_FILE\"", editor))
+            .env("FOUNDRY_TARGET_FILE", file_path)
+            .status()
+            .context("failed to launch editor")?
+    };
 
     if !status.success() {
         anyhow::bail!("editor exited with status {}", status);
@@ -312,7 +332,7 @@ fn spawn_build_loop(
         task::count_pending(&tasks)
     ));
 
-    let run_context = RunContext::new(project_dir, config.clone(), shutdown.clone());
+    let run_context = RunContext::new(project_dir, config.clone(), shutdown.clone(), state.tasks_file_lock.clone());
     let loop_tx = event_tx.clone();
     tokio::spawn(async move {
         build::build_loop(run_context, loop_tx).await;
@@ -335,6 +355,12 @@ fn spawn_inline_planning(
     state.planning = Some(PlanningState {
         label: label.clone(),
         user_intent: user_intent.clone(),
+        orchestrator_mode: false,
+        orchestrator_iteration: 0,
+        orchestrator_max_iterations: 0,
+        orchestrator_finding_count: 0,
+        orchestrator_role_label: None,
+        orchestrator_role_model: None,
     });
     state.current_task = None;
     state.next_task_hint = None;
@@ -345,7 +371,7 @@ fn spawn_inline_planning(
     );
     state.log(format!("Planning started — {}", label));
 
-    let run_context = RunContext::new(project_dir, config.clone(), shutdown.clone());
+    let run_context = RunContext::new(project_dir, config.clone(), shutdown.clone(), state.tasks_file_lock.clone());
     let event_tx = event_tx.clone();
     tokio::spawn(async move {
         planning::spawn_inline_planning_task(run_context, event_tx, user_intent).await;
@@ -383,6 +409,12 @@ fn spawn_append_tasks(
     state.planning = Some(PlanningState {
         label: request.label.clone(),
         user_intent: Some(request.description.clone()),
+        orchestrator_mode: false,
+        orchestrator_iteration: 0,
+        orchestrator_max_iterations: 0,
+        orchestrator_finding_count: 0,
+        orchestrator_role_label: None,
+        orchestrator_role_model: None,
     });
     state.current_task = None;
     state.next_task_hint = None;
@@ -390,7 +422,7 @@ fn spawn_append_tasks(
     state.set_agent(AgentRole::Planner, &format!("Claude {}", actual_model));
     state.log(format!("Planning started — {}", request.label));
 
-    let run_context = RunContext::new(project_dir, config.clone(), shutdown.clone());
+    let run_context = RunContext::new(project_dir, config.clone(), shutdown.clone(), state.tasks_file_lock.clone());
     let event_tx = event_tx.clone();
     tokio::spawn(async move {
         planning::run_append_tasks(run_context, event_tx, request.description).await;
@@ -448,15 +480,64 @@ pub(super) fn seed_spec_from_brief(project_dir: &Path, description: &str) -> Res
         .unwrap_or_default()
         .to_string_lossy();
     let spec = format!("# Specification: {project_name}\n\n## Project Brief\n{description}\n");
-    std::fs::write(contract_paths.spec_path, spec)?;
+    atomic_write_file(&contract_paths.spec_path, spec.as_bytes())?;
     Ok(())
 }
 
 fn handle_planning_event(state: &mut AppState, event: AppEvent) {
     match event {
-        AppEvent::AgentOutput(output) => handle_agent_output(state, output),
+        AppEvent::AgentOutput(output) => {
+            handle_agent_output(state, output);
+            if let Some(ref mut planning) = state.planning {
+                if planning.orchestrator_mode {
+                    if let Some(last_line) = state.agent_output.last() {
+                        if let Some(rest) = last_line.strip_prefix("[orchestrator] Iteration ") {
+                            if let Some(slash_pos) = rest.find('/') {
+                                if let Ok(iter_num) = rest[..slash_pos].parse::<usize>() {
+                                    planning.orchestrator_iteration = iter_num;
+                                }
+                            }
+                            if rest.contains("proposer") {
+                                planning.orchestrator_role_label =
+                                    Some("Proposing".to_string());
+                                if let Some(paren_open) = rest.find('(') {
+                                    if let Some(paren_close) = rest.find(')') {
+                                        if paren_close > paren_open + 1 {
+                                            planning.orchestrator_role_model =
+                                                Some(rest[paren_open + 1..paren_close].to_string());
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        if let Some(rest) = last_line.strip_prefix("[orchestrator] Reviewing with ") {
+                            planning.orchestrator_role_label = Some("Reviewing".to_string());
+                            let model_str = rest.trim_end_matches("...");
+                            if !model_str.is_empty() {
+                                planning.orchestrator_role_model = Some(model_str.to_string());
+                            }
+                        }
+                        if let Some(rest) =
+                            last_line.strip_prefix("[orchestrator] Review: ")
+                        {
+                            if let Some(paren_start) = rest.find('(') {
+                                let after_paren = &rest[paren_start + 1..];
+                                if let Some(space) = after_paren.find(' ') {
+                                    if let Ok(count) =
+                                        after_paren[..space].parse::<usize>()
+                                    {
+                                        planning.orchestrator_finding_count = count;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
         AppEvent::AgentDone(success) => handle_agent_done(state, success),
         AppEvent::PlanningFinished(outcome) => apply_planning_outcome(state, outcome),
+        AppEvent::OrchestratorFinished(outcome) => apply_orchestrator_outcome(state, outcome),
         AppEvent::Key(key) => handle_planning_key(state, key),
         AppEvent::Mouse(_) | AppEvent::Paste(_) => {}
         AppEvent::Tick => {
@@ -481,18 +562,28 @@ fn handle_planning_key(state: &mut AppState, key: event::KeyEvent) {
             state.show_dashboard = !state.show_dashboard;
             state.show_patterns = false;
         }
+        KeyCode::Char('f') => {
+            if state.last_orchestrator_outcome.is_some() {
+                state.show_findings = !state.show_findings;
+                state.findings_scroll = 0;
+            }
+        }
         KeyCode::Char('p') => {
             state.show_patterns = !state.show_patterns;
         }
         KeyCode::Up => {
-            if state.show_patterns {
+            if state.show_findings {
+                state.findings_scroll = state.findings_scroll.saturating_sub(3);
+            } else if state.show_patterns {
                 state.patterns_scroll = state.patterns_scroll.saturating_sub(3);
             } else {
                 state.scroll_offset = state.scroll_offset.saturating_add(3);
             }
         }
         KeyCode::Down => {
-            if state.show_patterns {
+            if state.show_findings {
+                state.findings_scroll = state.findings_scroll.saturating_add(3);
+            } else if state.show_patterns {
                 state.patterns_scroll = state.patterns_scroll.saturating_add(3);
             } else {
                 state.scroll_offset = state.scroll_offset.saturating_sub(3);
@@ -536,8 +627,12 @@ fn handle_event(state: &mut AppState, event: AppEvent) {
                     state.session_wip_commits += 1;
                 }
                 // Save stages into history (review result may arrive separately)
+                if !state.task_history.contains_key(&id) {
+                    state.task_history_order.push(id.clone());
+                }
                 let history = state.task_history.entry(id.clone()).or_default();
                 history.stages_seen = state.task_stages_seen.clone();
+                state.cap_task_history();
                 state.current_task = None;
                 state.task_start = None;
                 state.task_stages_seen.clear();
@@ -546,10 +641,10 @@ fn handle_event(state: &mut AppState, event: AppEvent) {
             LoopEvent::NextTaskUpdated(next_task) => {
                 state.next_task_hint = next_task;
             }
-            LoopEvent::DiscoveryStarted => {
+            LoopEvent::DiscoveryStarted(round) => {
                 state.is_discovering = true;
-                state.discovery_round += 1;
-                state.log(format!("Discovery round {} started", state.discovery_round));
+                state.discovery_round = round;
+                state.log(format!("Discovery round {} started", round));
                 state.clear_agent();
             }
             LoopEvent::DiscoveryCompleted(new_count) => {
@@ -557,6 +652,20 @@ fn handle_event(state: &mut AppState, event: AppEvent) {
                 state.log(format!("Discovery found {} new tasks", new_count));
             }
             LoopEvent::Log(ref msg) => {
+                // Track patterns learned from "Merged patterns: N new added" messages
+                if msg.starts_with("Merged patterns:") {
+                    if let Some(count_str) = msg
+                        .strip_prefix("Merged patterns: ")
+                        .and_then(|s| s.split_whitespace().next())
+                    {
+                        if let Ok(n) = count_str.parse::<usize>() {
+                            state.session_patterns_learned += n;
+                        }
+                    }
+                }
+                state.log(msg.clone());
+            }
+            LoopEvent::BackgroundLog(ref msg) => {
                 // Track patterns learned from "Merged patterns: N new added" messages
                 if msg.starts_with("Merged patterns:") {
                     if let Some(count_str) = msg
@@ -582,9 +691,13 @@ fn handle_event(state: &mut AppState, event: AppEvent) {
                 fix_passes,
                 passed,
             } => {
+                if !state.task_history.contains_key(&task_id) {
+                    state.task_history_order.push(task_id.clone());
+                }
                 let history = state.task_history.entry(task_id).or_default();
                 history.fix_passes = fix_passes;
                 history.passed_review = passed;
+                state.cap_task_history();
             }
             LoopEvent::Finished => {
                 state.log("All work complete — loop finished");
@@ -618,6 +731,12 @@ fn handle_event(state: &mut AppState, event: AppEvent) {
                         state.show_dashboard = !state.show_dashboard;
                         state.show_patterns = false;
                     }
+                    KeyCode::Char('f') => {
+                        if state.last_orchestrator_outcome.is_some() {
+                            state.show_findings = !state.show_findings;
+                            state.findings_scroll = 0;
+                        }
+                    }
                     KeyCode::Char('p') => {
                         if state.show_patterns {
                             // Return to whatever view was active before patterns
@@ -631,14 +750,18 @@ fn handle_event(state: &mut AppState, event: AppEvent) {
                         state.inject_input = Some(String::new());
                     }
                     KeyCode::Up => {
-                        if state.show_patterns {
+                        if state.show_findings {
+                            state.findings_scroll = state.findings_scroll.saturating_sub(3);
+                        } else if state.show_patterns {
                             state.patterns_scroll = state.patterns_scroll.saturating_sub(3);
                         } else {
                             state.scroll_offset = state.scroll_offset.saturating_add(3);
                         }
                     }
                     KeyCode::Down => {
-                        if state.show_patterns {
+                        if state.show_findings {
+                            state.findings_scroll = state.findings_scroll.saturating_add(3);
+                        } else if state.show_patterns {
                             state.patterns_scroll = state.patterns_scroll.saturating_add(3);
                         } else {
                             state.scroll_offset = state.scroll_offset.saturating_sub(3);
@@ -691,6 +814,9 @@ fn handle_event(state: &mut AppState, event: AppEvent) {
             };
             state.log(message);
         }
+        AppEvent::OrchestratorFinished(_) => {
+            state.log("Ignoring late orchestrator result while running");
+        }
     }
 }
 
@@ -731,6 +857,8 @@ fn handle_inject_key(state: &mut AppState, key: event::KeyEvent) {
 }
 
 fn commit_inject_task(state: &mut AppState, description: &str, run_next: bool) {
+    let lock = state.tasks_file_lock.clone();
+    let _lock = lock.lock().unwrap_or_else(|e| e.into_inner());
     let project_dir = state.buildloop_dir.parent().unwrap_or(Path::new("."));
     let plan_path = ContractPaths::resolve(project_dir).tasks_path;
 
@@ -801,22 +929,19 @@ fn commit_inject_task(state: &mut AppState, description: &str, run_next: bool) {
             }
         }
 
-        if let Err(e) = std::fs::write(&plan_path, new_content) {
+        if let Err(e) = atomic_write_file(&plan_path, new_content.as_bytes()) {
             state.log(format!("Failed to inject task: {}", e));
             return;
         }
     } else {
-        // Append to end (default)
-        let append_line = format!("\n{}\n", new_task_line);
-        if let Err(e) = std::fs::OpenOptions::new()
-            .append(true)
-            .create(true)
-            .open(&plan_path)
-            .and_then(|mut f| {
-                use std::io::Write;
-                f.write_all(append_line.as_bytes())
-            })
-        {
+        // Append to end (default) -- read + atomic write for crash safety
+        let mut full_content = content.clone();
+        if !full_content.ends_with('\n') {
+            full_content.push('\n');
+        }
+        full_content.push_str(&new_task_line);
+        full_content.push('\n');
+        if let Err(e) = atomic_write_file(&plan_path, full_content.as_bytes()) {
             state.log(format!("Failed to inject task: {}", e));
             return;
         }
@@ -830,6 +955,8 @@ fn commit_inject_task(state: &mut AppState, description: &str, run_next: bool) {
     state.log(format!("Injected task {}{}", task_id, placement));
     state.total_count += 1;
 }
+
+const AGENT_OUTPUT_CAP: usize = 2000;
 
 fn handle_agent_output(state: &mut AppState, output: AgentOutputEvent) {
     state.events_received += 1;
@@ -867,6 +994,15 @@ fn handle_agent_output(state: &mut AppState, output: AgentOutputEvent) {
             for line in text.lines().take(10) {
                 state.agent_output.push(line.to_string());
             }
+        }
+    }
+    if state.agent_output.len() > AGENT_OUTPUT_CAP {
+        let excess = state.agent_output.len() - AGENT_OUTPUT_CAP;
+        state.agent_output.drain(..excess);
+        if state.scroll_offset >= excess {
+            state.scroll_offset -= excess;
+        } else {
+            state.scroll_offset = 0;
         }
     }
 }
@@ -928,6 +1064,131 @@ fn apply_planning_outcome(state: &mut AppState, outcome: PlanningOutcome) {
             message: Some(message),
         });
     }
+}
+
+fn spawn_design_loop(
+    project_dir: &Path,
+    config: &Config,
+    event_tx: &mpsc::UnboundedSender<AppEvent>,
+    state: &mut AppState,
+    user_intent: String,
+    shutdown: &Arc<AtomicBool>,
+) {
+    let orch_config = OrchestratorConfig::from_config(config);
+    let label = format!("Design: {}", truncate_str(&user_intent, 48));
+    state.phase = AppPhase::Planning;
+    state.startup = None;
+    state.planning = Some(PlanningState {
+        label: label.clone(),
+        user_intent: Some(user_intent.clone()),
+        orchestrator_mode: true,
+        orchestrator_iteration: 0,
+        orchestrator_max_iterations: orch_config.max_iterations,
+        orchestrator_finding_count: 0,
+        orchestrator_role_label: None,
+        orchestrator_role_model: None,
+    });
+    state.current_task = None;
+    state.next_task_hint = None;
+    state.is_discovering = false;
+    state.set_agent(
+        AgentRole::Planner,
+        &format!("{} {}", orch_config.proposer_provider, orch_config.proposer_model),
+    );
+    state.log(format!("Design started — {}", label));
+
+    let project_dir = project_dir.to_path_buf();
+    let event_tx = event_tx.clone();
+    let user_intent_clone = user_intent;
+    let shutdown_clone = Some(shutdown.clone());
+
+    // Create a channel to forward agent output events from the orchestrator to the TUI
+    let (agent_tx, mut agent_rx) = mpsc::unbounded_channel::<AgentOutputEvent>();
+    let forward_tx = event_tx.clone();
+    tokio::spawn(async move {
+        while let Some(evt) = agent_rx.recv().await {
+            let _ = forward_tx.send(AppEvent::AgentOutput(evt));
+        }
+    });
+
+    tokio::spawn(async move {
+        let buildloop_dir = project_dir.join(".buildloop");
+        let log_dir = buildloop_dir.join("logs");
+        let _ = std::fs::create_dir_all(&log_dir);
+
+        let tx = event_tx.clone();
+        let result = orchestrator::orchestrate(
+            &user_intent_clone,
+            &orch_config,
+            &project_dir,
+            &log_dir,
+            |msg| {
+                let _ = tx.send(AppEvent::AgentOutput(AgentOutputEvent::Text(format!(
+                    "[orchestrator] {}",
+                    msg
+                ))));
+            },
+            Some(agent_tx),
+            shutdown_clone,
+        )
+        .await;
+
+        match result {
+            Ok(outcome) => {
+                let _ = orchestrator::write_orchestrator_output(&buildloop_dir, &outcome);
+                let _ = event_tx.send(AppEvent::OrchestratorFinished(outcome));
+            }
+            Err(e) => {
+                let fallback = OrchestratorOutcome {
+                    artifact: orchestrator::ProposerOutput {
+                        artifact_type: "analysis".to_string(),
+                        artifact_text: format!("Orchestrator error: {}", e),
+                        rationale: String::new(),
+                        claims: Vec::new(),
+                    },
+                    final_review: orchestrator::ReviewerOutput {
+                        status: "findings".to_string(),
+                        findings: Vec::new(),
+                        validated: Vec::new(),
+                    },
+                    iterations: 0,
+                    accepted: false,
+                };
+                let _ = event_tx.send(AppEvent::OrchestratorFinished(fallback));
+            }
+        }
+    });
+}
+
+fn apply_orchestrator_outcome(state: &mut AppState, outcome: OrchestratorOutcome) {
+    state.clear_agent();
+    state.planning = None;
+
+    let has_unresolved = !outcome.accepted && !outcome.final_review.findings.is_empty();
+
+    let message = if outcome.accepted {
+        format!(
+            "Design accepted after {} iteration(s). Output in .buildloop/orchestrator-output.md",
+            outcome.iterations
+        )
+    } else {
+        format!(
+            "Design completed with unresolved findings after {} iteration(s). Output in .buildloop/orchestrator-output.md",
+            outcome.iterations
+        )
+    };
+    state.log(message.clone());
+
+    state.last_orchestrator_outcome = Some(outcome);
+
+    if has_unresolved {
+        state.show_findings = true;
+        state.findings_scroll = 0;
+    }
+
+    state.pending_transition = Some(PendingTransition::ShowStartup {
+        message: Some(message),
+    });
 }
 
 // ─── Plan Mode (gap analysis, no building) ───────────────────

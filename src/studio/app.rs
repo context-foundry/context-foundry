@@ -4,7 +4,7 @@ use futures::{future::join_all, StreamExt};
 use std::{path::Path, time::Duration};
 use tokio::{sync::mpsc, task::JoinHandle};
 
-use crate::{agent::ModelProvider, config::Config, tui};
+use crate::{agent::ModelProvider, config::Config, git, tui};
 
 use super::{
     model::{StudioEvent, SHUTDOWN_GRACE_MILLIS},
@@ -49,8 +49,14 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
     state.log(format!("studio ready for {}", project_dir.display()));
     state.log(format!(
         "selected execution contract: {}",
-        state.selected_execution_contract().name
+        state
+            .selected_execution_contract()
+            .map(|c| c.name.as_str())
+            .unwrap_or("<none>")
     ));
+    for msg in git::check_git_readiness(project_dir) {
+        state.log(msg);
+    }
     log_provider_probe(&mut state, ModelProvider::Claude);
     log_provider_probe(&mut state, ModelProvider::Codex);
 
@@ -143,7 +149,7 @@ pub(in crate::studio) async fn shutdown_active_sessions(state: &mut StudioState)
 }
 
 #[cfg(test)]
-mod tests {
+mod shutdown_tests {
     use std::sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
