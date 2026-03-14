@@ -5,7 +5,7 @@
 Load Patterns → PLANNER → BUILDER → REVIEWER → FIXER (up to 2 passes) → GIT COMMIT
 ```
 
-When IMPL_PLAN.md completes, a DISCOVERY agent scans for new work and appends tasks.
+When TASKS.md completes, a DISCOVERY agent scans for new work and appends tasks.
 
 ## Module Responsibilities
 
@@ -16,7 +16,7 @@ When IMPL_PLAN.md completes, a DISCOVERY agent scans for new work and appends ta
 | `prompts.rs` | Role-specific prompt generation (planner/builder/reviewer/fixer/discovery) |
 | `patterns.rs` | Load, match, merge, extract learned patterns |
 | `config.rs` | `.foundry.json` settings with serde defaults |
-| `task.rs` | Parse IMPL_PLAN.md (`- [ ] T1.1: desc` format) |
+| `task.rs` | Parse TASKS.md (`- [ ] T1.1: desc` format) |
 | `tui.rs` | Ratatui terminal UI with per-role color coding |
 | `git.rs` | Commit (`feat(T1.1):` or `WIP(T1.1):`) and push |
 | `utils.rs` | UTF-8 safe string truncation |
@@ -40,5 +40,5 @@ When IMPL_PLAN.md completes, a DISCOVERY agent scans for new work and appends ta
 
 ## Key Files (Don't Modify Without Asking)
 - `CLAUDE.md` — project instructions
-- `IMPL_PLAN.md` — task list (only the build loop marks tasks complete)
+- `TASKS.md` — task list (only the build loop marks tasks complete)
 - `.buildloop/` — ephemeral build state

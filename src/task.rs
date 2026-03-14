@@ -63,7 +63,11 @@ pub fn parse_tasks(plan_path: &Path) -> Result<Vec<Task>> {
 }
 
 pub fn next_pending(tasks: &[Task]) -> Option<&Task> {
-    tasks.iter().find(|t| !t.completed)
+    nth_pending(tasks, 0)
+}
+
+pub fn nth_pending(tasks: &[Task], index: usize) -> Option<&Task> {
+    tasks.iter().filter(|t| !t.completed).nth(index)
 }
 
 pub fn mark_done(plan_path: &Path, line_number: usize) -> Result<()> {

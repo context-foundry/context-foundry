@@ -1,6 +1,8 @@
 use serde::Deserialize;
 use std::{collections::BTreeMap, path::Path};
 
+use crate::agent::ModelProvider;
+
 #[derive(Debug, Clone, Deserialize, Default)]
 #[serde(default)]
 pub struct StudioThemeConfig {
@@ -40,6 +42,14 @@ pub struct Config {
     pub reviewer_model: String,
     pub fixer_model: String,
     pub discovery_model: String,
+
+    /// Provider per build-loop role: "claude" (default) or "codex".
+    pub planner_provider: String,
+    pub builder_provider: String,
+    pub reviewer_provider: String,
+    pub fixer_provider: String,
+    pub discovery_provider: String,
+
     pub studio_claude_model: String,
     pub studio_codex_model: String,
     pub studio_theme: String,
@@ -52,6 +62,20 @@ pub struct Config {
     pub agent_timeout_secs: u64,
 
     pub patterns_dir: String,
+
+    /// Skip reviewer/fixer when builder's verification commands pass.
+    /// Relies on deterministic backpressure (tests, lints, type checks) instead of LLM review.
+    pub backpressure_only: bool,
+
+    /// Max number of patterns injected into agent prompts (protects context "smart zone").
+    pub max_pattern_injection: usize,
+
+    /// Max iterations for `foundry plan` mode (0 = unlimited).
+    pub planning_iterations: u64,
+
+    /// Optional git remote name to auto-push after successful commits.
+    /// Defaults to None so Foundry commits locally only.
+    pub auto_push_remote: Option<String>,
 }
 
 impl Default for Config {
@@ -62,6 +86,13 @@ impl Default for Config {
             reviewer_model: "opus".into(),
             fixer_model: "opus".into(),
             discovery_model: "opus".into(),
+
+            planner_provider: "claude".into(),
+            builder_provider: "claude".into(),
+            reviewer_provider: "claude".into(),
+            fixer_provider: "claude".into(),
+            discovery_provider: "claude".into(),
+
             studio_claude_model: "opus".into(),
             studio_codex_model: String::new(),
             studio_theme: "foundry".into(),
@@ -74,6 +105,11 @@ impl Default for Config {
             agent_timeout_secs: 600, // 10 minutes
 
             patterns_dir: "~/.foundry/patterns".into(),
+
+            backpressure_only: false,
+            max_pattern_injection: 10,
+            planning_iterations: 0,
+            auto_push_remote: None,
         }
     }
 }
@@ -87,5 +123,90 @@ impl Config {
         } else {
             Self::default()
         }
+    }
+
+    /// Parse a provider string ("claude" or "codex") into a ModelProvider.
+    /// Falls back to Claude for unrecognized values.
+    pub fn parse_provider(value: &str) -> ModelProvider {
+        match value.trim().to_lowercase().as_str() {
+            "codex" => ModelProvider::Codex,
+            _ => ModelProvider::Claude,
+        }
+    }
+
+    pub fn display_provider_model(provider: &str, model: &str) -> String {
+        let provider = Self::parse_provider(provider);
+        let model = model.trim();
+        if model.is_empty() {
+            provider.to_string()
+        } else {
+            format!("{provider} {model}")
+        }
+    }
+
+    /// Return (role_name, provider, model) tuples for all build-loop roles.
+    pub fn role_configs(&self) -> Vec<(&str, &str, &str)> {
+        vec![
+            ("Planner", &self.planner_provider, &self.planner_model),
+            ("Builder", &self.builder_provider, &self.builder_model),
+            ("Reviewer", &self.reviewer_provider, &self.reviewer_model),
+            ("Fixer", &self.fixer_provider, &self.fixer_model),
+            ("Discovery", &self.discovery_provider, &self.discovery_model),
+        ]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Config;
+    use crate::agent::ModelProvider;
+
+    #[test]
+    fn default_config_disables_auto_push() {
+        assert_eq!(Config::default().auto_push_remote, None);
+    }
+
+    #[test]
+    fn config_deserializes_auto_push_remote() {
+        let config: Config = serde_json::from_str(r#"{"auto_push_remote":"snedea"}"#)
+            .expect("config should deserialize");
+        assert_eq!(config.auto_push_remote.as_deref(), Some("snedea"));
+    }
+
+    #[test]
+    fn parse_provider_supports_codex_and_defaults_to_claude() {
+        assert_eq!(Config::parse_provider("codex"), ModelProvider::Codex);
+        assert_eq!(Config::parse_provider("CoDeX"), ModelProvider::Codex);
+        assert_eq!(Config::parse_provider("claude"), ModelProvider::Claude);
+        assert_eq!(Config::parse_provider("unknown"), ModelProvider::Claude);
+    }
+
+    #[test]
+    fn display_provider_model_formats_empty_and_named_models() {
+        assert_eq!(
+            Config::display_provider_model("claude", "opus"),
+            "Claude opus"
+        );
+        assert_eq!(Config::display_provider_model("codex", ""), "Codex");
+    }
+
+    #[test]
+    fn config_deserializes_role_specific_providers() {
+        let config: Config = serde_json::from_str(
+            r#"{
+                "planner_provider":"claude",
+                "builder_provider":"codex",
+                "reviewer_provider":"claude",
+                "fixer_provider":"codex",
+                "discovery_provider":"claude"
+            }"#,
+        )
+        .expect("config should deserialize");
+
+        assert_eq!(config.planner_provider, "claude");
+        assert_eq!(config.builder_provider, "codex");
+        assert_eq!(config.reviewer_provider, "claude");
+        assert_eq!(config.fixer_provider, "codex");
+        assert_eq!(config.discovery_provider, "claude");
     }
 }

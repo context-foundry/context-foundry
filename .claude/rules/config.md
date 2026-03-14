@@ -16,7 +16,7 @@
 ```
 All fields optional — `#[serde(default)]` provides sensible defaults.
 
-## IMPL_PLAN.md Task Format
+## TASKS.md Task Format
 ```markdown
 - [ ] T1.1: Short task description
 - [x] T1.2: Completed task (checked by build loop)

@@ -111,6 +111,7 @@ const PROVIDER_POLL_INTERVAL: Duration = Duration::from_millis(500);
 const PROVIDER_HARD_TIMEOUT_MULTIPLIER: u64 = 4;
 const CODEX_STALL_GRACE_SECS: u64 = 90;
 const CODEX_FAST_STALL_SECS: u64 = 45;
+const RUN_AGENT_CODEX_MAX_ATTEMPTS: usize = 2;
 
 #[derive(Debug)]
 struct ProviderProgressState {
@@ -175,7 +176,9 @@ fn note_provider_event(
     event: &AgentOutputEvent,
     progress: &Arc<Mutex<ProviderProgressState>>,
 ) {
-    let mut guard = progress.lock().expect("provider progress lock poisoned");
+    let mut guard = progress
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let now = Instant::now();
     match event {
         AgentOutputEvent::Stderr(text)
@@ -192,13 +195,56 @@ fn note_provider_stderr_line(
     line: &str,
     progress: &Arc<Mutex<ProviderProgressState>>,
 ) {
-    let mut guard = progress.lock().expect("provider progress lock poisoned");
+    let mut guard = progress
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let now = Instant::now();
     if provider == ModelProvider::Codex && is_codex_transport_issue(line) {
         guard.record_transport_issue_at(now);
     } else {
         guard.record_progress_at(now);
     }
+}
+
+fn should_retry_run_agent_attempt(
+    provider: ModelProvider,
+    outcome: &AgentResult,
+    attempt: usize,
+    max_attempts: usize,
+) -> bool {
+    provider == ModelProvider::Codex && attempt < max_attempts && outcome.should_retry()
+}
+
+/// Check whether a failed Codex outcome looks like a rate/quota limit,
+/// meaning we should fall back to Claude instead of returning the failure.
+///
+/// Checks the failure_message for rate-limit keywords, and also treats
+/// TransportStall and Failed exit kinds (after retries are exhausted) as
+/// potential infrastructure issues worth falling back from.
+fn should_fallback_to_claude(outcome: &AgentResult) -> bool {
+    if outcome.success {
+        return false;
+    }
+
+    // Check failure message for rate-limit / quota keywords
+    if let Some(ref msg) = outcome.failure_message {
+        let lower = msg.to_ascii_lowercase();
+        if lower.contains("rate")
+            || lower.contains("limit")
+            || lower.contains("quota")
+            || lower.contains("subscription")
+            || lower.contains("429")
+            || lower.contains("too many requests")
+        {
+            return true;
+        }
+    }
+
+    // TransportStall after retries exhausted is likely an infrastructure issue
+    matches!(
+        outcome.exit_kind,
+        AgentExitKind::TransportStall | AgentExitKind::Failed
+    )
 }
 
 pub async fn run_provider_session(options: ProviderRunOptions<'_>) -> Result<AgentResult> {
@@ -333,8 +379,9 @@ pub async fn run_provider_session(options: ProviderRunOptions<'_>) -> Result<Age
                     }
 
                     let now = Instant::now();
-                    let progress_snapshot =
-                        progress.lock().expect("provider progress lock poisoned");
+                    let progress_snapshot = progress
+                        .lock()
+                        .unwrap_or_else(|poisoned| poisoned.into_inner());
 
                     if provider == ModelProvider::Codex && progress_snapshot.transport_stalled(now)
                     {
@@ -424,6 +471,7 @@ pub async fn run_provider_session(options: ProviderRunOptions<'_>) -> Result<Age
 #[allow(clippy::too_many_arguments)]
 pub async fn run_agent(
     role: &AgentRole,
+    provider: ModelProvider,
     model: &str,
     prompt: &str,
     project_dir: &Path,
@@ -431,7 +479,67 @@ pub async fn run_agent(
     log_dir: &Path,
     allowed_tools: Option<&[&str]>,
     timeout_secs: u64,
+    shutdown: Option<Arc<AtomicBool>>,
 ) -> Result<AgentResult> {
+    // For Codex, delegate to run_provider_session which has full
+    // Codex support (JSON output parsing, stall detection), plus
+    // a single automatic retry on transport stalls in the build loop.
+    if provider == ModelProvider::Codex {
+        let max_attempts = RUN_AGENT_CODEX_MAX_ATTEMPTS;
+        let mut attempt = 1;
+        loop {
+            let outcome = run_provider_session(ProviderRunOptions {
+                provider: ModelProvider::Codex,
+                model,
+                prompt,
+                project_dir,
+                output_tx: output_tx.clone(),
+                log_dir,
+                timeout_secs,
+                skip_git_repo_check: false,
+                cancel_flag: shutdown.clone(),
+            })
+            .await?;
+
+            if should_retry_run_agent_attempt(provider, &outcome, attempt, max_attempts) {
+                let _ = output_tx.send(AgentOutputEvent::Stderr(format!(
+                    "Codex transport stalled; retrying attempt {}/{}",
+                    attempt + 1,
+                    max_attempts
+                )));
+                attempt += 1;
+                continue;
+            }
+
+            // Retries exhausted -- check if we should fall back to Claude
+            if should_fallback_to_claude(&outcome) {
+                let _ = output_tx.send(AgentOutputEvent::Stderr(format!(
+                    "Codex {} failed ({}); falling back to Claude opus",
+                    role,
+                    outcome
+                        .failure_message
+                        .as_deref()
+                        .unwrap_or("unknown error"),
+                )));
+                return Box::pin(run_agent(
+                    role,
+                    ModelProvider::Claude,
+                    "opus",
+                    prompt,
+                    project_dir,
+                    output_tx,
+                    log_dir,
+                    allowed_tools,
+                    timeout_secs,
+                    shutdown,
+                ))
+                .await;
+            }
+
+            return Ok(outcome);
+        }
+    }
+
     let timestamp = chrono::Utc::now().format("%Y%m%d-%H%M%S");
     let log_file_path = log_dir.join(format!("{}-{}.jsonl", role, timestamp));
     std::fs::create_dir_all(log_dir)?;
@@ -514,6 +622,18 @@ pub async fn run_agent(
                     break;
                 }
                 Ok(None) => {
+                    // Check shutdown flag first -- runtime is exiting
+                    if shutdown
+                        .as_ref()
+                        .is_some_and(|flag| flag.load(Ordering::Relaxed))
+                    {
+                        let _ = child.kill();
+                        let _ = child.wait();
+                        result.exit_kind = AgentExitKind::Cancelled;
+                        result.failure_message =
+                            Some(format!("Agent {} cancelled by shutdown", role_name));
+                        break;
+                    }
                     // Still running — check timeout
                     if Instant::now() >= deadline {
                         // Timeout — kill the child process
@@ -1283,6 +1403,58 @@ mod tests {
     }
 
     #[test]
+    fn run_agent_retry_policy_retries_codex_transport_stalls_once() {
+        let outcome = AgentResult {
+            success: false,
+            exit_code: 1,
+            exit_kind: AgentExitKind::TransportStall,
+            failure_message: Some("stalled".to_string()),
+        };
+
+        assert!(should_retry_run_agent_attempt(
+            ModelProvider::Codex,
+            &outcome,
+            1,
+            RUN_AGENT_CODEX_MAX_ATTEMPTS
+        ));
+        assert!(!should_retry_run_agent_attempt(
+            ModelProvider::Codex,
+            &outcome,
+            RUN_AGENT_CODEX_MAX_ATTEMPTS,
+            RUN_AGENT_CODEX_MAX_ATTEMPTS
+        ));
+    }
+
+    #[test]
+    fn run_agent_retry_policy_does_not_retry_claude_or_non_transport_failures() {
+        let transport_outcome = AgentResult {
+            success: false,
+            exit_code: 1,
+            exit_kind: AgentExitKind::TransportStall,
+            failure_message: Some("stalled".to_string()),
+        };
+        let failed_outcome = AgentResult {
+            success: false,
+            exit_code: 1,
+            exit_kind: AgentExitKind::Failed,
+            failure_message: Some("failed".to_string()),
+        };
+
+        assert!(!should_retry_run_agent_attempt(
+            ModelProvider::Claude,
+            &transport_outcome,
+            1,
+            RUN_AGENT_CODEX_MAX_ATTEMPTS
+        ));
+        assert!(!should_retry_run_agent_attempt(
+            ModelProvider::Codex,
+            &failed_outcome,
+            1,
+            RUN_AGENT_CODEX_MAX_ATTEMPTS
+        ));
+    }
+
+    #[test]
     fn parse_rate_limit_event() {
         let json = r#"{"type":"rate_limit_event","message":"Rate limited, retrying in 5s"}"#;
         let event = parse_stream_event(json);
@@ -1406,6 +1578,72 @@ mod tests {
                 assert!(text.contains("hook failed"));
             }
             other => panic!("expected hook failure stderr, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn fallback_triggers_on_rate_limit_keywords() {
+        let keywords = [
+            "rate limit exceeded",
+            "quota exhausted for this billing period",
+            "subscription limit reached",
+            "HTTP 429 too many requests",
+            "API rate limit hit",
+        ];
+        for msg in keywords {
+            let outcome = AgentResult {
+                success: false,
+                exit_code: 1,
+                exit_kind: AgentExitKind::Failed,
+                failure_message: Some(msg.to_string()),
+            };
+            assert!(
+                should_fallback_to_claude(&outcome),
+                "expected fallback for message: {msg}"
+            );
+        }
+    }
+
+    #[test]
+    fn fallback_triggers_on_transport_stall_and_failed() {
+        for kind in [AgentExitKind::TransportStall, AgentExitKind::Failed] {
+            let outcome = AgentResult {
+                success: false,
+                exit_code: 1,
+                exit_kind: kind,
+                failure_message: Some("something went wrong".to_string()),
+            };
+            assert!(
+                should_fallback_to_claude(&outcome),
+                "expected fallback for exit kind: {kind:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn fallback_skips_successful_outcomes() {
+        let outcome = AgentResult {
+            success: true,
+            exit_code: 0,
+            exit_kind: AgentExitKind::Completed,
+            failure_message: None,
+        };
+        assert!(!should_fallback_to_claude(&outcome));
+    }
+
+    #[test]
+    fn fallback_skips_non_rate_limit_cancellations_and_timeouts() {
+        for kind in [AgentExitKind::Cancelled, AgentExitKind::TimedOut] {
+            let outcome = AgentResult {
+                success: false,
+                exit_code: 1,
+                exit_kind: kind,
+                failure_message: Some("user cancelled".to_string()),
+            };
+            assert!(
+                !should_fallback_to_claude(&outcome),
+                "should NOT fallback for exit kind: {kind:?}"
+            );
         }
     }
 }

@@ -134,16 +134,22 @@ pub fn match_patterns<'a>(patterns: &'a [Pattern], task_desc: &str) -> Vec<&'a P
 }
 
 /// Format matched patterns as markdown text for injection into agent prompts.
-pub fn format_patterns_for_prompt(patterns: &[&Pattern], role: &str) -> String {
+/// `max_patterns` caps how many patterns are injected to protect the context "smart zone".
+pub fn format_patterns_for_prompt(
+    patterns: &[&Pattern],
+    role: &str,
+    max_patterns: usize,
+) -> String {
     if patterns.is_empty() {
         return String::new();
     }
 
+    let limit = if max_patterns == 0 { 10 } else { max_patterns };
     let role_lower = role.to_lowercase();
     let mut out = String::new();
     out.push_str("\n\n---\n## Known Patterns (from previous builds)\n\n");
 
-    for (i, p) in patterns.iter().enumerate().take(10) {
+    for (i, p) in patterns.iter().enumerate().take(limit) {
         out.push_str(&format!(
             "### {}. {} (seen {}x{})\n",
             i + 1,
@@ -317,13 +323,13 @@ mod tests {
         };
         let patterns = vec![&pattern];
 
-        let reviewer_output = format_patterns_for_prompt(&patterns, "reviewer");
+        let reviewer_output = format_patterns_for_prompt(&patterns, "reviewer", 10);
         assert!(
             reviewer_output.contains("reviewer advice"),
             "reviewer role should get reviewer advice"
         );
 
-        let planner_output = format_patterns_for_prompt(&patterns, "planner");
+        let planner_output = format_patterns_for_prompt(&patterns, "planner", 10);
         assert!(
             planner_output.contains("planner advice"),
             "planner role should get planner advice"

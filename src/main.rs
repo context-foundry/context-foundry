@@ -39,8 +39,14 @@ enum Commands {
     },
     /// Show current progress
     Status,
-    /// List all tasks from IMPL_PLAN.md
+    /// List all tasks from TASKS.md (legacy: IMPL_PLAN.md)
     Tasks,
+    /// Run dedicated planning mode (gap analysis, no building)
+    Plan {
+        /// Maximum planning iterations (0 = unlimited, stops when plan stabilizes)
+        #[arg(short = 'n', long)]
+        iterations: Option<u64>,
+    },
     /// Start the interactive multi-model studio
     Studio,
     /// Update foundry to the latest version
@@ -63,6 +69,9 @@ async fn main() -> Result<()> {
             } else {
                 app::run_tui(&project_dir).await?;
             }
+        }
+        Commands::Plan { iterations } => {
+            app::run_plan_mode(&project_dir, iterations.unwrap_or(0)).await?;
         }
         Commands::Status => {
             app::show_status(&project_dir)?;

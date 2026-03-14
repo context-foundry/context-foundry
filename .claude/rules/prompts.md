@@ -13,7 +13,7 @@ paths:
 | `reviewer_prompt()` | Validate changes | `.buildloop/review-report.md` (JSON findings) |
 | `fixer_prompt()` | Fix review issues | Code changes |
 | `pattern_extraction_prompt()` | Extract learnings | `.buildloop/patterns-extracted.json` |
-| `discovery_prompt()` | Find new work | Appends tasks to IMPL_PLAN.md |
+| `discovery_prompt()` | Find new work | Appends tasks to TASKS.md |
 
 ## Conventions
 - Raw string literals: `r#"..."#`

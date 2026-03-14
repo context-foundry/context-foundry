@@ -1,0 +1,1347 @@
+use super::startup::{
+    activate_startup_action, classify_plan_status, detect_startup_scenario, enter_home_surface,
+    handle_editor_key, handle_startup_key, handle_startup_mouse_at, load_pending_task_at,
+    set_startup_selected_action,
+};
+use super::state::{
+    AppEvent, AppPhase, AppState, EditorState, LoopEvent, PendingTransition, PlanStatus,
+    PlanningOutcome, StartupAction, StartupScenario, StartupState,
+};
+use super::{
+    apply_pending_transition, apply_planning_outcome, handle_event, prepare_append_tasks_start,
+    process_received_event, seed_spec_from_brief,
+};
+use crate::config::Config;
+use crate::tui::{editor_escape_hint, editor_shows_plan_shortcut, editor_title};
+use crossterm::event::{self, KeyCode, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
+use tokio::sync::mpsc;
+
+fn temp_project_dir(name: &str) -> PathBuf {
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system time before unix epoch")
+        .as_nanos();
+    let dir = std::env::temp_dir().join(format!("{}-{}", name, unique));
+    std::fs::create_dir_all(&dir).expect("failed to create temp dir");
+    dir
+}
+
+fn write_file(path: &Path, content: &str) {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).expect("failed to create parent dir");
+    }
+    std::fs::write(path, content).expect("failed to write test file");
+}
+
+#[test]
+fn detect_startup_scenario_for_fresh_directory() {
+    let dir = temp_project_dir("foundry-fresh");
+    assert_eq!(detect_startup_scenario(&dir), StartupScenario::EmptyProject);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn detect_startup_scenario_for_existing_code_without_plan() {
+    let dir = temp_project_dir("foundry-needs-plan");
+    write_file(
+        &dir.join("Cargo.toml"),
+        "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n",
+    );
+    write_file(&dir.join("src/main.rs"), "fn main() {}\n");
+
+    assert_eq!(detect_startup_scenario(&dir), StartupScenario::NeedsQueue);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn detect_startup_scenario_for_architecture_only_directory() {
+    let dir = temp_project_dir("foundry-architecture-only");
+    write_file(
+        &dir.join("SPEC.md"),
+        "# Architecture\n\n## Overview\nDescribe the system.\n",
+    );
+
+    assert_eq!(detect_startup_scenario(&dir), StartupScenario::NeedsQueue);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn detect_startup_scenario_ignores_virtualenv_only_directory() {
+    let dir = temp_project_dir("foundry-virtualenv-only");
+    write_file(
+        &dir.join(".venv/lib/python3.12/site-packages/demo.py"),
+        "def demo() -> None:\n    pass\n",
+    );
+
+    assert_eq!(detect_startup_scenario(&dir), StartupScenario::EmptyProject);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn detect_startup_scenario_for_plan_only_directory() {
+    let dir = temp_project_dir("foundry-plan-only");
+    write_file(
+        &dir.join("TASKS.md"),
+        "# Plan\n\n- [ ] T1.1: Add startup flow\n",
+    );
+
+    assert_eq!(detect_startup_scenario(&dir), StartupScenario::QueueReady);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn legacy_contract_filenames_still_work() {
+    let dir = temp_project_dir("foundry-legacy-contracts");
+    write_file(
+        &dir.join("ARCHITECTURE.md"),
+        "# Architecture\n\n## Overview\nLegacy spec.\n",
+    );
+    write_file(
+        &dir.join("IMPL_PLAN.md"),
+        "# Plan\n\n- [ ] T1.1: Legacy task\n",
+    );
+
+    assert_eq!(detect_startup_scenario(&dir), StartupScenario::QueueReady);
+
+    let startup = StartupState::new(
+        &dir,
+        StartupScenario::QueueReady,
+        PlanStatus::Pending(1),
+        None,
+    );
+    assert_eq!(startup.spec_file_name, "ARCHITECTURE.md");
+    assert_eq!(startup.tasks_file_name, "IMPL_PLAN.md");
+
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn detect_startup_scenario_for_pending_and_completed_plan() {
+    let dir = temp_project_dir("foundry-plan-status");
+    write_file(
+        &dir.join("Cargo.toml"),
+        "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n",
+    );
+    write_file(&dir.join("src/main.rs"), "fn main() {}\n");
+    write_file(
+        &dir.join("TASKS.md"),
+        "# Plan\n\n- [ ] T1.1: Add startup flow\n",
+    );
+    assert_eq!(detect_startup_scenario(&dir), StartupScenario::QueueReady);
+
+    write_file(
+        &dir.join("TASKS.md"),
+        "# Plan\n\n- [x] T1.1: Add startup flow\n",
+    );
+    assert_eq!(
+        detect_startup_scenario(&dir),
+        StartupScenario::QueueComplete
+    );
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn classify_plan_status_distinguishes_common_states() {
+    let dir = temp_project_dir("foundry-plan-classify");
+    let plan_path = dir.join("TASKS.md");
+
+    assert_eq!(classify_plan_status(&plan_path), PlanStatus::Missing);
+
+    write_file(&plan_path, "# Plan\n\n");
+    assert_eq!(classify_plan_status(&plan_path), PlanStatus::Empty);
+
+    write_file(&plan_path, "# Plan\n\n- [ ] T1.1: Pending task\n");
+    assert_eq!(classify_plan_status(&plan_path), PlanStatus::Pending(1));
+
+    write_file(&plan_path, "# Plan\n\n- [x] T1.1: Done task\n");
+    assert_eq!(classify_plan_status(&plan_path), PlanStatus::Complete);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn startup_action_scan_project_sets_planning_transition() {
+    let dir = temp_project_dir("foundry-startup-scan");
+    write_file(
+        &dir.join("Cargo.toml"),
+        "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n",
+    );
+    let mut state = AppState::new(dir.join(".buildloop"));
+    state.startup = Some(StartupState::new(
+        &dir,
+        StartupScenario::NeedsQueue,
+        PlanStatus::Missing,
+        None,
+    ));
+
+    activate_startup_action(&mut state, StartupAction::ScanProject);
+
+    assert!(matches!(
+        state.pending_transition,
+        Some(PendingTransition::StartPlanning { .. })
+    ));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn startup_action_edit_spec_sets_editor_transition() {
+    let dir = temp_project_dir("foundry-startup-editor");
+    write_file(
+        &dir.join("Cargo.toml"),
+        "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n",
+    );
+    let mut state = AppState::new(dir.join(".buildloop"));
+    state.startup = Some(StartupState::new(
+        &dir,
+        StartupScenario::NeedsQueue,
+        PlanStatus::Missing,
+        None,
+    ));
+
+    activate_startup_action(&mut state, StartupAction::EditSpec);
+
+    assert!(matches!(
+        state.pending_transition,
+        Some(PendingTransition::OpenEditor)
+    ));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn startup_action_view_tasks_sets_tasks_editor_transition() {
+    let dir = temp_project_dir("foundry-startup-tasks-editor");
+    write_file(
+        &dir.join("TASKS.md"),
+        "# Task Queue\n\n- [ ] T1.1: Pending task\n",
+    );
+
+    let mut state = AppState::new(dir.join(".buildloop"));
+    state.startup = Some(StartupState::new(
+        &dir,
+        StartupScenario::QueueReady,
+        PlanStatus::Pending(1),
+        None,
+    ));
+
+    activate_startup_action(&mut state, StartupAction::ViewTasks);
+
+    assert!(matches!(
+        state.pending_transition,
+        Some(PendingTransition::OpenTasksEditor)
+    ));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn startup_action_labels_show_bare_filenames() {
+    let dir = temp_project_dir("foundry-startup-action-labels");
+    write_file(&dir.join("TASKS.md"), "# Task Queue\n");
+    write_file(&dir.join("SPEC.md"), "# Specification: demo\n");
+
+    let startup = StartupState::new(
+        &dir,
+        StartupScenario::QueueReady,
+        PlanStatus::Pending(1),
+        None,
+    );
+
+    assert_eq!(
+        startup.action_label(StartupAction::ViewTasks),
+        "TASKS.md"
+    );
+    assert_eq!(
+        startup.action_label(StartupAction::EditSpec),
+        "SPEC.md"
+    );
+
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn enter_home_surface_keeps_fresh_directories_on_startup() {
+    let dir = temp_project_dir("foundry-home-empty");
+    let mut state = AppState::new(dir.join(".buildloop"));
+
+    enter_home_surface(&dir, &mut state, None);
+
+    assert_eq!(state.phase, AppPhase::Startup);
+    assert!(state.startup.is_some());
+    assert!(state.editor.is_none());
+    assert_eq!(
+        state.startup.as_ref().map(|startup| startup.scenario),
+        Some(StartupScenario::EmptyProject)
+    );
+
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn startup_empty_project_describe_work_seeds_spec_before_task_creation() {
+    let dir = temp_project_dir("foundry-empty-describe");
+    let mut state = AppState::new(dir.join(".buildloop"));
+    state.startup = Some(StartupState::new(
+        &dir,
+        StartupScenario::EmptyProject,
+        PlanStatus::Missing,
+        None,
+    ));
+
+    for c in "build a notes app".chars() {
+        handle_startup_key(
+            &mut state,
+            event::KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE),
+        );
+    }
+
+    handle_startup_key(
+        &mut state,
+        event::KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+    );
+
+    match &state.pending_transition {
+        Some(PendingTransition::AppendTasks(request)) => {
+            let description = &request.description;
+            assert_eq!(description, "build a notes app");
+            assert!(request.seed_spec_from_description);
+        }
+        other => panic!("expected AppendTasks transition, got {:?}", other),
+    }
+
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn seed_spec_from_brief_writes_minimal_spec() {
+    let dir = temp_project_dir("foundry-seed-spec");
+
+    seed_spec_from_brief(&dir, "build a CLI todo app").expect("seed spec should succeed");
+
+    let content = std::fs::read_to_string(dir.join("SPEC.md")).expect("missing SPEC.md");
+    assert!(content.contains("# Specification:"));
+    assert!(content.contains("## Project Brief"));
+    assert!(content.contains("build a CLI todo app"));
+
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn prepare_append_tasks_start_does_not_seed_spec_when_claude_is_missing() {
+    let dir = temp_project_dir("foundry-append-no-claude");
+    let mut state = AppState::new(dir.join(".buildloop"));
+    let request = super::state::AppendTasksRequest {
+        description: "build a notes app".to_string(),
+        label: "Describe project: build a notes app".to_string(),
+        seed_spec_from_description: true,
+    };
+
+    let can_start = prepare_append_tasks_start(&dir, &mut state, &request, false);
+
+    assert!(!can_start);
+    assert!(!dir.join("SPEC.md").exists());
+
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn startup_state_loads_plan_preview_and_next_pending_task() {
+    let dir = temp_project_dir("foundry-startup-preview");
+    write_file(
+        &dir.join("Cargo.toml"),
+        "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n",
+    );
+    write_file(
+        &dir.join("TASKS.md"),
+        "# Plan\n\n- [x] T1.1: Done task\n- [ ] T1.2: Pending task\n",
+    );
+
+    let startup = StartupState::new(
+        &dir,
+        StartupScenario::QueueReady,
+        PlanStatus::Pending(1),
+        None,
+    );
+    assert!(startup.has_plan_preview());
+    assert!(startup
+        .plan_preview_lines
+        .iter()
+        .any(|line| line.contains("T1.2")));
+    assert_eq!(
+        startup.next_pending_task.as_deref(),
+        Some("T1.2 — Pending task")
+    );
+
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn load_pending_task_at_reads_later_pending_items() {
+    let dir = temp_project_dir("foundry-next-pending");
+    write_file(
+        &dir.join("TASKS.md"),
+        "# Plan\n\n- [x] T1.1: Done\n- [ ] T1.2: First\n- [ ] T1.3: Second\n",
+    );
+
+    assert_eq!(
+        load_pending_task_at(&dir, 0).as_deref(),
+        Some("T1.2 — First")
+    );
+    assert_eq!(
+        load_pending_task_at(&dir, 1).as_deref(),
+        Some("T1.3 — Second")
+    );
+
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn startup_arrow_keys_scroll_plan_preview() {
+    let dir = temp_project_dir("foundry-startup-scroll");
+    write_file(
+        &dir.join("Cargo.toml"),
+        "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n",
+    );
+    write_file(
+        &dir.join("TASKS.md"),
+        "# Plan\n\n- [ ] T1.1: One\n- [ ] T1.2: Two\n- [ ] T1.3: Three\n",
+    );
+
+    let mut state = AppState::new(dir.join(".buildloop"));
+    state.startup = Some(StartupState::new(
+        &dir,
+        StartupScenario::QueueReady,
+        PlanStatus::Pending(3),
+        None,
+    ));
+
+    handle_startup_key(
+        &mut state,
+        event::KeyEvent::new(KeyCode::Down, KeyModifiers::NONE),
+    );
+    handle_startup_key(
+        &mut state,
+        event::KeyEvent::new(KeyCode::PageDown, KeyModifiers::NONE),
+    );
+
+    assert_eq!(
+        state
+            .startup
+            .as_ref()
+            .map(|startup| startup.plan_scroll_offset),
+        Some(9)
+    );
+
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn startup_mouse_click_selects_action_without_activating_it() {
+    let dir = temp_project_dir("foundry-startup-mouse");
+    write_file(
+        &dir.join("Cargo.toml"),
+        "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n",
+    );
+    write_file(
+        &dir.join("TASKS.md"),
+        "# Plan\n\n- [ ] T1.1: Pending task\n",
+    );
+
+    let mut state = AppState::new(dir.join(".buildloop"));
+    state.startup = Some(StartupState::new(
+        &dir,
+        StartupScenario::QueueReady,
+        PlanStatus::Pending(1),
+        None,
+    ));
+
+    handle_startup_mouse_at(
+        &mut state,
+        MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: 2,
+            row: 10,
+            modifiers: KeyModifiers::NONE,
+        },
+        (140, 40),
+    );
+
+    assert_eq!(
+        state
+            .startup
+            .as_ref()
+            .map(|startup| startup.selected_action),
+        Some(0)
+    );
+    assert!(state.pending_transition.is_none());
+
+    handle_startup_mouse_at(
+        &mut state,
+        MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: 2,
+            row: 12,
+            modifiers: KeyModifiers::NONE,
+        },
+        (140, 40),
+    );
+
+    assert_eq!(
+        state
+            .startup
+            .as_ref()
+            .map(|startup| startup.selected_action),
+        Some(1)
+    );
+    assert!(state.pending_transition.is_none());
+
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn startup_enter_activates_selected_action() {
+    let dir = temp_project_dir("foundry-startup-enter");
+    write_file(
+        &dir.join("Cargo.toml"),
+        "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n",
+    );
+    write_file(
+        &dir.join("TASKS.md"),
+        "# Plan\n\n- [ ] T1.1: Pending task\n",
+    );
+
+    let mut state = AppState::new(dir.join(".buildloop"));
+    state.startup = Some(StartupState::new(
+        &dir,
+        StartupScenario::QueueReady,
+        PlanStatus::Pending(1),
+        None,
+    ));
+
+    handle_startup_key(
+        &mut state,
+        event::KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+    );
+
+    assert!(matches!(
+        state.pending_transition,
+        Some(PendingTransition::StartBuild)
+    ));
+
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn startup_intent_input_accepts_digits_and_q_without_triggering_shortcuts() {
+    let dir = temp_project_dir("foundry-startup-intent-input");
+    write_file(
+        &dir.join("Cargo.toml"),
+        "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n",
+    );
+
+    let mut state = AppState::new(dir.join(".buildloop"));
+    state.startup = Some(StartupState::new(
+        &dir,
+        StartupScenario::QueueReady,
+        PlanStatus::Pending(1),
+        None,
+    ));
+    set_startup_selected_action(&mut state, 1);
+
+    handle_startup_key(
+        &mut state,
+        event::KeyEvent::new(KeyCode::Char('1'), KeyModifiers::NONE),
+    );
+    handle_startup_key(
+        &mut state,
+        event::KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE),
+    );
+
+    assert_eq!(
+        state
+            .startup
+            .as_ref()
+            .map(|startup| startup.selected_action),
+        Some(1)
+    );
+    assert_eq!(
+        state
+            .startup
+            .as_ref()
+            .map(|startup| startup.intent_input.as_str()),
+        Some("1q")
+    );
+    assert!(!state.should_quit);
+    assert!(state.pending_transition.is_none());
+
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn startup_clicking_preview_does_not_change_scroll_offset() {
+    let dir = temp_project_dir("foundry-startup-preview-jump");
+    write_file(
+        &dir.join("Cargo.toml"),
+        "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n",
+    );
+    write_file(
+        &dir.join("TASKS.md"),
+        "# Plan\n\n- [ ] T1.1: One\n- [ ] T1.2: Two\n- [ ] T1.3: Three\n- [ ] T1.4: Four\n",
+    );
+    write_file(
+        &dir.join("SPEC.md"),
+        "# Architecture\n\n## Overview\nLine A\nLine B\nLine C\n",
+    );
+
+    let mut state = AppState::new(dir.join(".buildloop"));
+    state.startup = Some(StartupState::new(
+        &dir,
+        StartupScenario::QueueReady,
+        PlanStatus::Pending(4),
+        None,
+    ));
+
+    // Click in the plan preview area -- scroll should NOT change
+    handle_startup_mouse_at(
+        &mut state,
+        MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: 80,
+            row: 14,
+            modifiers: KeyModifiers::NONE,
+        },
+        (140, 40),
+    );
+
+    assert_eq!(
+        state
+            .startup
+            .as_ref()
+            .map(|startup| startup.plan_scroll_offset),
+        Some(0)
+    );
+
+    // Switch to the architecture tab
+    handle_startup_mouse_at(
+        &mut state,
+        MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: 2,
+            row: 14,
+            modifiers: KeyModifiers::NONE,
+        },
+        (140, 40),
+    );
+
+    // Click in the architecture preview -- scroll should NOT change
+    handle_startup_mouse_at(
+        &mut state,
+        MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: 80,
+            row: 13,
+            modifiers: KeyModifiers::NONE,
+        },
+        (140, 40),
+    );
+
+    assert_eq!(
+        state
+            .startup
+            .as_ref()
+            .map(|startup| startup.spec_scroll_offset),
+        Some(0)
+    );
+
+    // Click again at the same position -- should still be 0, not compounding
+    handle_startup_mouse_at(
+        &mut state,
+        MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: 80,
+            row: 13,
+            modifiers: KeyModifiers::NONE,
+        },
+        (140, 40),
+    );
+
+    assert_eq!(
+        state
+            .startup
+            .as_ref()
+            .map(|startup| startup.spec_scroll_offset),
+        Some(0)
+    );
+
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn startup_scroll_events_are_debounced_immediately_after_click() {
+    let dir = temp_project_dir("foundry-startup-scroll-debounce");
+    write_file(
+        &dir.join("Cargo.toml"),
+        "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n",
+    );
+    write_file(
+        &dir.join("SPEC.md"),
+        "# Architecture\n\n## Overview\nLine A\nLine B\nLine C\nLine D\nLine E\n",
+    );
+
+    let mut state = AppState::new(dir.join(".buildloop"));
+    state.startup = Some(StartupState::new(
+        &dir,
+        StartupScenario::QueueReady,
+        PlanStatus::Pending(1),
+        None,
+    ));
+    // EditSpec is now at index 3 (after ViewTasks)
+    set_startup_selected_action(&mut state, 3);
+
+    handle_startup_mouse_at(
+        &mut state,
+        MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: 80,
+            row: 13,
+            modifiers: KeyModifiers::NONE,
+        },
+        (140, 40),
+    );
+    handle_startup_mouse_at(
+        &mut state,
+        MouseEvent {
+            kind: MouseEventKind::ScrollDown,
+            column: 80,
+            row: 13,
+            modifiers: KeyModifiers::NONE,
+        },
+        (140, 40),
+    );
+
+    assert_eq!(
+        state
+            .startup
+            .as_ref()
+            .map(|startup| startup.spec_scroll_offset),
+        Some(0)
+    );
+
+    let (_event_tx, mut event_rx) = mpsc::unbounded_channel::<AppEvent>();
+    process_received_event(&mut state, AppEvent::Tick, &mut event_rx);
+    process_received_event(&mut state, AppEvent::Tick, &mut event_rx);
+
+    handle_startup_mouse_at(
+        &mut state,
+        MouseEvent {
+            kind: MouseEventKind::ScrollDown,
+            column: 80,
+            row: 13,
+            modifiers: KeyModifiers::NONE,
+        },
+        (140, 40),
+    );
+
+    assert_eq!(
+        state
+            .startup
+            .as_ref()
+            .map(|startup| startup.spec_scroll_offset),
+        Some(3)
+    );
+
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn editor_escape_returns_to_startup_when_opened_from_menu() {
+    let dir = temp_project_dir("foundry-editor-back");
+    write_file(
+        &dir.join("Cargo.toml"),
+        "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n",
+    );
+    write_file(&dir.join("src/main.rs"), "fn main() {}\n");
+
+    let mut state = AppState::new(dir.join(".buildloop"));
+    state.phase = AppPhase::Editor;
+    state.editor_returns_to_startup = true;
+    state.editor = Some(EditorState {
+        text: "draft architecture".to_string(),
+        dirty: true,
+        scroll_offset: 0,
+        file_path: dir.join("SPEC.md"),
+    });
+
+    handle_editor_key(
+        &mut state,
+        event::KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
+    );
+    assert!(matches!(
+        state.pending_transition,
+        Some(PendingTransition::ReturnToStartup { .. })
+    ));
+
+    let shutdown = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    apply_pending_transition(
+        &dir,
+        &Config::load(&dir),
+        &mpsc::unbounded_channel::<AppEvent>().0,
+        &mut state,
+        &shutdown,
+    );
+
+    assert_eq!(state.phase, AppPhase::Startup);
+    assert!(state.startup.is_some());
+    assert_eq!(
+        state.editor.as_ref().map(|editor| editor.text.as_str()),
+        Some("draft architecture")
+    );
+    assert!(!state.should_quit);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn editor_ctrl_r_is_disabled_when_opened_from_startup() {
+    let dir = temp_project_dir("foundry-editor-ctrl-r-disabled");
+    let mut state = AppState::new(dir.join(".buildloop"));
+    state.phase = AppPhase::Editor;
+    state.editor_returns_to_startup = true;
+    state.editor = Some(EditorState {
+        text: "# Task Queue\n".to_string(),
+        dirty: false,
+        scroll_offset: 0,
+        file_path: dir.join("TASKS.md"),
+    });
+
+    handle_editor_key(
+        &mut state,
+        event::KeyEvent::new(KeyCode::Char('r'), KeyModifiers::CONTROL),
+    );
+
+    assert!(state.pending_transition.is_none());
+    assert_eq!(
+        state.log_messages.last().map(|(_, msg)| msg.as_str()),
+        Some("Save your edits, then press Esc to return to startup.")
+    );
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn editor_helpers_reflect_startup_return_mode_and_active_file_name() {
+    let mut state = AppState::new(PathBuf::from(".buildloop"));
+    state.phase = AppPhase::Editor;
+    state.editor_returns_to_startup = true;
+    state.editor = Some(EditorState {
+        text: "# Task Queue\n".to_string(),
+        dirty: true,
+        scroll_offset: 0,
+        file_path: PathBuf::from("TASKS.md"),
+    });
+
+    assert_eq!(editor_title(&state), " TASKS.md* ");
+    assert_eq!(editor_escape_hint(&state), " back  ");
+    assert!(!editor_shows_plan_shortcut(&state));
+}
+
+#[test]
+fn reopening_same_tasks_editor_preserves_unsaved_edits() {
+    let dir = temp_project_dir("foundry-reopen-tasks-editor");
+    write_file(&dir.join("TASKS.md"), "# Task Queue\n\n- [ ] T1.1: One\n");
+
+    let mut state = AppState::new(dir.join(".buildloop"));
+    state.editor = Some(EditorState {
+        text: "# Task Queue\n\n- [ ] T1.1: Edited draft\n".to_string(),
+        dirty: true,
+        scroll_offset: 0,
+        file_path: dir.join("TASKS.md"),
+    });
+    state.pending_transition = Some(PendingTransition::OpenTasksEditor);
+
+    let event_tx = mpsc::unbounded_channel::<AppEvent>().0;
+    let shutdown = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    apply_pending_transition(&dir, &Config::default(), &event_tx, &mut state, &shutdown);
+
+    assert_eq!(state.phase, AppPhase::Editor);
+    assert_eq!(
+        state.editor.as_ref().map(|editor| editor.text.as_str()),
+        Some("# Task Queue\n\n- [ ] T1.1: Edited draft\n")
+    );
+    assert_eq!(
+        state.editor.as_ref().map(|editor| editor.file_path.clone()),
+        Some(dir.join("TASKS.md"))
+    );
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn switching_from_tasks_editor_to_spec_editor_loads_the_spec_file() {
+    let dir = temp_project_dir("foundry-switch-editor-target");
+    write_file(&dir.join("SPEC.md"), "# Specification: demo\n");
+    write_file(&dir.join("TASKS.md"), "# Task Queue\n\n- [ ] T1.1: One\n");
+
+    let mut state = AppState::new(dir.join(".buildloop"));
+    state.editor = Some(EditorState {
+        text: "# Task Queue\n".to_string(),
+        dirty: true,
+        scroll_offset: 0,
+        file_path: dir.join("TASKS.md"),
+    });
+    state.pending_transition = Some(PendingTransition::OpenEditor);
+
+    let event_tx = mpsc::unbounded_channel::<AppEvent>().0;
+    let shutdown = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    apply_pending_transition(&dir, &Config::default(), &event_tx, &mut state, &shutdown);
+
+    assert_eq!(
+        state.editor.as_ref().map(|editor| editor.file_path.clone()),
+        Some(dir.join("SPEC.md"))
+    );
+    assert_eq!(
+        state.editor.as_ref().map(|editor| editor.text.as_str()),
+        Some("# Specification: demo\n")
+    );
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn planning_success_with_tasks_transitions_to_running() {
+    let mut state = AppState::new(PathBuf::from(".buildloop"));
+    apply_planning_outcome(
+        &mut state,
+        PlanningOutcome {
+            success: true,
+            total_tasks: 3,
+            pending_tasks: 2,
+            completed_tasks: 1,
+            new_tasks: 2,
+            error: None,
+            return_to_startup: false,
+        },
+    );
+
+    assert!(matches!(
+        state.pending_transition,
+        Some(PendingTransition::StartBuild)
+    ));
+}
+
+#[test]
+fn planning_success_with_no_tasks_returns_to_startup() {
+    let mut state = AppState::new(PathBuf::from(".buildloop"));
+    apply_planning_outcome(
+        &mut state,
+        PlanningOutcome {
+            success: true,
+            total_tasks: 0,
+            pending_tasks: 0,
+            completed_tasks: 0,
+            new_tasks: 0,
+            error: None,
+            return_to_startup: false,
+        },
+    );
+
+    assert!(matches!(
+        state.pending_transition,
+        Some(PendingTransition::ShowStartup { .. })
+    ));
+}
+
+#[test]
+fn planning_failure_returns_to_startup() {
+    let mut state = AppState::new(PathBuf::from(".buildloop"));
+    apply_planning_outcome(
+        &mut state,
+        PlanningOutcome {
+            success: false,
+            total_tasks: 0,
+            pending_tasks: 0,
+            completed_tasks: 0,
+            new_tasks: 0,
+            error: Some("planner failed".to_string()),
+            return_to_startup: false,
+        },
+    );
+
+    assert!(matches!(
+        state.pending_transition,
+        Some(PendingTransition::ShowStartup { .. })
+    ));
+}
+
+#[test]
+fn late_planning_finished_is_logged_in_running_phase() {
+    let mut state = AppState::new(PathBuf::from(".buildloop"));
+    handle_event(
+        &mut state,
+        AppEvent::PlanningFinished(PlanningOutcome {
+            success: true,
+            total_tasks: 4,
+            pending_tasks: 1,
+            completed_tasks: 3,
+            new_tasks: 0,
+            error: None,
+            return_to_startup: false,
+        }),
+    );
+
+    assert!(state
+        .log_messages
+        .last()
+        .map(|(_, msg)| msg.contains("Ignoring late planning result while running"))
+        .unwrap_or(false));
+}
+
+#[test]
+fn next_task_update_event_refreshes_running_queue_hint() {
+    let mut state = AppState::new(PathBuf::from(".buildloop"));
+    handle_event(
+        &mut state,
+        AppEvent::LoopEvent(LoopEvent::NextTaskUpdated(Some(
+            "T2.4 — Wire auth callbacks".to_string(),
+        ))),
+    );
+
+    assert_eq!(
+        state.next_task_hint.as_deref(),
+        Some("T2.4 — Wire auth callbacks")
+    );
+}
+
+#[test]
+fn startup_describe_work_queues_append_transition() {
+    let dir = temp_project_dir("foundry-startup-describe-work");
+    write_file(
+        &dir.join("Cargo.toml"),
+        "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n",
+    );
+    write_file(
+        &dir.join("TASKS.md"),
+        "# Plan\n\n- [ ] T1.1: Pending task\n",
+    );
+
+    let mut state = AppState::new(dir.join(".buildloop"));
+    state.startup = Some(StartupState::new(
+        &dir,
+        StartupScenario::QueueReady,
+        PlanStatus::Pending(1),
+        None,
+    ));
+
+    // Select "Describe more work" (index 1)
+    set_startup_selected_action(&mut state, 1);
+    assert!(state.startup.as_ref().unwrap().entering_intent);
+
+    // Type a description
+    for c in "fix the login timeout".chars() {
+        handle_startup_key(
+            &mut state,
+            event::KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE),
+        );
+    }
+
+    // Press Enter
+    handle_startup_key(
+        &mut state,
+        event::KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+    );
+
+    assert!(matches!(
+        state.pending_transition,
+        Some(PendingTransition::AppendTasks(_))
+    ));
+
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn startup_describe_work_rejects_empty_input() {
+    let dir = temp_project_dir("foundry-startup-describe-work-empty");
+    write_file(
+        &dir.join("Cargo.toml"),
+        "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n",
+    );
+    write_file(
+        &dir.join("TASKS.md"),
+        "# Plan\n\n- [ ] T1.1: Pending task\n",
+    );
+
+    let mut state = AppState::new(dir.join(".buildloop"));
+    state.startup = Some(StartupState::new(
+        &dir,
+        StartupScenario::QueueReady,
+        PlanStatus::Pending(1),
+        None,
+    ));
+
+    set_startup_selected_action(&mut state, 1);
+
+    // Press Enter with empty input
+    handle_startup_key(
+        &mut state,
+        event::KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+    );
+
+    // Should NOT queue a transition -- should show error
+    assert!(state.pending_transition.is_none());
+    assert!(state
+        .startup
+        .as_ref()
+        .unwrap()
+        .status_message
+        .as_ref()
+        .unwrap()
+        .contains("queue"));
+
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn startup_scan_project_accepts_empty_input() {
+    let dir = temp_project_dir("foundry-startup-scan-empty");
+    write_file(
+        &dir.join("Cargo.toml"),
+        "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n",
+    );
+
+    let mut state = AppState::new(dir.join(".buildloop"));
+    state.startup = Some(StartupState::new(
+        &dir,
+        StartupScenario::NeedsQueue,
+        PlanStatus::Missing,
+        None,
+    ));
+    set_startup_selected_action(&mut state, 1);
+
+    // Press Enter with empty input -- should work for ScanProject
+    handle_startup_key(
+        &mut state,
+        event::KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+    );
+
+    assert!(matches!(
+        state.pending_transition,
+        Some(PendingTransition::StartPlanning {
+            user_intent: None,
+            ..
+        })
+    ));
+
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn startup_scan_project_uses_focus_text() {
+    let dir = temp_project_dir("foundry-startup-scan-focus");
+    write_file(
+        &dir.join("Cargo.toml"),
+        "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n",
+    );
+
+    let mut state = AppState::new(dir.join(".buildloop"));
+    state.startup = Some(StartupState::new(
+        &dir,
+        StartupScenario::NeedsQueue,
+        PlanStatus::Missing,
+        None,
+    ));
+    set_startup_selected_action(&mut state, 1);
+
+    // Type focus text
+    for c in "auth bugs".chars() {
+        handle_startup_key(
+            &mut state,
+            event::KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE),
+        );
+    }
+
+    handle_startup_key(
+        &mut state,
+        event::KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+    );
+
+    match &state.pending_transition {
+        Some(PendingTransition::StartPlanning {
+            user_intent: Some(intent),
+            ..
+        }) => {
+            assert_eq!(intent, "auth bugs");
+        }
+        other => panic!("expected StartPlanning with intent, got {:?}", other),
+    }
+
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn scan_outcome_with_pending_tasks_starts_build() {
+    let mut state = AppState::new(PathBuf::from(".buildloop"));
+    apply_planning_outcome(
+        &mut state,
+        PlanningOutcome {
+            success: true,
+            total_tasks: 5,
+            pending_tasks: 3,
+            completed_tasks: 2,
+            new_tasks: 2,
+            error: None,
+            return_to_startup: false,
+        },
+    );
+
+    assert!(matches!(
+        state.pending_transition,
+        Some(PendingTransition::StartBuild)
+    ));
+}
+
+#[test]
+fn describe_work_outcome_returns_to_startup_for_review() {
+    let mut state = AppState::new(PathBuf::from(".buildloop"));
+    apply_planning_outcome(
+        &mut state,
+        PlanningOutcome {
+            success: true,
+            total_tasks: 5,
+            pending_tasks: 3,
+            completed_tasks: 2,
+            new_tasks: 2,
+            error: None,
+            return_to_startup: true,
+        },
+    );
+
+    match &state.pending_transition {
+        Some(PendingTransition::ShowStartup { message }) => {
+            assert_eq!(
+                message.as_deref(),
+                Some("Added 2 task(s) — 3 pending. Review the queue, then Continue when ready.")
+            );
+        }
+        other => panic!("expected ShowStartup transition, got {:?}", other),
+    }
+}
+
+// ─── Running-mode tests ──────────────────────────────────────
+
+#[test]
+fn running_page_up_down_scrolls_task_queue() {
+    let mut state = AppState::new(PathBuf::from(".buildloop"));
+    state.phase = AppPhase::Running;
+
+    handle_event(
+        &mut state,
+        AppEvent::Key(event::KeyEvent::new(KeyCode::PageUp, KeyModifiers::NONE)),
+    );
+    assert_eq!(state.task_queue_scroll, 3);
+
+    handle_event(
+        &mut state,
+        AppEvent::Key(event::KeyEvent::new(KeyCode::PageDown, KeyModifiers::NONE)),
+    );
+    assert_eq!(state.task_queue_scroll, 0);
+}
+
+#[test]
+fn running_p_toggles_patterns_view_and_returns_to_previous() {
+    let mut state = AppState::new(PathBuf::from(".buildloop"));
+    state.phase = AppPhase::Running;
+
+    // Start on output
+    assert!(!state.show_patterns);
+    assert!(!state.show_dashboard);
+
+    // p -> patterns
+    handle_event(
+        &mut state,
+        AppEvent::Key(event::KeyEvent::new(KeyCode::Char('p'), KeyModifiers::NONE)),
+    );
+    assert!(state.show_patterns);
+
+    // p -> back to output
+    handle_event(
+        &mut state,
+        AppEvent::Key(event::KeyEvent::new(KeyCode::Char('p'), KeyModifiers::NONE)),
+    );
+    assert!(!state.show_patterns);
+    assert!(!state.show_dashboard);
+}
+
+#[test]
+fn running_p_from_dashboard_returns_to_dashboard() {
+    let mut state = AppState::new(PathBuf::from(".buildloop"));
+    state.phase = AppPhase::Running;
+
+    // d -> dashboard
+    handle_event(
+        &mut state,
+        AppEvent::Key(event::KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE)),
+    );
+    assert!(state.show_dashboard);
+
+    // p -> patterns (dashboard preserved underneath)
+    handle_event(
+        &mut state,
+        AppEvent::Key(event::KeyEvent::new(KeyCode::Char('p'), KeyModifiers::NONE)),
+    );
+    assert!(state.show_patterns);
+    assert!(state.show_dashboard);
+
+    // p -> back to dashboard
+    handle_event(
+        &mut state,
+        AppEvent::Key(event::KeyEvent::new(KeyCode::Char('p'), KeyModifiers::NONE)),
+    );
+    assert!(!state.show_patterns);
+    assert!(state.show_dashboard);
+}
+
+#[test]
+fn running_patterns_scroll_uses_natural_direction() {
+    let mut state = AppState::new(PathBuf::from(".buildloop"));
+    state.phase = AppPhase::Running;
+    state.show_patterns = true;
+
+    // Down scrolls deeper (increases offset)
+    handle_event(
+        &mut state,
+        AppEvent::Key(event::KeyEvent::new(KeyCode::Down, KeyModifiers::NONE)),
+    );
+    assert_eq!(state.patterns_scroll, 3);
+
+    // Up scrolls back toward top (decreases offset)
+    handle_event(
+        &mut state,
+        AppEvent::Key(event::KeyEvent::new(KeyCode::Up, KeyModifiers::NONE)),
+    );
+    assert_eq!(state.patterns_scroll, 0);
+}
+
+#[test]
+fn running_queue_updated_event_populates_task_queue() {
+    use crate::task::Task;
+
+    let mut state = AppState::new(PathBuf::from(".buildloop"));
+    let tasks = vec![
+        Task {
+            id: "T1.1".to_string(),
+            description: "First task".to_string(),
+            line_number: 3,
+            completed: true,
+        },
+        Task {
+            id: "T1.2".to_string(),
+            description: "Second task".to_string(),
+            line_number: 4,
+            completed: false,
+        },
+    ];
+
+    handle_event(
+        &mut state,
+        AppEvent::LoopEvent(LoopEvent::QueueUpdated(tasks)),
+    );
+
+    assert_eq!(state.task_queue.len(), 2);
+    assert!(state.task_queue[0].completed);
+    assert!(!state.task_queue[1].completed);
+}
