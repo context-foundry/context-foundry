@@ -1,4 +1,3 @@
-use anyhow::Result;
 use crossterm::event::{self, KeyCode, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use std::path::Path;
 
@@ -7,8 +6,8 @@ use crate::{task, tui};
 
 use super::contract::ContractPaths;
 use super::{
-    AppEvent, AppPhase, AppState, AppendTasksRequest, EditorState, PendingTransition, PlanStatus,
-    StartupAction, StartupScenario, StartupState,
+    AppEvent, AppPhase, AppState, AppendTasksRequest, PendingTransition, PlanStatus, StartupAction,
+    StartupScenario, StartupState,
 };
 
 const CLICK_SCROLL_DEBOUNCE_TICKS: u8 = 2;
@@ -179,6 +178,7 @@ pub(super) fn handle_startup_event(state: &mut AppState, event: AppEvent) {
     match event {
         AppEvent::Key(key) => handle_startup_key(state, key),
         AppEvent::Mouse(mouse) => handle_startup_mouse(state, mouse),
+        AppEvent::Paste(text) => handle_startup_paste(state, text),
         AppEvent::Tick => {
             state.tick_count = state.tick_count.wrapping_add(1);
             state.startup_scroll_debounce_ticks =
@@ -188,6 +188,15 @@ pub(super) fn handle_startup_event(state: &mut AppState, event: AppEvent) {
             state.update_available = Some(version);
         }
         _ => {}
+    }
+}
+
+fn handle_startup_paste(state: &mut AppState, text: String) {
+    let Some(startup) = state.startup.as_mut() else {
+        return;
+    };
+    if startup.entering_intent {
+        startup.intent_input.push_str(&text);
     }
 }
 
@@ -471,109 +480,21 @@ pub(super) fn activate_startup_action(state: &mut AppState, action: StartupActio
             }
         }
         StartupAction::ViewTasks => {
-            state.pending_transition = Some(PendingTransition::OpenTasksEditor);
-        }
-        StartupAction::EditSpec => {
-            state.pending_transition = Some(PendingTransition::OpenEditor);
-        }
-    }
-}
-
-pub(super) fn handle_editor_event(state: &mut AppState, event: AppEvent) {
-    match event {
-        AppEvent::Key(key) => handle_editor_key(state, key),
-        AppEvent::Mouse(_) => {}
-        AppEvent::Tick => {
-            state.tick_count = state.tick_count.wrapping_add(1);
-        }
-        AppEvent::UpdateAvailable(version) => {
-            state.update_available = Some(version);
-        }
-        _ => {}
-    }
-}
-
-pub(super) fn handle_editor_key(state: &mut AppState, key: event::KeyEvent) {
-    match key.code {
-        KeyCode::Char('s') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-            if let Err(e) = save_editor(state) {
-                state.log(format!("Save failed: {}", e));
-            }
-        }
-        KeyCode::Char('r') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-            if state.editor_returns_to_startup {
-                state.log("Save your edits, then press Esc to return to startup.");
-                return;
-            }
-            if state
-                .editor
-                .as_ref()
-                .map(|editor| editor.dirty)
-                .unwrap_or(false)
-            {
-                if let Err(e) = save_editor(state) {
-                    state.log(format!("Save failed, cannot start loop: {}", e));
-                    return;
-                }
-            }
-            state.pending_transition = Some(PendingTransition::StartPlanning {
-                user_intent: None,
-                label: "Generate implementation plan".to_string(),
+            let tasks_path =
+                ContractPaths::resolve(state.buildloop_dir.parent().unwrap_or(Path::new(".")))
+                    .tasks_path;
+            state.pending_transition = Some(PendingTransition::OpenExternalEditor {
+                file_path: tasks_path,
             });
         }
-        KeyCode::Esc => {
-            if state.editor_returns_to_startup {
-                state.pending_transition =
-                    Some(PendingTransition::ReturnToStartup { message: None });
-            } else {
-                state.should_quit = true;
-            }
+        StartupAction::EditSpec => {
+            let spec_path =
+                ContractPaths::resolve(state.buildloop_dir.parent().unwrap_or(Path::new(".")))
+                    .spec_path;
+            state.pending_transition = Some(PendingTransition::OpenExternalEditor {
+                file_path: spec_path,
+            });
         }
-        KeyCode::Backspace => {
-            if let Some(editor) = state.editor.as_mut() {
-                if editor.text.pop().is_some() {
-                    editor.dirty = true;
-                }
-            }
-        }
-        KeyCode::Enter => {
-            if let Some(editor) = state.editor.as_mut() {
-                editor.text.push('\n');
-                editor.dirty = true;
-            }
-        }
-        KeyCode::Tab => {
-            if let Some(editor) = state.editor.as_mut() {
-                editor.text.push_str("    ");
-                editor.dirty = true;
-            }
-        }
-        KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-            if let Some(editor) = state.editor.as_mut() {
-                editor.text.clear();
-                editor.dirty = true;
-            }
-        }
-        KeyCode::Up => {
-            if let Some(editor) = state.editor.as_mut() {
-                editor.scroll_offset = editor.scroll_offset.saturating_add(1);
-            }
-        }
-        KeyCode::Down => {
-            if let Some(editor) = state.editor.as_mut() {
-                editor.scroll_offset = editor.scroll_offset.saturating_sub(1);
-            }
-        }
-        KeyCode::Char(c) => {
-            if !key.modifiers.contains(KeyModifiers::CONTROL) {
-                if let Some(editor) = state.editor.as_mut() {
-                    editor.text.push(c);
-                    editor.dirty = true;
-                    editor.scroll_offset = 0;
-                }
-            }
-        }
-        _ => {}
     }
 }
 
@@ -591,7 +512,7 @@ pub(super) fn enter_home_surface(
     state.planning = None;
 
     let scenario = detect_startup_scenario(project_dir);
-    enter_startup_surface_for_scenario(project_dir, state, scenario, status_message, false);
+    enter_startup_surface_for_scenario(project_dir, state, scenario, status_message);
 }
 
 fn resolve_project_name(project_dir: &Path) -> String {
@@ -626,7 +547,6 @@ pub(super) fn enter_startup_surface(
     project_dir: &Path,
     state: &mut AppState,
     status_message: Option<String>,
-    preserve_editor: bool,
 ) {
     refresh_plan_counts(project_dir, state);
     state.project_name = resolve_project_name(project_dir);
@@ -637,13 +557,7 @@ pub(super) fn enter_startup_surface(
     state.planning = None;
 
     let scenario = detect_startup_scenario(project_dir);
-    enter_startup_surface_for_scenario(
-        project_dir,
-        state,
-        scenario,
-        status_message,
-        preserve_editor,
-    );
+    enter_startup_surface_for_scenario(project_dir, state, scenario, status_message);
 }
 
 pub(super) fn enter_startup_surface_for_scenario(
@@ -651,7 +565,6 @@ pub(super) fn enter_startup_surface_for_scenario(
     state: &mut AppState,
     scenario: StartupScenario,
     status_message: Option<String>,
-    preserve_editor: bool,
 ) {
     let plan_status = classify_plan_status(&ContractPaths::resolve(project_dir).tasks_path);
     state.phase = AppPhase::Startup;
@@ -661,13 +574,9 @@ pub(super) fn enter_startup_surface_for_scenario(
         plan_status,
         status_message,
     ));
-    if !preserve_editor {
-        state.editor = None;
-    }
     state.current_task = None;
     state.next_task_hint = None;
     state.startup_scroll_debounce_ticks = 0;
-    state.editor_returns_to_startup = false;
 }
 
 fn refresh_plan_counts(project_dir: &Path, state: &mut AppState) {
@@ -709,75 +618,6 @@ pub(super) fn load_pending_task_at(project_dir: &Path, pending_index: usize) -> 
 
 fn current_terminal_size() -> (u16, u16) {
     crossterm::terminal::size().unwrap_or((120, 40))
-}
-
-pub(super) fn load_editor_state(project_dir: &Path) -> EditorState {
-    let spec_path = ContractPaths::resolve(project_dir).spec_path;
-    let (spec_text, spec_dirty) = if spec_path.exists() {
-        (
-            std::fs::read_to_string(&spec_path).unwrap_or_default(),
-            false,
-        )
-    } else {
-        (
-            format!(
-                "# Specification: {}\n\n\
-                ## Overview\n\
-                Describe what this project does.\n\n\
-                ## Tech Stack\n\
-                - \n\n\
-                ## Key Components\n\
-                - \n\n\
-                ## Build & Run\n\
-                ```\n\
-                ```\n",
-                project_dir
-                    .file_name()
-                    .unwrap_or_default()
-                    .to_string_lossy()
-            ),
-            true,
-        )
-    };
-
-    EditorState {
-        text: spec_text,
-        dirty: spec_dirty,
-        scroll_offset: 0,
-        file_path: spec_path,
-    }
-}
-
-pub(super) fn load_tasks_editor_state(project_dir: &Path) -> EditorState {
-    let tasks_path = ContractPaths::resolve(project_dir).tasks_path;
-    let (text, dirty) = if tasks_path.exists() {
-        (
-            std::fs::read_to_string(&tasks_path).unwrap_or_default(),
-            false,
-        )
-    } else {
-        ("# Task Queue\n\n".to_string(), true)
-    };
-
-    EditorState {
-        text,
-        dirty,
-        scroll_offset: 0,
-        file_path: tasks_path,
-    }
-}
-
-fn save_editor(state: &mut AppState) -> Result<()> {
-    let (file_path, text) = match state.editor.as_ref() {
-        Some(editor) => (editor.file_path.clone(), editor.text.clone()),
-        None => anyhow::bail!("editor not active"),
-    };
-
-    std::fs::write(&file_path, &text)?;
-    if let Some(editor) = state.editor.as_mut() {
-        editor.dirty = false;
-    }
-    Ok(())
 }
 
 pub(super) fn classify_plan_status(plan_path: &Path) -> PlanStatus {

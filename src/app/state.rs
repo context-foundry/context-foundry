@@ -13,7 +13,6 @@ use crate::task::{self, Task};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AppPhase {
     Startup,
-    Editor,
     Planning,
     Running,
 }
@@ -78,13 +77,6 @@ pub(super) struct AppendTasksRequest {
     pub(super) seed_spec_from_description: bool,
 }
 
-pub struct EditorState {
-    pub text: String,
-    pub dirty: bool,
-    pub scroll_offset: usize,
-    pub file_path: PathBuf,
-}
-
 #[derive(Debug, Clone)]
 pub(super) struct PlanningOutcome {
     pub(super) success: bool,
@@ -104,10 +96,8 @@ pub(super) enum PendingTransition {
         label: String,
     },
     AppendTasks(AppendTasksRequest),
-    OpenEditor,
-    OpenTasksEditor,
-    ReturnToStartup {
-        message: Option<String>,
+    OpenExternalEditor {
+        file_path: std::path::PathBuf,
     },
     ShowStartup {
         message: Option<String>,
@@ -118,7 +108,6 @@ pub struct AppState {
     pub buildloop_dir: PathBuf,
     pub phase: AppPhase,
     pub startup: Option<StartupState>,
-    pub editor: Option<EditorState>,
     pub planning: Option<PlanningState>,
     pub current_task: Option<Task>,
     pub next_task_hint: Option<String>,
@@ -151,7 +140,6 @@ pub struct AppState {
     pub task_start: Option<DateTime<Utc>>,
     pub task_stages_seen: Vec<AgentRole>,
     pub(super) startup_scroll_debounce_ticks: u8,
-    pub(super) editor_returns_to_startup: bool,
     pub(super) pending_transition: Option<PendingTransition>,
 }
 
@@ -161,7 +149,6 @@ impl AppState {
             buildloop_dir,
             phase: AppPhase::Startup,
             startup: None,
-            editor: None,
             planning: None,
             current_task: None,
             next_task_hint: None,
@@ -194,7 +181,6 @@ impl AppState {
             task_start: None,
             task_stages_seen: Vec::new(),
             startup_scroll_debounce_ticks: 0,
-            editor_returns_to_startup: false,
             pending_transition: None,
         }
     }
@@ -222,10 +208,6 @@ impl AppState {
         self.total_count = tasks.len();
         self.completed_count = task::count_completed(tasks);
     }
-
-    pub(crate) fn editor_returns_to_startup(&self) -> bool {
-        self.editor_returns_to_startup
-    }
 }
 
 // ─── Task Pipeline History ────────────────────────────────────
@@ -246,6 +228,7 @@ pub(super) enum AppEvent {
     LoopEvent(LoopEvent),
     Key(event::KeyEvent),
     Mouse(MouseEvent),
+    Paste(String),
     Tick,
     UpdateAvailable(String),
 }

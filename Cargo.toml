@@ -1,6 +1,6 @@
 [package]
 name = "foundry"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 description = "Autonomous build loop — the engine of Context Foundry"
 license = "MIT"
@@ -23,6 +23,7 @@ regex = "1"
 anyhow = "1"
 futures = "0.3"
 portable-pty = "0.8"
+blake3 = "1"
 
 [profile.release]
 opt-level = 3

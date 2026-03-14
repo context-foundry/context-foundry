@@ -83,27 +83,37 @@ pub fn load_patterns(dir: &Path) -> Vec<Pattern> {
 /// Match patterns against a task description using whole-word keyword matching.
 /// Returns patterns sorted by relevance (highest score first).
 pub fn match_patterns<'a>(patterns: &'a [Pattern], task_desc: &str) -> Vec<&'a Pattern> {
+    let scored = keyword_scores(patterns, task_desc);
+    let mut result: Vec<(&Pattern, usize)> = scored
+        .into_iter()
+        .filter(|(_, score)| *score > 0)
+        .map(|(idx, score)| (&patterns[idx], score))
+        .collect();
+    result.sort_by(|a, b| b.1.cmp(&a.1));
+    result.into_iter().map(|(p, _)| p).collect()
+}
+
+/// Returns (pattern_index, keyword_score) pairs for all patterns.
+/// Used by the semantic matcher as the keyword baseline for reranking.
+pub fn keyword_scores(patterns: &[Pattern], task_desc: &str) -> Vec<(usize, usize)> {
     let desc_lower = task_desc.to_lowercase();
     let desc_words: Vec<&str> = desc_lower.split_whitespace().collect();
 
-    let mut scored: Vec<(&Pattern, usize)> = patterns
+    patterns
         .iter()
-        .filter_map(|p| {
+        .enumerate()
+        .filter_map(|(i, p)| {
             let mut score = 0usize;
 
-            // Keyword matches — whole-word matching to avoid false positives
             for kw in &p.keywords {
                 let kw_lower = kw.to_lowercase();
                 if desc_words.iter().any(|w| *w == kw_lower) {
-                    // Exact word match
                     score += 2;
                 } else if desc_lower.contains(&kw_lower) {
-                    // Substring match (weaker signal, e.g. multi-word keywords)
                     score += 1;
                 }
             }
 
-            // Tech stack matches
             for tech in &p.tech_stack {
                 let tech_lower = tech.to_lowercase();
                 if desc_words.iter().any(|w| *w == tech_lower) || desc_lower.contains(&tech_lower) {
@@ -111,26 +121,17 @@ pub fn match_patterns<'a>(patterns: &'a [Pattern], task_desc: &str) -> Vec<&'a P
                 }
             }
 
-            // Boost auto_apply patterns
             if p.auto_apply && score > 0 {
                 score += 2;
             }
 
-            // Boost high-frequency patterns
             if p.frequency >= 3 && score > 0 {
                 score += 1;
             }
 
-            if score > 0 {
-                Some((p, score))
-            } else {
-                None
-            }
+            if score > 0 { Some((i, score)) } else { None }
         })
-        .collect();
-
-    scored.sort_by(|a, b| b.1.cmp(&a.1));
-    scored.into_iter().map(|(p, _)| p).collect()
+        .collect()
 }
 
 /// Format matched patterns as markdown text for injection into agent prompts.

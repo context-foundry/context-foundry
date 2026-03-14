@@ -1474,12 +1474,28 @@ fn render_planning_status_bar(frame: &mut Frame, area: Rect, state: &AppState) {
                 .bg(Color::DarkGray)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::raw(" scroll"),
+        Span::raw(" scroll  "),
+        Span::styled(
+            " d ",
+            Style::default()
+                .fg(Color::Black)
+                .bg(Color::DarkGray)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(" dashboard  "),
+        Span::styled(
+            " p ",
+            Style::default()
+                .fg(Color::Black)
+                .bg(Color::DarkGray)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(" patterns"),
     ];
 
     if let Some((_ts, msg)) = state.log_messages.last() {
         spans.push(Span::styled(
-            format!("  {}", truncate_str(msg, 90)),
+            format!("  {}", truncate_str(msg, 60)),
             Style::default().fg(Color::DarkGray),
         ));
     }
@@ -1494,186 +1510,6 @@ fn render_planning_status_bar(frame: &mut Frame, area: Rect, state: &AppState) {
     }
 
     frame.render_widget(Paragraph::new(Line::from(spans)), area);
-}
-
-// ─── Editor Phase ─────────────────────────────────────────────
-
-pub fn render_editor(frame: &mut Frame, state: &AppState) {
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Min(3),    // Editor body
-            Constraint::Length(1), // Status bar
-        ])
-        .split(frame.area());
-
-    render_editor_body(frame, chunks[0], state);
-    render_editor_status_bar(frame, chunks[1], state);
-}
-
-fn render_editor_body(frame: &mut Frame, area: Rect, state: &AppState) {
-    let (text, dirty) = match state.editor {
-        Some(ref editor) => (&editor.text, editor.dirty),
-        None => return,
-    };
-
-    let inner_width = area.width.saturating_sub(2) as usize;
-
-    // Append block cursor to display text
-    let display_text = format!("{}\u{2588}", text);
-
-    // Compute total wrapped lines for scroll math
-    let total_wrapped: usize = display_text
-        .lines()
-        .map(|line| wrap_line(line, inner_width).len())
-        .sum();
-    // Handle trailing newline (adds an extra line)
-    let total_wrapped = if display_text.ends_with('\n') {
-        total_wrapped + 1
-    } else {
-        total_wrapped.max(1)
-    };
-
-    let max_visible = area.height.saturating_sub(2) as usize;
-    let scroll_offset = state.editor.as_ref().map(|e| e.scroll_offset).unwrap_or(0);
-
-    // scroll_offset=0 means bottom visible. Higher values scroll up.
-    let scroll_from_top = if total_wrapped > max_visible {
-        total_wrapped
-            .saturating_sub(max_visible)
-            .saturating_sub(scroll_offset)
-    } else {
-        0
-    };
-
-    let title = editor_title(state);
-
-    let (border_style, title_style) = if dirty {
-        (
-            Style::default()
-                .fg(Color::Yellow)
-                .add_modifier(Modifier::BOLD),
-            Style::default()
-                .fg(Color::Yellow)
-                .add_modifier(Modifier::BOLD),
-        )
-    } else {
-        (
-            Style::default().fg(Color::Cyan),
-            Style::default()
-                .fg(Color::Cyan)
-                .add_modifier(Modifier::BOLD),
-        )
-    };
-
-    let paragraph = Paragraph::new(display_text.as_str())
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_style(border_style)
-                .title(Span::styled(title, title_style)),
-        )
-        .wrap(Wrap { trim: false })
-        .scroll((scroll_from_top as u16, 0));
-
-    frame.render_widget(paragraph, area);
-}
-
-pub(crate) fn editor_title(state: &AppState) -> String {
-    let file_name = state
-        .editor
-        .as_ref()
-        .and_then(|e| e.file_path.file_name())
-        .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "Editor".to_string());
-    if state.editor.as_ref().map(|e| e.dirty).unwrap_or(false) {
-        format!(" {}* ", file_name)
-    } else {
-        format!(" {} ", file_name)
-    }
-}
-
-pub(crate) fn editor_escape_hint(state: &AppState) -> &'static str {
-    if state.editor_returns_to_startup() {
-        " back  "
-    } else {
-        " quit  "
-    }
-}
-
-pub(crate) fn editor_shows_plan_shortcut(state: &AppState) -> bool {
-    !state.editor_returns_to_startup()
-}
-
-fn render_editor_status_bar(frame: &mut Frame, area: Rect, state: &AppState) {
-    let mut spans = vec![
-        Span::styled(
-            " Ctrl+S ",
-            Style::default()
-                .fg(Color::Black)
-                .bg(Color::DarkGray)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::raw(" save  "),
-        Span::styled(
-            " Esc ",
-            Style::default()
-                .fg(Color::Black)
-                .bg(Color::DarkGray)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::raw(editor_escape_hint(state)),
-        Span::styled(
-            " \u{2191}\u{2193} ",
-            Style::default()
-                .fg(Color::Black)
-                .bg(Color::DarkGray)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::raw(" scroll"),
-    ];
-
-    if editor_shows_plan_shortcut(state) {
-        spans.splice(
-            2..2,
-            [
-                Span::styled(
-                    " Ctrl+R ",
-                    Style::default()
-                        .fg(Color::Black)
-                        .bg(Color::DarkGray)
-                        .add_modifier(Modifier::BOLD),
-                ),
-                Span::raw(" plan + build  "),
-            ],
-        );
-    }
-
-    // Show most recent log message (error feedback during editor phase)
-    if let Some((_ts, msg)) = state.log_messages.last() {
-        spans.push(Span::styled(
-            format!("  {}", msg),
-            Style::default().fg(Color::Red),
-        ));
-    } else if state.total_count > 0 {
-        spans.push(Span::styled(
-            format!("  [{}/{}]", state.completed_count, state.total_count),
-            Style::default().fg(Color::DarkGray),
-        ));
-    }
-
-    if let Some(ref version) = state.update_available {
-        spans.push(Span::styled(
-            format!(" | v{} available", version),
-            Style::default()
-                .fg(Color::Green)
-                .add_modifier(Modifier::BOLD),
-        ));
-    }
-
-    let status = Line::from(spans);
-    let bar = Paragraph::new(status);
-    frame.render_widget(bar, area);
 }
 
 fn render_startup_summary(frame: &mut Frame, area: Rect, state: &AppState) {
@@ -2183,38 +2019,30 @@ fn render_startup_flow(frame: &mut Frame, area: Rect, state: &AppState) {
         ],
         Some(StartupAction::ViewTasks) => vec![
             Line::from(Span::styled(
-                " Browse the task queue:",
+                format!(" Opens {} in your editor.", startup.tasks_file_name),
                 Style::default().fg(Color::DarkGray),
             )),
             Line::from(Span::styled(
-                format!(" {}", startup.tasks_file_name),
-                Style::default().fg(Color::Cyan),
+                " Add, remove, or reorder tasks, then save and quit.",
+                Style::default().fg(Color::DarkGray),
             )),
             Line::from(Span::styled(
-                " Scroll to review. Reorder coming soon.",
-                Style::default().fg(Color::DarkGray),
+                " Changes take effect on the next Continue.",
+                Style::default().fg(Color::Gray),
             )),
         ],
         Some(StartupAction::EditSpec) => vec![
             Line::from(Span::styled(
-                " You edit the project spec:",
+                format!(" Opens {} in your editor.", startup.spec_file_name),
                 Style::default().fg(Color::DarkGray),
             )),
             Line::from(Span::styled(
-                format!(" {}", startup.spec_file_name),
-                Style::default().fg(Color::Cyan),
-            )),
-            Line::from("        |"),
-            Line::from(Span::styled(
-                format!(
-                    "        v  return here to describe work or scan into {}",
-                    startup.tasks_file_name
-                ),
-                Style::default().fg(Color::Yellow),
-            )),
-            Line::from(Span::styled(
-                " Editing the spec does not change the queue by itself.",
+                " The spec gives context to Scan project and the planner.",
                 Style::default().fg(Color::DarkGray),
+            )),
+            Line::from(Span::styled(
+                " Changes apply on the next Scan or build run.",
+                Style::default().fg(Color::Gray),
             )),
         ],
         _ => vec![

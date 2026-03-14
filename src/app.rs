@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use crossterm::event::{self, Event, KeyCode, KeyModifiers};
 use futures::StreamExt;
 use std::path::Path;
@@ -19,13 +19,11 @@ mod state;
 use self::context::RunContext;
 use self::contract::ContractPaths;
 use self::startup::{
-    enter_home_surface, enter_startup_surface, handle_editor_event, handle_startup_event,
-    load_editor_state, load_pending_task_at, load_tasks_editor_state,
+    enter_home_surface, enter_startup_surface, handle_startup_event, load_pending_task_at,
 };
 use self::state::{AppEvent, AppendTasksRequest, LoopEvent, PendingTransition, PlanningOutcome};
 pub use self::state::{
-    AppPhase, AppState, EditorState, PlanStatus, PlanningState, StartupAction, StartupScenario,
-    StartupState,
+    AppPhase, AppState, PlanStatus, PlanningState, StartupAction, StartupScenario, StartupState,
 };
 use crate::agent::{AgentOutputEvent, AgentRole};
 use crate::config::Config;
@@ -74,25 +72,8 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
         }
     });
 
-    // Spawn keyboard reader
-    let key_tx = event_tx.clone();
-    tokio::spawn(async move {
-        let mut reader = crossterm::event::EventStream::new();
-        loop {
-            if let Some(Ok(evt)) = reader.next().await {
-                let app_event = match evt {
-                    Event::Key(key) => Some(AppEvent::Key(key)),
-                    Event::Mouse(mouse) => Some(AppEvent::Mouse(mouse)),
-                    _ => None,
-                };
-                if let Some(app_event) = app_event {
-                    if key_tx.send(app_event).is_err() {
-                        break;
-                    }
-                }
-            }
-        }
-    });
+    // Spawn keyboard reader (keep handle so we can abort it for external editors)
+    let mut terminal_reader_handle = spawn_terminal_event_reader(event_tx.clone());
 
     // Background update check (non-blocking, delayed)
     let update_tx = event_tx.clone();
@@ -109,9 +90,7 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
         // Draw based on phase
         terminal.draw(|frame| match state.phase {
             AppPhase::Startup => tui::render_startup(frame, &state),
-            AppPhase::Editor => tui::render_editor(frame, &state),
-            AppPhase::Planning => tui::render(frame, &state),
-            AppPhase::Running => {
+            AppPhase::Planning | AppPhase::Running => {
                 if state.show_patterns {
                     tui::render_patterns(frame, &state, &config);
                 } else if state.show_dashboard {
@@ -128,7 +107,28 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
             None => break,
         }
 
-        apply_pending_transition(project_dir, &config, &event_tx, &mut state, &shutdown);
+        if let Some(editor_path) =
+            apply_pending_transition(project_dir, &config, &event_tx, &mut state, &shutdown)
+        {
+            // Abort the terminal event reader so it stops competing for input
+            terminal_reader_handle.abort();
+            tui::restore_terminal(&mut terminal)?;
+            let editor_result = launch_external_editor(&editor_path);
+            terminal = tui::setup_terminal()?;
+            // Respawn the terminal event reader
+            terminal_reader_handle = spawn_terminal_event_reader(event_tx.clone());
+            let message = match editor_result {
+                Ok(()) => {
+                    let name = editor_path
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy();
+                    Some(format!("{} saved. Changes apply on the next run.", name))
+                }
+                Err(e) => Some(format!("Editor failed: {}", e)),
+            };
+            enter_home_surface(project_dir, &mut state, message);
+        }
 
         if state.should_quit {
             break;
@@ -138,6 +138,7 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
     // Signal all spawned agent processes to terminate so spawn_blocking
     // threads exit promptly instead of blocking tokio runtime shutdown.
     shutdown.store(true, Ordering::Relaxed);
+    terminal_reader_handle.abort();
 
     // Restore terminal
     tui::restore_terminal(&mut terminal)?;
@@ -149,10 +150,35 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
     Ok(())
 }
 
+fn spawn_terminal_event_reader(
+    event_tx: mpsc::UnboundedSender<AppEvent>,
+) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        let mut reader = crossterm::event::EventStream::new();
+        loop {
+            if let Some(evt) = reader.next().await {
+                let Ok(evt) = evt else {
+                    break;
+                };
+                let app_event = match evt {
+                    Event::Key(key) => Some(AppEvent::Key(key)),
+                    Event::Mouse(mouse) => Some(AppEvent::Mouse(mouse)),
+                    Event::Paste(text) => Some(AppEvent::Paste(text)),
+                    _ => None,
+                };
+                if let Some(app_event) = app_event {
+                    if event_tx.send(app_event).is_err() {
+                        break;
+                    }
+                }
+            }
+        }
+    })
+}
+
 fn dispatch_event(state: &mut AppState, event: AppEvent) {
     match state.phase {
         AppPhase::Startup => handle_startup_event(state, event),
-        AppPhase::Editor => handle_editor_event(state, event),
         AppPhase::Planning => handle_planning_event(state, event),
         AppPhase::Running => handle_event(state, event),
     }
@@ -185,7 +211,7 @@ fn apply_pending_transition(
     event_tx: &mpsc::UnboundedSender<AppEvent>,
     state: &mut AppState,
     shutdown: &Arc<AtomicBool>,
-) {
+) -> Option<std::path::PathBuf> {
     while let Some(transition) = state.pending_transition.take() {
         match transition {
             PendingTransition::StartBuild => {
@@ -196,7 +222,6 @@ fn apply_pending_transition(
                 } else {
                     state.phase = AppPhase::Running;
                     state.startup = None;
-                    state.editor = None;
                     state.planning = None;
                 }
             }
@@ -214,44 +239,50 @@ fn apply_pending_transition(
             PendingTransition::AppendTasks(request) => {
                 spawn_append_tasks(project_dir, config, event_tx, state, request, shutdown);
             }
-            PendingTransition::OpenEditor => {
-                let spec_path = ContractPaths::resolve(project_dir).spec_path;
-                state.phase = AppPhase::Editor;
-                state.startup = None;
-                state.planning = None;
-                state.editor_returns_to_startup = true;
-                let needs_reload = state
-                    .editor
-                    .as_ref()
-                    .map(|editor| editor.file_path != spec_path)
-                    .unwrap_or(true);
-                if needs_reload {
-                    state.editor = Some(load_editor_state(project_dir));
-                }
-            }
-            PendingTransition::OpenTasksEditor => {
-                let tasks_path = ContractPaths::resolve(project_dir).tasks_path;
-                state.phase = AppPhase::Editor;
-                state.startup = None;
-                state.planning = None;
-                state.editor_returns_to_startup = true;
-                let needs_reload = state
-                    .editor
-                    .as_ref()
-                    .map(|editor| editor.file_path != tasks_path)
-                    .unwrap_or(true);
-                if needs_reload {
-                    state.editor = Some(load_tasks_editor_state(project_dir));
-                }
-            }
-            PendingTransition::ReturnToStartup { message } => {
-                enter_startup_surface(project_dir, state, message, true);
+            PendingTransition::OpenExternalEditor { file_path } => {
+                return Some(file_path);
             }
             PendingTransition::ShowStartup { message } => {
-                enter_startup_surface(project_dir, state, message, false);
+                enter_startup_surface(project_dir, state, message);
             }
         }
     }
+    None
+}
+
+fn launch_external_editor(file_path: &Path) -> Result<()> {
+    // Ensure the file exists (create with minimal content if new)
+    if !file_path.exists() {
+        if let Some(parent) = file_path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let name = file_path.file_name().unwrap_or_default().to_string_lossy();
+        let header = if name.contains("TASKS") || name.contains("IMPL_PLAN") {
+            "# Task Queue\n\n"
+        } else {
+            "# Specification\n\n"
+        };
+        std::fs::write(file_path, header)?;
+    }
+
+    let editor = std::env::var("EDITOR")
+        .ok()
+        .filter(|v| !v.trim().is_empty())
+        .unwrap_or_else(|| "nano".to_string());
+
+    let status = std::process::Command::new("sh")
+        .arg("-c")
+        .arg("$FOUNDRY_EDITOR \"$FOUNDRY_TARGET_FILE\"")
+        .env("FOUNDRY_EDITOR", &editor)
+        .env("FOUNDRY_TARGET_FILE", file_path)
+        .status()
+        .context("failed to launch editor")?;
+
+    if !status.success() {
+        anyhow::bail!("editor exited with status {}", status);
+    }
+
+    Ok(())
 }
 
 fn spawn_build_loop(
@@ -301,12 +332,10 @@ fn spawn_inline_planning(
 ) {
     state.phase = AppPhase::Planning;
     state.startup = None;
-    state.editor = None;
     state.planning = Some(PlanningState {
         label: label.clone(),
         user_intent: user_intent.clone(),
     });
-    state.editor_returns_to_startup = false;
     state.current_task = None;
     state.next_task_hint = None;
     state.is_discovering = false;
@@ -351,12 +380,10 @@ fn spawn_append_tasks(
 
     state.phase = AppPhase::Planning;
     state.startup = None;
-    state.editor = None;
     state.planning = Some(PlanningState {
         label: request.label.clone(),
         user_intent: Some(request.description.clone()),
     });
-    state.editor_returns_to_startup = false;
     state.current_task = None;
     state.next_task_hint = None;
     state.is_discovering = false;
@@ -382,7 +409,7 @@ fn prepare_append_tasks_start(
         let message =
             "Describe work requires the claude CLI, but it was not found on PATH.".to_string();
         state.log(message.clone());
-        enter_startup_surface(project_dir, state, Some(message), false);
+        enter_startup_surface(project_dir, state, Some(message));
         return false;
     }
 
@@ -394,7 +421,7 @@ fn prepare_append_tasks_start(
                 e
             );
             state.log(message.clone());
-            enter_startup_surface(project_dir, state, Some(message), false);
+            enter_startup_surface(project_dir, state, Some(message));
             return false;
         }
         state.log(format!(
@@ -431,7 +458,7 @@ fn handle_planning_event(state: &mut AppState, event: AppEvent) {
         AppEvent::AgentDone(success) => handle_agent_done(state, success),
         AppEvent::PlanningFinished(outcome) => apply_planning_outcome(state, outcome),
         AppEvent::Key(key) => handle_planning_key(state, key),
-        AppEvent::Mouse(_) => {}
+        AppEvent::Mouse(_) | AppEvent::Paste(_) => {}
         AppEvent::Tick => {
             state.tick_count = state.tick_count.wrapping_add(1);
         }
@@ -450,11 +477,32 @@ fn handle_planning_key(state: &mut AppState, key: event::KeyEvent) {
         KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
             state.should_quit = true;
         }
+        KeyCode::Char('d') => {
+            state.show_dashboard = !state.show_dashboard;
+            state.show_patterns = false;
+        }
+        KeyCode::Char('p') => {
+            state.show_patterns = !state.show_patterns;
+        }
         KeyCode::Up => {
-            state.scroll_offset = state.scroll_offset.saturating_add(3);
+            if state.show_patterns {
+                state.patterns_scroll = state.patterns_scroll.saturating_sub(3);
+            } else {
+                state.scroll_offset = state.scroll_offset.saturating_add(3);
+            }
         }
         KeyCode::Down => {
-            state.scroll_offset = state.scroll_offset.saturating_sub(3);
+            if state.show_patterns {
+                state.patterns_scroll = state.patterns_scroll.saturating_add(3);
+            } else {
+                state.scroll_offset = state.scroll_offset.saturating_sub(3);
+            }
+        }
+        KeyCode::PageUp => {
+            state.task_queue_scroll = state.task_queue_scroll.saturating_add(3);
+        }
+        KeyCode::PageDown => {
+            state.task_queue_scroll = state.task_queue_scroll.saturating_sub(3);
         }
         _ => {}
     }
@@ -625,6 +673,11 @@ fn handle_event(state: &mut AppState, event: AppEvent) {
                     // Clicks in running mode are no-ops for now
                 }
                 _ => {}
+            }
+        }
+        AppEvent::Paste(text) => {
+            if let Some(ref mut buf) = state.inject_input {
+                buf.push_str(&text);
             }
         }
         AppEvent::PlanningFinished(outcome) => {

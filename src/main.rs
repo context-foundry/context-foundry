@@ -5,6 +5,7 @@ use std::path::PathBuf;
 mod agent;
 mod app;
 mod config;
+mod embeddings;
 mod git;
 mod patterns;
 mod prompts;

@@ -1,18 +1,17 @@
 use super::startup::{
     activate_startup_action, classify_plan_status, detect_startup_scenario, enter_home_surface,
-    handle_editor_key, handle_startup_key, handle_startup_mouse_at, load_pending_task_at,
+    handle_startup_event, handle_startup_key, handle_startup_mouse_at, load_pending_task_at,
     set_startup_selected_action,
 };
 use super::state::{
-    AppEvent, AppPhase, AppState, EditorState, LoopEvent, PendingTransition, PlanStatus,
-    PlanningOutcome, StartupAction, StartupScenario, StartupState,
+    AppEvent, AppPhase, AppState, LoopEvent, PendingTransition, PlanStatus, PlanningOutcome,
+    StartupAction, StartupScenario, StartupState,
 };
 use super::{
     apply_pending_transition, apply_planning_outcome, handle_event, prepare_append_tasks_start,
     process_received_event, seed_spec_from_brief,
 };
 use crate::config::Config;
-use crate::tui::{editor_escape_hint, editor_shows_plan_shortcut, editor_title};
 use crossterm::event::{self, KeyCode, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -203,7 +202,7 @@ fn startup_action_edit_spec_sets_editor_transition() {
 
     assert!(matches!(
         state.pending_transition,
-        Some(PendingTransition::OpenEditor)
+        Some(PendingTransition::OpenExternalEditor { .. })
     ));
     let _ = std::fs::remove_dir_all(dir);
 }
@@ -228,7 +227,7 @@ fn startup_action_view_tasks_sets_tasks_editor_transition() {
 
     assert!(matches!(
         state.pending_transition,
-        Some(PendingTransition::OpenTasksEditor)
+        Some(PendingTransition::OpenExternalEditor { .. })
     ));
     let _ = std::fs::remove_dir_all(dir);
 }
@@ -246,14 +245,8 @@ fn startup_action_labels_show_bare_filenames() {
         None,
     );
 
-    assert_eq!(
-        startup.action_label(StartupAction::ViewTasks),
-        "TASKS.md"
-    );
-    assert_eq!(
-        startup.action_label(StartupAction::EditSpec),
-        "SPEC.md"
-    );
+    assert_eq!(startup.action_label(StartupAction::ViewTasks), "TASKS.md");
+    assert_eq!(startup.action_label(StartupAction::EditSpec), "SPEC.md");
 
     let _ = std::fs::remove_dir_all(dir);
 }
@@ -267,7 +260,6 @@ fn enter_home_surface_keeps_fresh_directories_on_startup() {
 
     assert_eq!(state.phase, AppPhase::Startup);
     assert!(state.startup.is_some());
-    assert!(state.editor.is_none());
     assert_eq!(
         state.startup.as_ref().map(|startup| startup.scenario),
         Some(StartupScenario::EmptyProject)
@@ -577,6 +569,30 @@ fn startup_intent_input_accepts_digits_and_q_without_triggering_shortcuts() {
 }
 
 #[test]
+fn startup_intent_input_accepts_paste_events() {
+    let dir = temp_project_dir("foundry-startup-intent-paste");
+    let mut state = AppState::new(dir.join(".buildloop"));
+    state.startup = Some(StartupState::new(
+        &dir,
+        StartupScenario::NeedsQueue,
+        PlanStatus::Missing,
+        None,
+    ));
+
+    handle_startup_event(&mut state, AppEvent::Paste("fix login timeout".to_string()));
+
+    assert_eq!(
+        state
+            .startup
+            .as_ref()
+            .map(|startup| startup.intent_input.as_str()),
+        Some("fix login timeout")
+    );
+
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
 fn startup_clicking_preview_does_not_change_scroll_offset() {
     let dir = temp_project_dir("foundry-startup-preview-jump");
     write_file(
@@ -753,152 +769,39 @@ fn startup_scroll_events_are_debounced_immediately_after_click() {
 }
 
 #[test]
-fn editor_escape_returns_to_startup_when_opened_from_menu() {
-    let dir = temp_project_dir("foundry-editor-back");
-    write_file(
-        &dir.join("Cargo.toml"),
-        "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n",
-    );
-    write_file(&dir.join("src/main.rs"), "fn main() {}\n");
+fn external_editor_transition_returns_file_path() {
+    let dir = temp_project_dir("foundry-external-editor");
+    write_file(&dir.join("TASKS.md"), "# Task Queue\n\n- [ ] T1.1: One\n");
 
     let mut state = AppState::new(dir.join(".buildloop"));
-    state.phase = AppPhase::Editor;
-    state.editor_returns_to_startup = true;
-    state.editor = Some(EditorState {
-        text: "draft architecture".to_string(),
-        dirty: true,
-        scroll_offset: 0,
+    state.pending_transition = Some(PendingTransition::OpenExternalEditor {
+        file_path: dir.join("TASKS.md"),
+    });
+
+    let event_tx = mpsc::unbounded_channel::<AppEvent>().0;
+    let shutdown = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let result =
+        apply_pending_transition(&dir, &Config::default(), &event_tx, &mut state, &shutdown);
+
+    assert_eq!(result, Some(dir.join("TASKS.md")));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn external_editor_transition_returns_spec_path() {
+    let dir = temp_project_dir("foundry-external-editor-spec");
+
+    let mut state = AppState::new(dir.join(".buildloop"));
+    state.pending_transition = Some(PendingTransition::OpenExternalEditor {
         file_path: dir.join("SPEC.md"),
     });
 
-    handle_editor_key(
-        &mut state,
-        event::KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
-    );
-    assert!(matches!(
-        state.pending_transition,
-        Some(PendingTransition::ReturnToStartup { .. })
-    ));
-
-    let shutdown = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-    apply_pending_transition(
-        &dir,
-        &Config::load(&dir),
-        &mpsc::unbounded_channel::<AppEvent>().0,
-        &mut state,
-        &shutdown,
-    );
-
-    assert_eq!(state.phase, AppPhase::Startup);
-    assert!(state.startup.is_some());
-    assert_eq!(
-        state.editor.as_ref().map(|editor| editor.text.as_str()),
-        Some("draft architecture")
-    );
-    assert!(!state.should_quit);
-    let _ = std::fs::remove_dir_all(dir);
-}
-
-#[test]
-fn editor_ctrl_r_is_disabled_when_opened_from_startup() {
-    let dir = temp_project_dir("foundry-editor-ctrl-r-disabled");
-    let mut state = AppState::new(dir.join(".buildloop"));
-    state.phase = AppPhase::Editor;
-    state.editor_returns_to_startup = true;
-    state.editor = Some(EditorState {
-        text: "# Task Queue\n".to_string(),
-        dirty: false,
-        scroll_offset: 0,
-        file_path: dir.join("TASKS.md"),
-    });
-
-    handle_editor_key(
-        &mut state,
-        event::KeyEvent::new(KeyCode::Char('r'), KeyModifiers::CONTROL),
-    );
-
-    assert!(state.pending_transition.is_none());
-    assert_eq!(
-        state.log_messages.last().map(|(_, msg)| msg.as_str()),
-        Some("Save your edits, then press Esc to return to startup.")
-    );
-    let _ = std::fs::remove_dir_all(dir);
-}
-
-#[test]
-fn editor_helpers_reflect_startup_return_mode_and_active_file_name() {
-    let mut state = AppState::new(PathBuf::from(".buildloop"));
-    state.phase = AppPhase::Editor;
-    state.editor_returns_to_startup = true;
-    state.editor = Some(EditorState {
-        text: "# Task Queue\n".to_string(),
-        dirty: true,
-        scroll_offset: 0,
-        file_path: PathBuf::from("TASKS.md"),
-    });
-
-    assert_eq!(editor_title(&state), " TASKS.md* ");
-    assert_eq!(editor_escape_hint(&state), " back  ");
-    assert!(!editor_shows_plan_shortcut(&state));
-}
-
-#[test]
-fn reopening_same_tasks_editor_preserves_unsaved_edits() {
-    let dir = temp_project_dir("foundry-reopen-tasks-editor");
-    write_file(&dir.join("TASKS.md"), "# Task Queue\n\n- [ ] T1.1: One\n");
-
-    let mut state = AppState::new(dir.join(".buildloop"));
-    state.editor = Some(EditorState {
-        text: "# Task Queue\n\n- [ ] T1.1: Edited draft\n".to_string(),
-        dirty: true,
-        scroll_offset: 0,
-        file_path: dir.join("TASKS.md"),
-    });
-    state.pending_transition = Some(PendingTransition::OpenTasksEditor);
-
     let event_tx = mpsc::unbounded_channel::<AppEvent>().0;
     let shutdown = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-    apply_pending_transition(&dir, &Config::default(), &event_tx, &mut state, &shutdown);
+    let result =
+        apply_pending_transition(&dir, &Config::default(), &event_tx, &mut state, &shutdown);
 
-    assert_eq!(state.phase, AppPhase::Editor);
-    assert_eq!(
-        state.editor.as_ref().map(|editor| editor.text.as_str()),
-        Some("# Task Queue\n\n- [ ] T1.1: Edited draft\n")
-    );
-    assert_eq!(
-        state.editor.as_ref().map(|editor| editor.file_path.clone()),
-        Some(dir.join("TASKS.md"))
-    );
-    let _ = std::fs::remove_dir_all(dir);
-}
-
-#[test]
-fn switching_from_tasks_editor_to_spec_editor_loads_the_spec_file() {
-    let dir = temp_project_dir("foundry-switch-editor-target");
-    write_file(&dir.join("SPEC.md"), "# Specification: demo\n");
-    write_file(&dir.join("TASKS.md"), "# Task Queue\n\n- [ ] T1.1: One\n");
-
-    let mut state = AppState::new(dir.join(".buildloop"));
-    state.editor = Some(EditorState {
-        text: "# Task Queue\n".to_string(),
-        dirty: true,
-        scroll_offset: 0,
-        file_path: dir.join("TASKS.md"),
-    });
-    state.pending_transition = Some(PendingTransition::OpenEditor);
-
-    let event_tx = mpsc::unbounded_channel::<AppEvent>().0;
-    let shutdown = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-    apply_pending_transition(&dir, &Config::default(), &event_tx, &mut state, &shutdown);
-
-    assert_eq!(
-        state.editor.as_ref().map(|editor| editor.file_path.clone()),
-        Some(dir.join("SPEC.md"))
-    );
-    assert_eq!(
-        state.editor.as_ref().map(|editor| editor.text.as_str()),
-        Some("# Specification: demo\n")
-    );
+    assert_eq!(result, Some(dir.join("SPEC.md")));
     let _ = std::fs::remove_dir_all(dir);
 }
 
@@ -1239,6 +1142,20 @@ fn running_page_up_down_scrolls_task_queue() {
         AppEvent::Key(event::KeyEvent::new(KeyCode::PageDown, KeyModifiers::NONE)),
     );
     assert_eq!(state.task_queue_scroll, 0);
+}
+
+#[test]
+fn running_inject_input_accepts_paste_events() {
+    let mut state = AppState::new(PathBuf::from(".buildloop"));
+    state.phase = AppPhase::Running;
+    state.inject_input = Some(String::new());
+
+    handle_event(
+        &mut state,
+        AppEvent::Paste("fix flaky auth test".to_string()),
+    );
+
+    assert_eq!(state.inject_input.as_deref(), Some("fix flaky auth test"));
 }
 
 #[test]

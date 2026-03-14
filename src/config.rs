@@ -76,6 +76,15 @@ pub struct Config {
     /// Optional git remote name to auto-push after successful commits.
     /// Defaults to None so Foundry commits locally only.
     pub auto_push_remote: Option<String>,
+
+    /// Enable semantic pattern matching via local Ollama embeddings.
+    pub semantic_match_enabled: bool,
+
+    /// Ollama embedding model name.
+    pub embedding_model: String,
+
+    /// Timeout for Ollama embedding requests (in milliseconds, rounded to whole seconds for curl).
+    pub embedding_timeout_ms: u64,
 }
 
 impl Default for Config {
@@ -110,6 +119,9 @@ impl Default for Config {
             max_pattern_injection: 10,
             planning_iterations: 0,
             auto_push_remote: None,
+            semantic_match_enabled: true,
+            embedding_model: "nomic-embed-text".into(),
+            embedding_timeout_ms: 2000,
         }
     }
 }

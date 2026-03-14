@@ -175,7 +175,26 @@ async fn process_task(
 
     let patterns_dir = patterns::resolve_patterns_dir(&ctx.config.patterns_dir);
     let all_patterns = patterns::load_patterns(&patterns_dir);
-    let matched = patterns::match_patterns(&all_patterns, task_desc);
+
+    let matched = if ctx.config.semantic_match_enabled {
+        let keyword_scores = patterns::keyword_scores(&all_patterns, task_desc);
+        let (scored, result) = crate::embeddings::match_patterns_semantic(
+            &all_patterns,
+            task_desc,
+            &ctx.config.embedding_model,
+            ctx.config.embedding_timeout_ms,
+            &keyword_scores,
+        )
+        .await;
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+            "Pattern matching ({}): cache {}/{} hit",
+            result.mode, result.cache_hits, result.cache_hits + result.cache_misses
+        ))));
+        scored.into_iter().map(|(p, _)| p).collect::<Vec<_>>()
+    } else {
+        patterns::match_patterns(&all_patterns, task_desc)
+    };
+
     let pattern_context =
         patterns::format_patterns_for_prompt(&matched, "planner", ctx.config.max_pattern_injection);
 
