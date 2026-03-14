@@ -2,7 +2,7 @@
 
 Autonomous build loop that plans, builds, reviews, and learns — forever.
 
-Foundry reads an `IMPL_PLAN.md` task list and works through it using Claude Code agents in a TUI, committing each completed task. When all tasks are done, it discovers new work and keeps going.
+Foundry reads a `TASKS.md` task list and works through it using Claude Code agents in a TUI, committing each completed task. When all tasks are done, it discovers new work and keeps going.
 
 ## Demos
 
@@ -23,7 +23,9 @@ REVIEWER (+ patterns + runtime checks) → .buildloop/review-report.md
   │
 PATTERN EXTRACTOR → merge into ~/.foundry/patterns/
   │
-GIT COMMIT → feat(task_id) or WIP(task_id)
+LOCAL GIT COMMIT → feat(task_id) or WIP(task_id)
+  │
+OPTIONAL AUTO-PUSH → only if `auto_push_remote` is configured
 ```
 
 ## How It Works
@@ -48,34 +50,79 @@ If you want per-project isolation, set `patterns_dir` in `.foundry.json` to a pr
 
 ### Discovery
 
-When all tasks in `IMPL_PLAN.md` are complete, foundry doesn't stop. A discovery agent scans the codebase — reading architecture docs, looking for TODOs/FIXMEs, checking for failed tests, spotting inconsistencies — and appends new tasks to `IMPL_PLAN.md`. The loop then works through those. If discovery finds nothing, it sleeps and tries again later.
+When all tasks in `TASKS.md` are complete, foundry doesn't stop. A discovery agent scans the codebase — reading architecture docs, looking for TODOs/FIXMEs, checking for failed tests, spotting inconsistencies — and appends new tasks to `TASKS.md`. The loop then works through those. If discovery finds nothing, it sleeps and tries again later.
 
 ## Install
 
+### Pre-built binaries
+
+Download from [GitHub Releases](https://github.com/context-foundry/context-foundry/releases/latest):
+
+| Platform | File |
+|----------|------|
+| macOS (Apple Silicon) | `foundry-aarch64-apple-darwin.tar.gz` |
+| macOS (Intel) | `foundry-x86_64-apple-darwin.tar.gz` |
+| Linux (x86_64) | `foundry-x86_64-unknown-linux-gnu.tar.gz` |
+| Windows (x86_64) | `foundry-x86_64-pc-windows-msvc.zip` |
+
+Extract and move to a directory in your PATH. On macOS/Linux:
+
 ```bash
-# From source (requires Rust toolchain + Claude Code CLI)
+tar xzf foundry-*.tar.gz
+sudo mv foundry /usr/local/bin/
+```
+
+On Windows (PowerShell):
+
+```powershell
+Expand-Archive foundry-x86_64-pc-windows-msvc.zip -DestinationPath .
+Move-Item foundry.exe C:\Users\$env:USERNAME\.cargo\bin\
+```
+
+### From source (all platforms)
+
+Requires [Rust](https://rustup.rs) and [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code).
+
+```bash
 cargo install --git https://github.com/context-foundry/context-foundry foundry
 ```
 
-Or via Homebrew (once a release is published):
+### macOS (Homebrew)
 
 ```bash
 brew tap context-foundry/tap
 brew install foundry
 ```
 
-Prebuilt GitHub Release binaries are published for macOS, Linux, and Windows x86_64. `foundry update` uses those release assets directly.
+### Windows (from source, step by step)
 
-Or build locally:
+For locked-down machines where unsigned binaries are blocked, compile from source:
+
+1. Install [Rust](https://rustup.rs) (includes `cargo`)
+2. Install [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) (select "C++ build tools" workload)
+3. Run in PowerShell:
+
+```powershell
+git clone https://github.com/context-foundry/context-foundry.git
+cd context-foundry
+cargo install --path .
+```
+
+The binary is compiled on your machine from source -- no unsigned downloads, no SmartScreen warnings. `foundry.exe` will be in `%USERPROFILE%\.cargo\bin\`.
+
+Or if you have Claude Code, paste this prompt and let it handle everything:
+
+> Clone and build Context Foundry. Run: `git clone https://github.com/context-foundry/context-foundry.git && cd context-foundry && cargo install --path .`
+
+### Self-update
 
 ```bash
-cargo build --release
-# Binary at ./target/release/foundry
+foundry update
 ```
 
 ## Usage
 
-Point foundry at any project directory that has an `IMPL_PLAN.md`:
+Point foundry at any project directory that has a `TASKS.md`:
 
 ```bash
 # TUI mode (default)
@@ -103,14 +150,14 @@ Studio is documented separately in [`docs/foundry-studio-readme.md`](docs/foundr
 
 A project needs two files to get started:
 
-1. **`IMPL_PLAN.md`** — Task checklist (foundry reads and marks tasks done):
+1. **`TASKS.md`** — Task checklist (foundry reads and marks tasks done):
    ```markdown
    ## Phase 1
    - [ ] 1.1: Set up project scaffolding
    - [ ] 1.2: Implement authentication
    ```
 
-2. **`ARCHITECTURE.md`** — What you're building (agents read this for context)
+2. **`SPEC.md`** — What you're building (agents read this for context)
 
 Optional:
 - **`.foundry.json`** — Override defaults:
@@ -120,10 +167,13 @@ Optional:
     "builder_model": "sonnet",
     "reviewer_model": "opus",
     "fixer_model": "opus",
-    "patterns_dir": "~/.foundry/patterns"
+    "patterns_dir": "~/.foundry/patterns",
+    "auto_push_remote": "snedea"
   }
   ```
 - **`CLAUDE.md`** — Project conventions (agents read this too)
+
+Legacy projects that still use `ARCHITECTURE.md` and `IMPL_PLAN.md` continue to work. Foundry prefers `SPEC.md` and `TASKS.md` when both are present.
 
 ## Agent Prompts
 
@@ -164,7 +214,7 @@ To use an extension, copy its `CLAUDE.md` and relevant docs into your project, o
 - **update.rs** — Self-update from GitHub Releases with checksum verification
 - **app.rs** — Build loop orchestration, review loop, pattern extraction
 - **tui.rs** — Ratatui terminal UI with live agent output
-- **task.rs** — Parse IMPL_PLAN.md task lists
+- **task.rs** — Parse TASKS.md task lists
 - **git.rs** — Commit and push helpers
 
 ## Previous Version
