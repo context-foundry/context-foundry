@@ -11,7 +11,7 @@ use crate::utils::atomic_write_file_best_effort;
 
 // ─── Config ──────────────────────────────────────────────────
 
-const DEFAULT_OLLAMA_URL: &str = "http://127.0.0.1:11434/api/embed";
+// Ollama URL is now configurable via Config.ollama_url
 const COOLDOWN_MS: u64 = 60_000;
 const CACHE_SCHEMA_VERSION: u32 = 1;
 
@@ -97,6 +97,7 @@ fn embed_batch_sync(
     texts: &[String],
     model: &str,
     timeout_ms: u64,
+    ollama_url: &str,
 ) -> Result<Vec<Vec<f32>>, String> {
     let body = serde_json::json!({
         "model": model,
@@ -104,11 +105,12 @@ fn embed_batch_sync(
     });
 
     let timeout_secs = (timeout_ms as f64 / 1000.0).max(1.0);
+    let url = format!("{}/api/embed", ollama_url);
     let output = std::process::Command::new("curl")
         .args([
             "-s",
             "-X", "POST",
-            DEFAULT_OLLAMA_URL,
+            &url,
             "-H", "Content-Type: application/json",
             "-d", &body.to_string(),
             "--max-time", &format!("{:.0}", timeout_secs),
@@ -138,6 +140,7 @@ pub async fn embed_batch(
     texts: &[String],
     model: &str,
     timeout_ms: u64,
+    ollama_url: &str,
 ) -> Result<Vec<Vec<f32>>, String> {
     if texts.is_empty() {
         return Ok(Vec::new());
@@ -145,8 +148,9 @@ pub async fn embed_batch(
 
     let texts = texts.to_vec();
     let model = model.to_string();
+    let url = ollama_url.to_string();
 
-    tokio::task::spawn_blocking(move || embed_batch_sync(&texts, &model, timeout_ms))
+    tokio::task::spawn_blocking(move || embed_batch_sync(&texts, &model, timeout_ms, &url))
         .await
         .map_err(|e| format!("embed task panicked: {}", e))?
 }
@@ -267,6 +271,7 @@ pub async fn match_patterns_semantic<'a>(
     model: &str,
     timeout_ms: u64,
     keyword_scores: &[(usize, usize)], // (pattern_index, keyword_score)
+    ollama_url: &str,
 ) -> (Vec<(&'a Pattern, usize)>, SemanticMatchResult) {
     // Start with keyword scores
     let mut scores: Vec<(usize, usize)> = keyword_scores.to_vec();
@@ -328,7 +333,7 @@ pub async fn match_patterns_semantic<'a>(
     // Batch embed missing patterns
     if !pattern_texts.is_empty() {
         let texts: Vec<String> = pattern_texts.iter().map(|(_, t)| t.clone()).collect();
-        match embed_batch(&texts, model, timeout_ms).await {
+        match embed_batch(&texts, model, timeout_ms, ollama_url).await {
             Ok(embeddings) => {
                 for ((idx, text), embedding) in pattern_texts.iter().zip(embeddings.iter()) {
                     let normalized = normalize(embedding);
@@ -362,7 +367,7 @@ pub async fn match_patterns_semantic<'a>(
 
     // Embed the task description
     let task_text = normalize_task_text(task_desc);
-    let task_embedding = match embed_batch(&[task_text], model, timeout_ms).await {
+    let task_embedding = match embed_batch(&[task_text], model, timeout_ms, ollama_url).await {
         Ok(mut embeddings) if !embeddings.is_empty() => normalize(&embeddings.remove(0)),
         _ => {
             mark_failed();
@@ -687,6 +692,7 @@ mod tests {
             "nomic-embed-text",
             5000,
             &keyword_scores,
+            "http://127.0.0.1:11434",
         )
         .await;
         assert!(results.is_empty());
@@ -736,6 +742,7 @@ mod tests {
             "nomic-embed-text",
             5000,
             &keyword_scores,
+            "http://127.0.0.1:11434",
         )
         .await;
         assert_eq!(info.mode, "cooldown");

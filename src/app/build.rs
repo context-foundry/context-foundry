@@ -74,6 +74,7 @@ fn spawn_lookahead_planner(
                 &ctx.config.embedding_model,
                 ctx.config.embedding_timeout_ms,
                 &keyword_scores,
+                &ctx.config.ollama_url,
             )
             .await;
             scored.into_iter().map(|(p, _)| p).collect::<Vec<_>>()
@@ -554,6 +555,7 @@ async fn process_task(
             &ctx.config.embedding_model,
             ctx.config.embedding_timeout_ms,
             &keyword_scores,
+            &ctx.config.ollama_url,
         )
         .await;
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(

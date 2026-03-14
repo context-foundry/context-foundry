@@ -140,8 +140,8 @@ pub fn render_dashboard(frame: &mut Frame, state: &AppState, config: &Config) {
         .constraints([
             Constraint::Length(7), // Pipeline subway map
             Constraint::Min(10),   // Middle: progress + stats
-            Constraint::Length(8), // Session config table
-            Constraint::Length(6), // Orchestrator config
+            Constraint::Length(8), // Build Loop config
+            Constraint::Length(6), // Doubt Loop config
             Constraint::Length(1), // Status bar
         ])
         .split(frame.area());
@@ -415,6 +415,16 @@ fn render_dashboard_stats(frame: &mut Frame, area: Rect, state: &AppState, _conf
     lines.push(Line::from(""));
 
     // Patterns
+    let match_mode = state
+        .last_pattern_match_mode
+        .as_deref()
+        .unwrap_or("--");
+    let match_color = match match_mode {
+        "semantic" => Color::Green,
+        "keyword-only" => Color::Yellow,
+        "cooldown" => Color::Red,
+        _ => Color::DarkGray,
+    };
     lines.push(Line::from(vec![
         Span::styled("  Patterns ", Style::default().fg(Color::Cyan)),
         Span::styled("learned: ", Style::default().fg(Color::DarkGray)),
@@ -422,6 +432,8 @@ fn render_dashboard_stats(frame: &mut Frame, area: Rect, state: &AppState, _conf
             format!("{}", state.session_patterns_learned),
             Style::default().fg(Color::White),
         ),
+        Span::styled("  match: ", Style::default().fg(Color::DarkGray)),
+        Span::styled(match_mode, Style::default().fg(match_color)),
     ]));
 
     lines.push(Line::from(""));
@@ -587,7 +599,7 @@ fn render_session_config(frame: &mut Frame, area: Rect, config: &Config) {
             .borders(Borders::ALL)
             .border_style(Style::default().fg(Color::DarkGray))
             .title(Span::styled(
-                " Session Config ",
+                " Build Loop ",
                 Style::default()
                     .fg(Color::Cyan)
                     .add_modifier(Modifier::BOLD),
@@ -686,7 +698,7 @@ fn render_orchestrator_config(frame: &mut Frame, area: Rect, config: &Config) {
             .borders(Borders::ALL)
             .border_style(Style::default().fg(Color::DarkGray))
             .title(Span::styled(
-                " Orchestrator ",
+                " Doubt Loop ",
                 Style::default()
                     .fg(Color::Cyan)
                     .add_modifier(Modifier::BOLD),
@@ -1205,7 +1217,7 @@ fn startup_layout(area: Rect, _state: &AppState) -> StartupLayout {
     let vertical = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(9),
+            Constraint::Length(8),
             Constraint::Min(8),
             Constraint::Length(1),
         ])
@@ -1403,6 +1415,14 @@ fn render_header(frame: &mut Frame, area: Rect, state: &AppState) {
                     .fg(Color::White)
                     .add_modifier(Modifier::BOLD),
             ),
+            Span::styled(
+                " RUNNING ",
+                Style::default()
+                    .fg(Color::Black)
+                    .bg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("  "),
             Span::styled(
                 format!("[{}/{}] {:.0}%", completed, total, pct),
                 Style::default()
@@ -1895,12 +1915,19 @@ fn render_startup_summary(frame: &mut Frame, area: Rect, state: &AppState) {
             ),
             Span::styled(
                 if state.project_name.is_empty() {
-                    "  Startup".to_string()
+                    String::new()
                 } else {
                     format!("  {} ", truncate_str(&state.project_name, 40))
                 },
                 Style::default()
                     .fg(Color::White)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                " STOPPED ",
+                Style::default()
+                    .fg(Color::Black)
+                    .bg(Color::DarkGray)
                     .add_modifier(Modifier::BOLD),
             ),
         ]),

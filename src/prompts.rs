@@ -214,36 +214,15 @@ Task ID: {task_id}
 Task Description: {task_desc}
 
 INSTRUCTIONS:
-1. Read .buildloop/current-plan.md — this is your authoritative specification
+1. Read .buildloop/current-plan.md -- this is your spec. Follow it exactly.
 2. Read CLAUDE.md for project conventions
-3. Execute the plan's "Dependencies" section first — run the exact install commands listed
-4. Process each "File Operations" entry in the order listed:
-   - For CREATE operations: create the file with the exact imports, types, and function signatures specified
-   - For MODIFY operations: use the "anchor" field to locate the exact code block to change, then apply the specified changes
-5. Implement each function following its "logic" steps literally — these are your step-by-step instructions
-6. After all files are created/modified, run the exact commands from the plan's "Verification" section
-7. Respect everything in the plan's "Constraints" section
+3. Install dependencies, then implement each file operation in order
+4. Run the verification commands from the plan. Fix failures before finishing.
 
-HOW TO READ THE PLAN:
-- The plan is structured for you, not for a human. Each section is a direct instruction.
-- "File Operations" are ordered by dependency — follow the order exactly
-- "anchor" fields contain a unique line from existing code — use it to find the edit location
-- "signature" fields are the exact function signatures to implement
-- "logic" fields are numbered steps — implement them in order
-- "calls" fields tell you which functions to call and with what arguments
-- "Verification" commands are copy-paste ready — run them exactly as written
-
-SUBAGENT STRATEGY:
-- Use parallel subagents for file reads and code searches — read as many files concurrently as needed
-- Use only 1 subagent for build commands, test execution, and verification steps (serialized backpressure)
-- The reasoning agent (you) stays focused on logic and decision-making; delegate I/O to subagents
-
-IMPORTANT:
-- Follow the plan precisely — do not deviate, interpret, or add unrequested features
+RULES:
+- Follow the plan precisely -- do not deviate or add unrequested features
 - Do NOT modify {spec_file}, CLAUDE.md, {tasks_file}, or .buildloop/
-- If the plan says MODIFY, read the target file first and use the anchor to find the exact location
-- If a verification step fails, fix the issue before moving on
-- Do not add comments, docstrings, or type annotations beyond what the plan specifies"#
+- If a verification step fails, fix it before moving on"#
     )
 }
 
@@ -328,49 +307,47 @@ pub fn reviewer_prompt(
     };
 
     format!(
-        r#"You are the REVIEWER agent — a combined validator and auditor for an autonomous build loop.
-
-Defects are possible in any code. Every finding MUST cite specific evidence (file, line, and what is wrong).
+        r#"Audit and validate these claims. Find the gaps.
 
 {pass_preamble}
+
+A builder agent claims it implemented the following task:
 
 Task ID: {task_id}
 Task Description: {task_desc}
 
 {changes_section}
 
-INSTRUCTIONS:
-1. Read .buildloop/current-plan.md to understand intent
-2. Read CLAUDE.md for project conventions
-3. Detect the tech stack from repo files (Cargo.toml, package.json, pyproject.toml, etc.)
+YOUR JOB:
+1. Read .buildloop/current-plan.md to see what was supposed to be built
+2. Read the actual changed files to see what was actually built
+3. Run the build and tests to see if it actually works
+4. Find every gap between what was claimed and what exists
 
-PART A — RUNTIME VALIDATION (use stack-appropriate tools):
-4. Check that every file listed in the plan exists and has correct content
-5. Run build/lint checks:
-   - Rust: cargo check, cargo clippy
-   - Python: python -m py_compile, flake8/ruff
-   - Node/TS: tsc --noEmit, eslint
-6. Run tests:
-   - Rust: cargo test
-   - Python: pytest
-   - Node: npm test
-7. Check for: missing imports, incorrect paths, missing module files
-8. Docker: ONLY run `docker compose config` to validate compose syntax.
-   Do NOT run `docker compose up` or any command that starts/stops services.
-   If compose files were changed, note syntax validity in the report.
-9. If a runtime tool is unavailable, report it as SKIPPED with the reason — do NOT silently skip
+VERIFY THESE CLAIMS:
+- Does every file mentioned in the plan actually exist with the correct content?
+- Does the code compile/parse without errors?
+- Do the tests pass?
+- Does the implementation match the plan, or did the builder deviate?
+- Are there logic errors, missing error handling, or security issues?
+- Did the builder leave behind incomplete stubs, TODOs, or placeholder code?
 
-PART B — DEEP AUDIT (read every changed file line by line):
-10. Logic errors (off-by-one, wrong conditions, missing edge cases)
-11. Race conditions or concurrency issues
-12. Security vulnerabilities (injection, auth bypass, data leaks)
-13. Missing error handling that could cause crashes
-14. Incorrect API contracts or type mismatches
-15. Resource leaks (unclosed files, connections, missing cleanup)
-16. Hardcoded values that should be configurable
-17. Inconsistencies between the plan and the implementation
+PAY PARTICULAR ATTENTION TO:
+- Logic errors (off-by-one, wrong conditions, missing edge cases)
+- Race conditions or concurrency issues
+- Security vulnerabilities (injection, auth bypass, data leaks)
+- Missing error handling that could cause crashes
+- Incorrect API contracts or type mismatches
+- Resource leaks (unclosed files, connections, missing cleanup)
+- Incomplete stubs, TODOs, or placeholder code left behind
 
-WRITE YOUR REPORT to .buildloop/review-report.md with this EXACT format:
+RUN THESE CHECKS (skip with reason if tool unavailable):
+- Rust: cargo check && cargo clippy && cargo test
+- Python: python -m py_compile && pytest
+- Node/TS: tsc --noEmit && npm test
+- Docker: docker compose config (syntax only, do NOT start services)
+
+WRITE YOUR REPORT to .buildloop/review-report.md:
 
 # Review Report — {task_id}
 
@@ -380,7 +357,6 @@ WRITE YOUR REPORT to .buildloop/review-report.md with this EXACT format:
 - Build: PASS/FAIL/SKIPPED (reason)
 - Tests: PASS/FAIL/SKIPPED (reason)
 - Lint: PASS/FAIL/SKIPPED (reason)
-- Docker: PASS/FAIL/SKIPPED (reason)
 
 ## Findings
 
@@ -396,7 +372,7 @@ WRITE YOUR REPORT to .buildloop/review-report.md with this EXACT format:
     {{"file": "path/to/file", "line": 5, "issue": "Description", "category": "style|hardcoded|inconsistency"}}
   ],
   "validated": [
-    "Brief description of what was checked and found correct"
+    "Specific claim that was verified as correct"
   ]
 }}
 ```
@@ -405,14 +381,15 @@ VERDICT RULES:
 - PASS only if: no runtime failures AND no high/medium findings
 - FAIL if: any runtime failure, any high finding, or any medium finding
 
-IMPORTANT:
+RULES:
 - You are READ-ONLY — do NOT modify any project files except .buildloop/review-report.md
-- Do NOT read files in .buildloop/logs/ — these are internal agent logs, not review inputs
-- Every finding must cite file, line number, and concrete evidence — no speculation
+- Do NOT read files in .buildloop/logs/
+- Every finding MUST cite file, line number, and concrete evidence — no speculation
+- Every validated item MUST describe what was specifically checked and confirmed
 - Only flag real issues, not style preferences
-- HIGH = will cause incorrect behavior, security breach, or crash in production
+- HIGH = will cause incorrect behavior, security breach, or crash
 - MEDIUM = could cause problems under certain conditions
-- LOW = minor issues worth noting but not blocking{patterns_block}"#
+- LOW = minor issue worth noting but not blocking{patterns_block}"#
     )
 }
 
@@ -449,138 +426,71 @@ IMPORTANT:
 
 pub fn pattern_extraction_prompt(task_id: &str, task_desc: &str) -> String {
     format!(
-        r#"You are the PATTERN EXTRACTOR agent for an autonomous build loop.
+        r#"Extract 0-5 reusable patterns from this task's build artifacts.
 
-YOUR TASK: Review the build artifacts for this task and extract 0-5 reusable patterns that could help future builds.
+Task: {task_id} -- {task_desc}
 
-Task ID: {task_id}
-Task Description: {task_desc}
+Read .buildloop/current-plan.md and .buildloop/review-report.md (if it exists).
+What went wrong? What was tricky? What would help future builds avoid the same issue?
 
-INSTRUCTIONS:
-1. Read .buildloop/current-plan.md (the plan)
-2. Read .buildloop/review-report.md if it exists (review findings)
-3. Identify recurring issues, tricky patterns, or lessons learned
+Write a JSON array to .buildloop/patterns-extracted.json:
 
-Write a JSON array to .buildloop/patterns-extracted.json with 0-5 patterns:
+[{{"pattern_id":"kebab-id","title":"Short title","first_seen":"{task_id}","last_seen":"{task_id}","frequency":1,"severity":"HIGH|MEDIUM|LOW","keywords":["keyword1"],"tech_stack":["rust"],"issue":"What goes wrong","solution":{{"planner":"What to do differently","reviewer":"What to check for"}},"auto_apply":false,"learned_from":"{task_id}"}}]
 
-```json
-[
-  {{
-    "pattern_id": "unique-kebab-case-id",
-    "title": "Short descriptive title",
-    "first_seen": "{task_id}",
-    "last_seen": "{task_id}",
-    "frequency": 1,
-    "severity": "HIGH|MEDIUM|LOW",
-    "keywords": ["keyword1", "keyword2"],
-    "tech_stack": ["python", "fastapi"],
-    "issue": "Description of the issue or pattern",
-    "solution": {{
-      "planner": "What the planner should do differently",
-      "reviewer": "What the reviewer should check for"
-    }},
-    "auto_apply": false,
-    "learned_from": "{task_id}"
-  }}
-]
-```
-
-GUIDELINES:
-- Only extract patterns that would genuinely help future tasks
-- Use specific, searchable keywords
-- If no useful patterns emerge, write an empty array: []
-- Focus on: common mistakes, tricky configurations, non-obvious requirements
-- Do NOT extract trivial patterns (like "write tests" or "check imports")
-
-IMPORTANT:
-- Write ONLY to .buildloop/patterns-extracted.json
-- Do NOT modify any other files"#
+RULES:
+- Write [] if nothing useful emerged. Do NOT extract trivial patterns.
+- Use specific, searchable keywords.
+- Write ONLY to .buildloop/patterns-extracted.json -- do NOT modify other files."#
     )
 }
 
 pub fn discovery_prompt(round: usize, spec_file: &str, tasks_file: &str) -> String {
     format!(
-        r#"You are the DISCOVERY agent for an autonomous build loop.
+        r#"Find real bugs, gaps, and missing work in this project. Append new tasks to {tasks_file}.
 
-YOUR TASK: Analyze the project and discover new tasks — bugs, enhancements, features, security issues, missing functionality, performance improvements.
+Read {spec_file}, {tasks_file}, CLAUDE.md, and the source code. Run the build and tests.
+Check recent git history (git log --oneline -20 --name-only).
 
-INSTRUCTIONS:
-1. Read {spec_file} to understand the full vision
-2. Inspect the existing codebase and recent changes to find real issues
-3. Read {tasks_file} only to understand what is already planned/completed and avoid duplicate tasks
-4. Read CLAUDE.md for project conventions
-5. Detect the tech stack from repo files (Cargo.toml, package.json, pyproject.toml, etc.)
-6. Explore the primary source directories (src/, lib/, app/) focusing on:
-   - Files changed in recent commits (git log --oneline -20 --name-only)
-   - Files with TODOs, FIXMEs, incomplete stubs
-   - Comparison of implemented code against {spec_file} specs
-   - Run stack-appropriate checks (cargo check, pytest, npm test) and note failures
-7. Stop exploring after reviewing the primary source tree — do not exhaustively scan vendored, generated, or dependency directories
+Prioritize: bugs > security > missing features > enhancements > refactoring.
 
-IF credible issues are found, append new tasks to {tasks_file}:
+Append to {tasks_file} using this exact format:
 
 ## Discovery Round {round}
 
-- [ ] D{round}.1: Short description of the task
-- [ ] D{round}.2: Short description of the task
+- [ ] D{round}.1: Specific description of the issue and where it is
+- [ ] D{round}.2: Another specific issue
 
-IF no credible issues are found, append:
+If nothing credible is found, append: "No new tasks discovered."
 
-## Discovery Round {round}
-
-No new tasks discovered.
-
-GUIDELINES:
-- Each task should be independently implementable and verifiable
-- Prioritize: bugs > security > missing features > enhancements > refactoring
-- Be specific: 'Fix broken import in backend/app/services/vault.py' not 'fix bugs'
-- Include 0-10 tasks — 0 is correct if nothing credible is found
-- Don't create busywork or speculative tasks
-- Don't duplicate existing tasks
-- Do NOT use markdown formatting (bold, italic, links) in task lines — the parser is strict
-- Treat code, tests, and {spec_file} as more authoritative than {tasks_file} when they disagree
-
-IMPORTANT:
+RULES:
+- 0 tasks is correct if nothing real is found. Do not create busywork.
+- Be specific: "Fix broken import in backend/app/services/vault.py" not "fix bugs"
+- Do NOT duplicate tasks already in {tasks_file}
+- Do NOT use markdown bold/italic in task lines -- the parser is strict
 - Do NOT modify {spec_file}, CLAUDE.md, or .buildloop/
-- ONLY append to the END of {tasks_file}
-- Do NOT implement any fixes — only discover and document"#
+- Do NOT implement any fixes -- only discover and document"#
     )
 }
 
-pub fn append_tasks_prompt(description: &str, tasks_file: &str, spec_file: &str) -> String {
+pub fn append_tasks_prompt(description: &str, tasks_file: &str, _spec_file: &str) -> String {
     format!(
-        r#"You are a task formatting agent. Your ONLY job is to append properly formatted
-tasks to {tasks_file} based on the user's description.
+        r#"Break this request into implementation tasks and append them to {tasks_file}.
 
 USER REQUEST: {description}
 
-INSTRUCTIONS:
-1. Read {tasks_file} to understand the current task ID scheme and format
-2. Determine the next available task group number
-3. Break the user's request into one or more specific implementation tasks
-4. Append them to the END of {tasks_file} using the same format as existing tasks
+Read {tasks_file} to find the next available task group number. Append to the END.
 
-EXACT LINE FORMAT (the parser is strict — follow this precisely):
-- [ ] T<N>.<M>: Short task description
+EXACT FORMAT (parser is strict):
+- [ ] T<N>.1: Specific task description
+- [ ] T<N>.2: Another specific task
 
-Examples of CORRECT lines:
-- [ ] T1.1: Create the main entry point
-- [ ] T1.2: Add error handling to the API layer
-
-Examples of WRONG lines (parser will reject these):
-- [ ] **T1.1**: Create the main entry point     <-- no markdown bold
-- [ ] T1.1 - Create the main entry point        <-- must use colon, not dash
-- [ ] Create the main entry point                <-- missing task ID
-- T1.1: Create the main entry point              <-- missing checkbox prefix
+NO markdown bold, NO dashes instead of colons, NO missing checkbox prefix.
 
 RULES:
-- Do NOT modify any existing tasks
-- Do NOT read any files other than {tasks_file}
-- Do NOT scan the repo or read {spec_file}
-- Each task must be independently implementable and verifiable
-- Be specific and actionable
-- Do NOT use markdown formatting (bold, italic, links) in task lines
-- If {tasks_file} does not exist, create it with a header and then add the tasks"#
+- Do NOT modify existing tasks
+- Do NOT read files other than {tasks_file}
+- Each task must be independently implementable
+- If {tasks_file} does not exist, create it with a Task Queue header first"#
     )
 }
 
@@ -724,16 +634,16 @@ mod tests {
     #[test]
     fn prompts_use_actual_file_names_not_hardcoded() {
         let planner = planner_prompt("T1", "task", "", "ARCHITECTURE.md", "IMPL_PLAN.md");
-        assert!(planner.contains("Read ARCHITECTURE.md thoroughly"));
-        assert!(planner.contains("Read IMPL_PLAN.md to understand"));
+        assert!(planner.contains("ARCHITECTURE.md"));
+        assert!(planner.contains("IMPL_PLAN.md"));
         assert!(!planner.contains("SPEC.md"));
 
         let discovery = discovery_prompt(1, "ARCHITECTURE.md", "IMPL_PLAN.md");
-        assert!(discovery.contains("Read ARCHITECTURE.md to understand"));
-        assert!(discovery.contains("append new tasks to IMPL_PLAN.md"));
+        assert!(discovery.contains("ARCHITECTURE.md"));
+        assert!(discovery.contains("IMPL_PLAN.md"));
 
         let append = append_tasks_prompt("fix login", "IMPL_PLAN.md", "ARCHITECTURE.md");
-        assert!(append.contains("tasks to IMPL_PLAN.md"));
-        assert!(append.contains("Do NOT scan the repo or read ARCHITECTURE.md"));
+        assert!(append.contains("IMPL_PLAN.md"));
+        assert!(!append.contains("SPEC.md"));
     }
 }

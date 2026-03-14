@@ -83,12 +83,57 @@ pub fn mark_done(plan_path: &Path, line_number: usize) -> Result<()> {
     let content = fs::read_to_string(plan_path)?;
     let mut lines: Vec<String> = content.lines().map(String::from).collect();
 
-    if line_number > 0 && line_number <= lines.len() {
+    // Primary: try the original line number (fast path when file hasn't changed)
+    if line_number > 0
+        && line_number <= lines.len()
+        && lines[line_number - 1].trim_start().starts_with("- [ ]")
+    {
         lines[line_number - 1] = lines[line_number - 1].replace("- [ ]", "- [x]");
+        atomic_write_file(plan_path, (lines.join("\n") + "\n").as_bytes())?;
+        return Ok(());
     }
 
-    atomic_write_file(plan_path, (lines.join("\n") + "\n").as_bytes())?;
+    // Fallback: file changed since parsing (lines shifted due to discovery/inject).
+    // Extract the task ID from the original line and search for it.
+    let id_prefix = if line_number > 0 && line_number <= lines.len() {
+        extract_task_id_prefix(&lines[line_number - 1])
+    } else {
+        None
+    };
+
+    if let Some(ref prefix) = id_prefix {
+        for line in lines.iter_mut() {
+            if line.trim_start().starts_with("- [ ]") && line.contains(prefix) {
+                *line = line.replace("- [ ]", "- [x]");
+                atomic_write_file(plan_path, (lines.join("\n") + "\n").as_bytes())?;
+                return Ok(());
+            }
+        }
+    }
+
+    // Last resort: scan all unchecked lines for one matching the original content
+    if line_number > 0 && line_number <= lines.len() {
+        let original_trimmed = lines[line_number - 1].trim().to_string();
+        for line in lines.iter_mut() {
+            if line.trim_start().starts_with("- [ ]") && line.trim() == original_trimmed {
+                *line = line.replace("- [ ]", "- [x]");
+                atomic_write_file(plan_path, (lines.join("\n") + "\n").as_bytes())?;
+                return Ok(());
+            }
+        }
+    }
+
+    // Nothing matched -- the task may already be checked or the file is very different
     Ok(())
+}
+
+fn extract_task_id_prefix(line: &str) -> Option<String> {
+    let rest = line
+        .trim_start()
+        .strip_prefix("- [ ] ")
+        .or_else(|| line.trim_start().strip_prefix("- [x] "))?;
+    let colon_pos = rest.find(':')?;
+    Some(rest[..colon_pos + 1].to_string())
 }
 
 pub fn count_completed(tasks: &[Task]) -> usize {

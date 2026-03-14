@@ -94,6 +94,9 @@ pub struct Config {
     /// Ollama embedding model name.
     pub embedding_model: String,
 
+    /// Ollama API base URL for embeddings (default: http://127.0.0.1:11434).
+    pub ollama_url: String,
+
     /// Timeout for Ollama embedding requests (in milliseconds, rounded to whole seconds for curl).
     pub embedding_timeout_ms: u64,
 
@@ -168,6 +171,7 @@ impl Default for Config {
             auto_push_remote: None,
             semantic_match_enabled: true,
             embedding_model: "nomic-embed-text".into(),
+            ollama_url: "http://127.0.0.1:11434".into(),
             embedding_timeout_ms: 2000,
             orchestrator_proposer_provider: "claude".into(),
             orchestrator_proposer_model: "opus".into(),
@@ -240,6 +244,8 @@ impl Config {
             ("Reviewer", &self.reviewer_provider, &self.reviewer_model),
             ("Fixer", &self.fixer_provider, &self.fixer_model),
             ("Discovery", &self.discovery_provider, &self.discovery_model),
+            ("Patterns", "claude", &self.pattern_extraction_model),
+            ("Add Tasks", "claude", "haiku"),
         ]
     }
 }

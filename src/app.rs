@@ -663,6 +663,15 @@ fn handle_event(state: &mut AppState, event: AppEvent) {
                         }
                     }
                 }
+                // Track pattern matching mode for dashboard
+                if msg.starts_with("Pattern matching (") {
+                    if let Some(mode) = msg
+                        .strip_prefix("Pattern matching (")
+                        .and_then(|s| s.split(')').next())
+                    {
+                        state.last_pattern_match_mode = Some(mode.to_string());
+                    }
+                }
                 state.log(msg.clone());
             }
             LoopEvent::BackgroundLog(ref msg) => {

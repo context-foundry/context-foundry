@@ -6,10 +6,10 @@
   "builder_model": "opus",
 
   "reviewer_provider": "claude",
-  "reviewer_model": "opus",
+  "reviewer_model": "sonnet",
 
   "fixer_provider": "claude",
-  "fixer_model": "opus",
+  "fixer_model": "sonnet",
 
   "discovery_provider": "claude",
   "discovery_model": "opus",
@@ -21,5 +21,6 @@
   "agent_timeout_secs": 900,
 
   "backpressure_only": false,
-  "max_pattern_injection": 10
+  "max_pattern_injection": 10,
+  "ollama_url": "http://127.0.0.1:11435"
 }
