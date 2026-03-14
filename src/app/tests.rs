@@ -1215,12 +1215,14 @@ fn running_queue_updated_event_populates_task_queue() {
             description: "First task".to_string(),
             line_number: 3,
             completed: true,
+            pipeline_progress: None,
         },
         Task {
             id: "T1.2".to_string(),
             description: "Second task".to_string(),
             line_number: 4,
             completed: false,
+            pipeline_progress: None,
         },
     ];
 
@@ -1856,6 +1858,7 @@ fn test_running_task_log_line_suppressed_when_dominated_by_task_id() {
         description: "Fix header duplication".to_string(),
         line_number: 47,
         completed: false,
+        pipeline_progress: None,
     });
     state.log("Task T6.1 started".to_string());
     let (_ts, msg) = state.log_messages.last().unwrap();

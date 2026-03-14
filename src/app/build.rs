@@ -586,6 +586,9 @@ async fn process_task(
     #[allow(unused_assignments)]
     let mut last_rate_limited = false;
 
+    // Helper: the planner character for the progress indicator.
+    let planner_char = if skip_planner { "-" } else { "P" };
+
     if skip_planner {
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
             "Skipping planner for simple task".to_string(),
@@ -687,6 +690,12 @@ async fn process_task(
                 return (false, last_rate_limited);
             }
         }
+
+        // Planner completed -- persist progress indicator.
+        {
+            let _lock = ctx.tasks_file_lock.lock().unwrap_or_else(|e| e.into_inner());
+            let _ = task::update_task_progress(&ctx.plan_path, task_id, &format!("{}...", planner_char));
+        }
     }
 
     // ─── Run Builder ─────────────────────────────────────────
@@ -745,6 +754,12 @@ async fn process_task(
         return (false, last_rate_limited);
     }
 
+    // Builder completed -- persist progress indicator.
+    {
+        let _lock = ctx.tasks_file_lock.lock().unwrap_or_else(|e| e.into_inner());
+        let _ = task::update_task_progress(&ctx.plan_path, task_id, &format!("{}B..", planner_char));
+    }
+
     adaptive_sleep(&ctx.config, last_rate_limited, ctx.config.pause_between_agents_secs).await;
 
     // Check stop between builder and reviewer
@@ -757,11 +772,11 @@ async fn process_task(
         return (false, last_rate_limited);
     }
 
-    let validated = if ctx.config.backpressure_only {
+    let (validated, fix_passes) = if ctx.config.backpressure_only {
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
             "Backpressure-only mode: skipping LLM review (builder verification passed)".to_string(),
         )));
-        true
+        (true, 0usize)
     } else {
         let reviewer_pattern_context = patterns::format_patterns_for_prompt(
             &matched,
@@ -770,6 +785,15 @@ async fn process_task(
         );
         review::run_review_loop(task_id, task_desc, ctx, &reviewer_pattern_context, tx).await
     };
+
+    // Persist final pipeline progress indicator.
+    {
+        let fixer_char = if fix_passes > 0 { "F" } else { "-" };
+        let fail_char = if !validated { "!" } else { "" };
+        let progress = format!("{}BR{}{}", planner_char, fixer_char, fail_char);
+        let _lock = ctx.tasks_file_lock.lock().unwrap_or_else(|e| e.into_inner());
+        let _ = task::update_task_progress(&ctx.plan_path, task_id, &progress);
+    }
 
     let committed = git::commit_and_push(
         &ctx.project_dir,

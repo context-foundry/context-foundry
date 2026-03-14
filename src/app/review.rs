@@ -9,19 +9,20 @@ use crate::prompts;
 use super::context::RunContext;
 use super::{AppEvent, LoopEvent};
 
+/// Returns `(passed, fix_passes)` so the caller can persist the pipeline progress indicator.
 pub(super) async fn run_review_loop(
     task_id: &str,
     task_desc: &str,
     ctx: &RunContext,
     pattern_context: &str,
     tx: &mpsc::UnboundedSender<AppEvent>,
-) -> bool {
+) -> (bool, usize) {
     let files_changed = get_changed_files(&ctx.project_dir);
     if files_changed.is_empty() {
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
             "No changed files to review".to_string(),
         )));
-        return false;
+        return (false, 0);
     }
 
     let files_list = files_changed.join("\n");
@@ -102,7 +103,7 @@ pub(super) async fn run_review_loop(
                 fix_passes: pass.saturating_sub(1),
                 passed: false,
             }));
-            return false;
+            return (false, pass.saturating_sub(1));
         }
 
         // Guard: reviewer agent succeeded but report file is missing or empty.
@@ -123,7 +124,7 @@ pub(super) async fn run_review_loop(
                 fix_passes: pass.saturating_sub(1),
                 passed: false,
             }));
-            return false;
+            return (false, pass.saturating_sub(1));
         }
 
         let verdict_pass = check_review_passed(&ctx.review_report);
@@ -141,12 +142,13 @@ pub(super) async fn run_review_loop(
             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
                 "Review passed — no actionable issues found".to_string(),
             )));
+            let fix_passes = pass.saturating_sub(1);
             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::TaskReviewResult {
                 task_id: task_id.to_string(),
-                fix_passes: pass.saturating_sub(1),
+                fix_passes,
                 passed: true,
             }));
-            return true;
+            return (true, fix_passes);
         }
 
         if pass < 2 {
@@ -203,7 +205,7 @@ pub(super) async fn run_review_loop(
                     fix_passes: 1,
                     passed: false,
                 }));
-                return false;
+                return (false, 1);
             }
 
             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
@@ -225,7 +227,7 @@ pub(super) async fn run_review_loop(
                     fix_passes: 1,
                     passed: false,
                 }));
-                return false;
+                return (false, 1);
             }
         } else {
             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
@@ -238,7 +240,7 @@ pub(super) async fn run_review_loop(
                 fix_passes: 1,
                 passed: false,
             }));
-            return false;
+            return (false, 1);
         }
     }
 

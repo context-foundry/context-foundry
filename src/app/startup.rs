@@ -1,10 +1,12 @@
 use crossterm::event::{self, KeyCode, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use std::path::Path;
 
+use crate::agent::AgentRole;
 use crate::utils::truncate_str;
 use crate::{task, tui};
 
 use super::contract::ContractPaths;
+use super::state::TaskPipelineHistory;
 use super::{
     AppEvent, AppPhase, AppState, AppendTasksRequest, PendingTransition, PlanStatus, StartupAction,
     StartupScenario, StartupState,
@@ -556,6 +558,7 @@ pub(super) fn enter_home_surface(
 ) {
     refresh_plan_counts(project_dir, state);
     refresh_git_commit_counts(project_dir, state);
+    populate_task_history_from_progress(project_dir, state);
     state.project_name = resolve_project_name(project_dir);
     state.clear_agent();
     state.current_task = None;
@@ -565,6 +568,62 @@ pub(super) fn enter_home_surface(
 
     let scenario = detect_startup_scenario(project_dir);
     enter_startup_surface_for_scenario(project_dir, state, scenario, status_message);
+}
+
+/// Populate `state.task_history` from `pipeline_progress` fields parsed from TASKS.md.
+/// This restores the pipeline indicators (PBRF) across session restarts.
+fn populate_task_history_from_progress(project_dir: &Path, state: &mut AppState) {
+    let plan_path = ContractPaths::resolve(project_dir).tasks_path;
+    let tasks = match task::parse_tasks(&plan_path) {
+        Ok(t) => t,
+        Err(_) => return,
+    };
+
+    for t in &tasks {
+        let Some(ref progress) = t.pipeline_progress else {
+            continue;
+        };
+
+        // Skip tasks that already have live history from the current session.
+        if state.task_history.contains_key(&t.id) {
+            continue;
+        }
+
+        let chars: Vec<char> = progress.chars().collect();
+
+        let mut stages_seen = Vec::new();
+        if chars.first() == Some(&'P') {
+            stages_seen.push(AgentRole::Planner);
+        }
+        if chars.get(1) == Some(&'B') {
+            stages_seen.push(AgentRole::Builder);
+        }
+        if chars.get(2) == Some(&'R') {
+            stages_seen.push(AgentRole::Reviewer);
+        }
+        if chars.get(3) == Some(&'F') {
+            stages_seen.push(AgentRole::Fixer);
+        }
+
+        let fix_passes = if chars.get(3) == Some(&'F') { 1 } else { 0 };
+        let has_bang = progress.contains('!');
+        let passed_review = if has_bang {
+            false
+        } else {
+            t.completed
+        };
+
+        let history = TaskPipelineHistory {
+            fix_passes,
+            passed_review,
+            stages_seen,
+        };
+
+        state.task_history_order.push(t.id.clone());
+        state.task_history.insert(t.id.clone(), history);
+    }
+
+    state.cap_task_history();
 }
 
 fn resolve_project_name(project_dir: &Path) -> String {

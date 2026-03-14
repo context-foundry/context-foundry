@@ -15,12 +15,17 @@ static RE_DISCOVERY_HEADER: LazyLock<Regex> =
 static RE_DISCOVERY_TASK_ID: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"D(\d+)\.\d+").unwrap());
 
+/// Matches a pipeline progress indicator like `[PB..]` or `[PBRF!]` at the end of a task line.
+static RE_PIPELINE_PROGRESS: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\s+\[([PBRF!.\-]{4,5})\]\s*$").unwrap());
+
 #[derive(Debug, Clone)]
 pub struct Task {
     pub id: String,
     pub description: String,
     pub line_number: usize,
     pub completed: bool,
+    pub pipeline_progress: Option<String>,
 }
 
 impl Task {
@@ -57,11 +62,22 @@ pub fn parse_tasks(plan_path: &Path) -> Result<Vec<Task>> {
             ("TASK".to_string(), text)
         };
 
+        // Extract pipeline progress indicator (e.g. `[PB..]`) from end of description.
+        let (description, pipeline_progress) =
+            if let Some(caps) = RE_PIPELINE_PROGRESS.captures(&description) {
+                let progress = caps[1].to_string();
+                let desc = description[..caps.get(0).unwrap().start()].to_string();
+                (desc, Some(progress))
+            } else {
+                (description, None)
+            };
+
         tasks.push(Task {
             id,
             description,
             line_number: i + 1,
             completed,
+            pipeline_progress,
         });
     }
 
@@ -121,6 +137,34 @@ pub fn mark_done(plan_path: &Path, line_number: usize) -> Result<()> {
     }
 
     // Nothing matched -- the task may already be checked or the file is very different
+    Ok(())
+}
+
+/// Update the pipeline progress indicator `[XXXX]` on the task line in the plan file.
+/// If the line already has an indicator, it is replaced; otherwise one is appended.
+pub fn update_task_progress(plan_path: &Path, task_id: &str, progress: &str) -> Result<()> {
+    let content = fs::read_to_string(plan_path)?;
+    let mut lines: Vec<String> = content.lines().map(String::from).collect();
+
+    let id_with_colon = format!("{}:", task_id);
+
+    for line in lines.iter_mut() {
+        let trimmed = line.trim_start();
+        if (trimmed.starts_with("- [ ]") || trimmed.starts_with("- [x]"))
+            && trimmed.contains(&id_with_colon)
+        {
+            // Strip existing progress indicator if present.
+            if let Some(caps) = RE_PIPELINE_PROGRESS.captures(line) {
+                let start = caps.get(0).unwrap().start();
+                line.truncate(start);
+            }
+            // Append the new indicator.
+            line.push_str(&format!(" [{}]", progress));
+            atomic_write_file(plan_path, (lines.join("\n") + "\n").as_bytes())?;
+            return Ok(());
+        }
+    }
+
     Ok(())
 }
 
