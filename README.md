@@ -40,6 +40,29 @@ Foundry's loop is designed around two forms of backpressure:
 
 **Short-term: the review gate.** After the builder finishes, a reviewer agent audits the changes — running build checks, linting, tests, and a structured code audit. If the reviewer finds HIGH or MEDIUM severity issues, a fixer agent addresses them, and the reviewer runs again. This happens up to 2 passes. If the work passes, it gets a `feat(task-id)` commit. If it still fails after 2 passes, it gets a `WIP(task-id)` commit — a signal that the work isn't validated and shouldn't be built on confidently. The review gate prevents bad code from silently flowing forward.
 
+**Pipeline tracking (PBRF).** Every task carries a 4-character progress indicator that records which pipeline stages ran and whether they succeeded. The indicator is persisted in `TASKS.md` next to each task and committed with the code, so you get a permanent audit trail.
+
+```
+- [x] T1.1: Set up project scaffolding          [PBRF]
+- [x] T1.2: Implement auth flow                 [-BR-]
+- [x] T1.3: Add rate limiting                   [PBRF!]
+- [ ] T1.4: Write integration tests             [....]
+```
+
+Each character represents a pipeline stage:
+
+| Position | Stage | Meaning |
+|----------|-------|---------|
+| 1 | **P** = Planner ran | **-** = planner skipped (simple task) |
+| 2 | **B** = Builder ran | |
+| 3 | **R** = Reviewer ran | **-** = review skipped |
+| 4 | **F** = Fixer ran | **-** = no fix needed |
+| suffix | **!** = review did not pass | (absent) = clean pass |
+
+Examples: `PBRF` = full pipeline, all stages ran, clean pass. `-BR-` = planner skipped, built and reviewed, no fixer needed. `PBRF!` = full pipeline but review still had issues after fixing (WIP commit). `P--!` = planner failed, nothing else ran.
+
+The TUI shows these indicators in the task queue with color coding, and they survive across restarts since they're written directly into the task file.
+
 **Long-term: pattern learning.** After each validated task, a pattern extractor agent scans the build artifacts, review findings, and plan to extract reusable lessons (e.g., "CFrame not Position for moving Roblox parts" or "always validate UTF-8 boundaries before string slicing"). These get saved as structured JSON to `~/.foundry/patterns/`. On the next task — in any project — matched patterns are injected into the planner and reviewer prompts as reference data. Patterns that recur 3+ times get auto-promoted, meaning they're always included. This is how the system gets better over time: a mistake made once becomes a check applied everywhere.
 
 ### Pattern scope
