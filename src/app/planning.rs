@@ -75,13 +75,9 @@ pub(super) async fn run_append_tasks(
     // Force Claude provider: Codex's --full-auto mode has no tool restriction
     // support, so allowed_tools would be silently ignored. Claude's --tools flag
     // enforces the Read/Write-only constraint that keeps this agent lightweight.
+    // Use Haiku -- append-tasks is task decomposition + text formatting.
     let provider = agent::ModelProvider::Claude;
-    let model =
-        if Config::parse_provider(&ctx.config.planner_provider) == agent::ModelProvider::Claude {
-            ctx.config.planner_model.as_str()
-        } else {
-            "opus"
-        };
+    let model = "haiku";
     let result = agent::run_agent(
         &AgentRole::Planner,
         provider,

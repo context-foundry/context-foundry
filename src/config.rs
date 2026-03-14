@@ -135,8 +135,8 @@ impl Default for Config {
         Self {
             planner_model: "opus".into(),
             builder_model: "opus".into(),
-            reviewer_model: "opus".into(),
-            fixer_model: "opus".into(),
+            reviewer_model: "sonnet".into(),
+            fixer_model: "sonnet".into(),
             discovery_model: "opus".into(),
 
             planner_provider: "claude".into(),
