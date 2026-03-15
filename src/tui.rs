@@ -2702,6 +2702,8 @@ mod tests {
         );
         startup.plan_preview_lines =
             vec!["# Plan".to_string(), "- [ ] T1.1: Pending task".to_string()];
+        // Select ViewTasks (index 1) so the plan preview is shown in the content area
+        startup.selected_action = 1;
         state.startup = Some(startup);
 
         assert!(matches!(

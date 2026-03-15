@@ -408,6 +408,9 @@ fn startup_arrow_keys_scroll_plan_preview() {
         None,
     ));
 
+    // Select Continue (index 3) so Down/PageDown scroll the plan preview
+    set_startup_selected_action(&mut state, 3);
+
     handle_startup_key(
         &mut state,
         event::KeyEvent::new(KeyCode::Down, KeyModifiers::NONE),
@@ -511,6 +514,8 @@ fn startup_enter_activates_selected_action() {
         None,
     ));
 
+    // Select Continue (index 3) and press Enter to start build
+    set_startup_selected_action(&mut state, 3);
     handle_startup_key(
         &mut state,
         event::KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
@@ -539,7 +544,8 @@ fn startup_intent_input_accepts_digits_and_q_without_triggering_shortcuts() {
         PlanStatus::Pending(1),
         None,
     ));
-    set_startup_selected_action(&mut state, 1);
+    // Select DescribeWork (index 2) to enter intent input mode
+    set_startup_selected_action(&mut state, 2);
 
     handle_startup_key(
         &mut state,
@@ -555,7 +561,7 @@ fn startup_intent_input_accepts_digits_and_q_without_triggering_shortcuts() {
             .startup
             .as_ref()
             .map(|startup| startup.selected_action),
-        Some(1)
+        Some(2)
     );
     assert_eq!(
         state
@@ -580,6 +586,9 @@ fn startup_intent_input_accepts_paste_events() {
         PlanStatus::Missing,
         None,
     ));
+
+    // Select DescribeWork (index 1) to enter intent input mode
+    set_startup_selected_action(&mut state, 1);
 
     handle_startup_event(&mut state, AppEvent::Paste("fix login timeout".to_string()));
 
@@ -712,8 +721,8 @@ fn startup_scroll_events_are_debounced_immediately_after_click() {
         PlanStatus::Pending(1),
         None,
     ));
-    // EditSpec is now at index 4 (after DesignWithReview and ViewTasks)
-    set_startup_selected_action(&mut state, 4);
+    // EditSpec is at index 0
+    set_startup_selected_action(&mut state, 0);
 
     handle_startup_mouse_at(
         &mut state,
@@ -932,8 +941,8 @@ fn startup_describe_work_queues_append_transition() {
         None,
     ));
 
-    // Select "Describe more work" (index 1)
-    set_startup_selected_action(&mut state, 1);
+    // Select "Describe more work" (index 2)
+    set_startup_selected_action(&mut state, 2);
     assert!(state.startup.as_ref().unwrap().entering_intent);
 
     // Type a description
@@ -978,7 +987,8 @@ fn startup_describe_work_rejects_empty_input() {
         None,
     ));
 
-    set_startup_selected_action(&mut state, 1);
+    // Select DescribeWork (index 2)
+    set_startup_selected_action(&mut state, 2);
 
     // Press Enter with empty input
     handle_startup_key(
@@ -1247,19 +1257,19 @@ fn test_design_with_review_not_in_empty_project() {
 }
 
 #[test]
-fn test_design_with_review_in_needs_queue() {
+fn test_design_with_review_not_in_needs_queue() {
     let dir = temp_project_dir("foundry-design-needs-queue");
     write_file(
         &dir.join("Cargo.toml"),
         "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n",
     );
     let startup = StartupState::new(&dir, StartupScenario::NeedsQueue, PlanStatus::Missing, None);
-    assert!(startup.actions.contains(&StartupAction::DesignWithReview));
+    assert!(!startup.actions.contains(&StartupAction::DesignWithReview));
     let _ = std::fs::remove_dir_all(dir);
 }
 
 #[test]
-fn test_design_with_review_in_queue_ready() {
+fn test_design_with_review_not_in_queue_ready() {
     let dir = temp_project_dir("foundry-design-queue-ready");
     write_file(
         &dir.join("TASKS.md"),
@@ -1267,43 +1277,12 @@ fn test_design_with_review_in_queue_ready() {
     );
     let startup =
         StartupState::new(&dir, StartupScenario::QueueReady, PlanStatus::Pending(1), None);
-    assert!(startup.actions.contains(&StartupAction::DesignWithReview));
+    assert!(!startup.actions.contains(&StartupAction::DesignWithReview));
     let _ = std::fs::remove_dir_all(dir);
 }
 
-#[test]
-fn test_design_with_review_action_sets_start_design_transition() {
-    let dir = temp_project_dir("foundry-design-transition");
-    write_file(
-        &dir.join("Cargo.toml"),
-        "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n",
-    );
-    let mut state = AppState::new(dir.join(".buildloop"));
-    state.startup = Some(StartupState::new(
-        &dir,
-        StartupScenario::NeedsQueue,
-        PlanStatus::Missing,
-        None,
-    ));
-    let startup = state.startup.as_mut().unwrap();
-    let idx = startup
-        .actions
-        .iter()
-        .position(|a| *a == StartupAction::DesignWithReview)
-        .expect("DesignWithReview should be in actions");
-    startup.selected_action = idx;
-    startup.intent_input = "design a REST API".to_string();
-
-    activate_startup_action(&mut state, StartupAction::DesignWithReview);
-
-    match &state.pending_transition {
-        Some(PendingTransition::StartDesign { user_intent }) => {
-            assert_eq!(user_intent, "design a REST API");
-        }
-        other => panic!("expected StartDesign transition, got {:?}", other),
-    }
-    let _ = std::fs::remove_dir_all(dir);
-}
+// test_design_with_review_action_sets_start_design_transition removed:
+// DesignWithReview is no longer in the startup action lists (available via `foundry design` CLI)
 
 #[test]
 fn test_design_with_review_empty_intent_shows_message() {
@@ -1414,89 +1393,11 @@ fn test_orchestrator_outcome_unresolved_shows_startup() {
 
 // ─── Orchestrator TUI integration tests ──────────────────────
 
-#[test]
-fn test_design_with_review_intent_enter_creates_start_design_transition() {
-    let dir = temp_project_dir("foundry-design-intent-enter");
-    write_file(
-        &dir.join("Cargo.toml"),
-        "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n",
-    );
-    let mut state = AppState::new(dir.join(".buildloop"));
-    state.startup = Some(StartupState::new(
-        &dir,
-        StartupScenario::NeedsQueue,
-        PlanStatus::Missing,
-        None,
-    ));
-    let idx = state
-        .startup
-        .as_ref()
-        .unwrap()
-        .actions
-        .iter()
-        .position(|a| *a == StartupAction::DesignWithReview)
-        .expect("DesignWithReview action not found");
-    set_startup_selected_action(&mut state, idx);
-    assert!(state.startup.as_ref().unwrap().entering_intent);
-    for c in "design a CLI tool".chars() {
-        handle_startup_key(
-            &mut state,
-            event::KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE),
-        );
-    }
-    handle_startup_key(
-        &mut state,
-        event::KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
-    );
-    match &state.pending_transition {
-        Some(PendingTransition::StartDesign { user_intent }) => {
-            assert_eq!(user_intent, "design a CLI tool");
-        }
-        other => panic!("expected StartDesign transition, got {:?}", other),
-    }
-    let _ = std::fs::remove_dir_all(dir);
-}
+// test_design_with_review_intent_enter_creates_start_design_transition removed:
+// DesignWithReview is no longer in the startup action lists (available via `foundry design` CLI)
 
-#[test]
-fn test_design_with_review_intent_enter_rejects_empty() {
-    let dir = temp_project_dir("foundry-design-intent-empty");
-    write_file(
-        &dir.join("Cargo.toml"),
-        "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n",
-    );
-    let mut state = AppState::new(dir.join(".buildloop"));
-    state.startup = Some(StartupState::new(
-        &dir,
-        StartupScenario::NeedsQueue,
-        PlanStatus::Missing,
-        None,
-    ));
-    let idx = state
-        .startup
-        .as_ref()
-        .unwrap()
-        .actions
-        .iter()
-        .position(|a| *a == StartupAction::DesignWithReview)
-        .expect("DesignWithReview action not found");
-    set_startup_selected_action(&mut state, idx);
-    handle_startup_key(
-        &mut state,
-        event::KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
-    );
-    assert!(state.pending_transition.is_none());
-    assert!(
-        state
-            .startup
-            .as_ref()
-            .unwrap()
-            .status_message
-            .as_ref()
-            .unwrap()
-            .contains("Describe what you want designed first.")
-    );
-    let _ = std::fs::remove_dir_all(dir);
-}
+// test_design_with_review_intent_enter_rejects_empty removed:
+// DesignWithReview is no longer in the startup action lists (available via `foundry design` CLI)
 
 #[test]
 fn test_planning_header_orchestrator_mode_initial_state() {

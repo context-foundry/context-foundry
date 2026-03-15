@@ -43,6 +43,7 @@ pub enum StartupScenario {
 pub enum StartupAction {
     Continue,
     DescribeWork,
+    #[allow(dead_code)]
     DesignWithReview,
     ScanProject,
     ViewTasks,

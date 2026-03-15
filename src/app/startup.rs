@@ -27,24 +27,21 @@ impl StartupState {
                 vec![StartupAction::DescribeWork, StartupAction::EditSpec]
             }
             StartupScenario::NeedsQueue => vec![
-                StartupAction::DescribeWork,
-                StartupAction::DesignWithReview,
-                StartupAction::ScanProject,
                 StartupAction::EditSpec,
+                StartupAction::DescribeWork,
+                StartupAction::ScanProject,
             ],
             StartupScenario::QueueReady => vec![
-                StartupAction::Continue,
-                StartupAction::DescribeWork,
-                StartupAction::DesignWithReview,
-                StartupAction::ViewTasks,
                 StartupAction::EditSpec,
+                StartupAction::ViewTasks,
+                StartupAction::DescribeWork,
+                StartupAction::Continue,
             ],
             StartupScenario::QueueComplete => vec![
-                StartupAction::DescribeWork,
-                StartupAction::DesignWithReview,
-                StartupAction::ScanProject,
-                StartupAction::ViewTasks,
                 StartupAction::EditSpec,
+                StartupAction::ViewTasks,
+                StartupAction::DescribeWork,
+                StartupAction::ScanProject,
             ],
         };
         let primary = actions[0];
@@ -169,7 +166,7 @@ impl StartupState {
 fn startup_action_uses_intent(action: StartupAction) -> bool {
     matches!(
         action,
-        StartupAction::DescribeWork | StartupAction::ScanProject | StartupAction::DesignWithReview
+        StartupAction::DescribeWork | StartupAction::ScanProject
     )
 }
 
