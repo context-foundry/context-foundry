@@ -195,13 +195,7 @@ fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppState, config: 
         let model_label = if let Some(ri) = role_idx {
             if *ri < roles.len() {
                 let (_name, provider, model) = roles[*ri];
-                let p = Config::parse_provider(provider);
-                let m = model.trim();
-                let display = if m.is_empty() {
-                    format!("{}", p)
-                } else {
-                    format!("{} {}", p, m)
-                };
+                let display = Config::display_provider_model(provider, model);
                 truncate_str(&display, 14).to_string()
             } else {
                 String::new()

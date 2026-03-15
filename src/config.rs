@@ -241,7 +241,15 @@ impl Config {
         if model.is_empty() {
             provider.to_string()
         } else {
-            format!("{provider} {model}")
+            // Capitalize first letter: "sonnet" -> "Sonnet", "opus" -> "Opus"
+            let capitalized = {
+                let mut chars = model.chars();
+                match chars.next() {
+                    Some(c) => format!("{}{}", c.to_uppercase(), chars.as_str()),
+                    None => String::new(),
+                }
+            };
+            format!("{provider} {capitalized}")
         }
     }
 
@@ -288,7 +296,7 @@ mod tests {
     fn display_provider_model_formats_empty_and_named_models() {
         assert_eq!(
             Config::display_provider_model("claude", "opus"),
-            "Claude opus"
+            "Claude Opus"
         );
         assert_eq!(Config::display_provider_model("codex", ""), "Codex");
     }
