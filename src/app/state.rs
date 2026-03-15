@@ -40,17 +40,24 @@ pub enum StartupScenario {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
 pub enum StartupAction {
     Continue,
     EditTasks,
-    #[allow(dead_code)]
     DescribeWork,
-    #[allow(dead_code)]
     DesignWithReview,
     ScanProject,
-    #[allow(dead_code)]
     ViewTasks,
     EditSpec,
+}
+
+#[derive(Debug, Clone)]
+pub struct FileEntry {
+    pub path: PathBuf,
+    pub name: String,
+    pub depth: usize,
+    pub is_dir: bool,
+    pub is_cf_highlight: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -58,19 +65,32 @@ pub struct StartupState {
     pub scenario: StartupScenario,
     pub plan_status: PlanStatus,
     pub has_spec: bool,
+    #[allow(dead_code)]
     pub selected_action: usize,
+    #[allow(dead_code)]
     pub actions: Vec<StartupAction>,
     pub entering_intent: bool,
     pub intent_input: String,
     pub status_message: Option<String>,
     pub git_context: Option<git::GitContext>,
+    #[allow(dead_code)]
     pub tasks_file_name: String,
+    #[allow(dead_code)]
     pub plan_preview_lines: Vec<String>,
+    #[allow(dead_code)]
     pub plan_scroll_offset: usize,
     pub next_pending_task: Option<String>,
+    #[allow(dead_code)]
     pub spec_file_name: String,
+    #[allow(dead_code)]
     pub spec_preview_lines: Vec<String>,
+    #[allow(dead_code)]
     pub spec_scroll_offset: usize,
+    pub file_tree: Vec<FileEntry>,
+    pub explorer_selected: usize,
+    pub explorer_scroll: usize,
+    pub file_preview_content: Vec<String>,
+    pub placeholder_tick: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -105,6 +125,7 @@ pub(super) struct PlanningOutcome {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub(super) enum PendingTransition {
     StartBuild,
     StartPlanning {

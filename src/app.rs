@@ -23,8 +23,11 @@ use self::startup::{
 };
 use self::state::{AppEvent, AppendTasksRequest, LoopEvent, PendingTransition, PlanningOutcome};
 pub use self::state::{
-    AppPhase, AppState, PlanStatus, PlanningState, StartupAction, StartupScenario, StartupState,
+    AppPhase, AppState, PlanStatus, PlanningState, StartupAction, StartupScenario,
+    StartupState,
 };
+#[cfg(test)]
+pub use self::state::FileEntry;
 use crate::agent::{AgentOutputEvent, AgentRole};
 use crate::config::Config;
 use crate::git;

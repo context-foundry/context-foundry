@@ -6,7 +6,7 @@ use crate::utils::truncate_str;
 use crate::{task, tui};
 
 use super::contract::ContractPaths;
-use super::state::TaskPipelineHistory;
+use super::state::{FileEntry, TaskPipelineHistory};
 use super::{
     AppEvent, AppPhase, AppState, AppendTasksRequest, PendingTransition, PlanStatus, StartupAction,
     StartupScenario, StartupState,
@@ -22,23 +22,19 @@ impl StartupState {
         status_message: Option<String>,
     ) -> Self {
         let contract_paths = ContractPaths::resolve(project_dir);
-        let actions = match scenario {
-            StartupScenario::EmptyProject => {
-                vec![StartupAction::EditTasks, StartupAction::EditSpec]
+        // Vestigial actions vec -- kept for struct compatibility, no longer rendered
+        let actions = vec![StartupAction::ScanProject];
+
+        let file_tree = build_file_tree(project_dir);
+        let file_preview_content = if let Some(first) = file_tree.first() {
+            if !first.is_dir {
+                load_file_preview(&first.path)
+            } else {
+                Vec::new()
             }
-            StartupScenario::NeedsQueue => vec![
-                StartupAction::ScanProject,
-            ],
-            StartupScenario::QueueReady => vec![
-                StartupAction::Continue,
-                StartupAction::EditTasks,
-            ],
-            StartupScenario::QueueComplete => vec![
-                StartupAction::EditTasks,
-                StartupAction::ScanProject,
-            ],
+        } else {
+            Vec::new()
         };
-        let primary = actions[0];
 
         Self {
             scenario,
@@ -46,14 +42,7 @@ impl StartupState {
             has_spec: contract_paths.spec_path.exists(),
             selected_action: 0,
             actions,
-            // For empty/new projects, EditTasks auto-opens AI intent input
-            // since there's nothing to view in the empty file.
-            entering_intent: startup_action_uses_intent(primary)
-                || (primary == StartupAction::EditTasks
-                    && matches!(
-                        scenario,
-                        StartupScenario::EmptyProject | StartupScenario::NeedsQueue
-                    )),
+            entering_intent: true, // always show input
             intent_input: String::new(),
             status_message,
             git_context: crate::git::gather_git_context(project_dir),
@@ -64,47 +53,11 @@ impl StartupState {
             spec_file_name: contract_paths.spec_file_name(),
             spec_preview_lines: load_spec_preview_lines(project_dir),
             spec_scroll_offset: 0,
-        }
-    }
-
-    pub fn action_label(&self, action: StartupAction) -> String {
-        match action {
-            StartupAction::Continue => "Continue".to_string(),
-            StartupAction::EditTasks => format!("Edit {}", self.tasks_file_name),
-            StartupAction::DescribeWork => "Add".to_string(),
-            StartupAction::DesignWithReview => "Design with review".to_string(),
-            StartupAction::ScanProject => "Scan project".to_string(),
-            StartupAction::ViewTasks => self.tasks_file_name.clone(),
-            StartupAction::EditSpec => self.spec_file_name.clone(),
-        }
-    }
-
-    pub fn action_description(&self, action: StartupAction) -> String {
-        match action {
-            StartupAction::Continue => {
-                "Resume the build loop from the next pending task.".to_string()
-            }
-            StartupAction::EditTasks => {
-                "View, edit, or add tasks. Press 'a' to add with AI, 'e' to edit manually.".to_string()
-            }
-            StartupAction::DescribeWork => format!(
-                "Add work to {}.",
-                self.tasks_file_name
-            ),
-            StartupAction::DesignWithReview => {
-                "Cross-model design loop. Proposer drafts, reviewer validates, iterates until accepted.".to_string()
-            }
-            StartupAction::ScanProject => format!(
-                "Inspect the codebase and append tasks to {}. {} is optional context.",
-                self.tasks_file_name, self.spec_file_name
-            ),
-            StartupAction::ViewTasks => {
-                "Browse the task queue. Scroll to review all tasks.".to_string()
-            }
-            StartupAction::EditSpec => {
-                "Optional advanced context. Edit the project spec used for future scans."
-                    .to_string()
-            }
+            file_tree,
+            explorer_selected: 0,
+            explorer_scroll: 0,
+            file_preview_content,
+            placeholder_tick: 0,
         }
     }
 
@@ -143,28 +96,88 @@ impl StartupState {
             PlanStatus::Complete => "complete".to_string(),
         }
     }
+}
 
-    pub fn has_plan_preview(&self) -> bool {
-        !self.plan_preview_lines.is_empty()
+// ─── File Tree ───────────────────────────────────────────────
+
+fn build_file_tree(project_dir: &Path) -> Vec<FileEntry> {
+    let mut entries = Vec::new();
+    build_file_tree_recursive(project_dir, project_dir, 0, &mut entries);
+    entries
+}
+
+fn build_file_tree_recursive(
+    base_dir: &Path,
+    dir: &Path,
+    depth: usize,
+    entries: &mut Vec<FileEntry>,
+) {
+    if depth > 3 {
+        return;
     }
-}
 
-fn startup_action_uses_intent(action: StartupAction) -> bool {
-    matches!(
-        action,
-        StartupAction::DescribeWork | StartupAction::ScanProject
-    )
-}
+    let read_dir = match std::fs::read_dir(dir) {
+        Ok(rd) => rd,
+        Err(_) => return,
+    };
 
-fn describe_work_empty_message(scenario: StartupScenario) -> &'static str {
-    match scenario {
-        StartupScenario::EmptyProject => "Describe what you want to build first.",
-        StartupScenario::QueueReady => "Describe what should be added to the queue first.",
-        StartupScenario::NeedsQueue | StartupScenario::QueueComplete => {
-            "Describe what you want Foundry to do first."
+    let mut items: Vec<_> = read_dir.flatten().collect();
+    items.sort_by(|a, b| {
+        let a_dir = a.path().is_dir();
+        let b_dir = b.path().is_dir();
+        b_dir.cmp(&a_dir).then_with(|| {
+            a.file_name()
+                .to_string_lossy()
+                .to_lowercase()
+                .cmp(&b.file_name().to_string_lossy().to_lowercase())
+        })
+    });
+
+    for item in &items {
+        let file_name = item.file_name().to_string_lossy().to_string();
+        let path = item.path();
+        let is_dir = path.is_dir();
+
+        if is_dir && should_skip_project_dir(&file_name) {
+            continue;
+        }
+
+        let is_cf_highlight = is_context_foundry_file(&file_name, &path, base_dir);
+        entries.push(FileEntry {
+            path: path.clone(),
+            name: file_name,
+            depth,
+            is_dir,
+            is_cf_highlight,
+        });
+
+        if is_dir {
+            build_file_tree_recursive(base_dir, &path, depth + 1, entries);
         }
     }
 }
+
+fn is_context_foundry_file(name: &str, path: &Path, base_dir: &Path) -> bool {
+    if matches!(name, "TASKS.md" | "SPEC.md" | "CLAUDE.md") {
+        return true;
+    }
+    let relative = path.strip_prefix(base_dir).unwrap_or(path);
+    relative
+        .components()
+        .any(|c| c.as_os_str() == ".buildloop")
+}
+
+fn load_file_preview(path: &Path) -> Vec<String> {
+    if path.is_dir() {
+        return vec!["<directory>".to_string()];
+    }
+    match std::fs::read_to_string(path) {
+        Ok(content) => content.lines().take(500).map(|l| l.to_string()).collect(),
+        Err(_) => vec!["<binary or unreadable file>".to_string()],
+    }
+}
+
+// ─── Event Handling ──────────────────────────────────────────
 
 pub(super) fn handle_startup_event(state: &mut AppState, event: AppEvent) {
     match event {
@@ -175,6 +188,9 @@ pub(super) fn handle_startup_event(state: &mut AppState, event: AppEvent) {
             state.tick_count = state.tick_count.wrapping_add(1);
             state.startup_scroll_debounce_ticks =
                 state.startup_scroll_debounce_ticks.saturating_sub(1);
+            if let Some(startup) = state.startup.as_mut() {
+                startup.placeholder_tick = startup.placeholder_tick.wrapping_add(1);
+            }
         }
         AppEvent::UpdateAvailable(version) => {
             state.update_available = Some(version);
@@ -198,20 +214,19 @@ fn handle_startup_paste(state: &mut AppState, text: String) {
 }
 
 pub(super) fn handle_startup_key(state: &mut AppState, key: event::KeyEvent) {
-    let action_count = state
-        .startup
-        .as_ref()
-        .map(|startup| startup.actions.len())
-        .unwrap_or(0);
-    if action_count == 0 {
+    let Some(_startup) = state.startup.as_ref() else {
         return;
-    }
+    };
 
-    let intent_active = selected_startup_action(state)
-        .map(startup_action_uses_intent)
-        .unwrap_or(false)
-        || state.startup.as_ref().is_some_and(|s| s.entering_intent);
-    if intent_active && startup_intent_captures_key(key) {
+    // Check if the intent input should capture this key
+    let is_typing_key = match key.code {
+        KeyCode::Char(_) if !key.modifiers.contains(KeyModifiers::CONTROL) => true,
+        KeyCode::Backspace => true,
+        KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => true,
+        _ => false,
+    };
+
+    if is_typing_key {
         handle_startup_intent_input(state, key);
         return;
     }
@@ -220,194 +235,48 @@ pub(super) fn handle_startup_key(state: &mut AppState, key: event::KeyEvent) {
         KeyCode::Tab | KeyCode::BackTab => {
             state.show_run_view = !state.show_run_view;
         }
-        KeyCode::Char('m') => {
+        KeyCode::Char('m') if key.modifiers.contains(KeyModifiers::CONTROL) => {
             state.run_mode = if state.run_mode == "hil" {
                 "loop".into()
             } else {
                 "hil".into()
             };
         }
-        KeyCode::Char('a') if matches!(selected_startup_action(state), Some(StartupAction::EditTasks)) => {
-            // Switch to AI add mode: enter intent input for the describe-work flow
-            if let Some(startup) = state.startup.as_mut() {
-                startup.entering_intent = true;
-                startup.intent_input.clear();
-            }
-        }
-        KeyCode::Char('e') if matches!(selected_startup_action(state), Some(StartupAction::EditTasks)) => {
-            // Open TASKS.md in external editor
-            activate_startup_action(state, StartupAction::EditTasks);
-        }
-        KeyCode::Char('f') if state.last_orchestrator_outcome.is_some() => {
+        KeyCode::Char('f')
+            if key.modifiers.contains(KeyModifiers::CONTROL)
+                && state.last_orchestrator_outcome.is_some() =>
+        {
             state.show_findings = !state.show_findings;
             state.findings_scroll = 0;
         }
-        KeyCode::Esc | KeyCode::Char('q') => {
+        KeyCode::Esc => {
             state.should_quit = true;
         }
-        KeyCode::Left => move_startup_selection(state, -1),
-        KeyCode::Right => move_startup_selection(state, 1),
-        KeyCode::Up => scroll_startup_content(state, -1),
-        KeyCode::Down => scroll_startup_content(state, 1),
-        KeyCode::PageUp => scroll_startup_content(state, -8),
-        KeyCode::PageDown => scroll_startup_content(state, 8),
+        KeyCode::Up => {
+            move_explorer_selection(state, -1);
+        }
+        KeyCode::Down => {
+            move_explorer_selection(state, 1);
+        }
+        KeyCode::PageUp => {
+            move_explorer_selection(state, -10);
+        }
+        KeyCode::PageDown => {
+            move_explorer_selection(state, 10);
+        }
         KeyCode::Enter => {
-            let action = state
-                .startup
-                .as_ref()
-                .and_then(|startup| startup.actions.get(startup.selected_action))
-                .copied();
-            if let Some(action) = action {
-                activate_startup_action(state, action);
-            }
-        }
-        KeyCode::Char(c) if c.is_ascii_digit() => {
-            if let Some(index) = c
-                .to_digit(10)
-                .and_then(|n| n.checked_sub(1))
-                .map(|n| n as usize)
-            {
-                set_startup_selected_action(state, index);
-            }
-        }
-        _ => {
-            let intent_active = selected_startup_action(state)
-                .map(startup_action_uses_intent)
-                .unwrap_or(false)
-                || state.startup.as_ref().is_some_and(|s| s.entering_intent);
-            if intent_active {
-                handle_startup_intent_input(state, key);
-            }
-        }
-    }
-}
-
-fn startup_intent_captures_key(key: event::KeyEvent) -> bool {
-    match key.code {
-        KeyCode::Enter | KeyCode::Backspace | KeyCode::Esc => true,
-        KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => true,
-        KeyCode::Char(_) if !key.modifiers.contains(KeyModifiers::CONTROL) => true,
-        _ => false,
-    }
-}
-
-pub(super) fn handle_startup_mouse(state: &mut AppState, mouse: MouseEvent) {
-    handle_startup_mouse_at(state, mouse, current_terminal_size());
-}
-
-pub(super) fn handle_startup_mouse_at(
-    state: &mut AppState,
-    mouse: MouseEvent,
-    terminal_size: (u16, u16),
-) {
-    match mouse.kind {
-        MouseEventKind::Down(MouseButton::Left) => {
-            // Primary fix: clicks inside the preview are read-only no-ops.
-            // Secondary guard: some trackpads emit a tiny wheel event as part of
-            // a tap/click gesture, so suppress startup scrolling briefly after a click.
-            state.startup_scroll_debounce_ticks = CLICK_SCROLL_DEBOUNCE_TICKS;
-            if let Some(target) =
-                tui::startup_hit_test(terminal_size, state, mouse.column, mouse.row)
-            {
-                match target {
-                    tui::StartupMouseTarget::Action(index) => {
-                        set_startup_selected_action(state, index);
-                    }
-                    tui::StartupMouseTarget::PreviewLine => {}
-                }
-            }
-        }
-        MouseEventKind::ScrollUp => {
-            if state.startup_scroll_debounce_ticks == 0 {
-                scroll_startup_content(state, -3)
-            }
-        }
-        MouseEventKind::ScrollDown => {
-            if state.startup_scroll_debounce_ticks == 0 {
-                scroll_startup_content(state, 3)
-            }
+            handle_startup_submit(state);
         }
         _ => {}
     }
 }
 
 pub(super) fn handle_startup_intent_input(state: &mut AppState, key: event::KeyEvent) {
-    let current_action = selected_startup_action(state);
     let Some(startup) = state.startup.as_mut() else {
         return;
     };
 
     match key.code {
-        KeyCode::Enter => {
-            let text = startup.intent_input.trim().to_string();
-
-            match current_action {
-                Some(StartupAction::EditTasks) => {
-                    // Re-borrow state after dropping startup ref
-                    let _ = startup;
-                    activate_startup_action(state, StartupAction::EditTasks);
-                }
-                Some(StartupAction::DescribeWork) => {
-                    if text.is_empty() {
-                        startup.status_message =
-                            Some(describe_work_empty_message(startup.scenario).to_string());
-                        return;
-                    }
-                    startup.entering_intent = false;
-                    startup.status_message = None;
-                    startup.intent_input.clear();
-                    let action_label = startup.action_label(StartupAction::DescribeWork);
-                    let label = format!("{action_label}: {}", truncate_str(&text, 48));
-                    state.pending_transition =
-                        Some(PendingTransition::AppendTasks(AppendTasksRequest {
-                            description: text,
-                            label,
-                            seed_spec_from_description: matches!(
-                                startup.scenario,
-                                StartupScenario::EmptyProject
-                            ),
-                        }));
-                }
-                Some(StartupAction::ScanProject) => {
-                    startup.entering_intent = false;
-                    startup.status_message = None;
-                    let user_intent = if text.is_empty() {
-                        None
-                    } else {
-                        Some(text.clone())
-                    };
-                    startup.intent_input.clear();
-                    let action_label = startup.action_label(StartupAction::ScanProject);
-                    let label = if let Some(ref intent) = user_intent {
-                        format!("{action_label}: {}", truncate_str(intent, 48))
-                    } else {
-                        action_label.to_string()
-                    };
-                    state.pending_transition =
-                        Some(PendingTransition::StartPlanning { user_intent, label });
-                }
-                Some(StartupAction::DesignWithReview) => {
-                    if text.is_empty() {
-                        startup.status_message =
-                            Some("Describe what you want designed first.".to_string());
-                        return;
-                    }
-                    startup.entering_intent = false;
-                    startup.status_message = None;
-                    startup.intent_input.clear();
-                    state.pending_transition = Some(PendingTransition::StartDesign {
-                        user_intent: text,
-                    });
-                }
-                _ => {}
-            }
-        }
-        KeyCode::Esc => {
-            // Exit intent mode and go back to file view
-            startup.entering_intent = false;
-            startup.intent_input.clear();
-            startup.status_message = None;
-        }
         KeyCode::Backspace => {
             startup.intent_input.pop();
         }
@@ -421,191 +290,179 @@ pub(super) fn handle_startup_intent_input(state: &mut AppState, key: event::KeyE
     }
 }
 
-pub(super) fn move_startup_selection(state: &mut AppState, delta: isize) {
-    let Some(startup) = state.startup.as_mut() else {
-        return;
-    };
-    let max_index = startup.actions.len().saturating_sub(1) as isize;
-    let next = (startup.selected_action as isize + delta).clamp(0, max_index) as usize;
-    set_startup_selected_action(state, next);
-}
+// ─── Explorer Navigation ─────────────────────────────────────
 
-pub(super) fn set_startup_selected_action(state: &mut AppState, index: usize) {
+fn move_explorer_selection(state: &mut AppState, delta: isize) {
     let Some(startup) = state.startup.as_mut() else {
         return;
     };
-    if index >= startup.actions.len() {
+    if startup.file_tree.is_empty() {
         return;
     }
-    startup.selected_action = index;
-    let action = startup.actions[index];
-    startup.entering_intent = startup_action_uses_intent(action)
-        || (action == StartupAction::EditTasks
-            && matches!(
-                startup.scenario,
-                StartupScenario::EmptyProject | StartupScenario::NeedsQueue
-            ));
-    startup.status_message = None;
-}
-
-pub(super) fn scroll_startup_content(state: &mut AppState, delta: isize) {
-    let action = selected_startup_action(state);
-    let Some(startup) = state.startup.as_mut() else {
+    let max_index = startup.file_tree.len() - 1;
+    let new_index =
+        (startup.explorer_selected as isize + delta).clamp(0, max_index as isize) as usize;
+    if new_index == startup.explorer_selected {
         return;
-    };
-
-    match action {
-        Some(StartupAction::DescribeWork)
-        | Some(StartupAction::ScanProject)
-        | Some(StartupAction::DesignWithReview) => {}
-        Some(StartupAction::EditSpec) => {
-            let max = startup.spec_preview_lines.len().saturating_sub(1);
-            adjust_scroll_offset(&mut startup.spec_scroll_offset, delta, max);
-        }
-        Some(StartupAction::EditTasks)
-        | Some(StartupAction::ViewTasks)
-        | Some(StartupAction::Continue)
-        | None => {
-            let max = startup.plan_preview_lines.len().saturating_sub(1);
-            adjust_scroll_offset(&mut startup.plan_scroll_offset, delta, max);
-        }
     }
-}
-
-pub(super) fn adjust_scroll_offset(offset: &mut usize, delta: isize, max: usize) {
-    if delta < 0 {
-        *offset = offset.saturating_sub(delta.unsigned_abs());
+    startup.explorer_selected = new_index;
+    // Adjust scroll to keep selection visible (estimate 20 visible rows)
+    let visible_estimate: usize = 20;
+    if new_index < startup.explorer_scroll {
+        startup.explorer_scroll = new_index;
+    } else if new_index >= startup.explorer_scroll + visible_estimate {
+        startup.explorer_scroll = new_index.saturating_sub(visible_estimate) + 1;
+    }
+    // Load preview
+    let entry = &startup.file_tree[new_index];
+    startup.file_preview_content = if entry.is_dir {
+        vec!["<directory>".to_string()]
     } else {
-        *offset = offset.saturating_add(delta as usize).min(max);
+        load_file_preview(&entry.path)
+    };
+}
+
+fn set_explorer_selection(state: &mut AppState, index: usize) {
+    let Some(startup) = state.startup.as_mut() else {
+        return;
+    };
+    if index >= startup.file_tree.len() {
+        return;
     }
+    startup.explorer_selected = index;
+    let visible_estimate: usize = 20;
+    if index < startup.explorer_scroll {
+        startup.explorer_scroll = index;
+    } else if index >= startup.explorer_scroll + visible_estimate {
+        startup.explorer_scroll = index.saturating_sub(visible_estimate) + 1;
+    }
+    let entry = &startup.file_tree[index];
+    startup.file_preview_content = if entry.is_dir {
+        vec!["<directory>".to_string()]
+    } else {
+        load_file_preview(&entry.path)
+    };
 }
 
-pub(super) fn selected_startup_action(state: &AppState) -> Option<StartupAction> {
-    state
-        .startup
-        .as_ref()
-        .and_then(|startup| startup.actions.get(startup.selected_action))
-        .copied()
-}
+// ─── Submit Handling ─────────────────────────────────────────
 
-pub(super) fn activate_startup_action(state: &mut AppState, action: StartupAction) {
-    match action {
-        StartupAction::Continue => {
-            state.pending_transition = Some(PendingTransition::StartBuild);
-        }
-        StartupAction::ScanProject => {
-            if let Some(startup) = state.startup.as_mut() {
-                let text = startup.intent_input.trim().to_string();
-                let user_intent = if text.is_empty() {
-                    None
-                } else {
-                    Some(text.clone())
-                };
-                startup.entering_intent = false;
-                startup.status_message = None;
-                startup.intent_input.clear();
-                let action_label = startup.action_label(StartupAction::ScanProject);
-                let label = if let Some(ref intent) = user_intent {
-                    format!("{action_label}: {}", truncate_str(intent, 48))
-                } else {
-                    action_label.to_string()
-                };
-                state.pending_transition =
-                    Some(PendingTransition::StartPlanning { user_intent, label });
-            }
-        }
-        StartupAction::EditTasks => {
-            if let Some(startup) = state.startup.as_mut() {
-                let text = startup.intent_input.trim().to_string();
-                if startup.entering_intent && !text.is_empty() {
-                    // AI add flow: user typed something and hit Enter
-                    startup.entering_intent = false;
-                    startup.status_message = None;
-                    startup.intent_input.clear();
-                    let label = format!("Add: {}", truncate_str(&text, 48));
-                    state.pending_transition =
-                        Some(PendingTransition::AppendTasks(AppendTasksRequest {
-                            description: text,
-                            label,
-                            seed_spec_from_description: matches!(
-                                startup.scenario,
-                                StartupScenario::EmptyProject
-                            ),
-                        }));
-                } else if startup.entering_intent {
-                    // AI add flow: empty input
-                    startup.status_message = Some("Describe what you want Foundry to build.".to_string());
-                } else {
-                    // Manual edit: open editor (activated via 'e' key)
-                    let tasks_path = super::contract::ContractPaths::resolve(
-                        state.buildloop_dir.parent().unwrap_or(std::path::Path::new(".")),
-                    )
-                    .tasks_path;
-                    state.pending_transition =
-                        Some(PendingTransition::OpenExternalEditor { file_path: tasks_path });
-                }
-            }
-        }
-        StartupAction::DescribeWork => {
-            if let Some(startup) = state.startup.as_mut() {
-                let text = startup.intent_input.trim().to_string();
-                if text.is_empty() {
-                    startup.entering_intent = true;
-                    startup.status_message =
-                        Some(describe_work_empty_message(startup.scenario).to_string());
-                    return;
-                }
-                startup.entering_intent = false;
-                startup.status_message = None;
-                startup.intent_input.clear();
-                let action_label = startup.action_label(StartupAction::DescribeWork);
-                let label = format!("{action_label}: {}", truncate_str(&text, 48));
+fn handle_startup_submit(state: &mut AppState) {
+    let Some(startup) = state.startup.as_mut() else {
+        return;
+    };
+    let text = startup.intent_input.trim().to_string();
+    let scenario = startup.scenario;
+    startup.intent_input.clear();
+    startup.status_message = None;
+
+    match scenario {
+        StartupScenario::QueueReady => {
+            if text.is_empty() {
+                // Resume building the existing queue
+                state.pending_transition = Some(PendingTransition::StartBuild);
+            } else {
+                let label = format!("Add: {}", truncate_str(&text, 48));
                 state.pending_transition =
                     Some(PendingTransition::AppendTasks(AppendTasksRequest {
                         description: text,
                         label,
-                        seed_spec_from_description: matches!(
-                            startup.scenario,
-                            StartupScenario::EmptyProject
-                        ),
+                        seed_spec_from_description: false,
                     }));
             }
         }
-        StartupAction::DesignWithReview => {
-            if let Some(startup) = state.startup.as_mut() {
-                let text = startup.intent_input.trim().to_string();
-                if text.is_empty() {
-                    startup.entering_intent = true;
-                    startup.status_message =
-                        Some("Describe what you want designed first.".to_string());
-                    return;
-                }
-                startup.entering_intent = false;
-                startup.status_message = None;
-                startup.intent_input.clear();
-                state.pending_transition = Some(PendingTransition::StartDesign {
-                    user_intent: text,
+        StartupScenario::QueueComplete => {
+            if text.is_empty() {
+                // Scan for new work
+                state.pending_transition = Some(PendingTransition::StartPlanning {
+                    user_intent: None,
+                    label: "Scan project".to_string(),
+                });
+            } else {
+                let label = format!("Add: {}", truncate_str(&text, 48));
+                state.pending_transition =
+                    Some(PendingTransition::AppendTasks(AppendTasksRequest {
+                        description: text,
+                        label,
+                        seed_spec_from_description: false,
+                    }));
+            }
+        }
+        StartupScenario::EmptyProject => {
+            if text.is_empty() {
+                state.pending_transition = Some(PendingTransition::StartPlanning {
+                    user_intent: None,
+                    label: "Scan project".to_string(),
+                });
+            } else {
+                // Seed spec from user description for brand-new projects
+                let label = format!("Add: {}", truncate_str(&text, 48));
+                state.pending_transition =
+                    Some(PendingTransition::AppendTasks(AppendTasksRequest {
+                        description: text,
+                        label,
+                        seed_spec_from_description: true,
+                    }));
+            }
+        }
+        StartupScenario::NeedsQueue => {
+            if text.is_empty() {
+                // General scan
+                state.pending_transition = Some(PendingTransition::StartPlanning {
+                    user_intent: None,
+                    label: "Scan project".to_string(),
+                });
+            } else {
+                // Gap analysis with user focus text
+                let label = format!("Scan: {}", truncate_str(&text, 48));
+                state.pending_transition = Some(PendingTransition::StartPlanning {
+                    user_intent: Some(text),
+                    label,
                 });
             }
         }
-        StartupAction::ViewTasks => {
-            let tasks_path =
-                ContractPaths::resolve(state.buildloop_dir.parent().unwrap_or(Path::new(".")))
-                    .tasks_path;
-            state.pending_transition = Some(PendingTransition::OpenExternalEditor {
-                file_path: tasks_path,
-            });
-        }
-        StartupAction::EditSpec => {
-            let spec_path =
-                ContractPaths::resolve(state.buildloop_dir.parent().unwrap_or(Path::new(".")))
-                    .spec_path;
-            state.pending_transition = Some(PendingTransition::OpenExternalEditor {
-                file_path: spec_path,
-            });
-        }
     }
 }
+
+// ─── Mouse Handling ──────────────────────────────────────────
+
+pub(super) fn handle_startup_mouse(state: &mut AppState, mouse: MouseEvent) {
+    handle_startup_mouse_at(state, mouse, current_terminal_size());
+}
+
+pub(super) fn handle_startup_mouse_at(
+    state: &mut AppState,
+    mouse: MouseEvent,
+    terminal_size: (u16, u16),
+) {
+    match mouse.kind {
+        MouseEventKind::Down(MouseButton::Left) => {
+            state.startup_scroll_debounce_ticks = CLICK_SCROLL_DEBOUNCE_TICKS;
+            if let Some(target) =
+                tui::startup_hit_test(terminal_size, state, mouse.column, mouse.row)
+            {
+                match target {
+                    tui::StartupMouseTarget::FileEntry(index) => {
+                        set_explorer_selection(state, index);
+                    }
+                    tui::StartupMouseTarget::PreviewLine => {}
+                }
+            }
+        }
+        MouseEventKind::ScrollUp => {
+            if state.startup_scroll_debounce_ticks == 0 {
+                move_explorer_selection(state, -3);
+            }
+        }
+        MouseEventKind::ScrollDown => {
+            if state.startup_scroll_debounce_ticks == 0 {
+                move_explorer_selection(state, 3);
+            }
+        }
+        _ => {}
+    }
+}
+
+// ─── Startup Surface Entry ───────────────────────────────────
 
 pub(super) fn enter_home_surface(
     project_dir: &Path,
@@ -653,25 +510,43 @@ fn populate_task_history_from_progress(project_dir: &Path, state: &mut AppState)
 
         if is_spiv {
             // SPIV format: Scout, Plan, Implement, Verify
-            if chars.first() == Some(&'S') { stages_seen.push(AgentRole::Scout); }
-            if chars.get(1) == Some(&'P') { stages_seen.push(AgentRole::Planner); }
-            if chars.get(2) == Some(&'I') { stages_seen.push(AgentRole::Builder); }
-            if chars.get(3) == Some(&'V') { stages_seen.push(AgentRole::Reviewer); }
+            if chars.first() == Some(&'S') {
+                stages_seen.push(AgentRole::Scout);
+            }
+            if chars.get(1) == Some(&'P') {
+                stages_seen.push(AgentRole::Planner);
+            }
+            if chars.get(2) == Some(&'I') {
+                stages_seen.push(AgentRole::Builder);
+            }
+            if chars.get(3) == Some(&'V') {
+                stages_seen.push(AgentRole::Reviewer);
+            }
         } else {
             // Legacy PBRF format: Planner, Builder, Reviewer, Fixer
-            if chars.first() == Some(&'P') { stages_seen.push(AgentRole::Planner); }
-            if chars.get(1) == Some(&'B') { stages_seen.push(AgentRole::Builder); }
-            if chars.get(2) == Some(&'R') { stages_seen.push(AgentRole::Reviewer); }
-            if chars.get(3) == Some(&'F') { stages_seen.push(AgentRole::Fixer); }
+            if chars.first() == Some(&'P') {
+                stages_seen.push(AgentRole::Planner);
+            }
+            if chars.get(1) == Some(&'B') {
+                stages_seen.push(AgentRole::Builder);
+            }
+            if chars.get(2) == Some(&'R') {
+                stages_seen.push(AgentRole::Reviewer);
+            }
+            if chars.get(3) == Some(&'F') {
+                stages_seen.push(AgentRole::Fixer);
+            }
         }
 
-        let fix_passes = if is_spiv { 0 } else if chars.get(3) == Some(&'F') { 1 } else { 0 };
-        let has_bang = progress.contains('!');
-        let passed_review = if has_bang {
-            false
+        let fix_passes = if is_spiv {
+            0
+        } else if chars.get(3) == Some(&'F') {
+            1
         } else {
-            t.completed
+            0
         };
+        let has_bang = progress.contains('!');
+        let passed_review = if has_bang { false } else { t.completed };
 
         let history = TaskPipelineHistory {
             fix_passes,
@@ -750,10 +625,9 @@ pub(super) fn enter_startup_surface_for_scenario(
     state.startup_scroll_debounce_ticks = 0;
 }
 
+// ─── Helpers ─────────────────────────────────────────────────
+
 fn refresh_git_commit_counts(project_dir: &Path, state: &mut AppState) {
-    // Count feat() and WIP() commits that touched files in this directory.
-    // The "--" separator scopes git log to the project path, so monorepo
-    // commits from other projects are excluded.
     let output = std::process::Command::new("git")
         .args(["log", "--oneline", "--format=%s", "--", "."])
         .current_dir(project_dir)
@@ -810,7 +684,7 @@ pub(super) fn load_pending_task_at(project_dir: &Path, pending_index: usize) -> 
     task::parse_tasks(&plan_path)
         .ok()
         .and_then(|tasks| task::nth_pending(&tasks, pending_index).cloned())
-        .map(|task| format!("{} — {}", task.id, task.short_desc(72)))
+        .map(|task| format!("{} \u{2014} {}", task.id, task.short_desc(72)))
 }
 
 fn current_terminal_size() -> (u16, u16) {

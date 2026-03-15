@@ -1,11 +1,10 @@
 use super::startup::{
-    activate_startup_action, classify_plan_status, detect_startup_scenario, enter_home_surface,
+    classify_plan_status, detect_startup_scenario, enter_home_surface,
     handle_startup_event, handle_startup_key, handle_startup_mouse_at, load_pending_task_at,
-    set_startup_selected_action,
 };
 use super::state::{
     AppEvent, AppPhase, AppState, LoopEvent, PendingTransition, PlanStatus, PlanningOutcome,
-    PlanningState, StartupAction, StartupScenario, StartupState,
+    PlanningState, StartupScenario, StartupState,
 };
 use super::{
     apply_orchestrator_outcome, apply_pending_transition, apply_planning_outcome, handle_event,
@@ -162,7 +161,7 @@ fn classify_plan_status_distinguishes_common_states() {
 }
 
 #[test]
-fn startup_action_scan_project_sets_planning_transition() {
+fn startup_empty_input_on_needs_queue_sets_planning_transition() {
     let dir = temp_project_dir("foundry-startup-scan");
     write_file(
         &dir.join("Cargo.toml"),
@@ -176,7 +175,11 @@ fn startup_action_scan_project_sets_planning_transition() {
         None,
     ));
 
-    activate_startup_action(&mut state, StartupAction::ScanProject);
+    // Press Enter with empty input on NeedsQueue -> StartPlanning
+    handle_startup_key(
+        &mut state,
+        event::KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+    );
 
     assert!(matches!(
         state.pending_transition,
@@ -185,73 +188,6 @@ fn startup_action_scan_project_sets_planning_transition() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
-#[test]
-fn startup_action_edit_spec_sets_editor_transition() {
-    let dir = temp_project_dir("foundry-startup-editor");
-    write_file(
-        &dir.join("Cargo.toml"),
-        "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n",
-    );
-    let mut state = AppState::new(dir.join(".buildloop"));
-    state.startup = Some(StartupState::new(
-        &dir,
-        StartupScenario::NeedsQueue,
-        PlanStatus::Missing,
-        None,
-    ));
-
-    activate_startup_action(&mut state, StartupAction::EditSpec);
-
-    assert!(matches!(
-        state.pending_transition,
-        Some(PendingTransition::OpenExternalEditor { .. })
-    ));
-    let _ = std::fs::remove_dir_all(dir);
-}
-
-#[test]
-fn startup_action_view_tasks_sets_tasks_editor_transition() {
-    let dir = temp_project_dir("foundry-startup-tasks-editor");
-    write_file(
-        &dir.join("TASKS.md"),
-        "# Task Queue\n\n- [ ] T1.1: Pending task\n",
-    );
-
-    let mut state = AppState::new(dir.join(".buildloop"));
-    state.startup = Some(StartupState::new(
-        &dir,
-        StartupScenario::QueueReady,
-        PlanStatus::Pending(1),
-        None,
-    ));
-
-    activate_startup_action(&mut state, StartupAction::ViewTasks);
-
-    assert!(matches!(
-        state.pending_transition,
-        Some(PendingTransition::OpenExternalEditor { .. })
-    ));
-    let _ = std::fs::remove_dir_all(dir);
-}
-
-#[test]
-fn startup_action_labels_show_bare_filenames() {
-    let dir = temp_project_dir("foundry-startup-action-labels");
-    write_file(&dir.join("TASKS.md"), "# Task Queue\n");
-    write_file(&dir.join("SPEC.md"), "# Specification: demo\n");
-
-    let startup = StartupState::new(
-        &dir,
-        StartupScenario::QueueReady,
-        PlanStatus::Pending(1),
-        None,
-    );
-
-    assert_eq!(startup.action_label(StartupAction::ViewTasks), "TASKS.md");
-    assert_eq!(startup.action_label(StartupAction::EditSpec), "SPEC.md");
-
-    let _ = std::fs::remove_dir_all(dir);
-}
 
 #[test]
 fn enter_home_surface_keeps_fresh_directories_on_startup() {
@@ -358,7 +294,7 @@ fn startup_state_loads_plan_preview_and_next_pending_task() {
         PlanStatus::Pending(1),
         None,
     );
-    assert!(startup.has_plan_preview());
+    assert!(!startup.plan_preview_lines.is_empty());
     assert!(startup
         .plan_preview_lines
         .iter()
@@ -392,58 +328,16 @@ fn load_pending_task_at_reads_later_pending_items() {
 }
 
 #[test]
-fn startup_arrow_keys_scroll_plan_preview() {
-    let dir = temp_project_dir("foundry-startup-scroll");
+fn startup_arrow_keys_navigate_file_explorer() {
+    let dir = temp_project_dir("foundry-startup-explorer-nav");
     write_file(
         &dir.join("Cargo.toml"),
         "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n",
     );
+    write_file(&dir.join("README.md"), "# README\n");
     write_file(
         &dir.join("TASKS.md"),
-        "# Plan\n\n- [ ] T1.1: One\n- [ ] T1.2: Two\n- [ ] T1.3: Three\n- [ ] T1.4: Four\n- [ ] T1.5: Five\n- [ ] T1.6: Six\n- [ ] T1.7: Seven\n- [ ] T1.8: Eight\n- [ ] T1.9: Nine\n- [ ] T1.10: Ten\n- [ ] T1.11: Eleven\n- [ ] T1.12: Twelve\n",
-    );
-
-    let mut state = AppState::new(dir.join(".buildloop"));
-    state.startup = Some(StartupState::new(
-        &dir,
-        StartupScenario::QueueReady,
-        PlanStatus::Pending(3),
-        None,
-    ));
-
-    // Select Continue (index 2) so Down/PageDown scroll the plan preview
-    set_startup_selected_action(&mut state, 2);
-
-    handle_startup_key(
-        &mut state,
-        event::KeyEvent::new(KeyCode::Down, KeyModifiers::NONE),
-    );
-    handle_startup_key(
-        &mut state,
-        event::KeyEvent::new(KeyCode::PageDown, KeyModifiers::NONE),
-    );
-
-    assert_eq!(
-        state
-            .startup
-            .as_ref()
-            .map(|startup| startup.plan_scroll_offset),
-        Some(9)
-    );
-
-    let _ = std::fs::remove_dir_all(dir);
-}
-
-#[test]
-fn startup_mouse_click_selects_action_without_activating_it() {
-    let dir = temp_project_dir("foundry-startup-mouse");
-    write_file(
-        &dir.join("Cargo.toml"),
-        "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n",
-    );
-    write_file(
-        &dir.join("TASKS.md"),
-        "# Plan\n\n- [ ] T1.1: Pending task\n",
+        "# Plan\n\n- [ ] T1.1: One\n",
     );
 
     let mut state = AppState::new(dir.join(".buildloop"));
@@ -454,51 +348,73 @@ fn startup_mouse_click_selects_action_without_activating_it() {
         None,
     ));
 
-    handle_startup_mouse_at(
-        &mut state,
-        MouseEvent {
-            kind: MouseEventKind::Down(MouseButton::Left),
-            column: 2,
-            row: 10,
-            modifiers: KeyModifiers::NONE,
-        },
-        (140, 40),
-    );
-
+    // Initially selected = 0
     assert_eq!(
-        state
-            .startup
-            .as_ref()
-            .map(|startup| startup.selected_action),
+        state.startup.as_ref().map(|s| s.explorer_selected),
         Some(0)
     );
-    assert!(state.pending_transition.is_none());
 
+    // Press Down to move to next entry
+    handle_startup_key(
+        &mut state,
+        event::KeyEvent::new(KeyCode::Down, KeyModifiers::NONE),
+    );
+
+    assert_eq!(
+        state.startup.as_ref().map(|s| s.explorer_selected),
+        Some(1)
+    );
+
+    // Press Up to move back
+    handle_startup_key(
+        &mut state,
+        event::KeyEvent::new(KeyCode::Up, KeyModifiers::NONE),
+    );
+
+    assert_eq!(
+        state.startup.as_ref().map(|s| s.explorer_selected),
+        Some(0)
+    );
+
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn startup_mouse_click_selects_file_entry() {
+    let dir = temp_project_dir("foundry-startup-mouse");
+    write_file(
+        &dir.join("Cargo.toml"),
+        "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n",
+    );
+    write_file(&dir.join("README.md"), "# README\n");
+
+    let mut state = AppState::new(dir.join(".buildloop"));
+    state.startup = Some(StartupState::new(
+        &dir,
+        StartupScenario::QueueReady,
+        PlanStatus::Pending(1),
+        None,
+    ));
+
+    // Click in file explorer area -- should select entry, not trigger transition
     handle_startup_mouse_at(
         &mut state,
         MouseEvent {
             kind: MouseEventKind::Down(MouseButton::Left),
             column: 2,
-            row: 12,
+            row: 9,
             modifiers: KeyModifiers::NONE,
         },
         (140, 40),
     );
 
-    assert_eq!(
-        state
-            .startup
-            .as_ref()
-            .map(|startup| startup.selected_action),
-        Some(1)
-    );
     assert!(state.pending_transition.is_none());
 
     let _ = std::fs::remove_dir_all(dir);
 }
 
 #[test]
-fn startup_enter_activates_selected_action() {
+fn startup_enter_empty_on_queue_ready_starts_build() {
     let dir = temp_project_dir("foundry-startup-enter");
     write_file(
         &dir.join("Cargo.toml"),
@@ -517,8 +433,7 @@ fn startup_enter_activates_selected_action() {
         None,
     ));
 
-    // Select Continue (index 2) and press Enter to start build
-    set_startup_selected_action(&mut state, 2);
+    // Press Enter with empty input -- should start build
     handle_startup_key(
         &mut state,
         event::KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
@@ -543,17 +458,12 @@ fn startup_intent_input_accepts_digits_and_q_without_triggering_shortcuts() {
     let mut state = AppState::new(dir.join(".buildloop"));
     state.startup = Some(StartupState::new(
         &dir,
-        StartupScenario::QueueReady,
-        PlanStatus::Pending(1),
+        StartupScenario::NeedsQueue,
+        PlanStatus::Missing,
         None,
     ));
-    // Select EditTasks (index 1) then press 'a' to enter AI add / intent input mode
-    set_startup_selected_action(&mut state, 1);
-    handle_startup_key(
-        &mut state,
-        event::KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE),
-    );
 
+    // Input is always active now -- type directly
     handle_startup_key(
         &mut state,
         event::KeyEvent::new(KeyCode::Char('1'), KeyModifiers::NONE),
@@ -563,13 +473,6 @@ fn startup_intent_input_accepts_digits_and_q_without_triggering_shortcuts() {
         event::KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE),
     );
 
-    assert_eq!(
-        state
-            .startup
-            .as_ref()
-            .map(|startup| startup.selected_action),
-        Some(1)
-    );
     assert_eq!(
         state
             .startup
@@ -594,9 +497,7 @@ fn startup_intent_input_accepts_paste_events() {
         None,
     ));
 
-    // Select ScanProject (index 1) to enter intent input mode
-    set_startup_selected_action(&mut state, 1);
-
+    // Input is always active -- paste directly
     handle_startup_event(&mut state, AppEvent::Paste("fix login timeout".to_string()));
 
     assert_eq!(
@@ -611,7 +512,7 @@ fn startup_intent_input_accepts_paste_events() {
 }
 
 #[test]
-fn startup_clicking_preview_does_not_change_scroll_offset() {
+fn startup_clicking_preview_does_not_change_explorer_selection() {
     let dir = temp_project_dir("foundry-startup-preview-jump");
     write_file(
         &dir.join("Cargo.toml"),
@@ -619,22 +520,20 @@ fn startup_clicking_preview_does_not_change_scroll_offset() {
     );
     write_file(
         &dir.join("TASKS.md"),
-        "# Plan\n\n- [ ] T1.1: One\n- [ ] T1.2: Two\n- [ ] T1.3: Three\n- [ ] T1.4: Four\n",
-    );
-    write_file(
-        &dir.join("SPEC.md"),
-        "# Architecture\n\n## Overview\nLine A\nLine B\nLine C\n",
+        "# Plan\n\n- [ ] T1.1: One\n",
     );
 
     let mut state = AppState::new(dir.join(".buildloop"));
     state.startup = Some(StartupState::new(
         &dir,
         StartupScenario::QueueReady,
-        PlanStatus::Pending(4),
+        PlanStatus::Pending(1),
         None,
     ));
 
-    // Click in the plan preview area -- scroll should NOT change
+    let initial_selected = state.startup.as_ref().map(|s| s.explorer_selected);
+
+    // Click in the preview area (right column) -- should NOT change explorer selection
     handle_startup_mouse_at(
         &mut state,
         MouseEvent {
@@ -647,63 +546,8 @@ fn startup_clicking_preview_does_not_change_scroll_offset() {
     );
 
     assert_eq!(
-        state
-            .startup
-            .as_ref()
-            .map(|startup| startup.plan_scroll_offset),
-        Some(0)
-    );
-
-    // Switch to the architecture tab
-    handle_startup_mouse_at(
-        &mut state,
-        MouseEvent {
-            kind: MouseEventKind::Down(MouseButton::Left),
-            column: 2,
-            row: 14,
-            modifiers: KeyModifiers::NONE,
-        },
-        (140, 40),
-    );
-
-    // Click in the architecture preview -- scroll should NOT change
-    handle_startup_mouse_at(
-        &mut state,
-        MouseEvent {
-            kind: MouseEventKind::Down(MouseButton::Left),
-            column: 80,
-            row: 13,
-            modifiers: KeyModifiers::NONE,
-        },
-        (140, 40),
-    );
-
-    assert_eq!(
-        state
-            .startup
-            .as_ref()
-            .map(|startup| startup.spec_scroll_offset),
-        Some(0)
-    );
-
-    // Click again at the same position -- should still be 0, not compounding
-    handle_startup_mouse_at(
-        &mut state,
-        MouseEvent {
-            kind: MouseEventKind::Down(MouseButton::Left),
-            column: 80,
-            row: 13,
-            modifiers: KeyModifiers::NONE,
-        },
-        (140, 40),
-    );
-
-    assert_eq!(
-        state
-            .startup
-            .as_ref()
-            .map(|startup| startup.spec_scroll_offset),
-        Some(0)
+        state.startup.as_ref().map(|s| s.explorer_selected),
+        initial_selected
     );
 
     let _ = std::fs::remove_dir_all(dir);
@@ -716,21 +560,21 @@ fn startup_scroll_events_are_debounced_immediately_after_click() {
         &dir.join("Cargo.toml"),
         "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n",
     );
-    write_file(
-        &dir.join("TASKS.md"),
-        "# Plan\n\n- [ ] T1.1: Task A\n- [ ] T1.2: Task B\n- [ ] T1.3: Task C\n- [ ] T1.4: Task D\n- [ ] T1.5: Task E\n",
-    );
+    write_file(&dir.join("README.md"), "# README\n");
+    let _ = std::fs::create_dir_all(dir.join("src"));
+    write_file(&dir.join("src/main.rs"), "fn main() {}\n");
 
     let mut state = AppState::new(dir.join(".buildloop"));
     state.startup = Some(StartupState::new(
         &dir,
         StartupScenario::QueueReady,
-        PlanStatus::Pending(5),
+        PlanStatus::Pending(1),
         None,
     ));
-    // ViewTasks is at index 0
-    set_startup_selected_action(&mut state, 0);
 
+    let initial_selected = state.startup.as_ref().unwrap().explorer_selected;
+
+    // Click sets debounce
     handle_startup_mouse_at(
         &mut state,
         MouseEvent {
@@ -741,11 +585,13 @@ fn startup_scroll_events_are_debounced_immediately_after_click() {
         },
         (140, 40),
     );
+
+    // Scroll immediately after click -- should be suppressed
     handle_startup_mouse_at(
         &mut state,
         MouseEvent {
             kind: MouseEventKind::ScrollDown,
-            column: 80,
+            column: 2,
             row: 13,
             modifiers: KeyModifiers::NONE,
         },
@@ -753,34 +599,30 @@ fn startup_scroll_events_are_debounced_immediately_after_click() {
     );
 
     assert_eq!(
-        state
-            .startup
-            .as_ref()
-            .map(|startup| startup.plan_scroll_offset),
-        Some(0)
+        state.startup.as_ref().unwrap().explorer_selected,
+        initial_selected
     );
 
+    // Tick to expire debounce
     let (_event_tx, mut event_rx) = mpsc::unbounded_channel::<AppEvent>();
     process_received_event(&mut state, AppEvent::Tick, &mut event_rx, &Config::default());
     process_received_event(&mut state, AppEvent::Tick, &mut event_rx, &Config::default());
 
+    // Scroll after debounce -- should work now
     handle_startup_mouse_at(
         &mut state,
         MouseEvent {
             kind: MouseEventKind::ScrollDown,
-            column: 80,
+            column: 2,
             row: 13,
             modifiers: KeyModifiers::NONE,
         },
         (140, 40),
     );
 
-    assert_eq!(
-        state
-            .startup
-            .as_ref()
-            .map(|startup| startup.plan_scroll_offset),
-        Some(3)
+    // Explorer selection should have changed (moved by 3)
+    assert!(
+        state.startup.as_ref().unwrap().explorer_selected > initial_selected
     );
 
     let _ = std::fs::remove_dir_all(dir);
@@ -931,7 +773,7 @@ fn next_task_update_event_refreshes_running_queue_hint() {
 }
 
 #[test]
-fn startup_describe_work_queues_append_transition() {
+fn startup_typing_and_enter_queues_append_transition() {
     let dir = temp_project_dir("foundry-startup-describe-work");
     write_file(
         &dir.join("Cargo.toml"),
@@ -950,15 +792,7 @@ fn startup_describe_work_queues_append_transition() {
         None,
     ));
 
-    // Select EditTasks (index 1) then press 'a' to enter AI add mode
-    set_startup_selected_action(&mut state, 1);
-    handle_startup_key(
-        &mut state,
-        event::KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE),
-    );
-    assert!(state.startup.as_ref().unwrap().entering_intent);
-
-    // Type a description
+    // Type a description directly (input is always active)
     for c in "fix the login timeout".chars() {
         handle_startup_key(
             &mut state,
@@ -980,55 +814,9 @@ fn startup_describe_work_queues_append_transition() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
-#[test]
-fn startup_describe_work_rejects_empty_input() {
-    let dir = temp_project_dir("foundry-startup-describe-work-empty");
-    write_file(
-        &dir.join("Cargo.toml"),
-        "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n",
-    );
-    write_file(
-        &dir.join("TASKS.md"),
-        "# Plan\n\n- [ ] T1.1: Pending task\n",
-    );
-
-    let mut state = AppState::new(dir.join(".buildloop"));
-    state.startup = Some(StartupState::new(
-        &dir,
-        StartupScenario::QueueReady,
-        PlanStatus::Pending(1),
-        None,
-    ));
-
-    // Select EditTasks (index 1) then press 'a' to enter AI add mode
-    set_startup_selected_action(&mut state, 1);
-    handle_startup_key(
-        &mut state,
-        event::KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE),
-    );
-
-    // Press Enter with empty input
-    handle_startup_key(
-        &mut state,
-        event::KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
-    );
-
-    // Should NOT queue a transition -- should show error
-    assert!(state.pending_transition.is_none());
-    assert!(state
-        .startup
-        .as_ref()
-        .unwrap()
-        .status_message
-        .as_ref()
-        .unwrap()
-        .contains("Describe"));
-
-    let _ = std::fs::remove_dir_all(dir);
-}
 
 #[test]
-fn startup_scan_project_accepts_empty_input() {
+fn startup_empty_input_on_needs_queue_starts_planning() {
     let dir = temp_project_dir("foundry-startup-scan-empty");
     write_file(
         &dir.join("Cargo.toml"),
@@ -1042,9 +830,8 @@ fn startup_scan_project_accepts_empty_input() {
         PlanStatus::Missing,
         None,
     ));
-    set_startup_selected_action(&mut state, 1);
 
-    // Press Enter with empty input -- should work for ScanProject
+    // Press Enter with empty input -- should start planning/scan
     handle_startup_key(
         &mut state,
         event::KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
@@ -1062,7 +849,7 @@ fn startup_scan_project_accepts_empty_input() {
 }
 
 #[test]
-fn startup_scan_project_uses_focus_text() {
+fn startup_text_input_on_needs_queue_starts_planning_with_intent() {
     let dir = temp_project_dir("foundry-startup-scan-focus");
     write_file(
         &dir.join("Cargo.toml"),
@@ -1076,7 +863,6 @@ fn startup_scan_project_uses_focus_text() {
         PlanStatus::Missing,
         None,
     ));
-    set_startup_selected_action(&mut state, 1);
 
     // Type focus text
     for c in "auth bugs".chars() {
@@ -1281,74 +1067,6 @@ fn running_queue_updated_event_populates_task_queue() {
     assert!(!state.task_queue[1].completed);
 }
 
-// ─── Design with review tests ────────────────────────────────
-
-#[test]
-fn test_design_with_review_not_in_empty_project() {
-    let dir = temp_project_dir("foundry-design-empty");
-    let startup = StartupState::new(&dir, StartupScenario::EmptyProject, PlanStatus::Missing, None);
-    assert!(!startup.actions.contains(&StartupAction::DesignWithReview));
-    let _ = std::fs::remove_dir_all(dir);
-}
-
-#[test]
-fn test_design_with_review_not_in_needs_queue() {
-    let dir = temp_project_dir("foundry-design-needs-queue");
-    write_file(
-        &dir.join("Cargo.toml"),
-        "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n",
-    );
-    let startup = StartupState::new(&dir, StartupScenario::NeedsQueue, PlanStatus::Missing, None);
-    assert!(!startup.actions.contains(&StartupAction::DesignWithReview));
-    let _ = std::fs::remove_dir_all(dir);
-}
-
-#[test]
-fn test_design_with_review_not_in_queue_ready() {
-    let dir = temp_project_dir("foundry-design-queue-ready");
-    write_file(
-        &dir.join("TASKS.md"),
-        "# Plan\n\n- [ ] T1.1: Pending task\n",
-    );
-    let startup =
-        StartupState::new(&dir, StartupScenario::QueueReady, PlanStatus::Pending(1), None);
-    assert!(!startup.actions.contains(&StartupAction::DesignWithReview));
-    let _ = std::fs::remove_dir_all(dir);
-}
-
-// test_design_with_review_action_sets_start_design_transition removed:
-// DesignWithReview is no longer in the startup action lists (available via `foundry design` CLI)
-
-#[test]
-fn test_design_with_review_empty_intent_shows_message() {
-    let dir = temp_project_dir("foundry-design-empty-intent");
-    write_file(
-        &dir.join("Cargo.toml"),
-        "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n",
-    );
-    let mut state = AppState::new(dir.join(".buildloop"));
-    state.startup = Some(StartupState::new(
-        &dir,
-        StartupScenario::NeedsQueue,
-        PlanStatus::Missing,
-        None,
-    ));
-    let startup = state.startup.as_mut().unwrap();
-    startup.intent_input = "".to_string();
-
-    activate_startup_action(&mut state, StartupAction::DesignWithReview);
-
-    assert!(state.pending_transition.is_none());
-    assert!(state
-        .startup
-        .as_ref()
-        .unwrap()
-        .status_message
-        .as_ref()
-        .unwrap()
-        .contains("Describe what you want designed first."));
-    let _ = std::fs::remove_dir_all(dir);
-}
 
 #[test]
 fn test_orchestrator_outcome_accepted_shows_startup() {
