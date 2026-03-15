@@ -42,10 +42,13 @@ pub enum StartupScenario {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StartupAction {
     Continue,
+    EditTasks,
+    #[allow(dead_code)]
     DescribeWork,
     #[allow(dead_code)]
     DesignWithReview,
     ScanProject,
+    #[allow(dead_code)]
     ViewTasks,
     EditSpec,
 }

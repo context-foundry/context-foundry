@@ -281,6 +281,12 @@ fn startup_empty_project_describe_work_seeds_spec_before_task_creation() {
         None,
     ));
 
+    // EditTasks is at index 0 (default). Press 'a' to enter AI add mode.
+    handle_startup_key(
+        &mut state,
+        event::KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE),
+    );
+
     for c in "build a notes app".chars() {
         handle_startup_key(
             &mut state,
@@ -544,8 +550,12 @@ fn startup_intent_input_accepts_digits_and_q_without_triggering_shortcuts() {
         PlanStatus::Pending(1),
         None,
     ));
-    // Select DescribeWork (index 1) to enter intent input mode
+    // Select EditTasks (index 1) then press 'a' to enter AI add / intent input mode
     set_startup_selected_action(&mut state, 1);
+    handle_startup_key(
+        &mut state,
+        event::KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE),
+    );
 
     handle_startup_key(
         &mut state,
@@ -941,8 +951,12 @@ fn startup_describe_work_queues_append_transition() {
         None,
     ));
 
-    // Select "Describe more work" (index 1)
+    // Select EditTasks (index 1) then press 'a' to enter AI add mode
     set_startup_selected_action(&mut state, 1);
+    handle_startup_key(
+        &mut state,
+        event::KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE),
+    );
     assert!(state.startup.as_ref().unwrap().entering_intent);
 
     // Type a description
@@ -987,8 +1001,12 @@ fn startup_describe_work_rejects_empty_input() {
         None,
     ));
 
-    // Select DescribeWork (index 1)
+    // Select EditTasks (index 1) then press 'a' to enter AI add mode
     set_startup_selected_action(&mut state, 1);
+    handle_startup_key(
+        &mut state,
+        event::KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE),
+    );
 
     // Press Enter with empty input
     handle_startup_key(
@@ -1005,7 +1023,7 @@ fn startup_describe_work_rejects_empty_input() {
         .status_message
         .as_ref()
         .unwrap()
-        .contains("queue"));
+        .contains("Describe"));
 
     let _ = std::fs::remove_dir_all(dir);
 }

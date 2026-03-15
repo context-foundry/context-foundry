@@ -2060,12 +2060,19 @@ fn render_startup_actions(frame: &mut Frame, area: Rect, state: &AppState) {
 }
 
 fn render_startup_content(frame: &mut Frame, area: Rect, state: &AppState) {
-    match selected_startup_action(state) {
-        Some(StartupAction::DescribeWork) | Some(StartupAction::ScanProject) => {
+    let action = selected_startup_action(state);
+    let is_edit_tasks_intent = action == Some(StartupAction::EditTasks)
+        && state.startup.as_ref().map(|s| s.entering_intent).unwrap_or(false);
+
+    match action {
+        Some(StartupAction::EditTasks) if is_edit_tasks_intent => {
             render_startup_intent(frame, area, state)
         }
-        Some(StartupAction::ViewTasks) | Some(StartupAction::Continue) => {
+        Some(StartupAction::EditTasks) | Some(StartupAction::ViewTasks) | Some(StartupAction::Continue) => {
             render_startup_tasks(frame, area, state)
+        }
+        Some(StartupAction::DescribeWork) | Some(StartupAction::ScanProject) => {
+            render_startup_intent(frame, area, state)
         }
         Some(StartupAction::EditSpec) => render_startup_spec(frame, area, state),
         _ => render_startup_plan(frame, area, state),
@@ -2248,6 +2255,15 @@ fn render_startup_intent(frame: &mut Frame, area: Rect, state: &AppState) {
                 "Press Enter to add and start.".to_string(),
             ),
         },
+        Some(StartupAction::EditTasks) => (
+            " Add with AI ".to_string(),
+            "What should Foundry work on next?".to_string(),
+            format!(
+                "Foundry scans your project, understands your intent, and creates comprehensive tasks in {}.",
+                startup.tasks_file_name
+            ),
+            "Press Enter to add. Press Esc to go back to viewing tasks.".to_string(),
+        ),
         Some(StartupAction::ScanProject) => (
             " Scan Project ".to_string(),
             "Optional: focus the scan on a bug, area, or goal:".to_string(),
@@ -2595,6 +2611,25 @@ fn render_startup_status_bar(frame: &mut Frame, area: Rect, state: &AppState) {
                 ),
                 Span::raw(" actions  "),
             ];
+
+            if matches!(selected_startup_action(state), Some(StartupAction::EditTasks)) {
+                spans.push(Span::styled(
+                    " a ",
+                    Style::default()
+                        .fg(Color::Black)
+                        .bg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                ));
+                spans.push(Span::raw(" add with AI  "));
+                spans.push(Span::styled(
+                    " e ",
+                    Style::default()
+                        .fg(Color::Black)
+                        .bg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                ));
+                spans.push(Span::raw(" edit manually  "));
+            }
 
             if startup.has_plan_preview()
                 || !startup.spec_preview_lines.is_empty()

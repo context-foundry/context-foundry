@@ -24,20 +24,18 @@ impl StartupState {
         let contract_paths = ContractPaths::resolve(project_dir);
         let actions = match scenario {
             StartupScenario::EmptyProject => {
-                vec![StartupAction::DescribeWork, StartupAction::EditSpec]
+                vec![StartupAction::EditTasks, StartupAction::EditSpec]
             }
             StartupScenario::NeedsQueue => vec![
-                StartupAction::DescribeWork,
+                StartupAction::EditTasks,
                 StartupAction::ScanProject,
             ],
             StartupScenario::QueueReady => vec![
-                StartupAction::ViewTasks,
-                StartupAction::DescribeWork,
                 StartupAction::Continue,
+                StartupAction::EditTasks,
             ],
             StartupScenario::QueueComplete => vec![
-                StartupAction::ViewTasks,
-                StartupAction::DescribeWork,
+                StartupAction::EditTasks,
                 StartupAction::ScanProject,
             ],
         };
@@ -66,6 +64,7 @@ impl StartupState {
     pub fn action_label(&self, action: StartupAction) -> String {
         match action {
             StartupAction::Continue => "Continue".to_string(),
+            StartupAction::EditTasks => format!("Edit {}", self.tasks_file_name),
             StartupAction::DescribeWork => "Add".to_string(),
             StartupAction::DesignWithReview => "Design with review".to_string(),
             StartupAction::ScanProject => "Scan project".to_string(),
@@ -79,24 +78,13 @@ impl StartupState {
             StartupAction::Continue => {
                 "Resume the build loop from the next pending task.".to_string()
             }
-            StartupAction::DescribeWork => match self.scenario {
-                StartupScenario::EmptyProject => format!(
-                    "Start with a brief. Foundry saves it to {}, creates {}, then starts building.",
-                    self.spec_file_name, self.tasks_file_name
-                ),
-                StartupScenario::NeedsQueue => format!(
-                    "Describe what you want done. Foundry creates {} and starts building.",
-                    self.tasks_file_name
-                ),
-                StartupScenario::QueueReady => format!(
-                    "Append work to {}, then resume the build loop.",
-                    self.tasks_file_name
-                ),
-                StartupScenario::QueueComplete => format!(
-                    "Describe what should happen next. Foundry turns it into tasks in {}.",
-                    self.tasks_file_name
-                ),
-            },
+            StartupAction::EditTasks => {
+                "View, edit, or add tasks. Press 'a' to add with AI, 'e' to edit manually.".to_string()
+            }
+            StartupAction::DescribeWork => format!(
+                "Add work to {}.",
+                self.tasks_file_name
+            ),
             StartupAction::DesignWithReview => {
                 "Cross-model design loop. Proposer drafts, reviewer validates, iterates until accepted.".to_string()
             }
@@ -213,11 +201,11 @@ pub(super) fn handle_startup_key(state: &mut AppState, key: event::KeyEvent) {
         return;
     }
 
-    if selected_startup_action(state)
+    let intent_active = selected_startup_action(state)
         .map(startup_action_uses_intent)
         .unwrap_or(false)
-        && startup_intent_captures_key(key)
-    {
+        || state.startup.as_ref().is_some_and(|s| s.entering_intent);
+    if intent_active && startup_intent_captures_key(key) {
         handle_startup_intent_input(state, key);
         return;
     }
@@ -232,6 +220,17 @@ pub(super) fn handle_startup_key(state: &mut AppState, key: event::KeyEvent) {
             } else {
                 "hil".into()
             };
+        }
+        KeyCode::Char('a') if matches!(selected_startup_action(state), Some(StartupAction::EditTasks)) => {
+            // Switch to AI add mode: enter intent input for the describe-work flow
+            if let Some(startup) = state.startup.as_mut() {
+                startup.entering_intent = true;
+                startup.intent_input.clear();
+            }
+        }
+        KeyCode::Char('e') if matches!(selected_startup_action(state), Some(StartupAction::EditTasks)) => {
+            // Open TASKS.md in external editor
+            activate_startup_action(state, StartupAction::EditTasks);
         }
         KeyCode::Char('f') if state.last_orchestrator_outcome.is_some() => {
             state.show_findings = !state.show_findings;
@@ -266,10 +265,11 @@ pub(super) fn handle_startup_key(state: &mut AppState, key: event::KeyEvent) {
             }
         }
         _ => {
-            if selected_startup_action(state)
+            let intent_active = selected_startup_action(state)
                 .map(startup_action_uses_intent)
                 .unwrap_or(false)
-            {
+                || state.startup.as_ref().is_some_and(|s| s.entering_intent);
+            if intent_active {
                 handle_startup_intent_input(state, key);
             }
         }
@@ -278,7 +278,7 @@ pub(super) fn handle_startup_key(state: &mut AppState, key: event::KeyEvent) {
 
 fn startup_intent_captures_key(key: event::KeyEvent) -> bool {
     match key.code {
-        KeyCode::Enter | KeyCode::Backspace => true,
+        KeyCode::Enter | KeyCode::Backspace | KeyCode::Esc => true,
         KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => true,
         KeyCode::Char(_) if !key.modifiers.contains(KeyModifiers::CONTROL) => true,
         _ => false,
@@ -336,6 +336,11 @@ pub(super) fn handle_startup_intent_input(state: &mut AppState, key: event::KeyE
             let text = startup.intent_input.trim().to_string();
 
             match current_action {
+                Some(StartupAction::EditTasks) => {
+                    // Re-borrow state after dropping startup ref
+                    let _ = startup;
+                    activate_startup_action(state, StartupAction::EditTasks);
+                }
                 Some(StartupAction::DescribeWork) => {
                     if text.is_empty() {
                         startup.status_message =
@@ -391,6 +396,12 @@ pub(super) fn handle_startup_intent_input(state: &mut AppState, key: event::KeyE
                 _ => {}
             }
         }
+        KeyCode::Esc => {
+            // Exit intent mode and go back to file view
+            startup.entering_intent = false;
+            startup.intent_input.clear();
+            startup.status_message = None;
+        }
         KeyCode::Backspace => {
             startup.intent_input.pop();
         }
@@ -439,7 +450,10 @@ pub(super) fn scroll_startup_content(state: &mut AppState, delta: isize) {
             let max = startup.spec_preview_lines.len().saturating_sub(1);
             adjust_scroll_offset(&mut startup.spec_scroll_offset, delta, max);
         }
-        Some(StartupAction::ViewTasks) | Some(StartupAction::Continue) | None => {
+        Some(StartupAction::EditTasks)
+        | Some(StartupAction::ViewTasks)
+        | Some(StartupAction::Continue)
+        | None => {
             let max = startup.plan_preview_lines.len().saturating_sub(1);
             adjust_scroll_offset(&mut startup.plan_scroll_offset, delta, max);
         }
@@ -486,6 +500,38 @@ pub(super) fn activate_startup_action(state: &mut AppState, action: StartupActio
                 };
                 state.pending_transition =
                     Some(PendingTransition::StartPlanning { user_intent, label });
+            }
+        }
+        StartupAction::EditTasks => {
+            if let Some(startup) = state.startup.as_mut() {
+                let text = startup.intent_input.trim().to_string();
+                if startup.entering_intent && !text.is_empty() {
+                    // AI add flow: user typed something and hit Enter
+                    startup.entering_intent = false;
+                    startup.status_message = None;
+                    startup.intent_input.clear();
+                    let label = format!("Add: {}", truncate_str(&text, 48));
+                    state.pending_transition =
+                        Some(PendingTransition::AppendTasks(AppendTasksRequest {
+                            description: text,
+                            label,
+                            seed_spec_from_description: matches!(
+                                startup.scenario,
+                                StartupScenario::EmptyProject
+                            ),
+                        }));
+                } else if startup.entering_intent {
+                    // AI add flow: empty input
+                    startup.status_message = Some("Describe what you want Foundry to build.".to_string());
+                } else {
+                    // Manual edit: open editor (activated via 'e' key)
+                    let tasks_path = super::contract::ContractPaths::resolve(
+                        state.buildloop_dir.parent().unwrap_or(std::path::Path::new(".")),
+                    )
+                    .tasks_path;
+                    state.pending_transition =
+                        Some(PendingTransition::OpenExternalEditor { file_path: tasks_path });
+                }
             }
         }
         StartupAction::DescribeWork => {
