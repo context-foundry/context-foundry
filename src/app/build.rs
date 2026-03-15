@@ -221,7 +221,9 @@ fn restore_state_files(
 // unless the last agent run encountered rate limiting. A minimal
 // 500ms pause is still applied to avoid hammering the API.
 
-const ADAPTIVE_PAUSE_MIN_MS: u64 = 500;
+// Near-zero pause when not rate-limited. Back-to-back API calls benefit
+// from prompt caching -- pausing actively hurts cache hit rates.
+const ADAPTIVE_PAUSE_MIN_MS: u64 = 100;
 
 /// Check whether an agent result indicates rate limiting occurred.
 fn was_rate_limited(result: &anyhow::Result<AgentResult>) -> bool {
@@ -666,9 +668,13 @@ async fn process_task(
     }
 
     // Classify task complexity to decide whether to skip the planner.
+    // Skip for simple tasks (existing behavior) AND for medium tasks with
+    // detailed descriptions (80+ chars). Detailed task descriptions from the
+    // upgraded describe-work agent are already comprehensive plans.
     let task_complexity = complexity::classify_task(task_desc);
-    let skip_planner =
-        task_complexity == TaskComplexity::Simple && ctx.config.skip_planner_for_simple;
+    let skip_planner = ctx.config.skip_planner_for_simple
+        && (task_complexity == TaskComplexity::Simple
+            || (task_complexity == TaskComplexity::Medium && task_desc.len() >= 80));
 
     // Track rate limiting across agents; starts false when planner is skipped.
     #[allow(unused_assignments)]
@@ -944,9 +950,21 @@ async fn process_task(
         return (false, last_rate_limited);
     }
 
+    // Skip verify for simple tasks when the builder's own checks passed.
+    // The builder already ran build/test/lint -- verify adds a fresh-context
+    // audit which is most valuable for complex tasks with blind spots.
+    let skip_verify = task_complexity == TaskComplexity::Simple
+        && build_ok
+        && !ctx.config.backpressure_only;
+
     let (validated, _fix_passes) = if ctx.config.backpressure_only {
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
             "Backpressure-only mode: skipping LLM review (builder verification passed)".to_string(),
+        )));
+        (true, 0usize)
+    } else if skip_verify {
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+            "Simple task with clean build -- skipping verify".to_string(),
         )));
         (true, 0usize)
     } else {
@@ -963,7 +981,7 @@ async fn process_task(
     // Agents may overwrite TASKS.md during their run, stripping intermediate
     // indicators, so the final write must be the last mutation before commit.
     {
-        let verify_char = "V"; // Verify always runs
+        let verify_char = if skip_verify || ctx.config.backpressure_only { "-" } else { "V" };
         let fail_char = if !validated { "!" } else { "" };
         let progress = format!("{}{}I{}{}", scout_char, planner_char, verify_char, fail_char);
         let _lock = ctx.tasks_file_lock.lock().unwrap_or_else(|e| e.into_inner());
