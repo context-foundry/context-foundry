@@ -1359,7 +1359,7 @@ fn render_header(frame: &mut Frame, area: Rect, state: &AppState) {
                 } else if state.stop_after_task {
                     " STOPPING "
                 } else if state.run_mode == "hil" {
-                    " RUNNING (HIL) "
+                    " RUNNING (Review) "
                 } else {
                     " RUNNING "
                 },
@@ -1878,6 +1878,18 @@ fn render_startup_summary(frame: &mut Frame, area: Rect, state: &AppState) {
                 Style::default()
                     .fg(Color::Black)
                     .bg(Color::DarkGray)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("  "),
+            Span::styled(
+                if state.run_mode == "hil" { " Review " } else { " Auto " },
+                Style::default()
+                    .fg(Color::Black)
+                    .bg(if state.run_mode == "hil" {
+                        Color::Yellow
+                    } else {
+                        Color::Green
+                    })
                     .add_modifier(Modifier::BOLD),
             ),
         ]),
@@ -2630,6 +2642,22 @@ fn render_startup_status_bar(frame: &mut Frame, area: Rect, state: &AppState) {
         " actions"
     } else {
         " dashboard"
+    }));
+    spans.push(Span::styled(
+        "  m ",
+        Style::default()
+            .fg(Color::Black)
+            .bg(if state.run_mode == "hil" {
+                Color::Yellow
+            } else {
+                Color::Green
+            })
+            .add_modifier(Modifier::BOLD),
+    ));
+    spans.push(Span::raw(if state.run_mode == "hil" {
+        "review"
+    } else {
+        "auto"
     }));
 
     if let Some(ref version) = state.update_available {

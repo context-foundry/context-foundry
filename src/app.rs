@@ -360,7 +360,11 @@ fn spawn_build_loop(
         task::count_pending(&tasks)
     ));
 
-    let run_context = RunContext::new(project_dir, config.clone(), shutdown.clone(), state.tasks_file_lock.clone());
+    // Apply runtime mode toggle (user may have toggled auto/review on startup screen)
+    let mut loop_config = config.clone();
+    loop_config.mode = state.run_mode.clone();
+
+    let run_context = RunContext::new(project_dir, loop_config, shutdown.clone(), state.tasks_file_lock.clone());
     let loop_tx = event_tx.clone();
     tokio::spawn(async move {
         build::build_loop(run_context, loop_tx).await;
