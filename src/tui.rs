@@ -1771,7 +1771,7 @@ fn render_status_bar(frame: &mut Frame, area: Rect, state: &AppState) {
                 .bg(Color::DarkGray)
                 .add_modifier(Modifier::BOLD),
         ));
-        spans.push(Span::raw("findings"));
+        spans.push(Span::raw(" findings"));
     }
 
     spans.push(Span::styled(discovery_info, Style::default().fg(Color::DarkGray)));
@@ -1826,7 +1826,7 @@ fn render_planning_status_bar(frame: &mut Frame, area: Rect, state: &AppState) {
                 .bg(Color::DarkGray)
                 .add_modifier(Modifier::BOLD),
         ));
-        spans.push(Span::raw("findings"));
+        spans.push(Span::raw(" findings"));
     }
 
     if let Some((_ts, msg)) = state.log_messages.last() {
@@ -2627,7 +2627,7 @@ fn render_startup_status_bar(frame: &mut Frame, area: Rect, state: &AppState) {
                         .bg(Color::DarkGray)
                         .add_modifier(Modifier::BOLD),
                 ));
-                spans.push(Span::raw("findings"));
+                spans.push(Span::raw(" findings"));
             }
             spans
         }
@@ -2657,9 +2657,9 @@ fn render_startup_status_bar(frame: &mut Frame, area: Rect, state: &AppState) {
             .add_modifier(Modifier::BOLD),
     ));
     spans.push(Span::raw(if state.run_mode == "hil" {
-        "review"
+        " review"
     } else {
-        "auto"
+        " auto"
     }));
 
     if let Some(ref version) = state.update_available {
