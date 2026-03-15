@@ -408,8 +408,8 @@ fn startup_arrow_keys_scroll_plan_preview() {
         None,
     ));
 
-    // Select Continue (index 3) so Down/PageDown scroll the plan preview
-    set_startup_selected_action(&mut state, 3);
+    // Select Continue (index 2) so Down/PageDown scroll the plan preview
+    set_startup_selected_action(&mut state, 2);
 
     handle_startup_key(
         &mut state,
@@ -587,7 +587,7 @@ fn startup_intent_input_accepts_paste_events() {
         None,
     ));
 
-    // Select DescribeWork (index 1) to enter intent input mode
+    // Select ScanProject (index 1) to enter intent input mode
     set_startup_selected_action(&mut state, 1);
 
     handle_startup_event(&mut state, AppEvent::Paste("fix login timeout".to_string()));
