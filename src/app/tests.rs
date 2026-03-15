@@ -175,7 +175,7 @@ fn startup_empty_input_on_needs_queue_sets_planning_transition() {
         None,
     ));
 
-    // Press Enter with empty input on NeedsQueue -> StartPlanning
+    // Press Enter with empty input on NeedsQueue -> StartBuild (bootstrap scout creates tasks)
     handle_startup_key(
         &mut state,
         event::KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
@@ -183,7 +183,7 @@ fn startup_empty_input_on_needs_queue_sets_planning_transition() {
 
     assert!(matches!(
         state.pending_transition,
-        Some(PendingTransition::StartPlanning { .. })
+        Some(PendingTransition::StartBuild)
     ));
     let _ = std::fs::remove_dir_all(dir);
 }
@@ -232,14 +232,17 @@ fn startup_empty_project_describe_work_seeds_spec_before_task_creation() {
         event::KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
     );
 
-    match &state.pending_transition {
-        Some(PendingTransition::AppendTasks(request)) => {
-            let description = &request.description;
-            assert_eq!(description, "build a notes app");
-            assert!(request.seed_spec_from_description);
-        }
-        other => panic!("expected AppendTasks transition, got {:?}", other),
-    }
+    // EmptyProject now goes straight to StartBuild (bootstrap scout creates tasks).
+    // The user's text is saved as SPEC.md before starting.
+    assert!(matches!(
+        state.pending_transition,
+        Some(PendingTransition::StartBuild)
+    ));
+
+    // Verify SPEC.md was seeded with the user's description
+    let spec_path = dir.join("SPEC.md");
+    let spec_content = std::fs::read_to_string(&spec_path).expect("SPEC.md should exist");
+    assert!(spec_content.contains("build a notes app"));
 
     let _ = std::fs::remove_dir_all(dir);
 }
@@ -816,7 +819,7 @@ fn startup_typing_and_enter_queues_append_transition() {
 
 
 #[test]
-fn startup_empty_input_on_needs_queue_starts_planning() {
+fn startup_empty_input_on_needs_queue_starts_build() {
     let dir = temp_project_dir("foundry-startup-scan-empty");
     write_file(
         &dir.join("Cargo.toml"),
@@ -831,7 +834,7 @@ fn startup_empty_input_on_needs_queue_starts_planning() {
         None,
     ));
 
-    // Press Enter with empty input -- should start planning/scan
+    // Press Enter with empty input -- goes straight to build (bootstrap scout creates tasks)
     handle_startup_key(
         &mut state,
         event::KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
@@ -839,17 +842,14 @@ fn startup_empty_input_on_needs_queue_starts_planning() {
 
     assert!(matches!(
         state.pending_transition,
-        Some(PendingTransition::StartPlanning {
-            user_intent: None,
-            ..
-        })
+        Some(PendingTransition::StartBuild)
     ));
 
     let _ = std::fs::remove_dir_all(dir);
 }
 
 #[test]
-fn startup_text_input_on_needs_queue_starts_planning_with_intent() {
+fn startup_text_input_on_needs_queue_starts_build() {
     let dir = temp_project_dir("foundry-startup-scan-focus");
     write_file(
         &dir.join("Cargo.toml"),
@@ -877,15 +877,11 @@ fn startup_text_input_on_needs_queue_starts_planning_with_intent() {
         event::KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
     );
 
-    match &state.pending_transition {
-        Some(PendingTransition::StartPlanning {
-            user_intent: Some(intent),
-            ..
-        }) => {
-            assert_eq!(intent, "auth bugs");
-        }
-        other => panic!("expected StartPlanning with intent, got {:?}", other),
-    }
+    // NeedsQueue now goes straight to StartBuild (bootstrap scout creates tasks)
+    assert!(matches!(
+        state.pending_transition,
+        Some(PendingTransition::StartBuild)
+    ));
 
     let _ = std::fs::remove_dir_all(dir);
 }
