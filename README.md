@@ -196,7 +196,7 @@ A project needs two files to get started:
    - [ ] 1.2: Implement authentication
    ```
 
-2. **`SPEC.md`** — What you're building (agents read this for context)
+2. **`SPEC.md`** — Project specification (auto-generated from your description, agents read this for context)
 
 Optional:
 - **`.foundry.json`** — Override defaults:
