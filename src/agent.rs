@@ -875,7 +875,22 @@ fn read_provider_output(
                             });
                             continue;
                         }
-                        ParsedClaudeLine::Ignore => continue,
+                        ParsedClaudeLine::Ignore => {
+                            // A result event with empty text still sets LAST_RESULT_USAGE.
+                            // Drain it here so Usage is emitted even when the Result itself
+                            // was suppressed (empty non-error result).
+                            LAST_RESULT_USAGE.with(|cell| {
+                                if let Some(usage) = cell.take() {
+                                    let _ = tx.send(AgentOutputEvent::Usage {
+                                        cost_usd: usage.cost_usd,
+                                        input_tokens: usage.input_tokens,
+                                        output_tokens: usage.output_tokens,
+                                        context_window: usage.context_window,
+                                    });
+                                }
+                            });
+                            continue;
+                        }
                         ParsedClaudeLine::Unparsed => {}
                     },
                     ModelProvider::Codex => {

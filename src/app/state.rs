@@ -244,6 +244,7 @@ impl AppState {
         self.agent_output.clear();
         self.scroll_offset = 0;
         self.events_received = 0;
+        self.agent_context_pct = None;
         self.current_agent = Some((role, Utc::now()));
         self.current_agent_model = Some(model.to_string());
     }
