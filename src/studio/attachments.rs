@@ -330,7 +330,7 @@ fn resolve_attachment_with_root(
     } else {
         project_dir.join(requested)
     };
-    let canonical_target = match fs::canonicalize(&lookup_path) {
+    let canonical_target = match dunce::canonicalize(&lookup_path) {
         Ok(path) => path,
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
             return attachment_error(
@@ -441,7 +441,7 @@ fn resolve_attachment_with_root(
 #[cfg(test)]
 pub(super) fn resolve_attachment(spec: &AttachmentSpec, project_dir: &Path) -> ResolvedAttachment {
     let requested_path = attachment_requested_display_path(spec);
-    let canonical_project = match fs::canonicalize(project_dir) {
+    let canonical_project = match dunce::canonicalize(project_dir) {
         Ok(path) => path,
         Err(err) => {
             return attachment_error(
@@ -467,7 +467,7 @@ pub(super) fn resolve_all_attachments(
         return Vec::new();
     }
 
-    let canonical_project = match fs::canonicalize(project_dir) {
+    let canonical_project = match dunce::canonicalize(project_dir) {
         Ok(path) => path,
         Err(err) => {
             return specs
@@ -775,13 +775,13 @@ pub(super) fn infer_attachment_spec_from_selected_path(
     selected_path: &Path,
     project_dir: &Path,
 ) -> Result<AttachmentSpec> {
-    let canonical_project = fs::canonicalize(project_dir).with_context(|| {
+    let canonical_project = dunce::canonicalize(project_dir).with_context(|| {
         format!(
             "failed to resolve project root for attachment picker: {}",
             project_dir.display()
         )
     })?;
-    let canonical_selected = fs::canonicalize(selected_path).with_context(|| {
+    let canonical_selected = dunce::canonicalize(selected_path).with_context(|| {
         format!(
             "failed to resolve selected attachment path: {}",
             selected_path.display()
@@ -969,7 +969,7 @@ mod tests {
             &project_dir,
             &[external_dir.join("notes.md"), external_dir.join("reports")],
         )?;
-        let canonical_external = fs::canonicalize(&external_dir)?;
+        let canonical_external = dunce::canonicalize(&external_dir)?;
 
         fs::remove_dir_all(&temp_root)?;
         assert_eq!(specs.len(), 2);
@@ -1056,7 +1056,7 @@ mod tests {
             },
             &project_dir,
         );
-        let canonical_outside = fs::canonicalize(&outside_path)?;
+        let canonical_outside = dunce::canonicalize(&outside_path)?;
 
         fs::remove_dir_all(&temp_root)?;
         assert!(resolved.error.is_none());

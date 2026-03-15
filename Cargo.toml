@@ -1,6 +1,6 @@
 [package]
 name = "foundry"
-version = "0.4.3"
+version = "0.4.4"
 edition = "2021"
 description = "Autonomous build loop — the engine of Context Foundry"
 license = "MIT"
@@ -24,6 +24,7 @@ anyhow = "1"
 futures = "0.3"
 portable-pty = "0.8"
 blake3 = "1"
+dunce = "1"
 
 [dev-dependencies]
 tempfile = "3"

@@ -68,7 +68,7 @@ async fn main() -> Result<()> {
         .dir
         .unwrap_or_else(|| std::env::current_dir().expect("cannot determine current directory"));
 
-    let project_dir = project_dir.canonicalize().unwrap_or(project_dir);
+    let project_dir = dunce::canonicalize(&project_dir).unwrap_or(project_dir);
 
     match cli.command.unwrap_or(Commands::Run { no_tui: false }) {
         Commands::Run { no_tui } => {
