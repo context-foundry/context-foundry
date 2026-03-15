@@ -99,8 +99,23 @@ On Windows (PowerShell):
 
 ```powershell
 Expand-Archive foundry-x86_64-pc-windows-msvc.zip -DestinationPath .
+```
+
+If you have Rust installed, `%USERPROFILE%\.cargo\bin\` is already in your PATH:
+
+```powershell
 Move-Item foundry.exe C:\Users\$env:USERNAME\.cargo\bin\
 ```
+
+If you don't have Rust, put it anywhere and add that folder to your PATH:
+
+```powershell
+mkdir C:\tools
+Move-Item foundry.exe C:\tools\
+[Environment]::SetEnvironmentVariable("Path", $env:Path + ";C:\tools", "User")
+```
+
+Open a new terminal and `foundry` works from any directory.
 
 ### From source (all platforms)
 
