@@ -219,7 +219,7 @@ fn restore_state_files(
 // ─── Adaptive Pause Helpers ──────────────────────────────────
 // When adaptive_pauses is enabled, skip the full inter-agent sleep
 // unless the last agent run encountered rate limiting. A minimal
-// 500ms pause is still applied to avoid hammering the API.
+// 100ms pause is still applied to avoid hammering the API.
 
 // Near-zero pause when not rate-limited. Back-to-back API calls benefit
 // from prompt caching -- pausing actively hurts cache hit rates.
@@ -241,7 +241,7 @@ fn was_rate_limited(result: &anyhow::Result<AgentResult>) -> bool {
 }
 
 /// Sleep adaptively: use the full configured pause when rate-limited or
-/// when adaptive_pauses is disabled; otherwise use a minimal 500ms pause.
+/// when adaptive_pauses is disabled; otherwise use a minimal 100ms pause.
 async fn adaptive_sleep(config: &Config, rate_limited: bool, full_secs: u64) {
     if !config.adaptive_pauses || rate_limited {
         tokio::time::sleep(Duration::from_secs(full_secs)).await;
@@ -755,8 +755,13 @@ async fn process_task(
     let planner_char = if skip_planner { "-" } else { "P" };
 
     if skip_planner {
+        let reason = if task_complexity == TaskComplexity::Simple {
+            "simple task"
+        } else {
+            "detailed medium task (>= 80 chars)"
+        };
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
-            "Skipping planner for simple task".to_string(),
+            format!("Skipping planner for {}", reason),
         )));
     } else {
         // ─── Check for Look-Ahead Plan ───────────────────────────
