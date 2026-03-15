@@ -37,11 +37,8 @@ pub(super) fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppStat
         _ => None,
     });
 
-    // Find verify model from role_configs (Reviewer provider/model)
-    let verify_model = roles.iter()
-        .find(|(name, _, _)| name.contains("erif") || name.contains("eview") || name.contains("ix"))
-        .map(|(_, provider, model)| Config::display_provider_model(provider, model))
-        .unwrap_or_default();
+    // DOUBT box model label: use reviewer config directly
+    let verify_model = Config::display_provider_model(&config.reviewer_provider, &config.reviewer_model);
 
     let connected: Vec<StageInfo> = [
         ("SCOUT", Some(0), "scout-report.md"),
