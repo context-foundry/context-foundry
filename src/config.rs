@@ -253,7 +253,7 @@ impl Config {
             ("Implement", &self.builder_provider, &self.builder_model),
             ("Discovery", &self.discovery_provider, &self.discovery_model),
             ("Patterns", "claude", &self.pattern_extraction_model),
-            ("Add Tasks", "claude", "haiku"),
+            ("Add Tasks", "claude", "sonnet"),
         ]
     }
 }

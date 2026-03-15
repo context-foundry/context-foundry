@@ -427,14 +427,8 @@ fn spawn_append_tasks(
         return;
     }
 
-    // Compute the actual model that run_append_tasks will use.
-    let actual_model = if Config::parse_provider(&config.planner_provider)
-        == crate::agent::ModelProvider::Claude
-    {
-        config.planner_model.as_str()
-    } else {
-        "opus"
-    };
+    // run_append_tasks always uses Claude sonnet regardless of planner config.
+    let actual_model = "sonnet";
 
     state.phase = AppPhase::Planning;
     state.startup = None;
