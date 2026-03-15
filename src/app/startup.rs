@@ -466,7 +466,7 @@ pub(super) fn enter_home_surface(
 }
 
 /// Populate `state.task_history` from `pipeline_progress` fields parsed from TASKS.md.
-/// This restores the pipeline indicators (SPIV / legacy PBRF) across session restarts.
+/// This restores the pipeline indicators (SPID / legacy PBRF) across session restarts.
 fn populate_task_history_from_progress(project_dir: &Path, state: &mut AppState) {
     let plan_path = ContractPaths::resolve(project_dir).tasks_path;
     let tasks = match task::parse_tasks(&plan_path) {
@@ -486,12 +486,12 @@ fn populate_task_history_from_progress(project_dir: &Path, state: &mut AppState)
 
         let chars: Vec<char> = progress.chars().collect();
 
-        // Detect SPIV format (starts with S) vs legacy PBRF format (starts with P or -)
-        let is_spiv = chars.first() == Some(&'S');
+        // Detect SPID format (starts with S) vs legacy PBRF format (starts with P or -)
+        let is_spid = chars.first() == Some(&'S');
         let mut stages_seen = Vec::new();
 
-        if is_spiv {
-            // SPIV format: Scout, Plan, Implement, Verify
+        if is_spid {
+            // SPID format: Scout, Plan, Implement, Verify
             if chars.first() == Some(&'S') {
                 stages_seen.push(AgentRole::Scout);
             }
@@ -501,7 +501,7 @@ fn populate_task_history_from_progress(project_dir: &Path, state: &mut AppState)
             if chars.get(2) == Some(&'I') {
                 stages_seen.push(AgentRole::Builder);
             }
-            if chars.get(3) == Some(&'V') {
+            if chars.get(3) == Some(&'D') || chars.get(3) == Some(&'V') {
                 stages_seen.push(AgentRole::Reviewer);
             }
         } else {
@@ -520,7 +520,7 @@ fn populate_task_history_from_progress(project_dir: &Path, state: &mut AppState)
             }
         }
 
-        let fix_passes = if is_spiv {
+        let fix_passes = if is_spid {
             0
         } else if chars.get(3) == Some(&'F') {
             1

@@ -337,7 +337,7 @@ fn detect_default_branch(project_dir: &Path) -> String {
 }
 
 /// Annotate completed tasks in TASKS.md with a PR number.
-/// Inserts `PR:#N` before the pipeline progress indicator (e.g. `[SPIV]`) so
+/// Inserts `PR:#N` before the pipeline progress indicator (e.g. `[SPID]`) so
 /// that the trailing `[XXXX]` regex in task.rs continues to match.
 /// If there is no indicator, the tag is appended at the end.
 pub fn annotate_tasks_with_pr(plan_path: &Path, pr_number: u64) -> Result<()> {
@@ -357,7 +357,7 @@ pub fn annotate_tasks_with_pr(plan_path: &Path, pr_number: u64) -> Result<()> {
         // Only annotate completed tasks that don't already have a PR tag
         if trimmed.starts_with("- [x]") && !line.contains("PR:#") {
             if let Some(m) = RE_PROGRESS_TAIL.find(line) {
-                // Insert PR tag before the [SPIV] indicator
+                // Insert PR tag before the [SPID] indicator
                 let insert_pos = m.start();
                 line.insert_str(insert_pos, &format!(" {}", pr_tag));
             } else {
@@ -533,22 +533,22 @@ mod tests {
     }
 
     #[test]
-    fn annotate_tasks_inserts_pr_tag_before_spiv_indicator() {
-        let path = temp_dir("foundry-annotate-spiv");
+    fn annotate_tasks_inserts_pr_tag_before_spid_indicator() {
+        let path = temp_dir("foundry-annotate-spid");
         let file = path.join("TASKS.md");
         fs::write(
             &file,
-            "- [x] T1.1: First task [SPIV]\n- [x] T1.2: No indicator\n- [x] T1.3: With exclaim [SPI!]\n",
+            "- [x] T1.1: First task [SPID]\n- [x] T1.2: No indicator\n- [x] T1.3: With exclaim [SPI!]\n",
         )
         .expect("write tasks");
 
         super::annotate_tasks_with_pr(&file, 7).expect("annotate should succeed");
         let content = fs::read_to_string(&file).expect("read tasks");
 
-        // PR tag should appear before the [SPIV] indicator
+        // PR tag should appear before the [SPID] indicator
         assert!(
-            content.contains("T1.1: First task PR:#7 [SPIV]"),
-            "PR tag should be before [SPIV], got: {}",
+            content.contains("T1.1: First task PR:#7 [SPID]"),
+            "PR tag should be before [SPID], got: {}",
             content
         );
         // No indicator -- tag goes at end

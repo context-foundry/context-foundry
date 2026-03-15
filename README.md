@@ -41,12 +41,12 @@ Foundry's loop is designed around two forms of backpressure:
 
 **Short-term: the verify gate.** After implementation, a verify agent audits the changes in a fresh context -- running build checks, tests, and a structured code audit. If it finds HIGH or MEDIUM issues, it fixes them and re-runs verification. If everything passes, the task gets a `feat(task-id)` commit. If issues remain, it gets a `WIP(task-id)` commit. The verify gate prevents bad code from silently flowing forward.
 
-**Pipeline tracking (SPIV).** Every task carries a 4-character progress indicator that records which pipeline stages ran and whether they succeeded. The indicator is persisted in `TASKS.md` next to each task and committed with the code, so you get a permanent audit trail.
+**Pipeline tracking (SPID).** Every task carries a 4-character progress indicator that records which pipeline stages ran and whether they succeeded. The indicator is persisted in `TASKS.md` next to each task and committed with the code, so you get a permanent audit trail.
 
 ```
-- [x] T1.1: Set up project scaffolding          [SPIV]
-- [x] T1.2: Implement auth flow                 [S-IV]
-- [x] T1.3: Add rate limiting                   [SPIV!]
+- [x] T1.1: Set up project scaffolding          [SPID]
+- [x] T1.2: Implement auth flow                 [S-ID]
+- [x] T1.3: Add rate limiting                   [SPID!]
 - [ ] T1.4: Write integration tests             [....]
 ```
 
@@ -57,10 +57,10 @@ Each character represents a pipeline stage:
 | 1 | **S** = Scout ran | **-** = scout skipped |
 | 2 | **P** = Plan ran | **-** = planner skipped (simple task) |
 | 3 | **I** = Implement ran | |
-| 4 | **V** = Verify ran | **-** = verify skipped |
+| 4 | **D** = Doubt ran | **-** = doubt skipped |
 | suffix | **!** = verify did not pass | (absent) = clean pass |
 
-Examples: `SPIV` = full pipeline, clean pass. `S-IV` = planner skipped, scouted and implemented and verified. `SPIV!` = full pipeline but verify found unfixable issues (WIP commit).
+Examples: `SPID` = full pipeline, clean pass. `S-ID` = planner skipped, scouted and implemented and verified. `SPID!` = full pipeline but verify found unfixable issues (WIP commit).
 
 The TUI shows these indicators in the task queue with color coding, and they survive across restarts since they're written directly into the task file.
 

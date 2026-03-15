@@ -342,7 +342,7 @@ pub(super) fn render_task_queue(frame: &mut Frame, area: Rect, state: &AppState)
                     ("S", AgentRole::Scout),
                     ("P", AgentRole::Planner),
                     ("I", AgentRole::Builder),
-                    ("V", AgentRole::Reviewer),
+                    ("D", AgentRole::Reviewer),
                 ];
                 let verify_color = if history.passed_review {
                     Color::Green
@@ -376,7 +376,7 @@ pub(super) fn render_task_queue(frame: &mut Frame, area: Rect, state: &AppState)
                     ("S", AgentRole::Scout),
                     ("P", AgentRole::Planner),
                     ("I", AgentRole::Builder),
-                    ("V", AgentRole::Reviewer),
+                    ("D", AgentRole::Reviewer),
                 ];
                 let active = state.current_agent.as_ref().map(|(r, _)| r);
                 let mut spans = vec![Span::styled(" ", Style::default())];

@@ -426,7 +426,7 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
 
             // mark_done is now called inside process_task, right before
             // commit_and_push, so the commit includes both the [x] mark
-            // and the [SPIV] indicator in one atomic operation.
+            // and the [SPID] indicator in one atomic operation.
 
             // Track when H-prefixed (human-injected) tasks complete for discovery cooldown
             if task_info.id.starts_with('H') {
@@ -1049,9 +1049,9 @@ async fn process_task(
     // Agents may overwrite TASKS.md during their run, stripping intermediate
     // indicators, so the final write must be the last mutation before commit.
     {
-        let verify_char = if skip_verify || ctx.config.backpressure_only { "-" } else { "V" };
+        let doubt_char = if skip_verify || ctx.config.backpressure_only { "-" } else { "D" };
         let fail_char = if !validated { "!" } else { "" };
-        let progress = format!("{}{}I{}{}", scout_char, planner_char, verify_char, fail_char);
+        let progress = format!("{}{}I{}{}", scout_char, planner_char, doubt_char, fail_char);
         let _lock = ctx.tasks_file_lock.lock().unwrap_or_else(|e| e.into_inner());
         let _ = task::update_task_progress(&ctx.plan_path, task_id, &progress);
         if validated {
