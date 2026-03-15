@@ -248,8 +248,18 @@ fn render_findings_status_bar(frame: &mut Frame, area: Rect, state: &AppState) {
 fn render_patterns_list(frame: &mut Frame, area: Rect, state: &AppState, config: &Config) {
     use crate::patterns;
 
-    let patterns_dir = patterns::resolve_patterns_dir(&config.patterns_dir);
-    let all_patterns = patterns::load_patterns(&patterns_dir);
+    // Use cached patterns (populated when 'p' is pressed) to avoid
+    // loading 800+ patterns from disk on every render frame (10fps).
+    let fallback;
+    let (all_patterns, patterns_dir) = if let (Some(cached), Some(dir)) =
+        (&state.patterns_cache, &state.patterns_dir_cache)
+    {
+        (cached.as_slice(), dir.clone())
+    } else {
+        let dir = patterns::resolve_patterns_dir(&config.patterns_dir);
+        fallback = patterns::load_patterns(&dir);
+        (fallback.as_slice(), dir)
+    };
 
     if all_patterns.is_empty() {
         let empty = Paragraph::new(vec![
@@ -289,7 +299,7 @@ fn render_patterns_list(frame: &mut Frame, area: Rect, state: &AppState, config:
     // Each pattern takes 3 display lines: title, issue, solution
     let mut display_lines: Vec<Line> = Vec::new();
 
-    for pattern in &all_patterns {
+    for pattern in all_patterns {
         let severity_style = match pattern.severity.as_deref() {
             Some("HIGH") => Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
             Some("MEDIUM") => Style::default().fg(Color::Yellow),

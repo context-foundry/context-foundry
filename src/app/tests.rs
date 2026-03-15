@@ -764,8 +764,8 @@ fn startup_scroll_events_are_debounced_immediately_after_click() {
     );
 
     let (_event_tx, mut event_rx) = mpsc::unbounded_channel::<AppEvent>();
-    process_received_event(&mut state, AppEvent::Tick, &mut event_rx);
-    process_received_event(&mut state, AppEvent::Tick, &mut event_rx);
+    process_received_event(&mut state, AppEvent::Tick, &mut event_rx, &Config::default());
+    process_received_event(&mut state, AppEvent::Tick, &mut event_rx, &Config::default());
 
     handle_startup_mouse_at(
         &mut state,
@@ -906,6 +906,7 @@ fn late_planning_finished_is_logged_in_running_phase() {
             error: None,
             return_to_startup: false,
         }),
+        &Config::default(),
     );
 
     assert!(state
@@ -923,6 +924,7 @@ fn next_task_update_event_refreshes_running_queue_hint() {
         AppEvent::LoopEvent(LoopEvent::NextTaskUpdated(Some(
             "T2.4 — Wire auth callbacks".to_string(),
         ))),
+        &Config::default(),
     );
 
     assert_eq!(
@@ -1174,12 +1176,14 @@ fn running_page_up_down_scrolls_task_queue() {
     handle_event(
         &mut state,
         AppEvent::Key(event::KeyEvent::new(KeyCode::PageUp, KeyModifiers::NONE)),
+        &Config::default(),
     );
     assert_eq!(state.task_queue_scroll, 3);
 
     handle_event(
         &mut state,
         AppEvent::Key(event::KeyEvent::new(KeyCode::PageDown, KeyModifiers::NONE)),
+        &Config::default(),
     );
     assert_eq!(state.task_queue_scroll, 0);
 }
@@ -1193,6 +1197,7 @@ fn running_inject_input_accepts_paste_events() {
     handle_event(
         &mut state,
         AppEvent::Paste("fix flaky auth test".to_string()),
+        &Config::default(),
     );
 
     assert_eq!(state.inject_input.as_deref(), Some("fix flaky auth test"));
@@ -1210,6 +1215,7 @@ fn running_p_toggles_patterns_view_and_returns_to_previous() {
     handle_event(
         &mut state,
         AppEvent::Key(event::KeyEvent::new(KeyCode::Char('p'), KeyModifiers::NONE)),
+        &Config::default(),
     );
     assert!(state.show_patterns);
 
@@ -1217,6 +1223,7 @@ fn running_p_toggles_patterns_view_and_returns_to_previous() {
     handle_event(
         &mut state,
         AppEvent::Key(event::KeyEvent::new(KeyCode::Char('p'), KeyModifiers::NONE)),
+        &Config::default(),
     );
     assert!(!state.show_patterns);
 }
@@ -1231,6 +1238,7 @@ fn running_patterns_scroll_uses_natural_direction() {
     handle_event(
         &mut state,
         AppEvent::Key(event::KeyEvent::new(KeyCode::Down, KeyModifiers::NONE)),
+        &Config::default(),
     );
     assert_eq!(state.patterns_scroll, 3);
 
@@ -1238,6 +1246,7 @@ fn running_patterns_scroll_uses_natural_direction() {
     handle_event(
         &mut state,
         AppEvent::Key(event::KeyEvent::new(KeyCode::Up, KeyModifiers::NONE)),
+        &Config::default(),
     );
     assert_eq!(state.patterns_scroll, 0);
 }
@@ -1267,6 +1276,7 @@ fn running_queue_updated_event_populates_task_queue() {
     handle_event(
         &mut state,
         AppEvent::LoopEvent(LoopEvent::QueueUpdated(tasks)),
+        &Config::default(),
     );
 
     assert_eq!(state.task_queue.len(), 2);
@@ -1470,6 +1480,7 @@ fn test_planning_event_iteration_line_updates_iteration_count() {
             "[orchestrator] Iteration 2/3: proposer (Claude opus)".to_string(),
         )),
         &mut event_rx,
+        &Config::default(),
     );
     let planning = state.planning.as_ref().unwrap();
     assert_eq!(planning.orchestrator_iteration, 2);
@@ -1498,6 +1509,7 @@ fn test_planning_event_reviewing_line_updates_role() {
             "[orchestrator] Reviewing with Codex codex-5.4...".to_string(),
         )),
         &mut event_rx,
+        &Config::default(),
     );
     let planning = state.planning.as_ref().unwrap();
     assert_eq!(planning.orchestrator_role_label.as_deref(), Some("Reviewing"));
@@ -1525,6 +1537,7 @@ fn test_planning_event_review_line_updates_finding_count() {
             "[orchestrator] Review: findings (3 issues found)".to_string(),
         )),
         &mut event_rx,
+        &Config::default(),
     );
     assert_eq!(state.planning.as_ref().unwrap().orchestrator_finding_count, 3);
 }
@@ -1550,6 +1563,7 @@ fn test_planning_event_non_orchestrator_mode_ignores_orchestrator_lines() {
             "[orchestrator] Iteration 2/3: proposer (Claude opus)".to_string(),
         )),
         &mut event_rx,
+        &Config::default(),
     );
     let planning = state.planning.as_ref().unwrap();
     assert_eq!(planning.orchestrator_iteration, 0);
@@ -1653,6 +1667,7 @@ fn test_agent_output_forwarding_produces_visible_events() {
         &mut state,
         AppEvent::AgentOutput(AgentOutputEvent::Text("Hello from proposer".to_string())),
         &mut event_rx,
+        &Config::default(),
     );
     assert_eq!(state.agent_output.len(), 1);
     assert_eq!(state.agent_output[0], "Hello from proposer");
@@ -1665,6 +1680,7 @@ fn test_agent_output_forwarding_produces_visible_events() {
             input_preview: "src/main.rs".to_string(),
         }),
         &mut event_rx,
+        &Config::default(),
     );
     assert_eq!(state.agent_output.len(), 2);
     assert!(state.agent_output[1].contains("[tool] Read"));
@@ -1676,6 +1692,7 @@ fn test_agent_output_forwarding_produces_visible_events() {
             output_preview: "fn main() {}".to_string(),
         }),
         &mut event_rx,
+        &Config::default(),
     );
     assert_eq!(state.agent_output.len(), 3);
     assert!(state.agent_output[2].contains("[result]"));
@@ -1819,6 +1836,7 @@ fn test_background_log_does_not_overwrite_agent_state() {
         AppEvent::LoopEvent(LoopEvent::BackgroundLog(
             "Background pattern extraction started".to_string(),
         )),
+        &Config::default(),
     );
 
     assert!(matches!(state.current_agent, Some((AgentRole::Builder, _))));
@@ -1842,6 +1860,7 @@ fn test_background_log_tracks_pattern_count() {
         AppEvent::LoopEvent(LoopEvent::BackgroundLog(
             "Merged patterns: 3 new added to /path".to_string(),
         )),
+        &Config::default(),
     );
 
     assert_eq!(state.session_patterns_learned, 3);
@@ -1860,6 +1879,7 @@ fn test_agent_started_discovery_overwrites_agent_state() {
             AgentRole::Discovery,
             "opus".to_string(),
         )),
+        &Config::default(),
     );
 
     assert!(matches!(

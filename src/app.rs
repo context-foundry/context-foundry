@@ -139,7 +139,7 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
 
         // Process events
         match event_rx.recv().await {
-            Some(evt) => process_received_event(&mut state, evt, &mut event_rx),
+            Some(evt) => process_received_event(&mut state, evt, &mut event_rx, &config),
             None => break,
         }
 
@@ -213,11 +213,11 @@ fn spawn_terminal_event_reader(
     })
 }
 
-fn dispatch_event(state: &mut AppState, event: AppEvent) {
+fn dispatch_event(state: &mut AppState, event: AppEvent, config: &Config) {
     match state.phase {
         AppPhase::Startup => handle_startup_event(state, event),
-        AppPhase::Planning => handle_planning_event(state, event),
-        AppPhase::Running => handle_event(state, event),
+        AppPhase::Planning => handle_planning_event(state, event, config),
+        AppPhase::Running => handle_event(state, event, config),
     }
 }
 
@@ -225,9 +225,10 @@ fn process_received_event(
     state: &mut AppState,
     event: AppEvent,
     event_rx: &mut mpsc::UnboundedReceiver<AppEvent>,
+    config: &Config,
 ) {
     let should_drain = matches!(event, AppEvent::Tick);
-    dispatch_event(state, event);
+    dispatch_event(state, event, config);
 
     if !should_drain {
         return;
@@ -235,7 +236,7 @@ fn process_received_event(
 
     // Keep the UI responsive by draining any events that piled up since the last frame.
     while let Ok(evt) = event_rx.try_recv() {
-        dispatch_event(state, evt);
+        dispatch_event(state, evt, config);
         if state.should_quit {
             break;
         }
@@ -510,7 +511,7 @@ pub(super) fn seed_spec_from_brief(project_dir: &Path, description: &str) -> Res
     Ok(())
 }
 
-fn handle_planning_event(state: &mut AppState, event: AppEvent) {
+fn handle_planning_event(state: &mut AppState, event: AppEvent, config: &Config) {
     match event {
         AppEvent::AgentOutput(output) => {
             handle_agent_output(state, output);
@@ -564,7 +565,7 @@ fn handle_planning_event(state: &mut AppState, event: AppEvent) {
         AppEvent::AgentDone(success) => handle_agent_done(state, success),
         AppEvent::PlanningFinished(outcome) => apply_planning_outcome(state, outcome),
         AppEvent::OrchestratorFinished(outcome) => apply_orchestrator_outcome(state, outcome),
-        AppEvent::Key(key) => handle_planning_key(state, key),
+        AppEvent::Key(key) => handle_planning_key(state, key, config),
         AppEvent::Mouse(_) | AppEvent::Paste(_) => {}
         AppEvent::Tick => {
             state.tick_count = state.tick_count.wrapping_add(1);
@@ -581,7 +582,7 @@ fn handle_planning_event(state: &mut AppState, event: AppEvent) {
     }
 }
 
-fn handle_planning_key(state: &mut AppState, key: event::KeyEvent) {
+fn handle_planning_key(state: &mut AppState, key: event::KeyEvent, config: &Config) {
     match key.code {
         KeyCode::Char('q') | KeyCode::Esc => {
             state.should_quit = true;
@@ -597,6 +598,9 @@ fn handle_planning_key(state: &mut AppState, key: event::KeyEvent) {
         }
         KeyCode::Char('p') => {
             state.show_patterns = !state.show_patterns;
+            if state.show_patterns {
+                refresh_patterns_cache(state, config);
+            }
         }
         KeyCode::Up => {
             if state.show_findings {
@@ -629,7 +633,7 @@ fn handle_planning_key(state: &mut AppState, key: event::KeyEvent) {
     }
 }
 
-fn handle_event(state: &mut AppState, event: AppEvent) {
+fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
     match event {
         AppEvent::AgentOutput(output) => handle_agent_output(state, output),
         AppEvent::AgentDone(success) => handle_agent_done(state, success),
@@ -805,11 +809,10 @@ fn handle_event(state: &mut AppState, event: AppEvent) {
                     }
                     KeyCode::Char('p') => {
                         if state.show_patterns {
-                            // Return to whatever view was active before patterns
                             state.show_patterns = false;
                         } else {
                             state.show_patterns = true;
-                            // p toggles the patterns overlay on/off
+                            refresh_patterns_cache(state, config);
                         }
                     }
                     KeyCode::Char('i') => {
@@ -1042,6 +1045,13 @@ fn commit_inject_task(state: &mut AppState, description: &str, run_next: bool) {
 }
 
 const AGENT_OUTPUT_CAP: usize = 2000;
+
+fn refresh_patterns_cache(state: &mut AppState, config: &Config) {
+    use crate::patterns;
+    let dir = patterns::resolve_patterns_dir(&config.patterns_dir);
+    state.patterns_cache = Some(patterns::load_patterns(&dir));
+    state.patterns_dir_cache = Some(dir);
+}
 
 fn handle_agent_output(state: &mut AppState, output: AgentOutputEvent) {
     state.events_received += 1;

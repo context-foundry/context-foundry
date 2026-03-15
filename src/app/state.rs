@@ -157,6 +157,8 @@ pub struct AppState {
     pub findings_scroll: usize,
     pub last_orchestrator_outcome: Option<OrchestratorOutcome>,
     pub patterns_scroll: usize,
+    pub patterns_cache: Option<Vec<crate::patterns::Pattern>>,
+    pub patterns_dir_cache: Option<std::path::PathBuf>,
     pub last_pattern_match_mode: Option<String>, // "semantic", "keyword-only", "cooldown"
     pub session_feat_commits: usize,
     pub session_wip_commits: usize,
@@ -210,6 +212,8 @@ impl AppState {
             findings_scroll: 0,
             last_orchestrator_outcome: None,
             patterns_scroll: 0,
+            patterns_cache: None,
+            patterns_dir_cache: None,
             last_pattern_match_mode: None,
             session_feat_commits: 0,
             session_wip_commits: 0,
