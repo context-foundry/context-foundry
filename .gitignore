@@ -26,7 +26,42 @@ Thumbs.db
 .buildloop/
 .foundry/
 
-# Private extensions (uncomment to track)
-# extensions/roblox/
-# extensions/flowise/
-# extensions/extend/
+# Private extensions
+extensions/roblox/
+extensions/flowise/
+extensions/extend/
+extensions/mindcraft/
+extensions/workday/
+extensions/workday-canvas/
+extensions/workday-transcripts/
+extensions/__pycache__/
+
+# Legacy Python package
+context_foundry/
+context_foundry.egg-info/
+dist/
+__pycache__/
+venv/
+.coverage
+
+# Archive
+_archive_2025/
+
+# Test artifacts
+test_flowise_project/
+tests/
+tools/
+apps/
+
+# MCP registry tokens
+.mcpregistry_*
+
+# Context Foundry runtime state
+.context-foundry/
+
+# Misc
+cloud_test*.txt
+scout_debug.log
+INTERNAL_*.md
+foundry-overview.html
+visualizer.html
