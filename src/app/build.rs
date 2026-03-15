@@ -1165,6 +1165,8 @@ async fn run_pattern_extraction(
     if patterns_extracted.exists() {
         match patterns::extract_patterns_from_file(patterns_extracted) {
             Ok(new_patterns) if !new_patterns.is_empty() => {
+                // Capture titles before merge (merge consumes the vec)
+                let titles: Vec<String> = new_patterns.iter().map(|p| p.title.clone()).collect();
                 match patterns::merge_patterns(patterns_dir, new_patterns) {
                     Ok(added) => {
                         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BackgroundLog(format!(
@@ -1172,6 +1174,12 @@ async fn run_pattern_extraction(
                             added,
                             patterns_dir.display()
                         ))));
+                        // Send individual pattern titles for session tracking
+                        for title in &titles {
+                            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BackgroundLog(
+                                format!("Pattern learned: {}", title),
+                            )));
+                        }
                     }
                     Err(e) => {
                         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BackgroundLog(format!(

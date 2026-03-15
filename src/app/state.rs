@@ -181,6 +181,7 @@ pub struct AppState {
     pub patterns_cache: Option<Vec<crate::patterns::Pattern>>,
     pub patterns_dir_cache: Option<std::path::PathBuf>,
     pub last_pattern_match_mode: Option<String>, // "semantic", "keyword-only", "cooldown"
+    pub session_patterns: Vec<String>, // pattern titles learned this session
     pub session_feat_commits: usize,
     pub session_wip_commits: usize,
     pub session_patterns_learned: usize,
@@ -238,6 +239,7 @@ impl AppState {
             last_pattern_match_mode: None,
             session_feat_commits: 0,
             session_wip_commits: 0,
+            session_patterns: Vec::new(),
             session_patterns_learned: 0,
             session_review_high: 0,
             session_review_medium: 0,

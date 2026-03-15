@@ -743,6 +743,9 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                         }
                     }
                 }
+                if let Some(title) = msg.strip_prefix("Pattern learned: ") {
+                    state.session_patterns.push(title.to_string());
+                }
                 state.log(msg.clone());
             }
             LoopEvent::CountsUpdated(completed, total) => {

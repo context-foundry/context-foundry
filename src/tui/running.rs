@@ -447,26 +447,14 @@ pub(super) fn render_patterns_learned(
     frame: &mut Frame,
     area: Rect,
     state: &AppState,
-    config: &crate::config::Config,
+    _config: &crate::config::Config,
 ) {
-    use crate::patterns;
-
-    // Use cached patterns if available, otherwise load from disk
-    let fallback;
-    let all_patterns = if let Some(ref cached) = state.patterns_cache {
-        cached.as_slice()
-    } else {
-        let dir = patterns::resolve_patterns_dir(&config.patterns_dir);
-        fallback = patterns::load_patterns(&dir);
-        fallback.as_slice()
-    };
-
-    let title = format!(" Patterns Learned ({}) ", all_patterns.len());
+    let title = format!(" Patterns Learned ({}) ", state.session_patterns.len());
     let max_lines = area.height.saturating_sub(2) as usize;
 
-    if all_patterns.is_empty() {
+    if state.session_patterns.is_empty() {
         let empty = Paragraph::new(Span::styled(
-            " No patterns learned yet.",
+            " Patterns will appear here as tasks complete.",
             Style::default().fg(Color::DarkGray),
         ))
         .block(
@@ -484,32 +472,24 @@ pub(super) fn render_patterns_learned(
         return;
     }
 
-    // Show most recent patterns first (last in the list = most recently added)
-    let items: Vec<ListItem> = all_patterns
+    // Show most recent patterns first
+    let items: Vec<ListItem> = state
+        .session_patterns
         .iter()
         .rev()
         .take(max_lines)
-        .map(|p| {
-            let severity_color = match p.severity.as_deref() {
-                Some("HIGH") => Color::Red,
-                Some("MEDIUM") => Color::Yellow,
-                _ => Color::Gray,
-            };
-            let freq = if p.frequency > 1 {
-                format!(" ({}x)", p.frequency)
-            } else {
-                String::new()
-            };
+        .enumerate()
+        .map(|(i, title)| {
+            let num = state.session_patterns.len() - i;
             ListItem::new(Line::from(vec![
                 Span::styled(
-                    format!(" {} ", p.severity.as_deref().unwrap_or("LOW")),
-                    Style::default().fg(severity_color),
+                    format!(" #{} ", num),
+                    Style::default().fg(Color::Cyan),
                 ),
                 Span::styled(
-                    truncate_str(&p.title, area.width.saturating_sub(16) as usize),
+                    truncate_str(title, area.width.saturating_sub(8) as usize),
                     Style::default().fg(Color::White),
                 ),
-                Span::styled(freq, Style::default().fg(Color::DarkGray)),
             ]))
         })
         .collect();
@@ -519,7 +499,7 @@ pub(super) fn render_patterns_learned(
             .borders(Borders::ALL)
             .border_style(Style::default().fg(Color::DarkGray))
             .title(Span::styled(
-                title,
+                format!(" Patterns Learned ({}) ", state.session_patterns.len()),
                 Style::default()
                     .fg(Color::Cyan)
                     .add_modifier(Modifier::BOLD),
