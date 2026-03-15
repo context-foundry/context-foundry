@@ -1,0 +1,48 @@
+{
+  "name": "context-foundry",
+  "version": "3.0.0",
+  "description": "Autonomous build loop that plans, builds, reviews, and learns. npm wrapper that installs the Foundry binary.",
+  "author": "Context Foundry",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/context-foundry/context-foundry"
+  },
+  "homepage": "https://github.com/context-foundry/context-foundry",
+  "bugs": {
+    "url": "https://github.com/context-foundry/context-foundry/issues"
+  },
+  "keywords": [
+    "ai",
+    "agents",
+    "claude",
+    "automation",
+    "build-loop",
+    "foundry",
+    "context-foundry",
+    "tui"
+  ],
+  "bin": {
+    "foundry": "bin/foundry"
+  },
+  "scripts": {
+    "postinstall": "node install.js"
+  },
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ],
+  "engines": {
+    "node": ">=16"
+  },
+  "files": [
+    "bin/",
+    "install.js",
+    "README.md"
+  ]
+}

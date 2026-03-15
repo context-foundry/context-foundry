@@ -1,0 +1,19 @@
+#!/usr/bin/env node
+
+const path = require("path");
+const { execFileSync } = require("child_process");
+const os = require("os");
+
+const nativeName = os.platform() === "win32" ? "foundry-native.exe" : "foundry-native";
+const binaryPath = path.join(__dirname, nativeName);
+
+try {
+  execFileSync(binaryPath, process.argv.slice(2), { stdio: "inherit" });
+} catch (err) {
+  if (err.status !== undefined) {
+    process.exit(err.status);
+  }
+  console.error(`Failed to run foundry: ${err.message}`);
+  console.error("Try reinstalling: npm install -g context-foundry");
+  process.exit(1);
+}
