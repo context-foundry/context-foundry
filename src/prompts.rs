@@ -510,14 +510,20 @@ Append to {tasks_file} using this exact format:
 
 ## Discovery Round {round}
 
-- [ ] D{round}.1: Specific description of the issue and where it is
-- [ ] D{round}.2: Another specific issue
+- [ ] D{round}.1: Comprehensive description covering all related issues found in one area
+
+TASK GRANULARITY:
+Each task runs through a full multi-agent pipeline (scout, plan, implement, verify).
+Bundle related issues into fewer, larger tasks to maximize efficiency:
+- BAD: 5 separate tasks for 5 related bugs in the same module
+- GOOD: 1 task that fixes all related issues in that module together
+- Only split when issues are in truly independent parts of the codebase
 
 If nothing credible is found, append: "No new tasks discovered."
 
 RULES:
 - 0 tasks is correct if nothing real is found. Do not create busywork.
-- Be specific: "Fix broken import in backend/app/services/vault.py" not "fix bugs"
+- Be specific and comprehensive in each task description
 - Do NOT duplicate tasks already in {tasks_file}
 - Do NOT use markdown bold/italic in task lines -- the parser is strict
 - Do NOT modify {spec_file}, CLAUDE.md, or .buildloop/
@@ -528,7 +534,7 @@ RULES:
 
 pub fn append_tasks_prompt(description: &str, tasks_file: &str, _spec_file: &str) -> String {
     format!(
-        r#"The user wants to add work to the task queue. Your job is to understand what they mean, break it into specific implementation tasks, and append them to {tasks_file}.
+        r#"The user wants to add work to the task queue. Your job is to understand what they mean, create comprehensive tasks, and append them to {tasks_file}.
 
 USER REQUEST: {description}
 
@@ -538,27 +544,35 @@ STEP 1 — QUICK CONTEXT (spend ~10 seconds, not more):
 - Grep for relevant existing code related to the user's request
 - This is NOT a full scout — just enough to write specific task descriptions
 
-STEP 2 — BREAK INTO TASKS:
+STEP 2 — CREATE TASKS:
 - Read {tasks_file} to find the next available task group number
-- Turn the user's request into 1-5 specific, actionable tasks
-- Each task should reference real files, routes, components, or modules you found
-- If the request is already specific ("fix the login timeout"), keep it as one task
-- If the request is vague ("add an admin page"), break it into concrete steps
+- Write FEWER, LARGER tasks — not many small ones
+- Each task will be executed by a multi-agent system (Claude Code) that can read many files,
+  make multiple changes, run builds and tests, and spawn sub-agents — all in one session
+- Bundle related work into single tasks. Example:
+  BAD (3 tasks, 12 agent spawns):
+    - [ ] T6.1: Add /admin route
+    - [ ] T6.2: Create AdminDashboard component
+    - [ ] T6.3: Add admin middleware
+  GOOD (1 task, 4 agent spawns):
+    - [ ] T6.1: Add admin system with protected /admin route, user management dashboard component, and role-based auth middleware
+- A single task can touch 5-10 files — the builder handles this naturally
+- Only split into separate tasks when the work is truly independent (different features, different subsystems)
 
 STEP 3 — APPEND:
 - Append tasks to the END of {tasks_file}
 - Do NOT modify existing tasks
 
 EXACT FORMAT (parser is strict):
-- [ ] T<N>.1: Specific task description
-- [ ] T<N>.2: Another specific task
+- [ ] T<N>.1: Detailed task description covering the full scope of work
 
-Correct:   - [ ] T6.1: Add /admin route with auth middleware guard in backend/routes/admin.rs
+Correct:   - [ ] T6.1: Add admin system with protected /admin route in backend, AdminDashboard component with user table in frontend, and role-based auth middleware that checks user.role
 Incorrect: - [ ] **T6.1** - Add admin page
 
 RULES:
 - Do NOT modify existing tasks
-- Each task must be independently implementable and verifiable
+- Fewer tasks with more scope is BETTER than many small tasks
+- Each task should describe a complete, coherent unit of work
 - Reference actual project files/patterns you found, not generic descriptions
 - If {tasks_file} does not exist, create it with a Task Queue header first"#
     )
@@ -622,8 +636,17 @@ ANALYSIS TO PERFORM:
 OUTPUT:
 Update {tasks_file} with new or re-prioritized tasks. Use this format:
 
-- [ ] T<N>.1: Short description of the task
-- [ ] T<N>.2: Short description of the task
+- [ ] T<N>.1: Comprehensive description of a coherent unit of work
+
+TASK GRANULARITY — THIS IS CRITICAL:
+Each task will be executed by a multi-agent system (Claude Code) that can read many files,
+make multiple changes across the codebase, run builds and tests, and spawn sub-agents —
+all in one session. Write tasks accordingly:
+- Bundle related work into FEWER, LARGER tasks
+- A single task can touch 5-15 files across frontend, backend, and config
+- Only split into separate tasks when work is truly independent (different features)
+- BAD: 10 tasks for one feature (one per file). GOOD: 2-3 tasks for one feature (one per concern area)
+- Each task description should be detailed enough that a capable agent knows the full scope
 
 PRIORITIZATION ORDER:
 1. Broken functionality (things that fail at runtime)
@@ -637,8 +660,7 @@ RULES:
 - Do NOT implement any code — only analyze and plan
 - Do NOT remove or modify existing completed tasks (lines with [x])
 - Do NOT duplicate tasks that already exist in the plan
-- Each task must be independently implementable and verifiable
-- Be specific: "Fix broken import in backend/app/services/vault.py" not "fix bugs"
+- Be specific and comprehensive in each task description
 - Do NOT use markdown formatting (bold, italic, links) in task lines — the parser is strict
 - Treat {spec_file} and real repo state as authoritative; use {tasks_file} for continuity and de-duplication only
 - Do NOT modify {spec_file}, CLAUDE.md, or .buildloop/{patterns_block}"#
