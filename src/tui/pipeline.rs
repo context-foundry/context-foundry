@@ -31,15 +31,23 @@ pub(super) fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppStat
     let active_connected = active_role.as_ref().and_then(|role| match role {
         AgentRole::Scout => Some(0),
         AgentRole::Planner => Some(1),
-        AgentRole::Builder | AgentRole::Reviewer | AgentRole::Fixer => Some(2),
+        AgentRole::Builder => Some(2),
+        AgentRole::Reviewer | AgentRole::Fixer => Some(3),
         _ => None,
     });
+
+    // Find verify model from role_configs (Reviewer provider/model)
+    let verify_model = roles.iter()
+        .find(|(name, _, _)| name.contains("erif") || name.contains("eview") || name.contains("ix"))
+        .map(|(_, provider, model)| Config::display_provider_model(provider, model))
+        .unwrap_or_default();
 
     let connected: Vec<StageInfo> = [
         ("SCOUT", Some(0)),
         ("PLAN", Some(1)),
         ("IMPLEMENT", Some(2)),
-        ("SHIP", None), // ship it Ralph
+        ("VERIFY", None),   // uses verify_model, not from role_configs index
+        ("SHIP", None),     // ship it Ralph
     ]
     .iter()
     .enumerate()
@@ -52,8 +60,12 @@ pub(super) fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppStat
             } else {
                 String::new()
             }
-        } else {
+        } else if *label == "VERIFY" {
+            truncate_str(&verify_model, 14).to_string()
+        } else if *label == "SHIP" {
             "GitHub".to_string()
+        } else {
+            String::new()
         };
 
         let (border_color, text_style) = match active_connected {
@@ -86,7 +98,7 @@ pub(super) fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppStat
 
     let disconnected: Vec<StageInfo> = vec![
         StageInfo {
-            label: "DISCOVERY",
+            label: "SAMSARA",
             model_label: truncate_str(&discovery_model, 14).to_string(),
             border_color: if discovery_active { pipe_color } else if discovery_used { Color::Green } else { Color::DarkGray },
             text_style: if discovery_active {
