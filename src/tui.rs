@@ -207,7 +207,7 @@ fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppState, config: 
                 String::new()
             }
         } else {
-            String::new()
+            "GitHub".to_string()
         };
 
         let style = match active_index {
