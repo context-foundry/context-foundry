@@ -285,6 +285,69 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
     // subsequent tasks unless the previous commit touched many files.
     const SCOUT_RETHRESHOLD: usize = 10;
     let mut scout_has_run = false;
+
+    // ─── Bootstrap Scout ──────────────────────────────────────────
+    // If TASKS.md has no pending tasks, run a bootstrap scout that
+    // investigates the codebase and creates the initial task queue.
+    // This replaces the separate gap analysis planner.
+    {
+        let tasks = task::parse_tasks(&ctx.plan_path).unwrap_or_default();
+        if task::count_pending(&tasks) == 0 {
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+                "No pending tasks -- running bootstrap scout to create task queue".to_string(),
+            )));
+
+            let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
+            let fwd_tx = tx.clone();
+            tokio::spawn(async move {
+                while let Some(evt) = agent_rx.recv().await {
+                    let _ = fwd_tx.send(AppEvent::AgentOutput(evt));
+                }
+            });
+
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::AgentStarted(
+                AgentRole::Scout,
+                Config::display_provider_model(
+                    &ctx.config.scout_provider,
+                    &ctx.config.scout_model,
+                ),
+            )));
+
+            // Read SPEC.md for user intent if it exists
+            let user_intent = std::fs::read_to_string(&ctx.spec_path)
+                .ok()
+                .filter(|s| !s.trim().is_empty());
+
+            let prompt = prompts::bootstrap_scout_prompt(
+                user_intent.as_deref(),
+                &ctx.spec_file_name(),
+                &ctx.tasks_file_name(),
+            );
+            let scout_result = agent::run_agent(
+                &AgentRole::Scout,
+                Config::parse_provider(&ctx.config.scout_provider),
+                &ctx.config.scout_model,
+                &prompt,
+                &ctx.project_dir,
+                agent_tx,
+                &ctx.log_dir,
+                None, // full tool access for task creation (needs Write)
+                ctx.config.agent_timeout_secs,
+                Some(ctx.shutdown.clone()),
+            )
+            .await;
+
+            let _ = tx.send(AppEvent::AgentDone(
+                scout_result.as_ref().map(|r| r.success).unwrap_or(false),
+            ));
+            scout_has_run = true;
+
+            if ctx.is_stop_requested() {
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Finished));
+                return;
+            }
+        }
+    }
     let mut last_commit_file_count: usize = 0;
 
     loop {

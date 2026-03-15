@@ -1,3 +1,62 @@
+/// Bootstrap scout: runs when TASKS.md has no pending tasks.
+/// Investigates the codebase AND creates tasks in one pass.
+pub fn bootstrap_scout_prompt(
+    user_intent: Option<&str>,
+    spec_file: &str,
+    tasks_file: &str,
+) -> String {
+    let intent_block = user_intent
+        .filter(|s| !s.trim().is_empty())
+        .map(|intent| format!("\nUSER REQUEST: {intent}\n"))
+        .unwrap_or_default();
+
+    format!(
+        r#"You are the SCOUT agent. Investigate this project and create a task queue.
+{intent_block}
+YOUR JOB:
+1. Read {spec_file} and CLAUDE.md if they exist
+2. Detect the tech stack (Cargo.toml, package.json, pyproject.toml, etc.)
+3. Read existing source code to understand what's built
+4. Run build/test commands to find current state
+5. Check git history: git log --oneline -20 --name-only
+
+THEN CREATE TASKS:
+Read {tasks_file}. Append tasks to the END using this exact format:
+
+- [ ] T<N>.1: Comprehensive task description
+
+TASK GRANULARITY:
+Each task runs through a full multi-agent pipeline (scout, plan, implement, verify).
+Bundle related work into FEWER, LARGER tasks:
+- A single task can touch 5-15 files
+- Only split when work is truly independent
+- BAD: 10 tasks for one feature. GOOD: 2-3 tasks per feature.
+
+PRIORITIZATION:
+1. Broken functionality
+2. Security issues
+3. Missing core features
+4. Integration gaps
+5. Test coverage
+
+ALSO WRITE your scout report to .buildloop/scout-report.md:
+
+# Scout Report
+
+## Tech Stack
+## Relevant Files
+## Architecture Notes
+## Risks
+
+RULES:
+- Do NOT implement any code -- investigate and create tasks only
+- Do NOT read files in .buildloop/logs/
+- Do NOT use markdown bold/italic in task lines -- the parser is strict
+- If {tasks_file} does not exist, create it with a Task Queue header
+- If nothing credible to do, write "No new tasks discovered.""#
+    )
+}
+
 pub fn scout_prompt(
     task_id: &str,
     task_desc: &str,

@@ -387,38 +387,20 @@ fn handle_startup_submit(state: &mut AppState) {
                     }));
             }
         }
-        StartupScenario::EmptyProject => {
-            if text.is_empty() {
-                state.pending_transition = Some(PendingTransition::StartPlanning {
-                    user_intent: None,
-                    label: "Scan project".to_string(),
-                });
-            } else {
-                // Seed spec from user description for brand-new projects
-                let label = format!("Add: {}", truncate_str(&text, 48));
-                state.pending_transition =
-                    Some(PendingTransition::AppendTasks(AppendTasksRequest {
-                        description: text,
-                        label,
-                        seed_spec_from_description: true,
-                    }));
+        StartupScenario::EmptyProject | StartupScenario::NeedsQueue => {
+            if !text.is_empty() && matches!(scenario, StartupScenario::EmptyProject) {
+                // Save user's raw words as SPEC.md for brand-new projects
+                let spec_path = super::contract::ContractPaths::resolve(
+                    state.buildloop_dir.parent().unwrap_or(std::path::Path::new(".")),
+                ).spec_path;
+                let _ = crate::utils::atomic_write_file(
+                    &spec_path,
+                    format!("# Project Brief\n\n{}\n", text).as_bytes(),
+                );
             }
-        }
-        StartupScenario::NeedsQueue => {
-            if text.is_empty() {
-                // General scan
-                state.pending_transition = Some(PendingTransition::StartPlanning {
-                    user_intent: None,
-                    label: "Scan project".to_string(),
-                });
-            } else {
-                // Gap analysis with user focus text
-                let label = format!("Scan: {}", truncate_str(&text, 48));
-                state.pending_transition = Some(PendingTransition::StartPlanning {
-                    user_intent: Some(text),
-                    label,
-                });
-            }
+            // Go straight to build loop -- bootstrap scout will create tasks
+            // from SPEC.md (saved above) or by scanning the codebase
+            state.pending_transition = Some(PendingTransition::StartBuild);
         }
     }
 }
