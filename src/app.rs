@@ -610,7 +610,9 @@ fn handle_planning_key(state: &mut AppState, key: event::KeyEvent) {
             } else if state.show_patterns {
                 state.patterns_scroll = state.patterns_scroll.saturating_sub(3);
             } else {
-                state.scroll_offset = state.scroll_offset.saturating_add(3);
+                // Cap scroll at total content length so we can't scroll into nothingness
+                let max = state.agent_output.len().saturating_sub(1);
+                state.scroll_offset = state.scroll_offset.saturating_add(3).min(max);
             }
         }
         KeyCode::Down => {
@@ -623,7 +625,8 @@ fn handle_planning_key(state: &mut AppState, key: event::KeyEvent) {
             }
         }
         KeyCode::PageUp => {
-            state.task_queue_scroll = state.task_queue_scroll.saturating_add(3);
+            let max = state.task_queue.len().saturating_sub(1);
+            state.task_queue_scroll = state.task_queue_scroll.saturating_add(3).min(max);
         }
         KeyCode::PageDown => {
             state.task_queue_scroll = state.task_queue_scroll.saturating_sub(3);
@@ -824,7 +827,8 @@ fn handle_event(state: &mut AppState, event: AppEvent) {
                         } else if state.show_patterns {
                             state.patterns_scroll = state.patterns_scroll.saturating_sub(3);
                         } else {
-                            state.scroll_offset = state.scroll_offset.saturating_add(3);
+                            let max = state.agent_output.len().saturating_sub(1);
+                            state.scroll_offset = state.scroll_offset.saturating_add(3).min(max);
                         }
                     }
                     KeyCode::Down => {
@@ -837,7 +841,8 @@ fn handle_event(state: &mut AppState, event: AppEvent) {
                         }
                     }
                     KeyCode::PageUp => {
-                        state.task_queue_scroll = state.task_queue_scroll.saturating_add(3);
+                        let max = state.task_queue.len().saturating_sub(1);
+                        state.task_queue_scroll = state.task_queue_scroll.saturating_add(3).min(max);
                     }
                     KeyCode::PageDown => {
                         state.task_queue_scroll = state.task_queue_scroll.saturating_sub(3);

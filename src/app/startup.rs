@@ -444,19 +444,21 @@ pub(super) fn scroll_startup_content(state: &mut AppState, delta: isize) {
         | Some(StartupAction::ScanProject)
         | Some(StartupAction::DesignWithReview) => {}
         Some(StartupAction::EditSpec) => {
-            adjust_scroll_offset(&mut startup.spec_scroll_offset, delta);
+            let max = startup.spec_preview_lines.len().saturating_sub(1);
+            adjust_scroll_offset(&mut startup.spec_scroll_offset, delta, max);
         }
         Some(StartupAction::ViewTasks) | Some(StartupAction::Continue) | None => {
-            adjust_scroll_offset(&mut startup.plan_scroll_offset, delta);
+            let max = startup.plan_preview_lines.len().saturating_sub(1);
+            adjust_scroll_offset(&mut startup.plan_scroll_offset, delta, max);
         }
     }
 }
 
-pub(super) fn adjust_scroll_offset(offset: &mut usize, delta: isize) {
+pub(super) fn adjust_scroll_offset(offset: &mut usize, delta: isize, max: usize) {
     if delta < 0 {
         *offset = offset.saturating_sub(delta.unsigned_abs());
     } else {
-        *offset = offset.saturating_add(delta as usize);
+        *offset = offset.saturating_add(delta as usize).min(max);
     }
 }
 

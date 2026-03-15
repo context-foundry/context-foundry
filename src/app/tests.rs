@@ -397,7 +397,7 @@ fn startup_arrow_keys_scroll_plan_preview() {
     );
     write_file(
         &dir.join("TASKS.md"),
-        "# Plan\n\n- [ ] T1.1: One\n- [ ] T1.2: Two\n- [ ] T1.3: Three\n",
+        "# Plan\n\n- [ ] T1.1: One\n- [ ] T1.2: Two\n- [ ] T1.3: Three\n- [ ] T1.4: Four\n- [ ] T1.5: Five\n- [ ] T1.6: Six\n- [ ] T1.7: Seven\n- [ ] T1.8: Eight\n- [ ] T1.9: Nine\n- [ ] T1.10: Ten\n- [ ] T1.11: Eleven\n- [ ] T1.12: Twelve\n",
     );
 
     let mut state = AppState::new(dir.join(".buildloop"));
@@ -1142,6 +1142,16 @@ fn describe_work_outcome_returns_to_startup_for_review() {
 fn running_page_up_down_scrolls_task_queue() {
     let mut state = AppState::new(PathBuf::from(".buildloop"));
     state.phase = AppPhase::Running;
+    // Populate task queue so scroll cap has room
+    for i in 0..20 {
+        state.task_queue.push(crate::task::Task {
+            id: format!("T1.{}", i),
+            description: format!("Task {}", i),
+            line_number: i + 1,
+            completed: false,
+            pipeline_progress: None,
+        });
+    }
 
     handle_event(
         &mut state,
