@@ -2036,7 +2036,9 @@ fn render_startup_content(frame: &mut Frame, area: Rect, state: &AppState) {
         Some(StartupAction::DescribeWork) | Some(StartupAction::ScanProject) => {
             render_startup_intent(frame, area, state)
         }
-        Some(StartupAction::ViewTasks) => render_startup_tasks(frame, area, state),
+        Some(StartupAction::ViewTasks) | Some(StartupAction::Continue) => {
+            render_startup_tasks(frame, area, state)
+        }
         Some(StartupAction::EditSpec) => render_startup_spec(frame, area, state),
         _ => render_startup_plan(frame, area, state),
     }
