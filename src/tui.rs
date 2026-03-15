@@ -463,6 +463,27 @@ fn render_dashboard_stats(frame: &mut Frame, area: Rect, state: &AppState, _conf
         Span::styled(&agent_str, Style::default().fg(Color::White)),
     ]));
 
+    // Cost and context usage
+    lines.push(Line::from(vec![
+        Span::styled("  Cost     ", Style::default().fg(Color::Cyan)),
+        Span::styled(
+            format!("${:.2}", state.session_cost_usd),
+            Style::default().fg(Color::White),
+        ),
+        Span::styled("  ctx: ", Style::default().fg(Color::DarkGray)),
+        Span::styled(
+            state.agent_context_pct
+                .map(|pct| format!("{}%", pct))
+                .unwrap_or_else(|| "--".to_string()),
+            Style::default().fg(match state.agent_context_pct {
+                Some(p) if p >= 90 => Color::Red,
+                Some(p) if p >= 70 => Color::Yellow,
+                Some(_) => Color::Green,
+                None => Color::DarkGray,
+            }),
+        ),
+    ]));
+
     lines.push(Line::from(""));
 
     // Agent status

@@ -1068,6 +1068,19 @@ fn handle_agent_output(state: &mut AppState, output: AgentOutputEvent) {
                 state.agent_output.push(line.to_string());
             }
         }
+        AgentOutputEvent::Usage {
+            cost_usd,
+            input_tokens,
+            output_tokens,
+            context_window,
+        } => {
+            state.session_cost_usd += cost_usd;
+            let total_tokens = input_tokens + output_tokens;
+            if context_window > 0 {
+                let pct = ((total_tokens as f64 / context_window as f64) * 100.0).min(100.0) as u8;
+                state.agent_context_pct = Some(pct);
+            }
+        }
     }
     if state.agent_output.len() > AGENT_OUTPUT_CAP {
         let excess = state.agent_output.len() - AGENT_OUTPUT_CAP;

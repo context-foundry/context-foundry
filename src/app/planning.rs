@@ -204,6 +204,7 @@ pub(super) async fn run_plan_mode(project_dir: &Path, max_iterations: u64) -> Re
                     }
                     AgentOutputEvent::Stderr(line) => eprintln!("[stderr] {}", line),
                     AgentOutputEvent::Result(text) => println!("{}", text),
+                    AgentOutputEvent::Usage { .. } => {}
                 }
             }
         });

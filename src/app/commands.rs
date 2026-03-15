@@ -179,6 +179,9 @@ pub(super) async fn run_headless(project_dir: &Path) -> Result<()> {
             AppEvent::AgentOutput(AgentOutputEvent::Result(text)) => {
                 println!("{}", text);
             }
+            AppEvent::AgentOutput(AgentOutputEvent::Usage { cost_usd, .. }) => {
+                eprintln!("[cost] ${:.2}", cost_usd);
+            }
             AppEvent::LoopEvent(loop_event) => match loop_event {
                 LoopEvent::TaskStarted(task) => {
                     eprintln!("\n=== TASK: {} — {} ===", task.id, task.short_desc(80));

@@ -162,6 +162,8 @@ pub struct AppState {
     pub session_review_medium: usize,
     pub session_review_low: usize,
     pub session_start: DateTime<Utc>,
+    pub session_cost_usd: f64,
+    pub agent_context_pct: Option<u8>, // Context window % used by current/last agent
     pub task_start: Option<DateTime<Utc>>,
     pub task_stages_seen: Vec<AgentRole>,
     pub(super) startup_scroll_debounce_ticks: u8,
@@ -213,6 +215,8 @@ impl AppState {
             session_review_medium: 0,
             session_review_low: 0,
             session_start: Utc::now(),
+            session_cost_usd: 0.0,
+            agent_context_pct: None,
             task_start: None,
             task_stages_seen: Vec::new(),
             startup_scroll_debounce_ticks: 0,

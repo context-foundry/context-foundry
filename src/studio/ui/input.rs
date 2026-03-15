@@ -134,6 +134,9 @@ pub(in crate::studio) fn handle_event(
                             session.output.push(line.to_string());
                         }
                     }
+                    AgentOutputEvent::Usage { cost_usd, .. } => {
+                        session.output.push(format!("[cost] ${:.2}", cost_usd));
+                    }
                 }
             }
         }

@@ -48,6 +48,13 @@ pub enum AgentOutputEvent {
     Stderr(String),
     /// Final result text
     Result(String),
+    /// Token usage and cost from result event
+    Usage {
+        cost_usd: f64,
+        input_tokens: u64,
+        output_tokens: u64,
+        context_window: u64,
+    },
 }
 
 pub struct AgentResult {
@@ -855,6 +862,17 @@ fn read_provider_output(
                             if tx.send(event).is_err() {
                                 return;
                             }
+                            // Emit Usage event if a result was just parsed
+                            LAST_RESULT_USAGE.with(|cell| {
+                                if let Some(usage) = cell.take() {
+                                    let _ = tx.send(AgentOutputEvent::Usage {
+                                        cost_usd: usage.cost_usd,
+                                        input_tokens: usage.input_tokens,
+                                        output_tokens: usage.output_tokens,
+                                        context_window: usage.context_window,
+                                    });
+                                }
+                            });
                             continue;
                         }
                         ParsedClaudeLine::Ignore => continue,
@@ -1146,6 +1164,45 @@ fn parse_claude_result_event(v: &Value) -> Option<AgentOutputEvent> {
     let text =
         extract_string_by_keys(v, &["result", "message", "text", "summary"]).unwrap_or_default();
 
+    // Extract usage data and emit as a separate event via the caller's channel.
+    // We store it in a thread-local so the PTY reader can emit it after the Result event.
+    LAST_RESULT_USAGE.with(|cell| {
+        let cost = v.get("total_cost_usd").and_then(|c| c.as_f64()).unwrap_or(0.0);
+        let usage = v.get("usage");
+        let input_tokens = usage
+            .and_then(|u| u.get("cache_creation_input_tokens"))
+            .and_then(|t| t.as_u64())
+            .unwrap_or(0)
+            + usage
+                .and_then(|u| u.get("cache_read_input_tokens"))
+                .and_then(|t| t.as_u64())
+                .unwrap_or(0)
+            + usage
+                .and_then(|u| u.get("input_tokens"))
+                .and_then(|t| t.as_u64())
+                .unwrap_or(0);
+        let output_tokens = usage
+            .and_then(|u| u.get("output_tokens"))
+            .and_then(|t| t.as_u64())
+            .unwrap_or(0);
+
+        // Find context window from modelUsage (first model entry)
+        let context_window = v
+            .get("modelUsage")
+            .and_then(|mu| mu.as_object())
+            .and_then(|map| map.values().next())
+            .and_then(|model| model.get("contextWindow"))
+            .and_then(|cw| cw.as_u64())
+            .unwrap_or(200_000);
+
+        cell.set(Some(ResultUsage {
+            cost_usd: cost,
+            input_tokens,
+            output_tokens,
+            context_window,
+        }));
+    });
+
     if text.trim().is_empty() {
         return if is_error {
             Some(AgentOutputEvent::Stderr(format!(
@@ -1166,6 +1223,18 @@ fn parse_claude_result_event(v: &Value) -> Option<AgentOutputEvent> {
     } else {
         AgentOutputEvent::Result(text)
     })
+}
+
+#[derive(Clone)]
+struct ResultUsage {
+    cost_usd: f64,
+    input_tokens: u64,
+    output_tokens: u64,
+    context_window: u64,
+}
+
+thread_local! {
+    static LAST_RESULT_USAGE: std::cell::Cell<Option<ResultUsage>> = const { std::cell::Cell::new(None) };
 }
 
 fn parse_claude_system_event(v: &Value) -> Option<AgentOutputEvent> {
