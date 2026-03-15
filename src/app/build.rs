@@ -336,7 +336,7 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
 
             // mark_done is now called inside process_task, right before
             // commit_and_push, so the commit includes both the [x] mark
-            // and the [PBRF] indicator in one atomic operation.
+            // and the [SPIV] indicator in one atomic operation.
 
             // Track when H-prefixed (human-injected) tasks complete for discovery cooldown
             if task_info.id.starts_with('H') {
@@ -848,7 +848,7 @@ async fn process_task(
             "Stop requested after BUILDER for {} — skipping review",
             task_id
         ))));
-        // Progress indicator already written at [PB..] above; commit preserves it.
+        // Progress indicator already written at [SPI.] above; commit preserves it.
         let _ = git::commit_and_push(&ctx.project_dir, &ctx.config, task_id, task_desc, true);
         return (false, last_rate_limited);
     }

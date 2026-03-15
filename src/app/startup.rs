@@ -571,7 +571,7 @@ pub(super) fn enter_home_surface(
 }
 
 /// Populate `state.task_history` from `pipeline_progress` fields parsed from TASKS.md.
-/// This restores the pipeline indicators (PBRF) across session restarts.
+/// This restores the pipeline indicators (SPIV / legacy PBRF) across session restarts.
 fn populate_task_history_from_progress(project_dir: &Path, state: &mut AppState) {
     let plan_path = ContractPaths::resolve(project_dir).tasks_path;
     let tasks = match task::parse_tasks(&plan_path) {

@@ -15,7 +15,7 @@ static RE_DISCOVERY_HEADER: LazyLock<Regex> =
 static RE_DISCOVERY_TASK_ID: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"D(\d+)\.\d+").unwrap());
 
-/// Matches a pipeline progress indicator like `[PB..]` or `[PBRF!]` at the end of a task line.
+/// Matches a pipeline progress indicator like `[SPIV]` or `[SPIV!]` (and legacy `[PBRF]`) at the end of a task line.
 static RE_PIPELINE_PROGRESS: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"\s+\[([A-Z!.\-]{4,6})\]\s*$").unwrap());
 
