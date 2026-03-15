@@ -1083,7 +1083,11 @@ fn render_patterns_list(frame: &mut Frame, area: Rect, state: &AppState, config:
         .take(max_lines)
         .collect();
 
-    let title = format!(" Learned Patterns ({}) ", all_patterns.len());
+    let title = format!(
+        " Learned Patterns ({}) | {} ",
+        all_patterns.len(),
+        patterns_dir.display()
+    );
 
     let paragraph = Paragraph::new(visible).block(
         Block::default()

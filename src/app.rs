@@ -860,10 +860,22 @@ fn handle_event(state: &mut AppState, event: AppEvent) {
             use crossterm::event::{MouseButton, MouseEventKind};
             match mouse.kind {
                 MouseEventKind::ScrollUp => {
-                    state.task_queue_scroll = state.task_queue_scroll.saturating_add(3);
+                    if state.show_patterns {
+                        state.patterns_scroll = state.patterns_scroll.saturating_sub(3);
+                    } else if state.show_findings {
+                        state.findings_scroll = state.findings_scroll.saturating_sub(3);
+                    } else {
+                        state.task_queue_scroll = state.task_queue_scroll.saturating_add(3);
+                    }
                 }
                 MouseEventKind::ScrollDown => {
-                    state.task_queue_scroll = state.task_queue_scroll.saturating_sub(3);
+                    if state.show_patterns {
+                        state.patterns_scroll = state.patterns_scroll.saturating_add(3);
+                    } else if state.show_findings {
+                        state.findings_scroll = state.findings_scroll.saturating_add(3);
+                    } else {
+                        state.task_queue_scroll = state.task_queue_scroll.saturating_sub(3);
+                    }
                 }
                 MouseEventKind::Down(MouseButton::Left) => {
                     // Clicks in running mode are no-ops for now
