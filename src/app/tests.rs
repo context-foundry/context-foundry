@@ -281,11 +281,8 @@ fn startup_empty_project_describe_work_seeds_spec_before_task_creation() {
         None,
     ));
 
-    // EditTasks is at index 0 (default). Press 'a' to enter AI add mode.
-    handle_startup_key(
-        &mut state,
-        event::KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE),
-    );
+    // EditTasks at index 0 auto-enters intent mode for EmptyProject.
+    assert!(state.startup.as_ref().unwrap().entering_intent);
 
     for c in "build a notes app".chars() {
         handle_startup_key(

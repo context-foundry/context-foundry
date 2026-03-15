@@ -47,7 +47,14 @@ impl StartupState {
             has_spec: contract_paths.spec_path.exists(),
             selected_action: 0,
             actions,
-            entering_intent: startup_action_uses_intent(primary),
+            // For empty/new projects, EditTasks auto-opens AI intent input
+            // since there's nothing to view in the empty file.
+            entering_intent: startup_action_uses_intent(primary)
+                || (primary == StartupAction::EditTasks
+                    && matches!(
+                        scenario,
+                        StartupScenario::EmptyProject | StartupScenario::NeedsQueue
+                    )),
             intent_input: String::new(),
             status_message,
             git_context: crate::git::gather_git_context(project_dir),
@@ -432,7 +439,13 @@ pub(super) fn set_startup_selected_action(state: &mut AppState, index: usize) {
         return;
     }
     startup.selected_action = index;
-    startup.entering_intent = startup_action_uses_intent(startup.actions[index]);
+    let action = startup.actions[index];
+    startup.entering_intent = startup_action_uses_intent(action)
+        || (action == StartupAction::EditTasks
+            && matches!(
+                startup.scenario,
+                StartupScenario::EmptyProject | StartupScenario::NeedsQueue
+            ));
     startup.status_message = None;
 }
 

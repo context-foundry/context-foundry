@@ -565,15 +565,26 @@ fn render_startup_intent(frame: &mut Frame, area: Rect, state: &AppState) {
                 "Press Enter to add and start.".to_string(),
             ),
         },
-        Some(StartupAction::EditTasks) => (
-            " Add with AI ".to_string(),
-            "What should Foundry work on next?".to_string(),
-            format!(
-                "Foundry scans your project, understands your intent, and creates comprehensive tasks in {}.",
-                startup.tasks_file_name
+        Some(StartupAction::EditTasks) => match startup.scenario {
+            StartupScenario::EmptyProject | StartupScenario::NeedsQueue => (
+                " What do you want to build? ".to_string(),
+                "Describe what you want Foundry to build:".to_string(),
+                format!(
+                    "Foundry scans your project, understands your intent, and creates comprehensive tasks in {}.",
+                    startup.tasks_file_name
+                ),
+                "Press Enter to start.".to_string(),
             ),
-            "Press Enter to add. Press Esc to go back to viewing tasks.".to_string(),
-        ),
+            _ => (
+                " Add with AI ".to_string(),
+                "What should Foundry work on next?".to_string(),
+                format!(
+                    "Foundry scans your project, understands your intent, and creates comprehensive tasks in {}.",
+                    startup.tasks_file_name
+                ),
+                "Press Enter to add. Press Esc to go back to viewing tasks.".to_string(),
+            ),
+        },
         Some(StartupAction::ScanProject) => (
             " Scan Project ".to_string(),
             "Optional: focus the scan on a bug, area, or goal:".to_string(),
