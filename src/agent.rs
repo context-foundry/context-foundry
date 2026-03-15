@@ -85,17 +85,58 @@ impl ModelProvider {
         }
     }
 
-    /// Returns the executable name for the current platform.
-    /// On Windows, npm-installed CLIs need the `.cmd` extension.
-    pub fn binary(self) -> &'static str {
-        match self {
-            ModelProvider::Claude => {
-                if cfg!(target_os = "windows") { "claude.cmd" } else { "claude" }
-            }
-            ModelProvider::Codex => {
-                if cfg!(target_os = "windows") { "codex.cmd" } else { "codex" }
+    /// Resolve the node CLI entry-point for this provider on Windows.
+    /// Returns `Some(path)` if found, `None` otherwise.
+    #[cfg(target_os = "windows")]
+    fn resolve_node_cli(self) -> Option<std::path::PathBuf> {
+        let cmd_name = match self {
+            ModelProvider::Claude => "claude.cmd",
+            ModelProvider::Codex => "codex.cmd",
+        };
+        let output = std::process::Command::new("where")
+            .arg(cmd_name)
+            .output()
+            .ok()?;
+        if !output.status.success() {
+            return None;
+        }
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let cmd_path = std::path::PathBuf::from(stdout.lines().next()?.trim());
+        let dir = cmd_path.parent()?;
+        let module = match self {
+            ModelProvider::Claude => "node_modules/@anthropic-ai/claude-code/cli.js",
+            ModelProvider::Codex => "node_modules/@anthropic-ai/codex/cli.js",
+        };
+        let cli_js = dir.join(module);
+        if cli_js.exists() { Some(cli_js) } else { None }
+    }
+
+    /// Builds a `CommandBuilder` for this provider (for PTY execution).
+    /// On Windows, invokes `node <cli.js>` directly to avoid portable_pty's
+    /// broken quoting of paths-with-spaces and cmd.exe arg mangling.
+    pub fn command_builder(self) -> CommandBuilder {
+        #[cfg(target_os = "windows")]
+        {
+            if let Some(cli_js) = self.resolve_node_cli() {
+                let mut cmd = CommandBuilder::new("node");
+                cmd.arg(cli_js.to_string_lossy().to_string());
+                return cmd;
             }
         }
+        CommandBuilder::new(self.slug())
+    }
+
+    /// Builds a `std::process::Command` for this provider (for non-PTY execution).
+    pub fn std_command(self) -> std::process::Command {
+        #[cfg(target_os = "windows")]
+        {
+            if let Some(cli_js) = self.resolve_node_cli() {
+                let mut cmd = std::process::Command::new("node");
+                cmd.arg(cli_js);
+                return cmd;
+            }
+        }
+        std::process::Command::new(self.slug())
     }
 }
 
@@ -276,7 +317,7 @@ pub async fn run_provider_session(options: ProviderRunOptions<'_>) -> Result<Age
 
     let mut cmd = match options.provider {
         ModelProvider::Claude => {
-            let mut cmd = CommandBuilder::new(ModelProvider::Claude.binary());
+            let mut cmd = ModelProvider::Claude.command_builder();
             cmd.arg("-p");
             cmd.arg(options.prompt);
             if !options.model.trim().is_empty() {
@@ -291,7 +332,7 @@ pub async fn run_provider_session(options: ProviderRunOptions<'_>) -> Result<Age
             cmd
         }
         ModelProvider::Codex => {
-            let mut cmd = CommandBuilder::new(ModelProvider::Codex.binary());
+            let mut cmd = ModelProvider::Codex.command_builder();
             cmd.arg("exec");
             cmd.arg("--json");
             if !options.model.trim().is_empty() {
@@ -558,7 +599,7 @@ pub async fn run_agent(
     std::fs::create_dir_all(log_dir)?;
 
     // Build command for PTY execution
-    let mut cmd = CommandBuilder::new(ModelProvider::Claude.binary());
+    let mut cmd = ModelProvider::Claude.command_builder();
     cmd.arg("-p");
     cmd.arg(prompt);
     if !model.trim().is_empty() {

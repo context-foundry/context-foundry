@@ -38,7 +38,7 @@ pub(super) fn probe_claude_readiness(project_dir: &Path, model: &str) -> Provide
         return ProviderReadiness::missing("claude CLI not found in PATH");
     }
 
-    let output = Command::new(ModelProvider::Claude.binary()).arg("--help").output();
+    let output = ModelProvider::Claude.std_command().arg("--help").output();
     let output = match output {
         Ok(output) => output,
         Err(err) => {
@@ -219,7 +219,7 @@ fn assess_codex_exec_help(help_text: &str) -> ProviderReadiness {
 }
 
 fn check_claude_auth() -> Result<AuthCheck> {
-    let output = Command::new(ModelProvider::Claude.binary())
+    let output = ModelProvider::Claude.std_command()
         .args(["auth", "status", "--json"])
         .output()
         .context("failed to run `claude auth status --json`")?;
@@ -288,7 +288,7 @@ fn check_codex_auth() -> Result<AuthCheck> {
 
 fn run_claude_live_probe(model: &str) -> Result<()> {
     let probe_dir = make_probe_dir("claude")?;
-    let mut cmd = Command::new(ModelProvider::Claude.binary());
+    let mut cmd = ModelProvider::Claude.std_command();
     cmd.current_dir(&probe_dir);
     cmd.arg("-p");
     cmd.arg("Reply with exactly OK and no other text.");
