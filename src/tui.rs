@@ -2214,7 +2214,7 @@ fn render_startup_intent(frame: &mut Frame, area: Rect, state: &AppState) {
                 " Describe Next Work ".to_string(),
                 "What do you want Foundry to do with this project?".to_string(),
                 format!(
-                    "Foundry will turn your description into task(s) in {} and start building. This does not scan the repo.",
+                    "Foundry scans your project, breaks your request into specific tasks, and appends them to {}.",
                     startup.tasks_file_name
                 ),
                 "Press Enter to create tasks and start.".to_string(),
@@ -2223,7 +2223,7 @@ fn render_startup_intent(frame: &mut Frame, area: Rect, state: &AppState) {
                 " Describe More Work ".to_string(),
                 "What else should be added to the queue?".to_string(),
                 format!(
-                    "Foundry will append task(s) to {} and then resume the build loop. Existing tasks stay in order.",
+                    "Foundry scans your project, breaks your request into specific tasks, and appends them to {}.",
                     startup.tasks_file_name
                 ),
                 "Press Enter to add tasks and start.".to_string(),
@@ -2232,7 +2232,7 @@ fn render_startup_intent(frame: &mut Frame, area: Rect, state: &AppState) {
                 " Describe Next Work ".to_string(),
                 "What should happen next?".to_string(),
                 format!(
-                    "Foundry will turn your description into task(s) in {} and start building. This does not scan the repo.",
+                    "Foundry scans your project, breaks your request into specific tasks, and appends them to {}.",
                     startup.tasks_file_name
                 ),
                 "Press Enter to create tasks and start.".to_string(),

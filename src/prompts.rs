@@ -528,22 +528,38 @@ RULES:
 
 pub fn append_tasks_prompt(description: &str, tasks_file: &str, _spec_file: &str) -> String {
     format!(
-        r#"Break this request into implementation tasks and append them to {tasks_file}.
+        r#"The user wants to add work to the task queue. Your job is to understand what they mean, break it into specific implementation tasks, and append them to {tasks_file}.
 
 USER REQUEST: {description}
 
-Read {tasks_file} to find the next available task group number. Append to the END.
+STEP 1 — QUICK CONTEXT (spend ~10 seconds, not more):
+- Read CLAUDE.md if it exists (project conventions)
+- Glob for project structure files (package.json, Cargo.toml, pyproject.toml, etc.)
+- Grep for relevant existing code related to the user's request
+- This is NOT a full scout — just enough to write specific task descriptions
+
+STEP 2 — BREAK INTO TASKS:
+- Read {tasks_file} to find the next available task group number
+- Turn the user's request into 1-5 specific, actionable tasks
+- Each task should reference real files, routes, components, or modules you found
+- If the request is already specific ("fix the login timeout"), keep it as one task
+- If the request is vague ("add an admin page"), break it into concrete steps
+
+STEP 3 — APPEND:
+- Append tasks to the END of {tasks_file}
+- Do NOT modify existing tasks
 
 EXACT FORMAT (parser is strict):
 - [ ] T<N>.1: Specific task description
 - [ ] T<N>.2: Another specific task
 
-NO markdown bold, NO dashes instead of colons, NO missing checkbox prefix.
+Correct:   - [ ] T6.1: Add /admin route with auth middleware guard in backend/routes/admin.rs
+Incorrect: - [ ] **T6.1** - Add admin page
 
 RULES:
 - Do NOT modify existing tasks
-- Do NOT read files other than {tasks_file}
-- Each task must be independently implementable
+- Each task must be independently implementable and verifiable
+- Reference actual project files/patterns you found, not generic descriptions
 - If {tasks_file} does not exist, create it with a Task Queue header first"#
     )
 }

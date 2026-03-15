@@ -72,12 +72,11 @@ pub(super) async fn run_append_tasks(
 
     let prompt =
         prompts::append_tasks_prompt(&description, &ctx.tasks_file_name(), &ctx.spec_file_name());
-    // Force Claude provider: Codex's --full-auto mode has no tool restriction
-    // support, so allowed_tools would be silently ignored. Claude's --tools flag
-    // enforces the Read/Write-only constraint that keeps this agent lightweight.
-    // Use Haiku -- append-tasks is task decomposition + text formatting.
+    // Use Sonnet with repo-reading tools for light expansion.
+    // The agent does a quick scan of the project structure to write
+    // specific, context-aware task descriptions.
     let provider = agent::ModelProvider::Claude;
-    let model = "haiku";
+    let model = "sonnet";
     let result = agent::run_agent(
         &AgentRole::Planner,
         provider,
@@ -86,7 +85,7 @@ pub(super) async fn run_append_tasks(
         &ctx.project_dir,
         agent_tx,
         &ctx.log_dir,
-        Some(&["Read", "Write"]),
+        Some(&["Read", "Write", "Glob", "Grep"]),
         ctx.config.agent_timeout_secs,
         Some(ctx.shutdown.clone()),
     )
