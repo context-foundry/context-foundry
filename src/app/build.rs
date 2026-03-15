@@ -248,6 +248,21 @@ async fn adaptive_sleep(config: &Config, rate_limited: bool, full_secs: u64) {
     }
 }
 
+/// Count files changed in the most recent git commit.
+fn count_last_commit_files(project_dir: &std::path::Path) -> usize {
+    std::process::Command::new("git")
+        .args(["diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD"])
+        .current_dir(project_dir)
+        .output()
+        .map(|out| {
+            String::from_utf8_lossy(&out.stdout)
+                .lines()
+                .filter(|l| !l.is_empty())
+                .count()
+        })
+        .unwrap_or(0)
+}
+
 pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEvent>) {
     ctx.ensure_runtime_dirs();
 
@@ -262,6 +277,13 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
 
     // ─── Planner Look-Ahead State ────────────────────────────────
     let mut lookahead: Option<LookaheadHandle> = None;
+
+    // ─── Scout State ──────────────────────────────────────────────
+    // Scout runs once at session start, then reuses the report for
+    // subsequent tasks unless the previous commit touched many files.
+    const SCOUT_RETHRESHOLD: usize = 10;
+    let mut scout_has_run = false;
+    let mut last_commit_file_count: usize = 0;
 
     loop {
         let tasks = match task::parse_tasks(&ctx.plan_path) {
@@ -323,7 +345,10 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
             // with --overwrite can delete everything in the project root.
             let state_backup = backup_state_files(&ctx);
 
-            let (success, task_rate_limited) = process_task(&task_info, &ctx, &tx).await;
+            // Skip scout if it already ran this session AND the last commit was small
+            let skip_scout = scout_has_run && last_commit_file_count < SCOUT_RETHRESHOLD;
+            let (success, task_rate_limited) = process_task(&task_info, &ctx, &tx, skip_scout).await;
+            scout_has_run = true;
 
             // Restore state files if the builder deleted or truncated them
             let restored = restore_state_files(&ctx, &state_backup, &tx);
@@ -348,6 +373,9 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                 task_info.id.clone(),
                 success,
             )));
+
+            // Count files in last commit for scout re-run threshold
+            last_commit_file_count = count_last_commit_files(&ctx.project_dir);
 
             if let Ok(tasks) = task::parse_tasks(&ctx.plan_path) {
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::CountsUpdated(
@@ -583,6 +611,7 @@ async fn process_task(
     task_info: &Task,
     ctx: &RunContext,
     tx: &mpsc::UnboundedSender<AppEvent>,
+    skip_scout: bool,
 ) -> (bool, bool) {
     let task_id = &task_info.id;
     let task_desc = &task_info.description;
@@ -594,7 +623,9 @@ async fn process_task(
 
     let scout_report = ctx.buildloop_dir.join("scout-report.md");
     let build_claims = ctx.buildloop_dir.join("build-claims.md");
-    let _ = std::fs::remove_file(&scout_report);
+    if !skip_scout {
+        let _ = std::fs::remove_file(&scout_report);
+    }
     let _ = std::fs::remove_file(&build_claims);
     let _ = std::fs::remove_file(&ctx.current_plan);
     let _ = std::fs::remove_file(&ctx.review_report);
@@ -642,8 +673,12 @@ async fn process_task(
     #[allow(unused_assignments)]
     let mut last_rate_limited = false;
 
-    // ─── Run Scout ──────────────────────────────────────────
-    {
+    // ─── Run Scout (skip if recent report exists and codebase hasn't changed much) ───
+    if skip_scout {
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+            "Reusing scout report from previous task".to_string(),
+        )));
+    } else {
         let scout_tools: &[&str] = &["Read", "Glob", "Grep", "Bash"];
 
         let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
@@ -709,7 +744,7 @@ async fn process_task(
     }
 
     // Helper: progress indicator characters.
-    let scout_char = "S";
+    let scout_char = if skip_scout { "-" } else { "S" };
     let planner_char = if skip_planner { "-" } else { "P" };
 
     if skip_planner {
