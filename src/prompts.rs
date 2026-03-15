@@ -268,12 +268,41 @@ INSTRUCTIONS:
 2. Read CLAUDE.md for project conventions
 3. Install dependencies, then implement each file operation in order
 4. Run the verification commands from the plan. Fix failures before finishing.
+5. AFTER all implementation and verification, write .buildloop/build-claims.md
+
+CLAIMS FILE (.buildloop/build-claims.md):
+When you are done, write a machine-readable summary of what you built.
+An auditor agent with a FRESH context window will read ONLY this file
+and the code to verify your work. Be precise and honest.
+
+```
+# Build Claims -- {task_id}
+
+## Files Changed
+- [CREATE|MODIFY] path/to/file.ext -- one-line description of change
+
+## Verification Results
+- Build: PASS|FAIL (exact command run)
+- Tests: PASS|FAIL|SKIPPED (exact command run)
+- Lint: PASS|FAIL|SKIPPED (exact command run)
+
+## Claims
+- [ ] Claim 1: specific verifiable statement about what was built
+- [ ] Claim 2: another specific verifiable statement
+- [ ] ...
+
+## Gaps and Assumptions
+- anything you are NOT confident about
+- edge cases you did not test
+- decisions you made that deviate from the plan
+```
 
 RULES:
 - Follow the plan precisely -- do not deviate or add unrequested features
-- Do NOT modify {spec_file}, CLAUDE.md, {tasks_file}, or .buildloop/
+- Do NOT modify {spec_file}, CLAUDE.md, or {tasks_file}
 - Do NOT read files in .buildloop/logs/
-- If a verification step fails, fix it before moving on"#
+- If a verification step fails, fix it before moving on
+- The claims file is your handoff to the auditor -- be specific, not vague"#
     )
 }
 
@@ -311,11 +340,17 @@ SUBAGENT STRATEGY:
 - Use only 1 subagent for build commands, test execution, and verification steps (serialized backpressure)
 - The reasoning agent (you) stays focused on logic and decision-making; delegate I/O to subagents
 
+8. AFTER all implementation and verification, write .buildloop/build-claims.md with:
+   - Files Changed (CREATE/MODIFY + path + description)
+   - Verification Results (Build/Tests/Lint: PASS/FAIL + command)
+   - Claims (checkboxes: specific verifiable statements about what was built)
+   - Gaps and Assumptions (anything you are not confident about)
+
 IMPORTANT:
 - Implement exactly what the task description says — do not add unrequested features
-- Do NOT modify {spec_file}, CLAUDE.md, {tasks_file}, or .buildloop/
+- Do NOT modify {spec_file}, CLAUDE.md, or {tasks_file}
 - If a verification step fails, fix the issue before moving on
-- Do not add comments, docstrings, or type annotations beyond what is needed"#
+- The claims file is your handoff to an auditor agent -- be specific, not vague"#
     )
 }
 
@@ -361,11 +396,9 @@ pub fn reviewer_prompt(
     };
 
     format!(
-        r#"Audit and validate these claims. Find the gaps. Fix what you find.
+        r#"Audit and validate these claims. Find the gaps.
 
 {pass_preamble}
-
-A builder agent claims it implemented the following task:
 
 Task ID: {task_id}
 Task Description: {task_desc}
@@ -373,20 +406,18 @@ Task Description: {task_desc}
 {changes_section}
 
 YOUR JOB (in order):
-1. Read .buildloop/current-plan.md to see what was supposed to be built
-2. Read the actual changed files to see what was actually built
-3. Run the build and tests to see if it actually works
-4. Find every gap between what was claimed and what exists
-5. FIX every HIGH and MEDIUM issue you find — you have full write access
-6. After fixing, re-run the build and tests to confirm your fixes work
-7. Write your final report AFTER all fixes are applied
+1. Read .buildloop/build-claims.md -- this is the builder's handoff. It lists what was
+   built, what was verified, and what the builder is NOT confident about.
+2. For EVERY claim in the Claims section, verify it against the actual code.
+   Read the files, check the logic, confirm the claim is true.
+3. Run the build and tests yourself -- do not trust the builder's reported results.
+4. Check the Gaps and Assumptions section -- these are where bugs hide.
+5. FIX every HIGH and MEDIUM issue you find -- you have full write access.
+6. After fixing, re-run checks to confirm your fixes work.
+7. Write your final report AFTER all fixes are applied.
 
-VERIFY THESE CLAIMS:
-- Does every file mentioned in the plan actually exist with the correct content?
-- Does the code compile/parse without errors?
-- Do the tests pass?
-- Does the implementation match the plan, or did the builder deviate?
-- Are there logic errors, missing error handling, or security issues?
+IF .buildloop/build-claims.md IS MISSING:
+Fall back to reading .buildloop/current-plan.md and the changed files directly.
 
 RUN THESE CHECKS (skip with reason if tool unavailable):
 - Rust: cargo check && cargo clippy && cargo test
@@ -395,14 +426,13 @@ RUN THESE CHECKS (skip with reason if tool unavailable):
 - Docker: docker compose config (syntax only, do NOT start services)
 
 WHEN YOU FIND ISSUES:
-- Fix them immediately — do not just report them
+- Fix them immediately -- do not just report them
 - Be surgical: fix only the issue, do not refactor surrounding code
 - After fixing, re-run the relevant check to confirm it passes
-- In your report, list what you found AND what you fixed
 
 WRITE YOUR FINAL REPORT to .buildloop/review-report.md:
 
-# Review Report — {task_id}
+# Review Report -- {task_id}
 
 ## Verdict: PASS or FAIL
 
@@ -410,6 +440,11 @@ WRITE YOUR FINAL REPORT to .buildloop/review-report.md:
 - Build: PASS/FAIL/SKIPPED (reason)
 - Tests: PASS/FAIL/SKIPPED (reason)
 - Lint: PASS/FAIL/SKIPPED (reason)
+
+## Claims Verified
+For each claim from build-claims.md:
+- [x] Claim text -- VERIFIED (evidence)
+- [ ] Claim text -- FAILED (what is actually wrong)
 
 ## Findings
 
@@ -423,9 +458,6 @@ WRITE YOUR FINAL REPORT to .buildloop/review-report.md:
   ],
   "low": [
     {{"file": "path/to/file", "line": 5, "issue": "Description", "category": "style|hardcoded|inconsistency"}}
-  ],
-  "validated": [
-    "Specific claim that was verified as correct"
   ]
 }}
 ```
@@ -440,7 +472,7 @@ RULES:
 - Every finding MUST cite file, line number, and concrete evidence
 - LOW findings: report only, do not fix
 - HIGH/MEDIUM findings: fix, then verify the fix works
-- Be surgical — fix the issue, not the style{patterns_block}"#
+- Be surgical -- fix the issue, not the style{patterns_block}"#
     )
 }
 

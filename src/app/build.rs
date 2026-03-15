@@ -593,7 +593,9 @@ async fn process_task(
     )));
 
     let scout_report = ctx.buildloop_dir.join("scout-report.md");
+    let build_claims = ctx.buildloop_dir.join("build-claims.md");
     let _ = std::fs::remove_file(&scout_report);
+    let _ = std::fs::remove_file(&build_claims);
     let _ = std::fs::remove_file(&ctx.current_plan);
     let _ = std::fs::remove_file(&ctx.review_report);
     let _ = std::fs::remove_file(&patterns_extracted);
