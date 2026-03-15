@@ -26,7 +26,7 @@ impl std::fmt::Display for AgentRole {
         match self {
             AgentRole::Planner => write!(f, "PLANNER"),
             AgentRole::Builder => write!(f, "BUILDER"),
-            AgentRole::Reviewer => write!(f, "REVIEWER"),
+            AgentRole::Reviewer => write!(f, "FIX"),
             AgentRole::Fixer => write!(f, "FIXER"),
             AgentRole::Discovery => write!(f, "DISCOVERY"),
         }

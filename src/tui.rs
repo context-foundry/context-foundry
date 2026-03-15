@@ -185,7 +185,7 @@ fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppState, config: 
     let stages: Vec<StageInfo> = [
         ("PLANNER", Some(0)),
         ("BUILDER", Some(1)),
-        ("REVIEWER", Some(2)),
+        ("FIX", Some(2)),
         ("COMMIT", None),
     ]
     .iter()

@@ -241,7 +241,7 @@ impl Config {
         vec![
             ("Planner", &self.planner_provider, &self.planner_model),
             ("Builder", &self.builder_provider, &self.builder_model),
-            ("Reviewer", &self.reviewer_provider, &self.reviewer_model),
+            ("Fix", &self.reviewer_provider, &self.reviewer_model),
             ("Discovery", &self.discovery_provider, &self.discovery_model),
             ("Patterns", "claude", &self.pattern_extraction_model),
             ("Add Tasks", "claude", "haiku"),

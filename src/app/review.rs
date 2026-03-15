@@ -101,7 +101,7 @@ pub(super) async fn run_review_loop(
     let reviewer_succeeded = review_result.as_ref().map(|r| r.success).unwrap_or(false);
     if !reviewer_succeeded {
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
-            "Reviewer agent failed — treating as review failure".to_string(),
+            "Fix agent failed — treating as review failure".to_string(),
         )));
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::TaskReviewResult {
             task_id: task_id.to_string(),
@@ -119,7 +119,7 @@ pub(super) async fn run_review_loop(
 
     if reviewer_made_fixes {
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
-            "Reviewer applied fixes during audit".to_string(),
+            "Fix agent applied fixes during audit".to_string(),
         )));
     }
 
@@ -131,7 +131,7 @@ pub(super) async fn run_review_loop(
 
     if !report_has_content {
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
-            "Reviewer succeeded but review-report.md is missing or empty — treating as failure".to_string(),
+            "Fix agent succeeded but review-report.md is missing or empty — treating as failure".to_string(),
         )));
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::TaskReviewResult {
             task_id: task_id.to_string(),
