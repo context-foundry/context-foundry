@@ -395,7 +395,7 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                     task::count_completed(&tasks),
                 );
 
-                match git::create_pr(&ctx.project_dir, &pr_title, &pr_body) {
+                match git::create_pr(&ctx.project_dir, &ctx.config, &pr_title, &pr_body) {
                     Ok(Some(pr_num)) => {
                         let _ = git::annotate_tasks_with_pr(&ctx.plan_path, pr_num);
                         // Commit the annotation

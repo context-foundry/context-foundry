@@ -201,27 +201,83 @@ fn maybe_push_commit(project_dir: &Path, remote: Option<&str>) -> Result<()> {
 
 /// Create a feature branch, push it, and open a PR via `gh`.
 /// Returns the PR number on success.
-pub fn create_pr(project_dir: &Path, title: &str, body: &str) -> Result<Option<u64>> {
+///
+/// If the current branch is the repo's default branch (e.g. `main`), a new
+/// feature branch `foundry/hil-<epoch>` is created so the PR targets default
+/// instead of trying main-to-main (which GitHub rejects).
+pub fn create_pr(
+    project_dir: &Path,
+    config: &Config,
+    title: &str,
+    body: &str,
+) -> Result<Option<u64>> {
     // Determine current branch
     let branch_out = Command::new("git")
         .args(["branch", "--show-current"])
         .current_dir(project_dir)
         .output()?;
-    let branch = String::from_utf8_lossy(&branch_out.stdout).trim().to_string();
+    let current_branch = String::from_utf8_lossy(&branch_out.stdout)
+        .trim()
+        .to_string();
 
-    // Push current branch
+    // Detect the default branch (usually "main" or "master")
+    let default_branch = detect_default_branch(project_dir);
+
+    let push_branch = if current_branch == default_branch {
+        // Cannot PR default into default -- create a feature branch
+        let epoch = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        let feature_branch = format!("foundry/hil-{}", epoch);
+        let checkout = Command::new("git")
+            .args(["checkout", "-b", &feature_branch])
+            .current_dir(project_dir)
+            .output()?;
+        if !checkout.status.success() {
+            anyhow::bail!(
+                "git checkout -b {} failed: {}",
+                feature_branch,
+                String::from_utf8_lossy(&checkout.stderr)
+            );
+        }
+        feature_branch
+    } else {
+        current_branch
+    };
+
+    // Determine which remote to push to
+    let remote = config
+        .auto_push_remote
+        .as_deref()
+        .filter(|r| !r.trim().is_empty())
+        .unwrap_or("origin");
+
+    // Push the branch
     let push_result = Command::new("git")
-        .args(["push", "-u", "origin", &branch])
+        .args(["push", "-u", remote, &push_branch])
         .current_dir(project_dir)
         .output()?;
 
     if !push_result.status.success() {
-        anyhow::bail!("git push failed: {}", String::from_utf8_lossy(&push_result.stderr));
+        anyhow::bail!(
+            "git push failed: {}",
+            String::from_utf8_lossy(&push_result.stderr)
+        );
     }
 
     // Create PR via gh
     let pr_result = Command::new("gh")
-        .args(["pr", "create", "--title", title, "--body", body])
+        .args([
+            "pr",
+            "create",
+            "--base",
+            &default_branch,
+            "--title",
+            title,
+            "--body",
+            body,
+        ])
         .current_dir(project_dir)
         .output()?;
 
@@ -245,9 +301,52 @@ pub fn create_pr(project_dir: &Path, title: &str, body: &str) -> Result<Option<u
     Ok(pr_number)
 }
 
+/// Detect the default branch for the repo. Tries `gh repo view` first,
+/// falls back to common names, then the current branch.
+fn detect_default_branch(project_dir: &Path) -> String {
+    // Try gh repo view --json defaultBranchRef
+    if let Ok(output) = Command::new("gh")
+        .args(["repo", "view", "--json", "defaultBranchRef", "-q", ".defaultBranchRef.name"])
+        .current_dir(project_dir)
+        .output()
+    {
+        if output.status.success() {
+            let name = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !name.is_empty() {
+                return name;
+            }
+        }
+    }
+
+    // Fallback: check if "main" or "master" branches exist locally
+    for candidate in &["main", "master"] {
+        let check = Command::new("git")
+            .args(["rev-parse", "--verify", candidate])
+            .current_dir(project_dir)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+        if let Ok(s) = check {
+            if s.success() {
+                return candidate.to_string();
+            }
+        }
+    }
+
+    "main".to_string()
+}
+
 /// Annotate completed tasks in TASKS.md with a PR number.
-/// Adds `PR:#N` after the SPIV indicator on each completed task line.
+/// Inserts `PR:#N` before the pipeline progress indicator (e.g. `[SPIV]`) so
+/// that the trailing `[XXXX]` regex in task.rs continues to match.
+/// If there is no indicator, the tag is appended at the end.
 pub fn annotate_tasks_with_pr(plan_path: &Path, pr_number: u64) -> Result<()> {
+    use regex::Regex;
+    use std::sync::LazyLock;
+
+    static RE_PROGRESS_TAIL: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"\s+\[([A-Z!.\-]{4,6})\]\s*$").unwrap());
+
     let content = std::fs::read_to_string(plan_path)?;
     let mut lines: Vec<String> = content.lines().map(String::from).collect();
 
@@ -257,7 +356,13 @@ pub fn annotate_tasks_with_pr(plan_path: &Path, pr_number: u64) -> Result<()> {
         let trimmed = line.trim_start();
         // Only annotate completed tasks that don't already have a PR tag
         if trimmed.starts_with("- [x]") && !line.contains("PR:#") {
-            line.push_str(&format!(" {}", pr_tag));
+            if let Some(m) = RE_PROGRESS_TAIL.find(line) {
+                // Insert PR tag before the [SPIV] indicator
+                let insert_pos = m.start();
+                line.insert_str(insert_pos, &format!(" {}", pr_tag));
+            } else {
+                line.push_str(&format!(" {}", pr_tag));
+            }
         }
     }
 
@@ -382,5 +487,79 @@ mod tests {
 
         let _ = fs::remove_dir_all(repo_dir);
         let _ = fs::remove_dir_all(remote_dir);
+    }
+
+    #[test]
+    fn annotate_tasks_appends_pr_tag_to_completed_tasks() {
+        let path = temp_dir("foundry-annotate-basic");
+        let file = path.join("TASKS.md");
+        fs::write(
+            &file,
+            "- [x] T1.1: First task\n- [ ] T1.2: Pending task\n- [x] T1.3: Third task\n",
+        )
+        .expect("write tasks");
+
+        super::annotate_tasks_with_pr(&file, 42).expect("annotate should succeed");
+        let content = fs::read_to_string(&file).expect("read tasks");
+
+        assert!(content.contains("- [x] T1.1: First task PR:#42"));
+        assert!(content.contains("- [ ] T1.2: Pending task"));
+        assert!(!content.contains("T1.2: Pending task PR:#42"));
+        assert!(content.contains("- [x] T1.3: Third task PR:#42"));
+
+        let _ = fs::remove_dir_all(path);
+    }
+
+    #[test]
+    fn annotate_tasks_skips_already_tagged_lines() {
+        let path = temp_dir("foundry-annotate-skip");
+        let file = path.join("TASKS.md");
+        fs::write(
+            &file,
+            "- [x] T1.1: First task PR:#10\n- [x] T1.2: Second task\n",
+        )
+        .expect("write tasks");
+
+        super::annotate_tasks_with_pr(&file, 42).expect("annotate should succeed");
+        let content = fs::read_to_string(&file).expect("read tasks");
+
+        // T1.1 should keep its original PR tag, not get a second one
+        assert!(content.contains("- [x] T1.1: First task PR:#10"));
+        assert!(!content.contains("PR:#42\n- [x] T1.1"));
+        // T1.2 should get the new tag
+        assert!(content.contains("- [x] T1.2: Second task PR:#42"));
+
+        let _ = fs::remove_dir_all(path);
+    }
+
+    #[test]
+    fn annotate_tasks_inserts_pr_tag_before_spiv_indicator() {
+        let path = temp_dir("foundry-annotate-spiv");
+        let file = path.join("TASKS.md");
+        fs::write(
+            &file,
+            "- [x] T1.1: First task [SPIV]\n- [x] T1.2: No indicator\n- [x] T1.3: With exclaim [SPI!]\n",
+        )
+        .expect("write tasks");
+
+        super::annotate_tasks_with_pr(&file, 7).expect("annotate should succeed");
+        let content = fs::read_to_string(&file).expect("read tasks");
+
+        // PR tag should appear before the [SPIV] indicator
+        assert!(
+            content.contains("T1.1: First task PR:#7 [SPIV]"),
+            "PR tag should be before [SPIV], got: {}",
+            content
+        );
+        // No indicator -- tag goes at end
+        assert!(content.contains("T1.2: No indicator PR:#7"));
+        // Works with [SPI!] too
+        assert!(
+            content.contains("T1.3: With exclaim PR:#7 [SPI!]"),
+            "PR tag should be before [SPI!], got: {}",
+            content
+        );
+
+        let _ = fs::remove_dir_all(path);
     }
 }
