@@ -196,7 +196,8 @@ fn spawn_terminal_event_reader(
                     break;
                 };
                 let app_event = match evt {
-                    Event::Key(key) => Some(AppEvent::Key(key)),
+                    Event::Key(key) if key.kind == event::KeyEventKind::Press => Some(AppEvent::Key(key)),
+                    Event::Key(_) => None, // Ignore Release/Repeat (Windows fires both)
                     Event::Mouse(mouse) => Some(AppEvent::Mouse(mouse)),
                     Event::Paste(text) => Some(AppEvent::Paste(text)),
                     _ => None,

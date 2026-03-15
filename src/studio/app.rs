@@ -24,7 +24,8 @@ pub(in crate::studio) fn spawn_terminal_event_reader(
         loop {
             if let Some(Ok(event)) = reader.next().await {
                 let studio_event = match event {
-                    Event::Key(key) => Some(StudioEvent::Key(key)),
+                    Event::Key(key) if key.kind == crossterm::event::KeyEventKind::Press => Some(StudioEvent::Key(key)),
+                    Event::Key(_) => None,
                     Event::Mouse(mouse) => Some(StudioEvent::Mouse(mouse)),
                     Event::Paste(text) => Some(StudioEvent::Paste(text)),
                     _ => None,
