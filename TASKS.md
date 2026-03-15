@@ -208,3 +208,9 @@ No new tasks discovered.
 ## Phase 9: Restyle Overview Page
 
 - [x] T9.1: Restyle foundry-overview.html to match the design system patterns. Replace the current color palette with the exact CSS custom properties from the design patterns: --bg: #1a1a2e, --surface: #16213e, --surface-hover: #1a2744, --border: #2a3a5c, --text: #e8e8e8, --text-muted: #8892a4, --accent: #E3734B (Claude Code orange). Remove ALL per-section accent colors and use only #E3734B as the single accent. Remove any gradients, glows, or glassmorphism. Shadow must be 0 1px 3px rgba(0,0,0,0.3) only. Border-radius 8px everywhere. Typography: h1 1.75rem, h2 1.25rem, body 0.9rem, small 0.8rem. The page should look premium and restrained, not like a colorful AI demo.
+
+## Roadmap
+
+- [ ] R1.1: Auto-create PR after task queue completion. When all tasks are done (or on stop), optionally create a GitHub PR with a summary of all completed tasks. One PR per session, not per task. Config: `auto_create_pr: true`.
+- [ ] R1.2: Per-task PR creation for team workflows. Each `feat(T1.1)` commit gets its own PR on a feature branch. Config: `pr_per_task: true`. Heavier, but matches team code review workflows.
+- [ ] R1.3: Auto-create GitHub issue on WIP commit. When verify fails and a task gets `WIP(T1.1)`, auto-create a GitHub issue with the review findings so failed tasks don't sit silently in TASKS.md. Config: `create_issue_on_wip: true`.

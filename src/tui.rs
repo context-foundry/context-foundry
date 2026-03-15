@@ -187,7 +187,7 @@ fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppState, config: 
         ("SCOUT", Some(0)),
         ("PLAN", Some(1)),
         ("IMPLEMENT", Some(2)),
-        ("COMMIT", None),
+        ("SHIP", None), // ship it Ralph
     ]
     .iter()
     .enumerate()
