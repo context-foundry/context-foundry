@@ -250,19 +250,31 @@ async fn adaptive_sleep(config: &Config, rate_limited: bool, full_secs: u64) {
     }
 }
 
-/// Count files changed in the most recent git commit.
-fn count_last_commit_files(project_dir: &std::path::Path) -> usize {
-    std::process::Command::new("git")
-        .args(["diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD"])
+/// Check if the last git commit touched any structural project files
+/// that would invalidate the scout report.
+fn last_commit_touched_structural(project_dir: &std::path::Path) -> bool {
+    let output = std::process::Command::new("git")
+        .args(["diff", "--name-only", "HEAD~1", "HEAD"])
         .current_dir(project_dir)
-        .output()
-        .map(|out| {
-            String::from_utf8_lossy(&out.stdout)
+        .output();
+    match output {
+        Ok(o) if o.status.success() => {
+            let files = String::from_utf8_lossy(&o.stdout);
+            const STRUCTURAL: &[&str] = &[
+                "SPEC.md",
+                "CLAUDE.md",
+                "Cargo.toml",
+                "package.json",
+                "pyproject.toml",
+                "project.yml",
+                "tsconfig.json",
+            ];
+            files
                 .lines()
-                .filter(|l| !l.is_empty())
-                .count()
-        })
-        .unwrap_or(0)
+                .any(|f| STRUCTURAL.iter().any(|s| f.ends_with(s)))
+        }
+        _ => true, // If git fails, re-scout to be safe
+    }
 }
 
 pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEvent>) {
@@ -280,10 +292,13 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
     // ─── Planner Look-Ahead State ────────────────────────────────
     let mut lookahead: Option<LookaheadHandle> = None;
 
+    // ─── Pattern Cache ─────────────────────────────────────────────
+    let patterns_dir = patterns::resolve_patterns_dir(&ctx.config.patterns_dir);
+    let mut cached_patterns = patterns::load_patterns(&patterns_dir);
+
     // ─── Scout State ──────────────────────────────────────────────
     // Scout runs once at session start, then reuses the report for
-    // subsequent tasks unless the previous commit touched many files.
-    const SCOUT_RETHRESHOLD: usize = 10;
+    // subsequent tasks unless the previous commit touched structural files.
     let mut scout_has_run = false;
 
     // ─── Bootstrap Scout ──────────────────────────────────────────
@@ -348,7 +363,9 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
             }
         }
     }
-    let mut last_commit_file_count: usize = 0;
+
+    // Accumulate build claims across the session for targeted discovery.
+    let mut session_build_claims: Vec<String> = Vec::new();
 
     loop {
         let tasks = match task::parse_tasks(&ctx.plan_path) {
@@ -396,23 +413,16 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                     }
                 }
 
-                if lookahead.is_none() {
-                    if let Some(next_task) = task::nth_pending(&tasks, 1) {
-                        let next_complexity = complexity::classify_task(&next_task.description);
-                        if next_complexity != TaskComplexity::Simple {
-                            lookahead = Some(spawn_lookahead_planner(next_task, &ctx, &tx));
-                        }
-                    }
-                }
             }
 
             // Backup state files before the builder runs -- scaffold tools
             // with --overwrite can delete everything in the project root.
             let state_backup = backup_state_files(&ctx);
 
-            // Skip scout if it already ran this session AND the last commit was small
-            let skip_scout = scout_has_run && last_commit_file_count < SCOUT_RETHRESHOLD;
-            let (success, task_rate_limited) = process_task(&task_info, &ctx, &tx, skip_scout).await;
+            // Skip scout if it already ran this session AND the last commit
+            // didn't touch any structural files (SPEC.md, Cargo.toml, etc.)
+            let skip_scout = scout_has_run && !last_commit_touched_structural(&ctx.project_dir);
+            let (success, task_rate_limited) = process_task(&task_info, &ctx, &tx, skip_scout, &cached_patterns, &patterns_dir).await;
             scout_has_run = true;
 
             // Restore state files if the builder deleted or truncated them
@@ -439,8 +449,30 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                 success,
             )));
 
-            // Count files in last commit for scout re-run threshold
-            last_commit_file_count = count_last_commit_files(&ctx.project_dir);
+            // Collect build claims for targeted discovery
+            if success {
+                if let Ok(claims) = std::fs::read_to_string(ctx.buildloop_dir.join("build-claims.md")) {
+                    session_build_claims.push(format!("## {}\n{}", task_info.id, claims));
+                }
+            }
+
+            // Reload patterns cache if extraction may have added new ones
+            let refreshed = patterns::load_patterns(&patterns_dir);
+            if refreshed.len() != cached_patterns.len() {
+                cached_patterns = refreshed;
+            }
+
+            // Spawn look-ahead planner for the next task now that the scout
+            // report from the current task is written to disk.
+            if ctx.config.planner_lookahead && lookahead.is_none() {
+                let fresh_tasks = task::parse_tasks(&ctx.plan_path).unwrap_or_default();
+                if let Some(next_task) = task::nth_pending(&fresh_tasks, 0) {
+                    let next_complexity = complexity::classify_task(&next_task.description);
+                    if next_complexity != TaskComplexity::Simple {
+                        lookahead = Some(spawn_lookahead_planner(next_task, &ctx, &tx));
+                    }
+                }
+            }
 
             if let Ok(tasks) = task::parse_tasks(&ctx.plan_path) {
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::CountsUpdated(
@@ -569,10 +601,16 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                 ),
             )));
 
+            let build_history = if session_build_claims.is_empty() {
+                None
+            } else {
+                Some(session_build_claims.join("\n\n"))
+            };
             let prompt = prompts::discovery_prompt(
                 discovery_round,
                 &ctx.spec_file_name(),
                 &ctx.tasks_file_name(),
+                build_history.as_deref(),
             );
             let result = agent::run_agent(
                 &AgentRole::Discovery,
@@ -645,7 +683,6 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                     ),
                     false,
                 );
-                last_commit_file_count = count_last_commit_files(&ctx.project_dir);
             }
 
             // Check stop after discovery commit
@@ -678,6 +715,8 @@ async fn process_task(
     ctx: &RunContext,
     tx: &mpsc::UnboundedSender<AppEvent>,
     skip_scout: bool,
+    cached_patterns: &[patterns::Pattern],
+    patterns_dir: &std::path::Path,
 ) -> (bool, bool) {
     let task_id = &task_info.id;
     let task_desc = &task_info.description;
@@ -697,13 +736,10 @@ async fn process_task(
     let _ = std::fs::remove_file(&ctx.review_report);
     let _ = std::fs::remove_file(&patterns_extracted);
 
-    let patterns_dir = patterns::resolve_patterns_dir(&ctx.config.patterns_dir);
-    let all_patterns = patterns::load_patterns(&patterns_dir);
-
     let matched = if ctx.config.semantic_match_enabled {
-        let keyword_scores = patterns::keyword_scores(&all_patterns, task_desc);
+        let keyword_scores = patterns::keyword_scores(cached_patterns, task_desc);
         let (scored, result) = crate::embeddings::match_patterns_semantic(
-            &all_patterns,
+            cached_patterns,
             task_desc,
             &ctx.config.embedding_model,
             ctx.config.embedding_timeout_ms,
@@ -717,11 +753,13 @@ async fn process_task(
         ))));
         scored.into_iter().map(|(p, _)| p).collect::<Vec<_>>()
     } else {
-        patterns::match_patterns(&all_patterns, task_desc)
+        patterns::match_patterns(cached_patterns, task_desc)
     };
 
     let pattern_context =
         patterns::format_patterns_for_prompt(&matched, "planner", ctx.config.max_pattern_injection);
+    let reviewer_pattern_context =
+        patterns::format_patterns_for_prompt(&matched, "reviewer", ctx.config.max_pattern_injection);
 
     if !matched.is_empty() {
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
@@ -1018,16 +1056,28 @@ async fn process_task(
         return (false, last_rate_limited);
     }
 
+    // Batch doubt: skip for all tasks except the last pending one
+    let pending_count = task::count_pending(
+        &task::parse_tasks(&ctx.plan_path).unwrap_or_default(),
+    );
+    let skip_for_batch = ctx.config.batch_doubt && pending_count > 1;
+
     // Skip verify for simple tasks when the builder's own checks passed.
     // The builder already ran build/test/lint -- verify adds a fresh-context
     // audit which is most valuable for complex tasks with blind spots.
-    let skip_verify = task_complexity == TaskComplexity::Simple
+    let skip_verify = (task_complexity == TaskComplexity::Simple
         && build_ok
-        && !ctx.config.backpressure_only;
+        && !ctx.config.backpressure_only)
+        || skip_for_batch;
 
     let (validated, _fix_passes) = if ctx.config.backpressure_only {
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
             "Backpressure-only mode: skipping LLM review (builder verification passed)".to_string(),
+        )));
+        (true, 0usize)
+    } else if skip_for_batch {
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+            format!("Batch doubt: deferring review ({} tasks remaining)", pending_count),
         )));
         (true, 0usize)
     } else if skip_verify {
@@ -1036,11 +1086,6 @@ async fn process_task(
         )));
         (true, 0usize)
     } else {
-        let reviewer_pattern_context = patterns::format_patterns_for_prompt(
-            &matched,
-            "reviewer",
-            ctx.config.max_pattern_injection,
-        );
         review::run_review_loop(task_id, task_desc, ctx, &reviewer_pattern_context, tx).await
     };
 
@@ -1083,7 +1128,7 @@ async fn process_task(
         let bg_task_id = task_id.to_string();
         let bg_task_desc = task_desc.to_string();
         let bg_ctx = ctx.clone();
-        let bg_patterns_dir = patterns_dir.clone();
+        let bg_patterns_dir = patterns_dir.to_path_buf();
         let bg_patterns_extracted = patterns_extracted.clone();
         let bg_tx = tx.clone();
         tokio::spawn(async move {

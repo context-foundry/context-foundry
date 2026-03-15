@@ -137,6 +137,14 @@ pub struct Config {
     /// Run mode: "loop" (default) runs forever with discovery.
     /// "hil" (human-in-the-loop) stops when queue empties, creates a PR, and waits.
     pub mode: String,
+
+    /// Pipeline mode: "full" (all 4 SPID stages), "fast" (skip scout if report
+    /// exists, defer doubt to end of session), "backpressure" (skip LLM review).
+    pub pipeline_mode: String,
+
+    /// When true, skip doubt for all tasks except the last pending one in the
+    /// session. The final doubt audits all accumulated changes.
+    pub batch_doubt: bool,
 }
 
 impl Default for Config {
@@ -193,6 +201,8 @@ impl Default for Config {
             planner_lookahead: true,
             pattern_extraction_model: "sonnet".into(),
             mode: "loop".into(),
+            pipeline_mode: "full".into(),
+            batch_doubt: false,
         }
     }
 }
@@ -328,6 +338,14 @@ mod tests {
         let config = Config::load(dir.path());
         assert_eq!(config.agent_timeout_secs, Config::default().agent_timeout_secs);
         assert_eq!(config.planner_model, Config::default().planner_model);
+    }
+
+    #[test]
+    fn config_deserializes_pipeline_mode_and_batch_doubt() {
+        let config: Config = serde_json::from_str(r#"{"pipeline_mode":"fast","batch_doubt":true}"#)
+            .expect("config should deserialize");
+        assert_eq!(config.pipeline_mode, "fast");
+        assert!(config.batch_doubt);
     }
 
     #[cfg(unix)]

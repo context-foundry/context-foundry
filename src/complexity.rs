@@ -51,6 +51,18 @@ pub fn classify_task(task_desc: &str) -> TaskComplexity {
     TaskComplexity::Medium
 }
 
+/// Classify task with additional context about spec detail level.
+/// When SPEC.md is detailed (>200 lines), downgrade Complex to Medium
+/// since the spec provides enough guidance to reduce ambiguity.
+pub fn classify_task_with_context(task_desc: &str, spec_line_count: usize) -> TaskComplexity {
+    let base = classify_task(task_desc);
+    if spec_line_count > 200 && base == TaskComplexity::Complex {
+        TaskComplexity::Medium
+    } else {
+        base
+    }
+}
+
 // ─── Tests ──────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -131,5 +143,29 @@ mod tests {
     fn exactly_200_chars_is_not_complex() {
         let desc = "x".repeat(200);
         assert_eq!(classify_task(&desc), TaskComplexity::Medium);
+    }
+
+    #[test]
+    fn detailed_spec_downgrades_complex_to_medium() {
+        assert_eq!(
+            classify_task_with_context("refactor auth module", 500),
+            TaskComplexity::Medium
+        );
+    }
+
+    #[test]
+    fn short_spec_keeps_complex() {
+        assert_eq!(
+            classify_task_with_context("refactor auth module", 100),
+            TaskComplexity::Complex
+        );
+    }
+
+    #[test]
+    fn detailed_spec_does_not_affect_simple() {
+        assert_eq!(
+            classify_task_with_context("fix typo in README", 500),
+            TaskComplexity::Simple
+        );
     }
 }

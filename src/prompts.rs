@@ -588,10 +588,30 @@ RULES:
     )
 }
 
-pub fn discovery_prompt(round: usize, spec_file: &str, tasks_file: &str) -> String {
+pub fn discovery_prompt(
+    round: usize,
+    spec_file: &str,
+    tasks_file: &str,
+    build_history: Option<&str>,
+) -> String {
+    let build_history_block = build_history
+        .filter(|s| !s.trim().is_empty())
+        .map(|history| {
+            format!(
+                r#"
+RECENT BUILD CONTEXT:
+The following changes were made in this session. Focus discovery on gaps
+relative to this work rather than surveying the entire codebase:
+
+{history}
+"#
+            )
+        })
+        .unwrap_or_default();
+
     format!(
         r#"Find real bugs, gaps, and missing work in this project. Append new tasks to {tasks_file}.
-
+{build_history_block}
 Read {spec_file}, {tasks_file}, CLAUDE.md, and the source code. Run the build and tests.
 Check recent git history (git log --oneline -20 --name-only).
 
@@ -821,7 +841,7 @@ mod tests {
         assert!(planner.contains("IMPL_PLAN.md"));
         assert!(!planner.contains("SPEC.md"));
 
-        let discovery = discovery_prompt(1, "ARCHITECTURE.md", "IMPL_PLAN.md");
+        let discovery = discovery_prompt(1, "ARCHITECTURE.md", "IMPL_PLAN.md", None);
         assert!(discovery.contains("ARCHITECTURE.md"));
         assert!(discovery.contains("IMPL_PLAN.md"));
 
