@@ -211,6 +211,6 @@ No new tasks discovered.
 
 ## Roadmap
 
-- [ ] R1.1: Auto-create PR after task queue completion. When all tasks are done (or on stop), optionally create a GitHub PR with a summary of all completed tasks. One PR per session, not per task. Config: `auto_create_pr: true`.
+- [x] R1.1: Auto-create PR after task queue completion. When all tasks are done (or on stop), optionally create a GitHub PR with a summary of all completed tasks. One PR per session, not per task. Config: `auto_create_pr: true`.
 - [ ] R1.2: Per-task PR creation for team workflows. Each `feat(T1.1)` commit gets its own PR on a feature branch. Config: `pr_per_task: true`. Heavier, but matches team code review workflows.
 - [ ] R1.3: Auto-create GitHub issue on WIP commit. When verify fails and a task gets `WIP(T1.1)`, auto-create a GitHub issue with the review findings so failed tasks don't sit silently in TASKS.md. Config: `create_issue_on_wip: true`.
