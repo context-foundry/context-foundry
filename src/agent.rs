@@ -84,6 +84,19 @@ impl ModelProvider {
             ModelProvider::Codex => "codex",
         }
     }
+
+    /// Returns the executable name for the current platform.
+    /// On Windows, npm-installed CLIs need the `.cmd` extension.
+    pub fn binary(self) -> &'static str {
+        match self {
+            ModelProvider::Claude => {
+                if cfg!(target_os = "windows") { "claude.cmd" } else { "claude" }
+            }
+            ModelProvider::Codex => {
+                if cfg!(target_os = "windows") { "codex.cmd" } else { "codex" }
+            }
+        }
+    }
 }
 
 impl std::fmt::Display for ModelProvider {
@@ -263,7 +276,7 @@ pub async fn run_provider_session(options: ProviderRunOptions<'_>) -> Result<Age
 
     let mut cmd = match options.provider {
         ModelProvider::Claude => {
-            let mut cmd = CommandBuilder::new("claude");
+            let mut cmd = CommandBuilder::new(ModelProvider::Claude.binary());
             cmd.arg("-p");
             cmd.arg(options.prompt);
             if !options.model.trim().is_empty() {
@@ -278,7 +291,7 @@ pub async fn run_provider_session(options: ProviderRunOptions<'_>) -> Result<Age
             cmd
         }
         ModelProvider::Codex => {
-            let mut cmd = CommandBuilder::new("codex");
+            let mut cmd = CommandBuilder::new(ModelProvider::Codex.binary());
             cmd.arg("exec");
             cmd.arg("--json");
             if !options.model.trim().is_empty() {
@@ -545,7 +558,7 @@ pub async fn run_agent(
     std::fs::create_dir_all(log_dir)?;
 
     // Build command for PTY execution
-    let mut cmd = CommandBuilder::new("claude");
+    let mut cmd = CommandBuilder::new(ModelProvider::Claude.binary());
     cmd.arg("-p");
     cmd.arg(prompt);
     if !model.trim().is_empty() {
