@@ -514,8 +514,8 @@ fn startup_enter_activates_selected_action() {
         None,
     ));
 
-    // Select Continue (index 3) and press Enter to start build
-    set_startup_selected_action(&mut state, 3);
+    // Select Continue (index 2) and press Enter to start build
+    set_startup_selected_action(&mut state, 2);
     handle_startup_key(
         &mut state,
         event::KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
@@ -544,8 +544,8 @@ fn startup_intent_input_accepts_digits_and_q_without_triggering_shortcuts() {
         PlanStatus::Pending(1),
         None,
     ));
-    // Select DescribeWork (index 2) to enter intent input mode
-    set_startup_selected_action(&mut state, 2);
+    // Select DescribeWork (index 1) to enter intent input mode
+    set_startup_selected_action(&mut state, 1);
 
     handle_startup_key(
         &mut state,
@@ -561,7 +561,7 @@ fn startup_intent_input_accepts_digits_and_q_without_triggering_shortcuts() {
             .startup
             .as_ref()
             .map(|startup| startup.selected_action),
-        Some(2)
+        Some(1)
     );
     assert_eq!(
         state
@@ -710,18 +710,18 @@ fn startup_scroll_events_are_debounced_immediately_after_click() {
         "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n",
     );
     write_file(
-        &dir.join("SPEC.md"),
-        "# Architecture\n\n## Overview\nLine A\nLine B\nLine C\nLine D\nLine E\n",
+        &dir.join("TASKS.md"),
+        "# Plan\n\n- [ ] T1.1: Task A\n- [ ] T1.2: Task B\n- [ ] T1.3: Task C\n- [ ] T1.4: Task D\n- [ ] T1.5: Task E\n",
     );
 
     let mut state = AppState::new(dir.join(".buildloop"));
     state.startup = Some(StartupState::new(
         &dir,
         StartupScenario::QueueReady,
-        PlanStatus::Pending(1),
+        PlanStatus::Pending(5),
         None,
     ));
-    // EditSpec is at index 0
+    // ViewTasks is at index 0
     set_startup_selected_action(&mut state, 0);
 
     handle_startup_mouse_at(
@@ -749,7 +749,7 @@ fn startup_scroll_events_are_debounced_immediately_after_click() {
         state
             .startup
             .as_ref()
-            .map(|startup| startup.spec_scroll_offset),
+            .map(|startup| startup.plan_scroll_offset),
         Some(0)
     );
 
@@ -772,7 +772,7 @@ fn startup_scroll_events_are_debounced_immediately_after_click() {
         state
             .startup
             .as_ref()
-            .map(|startup| startup.spec_scroll_offset),
+            .map(|startup| startup.plan_scroll_offset),
         Some(3)
     );
 
@@ -941,8 +941,8 @@ fn startup_describe_work_queues_append_transition() {
         None,
     ));
 
-    // Select "Describe more work" (index 2)
-    set_startup_selected_action(&mut state, 2);
+    // Select "Describe more work" (index 1)
+    set_startup_selected_action(&mut state, 1);
     assert!(state.startup.as_ref().unwrap().entering_intent);
 
     // Type a description
@@ -987,8 +987,8 @@ fn startup_describe_work_rejects_empty_input() {
         None,
     ));
 
-    // Select DescribeWork (index 2)
-    set_startup_selected_action(&mut state, 2);
+    // Select DescribeWork (index 1)
+    set_startup_selected_action(&mut state, 1);
 
     // Press Enter with empty input
     handle_startup_key(
@@ -1025,7 +1025,7 @@ fn startup_scan_project_accepts_empty_input() {
         PlanStatus::Missing,
         None,
     ));
-    set_startup_selected_action(&mut state, 2);
+    set_startup_selected_action(&mut state, 1);
 
     // Press Enter with empty input -- should work for ScanProject
     handle_startup_key(
@@ -1059,7 +1059,7 @@ fn startup_scan_project_uses_focus_text() {
         PlanStatus::Missing,
         None,
     ));
-    set_startup_selected_action(&mut state, 2);
+    set_startup_selected_action(&mut state, 1);
 
     // Type focus text
     for c in "auth bugs".chars() {

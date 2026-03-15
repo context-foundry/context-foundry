@@ -27,18 +27,15 @@ impl StartupState {
                 vec![StartupAction::DescribeWork, StartupAction::EditSpec]
             }
             StartupScenario::NeedsQueue => vec![
-                StartupAction::EditSpec,
                 StartupAction::DescribeWork,
                 StartupAction::ScanProject,
             ],
             StartupScenario::QueueReady => vec![
-                StartupAction::EditSpec,
                 StartupAction::ViewTasks,
                 StartupAction::DescribeWork,
                 StartupAction::Continue,
             ],
             StartupScenario::QueueComplete => vec![
-                StartupAction::EditSpec,
                 StartupAction::ViewTasks,
                 StartupAction::DescribeWork,
                 StartupAction::ScanProject,
