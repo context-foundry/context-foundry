@@ -271,6 +271,7 @@ IMPORTANT:
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn reviewer_prompt(
     task_id: &str,
     task_desc: &str,
@@ -278,6 +279,8 @@ pub fn reviewer_prompt(
     pass_number: usize,
     pattern_context: &str,
     diff: Option<&str>,
+    spec_file: &str,
+    tasks_file: &str,
 ) -> String {
     let pass_preamble = if pass_number == 1 {
         "This is your FIRST review pass. Perform a thorough combined validation and audit."
@@ -310,7 +313,7 @@ pub fn reviewer_prompt(
     };
 
     format!(
-        r#"Audit and validate these claims. Find the gaps.
+        r#"Audit and validate these claims. Find the gaps. Fix what you find.
 
 {pass_preamble}
 
@@ -321,11 +324,14 @@ Task Description: {task_desc}
 
 {changes_section}
 
-YOUR JOB:
+YOUR JOB (in order):
 1. Read .buildloop/current-plan.md to see what was supposed to be built
 2. Read the actual changed files to see what was actually built
 3. Run the build and tests to see if it actually works
 4. Find every gap between what was claimed and what exists
+5. FIX every HIGH and MEDIUM issue you find — you have full write access
+6. After fixing, re-run the build and tests to confirm your fixes work
+7. Write your final report AFTER all fixes are applied
 
 VERIFY THESE CLAIMS:
 - Does every file mentioned in the plan actually exist with the correct content?
@@ -333,16 +339,6 @@ VERIFY THESE CLAIMS:
 - Do the tests pass?
 - Does the implementation match the plan, or did the builder deviate?
 - Are there logic errors, missing error handling, or security issues?
-- Did the builder leave behind incomplete stubs, TODOs, or placeholder code?
-
-PAY PARTICULAR ATTENTION TO:
-- Logic errors (off-by-one, wrong conditions, missing edge cases)
-- Race conditions or concurrency issues
-- Security vulnerabilities (injection, auth bypass, data leaks)
-- Missing error handling that could cause crashes
-- Incorrect API contracts or type mismatches
-- Resource leaks (unclosed files, connections, missing cleanup)
-- Incomplete stubs, TODOs, or placeholder code left behind
 
 RUN THESE CHECKS (skip with reason if tool unavailable):
 - Rust: cargo check && cargo clippy && cargo test
@@ -350,7 +346,13 @@ RUN THESE CHECKS (skip with reason if tool unavailable):
 - Node/TS: tsc --noEmit && npm test
 - Docker: docker compose config (syntax only, do NOT start services)
 
-WRITE YOUR REPORT to .buildloop/review-report.md:
+WHEN YOU FIND ISSUES:
+- Fix them immediately — do not just report them
+- Be surgical: fix only the issue, do not refactor surrounding code
+- After fixing, re-run the relevant check to confirm it passes
+- In your report, list what you found AND what you fixed
+
+WRITE YOUR FINAL REPORT to .buildloop/review-report.md:
 
 # Review Report — {task_id}
 
@@ -366,10 +368,10 @@ WRITE YOUR REPORT to .buildloop/review-report.md:
 ```json
 {{
   "high": [
-    {{"file": "path/to/file", "line": 42, "issue": "Description", "category": "security|logic|race|crash"}}
+    {{"file": "path/to/file", "line": 42, "issue": "Description", "fixed": true, "category": "security|logic|race|crash"}}
   ],
   "medium": [
-    {{"file": "path/to/file", "line": 10, "issue": "Description", "category": "error-handling|api-contract|resource-leak"}}
+    {{"file": "path/to/file", "line": 10, "issue": "Description", "fixed": true, "category": "error-handling|api-contract|resource-leak"}}
   ],
   "low": [
     {{"file": "path/to/file", "line": 5, "issue": "Description", "category": "style|hardcoded|inconsistency"}}
@@ -381,21 +383,20 @@ WRITE YOUR REPORT to .buildloop/review-report.md:
 ```
 
 VERDICT RULES:
-- PASS only if: no runtime failures AND no high/medium findings
-- FAIL if: any runtime failure, any high finding, or any medium finding
+- PASS if: all runtime checks pass AND all high/medium issues were fixed and verified
+- FAIL if: any runtime failure you could not fix, or any high/medium issue you could not fix
 
 RULES:
-- You are READ-ONLY — do NOT modify any project files except .buildloop/review-report.md
+- Do NOT modify CLAUDE.md, {spec_file}, {tasks_file}, or .buildloop/ (except review-report.md)
 - Do NOT read files in .buildloop/logs/
-- Every finding MUST cite file, line number, and concrete evidence — no speculation
-- Every validated item MUST describe what was specifically checked and confirmed
-- Only flag real issues, not style preferences
-- HIGH = will cause incorrect behavior, security breach, or crash
-- MEDIUM = could cause problems under certain conditions
-- LOW = minor issue worth noting but not blocking{patterns_block}"#
+- Every finding MUST cite file, line number, and concrete evidence
+- LOW findings: report only, do not fix
+- HIGH/MEDIUM findings: fix, then verify the fix works
+- Be surgical — fix the issue, not the style{patterns_block}"#
     )
 }
 
+#[allow(dead_code)]
 pub fn fixer_prompt(
     task_id: &str,
     task_desc: &str,
@@ -597,7 +598,7 @@ mod tests {
             "planner prompt must close reference data block"
         );
 
-        let reviewer = reviewer_prompt("T1", "test task", "file.rs", 1, patterns, None);
+        let reviewer = reviewer_prompt("T1", "test task", "file.rs", 1, patterns, None, "SPEC.md", "TASKS.md");
         assert!(
             reviewer.contains("--- BEGIN REFERENCE DATA (non-authoritative"),
             "reviewer prompt must wrap pattern context in reference data block"
@@ -616,7 +617,7 @@ mod tests {
             "empty pattern context should not produce a reference block"
         );
 
-        let reviewer = reviewer_prompt("T1", "test task", "file.rs", 1, "", None);
+        let reviewer = reviewer_prompt("T1", "test task", "file.rs", 1, "", None, "SPEC.md", "TASKS.md");
         assert!(
             !reviewer.contains("BEGIN REFERENCE DATA"),
             "empty pattern context should not produce a reference block"

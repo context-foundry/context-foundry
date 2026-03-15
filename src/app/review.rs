@@ -45,206 +45,131 @@ pub(super) async fn run_review_loop(
         None
     };
 
+    // The reviewer has full write access and fixes issues it finds in a single pass.
+    // No separate fixer agent — the reviewer audits, fixes, re-verifies, and reports.
     let reviewer_tools: &[&str] = &["Read", "Glob", "Grep", "Write", "Bash"];
 
-    for pass in 1..=2 {
-        let _ = std::fs::remove_file(&ctx.review_report);
+    let _ = std::fs::remove_file(&ctx.review_report);
 
-        let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
-        let fwd_tx = tx.clone();
-        tokio::spawn(async move {
-            while let Some(evt) = agent_rx.recv().await {
-                let _ = fwd_tx.send(AppEvent::AgentOutput(evt));
-            }
-        });
+    // Snapshot changed files before review so we can detect if reviewer applied fixes.
+    let pre_review_files = get_changed_files(&ctx.project_dir);
 
-        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::AgentStarted(
-            AgentRole::Reviewer,
-            Config::display_provider_model(
-                &ctx.config.reviewer_provider,
-                &ctx.config.reviewer_model,
-            ),
-        )));
+    let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
+    let fwd_tx = tx.clone();
+    tokio::spawn(async move {
+        while let Some(evt) = agent_rx.recv().await {
+            let _ = fwd_tx.send(AppEvent::AgentOutput(evt));
+        }
+    });
 
-        let prompt = prompts::reviewer_prompt(
-            task_id,
-            task_desc,
-            &files_list,
-            pass,
-            pattern_context,
-            diff_for_review.as_deref(),
-        );
-        let review_result = agent::run_agent(
-            &AgentRole::Reviewer,
-            Config::parse_provider(&ctx.config.reviewer_provider),
+    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::AgentStarted(
+        AgentRole::Reviewer,
+        Config::display_provider_model(
+            &ctx.config.reviewer_provider,
             &ctx.config.reviewer_model,
-            &prompt,
-            &ctx.project_dir,
-            agent_tx,
-            &ctx.log_dir,
-            Some(reviewer_tools),
-            ctx.config.agent_timeout_secs,
-            Some(ctx.shutdown.clone()),
-        )
-        .await;
+        ),
+    )));
 
-        let _ = tx.send(AppEvent::AgentDone(
-            review_result.as_ref().map(|r| r.success).unwrap_or(false),
-        ));
+    let prompt = prompts::reviewer_prompt(
+        task_id,
+        task_desc,
+        &files_list,
+        1,
+        pattern_context,
+        diff_for_review.as_deref(),
+        &ctx.spec_file_name(),
+        &ctx.tasks_file_name(),
+    );
+    let review_result = agent::run_agent(
+        &AgentRole::Reviewer,
+        Config::parse_provider(&ctx.config.reviewer_provider),
+        &ctx.config.reviewer_model,
+        &prompt,
+        &ctx.project_dir,
+        agent_tx,
+        &ctx.log_dir,
+        Some(reviewer_tools),
+        ctx.config.agent_timeout_secs,
+        Some(ctx.shutdown.clone()),
+    )
+    .await;
 
-        let reviewer_succeeded = review_result.as_ref().map(|r| r.success).unwrap_or(false);
-        if !reviewer_succeeded {
-            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                "Reviewer agent failed on pass {}/2 — treating as review failure",
-                pass
-            ))));
-            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::TaskReviewResult {
-                task_id: task_id.to_string(),
-                fix_passes: pass.saturating_sub(1),
-                passed: false,
-            }));
-            return (false, pass.saturating_sub(1));
-        }
+    let _ = tx.send(AppEvent::AgentDone(
+        review_result.as_ref().map(|r| r.success).unwrap_or(false),
+    ));
 
-        // Guard: reviewer agent succeeded but report file is missing or empty.
-        // Without this check, parse_audit_findings returns (0,0,0) for missing/empty
-        // files and the condition (high == 0 && medium == 0) silently passes review.
-        let report_has_content = ctx.review_report.exists()
-            && std::fs::metadata(&ctx.review_report)
-                .map(|m| m.len() > 0)
-                .unwrap_or(false);
-
-        if !report_has_content {
-            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                "Reviewer agent succeeded on pass {}/2 but review-report.md is missing or empty — treating as review failure",
-                pass
-            ))));
-            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::TaskReviewResult {
-                task_id: task_id.to_string(),
-                fix_passes: pass.saturating_sub(1),
-                passed: false,
-            }));
-            return (false, pass.saturating_sub(1));
-        }
-
-        let verdict_pass = check_review_passed(&ctx.review_report);
-        let (high, medium, _low) = parse_audit_findings(&ctx.review_report);
-
-        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-            "Review pass {}/2: verdict={}, {} high, {} medium findings",
-            pass,
-            if verdict_pass { "PASS" } else { "FAIL" },
-            high,
-            medium
-        ))));
-
-        if verdict_pass || (high == 0 && medium == 0) {
-            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
-                "Review passed — no actionable issues found".to_string(),
-            )));
-            let fix_passes = pass.saturating_sub(1);
-            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::TaskReviewResult {
-                task_id: task_id.to_string(),
-                fix_passes,
-                passed: true,
-            }));
-            return (true, fix_passes);
-        }
-
-        if pass < 2 {
-            tokio::time::sleep(std::time::Duration::from_secs(
-                ctx.config.pause_between_agents_secs,
-            ))
-            .await;
-
-            let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
-            let fwd_tx = tx.clone();
-            tokio::spawn(async move {
-                while let Some(evt) = agent_rx.recv().await {
-                    let _ = fwd_tx.send(AppEvent::AgentOutput(evt));
-                }
-            });
-
-            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::AgentStarted(
-                AgentRole::Fixer,
-                Config::display_provider_model(&ctx.config.fixer_provider, &ctx.config.fixer_model),
-            )));
-
-            let prompt = prompts::fixer_prompt(
-                task_id,
-                task_desc,
-                pass,
-                &ctx.spec_file_name(),
-                &ctx.tasks_file_name(),
-            );
-            let fix_result = agent::run_agent(
-                &AgentRole::Fixer,
-                Config::parse_provider(&ctx.config.fixer_provider),
-                &ctx.config.fixer_model,
-                &prompt,
-                &ctx.project_dir,
-                agent_tx,
-                &ctx.log_dir,
-                None,
-                ctx.config.agent_timeout_secs,
-                Some(ctx.shutdown.clone()),
-            )
-            .await;
-
-            let _ = tx.send(AppEvent::AgentDone(
-                fix_result.map(|r| r.success).unwrap_or(false),
-            ));
-
-            // Check stop after fixer completion
-            if ctx.is_stop_requested() {
-                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
-                    "Stop requested after FIXER — skipping second review pass".to_string(),
-                )));
-                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::TaskReviewResult {
-                    task_id: task_id.to_string(),
-                    fix_passes: 1,
-                    passed: false,
-                }));
-                return (false, 1);
-            }
-
-            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
-                "Fixer completed, running second review pass...".to_string(),
-            )));
-
-            tokio::time::sleep(std::time::Duration::from_secs(
-                ctx.config.pause_between_agents_secs,
-            ))
-            .await;
-
-            // Check stop after inter-pass sleep
-            if ctx.is_stop_requested() {
-                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
-                    "Stop requested during inter-pass pause — skipping second review pass".to_string(),
-                )));
-                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::TaskReviewResult {
-                    task_id: task_id.to_string(),
-                    fix_passes: 1,
-                    passed: false,
-                }));
-                return (false, 1);
-            }
-        } else {
-            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                "Review pass 2 still has issues: {} high, {} medium — committing as-is",
-                high, medium
-            ))));
-            // One fixer ran (pass 1), then re-review (pass 2) still failed
-            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::TaskReviewResult {
-                task_id: task_id.to_string(),
-                fix_passes: 1,
-                passed: false,
-            }));
-            return (false, 1);
-        }
+    let reviewer_succeeded = review_result.as_ref().map(|r| r.success).unwrap_or(false);
+    if !reviewer_succeeded {
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+            "Reviewer agent failed — treating as review failure".to_string(),
+        )));
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::TaskReviewResult {
+            task_id: task_id.to_string(),
+            fix_passes: 0,
+            passed: false,
+        }));
+        return (false, 0);
     }
 
-    unreachable!("all paths return inside the review loop")
+    // Detect whether the reviewer applied fixes by checking for new file changes.
+    let post_review_files = get_changed_files(&ctx.project_dir);
+    let reviewer_made_fixes = post_review_files.len() > pre_review_files.len()
+        || post_review_files != pre_review_files;
+    let fix_passes: usize = if reviewer_made_fixes { 1 } else { 0 };
+
+    if reviewer_made_fixes {
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+            "Reviewer applied fixes during audit".to_string(),
+        )));
+    }
+
+    // Guard: reviewer agent succeeded but report file is missing or empty.
+    let report_has_content = ctx.review_report.exists()
+        && std::fs::metadata(&ctx.review_report)
+            .map(|m| m.len() > 0)
+            .unwrap_or(false);
+
+    if !report_has_content {
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+            "Reviewer succeeded but review-report.md is missing or empty — treating as failure".to_string(),
+        )));
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::TaskReviewResult {
+            task_id: task_id.to_string(),
+            fix_passes,
+            passed: false,
+        }));
+        return (false, fix_passes);
+    }
+
+    let verdict_pass = check_review_passed(&ctx.review_report);
+    let (high, medium, _low) = parse_audit_findings(&ctx.review_report);
+
+    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+        "Review: verdict={}, {} high, {} medium findings",
+        if verdict_pass { "PASS" } else { "FAIL" },
+        high,
+        medium
+    ))));
+
+    let passed = verdict_pass || (high == 0 && medium == 0);
+
+    if passed {
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+            "Review passed".to_string(),
+        )));
+    } else {
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+            "Review failed: {} high, {} medium unfixed issues remain",
+            high, medium
+        ))));
+    }
+
+    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::TaskReviewResult {
+        task_id: task_id.to_string(),
+        fix_passes,
+        passed,
+    }));
+    (passed, fix_passes)
 }
 
 fn get_diff_for_review(project_dir: &Path) -> String {

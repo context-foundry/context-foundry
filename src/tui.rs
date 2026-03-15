@@ -168,7 +168,6 @@ fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppState, config: 
         AgentRole::Planner,
         AgentRole::Builder,
         AgentRole::Reviewer,
-        AgentRole::Fixer,
     ];
 
     let active_index = active_role
@@ -187,7 +186,6 @@ fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppState, config: 
         ("PLANNER", Some(0)),
         ("BUILDER", Some(1)),
         ("REVIEWER", Some(2)),
-        ("FIXER", Some(3)),
         ("COMMIT", None),
     ]
     .iter()
@@ -281,14 +279,8 @@ fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppState, config: 
                 Style::default().fg(border_colors[i]),
             ));
             if i < stages.len() - 1 {
-                let arrow = if i == 2 {
-                    // Reviewer <-> Fixer: bidirectional (review gate loop)
-                    "\u{25c0}\u{2500}\u{25b6}\u{2500}"
-                } else {
-                    "\u{2500}\u{2500}\u{25b6}\u{2500}"
-                };
                 s.push(Span::styled(
-                    arrow,
+                    "\u{2500}\u{2500}\u{25b6}\u{2500}",
                     Style::default().fg(pipe_color),
                 ));
             }
