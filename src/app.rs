@@ -445,7 +445,7 @@ fn spawn_append_tasks(
     state.current_task = None;
     state.next_task_hint = None;
     state.is_discovering = false;
-    state.set_agent(AgentRole::Planner, &format!("Claude {}", actual_model));
+    state.set_agent(AgentRole::Planner, &Config::display_provider_model("claude", actual_model));
     state.log(format!("Planning started — {}", request.label));
 
     let run_context = RunContext::new(project_dir, config.clone(), shutdown.clone(), state.tasks_file_lock.clone());
@@ -1179,7 +1179,14 @@ fn spawn_design_loop(
     state.is_discovering = false;
     state.set_agent(
         AgentRole::Planner,
-        &format!("{} {}", orch_config.proposer_provider, orch_config.proposer_model),
+        &format!("{} {}", orch_config.proposer_provider, {
+            let m = orch_config.proposer_model.trim();
+            let mut chars = m.chars();
+            match chars.next() {
+                Some(c) => format!("{}{}", c.to_uppercase(), chars.as_str()),
+                None => String::new(),
+            }
+        }),
     );
     state.log(format!("Design started — {}", label));
 

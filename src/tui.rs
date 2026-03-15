@@ -585,7 +585,16 @@ fn render_session_config(frame: &mut Frame, area: Rect, config: &Config) {
                     Style::default().fg(Color::Gray),
                 )),
                 Cell::from(Span::styled(
-                    if model.is_empty() { "(default)" } else { model },
+                    if model.is_empty() {
+                        "(default)".to_string()
+                    } else {
+                        // Capitalize first letter for display consistency
+                        let mut chars = model.chars();
+                        match chars.next() {
+                            Some(c) => format!("{}{}", c.to_uppercase(), chars.as_str()),
+                            None => String::new(),
+                        }
+                    },
                     Style::default().fg(Color::Gray),
                 )),
                 Cell::from(Span::styled(
