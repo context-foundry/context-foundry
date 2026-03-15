@@ -14,26 +14,28 @@ use crate::utils::truncate_str;
 pub(super) fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppState, config: &Config) {
     let active_role = state.current_agent.as_ref().map(|(role, _)| role.clone());
 
-    // Map any active role to its pipeline box index.
-    // Builder, Reviewer, and Fixer all map to IMPLEMENT (index 2).
-    let active_index = active_role
-        .as_ref()
-        .and_then(|role| match role {
-            AgentRole::Scout => Some(0),
-            AgentRole::Planner => Some(1),
-            AgentRole::Builder | AgentRole::Reviewer | AgentRole::Fixer => Some(2),
-            _ => None,
-        });
+    let pipe_color = Color::Rgb(227, 115, 75); // Claude Code orange (#E3734B)
+    let box_width = 14usize;
 
     let roles = config.role_configs();
 
+    // ─── Connected pipeline stages (left side) ─────────────
     struct StageInfo {
         label: &'static str,
         model_label: String,
-        style: Style,
+        border_color: Color,
+        text_style: Style,
     }
 
-    let stages: Vec<StageInfo> = [
+    // Map active role to connected stage index
+    let active_connected = active_role.as_ref().and_then(|role| match role {
+        AgentRole::Scout => Some(0),
+        AgentRole::Planner => Some(1),
+        AgentRole::Builder | AgentRole::Reviewer | AgentRole::Fixer => Some(2),
+        _ => None,
+    });
+
+    let connected: Vec<StageInfo> = [
         ("SCOUT", Some(0)),
         ("PLAN", Some(1)),
         ("IMPLEMENT", Some(2)),
@@ -54,130 +56,140 @@ pub(super) fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppStat
             "GitHub".to_string()
         };
 
-        let style = match active_index {
-            Some(ai) if i == ai => Style::default()
-                .fg(Color::White)
-                .add_modifier(Modifier::BOLD),
-            Some(ai) if i < ai => {
-                // Completed stage (stages always run in strict order)
-                Style::default().fg(Color::Green)
-            }
-            _ => Style::default().fg(Color::DarkGray),
+        let (border_color, text_style) = match active_connected {
+            Some(ai) if i == ai => (
+                pipe_color,
+                Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+            ),
+            Some(ai) if i < ai => (Color::Green, Style::default().fg(Color::Green)),
+            _ => (Color::DarkGray, Style::default().fg(Color::DarkGray)),
         };
 
-        StageInfo {
-            label,
-            model_label,
-            style,
-        }
+        StageInfo { label, model_label, border_color, text_style }
     })
     .collect();
 
-    // Build styled lines for the subway map
-    let box_width = 14usize; // Fits "Claude sonnet" (13 chars) with padding
+    // ─── Disconnected stages (right side) ───────────────────
+    let discovery_active = active_role.as_ref() == Some(&AgentRole::Discovery);
+    let discovery_used = state.is_discovering || state.discovery_round > 0;
+    let patterns_used = state.session_patterns_learned > 0;
 
-    let pipe_color = Color::Rgb(227, 115, 75); // Claude Code orange (#E3734B)
+    // Find Discovery and Patterns model labels from role_configs
+    let discovery_model = roles.iter()
+        .find(|(name, _, _)| *name == "Discovery")
+        .map(|(_, provider, model)| Config::display_provider_model(provider, model))
+        .unwrap_or_default();
+    let patterns_model = roles.iter()
+        .find(|(name, _, _)| *name == "Patterns")
+        .map(|(_, provider, model)| Config::display_provider_model(provider, model))
+        .unwrap_or_default();
 
-    // Per-stage border color: active stage gets orange highlight, completed green, rest dim.
-    let border_colors: Vec<Color> = stages
-        .iter()
-        .enumerate()
-        .map(|(i, _)| match active_index {
-            Some(ai) if i == ai => pipe_color,     // Orange for active
-            Some(ai) if i < ai => Color::Green,
-            _ => Color::DarkGray,
-        })
-        .collect();
+    let disconnected: Vec<StageInfo> = vec![
+        StageInfo {
+            label: "DISCOVERY",
+            model_label: truncate_str(&discovery_model, 14).to_string(),
+            border_color: if discovery_active { pipe_color } else if discovery_used { Color::Green } else { Color::DarkGray },
+            text_style: if discovery_active {
+                Style::default().fg(Color::White).add_modifier(Modifier::BOLD)
+            } else if discovery_used {
+                Style::default().fg(Color::Green)
+            } else {
+                Style::default().fg(Color::DarkGray)
+            },
+        },
+        StageInfo {
+            label: "PATTERNS",
+            model_label: truncate_str(&patterns_model, 14).to_string(),
+            border_color: if patterns_used { Color::Green } else { Color::DarkGray },
+            text_style: if patterns_used {
+                Style::default().fg(Color::Green)
+            } else {
+                Style::default().fg(Color::DarkGray)
+            },
+        },
+    ];
 
-    // Top border line
-    let top_spans: Vec<Span> = {
-        let mut s = vec![Span::raw("  ")];
-        for (i, _stage) in stages.iter().enumerate() {
-            s.push(Span::styled(
-                format!("\u{256d}{}\u{256e}", "\u{2500}".repeat(box_width)),
-                Style::default().fg(border_colors[i]),
+    // ─── Render boxes ───────────────────────────────────────
+    // Helper: render one box's row segments
+    fn box_top(s: &mut Vec<Span>, width: usize, color: Color) {
+        s.push(Span::styled(
+            format!("\u{256d}{}\u{256e}", "\u{2500}".repeat(width)),
+            Style::default().fg(color),
+        ));
+    }
+    fn box_mid(s: &mut Vec<Span>, width: usize, label: &str, style: Style, color: Color) {
+        let pad_total = width.saturating_sub(label.len());
+        let left = pad_total / 2;
+        let right = pad_total - left;
+        s.push(Span::styled("\u{2502}", Style::default().fg(color)));
+        s.push(Span::styled(
+            format!("{}{}{}", " ".repeat(left), label, " ".repeat(right)),
+            style,
+        ));
+        s.push(Span::styled("\u{2502}", Style::default().fg(color)));
+    }
+    fn box_model(s: &mut Vec<Span>, width: usize, model: &str, color: Color) {
+        let pad_total = width.saturating_sub(model.len());
+        let left = pad_total / 2;
+        let right = pad_total - left;
+        s.push(Span::styled("\u{2502}", Style::default().fg(color)));
+        s.push(Span::styled(
+            format!("{}{}{}", " ".repeat(left), model, " ".repeat(right)),
+            Style::default().fg(Color::DarkGray),
+        ));
+        s.push(Span::styled("\u{2502}", Style::default().fg(color)));
+    }
+    fn box_bot(s: &mut Vec<Span>, width: usize, color: Color) {
+        s.push(Span::styled(
+            format!("\u{2570}{}\u{256f}", "\u{2500}".repeat(width)),
+            Style::default().fg(color),
+        ));
+    }
+
+    // Build each line across all boxes
+    let mut top_spans = vec![Span::raw("  ")];
+    let mut mid_spans = vec![Span::raw("  ")];
+    let mut model_spans = vec![Span::raw("  ")];
+    let mut bot_spans = vec![Span::raw("  ")];
+
+    // Connected stages with arrows
+    for (i, stage) in connected.iter().enumerate() {
+        box_top(&mut top_spans, box_width, stage.border_color);
+        box_mid(&mut mid_spans, box_width, stage.label, stage.text_style, stage.border_color);
+        box_model(&mut model_spans, box_width, &stage.model_label, stage.border_color);
+        box_bot(&mut bot_spans, box_width, stage.border_color);
+
+        if i < connected.len() - 1 {
+            top_spans.push(Span::raw("    "));
+            mid_spans.push(Span::styled(
+                "\u{2500}\u{2500}\u{25b6}\u{2500}",
+                Style::default().fg(pipe_color),
             ));
-            if i < stages.len() - 1 {
-                s.push(Span::raw("    "));
-            }
+            model_spans.push(Span::raw("    "));
+            bot_spans.push(Span::raw("    "));
         }
-        s
-    };
+    }
 
-    // Middle line (labels)
-    let mid_spans: Vec<Span> = {
-        let mut s = vec![Span::raw("  ")];
-        for (i, stage) in stages.iter().enumerate() {
-            let pad_total = box_width.saturating_sub(stage.label.len());
-            let left = pad_total / 2;
-            let right = pad_total - left;
-            s.push(Span::styled(
-                "\u{2502}",
-                Style::default().fg(border_colors[i]),
-            ));
-            s.push(Span::styled(
-                format!("{}{}{}", " ".repeat(left), stage.label, " ".repeat(right)),
-                stage.style,
-            ));
-            s.push(Span::styled(
-                "\u{2502}",
-                Style::default().fg(border_colors[i]),
-            ));
-            if i < stages.len() - 1 {
-                s.push(Span::styled(
-                    "\u{2500}\u{2500}\u{25b6}\u{2500}",
-                    Style::default().fg(pipe_color),
-                ));
-            }
-        }
-        s
-    };
+    // Gap between connected and disconnected
+    top_spans.push(Span::raw("        "));
+    mid_spans.push(Span::raw("        "));
+    model_spans.push(Span::raw("        "));
+    bot_spans.push(Span::raw("        "));
 
-    // Model label line
-    let model_spans: Vec<Span> = {
-        let mut s = vec![Span::raw("  ")];
-        for (i, stage) in stages.iter().enumerate() {
-            let pad_total = box_width.saturating_sub(stage.model_label.len());
-            let left = pad_total / 2;
-            let right = pad_total - left;
-            s.push(Span::styled(
-                "\u{2502}",
-                Style::default().fg(border_colors[i]),
-            ));
-            s.push(Span::styled(
-                format!(
-                    "{}{}{}",
-                    " ".repeat(left),
-                    stage.model_label,
-                    " ".repeat(right)
-                ),
-                Style::default().fg(Color::DarkGray),
-            ));
-            s.push(Span::styled(
-                "\u{2502}",
-                Style::default().fg(border_colors[i]),
-            ));
-            if i < stages.len() - 1 {
-                s.push(Span::raw("    "));
-            }
-        }
-        s
-    };
+    // Disconnected stages (no arrows)
+    for (i, stage) in disconnected.iter().enumerate() {
+        box_top(&mut top_spans, box_width, stage.border_color);
+        box_mid(&mut mid_spans, box_width, stage.label, stage.text_style, stage.border_color);
+        box_model(&mut model_spans, box_width, &stage.model_label, stage.border_color);
+        box_bot(&mut bot_spans, box_width, stage.border_color);
 
-    // Bottom border line
-    let bot_spans: Vec<Span> = {
-        let mut s = vec![Span::raw("  ")];
-        for (i, _stage) in stages.iter().enumerate() {
-            s.push(Span::styled(
-                format!("\u{2570}{}\u{256f}", "\u{2500}".repeat(box_width)),
-                Style::default().fg(border_colors[i]),
-            ));
-            if i < stages.len() - 1 {
-                s.push(Span::raw("    "));
-            }
+        if i < disconnected.len() - 1 {
+            top_spans.push(Span::raw("  "));
+            mid_spans.push(Span::raw("  "));
+            model_spans.push(Span::raw("  "));
+            bot_spans.push(Span::raw("  "));
         }
-        s
-    };
+    }
 
     let lines = vec![
         Line::from(""),

@@ -198,6 +198,7 @@ pub(super) fn render_dashboard_stats(frame: &mut Frame, area: Rect, state: &AppS
     frame.render_widget(stats_block, area);
 }
 
+#[allow(dead_code)]
 pub(super) fn render_session_config(frame: &mut Frame, area: Rect, config: &Config) {
     let header = Row::new(vec![
         Cell::from(Span::styled(
@@ -292,6 +293,7 @@ pub(super) fn render_session_config(frame: &mut Frame, area: Rect, config: &Conf
     frame.render_widget(table, area);
 }
 
+#[allow(dead_code)]
 pub(super) fn render_orchestrator_config(frame: &mut Frame, area: Rect, config: &Config) {
     let header = Row::new(vec![
         Cell::from(Span::styled(
