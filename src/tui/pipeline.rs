@@ -41,9 +41,9 @@ pub(super) fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppStat
     let verify_model = Config::display_provider_model(&config.reviewer_provider, &config.reviewer_model);
 
     let connected: Vec<StageInfo> = [
-        ("SCOUT", Some(0), "scout-report.md"),
-        ("PLAN", Some(1), "current-plan.md"),
-        ("IMPLEMENT", Some(2), "build-claims.md"),
+        ("SCOUT", Some(0), "scout-report"),
+        ("PLAN", Some(1), "current-plan"),
+        ("IMPLEMENT", Some(2), "build-claims"),
         ("DOUBT", None, "fresh context"),
         ("SHIP", None, "git + pr"),
     ]
