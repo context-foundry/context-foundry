@@ -66,12 +66,7 @@ impl StartupState {
     pub fn action_label(&self, action: StartupAction) -> String {
         match action {
             StartupAction::Continue => "Continue".to_string(),
-            StartupAction::DescribeWork => match self.scenario {
-                StartupScenario::EmptyProject => "Describe project".to_string(),
-                StartupScenario::NeedsQueue => "Describe work".to_string(),
-                StartupScenario::QueueReady => "Describe more work".to_string(),
-                StartupScenario::QueueComplete => "Describe next work".to_string(),
-            },
+            StartupAction::DescribeWork => "Add".to_string(),
             StartupAction::DesignWithReview => "Design with review".to_string(),
             StartupAction::ScanProject => "Scan project".to_string(),
             StartupAction::ViewTasks => self.tasks_file_name.clone(),

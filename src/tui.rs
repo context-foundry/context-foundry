@@ -2226,40 +2226,22 @@ fn render_startup_intent(frame: &mut Frame, area: Rect, state: &AppState) {
     let (title, prompt_text, helper_text, enter_hint) = match action {
         Some(StartupAction::DescribeWork) => match startup.scenario {
             StartupScenario::EmptyProject => (
-                " Describe The Project ".to_string(),
+                " Add ".to_string(),
                 "What do you want to build?".to_string(),
                 format!(
-                    "Foundry will save your brief in {}, turn it into initial tasks in {}, then start building.",
-                    startup.spec_file_name, startup.tasks_file_name
+                    "Foundry scans your project, understands your intent, and creates comprehensive tasks in {}.",
+                    startup.tasks_file_name
                 ),
-                "Press Enter to create the brief and task queue.".to_string(),
+                "Press Enter to start.".to_string(),
             ),
-            StartupScenario::NeedsQueue => (
-                " Describe Next Work ".to_string(),
-                "What do you want Foundry to do with this project?".to_string(),
+            _ => (
+                " Add ".to_string(),
+                "What should Foundry work on next?".to_string(),
                 format!(
                     "Foundry scans your project, understands your intent, and creates comprehensive tasks in {}.",
                     startup.tasks_file_name
                 ),
-                "Press Enter to create tasks and start.".to_string(),
-            ),
-            StartupScenario::QueueReady => (
-                " Describe More Work ".to_string(),
-                "What else should be added to the queue?".to_string(),
-                format!(
-                    "Foundry scans your project, understands your intent, and creates comprehensive tasks in {}.",
-                    startup.tasks_file_name
-                ),
-                "Press Enter to add tasks and start.".to_string(),
-            ),
-            StartupScenario::QueueComplete => (
-                " Describe Next Work ".to_string(),
-                "What should happen next?".to_string(),
-                format!(
-                    "Foundry scans your project, understands your intent, and creates comprehensive tasks in {}.",
-                    startup.tasks_file_name
-                ),
-                "Press Enter to create tasks and start.".to_string(),
+                "Press Enter to add and start.".to_string(),
             ),
         },
         Some(StartupAction::ScanProject) => (
