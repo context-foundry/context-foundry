@@ -1358,6 +1358,8 @@ fn render_header(frame: &mut Frame, area: Rect, state: &AppState) {
                     " STOPPED "
                 } else if state.stop_after_task {
                     " STOPPING "
+                } else if state.run_mode == "hil" {
+                    " RUNNING (HIL) "
                 } else {
                     " RUNNING "
                 },

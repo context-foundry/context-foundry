@@ -147,6 +147,7 @@ pub struct AppState {
     pub update_available: Option<String>,
     pub inject_input: Option<String>,
     pub show_run_view: bool, // Tab toggle: startup shows run view (pipeline+queue+config)
+    pub run_mode: String,    // "loop" or "hil"
     pub show_patterns: bool,
     pub show_findings: bool,
     pub findings_scroll: usize,
@@ -197,6 +198,7 @@ impl AppState {
             update_available: None,
             inject_input: None,
             show_run_view: false,
+            run_mode: "loop".into(),
             show_patterns: false,
             show_findings: false,
             findings_scroll: 0,

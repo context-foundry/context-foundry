@@ -133,6 +133,10 @@ pub struct Config {
 
     /// Model for pattern extraction (lightweight JSON output, doesn't need Opus).
     pub pattern_extraction_model: String,
+
+    /// Run mode: "loop" (default) runs forever with discovery.
+    /// "hil" (human-in-the-loop) stops when queue empties, creates a PR, and waits.
+    pub mode: String,
 }
 
 impl Default for Config {
@@ -188,6 +192,7 @@ impl Default for Config {
             discovery_cooldown_minutes: 5,
             planner_lookahead: true,
             pattern_extraction_model: "sonnet".into(),
+            mode: "loop".into(),
         }
     }
 }

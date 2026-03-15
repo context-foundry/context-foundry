@@ -44,6 +44,7 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
     let _ = std::fs::remove_file(buildloop_dir.join("stop"));
     let shutdown = Arc::new(AtomicBool::new(false));
     let mut state = AppState::new(buildloop_dir);
+    state.run_mode = config.mode.clone();
 
     // Git/GH readiness checks (advisory, non-blocking)
     for msg in git::check_git_readiness(project_dir) {

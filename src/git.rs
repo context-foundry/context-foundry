@@ -199,6 +199,72 @@ fn maybe_push_commit(project_dir: &Path, remote: Option<&str>) -> Result<()> {
     Ok(())
 }
 
+/// Create a feature branch, push it, and open a PR via `gh`.
+/// Returns the PR number on success.
+pub fn create_pr(project_dir: &Path, title: &str, body: &str) -> Result<Option<u64>> {
+    // Determine current branch
+    let branch_out = Command::new("git")
+        .args(["branch", "--show-current"])
+        .current_dir(project_dir)
+        .output()?;
+    let branch = String::from_utf8_lossy(&branch_out.stdout).trim().to_string();
+
+    // Push current branch
+    let push_result = Command::new("git")
+        .args(["push", "-u", "origin", &branch])
+        .current_dir(project_dir)
+        .output()?;
+
+    if !push_result.status.success() {
+        anyhow::bail!("git push failed: {}", String::from_utf8_lossy(&push_result.stderr));
+    }
+
+    // Create PR via gh
+    let pr_result = Command::new("gh")
+        .args(["pr", "create", "--title", title, "--body", body])
+        .current_dir(project_dir)
+        .output()?;
+
+    if !pr_result.status.success() {
+        let stderr = String::from_utf8_lossy(&pr_result.stderr);
+        // If a PR already exists for this branch, that's fine
+        if stderr.contains("already exists") {
+            return Ok(None);
+        }
+        anyhow::bail!("gh pr create failed: {}", stderr);
+    }
+
+    // Parse PR number from output (gh prints the PR URL)
+    let stdout = String::from_utf8_lossy(&pr_result.stdout);
+    let pr_number = stdout
+        .trim()
+        .rsplit('/')
+        .next()
+        .and_then(|s| s.parse::<u64>().ok());
+
+    Ok(pr_number)
+}
+
+/// Annotate completed tasks in TASKS.md with a PR number.
+/// Adds `PR:#N` after the SPIV indicator on each completed task line.
+pub fn annotate_tasks_with_pr(plan_path: &Path, pr_number: u64) -> Result<()> {
+    let content = std::fs::read_to_string(plan_path)?;
+    let mut lines: Vec<String> = content.lines().map(String::from).collect();
+
+    let pr_tag = format!("PR:#{}", pr_number);
+
+    for line in lines.iter_mut() {
+        let trimmed = line.trim_start();
+        // Only annotate completed tasks that don't already have a PR tag
+        if trimmed.starts_with("- [x]") && !line.contains("PR:#") {
+            line.push_str(&format!(" {}", pr_tag));
+        }
+    }
+
+    crate::utils::atomic_write_file(plan_path, (lines.join("\n") + "\n").as_bytes())?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::commit_and_push;
