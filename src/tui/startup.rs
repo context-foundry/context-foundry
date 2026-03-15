@@ -841,10 +841,13 @@ pub(super) fn render_startup_status_bar(frame: &mut Frame, area: Rect, state: &A
         return;
     };
 
-    let mut spans = if matches!(
+    let is_intent_active = matches!(
         selected_startup_action(state),
         Some(StartupAction::DescribeWork) | Some(StartupAction::ScanProject)
-    ) {
+    ) || (matches!(selected_startup_action(state), Some(StartupAction::EditTasks))
+        && startup.entering_intent);
+
+    let mut spans = if is_intent_active {
         vec![
             Span::styled(
                 " click ",
