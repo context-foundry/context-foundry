@@ -46,7 +46,7 @@ pub(super) fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppStat
         ("SCOUT", Some(0)),
         ("PLAN", Some(1)),
         ("IMPLEMENT", Some(2)),
-        ("VERIFY", None),   // uses verify_model, not from role_configs index
+        ("DOUBT", None),    // the doubt loop -- uses verify_model
         ("SHIP", None),     // ship it Ralph
     ]
     .iter()
@@ -60,7 +60,7 @@ pub(super) fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppStat
             } else {
                 String::new()
             }
-        } else if *label == "VERIFY" {
+        } else if *label == "DOUBT" {
             truncate_str(&verify_model, 14).to_string()
         } else if *label == "SHIP" {
             "GitHub".to_string()
