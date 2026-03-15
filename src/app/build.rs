@@ -539,6 +539,8 @@ async fn process_task(
         task_info.clone(),
     )));
 
+    let scout_report = ctx.buildloop_dir.join("scout-report.md");
+    let _ = std::fs::remove_file(&scout_report);
     let _ = std::fs::remove_file(&ctx.current_plan);
     let _ = std::fs::remove_file(&ctx.review_report);
     let _ = std::fs::remove_file(&patterns_extracted);
@@ -585,7 +587,74 @@ async fn process_task(
     #[allow(unused_assignments)]
     let mut last_rate_limited = false;
 
-    // Helper: the planner character for the progress indicator.
+    // ─── Run Scout ──────────────────────────────────────────
+    {
+        let scout_tools: &[&str] = &["Read", "Glob", "Grep", "Bash"];
+
+        let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
+        let fwd_tx = tx.clone();
+        tokio::spawn(async move {
+            while let Some(evt) = agent_rx.recv().await {
+                let _ = fwd_tx.send(AppEvent::AgentOutput(evt));
+            }
+        });
+
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::AgentStarted(
+            AgentRole::Scout,
+            Config::display_provider_model(
+                &ctx.config.scout_provider,
+                &ctx.config.scout_model,
+            ),
+        )));
+
+        let scout_prompt_text = prompts::scout_prompt(
+            task_id,
+            task_desc,
+            &ctx.spec_file_name(),
+            &ctx.tasks_file_name(),
+        );
+        let scout_result = agent::run_agent(
+            &AgentRole::Scout,
+            Config::parse_provider(&ctx.config.scout_provider),
+            &ctx.config.scout_model,
+            &scout_prompt_text,
+            &ctx.project_dir,
+            agent_tx,
+            &ctx.log_dir,
+            Some(scout_tools),
+            ctx.config.agent_timeout_secs,
+            Some(ctx.shutdown.clone()),
+        )
+        .await;
+
+        last_rate_limited = was_rate_limited(&scout_result);
+        let scout_ok = scout_result.map(|r| r.success).unwrap_or(false);
+        let _ = tx.send(AppEvent::AgentDone(scout_ok));
+
+        if !scout_ok {
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+                format!("Scout failed for {} — continuing without report", task_id),
+            )));
+        }
+
+        adaptive_sleep(
+            &ctx.config,
+            last_rate_limited,
+            ctx.config.pause_between_agents_secs,
+        )
+        .await;
+
+        if ctx.is_stop_requested() {
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                "Stop requested after SCOUT for {} — skipping remaining stages",
+                task_id
+            ))));
+            return (false, last_rate_limited);
+        }
+    }
+
+    // Helper: progress indicator characters.
+    let scout_char = "S";
     let planner_char = if skip_planner { "-" } else { "P" };
 
     if skip_planner {
@@ -658,7 +727,7 @@ async fn process_task(
             if !plan_ok || !ctx.current_plan.exists() {
                 {
                     let _lock = ctx.tasks_file_lock.lock().unwrap_or_else(|e| e.into_inner());
-                    let _ = task::update_task_progress(&ctx.plan_path, task_id, "P--!");
+                    let _ = task::update_task_progress(&ctx.plan_path, task_id, &format!("{}P--!", scout_char));
                 }
                 let committed =
                     git::commit_and_push(&ctx.project_dir, &ctx.config, task_id, task_desc, true)
@@ -690,7 +759,7 @@ async fn process_task(
                 ))));
                 {
                     let _lock = ctx.tasks_file_lock.lock().unwrap_or_else(|e| e.into_inner());
-                    let _ = task::update_task_progress(&ctx.plan_path, task_id, "P...");
+                    let _ = task::update_task_progress(&ctx.plan_path, task_id, &format!("{}P..", scout_char));
                 }
                 let _ =
                     git::commit_and_push(&ctx.project_dir, &ctx.config, task_id, task_desc, true);
@@ -701,7 +770,7 @@ async fn process_task(
         // Planner completed -- persist progress indicator.
         {
             let _lock = ctx.tasks_file_lock.lock().unwrap_or_else(|e| e.into_inner());
-            let _ = task::update_task_progress(&ctx.plan_path, task_id, &format!("{}...", planner_char));
+            let _ = task::update_task_progress(&ctx.plan_path, task_id, &format!("{}{}..", scout_char, planner_char));
         }
     }
 
@@ -759,7 +828,7 @@ async fn process_task(
         ))));
         {
             let _lock = ctx.tasks_file_lock.lock().unwrap_or_else(|e| e.into_inner());
-            let _ = task::update_task_progress(&ctx.plan_path, task_id, &format!("{}B-!", planner_char));
+            let _ = task::update_task_progress(&ctx.plan_path, task_id, &format!("{}{}I-!", scout_char, planner_char));
         }
         let _ = git::commit_and_push(&ctx.project_dir, &ctx.config, task_id, task_desc, true);
         return (false, last_rate_limited);
@@ -768,7 +837,7 @@ async fn process_task(
     // Builder completed -- persist progress indicator.
     {
         let _lock = ctx.tasks_file_lock.lock().unwrap_or_else(|e| e.into_inner());
-        let _ = task::update_task_progress(&ctx.plan_path, task_id, &format!("{}B..", planner_char));
+        let _ = task::update_task_progress(&ctx.plan_path, task_id, &format!("{}{}I.", scout_char, planner_char));
     }
 
     adaptive_sleep(&ctx.config, last_rate_limited, ctx.config.pause_between_agents_secs).await;
@@ -784,7 +853,7 @@ async fn process_task(
         return (false, last_rate_limited);
     }
 
-    let (validated, fix_passes) = if ctx.config.backpressure_only {
+    let (validated, _fix_passes) = if ctx.config.backpressure_only {
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
             "Backpressure-only mode: skipping LLM review (builder verification passed)".to_string(),
         )));
@@ -803,9 +872,9 @@ async fn process_task(
     // Agents may overwrite TASKS.md during their run, stripping intermediate
     // indicators, so the final write must be the last mutation before commit.
     {
-        let fixer_char = if fix_passes > 0 { "F" } else { "-" };
+        let verify_char = "V"; // Verify always runs
         let fail_char = if !validated { "!" } else { "" };
-        let progress = format!("{}BR{}{}", planner_char, fixer_char, fail_char);
+        let progress = format!("{}{}I{}{}", scout_char, planner_char, verify_char, fail_char);
         let _lock = ctx.tasks_file_lock.lock().unwrap_or_else(|e| e.into_inner());
         let _ = task::update_task_progress(&ctx.plan_path, task_id, &progress);
         if validated {

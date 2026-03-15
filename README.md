@@ -14,12 +14,13 @@ Foundry reads a `TASKS.md` task list and works through it using Claude Code agen
 ```
 Load patterns from ~/.foundry/patterns/
   │
-PLANNER (+ matched patterns) → .buildloop/current-plan.md
+SCOUT → .buildloop/scout-report.md (investigate codebase)
   │
-BUILDER → implement plan
+PLAN (+ patterns + scout report) → .buildloop/current-plan.md
   │
-REVIEWER (+ patterns + runtime checks) → .buildloop/review-report.md
-  │  └─ if FAIL: FIXER → re-review (up to 2 passes)
+IMPLEMENT → build the code, run checks
+  │
+VERIFY (fresh context) → audit claims, fix issues, write verdict
   │
 PATTERN EXTRACTOR → merge into ~/.foundry/patterns/
   │
@@ -38,14 +39,14 @@ Without guardrails, an autonomous build loop degrades fast. Task 3 builds on tas
 
 Foundry's loop is designed around two forms of backpressure:
 
-**Short-term: the review gate.** After the builder finishes, a reviewer agent audits the changes — running build checks, linting, tests, and a structured code audit. If the reviewer finds HIGH or MEDIUM severity issues, a fixer agent addresses them, and the reviewer runs again. This happens up to 2 passes. If the work passes, it gets a `feat(task-id)` commit. If it still fails after 2 passes, it gets a `WIP(task-id)` commit — a signal that the work isn't validated and shouldn't be built on confidently. The review gate prevents bad code from silently flowing forward.
+**Short-term: the verify gate.** After implementation, a verify agent audits the changes in a fresh context -- running build checks, tests, and a structured code audit. If it finds HIGH or MEDIUM issues, it fixes them and re-runs verification. If everything passes, the task gets a `feat(task-id)` commit. If issues remain, it gets a `WIP(task-id)` commit. The verify gate prevents bad code from silently flowing forward.
 
-**Pipeline tracking (PBRF).** Every task carries a 4-character progress indicator that records which pipeline stages ran and whether they succeeded. The indicator is persisted in `TASKS.md` next to each task and committed with the code, so you get a permanent audit trail.
+**Pipeline tracking (SPIV).** Every task carries a 4-character progress indicator that records which pipeline stages ran and whether they succeeded. The indicator is persisted in `TASKS.md` next to each task and committed with the code, so you get a permanent audit trail.
 
 ```
-- [x] T1.1: Set up project scaffolding          [PBRF]
-- [x] T1.2: Implement auth flow                 [-BR-]
-- [x] T1.3: Add rate limiting                   [PBRF!]
+- [x] T1.1: Set up project scaffolding          [SPIV]
+- [x] T1.2: Implement auth flow                 [S-IV]
+- [x] T1.3: Add rate limiting                   [SPIV!]
 - [ ] T1.4: Write integration tests             [....]
 ```
 
@@ -53,13 +54,13 @@ Each character represents a pipeline stage:
 
 | Position | Stage | Meaning |
 |----------|-------|---------|
-| 1 | **P** = Planner ran | **-** = planner skipped (simple task) |
-| 2 | **B** = Builder ran | |
-| 3 | **R** = Reviewer ran | **-** = review skipped |
-| 4 | **F** = Fixer ran | **-** = no fix needed |
-| suffix | **!** = review did not pass | (absent) = clean pass |
+| 1 | **S** = Scout ran | **-** = scout skipped |
+| 2 | **P** = Plan ran | **-** = planner skipped (simple task) |
+| 3 | **I** = Implement ran | |
+| 4 | **V** = Verify ran | **-** = verify skipped |
+| suffix | **!** = verify did not pass | (absent) = clean pass |
 
-Examples: `PBRF` = full pipeline, all stages ran, clean pass. `-BR-` = planner skipped, built and reviewed, no fixer needed. `PBRF!` = full pipeline but review still had issues after fixing (WIP commit). `P--!` = planner failed, nothing else ran.
+Examples: `SPIV` = full pipeline, clean pass. `S-IV` = planner skipped, scouted and implemented and verified. `SPIV!` = full pipeline but verify found unfixable issues (WIP commit).
 
 The TUI shows these indicators in the task queue with color coding, and they survive across restarts since they're written directly into the task file.
 

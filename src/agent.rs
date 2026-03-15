@@ -14,6 +14,7 @@ use tokio::sync::mpsc;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum AgentRole {
+    Scout,
     Planner,
     Builder,
     Reviewer,
@@ -24,10 +25,11 @@ pub enum AgentRole {
 impl std::fmt::Display for AgentRole {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            AgentRole::Planner => write!(f, "PLANNER"),
-            AgentRole::Builder => write!(f, "BUILDER"),
-            AgentRole::Reviewer => write!(f, "FIX"),
-            AgentRole::Fixer => write!(f, "FIXER"),
+            AgentRole::Scout => write!(f, "SCOUT"),
+            AgentRole::Planner => write!(f, "PLAN"),
+            AgentRole::Builder => write!(f, "IMPLEMENT"),
+            AgentRole::Reviewer => write!(f, "VERIFY"),
+            AgentRole::Fixer => write!(f, "VERIFY"),
             AgentRole::Discovery => write!(f, "DISCOVERY"),
         }
     }

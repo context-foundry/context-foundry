@@ -591,21 +591,25 @@ fn populate_task_history_from_progress(project_dir: &Path, state: &mut AppState)
 
         let chars: Vec<char> = progress.chars().collect();
 
+        // Detect SPIV format (starts with S) vs legacy PBRF format (starts with P or -)
+        let is_spiv = chars.first() == Some(&'S');
         let mut stages_seen = Vec::new();
-        if chars.first() == Some(&'P') {
-            stages_seen.push(AgentRole::Planner);
-        }
-        if chars.get(1) == Some(&'B') {
-            stages_seen.push(AgentRole::Builder);
-        }
-        if chars.get(2) == Some(&'R') {
-            stages_seen.push(AgentRole::Reviewer);
-        }
-        if chars.get(3) == Some(&'F') {
-            stages_seen.push(AgentRole::Fixer);
+
+        if is_spiv {
+            // SPIV format: Scout, Plan, Implement, Verify
+            if chars.first() == Some(&'S') { stages_seen.push(AgentRole::Scout); }
+            if chars.get(1) == Some(&'P') { stages_seen.push(AgentRole::Planner); }
+            if chars.get(2) == Some(&'I') { stages_seen.push(AgentRole::Builder); }
+            if chars.get(3) == Some(&'V') { stages_seen.push(AgentRole::Reviewer); }
+        } else {
+            // Legacy PBRF format: Planner, Builder, Reviewer, Fixer
+            if chars.first() == Some(&'P') { stages_seen.push(AgentRole::Planner); }
+            if chars.get(1) == Some(&'B') { stages_seen.push(AgentRole::Builder); }
+            if chars.get(2) == Some(&'R') { stages_seen.push(AgentRole::Reviewer); }
+            if chars.get(3) == Some(&'F') { stages_seen.push(AgentRole::Fixer); }
         }
 
-        let fix_passes = if chars.get(3) == Some(&'F') { 1 } else { 0 };
+        let fix_passes = if is_spiv { 0 } else if chars.get(3) == Some(&'F') { 1 } else { 0 };
         let has_bang = progress.contains('!');
         let passed_review = if has_bang {
             false

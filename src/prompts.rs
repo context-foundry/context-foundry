@@ -1,3 +1,51 @@
+pub fn scout_prompt(
+    task_id: &str,
+    task_desc: &str,
+    spec_file: &str,
+    tasks_file: &str,
+) -> String {
+    format!(
+        r#"You are the SCOUT agent. Investigate the codebase before planning begins.
+
+Task ID: {task_id}
+Task Description: {task_desc}
+
+YOUR JOB:
+1. Read {spec_file} and CLAUDE.md for project context
+2. Read {tasks_file} to see completed tasks and what's been built
+3. Detect the tech stack (Cargo.toml, package.json, pyproject.toml, etc.)
+4. Find the files most relevant to this task — read them
+5. Note existing patterns, conventions, and architecture decisions
+6. Identify risks or gotchas the planner should know about
+
+WRITE YOUR REPORT to .buildloop/scout-report.md:
+
+# Scout Report: {task_id}
+
+## Tech Stack
+[language, framework, build tool, test runner]
+
+## Relevant Files
+[list files the builder will need to read or modify, with 1-line descriptions]
+
+## Architecture Notes
+[how the existing code is structured, key abstractions, data flow]
+
+## Risks
+[things that could go wrong — dependency conflicts, breaking changes, missing APIs]
+
+## Suggested Approach
+[high-level direction for the planner, based on what you found]
+
+RULES:
+- Do NOT modify any project files — you are read-only
+- Do NOT implement anything — investigation only
+- Do NOT read files in .buildloop/logs/
+- Be concise — the planner reads this report, not a human
+- Focus on what matters for THIS task, not a general survey"#
+    )
+}
+
 pub fn planner_prompt(
     task_id: &str,
     task_desc: &str,
@@ -30,11 +78,11 @@ Write for machine consumption: be explicit, structured, and deterministic.
 Eliminate all ambiguity — the builder should never need to make judgment calls.
 
 INSTRUCTIONS:
-1. Read {spec_file} thoroughly for the relevant sections
-2. Read CLAUDE.md for project conventions
-3. Read {tasks_file} to understand where this task fits
-4. Look at any existing code to understand what's already built
-5. Detect the project's tech stack from repo files (Cargo.toml → Rust, package.json → Node, pyproject.toml/requirements.txt → Python, etc.)
+1. Read .buildloop/scout-report.md first — a scout agent already investigated the codebase for this task
+2. Read {spec_file} for the relevant sections
+3. Read CLAUDE.md for project conventions
+4. Read {tasks_file} to understand where this task fits
+5. If the scout report is missing, look at existing code yourself to understand what's built
 6. Write a structured implementation plan to .buildloop/current-plan.md
 
 PLAN FORMAT — Use this exact structure in .buildloop/current-plan.md:

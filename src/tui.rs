@@ -164,15 +164,16 @@ pub fn render(frame: &mut Frame, state: &AppState, config: &Config) {
 fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppState, config: &Config) {
     let active_role = state.current_agent.as_ref().map(|(role, _)| role.clone());
 
-    let stage_order = [
-        AgentRole::Planner,
-        AgentRole::Builder,
-        AgentRole::Reviewer,
-    ];
-
+    // Map any active role to its pipeline box index.
+    // Builder, Reviewer, and Fixer all map to IMPLEMENT (index 2).
     let active_index = active_role
         .as_ref()
-        .and_then(|role| stage_order.iter().position(|r| r == role));
+        .and_then(|role| match role {
+            AgentRole::Scout => Some(0),
+            AgentRole::Planner => Some(1),
+            AgentRole::Builder | AgentRole::Reviewer | AgentRole::Fixer => Some(2),
+            _ => None,
+        });
 
     let roles = config.role_configs();
 
@@ -183,9 +184,9 @@ fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppState, config: 
     }
 
     let stages: Vec<StageInfo> = [
-        ("PLANNER", Some(0)),
-        ("BUILDER", Some(1)),
-        ("FIX", Some(2)),
+        ("SCOUT", Some(0)),
+        ("PLAN", Some(1)),
+        ("IMPLEMENT", Some(2)),
         ("COMMIT", None),
     ]
     .iter()
@@ -1491,6 +1492,7 @@ fn render_agent_output(frame: &mut Frame, area: Rect, state: &AppState) {
 
     let title = if let Some((ref role, _)) = state.current_agent {
         let color = match role {
+            AgentRole::Scout => Color::LightBlue,
             AgentRole::Planner => Color::Magenta,
             AgentRole::Builder => Color::Green,
             AgentRole::Reviewer => Color::Cyan,
@@ -1590,27 +1592,25 @@ fn render_task_queue(frame: &mut Frame, area: Rect, state: &AppState) {
 
             // Pipeline indicator for completed and current tasks
             let pipeline_spans = if let Some(history) = state.task_history.get(&task.id) {
-                // Completed: show P>B>R>F with colors
+                // Completed: show S>P>I>V with colors
                 let all_stages = [
+                    ("S", AgentRole::Scout),
                     ("P", AgentRole::Planner),
-                    ("B", AgentRole::Builder),
-                    ("R", AgentRole::Reviewer),
-                    ("F", AgentRole::Fixer),
+                    ("I", AgentRole::Builder),
+                    ("V", AgentRole::Reviewer),
                 ];
-                let review_color = if history.fix_passes == 0 {
-                    Color::Green // Clean review, no fixer needed
-                } else if history.passed_review {
-                    Color::Yellow // Fixer ran, re-review passed
+                let verify_color = if history.passed_review {
+                    Color::Green
                 } else {
-                    Color::Red // Fixer ran, re-review still failed
+                    Color::Red
                 };
                 let mut spans = vec![Span::styled(" ", Style::default())];
                 for (label, role) in &all_stages {
                     let ran = history.stages_seen.contains(role);
                     let color = if !ran {
                         Color::DarkGray
-                    } else if *role == AgentRole::Fixer {
-                        review_color
+                    } else if *role == AgentRole::Reviewer {
+                        verify_color
                     } else {
                         Color::Green
                     };
@@ -1621,17 +1621,17 @@ fn render_task_queue(frame: &mut Frame, area: Rect, state: &AppState) {
                     };
                     spans.push(Span::styled(text, Style::default().fg(color)));
                 }
-                if !history.passed_review && history.fix_passes > 0 {
+                if !history.passed_review {
                     spans.push(Span::styled("!", Style::default().fg(Color::Red)));
                 }
                 spans
             } else if is_current {
                 // Current: show progress through pipeline
                 let all_stages = [
+                    ("S", AgentRole::Scout),
                     ("P", AgentRole::Planner),
-                    ("B", AgentRole::Builder),
-                    ("R", AgentRole::Reviewer),
-                    ("F", AgentRole::Fixer),
+                    ("I", AgentRole::Builder),
+                    ("V", AgentRole::Reviewer),
                 ];
                 let active = state.current_agent.as_ref().map(|(r, _)| r);
                 let mut spans = vec![Span::styled(" ", Style::default())];

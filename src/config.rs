@@ -37,6 +37,7 @@ pub struct StudioThemeConfig {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct Config {
+    pub scout_model: String,
     pub planner_model: String,
     pub builder_model: String,
     pub reviewer_model: String,
@@ -44,6 +45,7 @@ pub struct Config {
     pub discovery_model: String,
 
     /// Provider per build-loop role: "claude" (default) or "codex".
+    pub scout_provider: String,
     pub planner_provider: String,
     pub builder_provider: String,
     pub reviewer_provider: String,
@@ -136,12 +138,14 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
+            scout_model: "sonnet".into(),
             planner_model: "opus".into(),
             builder_model: "opus".into(),
             reviewer_model: "sonnet".into(),
             fixer_model: "sonnet".into(),
             discovery_model: "opus".into(),
 
+            scout_provider: "claude".into(),
             planner_provider: "claude".into(),
             builder_provider: "claude".into(),
             reviewer_provider: "claude".into(),
@@ -239,9 +243,9 @@ impl Config {
     /// Return (role_name, provider, model) tuples for all build-loop roles.
     pub fn role_configs(&self) -> Vec<(&str, &str, &str)> {
         vec![
-            ("Planner", &self.planner_provider, &self.planner_model),
-            ("Builder", &self.builder_provider, &self.builder_model),
-            ("Fix", &self.reviewer_provider, &self.reviewer_model),
+            ("Scout", &self.scout_provider, &self.scout_model),
+            ("Plan", &self.planner_provider, &self.planner_model),
+            ("Implement", &self.builder_provider, &self.builder_model),
             ("Discovery", &self.discovery_provider, &self.discovery_model),
             ("Patterns", "claude", &self.pattern_extraction_model),
             ("Add Tasks", "claude", "haiku"),
