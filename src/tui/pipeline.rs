@@ -23,6 +23,7 @@ pub(super) fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppStat
     struct StageInfo {
         label: &'static str,
         model_label: String,
+        kind_label: &'static str,
         border_color: Color,
         text_style: Style,
     }
@@ -43,15 +44,15 @@ pub(super) fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppStat
         .unwrap_or_default();
 
     let connected: Vec<StageInfo> = [
-        ("SCOUT", Some(0)),
-        ("PLAN", Some(1)),
-        ("IMPLEMENT", Some(2)),
-        ("DOUBT", None),    // the doubt loop -- uses verify_model
-        ("SHIP", None),     // ship it Ralph
+        ("SCOUT", Some(0), "scout-report.md"),
+        ("PLAN", Some(1), "current-plan.md"),
+        ("IMPLEMENT", Some(2), "build-claims.md"),
+        ("DOUBT", None, "fresh context"),
+        ("SHIP", None, "git + pr"),
     ]
     .iter()
     .enumerate()
-    .map(|(i, (label, role_idx))| {
+    .map(|(i, (label, role_idx, kind))| {
         let model_label = if let Some(ri) = role_idx {
             if *ri < roles.len() {
                 let (_name, provider, model) = roles[*ri];
@@ -77,7 +78,7 @@ pub(super) fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppStat
             _ => (Color::DarkGray, Style::default().fg(Color::DarkGray)),
         };
 
-        StageInfo { label, model_label, border_color, text_style }
+        StageInfo { label, model_label, kind_label: kind, border_color, text_style }
     })
     .collect();
 
@@ -100,6 +101,7 @@ pub(super) fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppStat
         StageInfo {
             label: "SAMSARA",
             model_label: truncate_str(&discovery_model, 14).to_string(),
+            kind_label: "TASKS.md",
             border_color: if discovery_active { pipe_color } else if discovery_used { Color::Green } else { Color::DarkGray },
             text_style: if discovery_active {
                 Style::default().fg(Color::White).add_modifier(Modifier::BOLD)
@@ -112,6 +114,7 @@ pub(super) fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppStat
         StageInfo {
             label: "PATTERNS",
             model_label: truncate_str(&patterns_model, 14).to_string(),
+            kind_label: "~/.foundry/",
             border_color: if patterns_used { Color::Green } else { Color::DarkGray },
             text_style: if patterns_used {
                 Style::default().fg(Color::Green)
@@ -162,6 +165,7 @@ pub(super) fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppStat
     let mut top_spans = vec![Span::raw("  ")];
     let mut mid_spans = vec![Span::raw("  ")];
     let mut model_spans = vec![Span::raw("  ")];
+    let mut kind_spans = vec![Span::raw("  ")];
     let mut bot_spans = vec![Span::raw("  ")];
 
     // Connected stages with arrows
@@ -169,6 +173,7 @@ pub(super) fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppStat
         box_top(&mut top_spans, box_width, stage.border_color);
         box_mid(&mut mid_spans, box_width, stage.label, stage.text_style, stage.border_color);
         box_model(&mut model_spans, box_width, &stage.model_label, stage.border_color);
+        box_model(&mut kind_spans, box_width, stage.kind_label, stage.border_color);
         box_bot(&mut bot_spans, box_width, stage.border_color);
 
         if i < connected.len() - 1 {
@@ -178,6 +183,7 @@ pub(super) fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppStat
                 Style::default().fg(pipe_color),
             ));
             model_spans.push(Span::raw("    "));
+            kind_spans.push(Span::raw("    "));
             bot_spans.push(Span::raw("    "));
         }
     }
@@ -186,6 +192,7 @@ pub(super) fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppStat
     top_spans.push(Span::raw("        "));
     mid_spans.push(Span::raw("        "));
     model_spans.push(Span::raw("        "));
+    kind_spans.push(Span::raw("        "));
     bot_spans.push(Span::raw("        "));
 
     // Disconnected stages (no arrows)
@@ -193,12 +200,14 @@ pub(super) fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppStat
         box_top(&mut top_spans, box_width, stage.border_color);
         box_mid(&mut mid_spans, box_width, stage.label, stage.text_style, stage.border_color);
         box_model(&mut model_spans, box_width, &stage.model_label, stage.border_color);
+        box_model(&mut kind_spans, box_width, stage.kind_label, stage.border_color);
         box_bot(&mut bot_spans, box_width, stage.border_color);
 
         if i < disconnected.len() - 1 {
             top_spans.push(Span::raw("  "));
             mid_spans.push(Span::raw("  "));
             model_spans.push(Span::raw("  "));
+            kind_spans.push(Span::raw("  "));
             bot_spans.push(Span::raw("  "));
         }
     }
@@ -208,6 +217,7 @@ pub(super) fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppStat
         Line::from(top_spans),
         Line::from(mid_spans),
         Line::from(model_spans),
+        Line::from(kind_spans),
         Line::from(bot_spans),
     ];
 

@@ -57,7 +57,7 @@ pub fn render(frame: &mut Frame, state: &AppState, config: &Config) {
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(5),  // Header
-            Constraint::Length(6),  // Pipeline map
+            Constraint::Length(7),  // Pipeline map (3 lines inside box + borders)
             Constraint::Min(10),   // Middle: agent output + task queue
             Constraint::Length(9), // Bottom: build config + stats + doubt config
             Constraint::Length(1), // Status bar
