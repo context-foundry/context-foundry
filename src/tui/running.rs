@@ -443,6 +443,91 @@ pub(super) fn render_task_queue(frame: &mut Frame, area: Rect, state: &AppState)
     frame.render_widget(list, area);
 }
 
+pub(super) fn render_patterns_learned(
+    frame: &mut Frame,
+    area: Rect,
+    state: &AppState,
+    config: &crate::config::Config,
+) {
+    use crate::patterns;
+
+    // Use cached patterns if available, otherwise load from disk
+    let fallback;
+    let all_patterns = if let Some(ref cached) = state.patterns_cache {
+        cached.as_slice()
+    } else {
+        let dir = patterns::resolve_patterns_dir(&config.patterns_dir);
+        fallback = patterns::load_patterns(&dir);
+        fallback.as_slice()
+    };
+
+    let title = format!(" Patterns Learned ({}) ", all_patterns.len());
+    let max_lines = area.height.saturating_sub(2) as usize;
+
+    if all_patterns.is_empty() {
+        let empty = Paragraph::new(Span::styled(
+            " No patterns learned yet.",
+            Style::default().fg(Color::DarkGray),
+        ))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::DarkGray))
+                .title(Span::styled(
+                    title,
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                )),
+        );
+        frame.render_widget(empty, area);
+        return;
+    }
+
+    // Show most recent patterns first (last in the list = most recently added)
+    let items: Vec<ListItem> = all_patterns
+        .iter()
+        .rev()
+        .take(max_lines)
+        .map(|p| {
+            let severity_color = match p.severity.as_deref() {
+                Some("HIGH") => Color::Red,
+                Some("MEDIUM") => Color::Yellow,
+                _ => Color::Gray,
+            };
+            let freq = if p.frequency > 1 {
+                format!(" ({}x)", p.frequency)
+            } else {
+                String::new()
+            };
+            ListItem::new(Line::from(vec![
+                Span::styled(
+                    format!(" {} ", p.severity.as_deref().unwrap_or("LOW")),
+                    Style::default().fg(severity_color),
+                ),
+                Span::styled(
+                    truncate_str(&p.title, area.width.saturating_sub(16) as usize),
+                    Style::default().fg(Color::White),
+                ),
+                Span::styled(freq, Style::default().fg(Color::DarkGray)),
+            ]))
+        })
+        .collect();
+
+    let list = List::new(items).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::DarkGray))
+            .title(Span::styled(
+                title,
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            )),
+    );
+    frame.render_widget(list, area);
+}
+
 pub(super) fn render_status_bar(frame: &mut Frame, area: Rect, state: &AppState) {
     if matches!(state.phase, AppPhase::Planning) {
         render_planning_status_bar(frame, area, state);
@@ -518,6 +603,16 @@ pub(super) fn render_status_bar(frame: &mut Frame, area: Rect, state: &AppState)
     }
 
     spans.push(Span::styled(discovery_info, Style::default().fg(Color::DarkGray)));
+
+    // Tab toggle -- always visible on Dashboard
+    spans.push(Span::styled(
+        "  Tab ",
+        Style::default()
+            .fg(Color::Black)
+            .bg(Color::Rgb(227, 115, 75))
+            .add_modifier(Modifier::BOLD),
+    ));
+    spans.push(Span::raw(" explorer"));
 
     if let Some(ref version) = state.update_available {
         spans.push(Span::styled(

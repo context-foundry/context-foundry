@@ -73,7 +73,14 @@ pub fn render(frame: &mut Frame, state: &AppState, config: &Config) {
         .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
         .split(chunks[2]);
     running::render_agent_output(frame, middle_cols[0], state);
-    running::render_task_queue(frame, middle_cols[1], state);
+
+    // Right panel: task queue (75%) + patterns learned (25%)
+    let right_panel = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Percentage(75), Constraint::Percentage(25)])
+        .split(middle_cols[1]);
+    running::render_task_queue(frame, right_panel[0], state);
+    running::render_patterns_learned(frame, right_panel[1], state, config);
 
     // Bottom: stats panel (full width)
     stats::render_dashboard_stats(frame, chunks[3], state, config);
