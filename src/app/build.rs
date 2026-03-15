@@ -580,6 +580,7 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                     ),
                     false,
                 );
+                last_commit_file_count = count_last_commit_files(&ctx.project_dir);
             }
 
             // Check stop after discovery commit
