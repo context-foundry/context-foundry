@@ -86,19 +86,10 @@ When you solve a new problem, save the pattern:
 
 This helps future agents avoid the same issues.
 
-## Doubt Loop (Mandatory)
+## Doubt Loop
 
-After every plan, implementation, or non-trivial code change, you MUST run the Doubt Loop:
-
-1. Spawn a sub-agent with the prompt: "Audit and validate these claims, find the gaps:" followed by your summary of what was changed.
-2. Review the sub-agent's findings.
-3. Fix any High or Medium findings before proceeding.
-4. Low findings can be filed as issues for later.
-
-This applies to:
-- Implementation summaries ("I changed X, Y, Z")
-- Plans and architecture proposals
-- Bug fixes with claims about what was fixed
-- Any response that makes verifiable claims about code
-
-Do NOT skip this step. The sub-agent catches blind spots that self-review misses.
+The doubt loop is handled by the VERIFY stage of the SPIV pipeline (a fresh-context
+agent that reads build-claims.md and audits with "Audit and validate these claims.
+Find the gaps."). Individual agents (scout, planner, builder) should NOT self-audit
+or spawn sub-agents for verification -- that wastes time and tokens. Focus on doing
+your job well and let VERIFY catch the gaps with fresh eyes.

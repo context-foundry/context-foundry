@@ -75,18 +75,13 @@ pub fn render(frame: &mut Frame, state: &AppState, config: &Config) {
     running::render_agent_output(frame, middle_cols[0], state);
     running::render_task_queue(frame, middle_cols[1], state);
 
-    // Bottom: split into 3 columns
+    // Bottom: split into 2 columns
     let bottom_cols = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage(35),
-            Constraint::Percentage(30),
-            Constraint::Percentage(35),
-        ])
+        .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
         .split(chunks[3]);
     stats::render_session_config(frame, bottom_cols[0], config);
     stats::render_dashboard_stats(frame, bottom_cols[1], state, config);
-    stats::render_orchestrator_config(frame, bottom_cols[2], config);
 
     // Use startup status bar when viewing dashboard from startup (Tab toggle)
     if matches!(state.phase, AppPhase::Startup) {

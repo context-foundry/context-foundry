@@ -283,7 +283,7 @@ pub(super) fn render_session_config(frame: &mut Frame, area: Rect, config: &Conf
             .borders(Borders::ALL)
             .border_style(Style::default().fg(Color::DarkGray))
             .title(Span::styled(
-                " Build Loop ",
+                " Pipeline ",
                 Style::default()
                     .fg(Color::Cyan)
                     .add_modifier(Modifier::BOLD),
