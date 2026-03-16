@@ -970,4 +970,65 @@ mod tests {
 
         let _ = fs::remove_dir_all(path);
     }
+
+    #[test]
+    fn commit_task_pr_preserves_tasks_on_base_branch() {
+        use super::commit_task_pr;
+
+        let repo_dir = temp_dir("foundry-task-pr-base-tasks");
+        init_repo(&repo_dir);
+
+        // Initial TASKS.md with two pending tasks
+        fs::write(
+            repo_dir.join("TASKS.md"),
+            "- [ ] T1.1: Test task\n- [ ] T2.1: Another task\n",
+        )
+        .expect("write initial tasks");
+        git(&repo_dir, &["add", "TASKS.md"]);
+        git(&repo_dir, &["commit", "-m", "add tasks"]);
+
+        // Simulate what build.rs does before calling commit_task_pr:
+        // mark_done + progress indicator on T1.1
+        fs::write(
+            repo_dir.join("TASKS.md"),
+            "- [x] T1.1: Test task [SPID]\n- [ ] T2.1: Another task\n",
+        )
+        .expect("write updated tasks");
+
+        // A code change so the commit is non-empty
+        fs::write(repo_dir.join("feature.txt"), "new code\n").expect("write feature");
+
+        let base = current_branch(&repo_dir);
+
+        // Push will fail (no remote), but local operations should succeed
+        let _ = commit_task_pr(
+            &repo_dir,
+            &Config::default(),
+            "T1.1",
+            "Test task",
+            &repo_dir.join("TASKS.md"),
+        );
+
+        // Should be back on base branch
+        assert_eq!(
+            current_branch(&repo_dir),
+            base,
+            "should return to base branch"
+        );
+
+        // TASKS.md on base should retain the mark_done + progress indicator
+        let content = fs::read_to_string(repo_dir.join("TASKS.md")).expect("read tasks");
+        assert!(
+            content.contains("- [x] T1.1: Test task"),
+            "T1.1 should be marked done on base, got: {}",
+            content
+        );
+        assert!(
+            content.contains("- [ ] T2.1: Another task"),
+            "T2.1 should remain pending, got: {}",
+            content
+        );
+
+        let _ = fs::remove_dir_all(repo_dir);
+    }
 }
