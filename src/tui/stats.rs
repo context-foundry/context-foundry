@@ -108,7 +108,7 @@ pub(super) fn render_dashboard_stats(frame: &mut Frame, area: Rect, state: &AppS
             .iter()
             .map(|(name, inj)| {
                 let refs = state.extension_reference_count.get(name).copied().unwrap_or(0);
-                format!("{} {}/{} inj, {} ref", name, inj, inj, refs)
+                format!("{} {} inj, {} ref", name, inj, refs)
             })
             .collect();
         lines.push(Line::from(vec![

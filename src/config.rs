@@ -288,7 +288,7 @@ impl Config {
         }
     }
 
-    /// Persist the selected extensions list to .foundry.json without
+    /// Persist the preview wrap preference to .foundry.json without
     /// overwriting other config fields.
     pub fn save_preview_wrap(project_dir: &Path, wrap: bool) {
         let config_path = project_dir.join(".foundry.json");
@@ -319,6 +319,8 @@ impl Config {
             ("Plan", &self.planner_provider, &self.planner_model),
             ("Implement", &self.builder_provider, &self.builder_model),
             ("Discovery", &self.discovery_provider, &self.discovery_model),
+            ("Reviewer", &self.reviewer_provider, &self.reviewer_model),
+            ("Fixer", &self.fixer_provider, &self.fixer_model),
             ("Patterns", "claude", &self.pattern_extraction_model),
             ("Add Tasks", "claude", "sonnet"),
         ]
