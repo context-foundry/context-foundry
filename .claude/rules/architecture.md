@@ -1,5 +1,6 @@
 ---
 paths:
+  - "src/app.rs"
   - "src/app/**/*.rs"
   - "src/main.rs"
   - "src/agent.rs"

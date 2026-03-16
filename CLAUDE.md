@@ -88,8 +88,8 @@ This helps future agents avoid the same issues.
 
 ## Doubt Loop
 
-The doubt loop is handled by the VERIFY stage of the SPID pipeline (a fresh-context
+The doubt loop is handled by the DOUBT stage of the SPID pipeline (a fresh-context
 agent that reads build-claims.md and audits with "Audit and validate these claims.
 Find the gaps."). Individual agents (scout, planner, builder) should NOT self-audit
 or spawn sub-agents for verification -- that wastes time and tokens. Focus on doing
-your job well and let VERIFY catch the gaps with fresh eyes.
+your job well and let DOUBT catch the gaps with fresh eyes.
