@@ -40,7 +40,7 @@ fn gate_builder(ctx: &RunContext) -> GateResult {
             GateResult::Fail("current-plan.md is empty -- planner produced no output".into())
         }
         Ok(content) => {
-            if !content.contains("## File Operations") && !content.contains("## Verification") {
+            if !content.contains("## File Operations") || !content.contains("## Verification") {
                 GateResult::Fail(
                     "current-plan.md missing required sections (File Operations, Verification)".into(),
                 )
@@ -1050,7 +1050,7 @@ async fn process_task(
                     &ctx.spec_file_name(), &ctx.tasks_file_name(),
                 ),
                 reason,
-                if failed_output.len() > 500 { &failed_output[..500] } else { &failed_output },
+                crate::utils::truncate_str(&failed_output, 500),
             );
 
             let (agent_tx2, mut agent_rx2) = mpsc::unbounded_channel();

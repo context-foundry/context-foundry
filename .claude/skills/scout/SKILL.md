@@ -24,20 +24,20 @@ Write findings to `.buildloop/scout-report.md` with these sections:
 ```markdown
 # Scout Report
 
-## Tech Stack
-- Language, framework, key dependencies
+## Key Facts (read this first)
+- 3-5 bullets: tech stack, critical files, hard constraints
 
 ## Relevant Files
-- file.rs -- what it does and why it matters for this task
+- file.rs -- what it does and why it matters (most important first)
 
 ## Architecture Notes
 - How the system is structured, key patterns
 
-## Risks
-- What could go wrong, edge cases, constraints
-
 ## Suggested Approach
 - Recommended implementation strategy
+
+## Risks and Constraints (read this last)
+- What could go wrong, edge cases, hard constraints
 ```
 
 ## Rules
