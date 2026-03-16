@@ -405,8 +405,30 @@ fn handle_startup_submit(state: &mut AppState) {
                 state.pending_transition = Some(PendingTransition::ShowStartup {
                     message: Some("SPEC.md created -- review it, then press Enter to start.".to_string()),
                 });
+            } else if matches!(scenario, StartupScenario::EmptyProject) {
+                // Empty project with no description -- nudge the user to type something
+                if let Some(ref mut s) = state.startup {
+                    s.status_message = Some(
+                        "Describe what you want to build -- an empty project needs direction.".to_string(),
+                    );
+                }
             } else {
-                // Empty Enter with no text -- start the bootstrap scout directly
+                // NeedsQueue with empty input -- check if SPEC.md has content
+                let project_dir = state.buildloop_dir.parent()
+                    .unwrap_or(std::path::Path::new("."));
+                let spec_path = super::contract::ContractPaths::resolve(project_dir).spec_path;
+                let spec_has_content = std::fs::read_to_string(&spec_path)
+                    .map(|c| c.lines().any(|l| !l.starts_with('#') && !l.trim().is_empty()))
+                    .unwrap_or(false);
+                if !spec_has_content {
+                    if let Some(ref mut s) = state.startup {
+                        s.status_message = Some(
+                            "SPEC.md is empty -- describe what to build, or it will just scan the codebase.".to_string(),
+                        );
+                    }
+                    return;
+                }
+                // SPEC.md has content -- proceed with bootstrap
                 let description = "Scan the project and create an initial task queue".to_string();
                 let label = format!("Bootstrap: {}", truncate_str(&description, 48));
                 state.pending_transition =
