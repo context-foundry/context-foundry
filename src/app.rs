@@ -709,12 +709,6 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                 });
                 *state.extension_inject_count.entry(name.clone()).or_insert(0) += 1;
             }
-            LoopEvent::ExtensionReferenced { ref name, .. } => {
-                *state.extension_reference_count.entry(name.clone()).or_insert(0) += 1;
-            }
-            LoopEvent::PatternApplied { .. } => {
-                state.pattern_apply_count += 1;
-            }
             LoopEvent::PatternsUsed { ref titles, ref keywords_by_title } => {
                 for title in titles {
                     state.session_patterns.push(state::PatternEvent {
@@ -1324,7 +1318,7 @@ fn handle_agent_output(state: &mut AppState, output: AgentOutputEvent) {
     }
 }
 
-fn handle_agent_done(state: &mut AppState, success: bool) {
+pub(super) fn handle_agent_done(state: &mut AppState, success: bool) {
     // ─── Extension & Pattern Reference Detection ───
     if !state.agent_output.is_empty() {
         let agent_role_str = state

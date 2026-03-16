@@ -7,11 +7,13 @@ use super::state::{
     PlanningState, StartupScenario, StartupState,
 };
 use super::{
-    apply_orchestrator_outcome, apply_pending_transition, apply_planning_outcome, handle_event,
-    prepare_append_tasks_start, process_received_event, seed_spec_from_brief,
+    apply_orchestrator_outcome, apply_pending_transition, apply_planning_outcome, handle_agent_done,
+    handle_event, prepare_append_tasks_start, process_received_event, seed_spec_from_brief,
 };
 use crate::config::Config;
 use crate::agent::{AgentOutputEvent, AgentRole};
+use crate::task::Task;
+use std::collections::HashMap;
 use crate::orchestrator::{Finding, OrchestratorOutcome, ProposerOutput, ReviewerOutput};
 use crossterm::event::{self, KeyCode, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use std::path::{Path, PathBuf};
@@ -1039,8 +1041,6 @@ fn running_patterns_scroll_uses_natural_direction() {
 
 #[test]
 fn running_queue_updated_event_populates_task_queue() {
-    use crate::task::Task;
-
     let mut state = AppState::new(PathBuf::from(".buildloop"));
     let tasks = vec![
         Task {
@@ -1606,4 +1606,191 @@ fn test_agent_started_discovery_overwrites_agent_state() {
     ));
     assert!(state.agent_output.is_empty());
     assert!(state.task_stages_seen.contains(&AgentRole::Discovery));
+}
+
+// ─── Extension & Pattern Telemetry Tests ────────────────────────────
+
+#[test]
+fn test_extension_reference_detection_finds_keywords() {
+    let dir = temp_project_dir("ext-ref-detect");
+    let mut state = AppState::new(dir.join(".buildloop"));
+    state.extension_keywords = HashMap::from([
+        ("roblox".to_string(), vec!["cframe".to_string(), "workspace".to_string(), "baseplate".to_string()]),
+    ]);
+    state.current_agent = Some((AgentRole::Builder, chrono::Utc::now()));
+    state.agent_output.push("Using CFrame to position the part".to_string());
+    handle_agent_done(&mut state, true);
+    assert_eq!(state.extension_reference_count.get("roblox"), Some(&1));
+    assert!(state.log_messages.iter().any(|(_, msg)| msg.contains("Extension 'roblox' referenced")));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn test_extension_reference_detection_no_match() {
+    let dir = temp_project_dir("ext-ref-nomatch");
+    let mut state = AppState::new(dir.join(".buildloop"));
+    state.extension_keywords = HashMap::from([
+        ("roblox".to_string(), vec!["cframe".to_string(), "workspace".to_string(), "baseplate".to_string()]),
+    ]);
+    state.current_agent = Some((AgentRole::Builder, chrono::Utc::now()));
+    state.agent_output.push("Writing unit tests for the parser".to_string());
+    handle_agent_done(&mut state, true);
+    assert!(state.extension_reference_count.get("roblox").is_none());
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn test_pattern_apply_detection_finds_keywords() {
+    let dir = temp_project_dir("pat-apply-detect");
+    let mut state = AppState::new(dir.join(".buildloop"));
+    state.active_pattern_keywords = HashMap::from([
+        ("SQLite case sensitivity".to_string(), vec!["func.lower".to_string(), "case-insensitive".to_string(), "sqlite".to_string()]),
+    ]);
+    state.current_agent = Some((AgentRole::Builder, chrono::Utc::now()));
+    state.agent_output.push("Using func.lower() for case-insensitive matching".to_string());
+    handle_agent_done(&mut state, true);
+    assert_eq!(state.pattern_apply_count, 1);
+    assert!(state.log_messages.iter().any(|(_, msg)| msg.contains("Pattern 'SQLite case sensitivity' applied")));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn test_pattern_apply_detection_no_match() {
+    let dir = temp_project_dir("pat-apply-nomatch");
+    let mut state = AppState::new(dir.join(".buildloop"));
+    state.active_pattern_keywords = HashMap::from([
+        ("SQLite case sensitivity".to_string(), vec!["func.lower".to_string(), "case-insensitive".to_string()]),
+    ]);
+    state.current_agent = Some((AgentRole::Builder, chrono::Utc::now()));
+    state.agent_output.push("Implementing the HTTP server".to_string());
+    handle_agent_done(&mut state, true);
+    assert_eq!(state.pattern_apply_count, 0);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn test_extension_inject_count_incremented_on_event() {
+    let dir = temp_project_dir("ext-inject-count");
+    let mut state = AppState::new(dir.join(".buildloop"));
+    let config = Config::default();
+    handle_event(
+        &mut state,
+        AppEvent::LoopEvent(LoopEvent::ExtensionInjected {
+            name: "roblox".to_string(),
+            agent_role: "Builder".to_string(),
+            task_id: "T1.1".to_string(),
+        }),
+        &config,
+    );
+    assert_eq!(state.extension_inject_count.get("roblox"), Some(&1));
+    assert_eq!(state.session_extensions_used.len(), 1);
+    handle_event(
+        &mut state,
+        AppEvent::LoopEvent(LoopEvent::ExtensionInjected {
+            name: "roblox".to_string(),
+            agent_role: "Reviewer".to_string(),
+            task_id: "T1.1".to_string(),
+        }),
+        &config,
+    );
+    assert_eq!(state.extension_inject_count.get("roblox"), Some(&2));
+    assert_eq!(state.session_extensions_used.len(), 2);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn test_patterns_used_event_increments_counters() {
+    let dir = temp_project_dir("pat-used-count");
+    let mut state = AppState::new(dir.join(".buildloop"));
+    let config = Config::default();
+    let titles = vec!["Pattern A".to_string(), "Pattern B".to_string()];
+    let keywords_by_title = HashMap::from([
+        ("Pattern A".to_string(), vec!["keyword1".to_string()]),
+        ("Pattern B".to_string(), vec!["keyword2".to_string()]),
+    ]);
+    handle_event(
+        &mut state,
+        AppEvent::LoopEvent(LoopEvent::PatternsUsed { titles, keywords_by_title }),
+        &config,
+    );
+    assert_eq!(state.pattern_inject_count, 2);
+    assert_eq!(state.session_patterns.len(), 2);
+    assert_eq!(state.active_pattern_keywords.len(), 2);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn test_build_completion_warns_unused_extensions() {
+    let dir = temp_project_dir("ext-warn-unused");
+    let mut state = AppState::new(dir.join(".buildloop"));
+    state.extension_inject_count = HashMap::from([("roblox".to_string(), 4)]);
+    // Leave extension_reference_count empty
+    let config = Config::default();
+    handle_event(
+        &mut state,
+        AppEvent::LoopEvent(LoopEvent::Finished),
+        &config,
+    );
+    assert!(state.log_messages.iter().any(|(_, msg)| msg.contains("Warning: Extension 'roblox' was injected 4 times but never referenced")));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn test_build_completion_no_warning_when_referenced() {
+    let dir = temp_project_dir("ext-warn-none");
+    let mut state = AppState::new(dir.join(".buildloop"));
+    state.extension_inject_count = HashMap::from([("roblox".to_string(), 4)]);
+    state.extension_reference_count = HashMap::from([("roblox".to_string(), 2)]);
+    let config = Config::default();
+    handle_event(
+        &mut state,
+        AppEvent::LoopEvent(LoopEvent::Finished),
+        &config,
+    );
+    assert!(!state.log_messages.iter().any(|(_, msg)| msg.contains("Warning: Extension 'roblox'")));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn test_keyword_minimum_length_filter() {
+    let dir = temp_project_dir("kw-min-len");
+    let mut state = AppState::new(dir.join(".buildloop"));
+    state.extension_keywords = HashMap::from([
+        ("recon".to_string(), vec!["ssh".to_string(), "idrac".to_string(), "racadm".to_string()]),
+    ]);
+    state.current_agent = Some((AgentRole::Builder, chrono::Utc::now()));
+    state.agent_output.push("Using ssh to connect and running racadm commands".to_string());
+    handle_agent_done(&mut state, true);
+    assert_eq!(state.extension_reference_count.get("recon"), Some(&1));
+    // The log should mention racadm (>= 4 chars) but NOT ssh (< 4 chars)
+    let ref_log = state.log_messages.iter().find(|(_, msg)| msg.contains("Extension 'recon' referenced"));
+    assert!(ref_log.is_some());
+    let (_, log_msg) = ref_log.unwrap();
+    assert!(log_msg.contains("racadm"));
+    assert!(!log_msg.contains("ssh"));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn test_active_pattern_keywords_cleared_on_task_start() {
+    let dir = temp_project_dir("pat-kw-clear");
+    let mut state = AppState::new(dir.join(".buildloop"));
+    state.active_pattern_keywords = HashMap::from([
+        ("Old Pattern".to_string(), vec!["stale_keyword".to_string()]),
+    ]);
+    let task = Task {
+        id: "T2.1".to_string(),
+        description: "New task".to_string(),
+        line_number: 0,
+        completed: false,
+        pipeline_progress: None,
+    };
+    let config = Config::default();
+    handle_event(
+        &mut state,
+        AppEvent::LoopEvent(LoopEvent::TaskStarted(task)),
+        &config,
+    );
+    assert!(state.active_pattern_keywords.is_empty());
+    let _ = std::fs::remove_dir_all(dir);
 }

@@ -431,10 +431,6 @@ pub(super) enum LoopEvent {
     ExtensionInjected { name: String, agent_role: String, task_id: String },
     PatternsUsed { titles: Vec<String>, keywords_by_title: HashMap<String, Vec<String>> },
     ExtensionKeywordsLoaded { keywords: HashMap<String, Vec<String>> },
-    #[allow(dead_code)]
-    ExtensionReferenced { name: String, agent_role: String, matched_keywords: Vec<String> },
-    #[allow(dead_code)]
-    PatternApplied { title: String, agent_role: String },
     Log(String),
     BackgroundLog(String),
     CountsUpdated(usize, usize),
