@@ -1,3 +1,10 @@
+---
+paths:
+  - "src/config.rs"
+  - ".foundry.json"
+  - "**/.foundry.json"
+---
+
 # Configuration
 
 ## `.foundry.json` (project root)

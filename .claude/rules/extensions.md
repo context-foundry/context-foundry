@@ -1,3 +1,8 @@
+---
+paths:
+  - "extensions/**/*"
+---
+
 # Extensions
 
 Extensions are domain-specific knowledge packages under `extensions/`.

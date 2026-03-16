@@ -19,6 +19,8 @@ Thumbs.db
 # Claude Code (ignore all except shared rules)
 .claude/*
 !.claude/rules/
+!.claude/skills/
+!.claude/commands/
 !.claude/CLAUDE.md
 .claude-code/
 

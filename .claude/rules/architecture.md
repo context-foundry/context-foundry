@@ -1,3 +1,11 @@
+---
+paths:
+  - "src/app/**/*.rs"
+  - "src/main.rs"
+  - "src/agent.rs"
+  - "Cargo.toml"
+---
+
 # Architecture
 
 ## Build Loop Pipeline

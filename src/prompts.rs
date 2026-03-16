@@ -191,16 +191,35 @@ PLAN FORMAT — Use this exact structure in .buildloop/current-plan.md:
 ```
 
 RULES FOR WRITING THE PLAN:
-- Every file operation must specify CREATE or MODIFY — never leave it ambiguous
+- Every file operation must specify CREATE or MODIFY -- never leave it ambiguous
 - For MODIFY operations, always include an anchor (a unique line from the existing file) so the builder knows exactly where to make changes
-- List file operations in dependency order — if file B imports from file A, list A first
-- Function signatures must include all parameter names, types, and return types — no ellipses or "etc."
+- List file operations in dependency order -- if file B imports from file A, list A first
+- Function signatures must include all parameter names, types, and return types -- no ellipses or "etc."
 - Logic steps must be concrete: "call fetch_user(user_id) and match on the Result" not "handle the user lookup"
 - Do not use vague language: no "appropriate", "relevant", "necessary", "etc.", "as needed", "should contain"
-- Every verification command must be copy-paste ready — no placeholders
+- Every verification command must be copy-paste ready -- no placeholders
+
+GOOD vs BAD PLAN EXAMPLES:
+
+BAD (vague, no anchors, ambiguous):
+  ### 1. MODIFY src/config.rs
+  - Update the config struct to add new fields
+  - Handle the configuration appropriately
+
+GOOD (explicit, anchored, deterministic):
+  ### 1. MODIFY src/config.rs
+  - operation: MODIFY
+  - reason: Add batch_doubt field to Config struct
+  - anchor: `pub struct Config {{`
+  #### Structs / Types
+  - Add field: `pub batch_doubt: bool` with `#[serde(default)]`
+  #### Functions
+  - signature: `fn default() -> Self`
+    - logic: 1. Add `batch_doubt: false` to Default impl
+    - anchor: `impl Default for Config {{`
 
 IMPORTANT:
-- Do NOT implement the code — only write the plan
+- Do NOT implement the code -- only write the plan
 - Do NOT modify {spec_file}, CLAUDE.md, {tasks_file}, or .buildloop/ (except current-plan.md)
 - Do NOT read files in .buildloop/logs/ -- these are internal agent logs, not project files
 - Write the plan to: .buildloop/current-plan.md{patterns_block}"#
@@ -488,6 +507,42 @@ WHEN YOU FIND ISSUES:
 - Fix them immediately -- do not just report them
 - Be surgical: fix only the issue, do not refactor surrounding code
 - After fixing, re-run the relevant check to confirm it passes
+
+SEVERITY CLASSIFICATION -- use these examples to calibrate:
+
+Example 1 (HIGH -- always report and fix):
+  file: src/auth.rs:45
+  issue: SQL query uses string format! instead of parameterized query
+  category: security
+  WHY HIGH: Direct user input in SQL enables injection attacks. Any unvalidated
+  external input flowing into a query/command/template is HIGH.
+
+Example 2 (MEDIUM -- report and fix):
+  file: src/api.rs:112
+  issue: unwrap() on user-provided input in request handler
+  category: error-handling
+  WHY MEDIUM: Panics at system boundary crash the server. Missing error handling
+  where external data crosses a trust boundary is MEDIUM.
+
+Example 3 (LOW -- report only, do NOT fix):
+  file: src/utils.rs:8
+  issue: Variable named 'x' could be more descriptive
+  category: style
+  WHY LOW: Local scope, self-evident from context, consistent with surrounding code.
+  Style choices that match the existing codebase are LOW. Do not fix these.
+
+WHAT TO REPORT:
+- Bugs, panics, security issues, logic errors
+- Missing error handling at system boundaries (user input, API calls, file I/O)
+- Claims in build-claims.md that contradict the actual code
+- Race conditions, resource leaks, crash paths
+
+WHAT TO SKIP (do not report at all):
+- Style preferences consistent with the existing codebase
+- Minor naming in local scope
+- Missing comments or documentation
+- Code patterns that match how the rest of the project works
+- Theoretical improvements with no concrete bug
 
 WRITE YOUR FINAL REPORT to .buildloop/review-report.md:
 

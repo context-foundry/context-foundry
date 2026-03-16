@@ -18,6 +18,55 @@ use super::context::RunContext;
 use super::{review, AppEvent, LoopEvent};
 use crate::utils::atomic_write_file;
 
+// ─── Prerequisite Gates ──────────────────────────────────────
+// Programmatic checks that block a pipeline stage from running
+// if its preconditions aren't met. This is deterministic enforcement
+// -- prompts have a non-zero failure rate, gates have zero.
+
+enum GateResult {
+    Pass,
+    Fail(String),
+}
+
+/// Check that the plan file exists and contains required sections
+/// before allowing the builder to run.
+fn gate_builder(ctx: &RunContext) -> GateResult {
+    let plan = &ctx.current_plan;
+    if !plan.exists() {
+        return GateResult::Fail("current-plan.md does not exist -- planner may have failed".into());
+    }
+    match std::fs::read_to_string(plan) {
+        Ok(content) if content.trim().is_empty() => {
+            GateResult::Fail("current-plan.md is empty -- planner produced no output".into())
+        }
+        Ok(content) => {
+            if !content.contains("## File Operations") && !content.contains("## Verification") {
+                GateResult::Fail(
+                    "current-plan.md missing required sections (File Operations, Verification)".into(),
+                )
+            } else {
+                GateResult::Pass
+            }
+        }
+        Err(e) => GateResult::Fail(format!("Failed to read current-plan.md: {}", e)),
+    }
+}
+
+/// Check that the builder produced claims before allowing the reviewer to run.
+fn gate_reviewer(ctx: &RunContext) -> GateResult {
+    let claims = ctx.buildloop_dir.join("build-claims.md");
+    if !claims.exists() {
+        return GateResult::Fail("build-claims.md does not exist -- builder may have failed".into());
+    }
+    match std::fs::metadata(&claims) {
+        Ok(meta) if meta.len() < 10 => {
+            GateResult::Fail("build-claims.md is effectively empty (<10 bytes)".into())
+        }
+        Ok(_) => GateResult::Pass,
+        Err(e) => GateResult::Fail(format!("Failed to stat build-claims.md: {}", e)),
+    }
+}
+
 // ─── Planner Look-Ahead ────────────────────────────────────────
 
 /// Build the plan filename for a look-ahead task: `plan-{task_id}.md`.
@@ -977,6 +1026,21 @@ async fn process_task(
         }
     }
 
+    // ─── Gate: Builder Prerequisites ────────────────────────
+    if !skip_planner {
+        if let GateResult::Fail(reason) = gate_builder(ctx) {
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                "GATE BLOCKED builder for {}: {}", task_id, reason
+            ))));
+            {
+                let _lock = ctx.tasks_file_lock.lock().unwrap_or_else(|e| e.into_inner());
+                let _ = task::update_task_progress(&ctx.plan_path, task_id, &format!("{}{}--!", scout_char, planner_char));
+            }
+            let _ = git::commit_and_push(&ctx.project_dir, &ctx.config, task_id, task_desc, true);
+            return (false, last_rate_limited);
+        }
+    }
+
     // ─── Run Builder ─────────────────────────────────────────
     let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
     let fwd_tx = tx.clone();
@@ -1086,7 +1150,21 @@ async fn process_task(
         )));
         (true, 0usize)
     } else {
-        review::run_review_loop(task_id, task_desc, ctx, &reviewer_pattern_context, tx).await
+        // ─── Gate: Reviewer Prerequisites ─────────────────────
+        match gate_reviewer(ctx) {
+            GateResult::Fail(reason) => {
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                    "GATE WARNING for reviewer on {}: {} -- reviewing without claims",
+                    task_id, reason
+                ))));
+                // Don't block -- reviewer can fall back to reading changed files.
+                // But log it clearly so we know the builder didn't produce claims.
+                review::run_review_loop(task_id, task_desc, ctx, &reviewer_pattern_context, tx).await
+            }
+            GateResult::Pass => {
+                review::run_review_loop(task_id, task_desc, ctx, &reviewer_pattern_context, tx).await
+            }
+        }
     };
 
     // Persist final pipeline progress indicator and mark done BEFORE committing.

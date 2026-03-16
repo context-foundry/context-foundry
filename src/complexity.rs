@@ -54,6 +54,7 @@ pub fn classify_task(task_desc: &str) -> TaskComplexity {
 /// Classify task with additional context about spec detail level.
 /// When SPEC.md is detailed (>200 lines), downgrade Complex to Medium
 /// since the spec provides enough guidance to reduce ambiguity.
+#[allow(dead_code)]
 pub fn classify_task_with_context(task_desc: &str, spec_line_count: usize) -> TaskComplexity {
     let base = classify_task(task_desc);
     if spec_line_count > 200 && base == TaskComplexity::Complex {

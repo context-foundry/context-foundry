@@ -1,3 +1,9 @@
+---
+paths:
+  - "src/patterns.rs"
+  - "**/*.json"
+---
+
 # Pattern System
 
 ## Pattern JSON Schema
