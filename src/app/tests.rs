@@ -883,6 +883,11 @@ fn startup_text_input_on_needs_queue_starts_build() {
         Some(PendingTransition::AppendTasks(_))
     ));
 
+    // NeedsQueue with text should also write SPEC.md (like EmptyProject does)
+    let spec_path = dir.join("SPEC.md");
+    let spec_content = std::fs::read_to_string(&spec_path).expect("SPEC.md should exist");
+    assert!(spec_content.contains("auth bugs"));
+
     let _ = std::fs::remove_dir_all(dir);
 }
 
