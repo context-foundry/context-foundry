@@ -175,15 +175,17 @@ fn startup_empty_input_on_needs_queue_sets_planning_transition() {
         None,
     ));
 
-    // Press Enter with empty input on NeedsQueue (no SPEC.md) -> warns user
+    // Press Enter with empty input on NeedsQueue -> opens selected file in explorer
     handle_startup_key(
         &mut state,
         event::KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
     );
 
-    // No SPEC.md content -> shows warning, does not start
-    assert!(state.pending_transition.is_none());
-    assert!(state.startup.as_ref().unwrap().status_message.is_some());
+    // Empty input Enter now triggers explorer action (open file / toggle dir)
+    assert!(matches!(
+        state.pending_transition,
+        Some(PendingTransition::OpenExternalEditor { .. })
+    ));
     let _ = std::fs::remove_dir_all(dir);
 }
 
@@ -435,7 +437,7 @@ fn startup_enter_empty_on_queue_ready_starts_build() {
         None,
     ));
 
-    // Press Enter with empty input -- should start build
+    // Press Enter with empty input -- should start build (QueueReady preserves StartBuild)
     handle_startup_key(
         &mut state,
         event::KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
@@ -833,25 +835,16 @@ fn startup_empty_input_on_needs_queue_starts_build() {
         None,
     ));
 
-    // Press Enter with empty input and no SPEC.md -> warns user, does not start
+    // Press Enter with empty input -> opens selected file in explorer
     handle_startup_key(
         &mut state,
         event::KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
     );
 
-    assert!(state.pending_transition.is_none());
-    assert!(state.startup.as_ref().unwrap().status_message.is_some());
-
-    // Now write a SPEC.md with content and try again
-    write_file(&dir.join("SPEC.md"), "# Brief\n\nBuild a notes app\n");
-    handle_startup_key(
-        &mut state,
-        event::KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
-    );
-
+    // Empty input Enter now triggers explorer action (open file / toggle dir)
     assert!(matches!(
         state.pending_transition,
-        Some(PendingTransition::AppendTasks(_))
+        Some(PendingTransition::OpenExternalEditor { .. })
     ));
 
     let _ = std::fs::remove_dir_all(dir);

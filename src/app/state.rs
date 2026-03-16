@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use std::time::SystemTime;
 
 use chrono::{DateTime, Utc};
 use crossterm::event::{self, MouseEvent};
@@ -59,6 +60,9 @@ pub struct FileEntry {
     pub is_dir: bool,
     pub is_cf_highlight: bool,
     pub is_hidden: bool,
+    pub expanded: bool,
+    pub file_size: u64,
+    pub modified: Option<SystemTime>,
 }
 
 #[derive(Debug, Clone)]
@@ -92,6 +96,26 @@ pub struct StartupState {
     pub explorer_scroll: usize,
     pub file_preview_content: Vec<String>,
     pub placeholder_tick: usize,
+}
+
+impl StartupState {
+    pub fn visible_indices(&self) -> Vec<usize> {
+        let mut result = Vec::new();
+        let mut skip_below: Option<usize> = None;
+        for (idx, entry) in self.file_tree.iter().enumerate() {
+            if let Some(d) = skip_below {
+                if entry.depth > d {
+                    continue;
+                }
+                skip_below = None;
+            }
+            result.push(idx);
+            if entry.is_dir && !entry.expanded {
+                skip_below = Some(entry.depth);
+            }
+        }
+        result
+    }
 }
 
 #[derive(Debug, Clone)]

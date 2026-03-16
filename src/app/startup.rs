@@ -141,6 +141,14 @@ fn build_file_tree_recursive(
         let is_skipped_dir = is_dir && should_skip_project_dir(&file_name);
 
         let is_cf_highlight = is_context_foundry_file(&file_name, &path, base_dir);
+        let (file_size, modified) = match std::fs::metadata(&path) {
+            Ok(meta) => {
+                let size = meta.len();
+                let mtime = meta.modified().ok();
+                (size, mtime)
+            }
+            Err(_) => (0, None),
+        };
         entries.push(FileEntry {
             path: path.clone(),
             name: file_name,
@@ -148,6 +156,9 @@ fn build_file_tree_recursive(
             is_dir,
             is_cf_highlight,
             is_hidden,
+            expanded: true,
+            file_size: if is_dir { 0 } else { file_size },
+            modified,
         });
 
         // Still recurse into hidden dirs (e.g. .buildloop) but not into
@@ -269,7 +280,19 @@ pub(super) fn handle_startup_key(state: &mut AppState, key: event::KeyEvent) {
             move_explorer_selection(state, 10);
         }
         KeyCode::Enter => {
-            handle_startup_submit(state);
+            let input_empty = state
+                .startup
+                .as_ref()
+                .is_none_or(|s| s.intent_input.is_empty());
+            let is_queue_ready = state
+                .startup
+                .as_ref()
+                .is_some_and(|s| s.scenario == StartupScenario::QueueReady);
+            if input_empty && !is_queue_ready {
+                handle_explorer_enter(state);
+            } else {
+                handle_startup_submit(state);
+            }
         }
         _ => {}
     }
@@ -300,22 +323,28 @@ fn move_explorer_selection(state: &mut AppState, delta: isize) {
     let Some(startup) = state.startup.as_mut() else {
         return;
     };
-    if startup.file_tree.is_empty() {
+    let vis = startup.visible_indices();
+    if vis.is_empty() {
         return;
     }
-    let max_index = startup.file_tree.len() - 1;
-    let new_index =
-        (startup.explorer_selected as isize + delta).clamp(0, max_index as isize) as usize;
+    // Find current position in visible list
+    let cur_pos = vis
+        .iter()
+        .position(|&i| i == startup.explorer_selected)
+        .unwrap_or(0);
+    let max_pos = vis.len() - 1;
+    let new_pos = (cur_pos as isize + delta).clamp(0, max_pos as isize) as usize;
+    let new_index = vis[new_pos];
     if new_index == startup.explorer_selected {
         return;
     }
     startup.explorer_selected = new_index;
     // Adjust scroll to keep selection visible (estimate 20 visible rows)
     let visible_estimate: usize = 20;
-    if new_index < startup.explorer_scroll {
-        startup.explorer_scroll = new_index;
-    } else if new_index >= startup.explorer_scroll + visible_estimate {
-        startup.explorer_scroll = new_index.saturating_sub(visible_estimate) + 1;
+    if new_pos < startup.explorer_scroll {
+        startup.explorer_scroll = new_pos;
+    } else if new_pos >= startup.explorer_scroll + visible_estimate {
+        startup.explorer_scroll = new_pos.saturating_sub(visible_estimate) + 1;
     }
     // Load preview
     let entry = &startup.file_tree[new_index];
@@ -334,11 +363,13 @@ fn set_explorer_selection(state: &mut AppState, index: usize) {
         return;
     }
     startup.explorer_selected = index;
+    let vis = startup.visible_indices();
+    let vis_pos = vis.iter().position(|&i| i == index).unwrap_or(0);
     let visible_estimate: usize = 20;
-    if index < startup.explorer_scroll {
-        startup.explorer_scroll = index;
-    } else if index >= startup.explorer_scroll + visible_estimate {
-        startup.explorer_scroll = index.saturating_sub(visible_estimate) + 1;
+    if vis_pos < startup.explorer_scroll {
+        startup.explorer_scroll = vis_pos;
+    } else if vis_pos >= startup.explorer_scroll + visible_estimate {
+        startup.explorer_scroll = vis_pos.saturating_sub(visible_estimate) + 1;
     }
     let entry = &startup.file_tree[index];
     startup.file_preview_content = if entry.is_dir {
@@ -346,6 +377,32 @@ fn set_explorer_selection(state: &mut AppState, index: usize) {
     } else {
         load_file_preview(&entry.path)
     };
+}
+
+fn handle_explorer_enter(state: &mut AppState) {
+    let Some(startup) = state.startup.as_mut() else {
+        return;
+    };
+    let selected = startup.explorer_selected;
+    if selected >= startup.file_tree.len() {
+        return;
+    }
+    if startup.file_tree[selected].is_dir {
+        // Toggle expanded/collapsed
+        startup.file_tree[selected].expanded = !startup.file_tree[selected].expanded;
+        // If collapsing, check if explorer_selected is now invisible
+        if !startup.file_tree[selected].expanded {
+            let vis = startup.visible_indices();
+            if !vis.contains(&startup.explorer_selected) {
+                startup.explorer_selected = selected;
+            }
+        }
+    } else {
+        // Open file in external editor
+        let file_path = startup.file_tree[selected].path.clone();
+        state.pending_transition =
+            Some(PendingTransition::OpenExternalEditor { file_path });
+    }
 }
 
 // ─── Submit Handling ─────────────────────────────────────────

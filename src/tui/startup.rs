@@ -1,3 +1,6 @@
+use std::time::SystemTime;
+
+use chrono::{DateTime, Utc};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -104,9 +107,10 @@ fn file_explorer_hit_test(
     }
 
     let relative_row = (row - inner_top) as usize;
-    let index = startup.explorer_scroll + relative_row;
-    if index < startup.file_tree.len() {
-        Some(StartupMouseTarget::FileEntry(index))
+    let vis = startup.visible_indices();
+    let vis_index = startup.explorer_scroll + relative_row;
+    if vis_index < vis.len() {
+        Some(StartupMouseTarget::FileEntry(vis[vis_index]))
     } else {
         None
     }
@@ -262,35 +266,78 @@ fn render_startup_summary(frame: &mut Frame, area: Rect, state: &AppState) {
     frame.render_widget(summary, area);
 }
 
+fn format_file_size(bytes: u64) -> String {
+    if bytes < 1024 {
+        format!("{:>5}", bytes)
+    } else if bytes < 1024 * 1024 {
+        format!("{:>4.1}K", bytes as f64 / 1024.0)
+    } else if bytes < 1024 * 1024 * 1024 {
+        format!("{:>4.1}M", bytes as f64 / (1024.0 * 1024.0))
+    } else {
+        format!("{:>4.1}G", bytes as f64 / (1024.0 * 1024.0 * 1024.0))
+    }
+}
+
+fn format_modified(t: Option<SystemTime>) -> String {
+    match t {
+        Some(st) => {
+            let dt: DateTime<Utc> = st.into();
+            dt.format("%Y-%m-%d").to_string()
+        }
+        None => String::new(),
+    }
+}
+
 fn render_file_explorer(frame: &mut Frame, area: Rect, state: &AppState) {
     let Some(startup) = state.startup.as_ref() else {
         return;
     };
 
     let visible_height = area.height.saturating_sub(2) as usize;
+    let vis = startup.visible_indices();
 
-    // Compute display scroll from explorer_selected, clamped for safety
-    let scroll = if startup.explorer_selected < startup.explorer_scroll {
-        startup.explorer_selected
+    // Find position of explorer_selected in visible list
+    let selected_vis_pos = vis
+        .iter()
+        .position(|&i| i == startup.explorer_selected)
+        .unwrap_or(0);
+
+    // Compute scroll in visible-index space
+    let scroll = if selected_vis_pos < startup.explorer_scroll {
+        selected_vis_pos
     } else if visible_height > 0
-        && startup.explorer_selected >= startup.explorer_scroll + visible_height
+        && selected_vis_pos >= startup.explorer_scroll + visible_height
     {
-        startup.explorer_selected.saturating_sub(visible_height) + 1
+        selected_vis_pos.saturating_sub(visible_height) + 1
     } else {
         startup.explorer_scroll
     };
 
-    let items: Vec<ListItem> = startup
-        .file_tree
+    // Determine if we have room for detail columns
+    let inner_width = area.width.saturating_sub(2) as usize; // minus borders
+    let show_details = inner_width > 40;
+    let size_col_width: usize = 6;
+    let date_col_width: usize = 11; // "2025-12-29 " with trailing space
+    let detail_width = if show_details {
+        size_col_width + date_col_width
+    } else {
+        0
+    };
+
+    let items: Vec<ListItem> = vis
         .iter()
-        .enumerate()
         .skip(scroll)
         .take(visible_height)
-        .map(|(idx, entry)| {
+        .map(|&tree_idx| {
+            let entry = &startup.file_tree[tree_idx];
             let indent = "  ".repeat(entry.depth);
-            let prefix = if entry.is_dir { "\u{25B8} " } else { "  " };
-            let display_name = format!("{}{}{}", indent, prefix, entry.name);
-            let is_selected = idx == startup.explorer_selected;
+            let prefix = if entry.is_dir {
+                if entry.expanded { "\u{25BC} " } else { "\u{25B6} " }
+            } else {
+                "  "
+            };
+
+            let is_selected = tree_idx == startup.explorer_selected;
             let fg_color = if entry.is_hidden {
                 Color::DarkGray
             } else if entry.is_cf_highlight {
@@ -308,7 +355,44 @@ fn render_file_explorer(frame: &mut Frame, area: Rect, state: &AppState) {
             } else {
                 Style::default().fg(fg_color)
             };
-            ListItem::new(Line::from(Span::styled(display_name, style)))
+
+            if show_details {
+                // Name column: fill remaining width
+                let name_str = format!("{}{}{}", indent, prefix, entry.name);
+                let name_max = inner_width.saturating_sub(detail_width);
+                let truncated_name = if name_str.len() > name_max {
+                    truncate_str(&name_str, name_max).to_string()
+                } else {
+                    format!("{:<width$}", name_str, width = name_max)
+                };
+
+                let size_str = if entry.is_dir {
+                    format!("{:>width$}", "", width = size_col_width)
+                } else {
+                    format!(
+                        "{:>width$}",
+                        format_file_size(entry.file_size),
+                        width = size_col_width
+                    )
+                };
+
+                let date_str = format!(" {:<10}", format_modified(entry.modified));
+
+                let detail_style = if is_selected {
+                    Style::default().fg(Color::Black).bg(fg_color)
+                } else {
+                    Style::default().fg(Color::DarkGray)
+                };
+
+                ListItem::new(Line::from(vec![
+                    Span::styled(truncated_name, style),
+                    Span::styled(size_str, detail_style),
+                    Span::styled(date_str, detail_style),
+                ]))
+            } else {
+                let display_name = format!("{}{}{}", indent, prefix, entry.name);
+                ListItem::new(Line::from(Span::styled(display_name, style)))
+            }
         })
         .collect();
 
@@ -577,6 +661,9 @@ mod tests {
                     is_dir: true,
                     is_cf_highlight: false,
                     is_hidden: false,
+                    expanded: true,
+                    file_size: 0,
+                    modified: None,
                 },
                 crate::app::FileEntry {
                     path: PathBuf::from("/tmp/TASKS.md"),
@@ -585,6 +672,9 @@ mod tests {
                     is_dir: false,
                     is_cf_highlight: true,
                     is_hidden: false,
+                    expanded: true,
+                    file_size: 0,
+                    modified: None,
                 },
             ],
             explorer_selected: 0,
