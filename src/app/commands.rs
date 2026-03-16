@@ -113,9 +113,14 @@ fn required_providers(
 pub(super) async fn run_headless(project_dir: &Path) -> Result<()> {
     let contract_paths = ContractPaths::resolve(project_dir);
     let headless_review_gate = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let mut config = Config::load(project_dir);
+    if config.run_mode == "review" {
+        eprintln!("[foundry] review mode is not supported in headless mode -- falling back to auto");
+        config.run_mode = "auto".to_string();
+    }
     let run_context = RunContext::new(
         project_dir,
-        Config::load(project_dir),
+        config,
         std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
         std::sync::Arc::new(std::sync::Mutex::new(())),
         headless_review_gate.clone(),

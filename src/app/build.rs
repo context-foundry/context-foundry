@@ -852,6 +852,27 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
     }
 }
 
+/// Route WIP commits to the correct function based on run_mode.
+/// In review mode, use commit_task_pr (feature branch isolation).
+/// Otherwise, use commit_and_push (base branch).
+fn commit_wip_for_mode(ctx: &RunContext, task_id: &str, task_desc: &str) -> bool {
+    if ctx.config.run_mode == "review" {
+        git::commit_task_pr(
+            &ctx.project_dir,
+            &ctx.config,
+            task_id,
+            task_desc,
+            &ctx.plan_path,
+            true,
+        )
+        .map(|(c, _)| c)
+        .unwrap_or(false)
+    } else {
+        git::commit_and_push(&ctx.project_dir, &ctx.config, task_id, task_desc, true)
+            .unwrap_or(false)
+    }
+}
+
 /// Returns (success, rate_limited) so the caller can decide on adaptive pauses.
 async fn process_task(
     task_info: &Task,
@@ -1087,9 +1108,7 @@ async fn process_task(
                     let _lock = ctx.tasks_file_lock.lock().unwrap_or_else(|e| e.into_inner());
                     let _ = task::update_task_progress(&ctx.plan_path, task_id, &format!("{}P--!", scout_char));
                 }
-                let committed =
-                    git::commit_and_push(&ctx.project_dir, &ctx.config, task_id, task_desc, true)
-                        .unwrap_or(false);
+                let committed = commit_wip_for_mode(ctx, task_id, task_desc);
                 let message = if committed {
                     format!("PLANNER failed for {} -- committed WIP changes", task_id)
                 } else {
@@ -1119,8 +1138,7 @@ async fn process_task(
                     let _lock = ctx.tasks_file_lock.lock().unwrap_or_else(|e| e.into_inner());
                     let _ = task::update_task_progress(&ctx.plan_path, task_id, &format!("{}P..", scout_char));
                 }
-                let _ =
-                    git::commit_and_push(&ctx.project_dir, &ctx.config, task_id, task_desc, true);
+                let _ = commit_wip_for_mode(ctx, task_id, task_desc);
                 return (false, last_rate_limited);
             }
         }
@@ -1148,7 +1166,7 @@ async fn process_task(
                     &format!("{}{}--!", scout_char, planner_char),
                 );
             }
-            let _ = git::commit_and_push(&ctx.project_dir, &ctx.config, task_id, task_desc, true);
+            let _ = commit_wip_for_mode(ctx, task_id, task_desc);
             return (false, last_rate_limited);
         }
     }
@@ -1224,7 +1242,7 @@ async fn process_task(
                     let _lock = ctx.tasks_file_lock.lock().unwrap_or_else(|e| e.into_inner());
                     let _ = task::update_task_progress(&ctx.plan_path, task_id, &format!("{}{}--!", scout_char, planner_char));
                 }
-                let _ = git::commit_and_push(&ctx.project_dir, &ctx.config, task_id, task_desc, true);
+                let _ = commit_wip_for_mode(ctx, task_id, task_desc);
                 return (false, last_rate_limited);
             }
 
@@ -1292,7 +1310,7 @@ async fn process_task(
             let _lock = ctx.tasks_file_lock.lock().unwrap_or_else(|e| e.into_inner());
             let _ = task::update_task_progress(&ctx.plan_path, task_id, &format!("{}{}I-!", scout_char, planner_char));
         }
-        let _ = git::commit_and_push(&ctx.project_dir, &ctx.config, task_id, task_desc, true);
+        let _ = commit_wip_for_mode(ctx, task_id, task_desc);
         return (false, last_rate_limited);
     }
 
@@ -1311,7 +1329,7 @@ async fn process_task(
             task_id
         ))));
         // Progress indicator already written at [SPI.] above; commit preserves it.
-        let _ = git::commit_and_push(&ctx.project_dir, &ctx.config, task_id, task_desc, true);
+        let _ = commit_wip_for_mode(ctx, task_id, task_desc);
         return (false, last_rate_limited);
     }
 
@@ -1393,6 +1411,32 @@ async fn process_task(
                     )));
                 }
 
+                // Create GitHub issue for WIP commits in review mode
+                if committed && !validated && ctx.config.create_issue_on_wip {
+                    match git::create_wip_issue(
+                        &ctx.project_dir,
+                        task_id,
+                        task_desc,
+                        &ctx.review_report,
+                    ) {
+                        Ok(Some(issue_num)) => {
+                            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+                                format!("Issue #{} created for WIP({})", issue_num, task_id),
+                            )));
+                        }
+                        Ok(None) => {
+                            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+                                format!("Issue created for WIP({}) but could not parse issue number", task_id),
+                            )));
+                        }
+                        Err(e) => {
+                            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+                                format!("Failed to create issue for WIP({}): {}", task_id, e),
+                            )));
+                        }
+                    }
+                }
+
                 // Pause: signal TUI and wait for user to press Enter or PR approval
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::WaitingForReview(pr_num)));
                 ctx.review_gate.store(true, Ordering::Relaxed);
@@ -1433,7 +1477,7 @@ async fn process_task(
             }
             Err(e) => {
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
-                    format!("Per-task PR failed: {} -- falling back to normal commit", e),
+                    format!("WARNING: Per-task PR failed: {} -- falling back to base-branch commit (feature branch isolation bypassed)", e),
                 )));
                 let committed = git::commit_and_push(&ctx.project_dir, &ctx.config, task_id, task_desc, !validated)
                     .unwrap_or(false);
