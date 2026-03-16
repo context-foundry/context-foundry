@@ -260,8 +260,14 @@ fn render_startup_summary(frame: &mut Frame, area: Rect, state: &AppState) {
     let git_summary = startup
         .git_context
         .as_ref()
-        .map(|ctx| format!("branch {} | {} dirty", ctx.branch, ctx.dirty_count))
-        .unwrap_or_else(|| "git summary unavailable".to_string());
+        .map(|ctx| {
+            let remote_part = match ctx.remote.as_deref() {
+                Some(r) => format!(" | {}", r),
+                None => " | no remote".to_string(),
+            };
+            format!("{} | {} dirty{}", ctx.branch, ctx.dirty_count, remote_part)
+        })
+        .unwrap_or_else(|| "not initialized".to_string());
 
     let mut lines = vec![
         Line::from(vec![
@@ -322,7 +328,11 @@ fn render_startup_summary(frame: &mut Frame, area: Rect, state: &AppState) {
         )),
         Line::from(Span::styled(
             format!("  Git: {}", git_summary),
-            Style::default().fg(Color::Gray),
+            Style::default().fg(if startup.git_context.is_none() {
+                Color::Red
+            } else {
+                Color::Gray
+            }),
         )),
         Line::from(Span::styled(
             format!("  {}", startup.summary_headline()),

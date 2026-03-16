@@ -73,12 +73,23 @@ pub(super) fn render_dashboard_stats(frame: &mut Frame, area: Rect, state: &AppS
     let (i_str, i_col) = ctx_pct_span(state.spid_context_pcts[2]);
     let (d_str, d_col) = ctx_pct_span(state.spid_context_pcts[3]);
 
+    let git_status_str = if state.git_initialized {
+        let remote_part = state.git_remote.as_deref().unwrap_or("no remote");
+        format!("{} | {} | {} dirty", state.git_branch, remote_part, state.git_dirty_count)
+    } else {
+        "not initialized".to_string()
+    };
+    let git_status_color = if !state.git_initialized {
+        Color::Red
+    } else if state.git_remote.is_none() {
+        Color::Yellow
+    } else {
+        Color::Green
+    };
+
     lines.push(Line::from(vec![
         Span::styled("  Git      ", Style::default().fg(Color::Cyan)),
-        Span::styled("feat: ", Style::default().fg(Color::DarkGray)),
-        Span::styled(format!("{}", state.session_feat_commits), Style::default().fg(Color::Green)),
-        Span::styled("  WIP: ", Style::default().fg(Color::DarkGray)),
-        Span::styled(format!("{:<width$}", state.session_wip_commits, width = half_width.saturating_sub(28)), Style::default().fg(Color::Yellow)),
+        Span::styled(format!("{:<width$}", git_status_str, width = half_width.saturating_sub(11)), Style::default().fg(git_status_color)),
         Span::styled("Context   ", Style::default().fg(Color::Cyan)),
         Span::styled("S:", Style::default().fg(Color::DarkGray)),
         Span::styled(format!("{:<4}", s_str), Style::default().fg(s_col)),
@@ -103,8 +114,12 @@ pub(super) fn render_dashboard_stats(frame: &mut Frame, area: Rect, state: &AppS
     lines.push(Line::from(vec![
         Span::styled("  Patterns ", Style::default().fg(Color::Cyan)),
         Span::styled(format!("{}", state.session_patterns_learned), Style::default().fg(Color::White)),
+        Span::styled("  feat: ", Style::default().fg(Color::DarkGray)),
+        Span::styled(format!("{}", state.session_feat_commits), Style::default().fg(Color::Green)),
+        Span::styled("  WIP: ", Style::default().fg(Color::DarkGray)),
+        Span::styled(format!("{}", state.session_wip_commits), Style::default().fg(Color::Yellow)),
         Span::styled("  Ollama: ", Style::default().fg(Color::DarkGray)),
-        Span::styled(format!("{:<width$}", ollama_label, width = half_width.saturating_sub(24)), Style::default().fg(ollama_color)),
+        Span::styled(format!("{:<width$}", ollama_label, width = half_width.saturating_sub(40)), Style::default().fg(ollama_color)),
         Span::styled("Timing    ", Style::default().fg(Color::Cyan)),
         Span::styled("session: ", Style::default().fg(Color::DarkGray)),
         Span::styled(&session_str, Style::default().fg(Color::White)),

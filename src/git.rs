@@ -9,6 +9,7 @@ use crate::utils::truncate_str;
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct GitContext {
     pub branch: String,
+    pub remote: Option<String>,
     pub dirty_count: usize,
     pub recent_commits: Vec<String>,
 }
@@ -104,6 +105,21 @@ pub fn gather_git_context(project_dir: &Path) -> Option<GitContext> {
         .map(|out| String::from_utf8_lossy(&out.stdout).lines().count())
         .unwrap_or(0);
 
+    let remote = Command::new("git")
+        .args(["remote"])
+        .current_dir(project_dir)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .output()
+        .ok()
+        .and_then(|out| {
+            String::from_utf8_lossy(&out.stdout)
+                .lines()
+                .next()
+                .filter(|l| !l.trim().is_empty())
+                .map(|l| l.trim().to_string())
+        });
+
     let recent_output = Command::new("git")
         .args(["log", "--oneline", "-3"])
         .current_dir(project_dir)
@@ -125,6 +141,7 @@ pub fn gather_git_context(project_dir: &Path) -> Option<GitContext> {
 
     Some(GitContext {
         branch,
+        remote,
         dirty_count,
         recent_commits,
     })

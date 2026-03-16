@@ -943,6 +943,19 @@ pub(super) fn enter_startup_surface_for_scenario(
     ));
     state.current_task = None;
     state.next_task_hint = None;
+    if let Some(ref startup) = state.startup {
+        if let Some(ref ctx) = startup.git_context {
+            state.git_initialized = true;
+            state.git_branch = ctx.branch.clone();
+            state.git_remote = ctx.remote.clone();
+            state.git_dirty_count = ctx.dirty_count;
+        } else {
+            state.git_initialized = false;
+            state.git_branch.clear();
+            state.git_remote = None;
+            state.git_dirty_count = 0;
+        }
+    }
     state.startup_scroll_debounce_ticks = 0;
 }
 

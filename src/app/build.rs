@@ -1315,7 +1315,7 @@ async fn process_task(
         }
     }
 
-    let _committed = if ctx.config.pr_per_task && validated {
+    let _committed = if ctx.config.pr_per_task && validated && ctx.config.mode == "hil" {
         // Per-task PR mode: branch, commit, push, create PR, return to base
         match git::commit_task_pr(&ctx.project_dir, &ctx.config, task_id, task_desc) {
             Ok((committed, pr_num)) => {
@@ -1340,6 +1340,11 @@ async fn process_task(
             }
         }
     } else {
+        if ctx.config.pr_per_task && validated {
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+                "PR creation skipped (auto mode -- switch to Review mode for PRs)".to_string(),
+            )));
+        }
         let committed = git::commit_and_push(
             &ctx.project_dir,
             &ctx.config,
