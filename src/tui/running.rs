@@ -107,7 +107,7 @@ pub(super) fn render_header(frame: &mut Frame, area: Rect, state: &AppState) {
                     .fg(Color::Black)
                     .bg(if matches!(state.phase, AppPhase::Startup) {
                         Color::DarkGray
-                    } else if state.stop_after_task {
+                    } else if state.stop_after_task || state.awaiting_review {
                         Color::Yellow
                     } else {
                         Color::Green

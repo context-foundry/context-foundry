@@ -1376,13 +1376,14 @@ async fn process_task(
         }
     }
 
-    let _committed = if ctx.config.run_mode == "review" && validated {
+    let _committed = if ctx.config.run_mode == "review" {
         // Review mode: branch, commit, push, create PR, return to base
-        match git::commit_task_pr(&ctx.project_dir, &ctx.config, task_id, task_desc, &ctx.plan_path) {
+        match git::commit_task_pr(&ctx.project_dir, &ctx.config, task_id, task_desc, &ctx.plan_path, !validated) {
             Ok((committed, pr_num)) => {
                 if committed {
+                    let prefix = if validated { "feat" } else { "WIP" };
                     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                        "Committed feat({})", task_id
+                        "Committed {}({})", prefix, task_id
                     ))));
                 }
                 if let Some(pr) = pr_num {
@@ -1433,7 +1434,7 @@ async fn process_task(
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
                     format!("Per-task PR failed: {} -- falling back to normal commit", e),
                 )));
-                let committed = git::commit_and_push(&ctx.project_dir, &ctx.config, task_id, task_desc, false)
+                let committed = git::commit_and_push(&ctx.project_dir, &ctx.config, task_id, task_desc, !validated)
                     .unwrap_or(false);
 
                 // Still pause after fallback commit in review mode
