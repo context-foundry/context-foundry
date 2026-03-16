@@ -47,7 +47,7 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
     let _ = std::fs::remove_file(buildloop_dir.join("stop"));
     let shutdown = Arc::new(AtomicBool::new(false));
     let mut state = AppState::new(buildloop_dir);
-    state.run_mode = config.mode.clone();
+    state.run_mode = config.run_mode.clone();
 
     // Git/GH readiness checks (advisory, non-blocking)
     for msg in git::check_git_readiness(project_dir) {
@@ -372,9 +372,15 @@ fn spawn_build_loop(
 
     // Apply runtime mode toggle (user may have toggled auto/review on startup screen)
     let mut loop_config = config.clone();
-    loop_config.mode = state.run_mode.clone();
+    loop_config.run_mode = state.run_mode.clone();
 
-    let run_context = RunContext::new(project_dir, loop_config, shutdown.clone(), state.tasks_file_lock.clone());
+    let review_gate = Arc::new(AtomicBool::new(false));
+    state.review_gate = Some(review_gate.clone());
+    state.awaiting_review = false;
+    state.awaiting_pr = None;
+    state.pr_poll_last_check = None;
+
+    let run_context = RunContext::new(project_dir, loop_config, shutdown.clone(), state.tasks_file_lock.clone(), review_gate);
     let loop_tx = event_tx.clone();
     tokio::spawn(async move {
         build::build_loop(run_context, loop_tx).await;
@@ -413,7 +419,7 @@ fn spawn_inline_planning(
     );
     state.log(format!("Planning started — {}", label));
 
-    let run_context = RunContext::new(project_dir, config.clone(), shutdown.clone(), state.tasks_file_lock.clone());
+    let run_context = RunContext::new(project_dir, config.clone(), shutdown.clone(), state.tasks_file_lock.clone(), Arc::new(AtomicBool::new(false)));
     let event_tx = event_tx.clone();
     tokio::spawn(async move {
         planning::spawn_inline_planning_task(run_context, event_tx, user_intent).await;
@@ -458,7 +464,7 @@ fn spawn_append_tasks(
     state.set_agent(AgentRole::Planner, &Config::display_provider_model("claude", actual_model));
     state.log(format!("Planning started — {}", request.label));
 
-    let run_context = RunContext::new(project_dir, config.clone(), shutdown.clone(), state.tasks_file_lock.clone());
+    let run_context = RunContext::new(project_dir, config.clone(), shutdown.clone(), state.tasks_file_lock.clone(), Arc::new(AtomicBool::new(false)));
     let event_tx = event_tx.clone();
     tokio::spawn(async move {
         planning::run_append_tasks(run_context, event_tx, request.description).await;
@@ -803,6 +809,41 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                 history.passed_review = passed;
                 state.cap_task_history();
             }
+            LoopEvent::WaitingForReview(pr_num) => {
+                state.awaiting_review = true;
+                state.awaiting_pr = pr_num;
+                state.pr_poll_last_check = None;
+                if let Some(num) = pr_num {
+                    state.log(format!("Awaiting PR #{} review -- press Enter to skip or wait for approval", num));
+                } else {
+                    state.log("Awaiting review -- press Enter or 'c' to continue");
+                }
+            }
+            LoopEvent::PrApproved(pr_num) => {
+                state.awaiting_review = false;
+                state.awaiting_pr = None;
+                state.pr_poll_last_check = None;
+                if let Some(ref gate) = state.review_gate {
+                    gate.store(false, Ordering::Relaxed);
+                }
+                state.log(format!("PR #{} approved -- resuming pipeline", pr_num));
+            }
+            LoopEvent::PrClosed(pr_num) => {
+                state.awaiting_review = false;
+                state.awaiting_pr = None;
+                state.pr_poll_last_check = None;
+                if let Some(ref gate) = state.review_gate {
+                    gate.store(false, Ordering::Relaxed);
+                }
+                // Create stop file to halt the build loop
+                let _ = std::fs::create_dir_all(&state.buildloop_dir);
+                let _ = std::fs::write(state.buildloop_dir.join("stop"), "");
+                state.stop_after_task = true;
+                state.log(format!("PR #{} was closed without merge -- stopping", pr_num));
+            }
+            LoopEvent::PrPollChecked => {
+                state.pr_poll_last_check = Some(std::time::Instant::now());
+            }
             LoopEvent::Finished => {
                 // Emit warnings for injected-but-never-referenced extensions
                 let warnings: Vec<String> = state.extension_inject_count
@@ -831,6 +872,16 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
             if state.inject_input.is_some() {
                 handle_inject_key(state, key);
             } else if state.show_running_explorer {
+                // Review gate: Enter/c clears the review pause (must be before other handlers)
+                if state.awaiting_review && matches!(key.code, KeyCode::Enter | KeyCode::Char('c')) {
+                    state.awaiting_review = false;
+                    if let Some(ref gate) = state.review_gate {
+                        gate.store(false, Ordering::Relaxed);
+                    }
+                    state.log("Continuing to next task");
+                    state.awaiting_pr = None;
+                    state.pr_poll_last_check = None;
+                } else {
                 match key.code {
                     KeyCode::Char('q') => {
                         if state.stop_after_task {
@@ -889,7 +940,18 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                     }
                     _ => {}
                 }
+                } // close review-gate else
             } else {
+                // Review gate: Enter/c clears the review pause (must be before other handlers)
+                if state.awaiting_review && matches!(key.code, KeyCode::Enter | KeyCode::Char('c')) {
+                    state.awaiting_review = false;
+                    if let Some(ref gate) = state.review_gate {
+                        gate.store(false, Ordering::Relaxed);
+                    }
+                    state.log("Continuing to next task");
+                    state.awaiting_pr = None;
+                    state.pr_poll_last_check = None;
+                } else {
                 match key.code {
                     KeyCode::Char('q') => {
                         if state.stop_after_task {
@@ -991,6 +1053,7 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                     }
                     _ => {}
                 }
+                } // close review-gate else
             }
         }
         AppEvent::Tick => {

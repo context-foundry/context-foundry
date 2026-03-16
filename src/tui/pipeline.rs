@@ -96,11 +96,21 @@ pub(super) fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppStat
 
     let disconnected: Vec<StageInfo> = vec![
         StageInfo {
-            label: "LOOP",
+            label: "DISCOVER",
             model_label: truncate_str(&discovery_model, 14).to_string(),
             kind_label: "TASKS.md",
-            border_color: if discovery_active { pipe_color } else if discovery_used { Color::Green } else { Color::DarkGray },
-            text_style: if discovery_active {
+            border_color: if state.run_mode == "sprint" || state.run_mode == "review" {
+                Color::DarkGray
+            } else if discovery_active {
+                pipe_color
+            } else if discovery_used {
+                Color::Green
+            } else {
+                Color::DarkGray
+            },
+            text_style: if state.run_mode == "sprint" || state.run_mode == "review" {
+                Style::default().fg(Color::DarkGray)
+            } else if discovery_active {
                 Style::default().fg(Color::White).add_modifier(Modifier::BOLD)
             } else if discovery_used {
                 Style::default().fg(Color::Green)

@@ -94,8 +94,12 @@ pub(super) fn render_header(frame: &mut Frame, area: Rect, state: &AppState) {
                     " STOPPED "
                 } else if state.stop_after_task {
                     " STOPPING "
-                } else if state.run_mode == "hil" {
-                    " RUNNING (Review) "
+                } else if state.awaiting_review {
+                    if state.awaiting_pr.is_some() {
+                        " POLLING PR "
+                    } else {
+                        " PAUSED (Review) "
+                    }
                 } else {
                     " RUNNING "
                 },
@@ -112,13 +116,17 @@ pub(super) fn render_header(frame: &mut Frame, area: Rect, state: &AppState) {
             ),
             Span::raw("  "),
             Span::styled(
-                if state.run_mode == "hil" { " Review " } else { " Auto " },
+                match state.run_mode.as_str() {
+                    "sprint" => " Sprint ",
+                    "review" => " Review ",
+                    _ => " Auto ",
+                },
                 Style::default()
                     .fg(Color::Black)
-                    .bg(if state.run_mode == "hil" {
-                        Color::Yellow
-                    } else {
-                        Color::Green
+                    .bg(match state.run_mode.as_str() {
+                        "sprint" => Color::Cyan,
+                        "review" => Color::Yellow,
+                        _ => Color::Green,
                     })
                     .add_modifier(Modifier::BOLD),
             ),
@@ -142,6 +150,31 @@ pub(super) fn render_header(frame: &mut Frame, area: Rect, state: &AppState) {
             Style::default().fg(Color::DarkGray),
         )),
     ];
+
+    if state.awaiting_review {
+        if let Some(pr_num) = state.awaiting_pr {
+            let ago_text = match state.pr_poll_last_check {
+                Some(last) => {
+                    let elapsed = last.elapsed().as_secs();
+                    if elapsed < 60 {
+                        format!("last checked {}s ago", elapsed)
+                    } else {
+                        format!("last checked {}m ago", elapsed / 60)
+                    }
+                }
+                None => "polling not started yet".to_string(),
+            };
+            header_text.push(Line::from(Span::styled(
+                format!("  Waiting for PR #{} review... ({})", pr_num, ago_text),
+                Style::default().fg(Color::Yellow),
+            )));
+        } else {
+            header_text.push(Line::from(Span::styled(
+                "  Waiting for review -- press Enter to continue",
+                Style::default().fg(Color::Yellow),
+            )));
+        }
+    }
 
     if let Some(next_task) = state.next_task_hint.as_ref() {
         header_text.push(Line::from(Span::styled(
@@ -671,6 +704,21 @@ pub(super) fn render_status_bar(frame: &mut Frame, area: Rect, state: &AppState)
         ),
         Span::raw(" patterns"),
     ];
+
+    if state.awaiting_review {
+        spans.push(Span::styled(
+            "  Enter ",
+            Style::default()
+                .fg(Color::Black)
+                .bg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        ));
+        if state.awaiting_pr.is_some() {
+            spans.push(Span::raw(" skip wait"));
+        } else {
+            spans.push(Span::raw(" continue"));
+        }
+    }
 
     if state.last_orchestrator_outcome.is_some() {
         spans.push(Span::styled(

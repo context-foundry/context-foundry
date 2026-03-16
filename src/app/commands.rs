@@ -112,11 +112,13 @@ fn required_providers(
 
 pub(super) async fn run_headless(project_dir: &Path) -> Result<()> {
     let contract_paths = ContractPaths::resolve(project_dir);
+    let headless_review_gate = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
     let run_context = RunContext::new(
         project_dir,
         Config::load(project_dir),
         std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
         std::sync::Arc::new(std::sync::Mutex::new(())),
+        headless_review_gate.clone(),
     );
 
     let shutdown_signal = run_context.shutdown.clone();
@@ -209,7 +211,19 @@ pub(super) async fn run_headless(project_dir: &Path) -> Result<()> {
                 | LoopEvent::TaskReviewResult { .. }
                 | LoopEvent::ExtensionInjected { .. }
                 | LoopEvent::ExtensionKeywordsLoaded { .. }
-                | LoopEvent::PatternsUsed { .. } => {}
+                | LoopEvent::PatternsUsed { .. }
+                | LoopEvent::PrPollChecked => {}
+                LoopEvent::PrApproved(pr_num) => {
+                    eprintln!("[log] PR #{} approved -- resuming pipeline", pr_num);
+                }
+                LoopEvent::PrClosed(pr_num) => {
+                    eprintln!("[log] PR #{} was closed without merge -- stopping", pr_num);
+                }
+                LoopEvent::WaitingForReview(_) => {
+                    // In headless mode there is no TUI to clear the gate; auto-clear it so
+                    // the build loop continues instead of hanging forever.
+                    headless_review_gate.store(false, Ordering::Relaxed);
+                }
             },
             AppEvent::UpdateAvailable(version) => {
                 update_version = Some(version);

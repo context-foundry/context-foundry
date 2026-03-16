@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
@@ -237,7 +238,11 @@ pub struct AppState {
     pub update_available: Option<String>,
     pub inject_input: Option<String>,
     pub show_run_view: bool, // Tab toggle: startup shows run view (pipeline+queue+config)
-    pub run_mode: String,    // "loop" or "hil"
+    pub run_mode: String,    // "auto", "sprint", or "review"
+    pub awaiting_review: bool,
+    pub(super) review_gate: Option<Arc<AtomicBool>>,
+    pub awaiting_pr: Option<u64>,
+    pub pr_poll_last_check: Option<std::time::Instant>,
     pub show_patterns: bool,
     pub show_findings: bool,
     pub findings_scroll: usize,
@@ -312,7 +317,11 @@ impl AppState {
             update_available: None,
             inject_input: None,
             show_run_view: false,
-            run_mode: "loop".into(),
+            run_mode: "auto".into(),
+            awaiting_review: false,
+            review_gate: None,
+            awaiting_pr: None,
+            pr_poll_last_check: None,
             show_patterns: false,
             show_findings: false,
             findings_scroll: 0,
@@ -440,5 +449,9 @@ pub(super) enum LoopEvent {
         fix_passes: usize,
         passed: bool,
     },
+    WaitingForReview(Option<u64>),
+    PrApproved(u64),
+    PrClosed(u64),
+    PrPollChecked,
     Finished,
 }

@@ -17,11 +17,12 @@ pub(super) struct RunContext {
     pub(super) current_plan: PathBuf,
     pub(super) review_report: PathBuf,
     pub(super) shutdown: Arc<AtomicBool>,
+    pub(super) review_gate: Arc<AtomicBool>,
     pub(super) tasks_file_lock: Arc<Mutex<()>>,
 }
 
 impl RunContext {
-    pub(super) fn new(project_dir: &Path, config: Config, shutdown: Arc<AtomicBool>, tasks_file_lock: Arc<Mutex<()>>) -> Self {
+    pub(super) fn new(project_dir: &Path, config: Config, shutdown: Arc<AtomicBool>, tasks_file_lock: Arc<Mutex<()>>, review_gate: Arc<AtomicBool>) -> Self {
         let contract_paths = ContractPaths::resolve(project_dir);
         let buildloop_dir = project_dir.join(".buildloop");
         let log_dir = buildloop_dir.join("logs");
@@ -36,6 +37,7 @@ impl RunContext {
             current_plan: buildloop_dir.join("current-plan.md"),
             review_report: buildloop_dir.join("review-report.md"),
             shutdown,
+            review_gate,
             tasks_file_lock,
         }
     }

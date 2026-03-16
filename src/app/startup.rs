@@ -337,11 +337,30 @@ pub(super) fn handle_startup_key(state: &mut AppState, key: event::KeyEvent) {
             state.show_run_view = !state.show_run_view;
         }
         KeyCode::Char('m') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-            state.run_mode = if state.run_mode == "hil" {
-                "loop".into()
-            } else {
-                "hil".into()
+            state.run_mode = match state.run_mode.as_str() {
+                "auto" => "sprint".into(),
+                "sprint" => "review".into(),
+                _ => "auto".into(),
             };
+            let project_dir = state.buildloop_dir.parent().unwrap_or(std::path::Path::new("."));
+            Config::save_run_mode(project_dir, &state.run_mode);
+            // Warn if gh CLI not available when switching to review mode
+            if state.run_mode == "review" {
+                if !crate::git::is_gh_authenticated() {
+                    if let Some(ref mut s) = state.startup {
+                        s.status_message = Some(
+                            "Warning: gh CLI not installed or not authenticated -- PR auto-resume won't work in Review mode".into(),
+                        );
+                    }
+                }
+            } else {
+                // Clear any previous gh warning when switching away from review
+                if let Some(ref mut s) = state.startup {
+                    if s.status_message.as_ref().is_some_and(|m| m.contains("gh CLI")) {
+                        s.status_message = None;
+                    }
+                }
+            }
         }
         KeyCode::Char('f')
             if key.modifiers.contains(KeyModifiers::CONTROL)

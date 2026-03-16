@@ -138,9 +138,10 @@ pub struct Config {
     /// Model for pattern extraction (lightweight JSON output, doesn't need Opus).
     pub pattern_extraction_model: String,
 
-    /// Run mode: "loop" (default) runs forever with discovery.
-    /// "hil" (human-in-the-loop) stops when queue empties, creates a PR, and waits.
-    pub mode: String,
+    /// Run mode: "auto" (default) runs forever with discovery.
+    /// "sprint" runs all tasks then stops. "review" runs one task at a time with PR per task.
+    #[serde(alias = "mode")]
+    pub run_mode: String,
 
     /// Pipeline mode: "full" (all 4 SPID stages), "fast" (skip scout if report
     /// exists, defer doubt to end of session), "backpressure" (skip LLM review).
@@ -153,11 +154,6 @@ pub struct Config {
     /// Selected extension names (e.g., ["roblox", "extend"]).
     pub extensions: Vec<String>,
 
-    /// When true, each validated task gets its own feature branch and PR
-    /// instead of committing to the current branch. WIP commits still go
-    /// to the current branch. Designed for team code-review workflows.
-    pub pr_per_task: bool,
-
     /// When true, auto-create a GitHub issue when a task commits as WIP
     /// (validation failed). The issue body includes review findings from
     /// .buildloop/review-report.md.
@@ -166,6 +162,9 @@ pub struct Config {
     /// Preview pane word-wrap preference (persisted to .foundry.json).
     #[serde(default = "default_true")]
     pub preview_wrap: bool,
+
+    /// Poll interval (seconds) for checking PR review status in Review mode.
+    pub pr_poll_interval_secs: u64,
 }
 
 impl Default for Config {
@@ -221,13 +220,13 @@ impl Default for Config {
             discovery_cooldown_minutes: 5,
             planner_lookahead: true,
             pattern_extraction_model: "sonnet".into(),
-            mode: "loop".into(),
+            run_mode: "auto".into(),
             pipeline_mode: "full".into(),
             batch_doubt: false,
             extensions: Vec::new(),
-            pr_per_task: false,
             create_issue_on_wip: false,
             preview_wrap: true,
+            pr_poll_interval_secs: 30,
         }
     }
 }
@@ -246,8 +245,16 @@ impl Config {
                     return Self::default();
                 }
             };
-            match serde_json::from_str(&content) {
-                Ok(config) => config,
+            match serde_json::from_str::<Self>(&content) {
+                Ok(mut config) => {
+                    // Normalize legacy mode values
+                    if config.run_mode == "loop" {
+                        config.run_mode = "auto".into();
+                    } else if config.run_mode == "hil" {
+                        config.run_mode = "review".into();
+                    }
+                    config
+                }
                 Err(e) => {
                     eprintln!(
                         "warning: failed to parse {}: {e} -- using default config",
@@ -308,6 +315,18 @@ impl Config {
         let mut value: serde_json::Value =
             serde_json::from_str(&content).unwrap_or(serde_json::json!({}));
         value["extensions"] = serde_json::json!(extensions);
+        let json = serde_json::to_string_pretty(&value).unwrap_or_default();
+        let _ = crate::utils::atomic_write_file(&config_path, json.as_bytes());
+    }
+
+    /// Persist the run_mode to .foundry.json without overwriting other config fields.
+    pub fn save_run_mode(project_dir: &Path, run_mode: &str) {
+        let config_path = project_dir.join(".foundry.json");
+        let content =
+            std::fs::read_to_string(&config_path).unwrap_or_else(|_| "{}".to_string());
+        let mut value: serde_json::Value =
+            serde_json::from_str(&content).unwrap_or(serde_json::json!({}));
+        value["run_mode"] = serde_json::json!(run_mode);
         let json = serde_json::to_string_pretty(&value).unwrap_or_default();
         let _ = crate::utils::atomic_write_file(&config_path, json.as_bytes());
     }
@@ -400,15 +419,27 @@ mod tests {
     }
 
     #[test]
-    fn default_config_disables_pr_per_task() {
-        assert!(!Config::default().pr_per_task);
+    fn default_config_uses_auto_run_mode() {
+        assert_eq!(Config::default().run_mode, "auto");
     }
 
     #[test]
-    fn config_deserializes_pr_per_task() {
-        let config: Config = serde_json::from_str(r#"{"pr_per_task":true}"#)
-            .expect("config should deserialize");
-        assert!(config.pr_per_task);
+    fn config_normalizes_legacy_mode_values() {
+        let dir = tempfile::tempdir().unwrap();
+        // Old "loop" -> "auto"
+        fs::write(dir.path().join(".foundry.json"), r#"{"mode":"loop"}"#).unwrap();
+        let config = Config::load(dir.path());
+        assert_eq!(config.run_mode, "auto");
+
+        // Old "hil" -> "review"
+        fs::write(dir.path().join(".foundry.json"), r#"{"mode":"hil"}"#).unwrap();
+        let config = Config::load(dir.path());
+        assert_eq!(config.run_mode, "review");
+
+        // New "run_mode" key passes through
+        fs::write(dir.path().join(".foundry.json"), r#"{"run_mode":"sprint"}"#).unwrap();
+        let config = Config::load(dir.path());
+        assert_eq!(config.run_mode, "sprint");
     }
 
     #[test]

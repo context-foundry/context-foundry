@@ -14,6 +14,17 @@ pub struct GitContext {
     pub recent_commits: Vec<String>,
 }
 
+/// Check if `gh` CLI is installed and authenticated.
+pub fn is_gh_authenticated() -> bool {
+    Command::new("gh")
+        .args(["auth", "status"])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+}
+
 /// Check git and gh readiness, returning advisory log messages.
 /// Auto-initializes a git repo if the project isn't one yet.
 pub fn check_git_readiness(project_dir: &Path) -> Vec<String> {
@@ -222,6 +233,7 @@ fn maybe_push_commit(project_dir: &Path, remote: Option<&str>) -> Result<()> {
 /// If the current branch is the repo's default branch (e.g. `main`), a new
 /// feature branch `foundry/hil-<epoch>` is created so the PR targets default
 /// instead of trying main-to-main (which GitHub rejects).
+#[allow(dead_code)]
 pub fn create_pr(
     project_dir: &Path,
     config: &Config,
@@ -320,6 +332,7 @@ pub fn create_pr(
 
 /// Detect the default branch for the repo. Tries `gh repo view` first,
 /// falls back to common names, then the current branch.
+#[allow(dead_code)]
 fn detect_default_branch(project_dir: &Path) -> String {
     // Try gh repo view --json defaultBranchRef
     if let Ok(output) = Command::new("gh")

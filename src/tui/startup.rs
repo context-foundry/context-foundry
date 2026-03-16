@@ -292,13 +292,17 @@ fn render_startup_summary(frame: &mut Frame, area: Rect, state: &AppState) {
             ),
             Span::raw("  "),
             Span::styled(
-                if state.run_mode == "hil" { " Review " } else { " Auto " },
+                match state.run_mode.as_str() {
+                    "sprint" => " Sprint ",
+                    "review" => " Review ",
+                    _ => " Auto ",
+                },
                 Style::default()
                     .fg(Color::Black)
-                    .bg(if state.run_mode == "hil" {
-                        Color::Yellow
-                    } else {
-                        Color::Green
+                    .bg(match state.run_mode.as_str() {
+                        "sprint" => Color::Cyan,
+                        "review" => Color::Yellow,
+                        _ => Color::Green,
                     })
                     .add_modifier(Modifier::BOLD),
             ),
@@ -963,17 +967,17 @@ pub(super) fn render_startup_status_bar(frame: &mut Frame, area: Rect, state: &A
         "  ^M ",
         Style::default()
             .fg(Color::Black)
-            .bg(if state.run_mode == "hil" {
-                Color::Yellow
-            } else {
-                Color::Green
+            .bg(match state.run_mode.as_str() {
+                "sprint" => Color::Cyan,
+                "review" => Color::Yellow,
+                _ => Color::Green,
             })
             .add_modifier(Modifier::BOLD),
     ));
-    spans.push(Span::raw(if state.run_mode == "hil" {
-        " review"
-    } else {
-        " auto"
+    spans.push(Span::raw(match state.run_mode.as_str() {
+        "auto" => " sprint",
+        "sprint" => " review",
+        _ => " auto",
     }));
 
     if state.last_orchestrator_outcome.is_some() {
