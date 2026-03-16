@@ -252,6 +252,9 @@ pub(super) fn handle_startup_key(state: &mut AppState, key: event::KeyEvent) {
         KeyCode::Esc => {
             state.should_quit = true;
         }
+        KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+            state.should_quit = true;
+        }
         KeyCode::Up => {
             move_explorer_selection(state, -1);
         }
