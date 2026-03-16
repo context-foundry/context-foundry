@@ -145,6 +145,9 @@ pub struct Config {
     /// When true, skip doubt for all tasks except the last pending one in the
     /// session. The final doubt audits all accumulated changes.
     pub batch_doubt: bool,
+
+    /// Selected extension names (e.g., ["roblox", "extend"]).
+    pub extensions: Vec<String>,
 }
 
 impl Default for Config {
@@ -203,6 +206,7 @@ impl Default for Config {
             mode: "loop".into(),
             pipeline_mode: "full".into(),
             batch_doubt: false,
+            extensions: Vec::new(),
         }
     }
 }
@@ -261,6 +265,19 @@ impl Config {
             };
             format!("{provider} {capitalized}")
         }
+    }
+
+    /// Persist the selected extensions list to .foundry.json without
+    /// overwriting other config fields.
+    pub fn save_extensions(project_dir: &Path, extensions: &[String]) {
+        let config_path = project_dir.join(".foundry.json");
+        let content =
+            std::fs::read_to_string(&config_path).unwrap_or_else(|_| "{}".to_string());
+        let mut value: serde_json::Value =
+            serde_json::from_str(&content).unwrap_or(serde_json::json!({}));
+        value["extensions"] = serde_json::json!(extensions);
+        let json = serde_json::to_string_pretty(&value).unwrap_or_default();
+        let _ = crate::utils::atomic_write_file(&config_path, json.as_bytes());
     }
 
     /// Return (role_name, provider, model) tuples for all build-loop roles.

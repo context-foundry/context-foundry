@@ -2,6 +2,8 @@ use crossterm::event::{self, KeyCode, KeyModifiers, MouseButton, MouseEvent, Mou
 use std::path::Path;
 
 use crate::agent::AgentRole;
+use crate::config::Config;
+use crate::extensions;
 use crate::utils::truncate_str;
 use crate::{task, tui};
 
@@ -231,6 +233,48 @@ pub(super) fn handle_startup_key(state: &mut AppState, key: event::KeyEvent) {
         return;
     };
 
+    // Extension panel navigation (intercepts keys when panel is open)
+    if state.show_extensions_panel && !state.available_extensions.is_empty() {
+        match key.code {
+            KeyCode::Up => {
+                if state.extensions_cursor > 0 {
+                    state.extensions_cursor -= 1;
+                }
+            }
+            KeyCode::Down => {
+                if state.extensions_cursor + 1 < state.available_extensions.len() {
+                    state.extensions_cursor += 1;
+                }
+            }
+            KeyCode::Char(' ') | KeyCode::Enter => {
+                // Toggle selection
+                if let Some(ext) = state.available_extensions.get_mut(state.extensions_cursor) {
+                    ext.1 = !ext.1;
+                }
+                // Persist to .foundry.json
+                let project_dir = state
+                    .buildloop_dir
+                    .parent()
+                    .unwrap_or(std::path::Path::new("."));
+                let selected: Vec<String> = state
+                    .available_extensions
+                    .iter()
+                    .filter(|(_, sel)| *sel)
+                    .map(|(name, _)| name.clone())
+                    .collect();
+                Config::save_extensions(project_dir, &selected);
+            }
+            KeyCode::Esc => {
+                state.show_extensions_panel = false;
+            }
+            KeyCode::Char('e') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                state.show_extensions_panel = false;
+            }
+            _ => {}
+        }
+        return;
+    }
+
     // Check if the intent input should capture this key
     let is_typing_key = match key.code {
         KeyCode::Char(_) if !key.modifiers.contains(KeyModifiers::CONTROL) => true,
@@ -245,6 +289,14 @@ pub(super) fn handle_startup_key(state: &mut AppState, key: event::KeyEvent) {
     }
 
     match key.code {
+        KeyCode::Char('e') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+            if !state.available_extensions.is_empty() {
+                state.show_extensions_panel = !state.show_extensions_panel;
+                if state.show_extensions_panel {
+                    state.extensions_cursor = 0;
+                }
+            }
+        }
         KeyCode::Tab | KeyCode::BackTab => {
             state.show_run_view = !state.show_run_view;
         }
@@ -591,6 +643,17 @@ pub(super) fn enter_home_surface(
 
     let scenario = detect_startup_scenario(project_dir);
     enter_startup_surface_for_scenario(project_dir, state, scenario, status_message);
+
+    // Discover extensions and merge with config selection
+    let discovered = extensions::discover_extensions(project_dir);
+    let config = Config::load(project_dir);
+    state.available_extensions = discovered
+        .iter()
+        .map(|ext| {
+            let selected = config.extensions.contains(&ext.name);
+            (ext.name.clone(), selected)
+        })
+        .collect();
 }
 
 /// Populate `state.task_history` from `pipeline_progress` fields parsed from TASKS.md.
@@ -714,6 +777,17 @@ pub(super) fn enter_startup_surface(
 
     let scenario = detect_startup_scenario(project_dir);
     enter_startup_surface_for_scenario(project_dir, state, scenario, status_message);
+
+    // Discover extensions and merge with config selection
+    let discovered = extensions::discover_extensions(project_dir);
+    let config = Config::load(project_dir);
+    state.available_extensions = discovered
+        .iter()
+        .map(|ext| {
+            let selected = config.extensions.contains(&ext.name);
+            (ext.name.clone(), selected)
+        })
+        .collect();
 }
 
 pub(super) fn enter_startup_surface_for_scenario(

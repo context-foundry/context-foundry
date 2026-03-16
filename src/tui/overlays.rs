@@ -426,3 +426,90 @@ fn render_patterns_status_bar(frame: &mut Frame, area: Rect, state: &AppState) {
 
     frame.render_widget(Paragraph::new(Line::from(spans)), area);
 }
+
+pub(super) fn render_extensions(frame: &mut Frame, state: &AppState) {
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Min(10),   // Extension list
+            Constraint::Length(1), // Status bar
+        ])
+        .split(frame.area());
+
+    // Extension list
+    if state.available_extensions.is_empty() {
+        let empty = Paragraph::new(vec![
+            Line::from(""),
+            Line::from(Span::styled(
+                "  No extensions found.",
+                Style::default().fg(Color::DarkGray),
+            )),
+            Line::from(""),
+            Line::from(Span::styled(
+                "  Place extensions in ~/.foundry/extensions/ or ./extensions/",
+                Style::default().fg(Color::DarkGray),
+            )),
+        ])
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Rgb(227, 115, 75)))
+                .title(Span::styled(
+                    " Extensions ",
+                    Style::default()
+                        .fg(Color::Rgb(227, 115, 75))
+                        .add_modifier(Modifier::BOLD),
+                )),
+        );
+        frame.render_widget(empty, chunks[0]);
+    } else {
+        let lines: Vec<Line> = state
+            .available_extensions
+            .iter()
+            .enumerate()
+            .map(|(i, (name, selected))| {
+                let checkbox = if *selected { "[x]" } else { "[ ]" };
+                let is_cursor = i == state.extensions_cursor;
+                let style = if is_cursor {
+                    Style::default()
+                        .fg(Color::Black)
+                        .bg(Color::Rgb(227, 115, 75))
+                        .add_modifier(Modifier::BOLD)
+                } else if *selected {
+                    Style::default().fg(Color::Green)
+                } else {
+                    Style::default().fg(Color::White)
+                };
+                Line::from(Span::styled(format!("  {} {}", checkbox, name), style))
+            })
+            .collect();
+
+        let paragraph = Paragraph::new(lines).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Rgb(227, 115, 75)))
+                .title(Span::styled(
+                    " Extensions ",
+                    Style::default()
+                        .fg(Color::Rgb(227, 115, 75))
+                        .add_modifier(Modifier::BOLD),
+                )),
+        );
+        frame.render_widget(paragraph, chunks[0]);
+    }
+
+    // Status bar
+    let badge = Style::default()
+        .fg(Color::Black)
+        .bg(Color::DarkGray)
+        .add_modifier(Modifier::BOLD);
+    let spans = vec![
+        Span::styled(" Up/Down ", badge),
+        Span::raw(" navigate  "),
+        Span::styled(" Space ", badge),
+        Span::raw(" toggle  "),
+        Span::styled(" Esc ", badge),
+        Span::raw(" close"),
+    ];
+    frame.render_widget(Paragraph::new(Line::from(spans)), chunks[1]);
+}

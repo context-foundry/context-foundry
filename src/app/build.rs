@@ -16,6 +16,7 @@ use std::path::PathBuf;
 
 use super::context::RunContext;
 use super::{review, AppEvent, LoopEvent};
+use crate::extensions;
 use crate::utils::atomic_write_file;
 
 // ─── Prerequisite Gates ──────────────────────────────────────
@@ -91,6 +92,7 @@ fn spawn_lookahead_planner(
     next_task: &Task,
     ctx: &RunContext,
     tx: &mpsc::UnboundedSender<AppEvent>,
+    extension_context: String,
 ) -> LookaheadHandle {
     let task_id = next_task.id.clone();
     let task_desc = next_task.description.clone();
@@ -142,6 +144,7 @@ fn spawn_lookahead_planner(
             &ctx.tasks_file_name(),
             &plan_file,
         );
+        let prompt = prompts::wrap_with_extensions(&prompt, &extension_context);
 
         let (agent_tx, _agent_rx) = mpsc::unbounded_channel();
         let result = agent::run_agent(
@@ -329,6 +332,19 @@ fn last_commit_touched_structural(project_dir: &std::path::Path) -> bool {
 pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEvent>) {
     ctx.ensure_runtime_dirs();
 
+    // ─── Extension Contract Loading ─────────────────────────────
+    let discovered_extensions = extensions::discover_extensions(&ctx.project_dir);
+    let extension_context = extensions::load_extension_context(
+        &discovered_extensions,
+        &ctx.config.extensions,
+    );
+    if !ctx.config.extensions.is_empty() {
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+            "Extensions active: {}",
+            ctx.config.extensions.join(", ")
+        ))));
+    }
+
     let mut discovery_round: usize = task::highest_discovery_round(&ctx.plan_path);
 
     // ─── Discovery Cooldown State ────────────────────────────────
@@ -344,6 +360,19 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
     // ─── Pattern Cache ─────────────────────────────────────────────
     let patterns_dir = patterns::resolve_patterns_dir(&ctx.config.patterns_dir);
     let mut cached_patterns = patterns::load_patterns(&patterns_dir);
+
+    // Merge extension patterns into the pool
+    let ext_patterns = extensions::load_extension_patterns(
+        &discovered_extensions,
+        &ctx.config.extensions,
+    );
+    if !ext_patterns.is_empty() {
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+            "Loaded {} extension patterns",
+            ext_patterns.len()
+        ))));
+        cached_patterns.extend(ext_patterns);
+    }
 
     // ─── Scout State ──────────────────────────────────────────────
     // Scout runs once at session start, then reuses the report for
@@ -387,6 +416,7 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                 &ctx.spec_file_name(),
                 &ctx.tasks_file_name(),
             );
+            let prompt = prompts::wrap_with_extensions(&prompt, &extension_context);
             let scout_result = agent::run_agent(
                 &AgentRole::Scout,
                 Config::parse_provider(&ctx.config.scout_provider),
@@ -471,7 +501,7 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
             // Skip scout if it already ran this session AND the last commit
             // didn't touch any structural files (SPEC.md, Cargo.toml, etc.)
             let skip_scout = scout_has_run && !last_commit_touched_structural(&ctx.project_dir);
-            let (success, task_rate_limited) = process_task(&task_info, &ctx, &tx, skip_scout, &cached_patterns, &patterns_dir).await;
+            let (success, task_rate_limited) = process_task(&task_info, &ctx, &tx, skip_scout, &cached_patterns, &patterns_dir, &extension_context).await;
             scout_has_run = true;
 
             // Restore state files if the builder deleted or truncated them
@@ -518,7 +548,7 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                 if let Some(next_task) = task::nth_pending(&fresh_tasks, 0) {
                     let next_complexity = complexity::classify_task(&next_task.description);
                     if next_complexity != TaskComplexity::Simple {
-                        lookahead = Some(spawn_lookahead_planner(next_task, &ctx, &tx));
+                        lookahead = Some(spawn_lookahead_planner(next_task, &ctx, &tx, extension_context.clone()));
                     }
                 }
             }
@@ -661,6 +691,7 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                 &ctx.tasks_file_name(),
                 build_history.as_deref(),
             );
+            let prompt = prompts::wrap_with_extensions(&prompt, &extension_context);
             let result = agent::run_agent(
                 &AgentRole::Discovery,
                 Config::parse_provider(&ctx.config.discovery_provider),
@@ -766,6 +797,7 @@ async fn process_task(
     skip_scout: bool,
     cached_patterns: &[patterns::Pattern],
     patterns_dir: &std::path::Path,
+    extension_context: &str,
 ) -> (bool, bool) {
     let task_id = &task_info.id;
     let task_desc = &task_info.description;
@@ -860,6 +892,7 @@ async fn process_task(
             &ctx.spec_file_name(),
             &ctx.tasks_file_name(),
         );
+        let scout_prompt_text = prompts::wrap_with_extensions(&scout_prompt_text, extension_context);
         let scout_result = agent::run_agent(
             &AgentRole::Scout,
             Config::parse_provider(&ctx.config.scout_provider),
@@ -958,6 +991,7 @@ async fn process_task(
                 &ctx.spec_file_name(),
                 &ctx.tasks_file_name(),
             );
+            let prompt = prompts::wrap_with_extensions(&prompt, extension_context);
             let plan_result = agent::run_agent(
                 &AgentRole::Planner,
                 Config::parse_provider(&ctx.config.planner_provider),
@@ -1026,6 +1060,27 @@ async fn process_task(
         }
     }
 
+    // ─── Gate: Extension Contracts ──────────────────────────────
+    if !ctx.config.extensions.is_empty() {
+        let discovered = extensions::discover_extensions(&ctx.project_dir);
+        if let Err(errors) = extensions::validate_extensions(&discovered, &ctx.config.extensions) {
+            for err in &errors {
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                    "GATE BLOCKED: {}", err
+                ))));
+            }
+            {
+                let _lock = ctx.tasks_file_lock.lock().unwrap_or_else(|e| e.into_inner());
+                let _ = task::update_task_progress(
+                    &ctx.plan_path, task_id,
+                    &format!("{}{}--!", scout_char, planner_char),
+                );
+            }
+            let _ = git::commit_and_push(&ctx.project_dir, &ctx.config, task_id, task_desc, true);
+            return (false, last_rate_limited);
+        }
+    }
+
     // ─── Gate: Builder Prerequisites (with retry-on-validation-failure) ──
     if !skip_planner {
         if let GateResult::Fail(reason) = gate_builder(ctx) {
@@ -1052,6 +1107,7 @@ async fn process_task(
                 reason,
                 crate::utils::truncate_str(&failed_output, 500),
             );
+            let retry_prompt = prompts::wrap_with_extensions(&retry_prompt, extension_context);
 
             let (agent_tx2, mut agent_rx2) = mpsc::unbounded_channel();
             let fwd_tx2 = tx.clone();
@@ -1134,6 +1190,7 @@ async fn process_task(
             &ctx.tasks_file_name(),
         )
     };
+    let prompt = prompts::wrap_with_extensions(&prompt, extension_context);
     let build_result = agent::run_agent(
         &AgentRole::Builder,
         Config::parse_provider(&ctx.config.builder_provider),
@@ -1223,10 +1280,10 @@ async fn process_task(
                 ))));
                 // Don't block -- reviewer can fall back to reading changed files.
                 // But log it clearly so we know the builder didn't produce claims.
-                review::run_review_loop(task_id, task_desc, ctx, &reviewer_pattern_context, tx).await
+                review::run_review_loop(task_id, task_desc, ctx, &reviewer_pattern_context, extension_context, tx).await
             }
             GateResult::Pass => {
-                review::run_review_loop(task_id, task_desc, ctx, &reviewer_pattern_context, tx).await
+                review::run_review_loop(task_id, task_desc, ctx, &reviewer_pattern_context, extension_context, tx).await
             }
         }
     };
@@ -1327,6 +1384,8 @@ async fn run_pattern_extraction(
     )));
 
     let prompt = prompts::pattern_extraction_prompt(task_id, task_desc);
+    // Note: pattern extraction doesn't get extension context -- it's a lightweight
+    // JSON extraction task that doesn't benefit from domain-specific instructions.
     let result = agent::run_agent(
         &AgentRole::Discovery,
         agent::ModelProvider::Claude,

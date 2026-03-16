@@ -7,6 +7,7 @@ mod app;
 mod complexity;
 mod config;
 mod embeddings;
+mod extensions;
 mod git;
 mod orchestrator;
 mod patterns;

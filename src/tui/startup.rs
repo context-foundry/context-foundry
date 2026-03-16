@@ -223,6 +223,31 @@ fn render_startup_summary(frame: &mut Frame, area: Rect, state: &AppState) {
         )),
     ];
 
+    // Extensions indicator
+    if !state.available_extensions.is_empty() {
+        let active_count = state.available_extensions.iter().filter(|(_, s)| *s).count();
+        let total_count = state.available_extensions.len();
+        let ext_names: String = state
+            .available_extensions
+            .iter()
+            .filter(|(_, s)| *s)
+            .map(|(n, _)| n.as_str())
+            .collect::<Vec<_>>()
+            .join(", ");
+        let ext_display = if active_count == 0 {
+            format!(
+                "  Extensions: none ({} available, Ctrl+E to configure)",
+                total_count
+            )
+        } else {
+            format!("  Extensions: {} ({}/{})", ext_names, active_count, total_count)
+        };
+        lines.push(Line::from(Span::styled(
+            ext_display,
+            Style::default().fg(Color::Rgb(227, 115, 75)),
+        )));
+    }
+
     if let Some(commit) = startup
         .git_context
         .as_ref()
@@ -803,6 +828,17 @@ pub(super) fn render_startup_status_bar(frame: &mut Frame, area: Rect, state: &A
                 .add_modifier(Modifier::BOLD),
         ));
         spans.push(Span::raw(" findings"));
+    }
+
+    if !state.available_extensions.is_empty() {
+        spans.push(Span::styled(
+            "  ^E ",
+            Style::default()
+                .fg(Color::Black)
+                .bg(Color::DarkGray)
+                .add_modifier(Modifier::BOLD),
+        ));
+        spans.push(Span::raw(" extensions"));
     }
 
     if let Some(ref version) = state.update_available {

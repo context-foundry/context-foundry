@@ -1,3 +1,13 @@
+/// Prepend extension contract context to any agent prompt.
+/// If extension_context is empty, return prompt unchanged.
+pub fn wrap_with_extensions(prompt: &str, extension_context: &str) -> String {
+    if extension_context.trim().is_empty() {
+        prompt.to_string()
+    } else {
+        format!("{}\n\n{}", extension_context, prompt)
+    }
+}
+
 /// Bootstrap scout: runs when TASKS.md has no pending tasks.
 /// Investigates the codebase AND creates tasks in one pass.
 pub fn bootstrap_scout_prompt(

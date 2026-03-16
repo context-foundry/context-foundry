@@ -234,6 +234,9 @@ pub struct AppState {
     pub focused_pane: TuiPane,
     pub running_explorer: Option<StartupState>,
     pub show_running_explorer: bool,
+    pub available_extensions: Vec<(String, bool)>, // (name, selected)
+    pub show_extensions_panel: bool,
+    pub extensions_cursor: usize,
     pub(super) pending_transition: Option<PendingTransition>,
     pub(super) tasks_file_lock: Arc<Mutex<()>>,
 }
@@ -294,6 +297,9 @@ impl AppState {
             focused_pane: TuiPane::Explorer,
             running_explorer: None,
             show_running_explorer: false,
+            available_extensions: Vec::new(),
+            show_extensions_panel: false,
+            extensions_cursor: 0,
             pending_transition: None,
             tasks_file_lock: Arc::new(Mutex::new(())),
         }

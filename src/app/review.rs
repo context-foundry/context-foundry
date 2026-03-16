@@ -15,6 +15,7 @@ pub(super) async fn run_review_loop(
     task_desc: &str,
     ctx: &RunContext,
     pattern_context: &str,
+    extension_context: &str,
     tx: &mpsc::UnboundedSender<AppEvent>,
 ) -> (bool, usize) {
     let files_changed = get_changed_files(&ctx.project_dir);
@@ -80,6 +81,7 @@ pub(super) async fn run_review_loop(
         &ctx.spec_file_name(),
         &ctx.tasks_file_name(),
     );
+    let prompt = prompts::wrap_with_extensions(&prompt, extension_context);
     let review_result = agent::run_agent(
         &AgentRole::Reviewer,
         Config::parse_provider(&ctx.config.reviewer_provider),

@@ -217,6 +217,10 @@ pub fn render_findings(frame: &mut Frame, state: &AppState) {
     overlays::render_findings(frame, state);
 }
 
+pub fn render_extensions(frame: &mut Frame, state: &AppState) {
+    overlays::render_extensions(frame, state);
+}
+
 pub fn render_running_explorer(frame: &mut Frame, state: &AppState, config: &Config) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
