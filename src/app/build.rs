@@ -866,10 +866,16 @@ fn commit_wip_for_mode(ctx: &RunContext, task_id: &str, task_desc: &str) -> bool
             true,
         )
         .map(|(c, _)| c)
-        .unwrap_or(false)
+        .unwrap_or_else(|e| {
+            eprintln!("[foundry] WARNING: WIP commit_task_pr failed for {}: {} -- changes may be lost", task_id, e);
+            false
+        })
     } else {
         git::commit_and_push(&ctx.project_dir, &ctx.config, task_id, task_desc, true)
-            .unwrap_or(false)
+            .unwrap_or_else(|e| {
+                eprintln!("[foundry] WARNING: WIP commit_and_push failed for {}: {} -- changes may be lost", task_id, e);
+                false
+            })
     }
 }
 
@@ -1438,8 +1444,8 @@ async fn process_task(
                 }
 
                 // Pause: signal TUI and wait for user to press Enter or PR approval
-                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::WaitingForReview(pr_num)));
                 ctx.review_gate.store(true, Ordering::Relaxed);
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::WaitingForReview(pr_num)));
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
                     "Waiting for PR review -- press Enter to continue or wait for approval".to_string(),
                 )));
@@ -1484,8 +1490,8 @@ async fn process_task(
 
                 // Still pause after fallback commit in review mode
                 if committed {
-                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::WaitingForReview(None)));
                     ctx.review_gate.store(true, Ordering::Relaxed);
+                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::WaitingForReview(None)));
                     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
                         "Waiting for review -- press Enter to continue to next task".to_string(),
                     )));

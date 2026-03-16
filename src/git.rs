@@ -5,7 +5,6 @@ use std::process::{Command, Stdio};
 use crate::config::Config;
 use crate::utils::truncate_str;
 
-#[allow(dead_code)]
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct GitContext {
     pub branch: String,
@@ -86,7 +85,6 @@ pub fn check_git_readiness(project_dir: &Path) -> Vec<String> {
     messages
 }
 
-#[allow(dead_code)]
 pub fn gather_git_context(project_dir: &Path) -> Option<GitContext> {
     let branch_output = Command::new("git")
         .args(["symbolic-ref", "--short", "HEAD"])
@@ -379,7 +377,7 @@ pub fn commit_task_pr(
                 .current_dir(project_dir)
                 .output();
             let _ = Command::new("git")
-                .args(["push", remote, &feature_branch])
+                .args(["push", "--force-with-lease", remote, &feature_branch])
                 .current_dir(project_dir)
                 .output();
         }
@@ -909,5 +907,124 @@ mod tests {
         );
 
         let _ = fs::remove_dir_all(repo_dir);
+    }
+
+    #[test]
+    fn commit_task_pr_wip_uses_wip_prefix_and_skips_pr() {
+        use super::commit_task_pr;
+
+        let repo_dir = temp_dir("foundry-task-pr-wip");
+        init_repo(&repo_dir);
+        let base = current_branch(&repo_dir);
+
+        // Create a TASKS.md so plan_path is valid
+        fs::write(repo_dir.join("TASKS.md"), "- [ ] T1.1: WIP task\n").expect("write tasks");
+        git(&repo_dir, &["add", "TASKS.md"]);
+        git(&repo_dir, &["commit", "-m", "add tasks"]);
+
+        // A code change so the commit is non-empty
+        fs::write(
+            repo_dir.join("wip-feature.txt"),
+            "work in progress\n",
+        )
+        .expect("write wip feature");
+
+        // Call with is_wip=true
+        let result = commit_task_pr(
+            &repo_dir,
+            &Config::default(),
+            "T1.1",
+            "WIP task",
+            &repo_dir.join("TASKS.md"),
+            true,
+        );
+
+        // Push will fail (no remote), but local operations should succeed
+        let _ = result;
+
+        // After the call, we should be back on the base branch
+        assert_eq!(
+            current_branch(&repo_dir),
+            base,
+            "should return to base branch"
+        );
+
+        // The feature branch should exist
+        let branches = Command::new("git")
+            .args(["branch"])
+            .current_dir(&repo_dir)
+            .output()
+            .expect("git branch");
+        let branch_list = String::from_utf8_lossy(&branches.stdout);
+        assert!(
+            branch_list.contains("foundry/t1.1"),
+            "feature branch should exist, got: {}",
+            branch_list
+        );
+
+        // Verify the commit message uses WIP prefix (not feat)
+        let log = Command::new("git")
+            .args(["log", "--oneline", "-1", "foundry/t1.1"])
+            .current_dir(&repo_dir)
+            .output()
+            .expect("git log");
+        let log_text = String::from_utf8_lossy(&log.stdout);
+        assert!(
+            log_text.contains("WIP(T1.1)"),
+            "commit should have WIP prefix, got: {}",
+            log_text
+        );
+        assert!(
+            !log_text.contains("feat(T1.1)"),
+            "commit should NOT have feat prefix, got: {}",
+            log_text
+        );
+
+        // Verify PR number is None (WIP skips PR creation)
+        // Re-run in a repo with a remote to verify pr_number is None
+        let remote_dir = temp_dir("foundry-task-pr-wip-remote");
+        let repo_dir2 = temp_dir("foundry-task-pr-wip-with-remote");
+        git(&remote_dir, &["init", "--bare"]);
+        init_repo(&repo_dir2);
+        git(
+            &repo_dir2,
+            &["remote", "add", "origin", remote_dir.to_str().unwrap()],
+        );
+        // Push initial commit so remote has the base branch
+        git(&repo_dir2, &["push", "-u", "origin", "HEAD"]);
+
+        fs::write(
+            repo_dir2.join("TASKS.md"),
+            "- [ ] T2.1: WIP task 2\n",
+        )
+        .expect("write tasks");
+        git(&repo_dir2, &["add", "TASKS.md"]);
+        git(&repo_dir2, &["commit", "-m", "add tasks"]);
+
+        fs::write(repo_dir2.join("wip2.txt"), "wip content\n").expect("write wip2");
+
+        let (committed, pr_num) = commit_task_pr(
+            &repo_dir2,
+            &Config {
+                auto_push_remote: Some("origin".to_string()),
+                ..Config::default()
+            },
+            "T2.1",
+            "WIP task 2",
+            &repo_dir2.join("TASKS.md"),
+            true,
+        )
+        .expect("commit_task_pr should succeed with remote");
+
+        assert!(committed, "WIP commit should succeed");
+        assert!(
+            pr_num.is_none(),
+            "WIP path should not create a PR, got: {:?}",
+            pr_num
+        );
+
+        let _ = fs::remove_dir_all(repo_dir);
+        let _ = fs::remove_dir_all(remote_dir);
+        let _ = fs::remove_dir_all(repo_dir2);
     }
 }
