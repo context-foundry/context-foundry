@@ -270,3 +270,21 @@ pub fn startup_hit_test(
 ) -> Option<StartupMouseTarget> {
     startup::startup_hit_test(terminal_size, state, column, row)
 }
+
+pub fn explorer_toggle_hit_test(
+    area: ratatui::layout::Rect,
+    column: u16,
+    row: u16,
+    file_tree: &[crate::app::FileEntry],
+) -> Option<StartupMouseTarget> {
+    startup::explorer_toggle_hit_test(area, column, row, file_tree)
+}
+
+pub fn preview_toggle_hit_test(
+    area: ratatui::layout::Rect,
+    column: u16,
+    row: u16,
+    preview_wrap: bool,
+) -> Option<StartupMouseTarget> {
+    startup::preview_toggle_hit_test(area, column, row, preview_wrap)
+}

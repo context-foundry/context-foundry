@@ -133,6 +133,7 @@ pub struct StartupState {
     pub file_preview_content: Vec<String>,
     pub file_preview_scroll: usize,
     pub placeholder_tick: usize,
+    pub preview_wrap: bool,
 }
 
 impl StartupState {

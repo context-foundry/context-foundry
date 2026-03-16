@@ -9,7 +9,7 @@ use ratatui::{
     Frame,
 };
 
-use crate::app::{AppState, ExtensionDisplayInfo, StartupState, TuiPane};
+use crate::app::{AppState, ExtensionDisplayInfo, FileEntry, StartupState, TuiPane};
 use super::{pane_border_style, pane_border_type};
 use crate::utils::truncate_str;
 
@@ -30,6 +30,12 @@ pub enum StartupMouseTarget {
     FileEntry(usize),
     PreviewLine,
     ExtensionEntry(usize),
+    ExpandAllToggle,
+    WrapToggle,
+}
+
+fn is_all_expanded(file_tree: &[FileEntry]) -> bool {
+    file_tree.iter().filter(|e| e.is_dir).all(|e| e.expanded)
 }
 
 pub(super) struct StartupLayout {
@@ -62,6 +68,16 @@ pub(super) fn startup_hit_test(
     let area = Rect::new(0, 0, terminal_size.0, terminal_size.1);
     let ext_count = state.available_extensions.len();
     let layout = startup_layout(area, ext_count);
+
+    // Check toggle buttons first (they occupy the border row that inner hit-tests skip)
+    if let Some(startup) = state.startup.as_ref() {
+        if let Some(target) = explorer_toggle_hit_test(layout.explorer, column, row, &startup.file_tree) {
+            return Some(target);
+        }
+        if let Some(target) = preview_toggle_hit_test(layout.preview, column, row, startup.preview_wrap) {
+            return Some(target);
+        }
+    }
 
     if let Some(target) = file_explorer_hit_test(layout.explorer, state, column, row) {
         return Some(target);
@@ -195,6 +211,45 @@ fn rect_contains(area: Rect, column: u16, row: u16) -> bool {
         && column < area.x.saturating_add(area.width)
         && row >= area.y
         && row < area.y.saturating_add(area.height)
+}
+
+pub(super) fn explorer_toggle_hit_test(
+    area: Rect,
+    column: u16,
+    row: u16,
+    file_tree: &[FileEntry],
+) -> Option<StartupMouseTarget> {
+    if row != area.y {
+        return None;
+    }
+    if file_tree.iter().all(|e| !e.is_dir) {
+        return None;
+    }
+    // Toggle occupies 7 chars: "[+all] " or "[-all] ", right-aligned before the border corner
+    if column >= area.x + area.width.saturating_sub(8)
+        && column < area.x + area.width.saturating_sub(1)
+    {
+        return Some(StartupMouseTarget::ExpandAllToggle);
+    }
+    None
+}
+
+pub(super) fn preview_toggle_hit_test(
+    area: Rect,
+    column: u16,
+    row: u16,
+    preview_wrap: bool,
+) -> Option<StartupMouseTarget> {
+    if row != area.y {
+        return None;
+    }
+    let label_len: u16 = if preview_wrap { 7 } else { 10 };
+    if column >= area.x + area.width.saturating_sub(label_len + 1)
+        && column < area.x + area.width.saturating_sub(1)
+    {
+        return Some(StartupMouseTarget::WrapToggle);
+    }
+    None
 }
 
 fn render_startup_summary(frame: &mut Frame, area: Rect, state: &AppState) {
@@ -455,18 +510,32 @@ fn render_file_explorer(frame: &mut Frame, area: Rect, state: &AppState) {
         })
         .collect();
 
-    let list = List::new(items).block(
-        Block::default()
-            .borders(Borders::ALL)
-            .border_style(pane_border_style(state.focused_pane, TuiPane::Explorer))
-            .border_type(pane_border_type(state.focused_pane, TuiPane::Explorer))
-            .title(Span::styled(
-                " Files ",
-                Style::default()
-                    .fg(Color::White)
-                    .add_modifier(Modifier::BOLD),
-            )),
-    );
+    let expand_label = if is_all_expanded(&startup.file_tree) {
+        "[-all] "
+    } else {
+        "[+all] "
+    };
+    let has_dirs = startup.file_tree.iter().any(|e| e.is_dir);
+    let mut block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(pane_border_style(state.focused_pane, TuiPane::Explorer))
+        .border_type(pane_border_type(state.focused_pane, TuiPane::Explorer))
+        .title(Span::styled(
+            " Files ",
+            Style::default()
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD),
+        ));
+    if has_dirs {
+        block = block.title_top(
+            Line::from(Span::styled(
+                expand_label,
+                Style::default().fg(Color::DarkGray),
+            ))
+            .right_aligned(),
+        );
+    }
+    let list = List::new(items).block(block);
     frame.render_widget(list, area);
 }
 
@@ -480,6 +549,8 @@ fn render_file_preview(frame: &mut Frame, area: Rect, state: &AppState) {
         .get(startup.explorer_selected)
         .map(|e| e.name.clone())
         .unwrap_or_else(|| "Preview".to_string());
+
+    let wrap_label = if startup.preview_wrap { "[wrap] " } else { "[no-wrap] " };
 
     if startup.file_preview_content.is_empty() {
         let empty = Paragraph::new(Span::styled(
@@ -496,7 +567,14 @@ fn render_file_preview(frame: &mut Frame, area: Rect, state: &AppState) {
                     Style::default()
                         .fg(Color::White)
                         .add_modifier(Modifier::BOLD),
-                )),
+                ))
+                .title_top(
+                    Line::from(Span::styled(
+                        wrap_label,
+                        Style::default().fg(Color::DarkGray),
+                    ))
+                    .right_aligned(),
+                ),
         );
         frame.render_widget(empty, area);
         return;
@@ -521,20 +599,27 @@ fn render_file_preview(frame: &mut Frame, area: Rect, state: &AppState) {
         })
         .collect();
 
-    let paragraph = Paragraph::new(lines)
-        .wrap(Wrap { trim: false })
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_style(pane_border_style(state.focused_pane, TuiPane::Preview))
-                .border_type(pane_border_type(state.focused_pane, TuiPane::Preview))
-                .title(Span::styled(
-                    format!(" {} ", title),
-                    Style::default()
-                        .fg(Color::White)
-                        .add_modifier(Modifier::BOLD),
-                )),
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(pane_border_style(state.focused_pane, TuiPane::Preview))
+        .border_type(pane_border_type(state.focused_pane, TuiPane::Preview))
+        .title(Span::styled(
+            format!(" {} ", title),
+            Style::default()
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD),
+        ))
+        .title_top(
+            Line::from(Span::styled(
+                wrap_label,
+                Style::default().fg(Color::DarkGray),
+            ))
+            .right_aligned(),
         );
+    let mut paragraph = Paragraph::new(lines).block(block);
+    if startup.preview_wrap {
+        paragraph = paragraph.wrap(Wrap { trim: false });
+    }
     frame.render_widget(paragraph, area);
 }
 
@@ -643,18 +728,32 @@ pub(super) fn render_file_explorer_from(
         })
         .collect();
 
-    let list = List::new(items).block(
-        Block::default()
-            .borders(Borders::ALL)
-            .border_style(pane_border_style(focused, TuiPane::Explorer))
-            .border_type(pane_border_type(focused, TuiPane::Explorer))
-            .title(Span::styled(
-                " Files ",
-                Style::default()
-                    .fg(Color::White)
-                    .add_modifier(Modifier::BOLD),
-            )),
-    );
+    let expand_label = if is_all_expanded(&startup.file_tree) {
+        "[-all] "
+    } else {
+        "[+all] "
+    };
+    let has_dirs = startup.file_tree.iter().any(|e| e.is_dir);
+    let mut block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(pane_border_style(focused, TuiPane::Explorer))
+        .border_type(pane_border_type(focused, TuiPane::Explorer))
+        .title(Span::styled(
+            " Files ",
+            Style::default()
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD),
+        ));
+    if has_dirs {
+        block = block.title_top(
+            Line::from(Span::styled(
+                expand_label,
+                Style::default().fg(Color::DarkGray),
+            ))
+            .right_aligned(),
+        );
+    }
+    let list = List::new(items).block(block);
     frame.render_widget(list, area);
 }
 
@@ -672,6 +771,7 @@ pub(super) fn render_file_preview_from(
 
     let border_style = pane_border_style(focused, TuiPane::Preview);
     let border_type = pane_border_type(focused, TuiPane::Preview);
+    let wrap_label = if startup.preview_wrap { "[wrap] " } else { "[no-wrap] " };
 
     if startup.file_preview_content.is_empty() {
         let empty = Paragraph::new(Span::styled(
@@ -688,7 +788,14 @@ pub(super) fn render_file_preview_from(
                     Style::default()
                         .fg(Color::White)
                         .add_modifier(Modifier::BOLD),
-                )),
+                ))
+                .title_top(
+                    Line::from(Span::styled(
+                        wrap_label,
+                        Style::default().fg(Color::DarkGray),
+                    ))
+                    .right_aligned(),
+                ),
         );
         frame.render_widget(empty, area);
         return;
@@ -720,20 +827,27 @@ pub(super) fn render_file_preview_from(
         format!(" {} ", title)
     };
 
-    let paragraph = Paragraph::new(lines)
-        .wrap(Wrap { trim: false })
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_style(border_style)
-                .border_type(border_type)
-                .title(Span::styled(
-                    scroll_indicator,
-                    Style::default()
-                        .fg(Color::White)
-                        .add_modifier(Modifier::BOLD),
-                )),
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(border_style)
+        .border_type(border_type)
+        .title(Span::styled(
+            scroll_indicator,
+            Style::default()
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD),
+        ))
+        .title_top(
+            Line::from(Span::styled(
+                wrap_label,
+                Style::default().fg(Color::DarkGray),
+            ))
+            .right_aligned(),
         );
+    let mut paragraph = Paragraph::new(lines).block(block);
+    if startup.preview_wrap {
+        paragraph = paragraph.wrap(Wrap { trim: false });
+    }
     frame.render_widget(paragraph, area);
 }
 
@@ -1064,6 +1178,7 @@ mod tests {
             file_preview_content: vec!["content line".to_string()],
             file_preview_scroll: 0,
             placeholder_tick: 0,
+            preview_wrap: true,
         };
         state.startup = Some(startup);
 

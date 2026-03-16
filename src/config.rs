@@ -3,6 +3,10 @@ use std::{collections::BTreeMap, path::Path};
 
 use crate::agent::ModelProvider;
 
+fn default_true() -> bool {
+    true
+}
+
 #[derive(Debug, Clone, Deserialize, Default)]
 #[serde(default)]
 pub struct StudioThemeConfig {
@@ -158,6 +162,10 @@ pub struct Config {
     /// (validation failed). The issue body includes review findings from
     /// .buildloop/review-report.md.
     pub create_issue_on_wip: bool,
+
+    /// Preview pane word-wrap preference (persisted to .foundry.json).
+    #[serde(default = "default_true")]
+    pub preview_wrap: bool,
 }
 
 impl Default for Config {
@@ -219,6 +227,7 @@ impl Default for Config {
             extensions: Vec::new(),
             pr_per_task: false,
             create_issue_on_wip: false,
+            preview_wrap: true,
         }
     }
 }
@@ -281,6 +290,17 @@ impl Config {
 
     /// Persist the selected extensions list to .foundry.json without
     /// overwriting other config fields.
+    pub fn save_preview_wrap(project_dir: &Path, wrap: bool) {
+        let config_path = project_dir.join(".foundry.json");
+        let content =
+            std::fs::read_to_string(&config_path).unwrap_or_else(|_| "{}".to_string());
+        let mut value: serde_json::Value =
+            serde_json::from_str(&content).unwrap_or(serde_json::json!({}));
+        value["preview_wrap"] = serde_json::json!(wrap);
+        let json = serde_json::to_string_pretty(&value).unwrap_or_default();
+        let _ = crate::utils::atomic_write_file(&config_path, json.as_bytes());
+    }
+
     pub fn save_extensions(project_dir: &Path, extensions: &[String]) {
         let config_path = project_dir.join(".foundry.json");
         let content =

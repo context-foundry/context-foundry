@@ -61,6 +61,7 @@ impl StartupState {
             file_preview_content,
             file_preview_scroll: 0,
             placeholder_tick: 0,
+            preview_wrap: Config::load(project_dir).preview_wrap,
         }
     }
 
@@ -413,6 +414,37 @@ pub(super) fn handle_startup_intent_input(state: &mut AppState, key: event::KeyE
     }
 }
 
+pub(super) fn toggle_expand_all(startup: &mut StartupState) {
+    let any_collapsed = startup.file_tree.iter().any(|e| e.is_dir && !e.expanded);
+    let new_state = any_collapsed;
+    for entry in startup.file_tree.iter_mut() {
+        if entry.is_dir {
+            entry.expanded = new_state;
+        }
+    }
+    let vis = startup.visible_indices();
+    if vis.is_empty() {
+        startup.explorer_selected = 0;
+        startup.explorer_scroll = 0;
+        return;
+    }
+    if !vis.contains(&startup.explorer_selected) {
+        startup.explorer_selected = vis[0];
+    }
+    let vis_pos = vis
+        .iter()
+        .position(|&i| i == startup.explorer_selected)
+        .unwrap_or(0);
+    if vis_pos < startup.explorer_scroll {
+        startup.explorer_scroll = vis_pos;
+    }
+}
+
+pub(super) fn toggle_preview_wrap(startup: &mut StartupState, project_dir: &Path) {
+    startup.preview_wrap = !startup.preview_wrap;
+    Config::save_preview_wrap(project_dir, startup.preview_wrap);
+}
+
 // ─── Explorer Navigation ─────────────────────────────────────
 
 fn move_explorer_selection(state: &mut AppState, delta: isize) {
@@ -653,6 +685,22 @@ pub(super) fn handle_startup_mouse_at(
                             .map(|e| e.name.clone())
                             .collect();
                         Config::save_extensions(project_dir, &selected);
+                    }
+                    tui::StartupMouseTarget::ExpandAllToggle => {
+                        state.focused_pane = crate::app::state::TuiPane::Explorer;
+                        if let Some(startup) = state.startup.as_mut() {
+                            toggle_expand_all(startup);
+                        }
+                    }
+                    tui::StartupMouseTarget::WrapToggle => {
+                        state.focused_pane = crate::app::state::TuiPane::Preview;
+                        let project_dir = state
+                            .buildloop_dir
+                            .parent()
+                            .unwrap_or(std::path::Path::new("."));
+                        if let Some(startup) = state.startup.as_mut() {
+                            toggle_preview_wrap(startup, project_dir);
+                        }
                     }
                 }
             } else {

@@ -27,7 +27,6 @@ pub use self::state::{
     AppPhase, AppState, ExtensionDisplayInfo, PatternEventKind,
     PlanStatus, PlanningState, StartupAction, StartupScenario, StartupState, TuiPane,
 };
-#[cfg(test)]
 pub use self::state::FileEntry;
 use crate::agent::{AgentOutputEvent, AgentRole};
 use crate::config::Config;
@@ -848,6 +847,17 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                     KeyCode::Enter => {
                         handle_running_explorer_enter(state);
                     }
+                    KeyCode::Char('a') => {
+                        if let Some(ref mut explorer) = state.running_explorer {
+                            startup::toggle_expand_all(explorer);
+                        }
+                    }
+                    KeyCode::Char('w') => {
+                        let project_dir = state.buildloop_dir.parent().unwrap_or(std::path::Path::new("."));
+                        if let Some(ref mut explorer) = state.running_explorer {
+                            startup::toggle_preview_wrap(explorer, project_dir);
+                        }
+                    }
                     _ => {}
                 }
             } else {
@@ -1595,6 +1605,25 @@ fn handle_startup_mouse_at_for_running(
 
     match mouse.kind {
         MouseEventKind::Down(MouseButton::Left) => {
+            // Check toggle buttons first (border row)
+            if let Some(ref explorer) = state.running_explorer {
+                if let Some(tui::StartupMouseTarget::ExpandAllToggle) = tui::explorer_toggle_hit_test(explorer_area, mouse.column, mouse.row, &explorer.file_tree) {
+                    state.focused_pane = state::TuiPane::Explorer;
+                    if let Some(ref mut ex) = state.running_explorer {
+                        startup::toggle_expand_all(ex);
+                    }
+                    return;
+                }
+                if let Some(tui::StartupMouseTarget::WrapToggle) = tui::preview_toggle_hit_test(preview_area, mouse.column, mouse.row, explorer.preview_wrap) {
+                    state.focused_pane = state::TuiPane::Preview;
+                    let project_dir = state.buildloop_dir.parent().unwrap_or(std::path::Path::new("."));
+                    if let Some(ref mut ex) = state.running_explorer {
+                        startup::toggle_preview_wrap(ex, project_dir);
+                    }
+                    return;
+                }
+            }
+
             if tui::rect_contains(explorer_area, mouse.column, mouse.row) {
                 state.focused_pane = state::TuiPane::Explorer;
                 // Hit-test to select file entry
