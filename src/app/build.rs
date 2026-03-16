@@ -315,9 +315,7 @@ async fn poll_pr_review(
     review_gate: Arc<AtomicBool>,
 ) {
     loop {
-        tokio::time::sleep(Duration::from_secs(poll_interval_secs)).await;
-
-        // If the gate was already cleared (user pressed Enter), stop polling
+        // Check gate FIRST (before sleeping), so first poll is immediate
         if !review_gate.load(Ordering::Relaxed) {
             return;
         }
@@ -349,6 +347,14 @@ async fn poll_pr_review(
                         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::PrClosed(pr_number)));
                         return;
                     }
+                    if review_decision == "CHANGES_REQUESTED" {
+                        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BackgroundLog(
+                            format!(
+                                "PR #{}: changes requested -- update the code or press Enter to skip",
+                                pr_number
+                            ),
+                        )));
+                    }
                 }
                 // Still open/in review -- continue polling
             }
@@ -358,6 +364,9 @@ async fn poll_pr_review(
                 )));
             }
         }
+
+        // Sleep AFTER polling, so the first check is immediate
+        tokio::time::sleep(Duration::from_secs(poll_interval_secs)).await;
     }
 }
 
@@ -867,8 +876,18 @@ fn commit_wip_for_mode(ctx: &RunContext, task_id: &str, task_desc: &str) -> bool
         )
         .map(|(c, _)| c)
         .unwrap_or_else(|e| {
-            eprintln!("[foundry] WARNING: WIP commit_task_pr failed for {}: {} -- changes may be lost", task_id, e);
-            false
+            eprintln!(
+                "[foundry] WARNING: WIP commit_task_pr failed for {}: {} -- falling back to base-branch commit (feature branch isolation bypassed)",
+                task_id, e
+            );
+            git::commit_and_push(&ctx.project_dir, &ctx.config, task_id, task_desc, true)
+                .unwrap_or_else(|e2| {
+                    eprintln!(
+                        "[foundry] WARNING: WIP commit_and_push fallback also failed for {}: {} -- changes may be lost",
+                        task_id, e2
+                    );
+                    false
+                })
         })
     } else {
         git::commit_and_push(&ctx.project_dir, &ctx.config, task_id, task_desc, true)

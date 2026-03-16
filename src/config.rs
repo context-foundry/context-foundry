@@ -320,6 +320,7 @@ impl Config {
     }
 
     /// Persist the run_mode to .foundry.json without overwriting other config fields.
+    /// Also removes the legacy "mode" key if present, to prevent it from shadowing.
     pub fn save_run_mode(project_dir: &Path, run_mode: &str) {
         let config_path = project_dir.join(".foundry.json");
         let content =
@@ -327,6 +328,11 @@ impl Config {
         let mut value: serde_json::Value =
             serde_json::from_str(&content).unwrap_or(serde_json::json!({}));
         value["run_mode"] = serde_json::json!(run_mode);
+        // Remove legacy "mode" key to prevent it from shadowing "run_mode"
+        // when JSON is reordered or parsed by a different library.
+        if let Some(obj) = value.as_object_mut() {
+            obj.remove("mode");
+        }
         let json = serde_json::to_string_pretty(&value).unwrap_or_default();
         let _ = crate::utils::atomic_write_file(&config_path, json.as_bytes());
     }
