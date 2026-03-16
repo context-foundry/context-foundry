@@ -1026,18 +1026,82 @@ async fn process_task(
         }
     }
 
-    // ─── Gate: Builder Prerequisites ────────────────────────
+    // ─── Gate: Builder Prerequisites (with retry-on-validation-failure) ──
     if !skip_planner {
         if let GateResult::Fail(reason) = gate_builder(ctx) {
+            // Retry-with-error-feedback: append the validation error to the
+            // original prompt and re-run the planner once. This is more
+            // effective than blind retry because the agent gets specific
+            // feedback about what's wrong with its output.
             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                "GATE BLOCKED builder for {}: {}", task_id, reason
+                "GATE: plan validation failed for {} -- retrying planner with feedback: {}",
+                task_id, reason
             ))));
-            {
-                let _lock = ctx.tasks_file_lock.lock().unwrap_or_else(|e| e.into_inner());
-                let _ = task::update_task_progress(&ctx.plan_path, task_id, &format!("{}{}--!", scout_char, planner_char));
+
+            let failed_output = std::fs::read_to_string(&ctx.current_plan).unwrap_or_default();
+            let retry_prompt = format!(
+                "{}\n\n--- VALIDATION ERROR (your previous output failed these checks) ---\n\
+                 Error: {}\n\
+                 Your previous output:\n```\n{}\n```\n\
+                 Fix these specific issues. The plan MUST contain '## File Operations' and '## Verification' sections.\n\
+                 --- END VALIDATION ERROR ---",
+                prompts::planner_prompt(
+                    task_id, task_desc, &pattern_context,
+                    &ctx.spec_file_name(), &ctx.tasks_file_name(),
+                ),
+                reason,
+                if failed_output.len() > 500 { &failed_output[..500] } else { &failed_output },
+            );
+
+            let (agent_tx2, mut agent_rx2) = mpsc::unbounded_channel();
+            let fwd_tx2 = tx.clone();
+            tokio::spawn(async move {
+                while let Some(evt) = agent_rx2.recv().await {
+                    let _ = fwd_tx2.send(AppEvent::AgentOutput(evt));
+                }
+            });
+
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::AgentStarted(
+                AgentRole::Planner,
+                Config::display_provider_model(
+                    &ctx.config.planner_provider, &ctx.config.planner_model,
+                ),
+            )));
+
+            let retry_result = agent::run_agent(
+                &AgentRole::Planner,
+                Config::parse_provider(&ctx.config.planner_provider),
+                &ctx.config.planner_model,
+                &retry_prompt,
+                &ctx.project_dir,
+                agent_tx2,
+                &ctx.log_dir,
+                None,
+                ctx.config.agent_timeout_secs,
+                Some(ctx.shutdown.clone()),
+            ).await;
+
+            last_rate_limited = was_rate_limited(&retry_result);
+            let _ = tx.send(AppEvent::AgentDone(
+                retry_result.as_ref().map(|r| r.success).unwrap_or(false),
+            ));
+
+            // Check gate again after retry
+            if let GateResult::Fail(reason2) = gate_builder(ctx) {
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                    "GATE BLOCKED builder for {} after retry: {}", task_id, reason2
+                ))));
+                {
+                    let _lock = ctx.tasks_file_lock.lock().unwrap_or_else(|e| e.into_inner());
+                    let _ = task::update_task_progress(&ctx.plan_path, task_id, &format!("{}{}--!", scout_char, planner_char));
+                }
+                let _ = git::commit_and_push(&ctx.project_dir, &ctx.config, task_id, task_desc, true);
+                return (false, last_rate_limited);
             }
-            let _ = git::commit_and_push(&ctx.project_dir, &ctx.config, task_id, task_desc, true);
-            return (false, last_rate_limited);
+
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                "Planner retry succeeded for {}", task_id
+            ))));
         }
     }
 

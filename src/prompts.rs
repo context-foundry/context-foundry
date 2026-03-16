@@ -39,14 +39,23 @@ PRIORITIZATION:
 4. Integration gaps
 5. Test coverage
 
-ALSO WRITE your scout report to .buildloop/scout-report.md:
+ALSO WRITE your scout report to .buildloop/scout-report.md.
+Structure it for downstream agents that will read it -- key facts first,
+details in the middle, risks and constraints last:
 
 # Scout Report
 
-## Tech Stack
+## Key Facts (read this first)
+[3-5 bullet points: language, framework, build system, critical constraint]
+
 ## Relevant Files
+[files the builder will need, with 1-line descriptions -- most important first]
+
 ## Architecture Notes
-## Risks
+[how the code is structured, key abstractions, data flow -- can be detailed]
+
+## Risks and Constraints (read this last)
+[what could go wrong, hard constraints, things the planner must not ignore]
 
 RULES:
 - Do NOT implement any code -- investigate and create tasks only
@@ -77,24 +86,26 @@ YOUR JOB:
 5. Note existing patterns, conventions, and architecture decisions
 6. Identify risks or gotchas the planner should know about
 
-WRITE YOUR REPORT to .buildloop/scout-report.md:
+WRITE YOUR REPORT to .buildloop/scout-report.md.
+Structure it for downstream agents -- key facts first (beginning bias),
+details in the middle, risks last (recency bias):
 
 # Scout Report: {task_id}
 
-## Tech Stack
-[language, framework, build tool, test runner]
+## Key Facts (read this first)
+[3-5 bullets: tech stack, critical files, hard constraints for this task]
 
 ## Relevant Files
-[list files the builder will need to read or modify, with 1-line descriptions]
+[files the builder will need to read or modify, most important first, with 1-line descriptions]
 
 ## Architecture Notes
 [how the existing code is structured, key abstractions, data flow]
 
-## Risks
-[things that could go wrong — dependency conflicts, breaking changes, missing APIs]
-
 ## Suggested Approach
 [high-level direction for the planner, based on what you found]
+
+## Risks and Constraints (read this last)
+[things that could go wrong -- dependency conflicts, breaking changes, missing APIs]
 
 RULES:
 - Do NOT modify any project files — you are read-only
