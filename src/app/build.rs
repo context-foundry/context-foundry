@@ -1354,7 +1354,7 @@ async fn process_task(
 
     let _committed = if ctx.config.pr_per_task && validated && ctx.config.mode == "hil" {
         // Per-task PR mode: branch, commit, push, create PR, return to base
-        match git::commit_task_pr(&ctx.project_dir, &ctx.config, task_id, task_desc) {
+        match git::commit_task_pr(&ctx.project_dir, &ctx.config, task_id, task_desc, &ctx.plan_path) {
             Ok((committed, pr_num)) => {
                 if committed {
                     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(

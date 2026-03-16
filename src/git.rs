@@ -361,6 +361,7 @@ pub fn commit_task_pr(
     config: &Config,
     task_id: &str,
     task_desc: &str,
+    plan_path: &Path,
 ) -> Result<(bool, Option<u64>)> {
     // Remember the base branch so we can return to it after the PR.
     let base_branch = {
@@ -375,12 +376,12 @@ pub fn commit_task_pr(
     let feature_branch = format!("foundry/{}", task_id.to_lowercase());
 
     let checkout = Command::new("git")
-        .args(["checkout", "-b", &feature_branch])
+        .args(["checkout", "-B", &feature_branch])
         .current_dir(project_dir)
         .output()?;
     if !checkout.status.success() {
         anyhow::bail!(
-            "git checkout -b {} failed: {}",
+            "git checkout -B {} failed: {}",
             feature_branch,
             String::from_utf8_lossy(&checkout.stderr)
         );
@@ -470,6 +471,26 @@ pub fn commit_task_pr(
                     .next()
                     .and_then(|s| s.parse::<u64>().ok());
             }
+        }
+    }
+
+    // Annotate TASKS.md with the PR number and push the annotation
+    if let Some(pr_num) = pr_number {
+        if annotate_tasks_with_pr(plan_path, pr_num).is_ok() {
+            // Stage only TASKS.md (plan_path) to avoid picking up unrelated changes
+            let _ = Command::new("git")
+                .args(["add", &plan_path.to_string_lossy()])
+                .current_dir(project_dir)
+                .output();
+            let annotation_msg = format!("annotate TASKS.md with PR #{} for {}", pr_num, task_id);
+            let _ = Command::new("git")
+                .args(["commit", "-m", &annotation_msg])
+                .current_dir(project_dir)
+                .output();
+            let _ = Command::new("git")
+                .args(["push", remote, &feature_branch])
+                .current_dir(project_dir)
+                .output();
         }
     }
 
@@ -710,7 +731,7 @@ mod tests {
         fs::write(repo_dir.join("feature.txt"), "new code\n").expect("write feature");
 
         // No remote, so push will fail but commit + branch should succeed
-        let result = commit_task_pr(&repo_dir, &Config::default(), "T1.1", "Add feature");
+        let result = commit_task_pr(&repo_dir, &Config::default(), "T1.1", "Add feature", &repo_dir.join("TASKS.md"));
         assert!(result.is_ok() || result.is_err()); // push may fail, that's fine
 
         // After the call, we should be back on the base branch
@@ -754,7 +775,7 @@ mod tests {
 
         // No changes -- should return (false, None) and clean up the branch
         let (committed, pr) =
-            commit_task_pr(&repo_dir, &Config::default(), "T2.1", "No changes")
+            commit_task_pr(&repo_dir, &Config::default(), "T2.1", "No changes", &repo_dir.join("TASKS.md"))
                 .expect("should not error");
         assert!(!committed);
         assert!(pr.is_none());
