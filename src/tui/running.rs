@@ -478,15 +478,20 @@ pub(super) fn render_patterns_learned(
         return;
     }
 
-    // Show most recent patterns first
+    // Show most recent patterns first, respecting scroll offset
+    let total_patterns = state.session_patterns.len();
+    let scroll = state
+        .patterns_scroll
+        .min(total_patterns.saturating_sub(1));
     let items: Vec<ListItem> = state
         .session_patterns
         .iter()
         .rev()
+        .skip(scroll)
         .take(max_lines)
         .enumerate()
         .map(|(i, title)| {
-            let num = state.session_patterns.len() - i;
+            let num = total_patterns.saturating_sub(scroll + i);
             ListItem::new(Line::from(vec![
                 Span::styled(
                     format!(" #{} ", num),
