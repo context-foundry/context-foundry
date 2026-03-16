@@ -646,6 +646,7 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                 state.current_task = Some(task);
                 state.task_start = Some(chrono::Utc::now());
                 state.task_stages_seen.clear();
+                state.spid_context_pcts = [None; 4];
                 state.clear_agent();
             }
             LoopEvent::AgentStarted(role, model) => {
@@ -1123,8 +1124,22 @@ fn handle_agent_output(state: &mut AppState, output: AgentOutputEvent) {
 
 fn handle_agent_done(state: &mut AppState, success: bool) {
     if let Some((ref role, _)) = state.current_agent {
+        let role_clone = role.clone();
         let status = if success { "completed" } else { "FAILED" };
-        state.log(format!("{} {}", role, status));
+        state.log(format!("{} {}", role_clone, status));
+        // Save context % to the SPID slot for this stage
+        if let Some(pct) = state.agent_context_pct {
+            let slot = match role_clone {
+                AgentRole::Scout => Some(0),
+                AgentRole::Planner => Some(1),
+                AgentRole::Builder => Some(2),
+                AgentRole::Reviewer => Some(3),
+                _ => None,
+            };
+            if let Some(i) = slot {
+                state.spid_context_pcts[i] = Some(pct);
+            }
+        }
     }
 }
 

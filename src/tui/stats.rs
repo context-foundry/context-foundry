@@ -38,61 +38,50 @@ pub(super) fn render_dashboard_stats(frame: &mut Frame, area: Rect, state: &AppS
         ),
     ]));
 
-    // Git stats
+    // Two-column layout: left = git + patterns, right = context + timing
+    // We build each line with left and right halves padded to fill the width.
+    let half_width = area.width.saturating_sub(4) as usize / 2; // borders + padding
+
+    // ─── Row 1: Git | Context SPID ───
+    let (ollama_label, ollama_color) = match state.last_pattern_match_mode.as_deref() {
+        Some("semantic") => ("connected", Color::Green),
+        Some("cooldown") => ("down", Color::Red),
+        Some("keyword-only") => ("off", Color::Yellow),
+        _ => ("--", Color::DarkGray),
+    };
+
+    fn ctx_pct_span(pct: Option<u8>) -> (String, Color) {
+        match pct {
+            Some(p) if p >= 90 => (format!("{}%", p), Color::Red),
+            Some(p) if p >= 70 => (format!("{}%", p), Color::Yellow),
+            Some(p) => (format!("{}%", p), Color::Green),
+            None => ("--".to_string(), Color::DarkGray),
+        }
+    }
+
+    let (s_str, s_col) = ctx_pct_span(state.spid_context_pcts[0]);
+    let (p_str, p_col) = ctx_pct_span(state.spid_context_pcts[1]);
+    let (i_str, i_col) = ctx_pct_span(state.spid_context_pcts[2]);
+    let (d_str, d_col) = ctx_pct_span(state.spid_context_pcts[3]);
+
     lines.push(Line::from(vec![
         Span::styled("  Git      ", Style::default().fg(Color::Cyan)),
         Span::styled("feat: ", Style::default().fg(Color::DarkGray)),
-        Span::styled(
-            format!("{}", state.session_feat_commits),
-            Style::default().fg(Color::Green),
-        ),
+        Span::styled(format!("{}", state.session_feat_commits), Style::default().fg(Color::Green)),
         Span::styled("  WIP: ", Style::default().fg(Color::DarkGray)),
-        Span::styled(
-            format!("{}", state.session_wip_commits),
-            Style::default().fg(Color::Yellow),
-        ),
+        Span::styled(format!("{:<width$}", state.session_wip_commits, width = half_width.saturating_sub(28)), Style::default().fg(Color::Yellow)),
+        Span::styled("Context   ", Style::default().fg(Color::Cyan)),
+        Span::styled("S:", Style::default().fg(Color::DarkGray)),
+        Span::styled(format!("{:<4}", s_str), Style::default().fg(s_col)),
+        Span::styled(" P:", Style::default().fg(Color::DarkGray)),
+        Span::styled(format!("{:<4}", p_str), Style::default().fg(p_col)),
+        Span::styled(" I:", Style::default().fg(Color::DarkGray)),
+        Span::styled(format!("{:<4}", i_str), Style::default().fg(i_col)),
+        Span::styled(" D:", Style::default().fg(Color::DarkGray)),
+        Span::styled(&d_str, Style::default().fg(d_col)),
     ]));
 
-    lines.push(Line::from(""));
-
-    // Patterns + Ollama status
-    let (ollama_label, ollama_color) = match state.last_pattern_match_mode.as_deref() {
-        Some("semantic") => ("Ollama: connected", Color::Green),
-        Some("cooldown") => ("Ollama: down", Color::Red),
-        Some("keyword-only") => ("Ollama: off", Color::Yellow),
-        _ => ("Ollama: --", Color::DarkGray),
-    };
-    lines.push(Line::from(vec![
-        Span::styled("  Patterns ", Style::default().fg(Color::Cyan)),
-        Span::styled("learned: ", Style::default().fg(Color::DarkGray)),
-        Span::styled(
-            format!("{}", state.session_patterns_learned),
-            Style::default().fg(Color::White),
-        ),
-    ]));
-    lines.push(Line::from(vec![
-        Span::styled("           ", Style::default()),
-        Span::styled(ollama_label, Style::default().fg(ollama_color)),
-    ]));
-
-    // Review findings
-    if state.session_review_high > 0 || state.session_review_medium > 0 || state.session_review_low > 0 {
-        lines.push(Line::from(vec![
-            Span::styled("  Review   ", Style::default().fg(Color::Cyan)),
-            Span::styled(
-                format!("{}", state.session_review_high),
-                Style::default().fg(if state.session_review_high > 0 { Color::Red } else { Color::DarkGray }),
-            ),
-            Span::styled(" high  ", Style::default().fg(Color::DarkGray)),
-            Span::styled(
-                format!("{}", state.session_review_medium),
-                Style::default().fg(if state.session_review_medium > 0 { Color::Yellow } else { Color::DarkGray }),
-            ),
-            Span::styled(" med", Style::default().fg(Color::DarkGray)),
-        ]));
-    }
-
-    // Timing
+    // ─── Row 2: Patterns + Ollama | Timing ───
     let now = chrono::Utc::now();
     let session_elapsed = now.signed_duration_since(state.session_start);
     let session_str = format_duration_hms(session_elapsed);
@@ -102,49 +91,19 @@ pub(super) fn render_dashboard_stats(frame: &mut Frame, area: Rect, state: &AppS
         .map(|ts| format_duration_hms(now.signed_duration_since(ts)))
         .unwrap_or_else(|| "--:--".to_string());
 
-    let agent_str = state
-        .current_agent
-        .as_ref()
-        .map(|(_, started)| format_duration_hms(now.signed_duration_since(*started)))
-        .unwrap_or_else(|| "--:--".to_string());
-
     lines.push(Line::from(vec![
-        Span::styled("  Timing   ", Style::default().fg(Color::Cyan)),
+        Span::styled("  Patterns ", Style::default().fg(Color::Cyan)),
+        Span::styled(format!("{}", state.session_patterns_learned), Style::default().fg(Color::White)),
+        Span::styled("  Ollama: ", Style::default().fg(Color::DarkGray)),
+        Span::styled(format!("{:<width$}", ollama_label, width = half_width.saturating_sub(24)), Style::default().fg(ollama_color)),
+        Span::styled("Timing    ", Style::default().fg(Color::Cyan)),
         Span::styled("session: ", Style::default().fg(Color::DarkGray)),
         Span::styled(&session_str, Style::default().fg(Color::White)),
-    ]));
-    lines.push(Line::from(vec![
-        Span::styled("           ", Style::default().fg(Color::Cyan)),
-        Span::styled("task: ", Style::default().fg(Color::DarkGray)),
+        Span::styled("  task: ", Style::default().fg(Color::DarkGray)),
         Span::styled(&task_str, Style::default().fg(Color::White)),
-        Span::styled("  agent: ", Style::default().fg(Color::DarkGray)),
-        Span::styled(&agent_str, Style::default().fg(Color::White)),
     ]));
 
-    // Cost and context usage
-    lines.push(Line::from(vec![
-        Span::styled("  Cost     ", Style::default().fg(Color::Cyan)),
-        Span::styled(
-            format!("${:.2}", state.session_cost_usd),
-            Style::default().fg(Color::White),
-        ),
-        Span::styled("  ctx: ", Style::default().fg(Color::DarkGray)),
-        Span::styled(
-            state.agent_context_pct
-                .map(|pct| format!("{}%", pct))
-                .unwrap_or_else(|| "--".to_string()),
-            Style::default().fg(match state.agent_context_pct {
-                Some(p) if p >= 90 => Color::Red,
-                Some(p) if p >= 70 => Color::Yellow,
-                Some(_) => Color::Green,
-                None => Color::DarkGray,
-            }),
-        ),
-    ]));
-
-    lines.push(Line::from(""));
-
-    // Agent status
+    // ─── Row 3: Agent status ───
     let agent_label = state
         .current_agent
         .as_ref()
@@ -154,33 +113,32 @@ pub(super) fn render_dashboard_stats(frame: &mut Frame, area: Rect, state: &AppS
         })
         .unwrap_or_else(|| "idle".to_string());
 
-    lines.push(Line::from(vec![
+    let agent_str = state
+        .current_agent
+        .as_ref()
+        .map(|(_, started)| format_duration_hms(now.signed_duration_since(*started)))
+        .unwrap_or_default();
+
+    let mut agent_spans = vec![
         Span::styled("  Agent    ", Style::default().fg(Color::Cyan)),
         Span::styled(
-            agent_label,
+            &agent_label,
             if state.current_agent.is_some() {
-                Style::default()
-                    .fg(Color::Yellow)
-                    .add_modifier(Modifier::BOLD)
+                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
             } else {
                 Style::default().fg(Color::DarkGray)
             },
         ),
-    ]));
-
+    ];
     if state.current_agent.is_some() {
         let spinner_chars = ['|', '/', '-', '\\'];
         let spinner = spinner_chars[state.tick_count % spinner_chars.len()];
-        let activity = if state.agent_output.is_empty() {
-            format!("  {} thinking...", spinner)
-        } else {
-            format!("  {} {} events", spinner, state.events_received)
-        };
-        lines.push(Line::from(Span::styled(
-            format!("           {}", activity),
+        agent_spans.push(Span::styled(
+            format!("  {} {} events  {}", spinner, state.events_received, agent_str),
             Style::default().fg(Color::DarkGray),
-        )));
+        ));
     }
+    lines.push(Line::from(agent_spans));
 
     let stats_block = Paragraph::new(lines)
         .block(
