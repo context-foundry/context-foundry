@@ -33,7 +33,10 @@ When I ask you to "build", "create", "implement", or describe a non-trivial proj
 - Read CLAUDE.md, SPEC.md, TASKS.md if they exist
 - Detect tech stack from project files
 - Read relevant source code
-- Write `.buildloop/scout-report.md` with: Tech Stack, Relevant Files, Architecture Notes, Risks, Suggested Approach
+- Write `.buildloop/scout-report.md` with position-aware structure:
+  - **Key Facts** (first -- beginning bias for LLM attention)
+  - Relevant Files, Architecture Notes, Suggested Approach (middle)
+  - **Risks and Constraints** (last -- recency bias for LLM attention)
 - If TASKS.md has no pending tasks, also create tasks (see Task Creation below)
 
 **2. PLAN** -- Create an implementation plan.
@@ -41,6 +44,8 @@ When I ask you to "build", "create", "implement", or describe a non-trivial proj
 - Write `.buildloop/current-plan.md` with: Dependencies, File Operations (in order), Verification commands, Constraints
 - Every file operation must specify CREATE or MODIFY with exact function signatures
 - The plan is for a machine (you), not a human -- be explicit and deterministic
+- Include anchors (unique lines from existing code) for every MODIFY operation
+- **Prerequisite gate**: the plan MUST contain `## File Operations` and `## Verification` sections or the builder will not run. If missing, the planner is retried once with the specific validation error appended.
 
 **3. IMPLEMENT** -- Build it.
 - Follow `.buildloop/current-plan.md` exactly
@@ -63,6 +68,12 @@ When I ask you to "build", "create", "implement", or describe a non-trivial proj
 **4. DOUBT** -- Audit with fresh eyes.
 - Spawn a sub-agent with this exact prompt:
   > "Audit and validate these claims. Find the gaps. Read .buildloop/build-claims.md. For every claim, verify it against the actual code. Run the build and tests yourself. Fix every HIGH and MEDIUM issue. Write your findings to .buildloop/review-report.md."
+- The sub-agent runs in a **fresh context** with no shared history from the builder. This is the multi-instance review pattern -- an independent instance catches bugs the author is blind to.
+- Severity calibration (use these to classify findings):
+  - **HIGH**: Security issues, data loss, crashes from external input (always fix)
+  - **MEDIUM**: Missing error handling at system boundaries, logic errors (always fix)
+  - **LOW**: Style, naming, patterns consistent with existing code (report only, do not fix)
+- Skip: style preferences matching existing code, theoretical improvements with no concrete bug
 - The sub-agent has full write access -- it fixes what it finds
 - If the sub-agent reports PASS: commit as `feat(task-id): description`
 - If FAIL: commit as `WIP(task-id): description`
@@ -105,3 +116,15 @@ When all tasks in TASKS.md are complete:
 | `.buildloop/build-claims.md` | Builder's claims for audit | Implement |
 | `.buildloop/review-report.md` | Doubt loop findings | Doubt |
 | `~/.foundry/patterns/*.json` | Learned patterns | Pattern extraction |
+
+### On-Demand Skills
+
+These skills can be invoked manually when not using the autonomous pipeline:
+
+| Skill | Purpose | Isolation |
+|-------|---------|-----------|
+| `/audit` | Run a doubt loop on current changes | `context: fork` (fresh sub-agent) |
+| `/scout` | Investigate codebase for a task | `context: fork` (read-only) |
+| `/extract-patterns` | Learn patterns from recent work | `context: fork` |
+
+Skills run in forked context to prevent verbose output from polluting the main conversation. Each has restricted tool access appropriate to its role.
