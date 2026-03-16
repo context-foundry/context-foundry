@@ -64,6 +64,8 @@ Examples: `SPID` = full pipeline, clean pass. `S-ID` = planner skipped, scouted 
 
 The TUI shows these indicators in the task queue with color coding, and they survive across restarts since they're written directly into the task file.
 
+**Why a fresh context matters.** The verify agent runs in a completely separate Claude session with no shared history from the builder. This is intentional. A model that just wrote the code retains its reasoning context and is less likely to question its own decisions. An independent instance -- given only the claims and the code -- catches bugs the author is blind to. This is the same multi-instance review architecture described in Anthropic's [Claude Certified Architect](https://www.anthropic.com/certifications) program as a production best practice for reliable AI-generated code.
+
 **Long-term: pattern learning.** After each validated task, a pattern extractor agent scans the build artifacts, review findings, and plan to extract reusable lessons (e.g., "CFrame not Position for moving Roblox parts" or "always validate UTF-8 boundaries before string slicing"). These get saved as structured JSON to `~/.foundry/patterns/`. On the next task — in any project — matched patterns are injected into the planner and reviewer prompts as reference data. Patterns that recur 3+ times get auto-promoted, meaning they're always included. This is how the system gets better over time: a mistake made once becomes a check applied everywhere.
 
 ### Pattern scope
