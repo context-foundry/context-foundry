@@ -388,8 +388,10 @@ fn handle_startup_submit(state: &mut AppState) {
             }
         }
         StartupScenario::EmptyProject | StartupScenario::NeedsQueue => {
-            if !text.is_empty() && matches!(scenario, StartupScenario::EmptyProject) {
-                // Save user's raw words as SPEC.md for brand-new projects
+            if !text.is_empty() {
+                // Save user's description as SPEC.md so the bootstrap scout has context.
+                // This applies to both EmptyProject and NeedsQueue -- the user typed
+                // something they want built, and the scout needs to read it.
                 let spec_path = super::contract::ContractPaths::resolve(
                     state.buildloop_dir.parent().unwrap_or(std::path::Path::new(".")),
                 ).spec_path;
@@ -398,9 +400,20 @@ fn handle_startup_submit(state: &mut AppState) {
                     format!("# Project Brief\n\n{}\n", text).as_bytes(),
                 );
             }
-            // Go straight to build loop -- bootstrap scout will create tasks
-            // from SPEC.md (saved above) or by scanning the codebase
-            state.pending_transition = Some(PendingTransition::StartBuild);
+            // Use AppendTasks to create TASKS.md via bootstrap scout, then start
+            // the build loop. StartBuild requires TASKS.md to exist already.
+            let description = if text.is_empty() {
+                "Scan the project and create an initial task queue".to_string()
+            } else {
+                text
+            };
+            let label = format!("Bootstrap: {}", truncate_str(&description, 48));
+            state.pending_transition =
+                Some(PendingTransition::AppendTasks(AppendTasksRequest {
+                    description,
+                    label,
+                    seed_spec_from_description: false,
+                }));
         }
     }
 }

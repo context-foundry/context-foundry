@@ -2,7 +2,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem, Paragraph},
+    widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
     Frame,
 };
 
@@ -67,7 +67,7 @@ pub(super) fn startup_layout(area: Rect) -> StartupLayout {
         .constraints([
             Constraint::Length(8),  // summary
             Constraint::Min(8),    // body
-            Constraint::Length(3), // input prompt
+            Constraint::Length(5), // input prompt (borders + 3 content lines for wrapping)
             Constraint::Length(1), // status bar
         ])
         .split(area);
@@ -372,17 +372,19 @@ fn render_file_preview(frame: &mut Frame, area: Rect, state: &AppState) {
         })
         .collect();
 
-    let paragraph = Paragraph::new(lines).block(
-        Block::default()
-            .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::DarkGray))
-            .title(Span::styled(
-                format!(" {} ", title),
-                Style::default()
-                    .fg(Color::White)
-                    .add_modifier(Modifier::BOLD),
-            )),
-    );
+    let paragraph = Paragraph::new(lines)
+        .wrap(Wrap { trim: false })
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::DarkGray))
+                .title(Span::styled(
+                    format!(" {} ", title),
+                    Style::default()
+                        .fg(Color::White)
+                        .add_modifier(Modifier::BOLD),
+                )),
+        );
     frame.render_widget(paragraph, area);
 }
 
@@ -420,17 +422,19 @@ fn render_input_prompt(frame: &mut Frame, area: Rect, state: &AppState) {
         ])
     };
 
-    let prompt = Paragraph::new(vec![input_line]).block(
-        Block::default()
-            .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::Rgb(227, 115, 75)))
-            .title(Span::styled(
-                " What do you want to do? ",
-                Style::default()
-                    .fg(Color::Rgb(227, 115, 75))
-                    .add_modifier(Modifier::BOLD),
-            )),
-    );
+    let prompt = Paragraph::new(vec![input_line])
+        .wrap(Wrap { trim: false })
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Rgb(227, 115, 75)))
+                .title(Span::styled(
+                    " What do you want to do? ",
+                    Style::default()
+                        .fg(Color::Rgb(227, 115, 75))
+                        .add_modifier(Modifier::BOLD),
+                )),
+        );
     frame.render_widget(prompt, area);
 }
 

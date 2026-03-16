@@ -175,7 +175,7 @@ fn startup_empty_input_on_needs_queue_sets_planning_transition() {
         None,
     ));
 
-    // Press Enter with empty input on NeedsQueue -> StartBuild (bootstrap scout creates tasks)
+    // Press Enter with empty input on NeedsQueue -> AppendTasks (bootstrap scout creates tasks)
     handle_startup_key(
         &mut state,
         event::KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
@@ -183,7 +183,7 @@ fn startup_empty_input_on_needs_queue_sets_planning_transition() {
 
     assert!(matches!(
         state.pending_transition,
-        Some(PendingTransition::StartBuild)
+        Some(PendingTransition::AppendTasks(_))
     ));
     let _ = std::fs::remove_dir_all(dir);
 }
@@ -232,11 +232,11 @@ fn startup_empty_project_describe_work_seeds_spec_before_task_creation() {
         event::KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
     );
 
-    // EmptyProject now goes straight to StartBuild (bootstrap scout creates tasks).
+    // EmptyProject now uses AppendTasks to create TASKS.md via bootstrap scout.
     // The user's text is saved as SPEC.md before starting.
     assert!(matches!(
         state.pending_transition,
-        Some(PendingTransition::StartBuild)
+        Some(PendingTransition::AppendTasks(_))
     ));
 
     // Verify SPEC.md was seeded with the user's description
@@ -834,7 +834,7 @@ fn startup_empty_input_on_needs_queue_starts_build() {
         None,
     ));
 
-    // Press Enter with empty input -- goes straight to build (bootstrap scout creates tasks)
+    // Press Enter with empty input -- uses AppendTasks to bootstrap the task queue
     handle_startup_key(
         &mut state,
         event::KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
@@ -842,7 +842,7 @@ fn startup_empty_input_on_needs_queue_starts_build() {
 
     assert!(matches!(
         state.pending_transition,
-        Some(PendingTransition::StartBuild)
+        Some(PendingTransition::AppendTasks(_))
     ));
 
     let _ = std::fs::remove_dir_all(dir);
@@ -877,10 +877,10 @@ fn startup_text_input_on_needs_queue_starts_build() {
         event::KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
     );
 
-    // NeedsQueue now goes straight to StartBuild (bootstrap scout creates tasks)
+    // NeedsQueue now uses AppendTasks to create TASKS.md via bootstrap scout
     assert!(matches!(
         state.pending_transition,
-        Some(PendingTransition::StartBuild)
+        Some(PendingTransition::AppendTasks(_))
     ));
 
     let _ = std::fs::remove_dir_all(dir);
