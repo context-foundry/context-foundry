@@ -137,10 +137,8 @@ fn build_file_tree_recursive(
         let file_name = item.file_name().to_string_lossy().to_string();
         let path = item.path();
         let is_dir = path.is_dir();
-
-        if is_dir && should_skip_project_dir(&file_name) {
-            continue;
-        }
+        let is_hidden = file_name.starts_with('.');
+        let is_skipped_dir = is_dir && should_skip_project_dir(&file_name);
 
         let is_cf_highlight = is_context_foundry_file(&file_name, &path, base_dir);
         entries.push(FileEntry {
@@ -149,9 +147,12 @@ fn build_file_tree_recursive(
             depth,
             is_dir,
             is_cf_highlight,
+            is_hidden,
         });
 
-        if is_dir {
+        // Still recurse into hidden dirs (e.g. .buildloop) but not into
+        // large generated dirs like node_modules, target, .git
+        if is_dir && !is_skipped_dir {
             build_file_tree_recursive(base_dir, &path, depth + 1, entries);
         }
     }

@@ -291,7 +291,9 @@ fn render_file_explorer(frame: &mut Frame, area: Rect, state: &AppState) {
             let prefix = if entry.is_dir { "\u{25B8} " } else { "  " };
             let display_name = format!("{}{}{}", indent, prefix, entry.name);
             let is_selected = idx == startup.explorer_selected;
-            let fg_color = if entry.is_cf_highlight {
+            let fg_color = if entry.is_hidden {
+                Color::DarkGray
+            } else if entry.is_cf_highlight {
                 Color::Rgb(227, 115, 75) // CF orange
             } else if entry.is_dir {
                 Color::Cyan
@@ -574,6 +576,7 @@ mod tests {
                     depth: 0,
                     is_dir: true,
                     is_cf_highlight: false,
+                    is_hidden: false,
                 },
                 crate::app::FileEntry {
                     path: PathBuf::from("/tmp/TASKS.md"),
@@ -581,6 +584,7 @@ mod tests {
                     depth: 0,
                     is_dir: false,
                     is_cf_highlight: true,
+                    is_hidden: false,
                 },
             ],
             explorer_selected: 0,

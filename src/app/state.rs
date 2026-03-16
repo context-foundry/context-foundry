@@ -58,6 +58,7 @@ pub struct FileEntry {
     pub depth: usize,
     pub is_dir: bool,
     pub is_cf_highlight: bool,
+    pub is_hidden: bool,
 }
 
 #[derive(Debug, Clone)]
