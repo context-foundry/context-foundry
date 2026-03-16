@@ -239,11 +239,46 @@ Key design decisions in the prompt system:
 
 ## Extensions
 
-Foundry does not ship with any extensions. Extensions are something you create yourself — domain-specific knowledge packages that teach foundry's agents how to work with your particular technologies, APIs, or workflows.
+Extensions are domain-specific knowledge packages that teach foundry's agents how to work with technologies, APIs, or workflows that aren't in Claude's training data. Foundry discovers extensions automatically from `~/.foundry/extensions/` and project-local `extensions/` directories.
 
-An extension is just a folder containing guides, patterns, templates, and examples (e.g., a `CLAUDE.md` with rules, a patterns JSON with learned issues). Foundry provides the framework: agents already know how to read `CLAUDE.md` files for project conventions, and the pattern system already knows how to load and match JSON pattern files. You supply the domain knowledge.
+An extension is a folder containing a `CLAUDE.md` (domain rules) and optionally a patterns JSON (learned issues). For example, a Roblox extension might teach agents to use CFrame instead of Position for moving parts, or a Workday Extend extension might document that WIDs are tenant-specific.
 
-To use an extension, copy its `CLAUDE.md` and relevant docs into your project, or reference them from your project's `CLAUDE.md`.
+### Extension contracts
+
+On the startup screen, foundry shows a checkbox panel listing all discovered extensions with their pattern counts. Select the ones relevant to your build:
+
+```
+┌ Extensions ──────────────────────────────────────┐
+│ [ ] extend (1p) Workday Extend orchestrations    │
+│ [x] flowise (3p) Flowise AgentFlow v2 workflows  │
+│ [ ] recon (1p) Fleet ops, iDRAC                  │
+│ [ ] roblox (4p) Roblox world gen, Lune scripting │
+└──────────────────────────────────────────────────┘
+```
+
+Selected extensions are **programmatically injected** into every agent's prompt -- the scout, planner, builder, and reviewer all receive the extension's CLAUDE.md and patterns as prepended context. This is deterministic enforcement, not a suggestion the agent may or may not follow. The extension context is a contract that the pipeline guarantees.
+
+The status bar shows active extensions at all times: `Extensions: flowise (1 active)` or `Extensions: none`.
+
+Selection persists to `.foundry.json`:
+```json
+{
+  "extensions": ["flowise"]
+}
+```
+
+### Creating extensions
+
+```
+extensions/your-domain/
+├── CLAUDE.md                          # Domain rules (injected into every agent prompt)
+├── patterns/your-domain-common-issues.json  # Learned issues (merged into pattern matching)
+└── docs/                              # Supporting documentation
+```
+
+The `CLAUDE.md` should contain the rules and patterns an agent needs to work correctly in your domain. Extension patterns are automatically merged into the global pattern matching pool when the extension is selected -- no manual merge step needed.
+
+A prerequisite gate validates extensions before the builder runs: if an extension is configured but its CLAUDE.md is missing, the build is blocked with a clear error.
 
 ## Architecture
 
