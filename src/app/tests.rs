@@ -232,11 +232,11 @@ fn startup_empty_project_describe_work_seeds_spec_before_task_creation() {
         event::KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
     );
 
-    // EmptyProject now uses AppendTasks to create TASKS.md via bootstrap scout.
-    // The user's text is saved as SPEC.md before starting.
+    // EmptyProject with text now writes SPEC.md and returns to startup for review.
+    // The user must press Enter again to start the loop.
     assert!(matches!(
         state.pending_transition,
-        Some(PendingTransition::AppendTasks(_))
+        Some(PendingTransition::ShowStartup { .. })
     ));
 
     // Verify SPEC.md was seeded with the user's description
@@ -877,13 +877,13 @@ fn startup_text_input_on_needs_queue_starts_build() {
         event::KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
     );
 
-    // NeedsQueue now uses AppendTasks to create TASKS.md via bootstrap scout
+    // NeedsQueue with text writes SPEC.md and returns to startup for review
     assert!(matches!(
         state.pending_transition,
-        Some(PendingTransition::AppendTasks(_))
+        Some(PendingTransition::ShowStartup { .. })
     ));
 
-    // NeedsQueue with text should also write SPEC.md (like EmptyProject does)
+    // NeedsQueue with text should write SPEC.md
     let spec_path = dir.join("SPEC.md");
     let spec_content = std::fs::read_to_string(&spec_path).expect("SPEC.md should exist");
     assert!(spec_content.contains("auth bugs"));

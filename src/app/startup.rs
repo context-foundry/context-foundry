@@ -392,28 +392,30 @@ fn handle_startup_submit(state: &mut AppState) {
                 // Save user's description as SPEC.md so the bootstrap scout has context.
                 // This applies to both EmptyProject and NeedsQueue -- the user typed
                 // something they want built, and the scout needs to read it.
-                let spec_path = super::contract::ContractPaths::resolve(
-                    state.buildloop_dir.parent().unwrap_or(std::path::Path::new(".")),
-                ).spec_path;
+                let project_dir = state.buildloop_dir.parent()
+                    .unwrap_or(std::path::Path::new("."))
+                    .to_path_buf();
+                let spec_path = super::contract::ContractPaths::resolve(&project_dir).spec_path;
                 let _ = crate::utils::atomic_write_file(
                     &spec_path,
                     format!("# Project Brief\n\n{}\n", text).as_bytes(),
                 );
-            }
-            // Use AppendTasks to create TASKS.md via bootstrap scout, then start
-            // the build loop. StartBuild requires TASKS.md to exist already.
-            let description = if text.is_empty() {
-                "Scan the project and create an initial task queue".to_string()
+                // Return to startup so the user can review SPEC.md before starting.
+                // The scenario will re-detect as NeedsQueue (spec exists, no tasks yet).
+                state.pending_transition = Some(PendingTransition::ShowStartup {
+                    message: Some("SPEC.md created -- review it, then press Enter to start.".to_string()),
+                });
             } else {
-                text
-            };
-            let label = format!("Bootstrap: {}", truncate_str(&description, 48));
-            state.pending_transition =
-                Some(PendingTransition::AppendTasks(AppendTasksRequest {
-                    description,
-                    label,
-                    seed_spec_from_description: false,
-                }));
+                // Empty Enter with no text -- start the bootstrap scout directly
+                let description = "Scan the project and create an initial task queue".to_string();
+                let label = format!("Bootstrap: {}", truncate_str(&description, 48));
+                state.pending_transition =
+                    Some(PendingTransition::AppendTasks(AppendTasksRequest {
+                        description,
+                        label,
+                        seed_spec_from_description: false,
+                    }));
+            }
         }
     }
 }
