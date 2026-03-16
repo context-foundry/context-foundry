@@ -24,8 +24,8 @@ use self::startup::{
 };
 use self::state::{AppEvent, AppendTasksRequest, LoopEvent, PendingTransition, PlanningOutcome};
 pub use self::state::{
-    AppPhase, AppState, PlanStatus, PlanningState, StartupAction, StartupScenario,
-    StartupState, TuiPane,
+    AppPhase, AppState, ExtensionDisplayInfo, PlanStatus, PlanningState, StartupAction,
+    StartupScenario, StartupState, TuiPane,
 };
 #[cfg(test)]
 pub use self::state::FileEntry;
@@ -122,9 +122,7 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
         // Draw based on phase
         terminal.draw(|frame| match state.phase {
             AppPhase::Startup => {
-                if state.show_extensions_panel {
-                    tui::render_extensions(frame, &state);
-                } else if state.show_findings {
+                if state.show_findings {
                     tui::render_findings(frame, &state);
                 } else if state.show_run_view {
                     tui::render(frame, &state, &config);
@@ -133,9 +131,7 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
                 }
             }
             AppPhase::Planning | AppPhase::Running => {
-                if state.show_extensions_panel {
-                    tui::render_extensions(frame, &state);
-                } else if state.show_findings {
+                if state.show_findings {
                     tui::render_findings(frame, &state);
                 } else if state.show_patterns {
                     tui::render_patterns(frame, &state, &config);
@@ -789,42 +785,6 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
         AppEvent::Key(key) => {
             if state.inject_input.is_some() {
                 handle_inject_key(state, key);
-            } else if state.show_extensions_panel && !state.available_extensions.is_empty() {
-                match key.code {
-                    KeyCode::Up => {
-                        if state.extensions_cursor > 0 {
-                            state.extensions_cursor -= 1;
-                        }
-                    }
-                    KeyCode::Down => {
-                        if state.extensions_cursor + 1 < state.available_extensions.len() {
-                            state.extensions_cursor += 1;
-                        }
-                    }
-                    KeyCode::Char(' ') | KeyCode::Enter => {
-                        if let Some(ext) = state.available_extensions.get_mut(state.extensions_cursor) {
-                            ext.1 = !ext.1;
-                        }
-                        let project_dir = state
-                            .buildloop_dir
-                            .parent()
-                            .unwrap_or(std::path::Path::new("."));
-                        let selected: Vec<String> = state
-                            .available_extensions
-                            .iter()
-                            .filter(|(_, sel)| *sel)
-                            .map(|(name, _)| name.clone())
-                            .collect();
-                        Config::save_extensions(project_dir, &selected);
-                    }
-                    KeyCode::Esc => {
-                        state.show_extensions_panel = false;
-                    }
-                    KeyCode::Char('e') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                        state.show_extensions_panel = false;
-                    }
-                    _ => {}
-                }
             } else if state.show_running_explorer {
                 match key.code {
                     KeyCode::Char('q') => {
@@ -915,14 +875,6 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                         } else {
                             state.show_patterns = true;
                             refresh_patterns_cache(state, config);
-                        }
-                    }
-                    KeyCode::Char('e') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                        if !state.available_extensions.is_empty() {
-                            state.show_extensions_panel = !state.show_extensions_panel;
-                            if state.show_extensions_panel {
-                                state.extensions_cursor = 0;
-                            }
                         }
                     }
                     KeyCode::Char('i') => {

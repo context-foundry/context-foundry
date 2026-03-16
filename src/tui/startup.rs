@@ -9,7 +9,7 @@ use ratatui::{
     Frame,
 };
 
-use crate::app::{AppState, StartupState, TuiPane};
+use crate::app::{AppState, ExtensionDisplayInfo, StartupState, TuiPane};
 use super::{pane_border_style, pane_border_type};
 use crate::utils::truncate_str;
 
@@ -29,21 +29,25 @@ const PLACEHOLDER_SUGGESTIONS: &[&str] = &[
 pub enum StartupMouseTarget {
     FileEntry(usize),
     PreviewLine,
+    ExtensionEntry(usize),
 }
 
 pub(super) struct StartupLayout {
     pub(super) summary: Rect,
     pub(super) status: Rect,
     pub(super) explorer: Rect,
+    pub(super) extensions: Rect,
     pub(super) preview: Rect,
     pub(super) input: Rect,
 }
 
 pub(super) fn render_startup(frame: &mut Frame, state: &AppState) {
-    let layout = startup_layout(frame.area());
+    let ext_count = state.available_extensions.len();
+    let layout = startup_layout(frame.area(), ext_count);
 
     render_startup_summary(frame, layout.summary, state);
     render_file_explorer(frame, layout.explorer, state);
+    render_extensions_panel(frame, layout.extensions, state);
     render_file_preview(frame, layout.preview, state);
     render_input_prompt(frame, layout.input, state);
     render_startup_status_bar(frame, layout.status, state);
@@ -56,16 +60,27 @@ pub(super) fn startup_hit_test(
     row: u16,
 ) -> Option<StartupMouseTarget> {
     let area = Rect::new(0, 0, terminal_size.0, terminal_size.1);
-    let layout = startup_layout(area);
+    let ext_count = state.available_extensions.len();
+    let layout = startup_layout(area, ext_count);
 
     if let Some(target) = file_explorer_hit_test(layout.explorer, state, column, row) {
+        return Some(target);
+    }
+
+    if let Some(target) = extensions_panel_hit_test(layout.extensions, state, column, row) {
         return Some(target);
     }
 
     startup_preview_hit_test(layout.preview, state, column, row)
 }
 
-pub(super) fn startup_layout(area: Rect) -> StartupLayout {
+pub(super) fn startup_layout(area: Rect, extension_count: usize) -> StartupLayout {
+    let ext_panel_height = if extension_count == 0 {
+        4u16 // "No extensions found" + borders
+    } else {
+        (extension_count as u16 + 2).min(8) // rows + borders, capped at 8
+    };
+
     let vertical = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -81,10 +96,20 @@ pub(super) fn startup_layout(area: Rect) -> StartupLayout {
         .constraints([Constraint::Percentage(36), Constraint::Percentage(64)])
         .split(vertical[1]);
 
+    // Split left column: file explorer (top) + extensions panel (bottom)
+    let left_split = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Min(5),                    // file explorer (flexible)
+            Constraint::Length(ext_panel_height),   // extensions panel (fixed)
+        ])
+        .split(columns[0]);
+
     StartupLayout {
         summary: vertical[0],
         status: vertical[3],
-        explorer: columns[0],
+        explorer: left_split[0],
+        extensions: left_split[1],
         preview: columns[1],
         input: vertical[2],
     }
@@ -138,6 +163,31 @@ fn startup_preview_hit_test(
     }
 
     Some(StartupMouseTarget::PreviewLine)
+}
+
+fn extensions_panel_hit_test(
+    area: Rect,
+    state: &AppState,
+    column: u16,
+    row: u16,
+) -> Option<StartupMouseTarget> {
+    if !rect_contains(area, column, row) {
+        return None;
+    }
+    if state.available_extensions.is_empty() {
+        return None;
+    }
+    let inner_top = area.y + 1;
+    let inner_bottom = area.y + area.height.saturating_sub(1);
+    if row < inner_top || row >= inner_bottom {
+        return None;
+    }
+    let relative_row = (row - inner_top) as usize;
+    if relative_row < state.available_extensions.len() {
+        Some(StartupMouseTarget::ExtensionEntry(relative_row))
+    } else {
+        None
+    }
 }
 
 fn rect_contains(area: Rect, column: u16, row: u16) -> bool {
@@ -222,31 +272,6 @@ fn render_startup_summary(frame: &mut Frame, area: Rect, state: &AppState) {
             Style::default().fg(Color::Gray),
         )),
     ];
-
-    // Extensions indicator
-    if !state.available_extensions.is_empty() {
-        let active_count = state.available_extensions.iter().filter(|(_, s)| *s).count();
-        let total_count = state.available_extensions.len();
-        let ext_names: String = state
-            .available_extensions
-            .iter()
-            .filter(|(_, s)| *s)
-            .map(|(n, _)| n.as_str())
-            .collect::<Vec<_>>()
-            .join(", ");
-        let ext_display = if active_count == 0 {
-            format!(
-                "  Extensions: none ({} available, Ctrl+E to configure)",
-                total_count
-            )
-        } else {
-            format!("  Extensions: {} ({}/{})", ext_names, active_count, total_count)
-        };
-        lines.push(Line::from(Span::styled(
-            ext_display,
-            Style::default().fg(Color::Rgb(227, 115, 75)),
-        )));
-    }
 
     if let Some(commit) = startup
         .git_context
@@ -830,15 +855,21 @@ pub(super) fn render_startup_status_bar(frame: &mut Frame, area: Rect, state: &A
         spans.push(Span::raw(" findings"));
     }
 
+    // Extensions indicator (always shown)
+    let ext_status = format_extensions_status(&state.available_extensions);
+    spans.push(Span::styled(
+        format!("  {} ", ext_status),
+        Style::default().fg(Color::Rgb(227, 115, 75)),
+    ));
     if !state.available_extensions.is_empty() {
         spans.push(Span::styled(
-            "  ^E ",
+            " ^E ",
             Style::default()
                 .fg(Color::Black)
                 .bg(Color::DarkGray)
                 .add_modifier(Modifier::BOLD),
         ));
-        spans.push(Span::raw(" extensions"));
+        spans.push(Span::raw("focus"));
     }
 
     if let Some(ref version) = state.update_available {
@@ -851,6 +882,108 @@ pub(super) fn render_startup_status_bar(frame: &mut Frame, area: Rect, state: &A
     }
 
     frame.render_widget(Paragraph::new(Line::from(spans)), area);
+}
+
+fn render_extensions_panel(frame: &mut Frame, area: Rect, state: &AppState) {
+    let border_style = pane_border_style(state.focused_pane, TuiPane::Extensions);
+    let border_type = pane_border_type(state.focused_pane, TuiPane::Extensions);
+    let title_span = Span::styled(
+        " Extensions ",
+        Style::default()
+            .fg(Color::Rgb(227, 115, 75))
+            .add_modifier(Modifier::BOLD),
+    );
+
+    if state.available_extensions.is_empty() {
+        let paragraph = Paragraph::new(vec![
+            Line::from(Span::styled(
+                "  No extensions found.",
+                Style::default().fg(Color::DarkGray),
+            )),
+            Line::from(Span::styled(
+                "  Add to ~/.foundry/extensions/",
+                Style::default().fg(Color::DarkGray),
+            )),
+        ])
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(border_style)
+                .border_type(border_type)
+                .title(title_span),
+        );
+        frame.render_widget(paragraph, area);
+        return;
+    }
+
+    let inner_width = area.width.saturating_sub(2) as usize;
+    let lines: Vec<Line> = state
+        .available_extensions
+        .iter()
+        .enumerate()
+        .map(|(i, ext)| {
+            let checkbox = if ext.selected { "[x]" } else { "[ ]" };
+            let is_cursor =
+                i == state.extensions_cursor && state.focused_pane == TuiPane::Extensions;
+            let pattern_label = if ext.pattern_count > 0 {
+                format!(" ({}p)", ext.pattern_count)
+            } else {
+                String::new()
+            };
+            let name_and_meta = format!("{} {}{}", checkbox, ext.name, pattern_label);
+            let desc_width = inner_width.saturating_sub(name_and_meta.len() + 3);
+            let desc = truncate_str(&ext.description, desc_width);
+
+            let name_style = if is_cursor {
+                Style::default()
+                    .fg(Color::Black)
+                    .bg(Color::Rgb(227, 115, 75))
+                    .add_modifier(Modifier::BOLD)
+            } else if ext.selected {
+                Style::default().fg(Color::Green)
+            } else {
+                Style::default().fg(Color::White)
+            };
+
+            let desc_style = if is_cursor {
+                Style::default()
+                    .fg(Color::Black)
+                    .bg(Color::Rgb(227, 115, 75))
+            } else {
+                Style::default().fg(Color::DarkGray)
+            };
+
+            Line::from(vec![
+                Span::styled(format!(" {} ", name_and_meta), name_style),
+                Span::styled(desc.to_string(), desc_style),
+            ])
+        })
+        .collect();
+
+    let paragraph = Paragraph::new(lines).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(border_style)
+            .border_type(border_type)
+            .title(title_span),
+    );
+    frame.render_widget(paragraph, area);
+}
+
+fn format_extensions_status(extensions: &[ExtensionDisplayInfo]) -> String {
+    if extensions.is_empty() {
+        return "Ext: none".to_string();
+    }
+    let active: Vec<&str> = extensions
+        .iter()
+        .filter(|e| e.selected)
+        .map(|e| e.name.as_str())
+        .collect();
+    if active.is_empty() {
+        return format!("Ext: none ({} avail)", extensions.len());
+    }
+    let names = active.join(", ");
+    format!("Ext: {} ({} active)", names, active.len())
 }
 
 #[cfg(test)]

@@ -7,7 +7,7 @@ use ratatui::{
 };
 
 use crate::agent::AgentRole;
-use crate::app::{AppPhase, AppState, TuiPane};
+use crate::app::{AppPhase, AppState, ExtensionDisplayInfo, TuiPane};
 use super::{pane_border_style, pane_border_type};
 use crate::utils::truncate_str;
 
@@ -606,6 +606,15 @@ pub(super) fn render_status_bar(frame: &mut Frame, area: Rect, state: &AppState)
     ));
     spans.push(Span::raw(" explorer"));
 
+    // Extensions indicator (read-only during running)
+    let ext_status = format_running_extensions_status(&state.available_extensions);
+    if !ext_status.is_empty() {
+        spans.push(Span::styled(
+            format!("  {} ", ext_status),
+            Style::default().fg(Color::Rgb(227, 115, 75)),
+        ));
+    }
+
     if let Some(ref version) = state.update_available {
         spans.push(Span::styled(
             format!(" | v{} available — `foundry update`", version),
@@ -714,6 +723,15 @@ pub(super) fn render_running_explorer_status_bar(frame: &mut Frame, area: Rect, 
         Span::raw(" stop"),
     ];
 
+    // Extensions indicator
+    let ext_status = format_running_extensions_status(&state.available_extensions);
+    if !ext_status.is_empty() {
+        spans.push(Span::styled(
+            format!("  {} ", ext_status),
+            Style::default().fg(Color::Rgb(227, 115, 75)),
+        ));
+    }
+
     if let Some(ref version) = state.update_available {
         spans.push(Span::styled(
             format!(" | v{} available -- `foundry update`", version),
@@ -724,4 +742,19 @@ pub(super) fn render_running_explorer_status_bar(frame: &mut Frame, area: Rect, 
     }
 
     frame.render_widget(Paragraph::new(Line::from(spans)), area);
+}
+
+fn format_running_extensions_status(extensions: &[ExtensionDisplayInfo]) -> String {
+    if extensions.is_empty() {
+        return String::new();
+    }
+    let active: Vec<&str> = extensions
+        .iter()
+        .filter(|e| e.selected)
+        .map(|e| e.name.as_str())
+        .collect();
+    if active.is_empty() {
+        return "Ext: none".to_string();
+    }
+    format!("Ext: {} ({} active)", active.join(", "), active.len())
 }

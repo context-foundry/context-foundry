@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use crate::patterns::{self, Pattern};
+use crate::utils::truncate_str;
 
 #[derive(Debug, Clone)]
 pub struct ExtensionInfo {
@@ -81,6 +82,52 @@ fn scan_extensions_dir(dir: &Path, source: ExtensionSource, results: &mut Vec<Ex
             source,
         });
     }
+}
+
+/// Extract a one-line description from a CLAUDE.md file.
+/// Returns the first non-empty, non-heading line after the first `#` heading.
+pub fn extract_description(claude_md_path: &Path) -> String {
+    let content = match std::fs::read_to_string(claude_md_path) {
+        Ok(c) => c,
+        Err(_) => return "(no description)".to_string(),
+    };
+    let mut past_heading = false;
+    for line in content.lines() {
+        if !past_heading {
+            if line.starts_with('#') {
+                past_heading = true;
+            }
+            continue;
+        }
+        let trimmed = line.trim();
+        if !trimmed.is_empty() && !trimmed.starts_with('#') {
+            if trimmed.len() > 80 {
+                return truncate_str(trimmed, 80).to_string();
+            }
+            return trimmed.to_string();
+        }
+    }
+    "(no description)".to_string()
+}
+
+/// Count JSON pattern files in an extension's patterns directory.
+pub fn count_extension_patterns(patterns_dir: &Option<PathBuf>) -> usize {
+    let Some(dir) = patterns_dir else {
+        return 0;
+    };
+    let entries = match std::fs::read_dir(dir) {
+        Ok(e) => e,
+        Err(_) => return 0,
+    };
+    entries
+        .flatten()
+        .filter(|e| {
+            e.path()
+                .extension()
+                .and_then(|ext| ext.to_str())
+                .is_some_and(|ext| ext == "json")
+        })
+        .count()
 }
 
 /// Read CLAUDE.md from each selected extension and build a single concatenated

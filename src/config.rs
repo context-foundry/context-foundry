@@ -148,6 +148,11 @@ pub struct Config {
 
     /// Selected extension names (e.g., ["roblox", "extend"]).
     pub extensions: Vec<String>,
+
+    /// When true, each validated task gets its own feature branch and PR
+    /// instead of committing to the current branch. WIP commits still go
+    /// to the current branch. Designed for team code-review workflows.
+    pub pr_per_task: bool,
 }
 
 impl Default for Config {
@@ -207,6 +212,7 @@ impl Default for Config {
             pipeline_mode: "full".into(),
             batch_doubt: false,
             extensions: Vec::new(),
+            pr_per_task: false,
         }
     }
 }
@@ -363,6 +369,18 @@ mod tests {
             .expect("config should deserialize");
         assert_eq!(config.pipeline_mode, "fast");
         assert!(config.batch_doubt);
+    }
+
+    #[test]
+    fn default_config_disables_pr_per_task() {
+        assert!(!Config::default().pr_per_task);
+    }
+
+    #[test]
+    fn config_deserializes_pr_per_task() {
+        let config: Config = serde_json::from_str(r#"{"pr_per_task":true}"#)
+            .expect("config should deserialize");
+        assert!(config.pr_per_task);
     }
 
     #[cfg(unix)]

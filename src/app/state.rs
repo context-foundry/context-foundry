@@ -30,6 +30,15 @@ pub enum TuiPane {
     AgentOutput,
     TaskQueue,
     PatternsLearned,
+    Extensions,
+}
+
+#[derive(Debug, Clone)]
+pub struct ExtensionDisplayInfo {
+    pub name: String,
+    pub selected: bool,
+    pub description: String,
+    pub pattern_count: usize,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -234,8 +243,7 @@ pub struct AppState {
     pub focused_pane: TuiPane,
     pub running_explorer: Option<StartupState>,
     pub show_running_explorer: bool,
-    pub available_extensions: Vec<(String, bool)>, // (name, selected)
-    pub show_extensions_panel: bool,
+    pub available_extensions: Vec<ExtensionDisplayInfo>,
     pub extensions_cursor: usize,
     pub(super) pending_transition: Option<PendingTransition>,
     pub(super) tasks_file_lock: Arc<Mutex<()>>,
@@ -298,7 +306,6 @@ impl AppState {
             running_explorer: None,
             show_running_explorer: false,
             available_extensions: Vec::new(),
-            show_extensions_panel: false,
             extensions_cursor: 0,
             pending_transition: None,
             tasks_file_lock: Arc::new(Mutex::new(())),

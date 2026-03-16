@@ -233,23 +233,27 @@ pub(super) fn handle_startup_key(state: &mut AppState, key: event::KeyEvent) {
         return;
     };
 
-    // Extension panel navigation (intercepts keys when panel is open)
-    if state.show_extensions_panel && !state.available_extensions.is_empty() {
+    // Extension panel navigation (when focused on extensions pane)
+    if state.focused_pane == crate::app::state::TuiPane::Extensions
+        && !state.available_extensions.is_empty()
+    {
         match key.code {
             KeyCode::Up => {
                 if state.extensions_cursor > 0 {
                     state.extensions_cursor -= 1;
                 }
+                return;
             }
             KeyCode::Down => {
                 if state.extensions_cursor + 1 < state.available_extensions.len() {
                     state.extensions_cursor += 1;
                 }
+                return;
             }
-            KeyCode::Char(' ') | KeyCode::Enter => {
+            KeyCode::Char(' ') => {
                 // Toggle selection
                 if let Some(ext) = state.available_extensions.get_mut(state.extensions_cursor) {
-                    ext.1 = !ext.1;
+                    ext.selected = !ext.selected;
                 }
                 // Persist to .foundry.json
                 let project_dir = state
@@ -259,20 +263,49 @@ pub(super) fn handle_startup_key(state: &mut AppState, key: event::KeyEvent) {
                 let selected: Vec<String> = state
                     .available_extensions
                     .iter()
-                    .filter(|(_, sel)| *sel)
-                    .map(|(name, _)| name.clone())
+                    .filter(|e| e.selected)
+                    .map(|e| e.name.clone())
                     .collect();
                 Config::save_extensions(project_dir, &selected);
+                return;
+            }
+            KeyCode::Enter => {
+                // Toggle if input is empty; otherwise fall through to submit
+                let input_empty = state
+                    .startup
+                    .as_ref()
+                    .is_none_or(|s| s.intent_input.is_empty());
+                if input_empty {
+                    if let Some(ext) = state.available_extensions.get_mut(state.extensions_cursor) {
+                        ext.selected = !ext.selected;
+                    }
+                    let project_dir = state
+                        .buildloop_dir
+                        .parent()
+                        .unwrap_or(std::path::Path::new("."));
+                    let selected: Vec<String> = state
+                        .available_extensions
+                        .iter()
+                        .filter(|e| e.selected)
+                        .map(|e| e.name.clone())
+                        .collect();
+                    Config::save_extensions(project_dir, &selected);
+                    return;
+                }
+                // Fall through to normal Enter handling
             }
             KeyCode::Esc => {
-                state.show_extensions_panel = false;
+                state.focused_pane = crate::app::state::TuiPane::Explorer;
+                return;
             }
             KeyCode::Char('e') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                state.show_extensions_panel = false;
+                state.focused_pane = crate::app::state::TuiPane::Explorer;
+                return;
             }
-            _ => {}
+            _ => {
+                // Fall through to normal key handling
+            }
         }
-        return;
     }
 
     // Check if the intent input should capture this key
@@ -291,8 +324,10 @@ pub(super) fn handle_startup_key(state: &mut AppState, key: event::KeyEvent) {
     match key.code {
         KeyCode::Char('e') if key.modifiers.contains(KeyModifiers::CONTROL) => {
             if !state.available_extensions.is_empty() {
-                state.show_extensions_panel = !state.show_extensions_panel;
-                if state.show_extensions_panel {
+                if state.focused_pane == crate::app::state::TuiPane::Extensions {
+                    state.focused_pane = crate::app::state::TuiPane::Explorer;
+                } else {
+                    state.focused_pane = crate::app::state::TuiPane::Extensions;
                     state.extensions_cursor = 0;
                 }
             }
@@ -583,6 +618,25 @@ pub(super) fn handle_startup_mouse_at(
                     tui::StartupMouseTarget::PreviewLine => {
                         state.focused_pane = crate::app::state::TuiPane::Preview;
                     }
+                    tui::StartupMouseTarget::ExtensionEntry(index) => {
+                        state.focused_pane = crate::app::state::TuiPane::Extensions;
+                        state.extensions_cursor = index;
+                        // Toggle the clicked extension
+                        if let Some(ext) = state.available_extensions.get_mut(index) {
+                            ext.selected = !ext.selected;
+                        }
+                        let project_dir = state
+                            .buildloop_dir
+                            .parent()
+                            .unwrap_or(std::path::Path::new("."));
+                        let selected: Vec<String> = state
+                            .available_extensions
+                            .iter()
+                            .filter(|e| e.selected)
+                            .map(|e| e.name.clone())
+                            .collect();
+                        Config::save_extensions(project_dir, &selected);
+                    }
                 }
             }
         }
@@ -651,7 +705,14 @@ pub(super) fn enter_home_surface(
         .iter()
         .map(|ext| {
             let selected = config.extensions.contains(&ext.name);
-            (ext.name.clone(), selected)
+            let description = extensions::extract_description(&ext.claude_md_path);
+            let pattern_count = extensions::count_extension_patterns(&ext.patterns_dir);
+            crate::app::state::ExtensionDisplayInfo {
+                name: ext.name.clone(),
+                selected,
+                description,
+                pattern_count,
+            }
         })
         .collect();
 }
@@ -785,7 +846,14 @@ pub(super) fn enter_startup_surface(
         .iter()
         .map(|ext| {
             let selected = config.extensions.contains(&ext.name);
-            (ext.name.clone(), selected)
+            let description = extensions::extract_description(&ext.claude_md_path);
+            let pattern_count = extensions::count_extension_patterns(&ext.patterns_dir);
+            crate::app::state::ExtensionDisplayInfo {
+                name: ext.name.clone(),
+                selected,
+                description,
+                pattern_count,
+            }
         })
         .collect();
 }

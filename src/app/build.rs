@@ -1303,22 +1303,49 @@ async fn process_task(
         }
     }
 
-    let committed = git::commit_and_push(
-        &ctx.project_dir,
-        &ctx.config,
-        task_id,
-        task_desc,
-        !validated,
-    )
-    .unwrap_or(false);
+    let _committed = if ctx.config.pr_per_task && validated {
+        // Per-task PR mode: branch, commit, push, create PR, return to base
+        match git::commit_task_pr(&ctx.project_dir, &ctx.config, task_id, task_desc) {
+            Ok((committed, pr_num)) => {
+                if committed {
+                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                        "Committed feat({})", task_id
+                    ))));
+                }
+                if let Some(pr) = pr_num {
+                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+                        format!("PR #{} created for {}", pr, task_id),
+                    )));
+                }
+                committed
+            }
+            Err(e) => {
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+                    format!("Per-task PR failed: {} -- falling back to normal commit", e),
+                )));
+                git::commit_and_push(&ctx.project_dir, &ctx.config, task_id, task_desc, false)
+                    .unwrap_or(false)
+            }
+        }
+    } else {
+        let committed = git::commit_and_push(
+            &ctx.project_dir,
+            &ctx.config,
+            task_id,
+            task_desc,
+            !validated,
+        )
+        .unwrap_or(false);
 
-    if committed {
-        let prefix = if validated { "feat" } else { "WIP" };
-        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-            "Committed {}({})",
-            prefix, task_id
-        ))));
-    }
+        if committed {
+            let prefix = if validated { "feat" } else { "WIP" };
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                "Committed {}({})",
+                prefix, task_id
+            ))));
+        }
+        committed
+    };
 
     if validated {
         // Fire-and-forget: pattern extraction runs in the background so the
