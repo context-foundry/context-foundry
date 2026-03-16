@@ -133,9 +133,9 @@ pub(super) fn render_dashboard_stats(frame: &mut Frame, area: Rect, state: &AppS
     lines.push(Line::from(vec![
         Span::styled("  Patterns ", Style::default().fg(Color::Cyan)),
         Span::styled(format!("{} inj, {} applied", state.pattern_inject_count, state.pattern_apply_count), Style::default().fg(Color::White)),
-        Span::styled("  feat: ", Style::default().fg(Color::DarkGray)),
+        Span::styled("  session feat: ", Style::default().fg(Color::DarkGray)),
         Span::styled(format!("{}", state.session_feat_commits), Style::default().fg(Color::Green)),
-        Span::styled("  WIP: ", Style::default().fg(Color::DarkGray)),
+        Span::styled("  session WIP: ", Style::default().fg(Color::DarkGray)),
         Span::styled(format!("{}", state.session_wip_commits), Style::default().fg(Color::Yellow)),
         Span::styled("  Ollama: ", Style::default().fg(Color::DarkGray)),
         Span::styled(format!("{:<width$}", ollama_label, width = half_width.saturating_sub(40)), Style::default().fg(ollama_color)),

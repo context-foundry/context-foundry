@@ -774,7 +774,6 @@ pub(super) fn enter_home_surface(
     status_message: Option<String>,
 ) {
     refresh_plan_counts(project_dir, state);
-    refresh_git_commit_counts(project_dir, state);
     populate_task_history_from_progress(project_dir, state);
     state.project_name = resolve_project_name(project_dir);
     state.clear_agent();
@@ -979,29 +978,6 @@ pub(super) fn enter_startup_surface_for_scenario(
 }
 
 // ─── Helpers ─────────────────────────────────────────────────
-
-fn refresh_git_commit_counts(project_dir: &Path, state: &mut AppState) {
-    let output = std::process::Command::new("git")
-        .args(["log", "--oneline", "--format=%s", "--", "."])
-        .current_dir(project_dir)
-        .output();
-    if let Ok(output) = output {
-        if output.status.success() {
-            let log = String::from_utf8_lossy(&output.stdout);
-            let mut feat = 0usize;
-            let mut wip = 0usize;
-            for line in log.lines() {
-                if line.starts_with("feat(") {
-                    feat += 1;
-                } else if line.starts_with("WIP(") {
-                    wip += 1;
-                }
-            }
-            state.session_feat_commits = feat;
-            state.session_wip_commits = wip;
-        }
-    }
-}
 
 fn refresh_plan_counts(project_dir: &Path, state: &mut AppState) {
     let plan_path = ContractPaths::resolve(project_dir).tasks_path;
