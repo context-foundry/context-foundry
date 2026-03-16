@@ -1108,6 +1108,20 @@ fn handle_agent_output(state: &mut AppState, output: AgentOutputEvent) {
             if context_window > 0 {
                 let pct = ((total_tokens as f64 / context_window as f64) * 100.0).min(100.0) as u8;
                 state.agent_context_pct = Some(pct);
+                // Save to SPID slot immediately (set_agent resets agent_context_pct
+                // when the next stage starts, so we must capture it here)
+                if let Some((ref role, _)) = state.current_agent {
+                    let slot = match role {
+                        AgentRole::Scout => Some(0),
+                        AgentRole::Planner => Some(1),
+                        AgentRole::Builder => Some(2),
+                        AgentRole::Reviewer => Some(3),
+                        _ => None,
+                    };
+                    if let Some(i) = slot {
+                        state.spid_context_pcts[i] = Some(pct);
+                    }
+                }
             }
         }
     }
@@ -1124,22 +1138,8 @@ fn handle_agent_output(state: &mut AppState, output: AgentOutputEvent) {
 
 fn handle_agent_done(state: &mut AppState, success: bool) {
     if let Some((ref role, _)) = state.current_agent {
-        let role_clone = role.clone();
         let status = if success { "completed" } else { "FAILED" };
-        state.log(format!("{} {}", role_clone, status));
-        // Save context % to the SPID slot for this stage
-        if let Some(pct) = state.agent_context_pct {
-            let slot = match role_clone {
-                AgentRole::Scout => Some(0),
-                AgentRole::Planner => Some(1),
-                AgentRole::Builder => Some(2),
-                AgentRole::Reviewer => Some(3),
-                _ => None,
-            };
-            if let Some(i) = slot {
-                state.spid_context_pcts[i] = Some(pct);
-            }
-        }
+        state.log(format!("{} {}", role, status));
     }
 }
 
