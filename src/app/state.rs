@@ -41,6 +41,24 @@ pub struct ExtensionDisplayInfo {
     pub pattern_count: usize,
 }
 
+#[derive(Debug, Clone)]
+pub struct PatternEvent {
+    pub title: String,
+    pub kind: PatternEventKind,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PatternEventKind {
+    Learned,
+    Used,
+}
+
+#[derive(Debug, Clone)]
+pub struct ExtensionEvent {
+    pub name: String,
+    pub task_id: String,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PlanStatus {
     Missing,
@@ -225,7 +243,8 @@ pub struct AppState {
     pub patterns_cache: Option<Vec<crate::patterns::Pattern>>,
     pub patterns_dir_cache: Option<std::path::PathBuf>,
     pub last_pattern_match_mode: Option<String>, // "semantic", "keyword-only", "cooldown"
-    pub session_patterns: Vec<String>, // pattern titles learned this session
+    pub session_patterns: Vec<PatternEvent>, // pattern activity (learned + used) this session
+    pub session_extensions_used: Vec<ExtensionEvent>, // extension injections this session
     pub session_feat_commits: usize,
     pub session_wip_commits: usize,
     pub session_patterns_learned: usize,
@@ -291,6 +310,7 @@ impl AppState {
             session_feat_commits: 0,
             session_wip_commits: 0,
             session_patterns: Vec::new(),
+            session_extensions_used: Vec::new(),
             session_patterns_learned: 0,
             session_review_high: 0,
             session_review_medium: 0,
@@ -384,6 +404,8 @@ pub(super) enum LoopEvent {
     NextTaskUpdated(Option<String>),
     DiscoveryStarted(usize),
     DiscoveryCompleted(usize),
+    ExtensionInjected { name: String, task_id: String },
+    PatternsUsed { titles: Vec<String> },
     Log(String),
     BackgroundLog(String),
     CountsUpdated(usize, usize),

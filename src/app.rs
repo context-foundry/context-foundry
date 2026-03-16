@@ -24,8 +24,8 @@ use self::startup::{
 };
 use self::state::{AppEvent, AppendTasksRequest, LoopEvent, PendingTransition, PlanningOutcome};
 pub use self::state::{
-    AppPhase, AppState, ExtensionDisplayInfo, PlanStatus, PlanningState, StartupAction,
-    StartupScenario, StartupState, TuiPane,
+    AppPhase, AppState, ExtensionDisplayInfo, PatternEventKind,
+    PlanStatus, PlanningState, StartupAction, StartupScenario, StartupState, TuiPane,
 };
 #[cfg(test)]
 pub use self::state::FileEntry;
@@ -698,6 +698,20 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                 state.is_discovering = false;
                 state.log(format!("Discovery found {} new tasks", new_count));
             }
+            LoopEvent::ExtensionInjected { ref name, ref task_id } => {
+                state.session_extensions_used.push(state::ExtensionEvent {
+                    name: name.clone(),
+                    task_id: task_id.clone(),
+                });
+            }
+            LoopEvent::PatternsUsed { ref titles } => {
+                for title in titles {
+                    state.session_patterns.push(state::PatternEvent {
+                        title: title.clone(),
+                        kind: state::PatternEventKind::Used,
+                    });
+                }
+            }
             LoopEvent::Log(ref msg) => {
                 // Track patterns learned from "Merged patterns: N new added" messages
                 if msg.starts_with("Merged patterns:") {
@@ -752,7 +766,10 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                     }
                 }
                 if let Some(title) = msg.strip_prefix("Pattern learned: ") {
-                    state.session_patterns.push(title.to_string());
+                    state.session_patterns.push(state::PatternEvent {
+                        title: title.to_string(),
+                        kind: state::PatternEventKind::Learned,
+                    });
                 }
                 state.log(msg.clone());
             }
@@ -973,9 +990,11 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                                 state.focused_pane = state::TuiPane::TaskQueue;
                                 let max = state.task_queue.len().saturating_sub(1);
                                 state.task_queue_scroll = state.task_queue_scroll.saturating_add(3).min(max);
-                            } else if tui::rect_contains(panes.patterns_learned, mouse.column, mouse.row) {
+                            } else if tui::rect_contains(panes.patterns, mouse.column, mouse.row) {
                                 state.focused_pane = state::TuiPane::PatternsLearned;
                                 state.patterns_scroll = state.patterns_scroll.saturating_sub(3);
+                            } else if tui::rect_contains(panes.extensions_used, mouse.column, mouse.row) {
+                                state.focused_pane = state::TuiPane::Extensions;
                             }
                         }
                     }
@@ -994,9 +1013,11 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                             } else if tui::rect_contains(panes.task_queue, mouse.column, mouse.row) {
                                 state.focused_pane = state::TuiPane::TaskQueue;
                                 state.task_queue_scroll = state.task_queue_scroll.saturating_sub(3);
-                            } else if tui::rect_contains(panes.patterns_learned, mouse.column, mouse.row) {
+                            } else if tui::rect_contains(panes.patterns, mouse.column, mouse.row) {
                                 state.focused_pane = state::TuiPane::PatternsLearned;
                                 state.patterns_scroll = state.patterns_scroll.saturating_add(3);
+                            } else if tui::rect_contains(panes.extensions_used, mouse.column, mouse.row) {
+                                state.focused_pane = state::TuiPane::Extensions;
                             }
                         }
                     }
@@ -1008,8 +1029,10 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                             state.focused_pane = state::TuiPane::AgentOutput;
                         } else if tui::rect_contains(panes.task_queue, mouse.column, mouse.row) {
                             state.focused_pane = state::TuiPane::TaskQueue;
-                        } else if tui::rect_contains(panes.patterns_learned, mouse.column, mouse.row) {
+                        } else if tui::rect_contains(panes.patterns, mouse.column, mouse.row) {
                             state.focused_pane = state::TuiPane::PatternsLearned;
+                        } else if tui::rect_contains(panes.extensions_used, mouse.column, mouse.row) {
+                            state.focused_pane = state::TuiPane::Extensions;
                         }
                     }
                     _ => {}
@@ -1592,12 +1615,18 @@ fn handle_startup_mouse_at_for_running(
                             } else if vis_pos >= explorer.explorer_scroll + visible_estimate {
                                 explorer.explorer_scroll = vis_pos.saturating_sub(visible_estimate) + 1;
                             }
-                            let entry = &explorer.file_tree[tree_idx];
-                            explorer.file_preview_content = if entry.is_dir {
-                                vec!["<directory>".to_string()]
+                            // Toggle folder expanded/collapsed on click
+                            if explorer.file_tree[tree_idx].is_dir {
+                                explorer.file_tree[tree_idx].expanded =
+                                    !explorer.file_tree[tree_idx].expanded;
+                                explorer.file_preview_content =
+                                    vec!["<directory>".to_string()];
                             } else {
-                                load_file_preview_for_running(&entry.path)
-                            };
+                                explorer.file_preview_content =
+                                    load_file_preview_for_running(
+                                        &explorer.file_tree[tree_idx].path,
+                                    );
+                            }
                             explorer.file_preview_scroll = 0;
                         }
                     }
@@ -1626,7 +1655,7 @@ fn handle_startup_mouse_at_for_running(
                         let max_scroll = explorer
                             .file_preview_content
                             .len()
-                            .saturating_sub(20);
+                            .saturating_sub(1);
                         explorer.file_preview_scroll =
                             (explorer.file_preview_scroll + 3).min(max_scroll);
                     }

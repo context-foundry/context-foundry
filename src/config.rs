@@ -153,6 +153,11 @@ pub struct Config {
     /// instead of committing to the current branch. WIP commits still go
     /// to the current branch. Designed for team code-review workflows.
     pub pr_per_task: bool,
+
+    /// When true, auto-create a GitHub issue when a task commits as WIP
+    /// (validation failed). The issue body includes review findings from
+    /// .buildloop/review-report.md.
+    pub create_issue_on_wip: bool,
 }
 
 impl Default for Config {
@@ -213,6 +218,7 @@ impl Default for Config {
             batch_doubt: false,
             extensions: Vec::new(),
             pr_per_task: false,
+            create_issue_on_wip: false,
         }
     }
 }
@@ -381,6 +387,18 @@ mod tests {
         let config: Config = serde_json::from_str(r#"{"pr_per_task":true}"#)
             .expect("config should deserialize");
         assert!(config.pr_per_task);
+    }
+
+    #[test]
+    fn default_config_disables_create_issue_on_wip() {
+        assert!(!Config::default().create_issue_on_wip);
+    }
+
+    #[test]
+    fn config_deserializes_create_issue_on_wip() {
+        let config: Config = serde_json::from_str(r#"{"create_issue_on_wip":true}"#)
+            .expect("config should deserialize");
+        assert!(config.create_issue_on_wip);
     }
 
     #[cfg(unix)]

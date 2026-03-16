@@ -206,7 +206,9 @@ pub(super) async fn run_headless(project_dir: &Path) -> Result<()> {
                 LoopEvent::CountsUpdated(_, _)
                 | LoopEvent::NextTaskUpdated(_)
                 | LoopEvent::QueueUpdated(_)
-                | LoopEvent::TaskReviewResult { .. } => {}
+                | LoopEvent::TaskReviewResult { .. }
+                | LoopEvent::ExtensionInjected { .. }
+                | LoopEvent::PatternsUsed { .. } => {}
             },
             AppEvent::UpdateAvailable(version) => {
                 update_version = Some(version);

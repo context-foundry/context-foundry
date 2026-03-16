@@ -241,6 +241,14 @@ fn render_startup_summary(frame: &mut Frame, area: Rect, state: &AppState) {
                     })
                     .add_modifier(Modifier::BOLD),
             ),
+            Span::raw("  "),
+            Span::styled(
+                if state.show_run_view { " Dashboard " } else { " Explore " },
+                Style::default()
+                    .fg(Color::White)
+                    .bg(Color::Rgb(60, 60, 80))
+                    .add_modifier(Modifier::BOLD),
+            ),
         ]),
         Line::from(Span::styled(
             format!(

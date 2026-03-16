@@ -12,14 +12,6 @@ use super::{pane_border_style, pane_border_type};
 use crate::utils::truncate_str;
 
 pub(super) fn render_header(frame: &mut Frame, area: Rect, state: &AppState) {
-    let completed = state.completed_count;
-    let total = state.total_count;
-    let pct = if total > 0 {
-        (completed as f64 / total as f64) * 100.0
-    } else {
-        0.0
-    };
-
     let desc_width = area.width.saturating_sub(10) as usize;
     let task_line = if let Some(ref task) = state.current_task {
         format!("  {} — {}", task.id, task.short_desc(desc_width))
@@ -52,7 +44,7 @@ pub(super) fn render_header(frame: &mut Frame, area: Rect, state: &AppState) {
             format!("  Planning — {}", planning.label)
         }
     } else if state.is_discovering {
-        "  Discovery — scanning for new work...".to_string()
+        "  Loop — scanning for new work...".to_string()
     } else {
         "  Waiting...".to_string()
     };
@@ -120,9 +112,22 @@ pub(super) fn render_header(frame: &mut Frame, area: Rect, state: &AppState) {
             ),
             Span::raw("  "),
             Span::styled(
-                format!("[{}/{}] {:.0}%", completed, total, pct),
+                if state.run_mode == "hil" { " Review " } else { " Auto " },
                 Style::default()
-                    .fg(Color::Yellow)
+                    .fg(Color::Black)
+                    .bg(if state.run_mode == "hil" {
+                        Color::Yellow
+                    } else {
+                        Color::Green
+                    })
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("  "),
+            Span::styled(
+                if state.show_running_explorer { " Explore " } else { " Dashboard " },
+                Style::default()
+                    .fg(Color::White)
+                    .bg(Color::Rgb(60, 60, 80))
                     .add_modifier(Modifier::BOLD),
             ),
         ]),
@@ -447,19 +452,23 @@ pub(super) fn render_task_queue(frame: &mut Frame, area: Rect, state: &AppState,
     frame.render_widget(list, area);
 }
 
-pub(super) fn render_patterns_learned(
+pub(super) fn render_patterns(
     frame: &mut Frame,
     area: Rect,
     state: &AppState,
     _config: &crate::config::Config,
     focused: TuiPane,
 ) {
-    let title = format!(" Patterns Learned ({}) ", state.session_patterns.len());
+    use crate::app::PatternEventKind;
+
+    let used_count = state.session_patterns.iter().filter(|p| p.kind == PatternEventKind::Used).count();
+    let learned_count = state.session_patterns.iter().filter(|p| p.kind == PatternEventKind::Learned).count();
+    let title = format!(" Patterns ({} used, {} learned) ", used_count, learned_count);
     let max_lines = area.height.saturating_sub(2) as usize;
 
     if state.session_patterns.is_empty() {
         let empty = Paragraph::new(Span::styled(
-            " Patterns will appear here as tasks complete.",
+            " Pattern activity will appear here.",
             Style::default().fg(Color::DarkGray),
         ))
         .block(
@@ -468,7 +477,7 @@ pub(super) fn render_patterns_learned(
                 .border_style(pane_border_style(focused, TuiPane::PatternsLearned))
                 .border_type(pane_border_type(focused, TuiPane::PatternsLearned))
                 .title(Span::styled(
-                    title,
+                    " Patterns ",
                     Style::default()
                         .fg(Color::Cyan)
                         .add_modifier(Modifier::BOLD),
@@ -478,7 +487,6 @@ pub(super) fn render_patterns_learned(
         return;
     }
 
-    // Show most recent patterns first, respecting scroll offset
     let total_patterns = state.session_patterns.len();
     let scroll = state
         .patterns_scroll
@@ -490,15 +498,23 @@ pub(super) fn render_patterns_learned(
         .skip(scroll)
         .take(max_lines)
         .enumerate()
-        .map(|(i, title)| {
+        .map(|(i, event)| {
             let num = total_patterns.saturating_sub(scroll + i);
+            let (label, color) = match event.kind {
+                PatternEventKind::Used => ("used", Color::Green),
+                PatternEventKind::Learned => ("new", Color::Yellow),
+            };
             ListItem::new(Line::from(vec![
                 Span::styled(
                     format!(" #{} ", num),
-                    Style::default().fg(Color::Cyan),
+                    Style::default().fg(color),
                 ),
                 Span::styled(
-                    truncate_str(title, area.width.saturating_sub(8) as usize),
+                    format!("[{}] ", label),
+                    Style::default().fg(color),
+                ),
+                Span::styled(
+                    truncate_str(&event.title, area.width.saturating_sub(14) as usize),
                     Style::default().fg(Color::White),
                 ),
             ]))
@@ -511,9 +527,80 @@ pub(super) fn render_patterns_learned(
             .border_style(pane_border_style(focused, TuiPane::PatternsLearned))
             .border_type(pane_border_type(focused, TuiPane::PatternsLearned))
             .title(Span::styled(
-                format!(" Patterns Learned ({}) ", state.session_patterns.len()),
+                title,
                 Style::default()
                     .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            )),
+    );
+    frame.render_widget(list, area);
+}
+
+pub(super) fn render_extensions_used(
+    frame: &mut Frame,
+    area: Rect,
+    state: &AppState,
+    focused: TuiPane,
+) {
+    let total = state.session_extensions_used.len();
+    let title = format!(" Extensions Used ({}) ", total);
+    let max_lines = area.height.saturating_sub(2) as usize;
+
+    if state.session_extensions_used.is_empty() {
+        let empty = Paragraph::new(Span::styled(
+            " Extension usage will appear here.",
+            Style::default().fg(Color::DarkGray),
+        ))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(pane_border_style(focused, TuiPane::Extensions))
+                .border_type(pane_border_type(focused, TuiPane::Extensions))
+                .title(Span::styled(
+                    " Extensions Used ",
+                    Style::default()
+                        .fg(Color::Rgb(227, 115, 75))
+                        .add_modifier(Modifier::BOLD),
+                )),
+        );
+        frame.render_widget(empty, area);
+        return;
+    }
+
+    let items: Vec<ListItem> = state
+        .session_extensions_used
+        .iter()
+        .rev()
+        .take(max_lines)
+        .enumerate()
+        .map(|(i, event)| {
+            let num = total.saturating_sub(i);
+            ListItem::new(Line::from(vec![
+                Span::styled(
+                    format!(" #{} ", num),
+                    Style::default().fg(Color::Rgb(227, 115, 75)),
+                ),
+                Span::styled(
+                    &event.name,
+                    Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    format!(" ({})", event.task_id),
+                    Style::default().fg(Color::DarkGray),
+                ),
+            ]))
+        })
+        .collect();
+
+    let list = List::new(items).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(pane_border_style(focused, TuiPane::Extensions))
+            .border_type(pane_border_type(focused, TuiPane::Extensions))
+            .title(Span::styled(
+                title,
+                Style::default()
+                    .fg(Color::Rgb(227, 115, 75))
                     .add_modifier(Modifier::BOLD),
             )),
     );
@@ -527,7 +614,7 @@ pub(super) fn render_status_bar(frame: &mut Frame, area: Rect, state: &AppState)
     }
 
     let discovery_info = if state.discovery_round > 0 {
-        format!(" | discovery round {} ", state.discovery_round)
+        format!(" | loop round {} ", state.discovery_round)
     } else {
         String::new()
     };
@@ -604,7 +691,11 @@ pub(super) fn render_status_bar(frame: &mut Frame, area: Rect, state: &AppState)
             .bg(Color::Rgb(227, 115, 75))
             .add_modifier(Modifier::BOLD),
     ));
-    spans.push(Span::raw(" explorer"));
+    spans.push(Span::raw(if state.show_running_explorer {
+        " dashboard"
+    } else {
+        " explore"
+    }));
 
     // Extensions indicator (read-only during running)
     let ext_status = format_running_extensions_status(&state.available_extensions);

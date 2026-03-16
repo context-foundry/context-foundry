@@ -97,7 +97,7 @@ After each successful task:
 - Before starting a new task, load and match relevant patterns
 - Inject matched patterns into the Plan stage as reference data
 
-### Samsara (Discovery)
+### Loop (Discovery)
 
 When all tasks in TASKS.md are complete:
 - Scan the codebase for bugs, gaps, missing features
@@ -109,7 +109,7 @@ When all tasks in TASKS.md are complete:
 
 | File | Purpose | Who writes it |
 |------|---------|--------------|
-| `TASKS.md` | Task queue with SPID indicators | Scout (bootstrap), Samsara |
+| `TASKS.md` | Task queue with SPID indicators | Scout (bootstrap), Loop |
 | `SPEC.md` | Project specification | Builder (first task) |
 | `.buildloop/scout-report.md` | Codebase investigation | Scout |
 | `.buildloop/current-plan.md` | Implementation plan | Plan |

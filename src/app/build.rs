@@ -847,6 +847,18 @@ async fn process_task(
             "Matched {} patterns for task",
             matched.len()
         ))));
+        let titles: Vec<String> = matched.iter().map(|p| p.title.clone()).collect();
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::PatternsUsed { titles }));
+    }
+
+    // Track extension injections per task
+    if !extension_context.is_empty() {
+        for ext_name in &ctx.config.extensions {
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::ExtensionInjected {
+                name: ext_name.clone(),
+                task_id: task_id.to_string(),
+            }));
+        }
     }
 
     // Classify task complexity to decide whether to skip the planner.
@@ -1343,6 +1355,30 @@ async fn process_task(
                 "Committed {}({})",
                 prefix, task_id
             ))));
+        }
+        if committed && !validated && ctx.config.create_issue_on_wip {
+            match git::create_wip_issue(
+                &ctx.project_dir,
+                task_id,
+                task_desc,
+                &ctx.review_report,
+            ) {
+                Ok(Some(issue_num)) => {
+                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+                        format!("Issue #{} created for WIP({})", issue_num, task_id),
+                    )));
+                }
+                Ok(None) => {
+                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+                        format!("Issue created for WIP({}) but could not parse issue number", task_id),
+                    )));
+                }
+                Err(e) => {
+                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+                        format!("Failed to create issue for WIP({}): {}", task_id, e),
+                    )));
+                }
+            }
         }
         committed
     };

@@ -12,18 +12,26 @@ use crate::config::Config;
 pub(super) fn render_dashboard_stats(frame: &mut Frame, area: Rect, state: &AppState, _config: &Config) {
     let mut lines = Vec::new();
 
-    // Progress bar
+    // Progress: [93/96] ████████████░░ 97%
     let completed = state.completed_count;
     let total = state.total_count;
-    let bar_width = area.width.saturating_sub(6) as usize; // leave room for borders + label
+    let pct = if total > 0 { completed * 100 / total } else { 0 };
+    let left_label = format!(" [{}/{}] ", completed, total);
+    let right_label = format!(" {}%", pct);
+    let bar_width = (area.width.saturating_sub(4) as usize)
+        .saturating_sub(left_label.len())
+        .saturating_sub(right_label.len());
     let filled = if total > 0 {
         (completed as f64 / total as f64 * bar_width as f64) as usize
     } else {
         0
     };
     let empty = bar_width.saturating_sub(filled);
-    let pct = if total > 0 { completed * 100 / total } else { 0 };
-    lines.push(Line::from(vec![
+    let bar_spans: Vec<Span> = vec![
+        Span::styled(
+            left_label,
+            Style::default().fg(Color::Yellow).add_modifier(ratatui::style::Modifier::BOLD),
+        ),
         Span::styled(
             "\u{2588}".repeat(filled),
             Style::default().fg(Color::Green),
@@ -33,10 +41,11 @@ pub(super) fn render_dashboard_stats(frame: &mut Frame, area: Rect, state: &AppS
             Style::default().fg(Color::DarkGray),
         ),
         Span::styled(
-            format!(" {}%", pct),
-            Style::default().fg(Color::White),
+            right_label,
+            Style::default().fg(Color::Yellow).add_modifier(ratatui::style::Modifier::BOLD),
         ),
-    ]));
+    ];
+    lines.push(Line::from(bar_spans));
 
     // Two-column layout: left = git + patterns, right = context + timing
     // We build each line with left and right halves padded to fill the width.

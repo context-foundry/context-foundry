@@ -96,7 +96,7 @@ pub(super) fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppStat
 
     let disconnected: Vec<StageInfo> = vec![
         StageInfo {
-            label: "SAMSARA",
+            label: "LOOP",
             model_label: truncate_str(&discovery_model, 14).to_string(),
             kind_label: "TASKS.md",
             border_color: if discovery_active { pipe_color } else if discovery_used { Color::Green } else { Color::DarkGray },

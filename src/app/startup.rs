@@ -372,11 +372,19 @@ pub(super) fn handle_startup_key(state: &mut AppState, key: event::KeyEvent) {
                 .startup
                 .as_ref()
                 .is_none_or(|s| s.intent_input.is_empty());
-            let is_queue_ready = state
-                .startup
-                .as_ref()
-                .is_some_and(|s| s.scenario == StartupScenario::QueueReady);
-            if input_empty && !is_queue_ready {
+            // QueueReady and QueueComplete have meaningful empty-Enter actions
+            // (start build / scan), so prioritize submit over explorer toggle.
+            let scenario_has_empty_action = state.startup.as_ref().is_some_and(|s| {
+                matches!(
+                    s.scenario,
+                    StartupScenario::QueueReady | StartupScenario::QueueComplete
+                )
+            });
+            let on_file_pane = matches!(
+                state.focused_pane,
+                crate::app::state::TuiPane::Explorer | crate::app::state::TuiPane::Preview
+            );
+            if input_empty && on_file_pane && !scenario_has_empty_action {
                 handle_explorer_enter(state);
             } else {
                 handle_startup_submit(state);
@@ -614,6 +622,15 @@ pub(super) fn handle_startup_mouse_at(
                     tui::StartupMouseTarget::FileEntry(index) => {
                         state.focused_pane = crate::app::state::TuiPane::Explorer;
                         set_explorer_selection(state, index);
+                        // Toggle folder expanded/collapsed on click
+                        if let Some(startup) = state.startup.as_mut() {
+                            if index < startup.file_tree.len()
+                                && startup.file_tree[index].is_dir
+                            {
+                                startup.file_tree[index].expanded =
+                                    !startup.file_tree[index].expanded;
+                            }
+                        }
                     }
                     tui::StartupMouseTarget::PreviewLine => {
                         state.focused_pane = crate::app::state::TuiPane::Preview;
@@ -638,6 +655,10 @@ pub(super) fn handle_startup_mouse_at(
                         Config::save_extensions(project_dir, &selected);
                     }
                 }
+            } else {
+                // Clicked outside file/preview/extension panes (e.g. input area)
+                // Reset focus so Enter submits instead of opening editor
+                state.focused_pane = crate::app::state::TuiPane::AgentOutput;
             }
         }
         MouseEventKind::ScrollUp => {
@@ -663,7 +684,7 @@ pub(super) fn handle_startup_mouse_at(
                             let max_scroll = startup
                                 .file_preview_content
                                 .len()
-                                .saturating_sub(20); // rough visible height estimate
+                                .saturating_sub(1);
                             startup.file_preview_scroll =
                                 (startup.file_preview_scroll + 3).min(max_scroll);
                         }
