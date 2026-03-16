@@ -322,14 +322,15 @@ async fn poll_pr_review(
             return;
         }
 
-        let result = std::process::Command::new("gh")
+        let result = tokio::process::Command::new("gh")
             .args([
                 "pr", "view",
                 &pr_number.to_string(),
                 "--json", "reviewDecision,state",
             ])
             .current_dir(&project_dir)
-            .output();
+            .output()
+            .await;
 
         // Always update the poll timestamp
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::PrPollChecked));
