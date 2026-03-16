@@ -329,6 +329,24 @@ fn last_commit_touched_structural(project_dir: &std::path::Path) -> bool {
     }
 }
 
+fn emit_extension_injections(
+    tx: &mpsc::UnboundedSender<AppEvent>,
+    extensions: &[String],
+    extension_context: &str,
+    agent_role: &AgentRole,
+    task_id: &str,
+) {
+    if !extension_context.is_empty() {
+        for ext_name in extensions {
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::ExtensionInjected {
+                name: ext_name.clone(),
+                agent_role: agent_role.to_string(),
+                task_id: task_id.to_string(),
+            }));
+        }
+    }
+}
+
 pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEvent>) {
     ctx.ensure_runtime_dirs();
 
@@ -343,6 +361,24 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
             "Extensions active: {}",
             ctx.config.extensions.join(", ")
         ))));
+    }
+
+    // Extract and send extension keywords for reference detection
+    {
+        let mut kw_map: HashMap<String, Vec<String>> = HashMap::new();
+        for ext_name in &ctx.config.extensions {
+            if let Some(ext) = discovered_extensions.iter().find(|e| e.name == *ext_name) {
+                let keywords = extensions::extract_keywords(&ext.claude_md_path);
+                if !keywords.is_empty() {
+                    kw_map.insert(ext_name.clone(), keywords);
+                }
+            }
+        }
+        if !kw_map.is_empty() {
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::ExtensionKeywordsLoaded {
+                keywords: kw_map,
+            }));
+        }
     }
 
     let mut discovery_round: usize = task::highest_discovery_round(&ctx.plan_path);
@@ -417,6 +453,7 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                 &ctx.tasks_file_name(),
             );
             let prompt = prompts::wrap_with_extensions(&prompt, &extension_context);
+            emit_extension_injections(&tx, &ctx.config.extensions, &extension_context, &AgentRole::Scout, "bootstrap");
             let scout_result = agent::run_agent(
                 &AgentRole::Scout,
                 Config::parse_provider(&ctx.config.scout_provider),
@@ -692,6 +729,7 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                 build_history.as_deref(),
             );
             let prompt = prompts::wrap_with_extensions(&prompt, &extension_context);
+            emit_extension_injections(&tx, &ctx.config.extensions, &extension_context, &AgentRole::Discovery, &format!("discovery-{}", discovery_round));
             let result = agent::run_agent(
                 &AgentRole::Discovery,
                 Config::parse_provider(&ctx.config.discovery_provider),
@@ -848,17 +886,12 @@ async fn process_task(
             matched.len()
         ))));
         let titles: Vec<String> = matched.iter().map(|p| p.title.clone()).collect();
-        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::PatternsUsed { titles }));
-    }
-
-    // Track extension injections per task
-    if !extension_context.is_empty() {
-        for ext_name in &ctx.config.extensions {
-            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::ExtensionInjected {
-                name: ext_name.clone(),
-                task_id: task_id.to_string(),
-            }));
-        }
+        let keywords_by_title: HashMap<String, Vec<String>> = matched
+            .iter()
+            .filter(|p| !p.keywords.is_empty())
+            .map(|p| (p.title.clone(), p.keywords.iter().map(|k| k.to_lowercase()).collect()))
+            .collect();
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::PatternsUsed { titles, keywords_by_title }));
     }
 
     // Classify task complexity to decide whether to skip the planner.
@@ -905,6 +938,7 @@ async fn process_task(
             &ctx.tasks_file_name(),
         );
         let scout_prompt_text = prompts::wrap_with_extensions(&scout_prompt_text, extension_context);
+        emit_extension_injections(tx, &ctx.config.extensions, extension_context, &AgentRole::Scout, task_id);
         let scout_result = agent::run_agent(
             &AgentRole::Scout,
             Config::parse_provider(&ctx.config.scout_provider),
@@ -1004,6 +1038,7 @@ async fn process_task(
                 &ctx.tasks_file_name(),
             );
             let prompt = prompts::wrap_with_extensions(&prompt, extension_context);
+            emit_extension_injections(tx, &ctx.config.extensions, extension_context, &AgentRole::Planner, task_id);
             let plan_result = agent::run_agent(
                 &AgentRole::Planner,
                 Config::parse_provider(&ctx.config.planner_provider),
@@ -1120,6 +1155,7 @@ async fn process_task(
                 crate::utils::truncate_str(&failed_output, 500),
             );
             let retry_prompt = prompts::wrap_with_extensions(&retry_prompt, extension_context);
+            emit_extension_injections(tx, &ctx.config.extensions, extension_context, &AgentRole::Planner, task_id);
 
             let (agent_tx2, mut agent_rx2) = mpsc::unbounded_channel();
             let fwd_tx2 = tx.clone();
@@ -1203,6 +1239,7 @@ async fn process_task(
         )
     };
     let prompt = prompts::wrap_with_extensions(&prompt, extension_context);
+    emit_extension_injections(tx, &ctx.config.extensions, extension_context, &AgentRole::Builder, task_id);
     let build_result = agent::run_agent(
         &AgentRole::Builder,
         Config::parse_provider(&ctx.config.builder_provider),

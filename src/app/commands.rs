@@ -208,6 +208,9 @@ pub(super) async fn run_headless(project_dir: &Path) -> Result<()> {
                 | LoopEvent::QueueUpdated(_)
                 | LoopEvent::TaskReviewResult { .. }
                 | LoopEvent::ExtensionInjected { .. }
+                | LoopEvent::ExtensionKeywordsLoaded { .. }
+                | LoopEvent::ExtensionReferenced { .. }
+                | LoopEvent::PatternApplied { .. }
                 | LoopEvent::PatternsUsed { .. } => {}
             },
             AppEvent::UpdateAvailable(version) => {

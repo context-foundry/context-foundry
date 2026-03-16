@@ -215,6 +215,46 @@ pub fn validate_extensions(
     }
 }
 
+/// Extract domain-specific keywords from an extension's CLAUDE.md for reference detection.
+/// Pulls inline code spans (backtick-delimited) and bold text (**-delimited) as keyword candidates.
+pub fn extract_keywords(claude_md_path: &Path) -> Vec<String> {
+    let content = match std::fs::read_to_string(claude_md_path) {
+        Ok(c) => c,
+        Err(_) => return Vec::new(),
+    };
+
+    let mut keywords = std::collections::HashSet::new();
+
+    for line in content.lines() {
+        // Extract inline code spans (backtick-delimited)
+        let parts: Vec<&str> = line.split('`').collect();
+        for (i, part) in parts.iter().enumerate() {
+            if i % 2 == 1 {
+                let term = part.trim();
+                if term.len() >= 3 && term.len() <= 40 && !term.chars().all(|c| c.is_ascii_digit()) {
+                    keywords.insert(term.to_lowercase());
+                }
+            }
+        }
+
+        // Extract bold text (**-delimited)
+        let bold_parts: Vec<&str> = line.split("**").collect();
+        for (i, part) in bold_parts.iter().enumerate() {
+            if i % 2 == 1 {
+                let term = part.trim();
+                if term.len() >= 3 && term.len() <= 40 && !term.chars().all(|c| c.is_ascii_digit()) {
+                    keywords.insert(term.to_lowercase());
+                }
+            }
+        }
+    }
+
+    let mut result: Vec<String> = keywords.into_iter().collect();
+    result.sort();
+    result.truncate(50);
+    result
+}
+
 /// Load all pattern JSON files from selected extensions' patterns directories.
 pub fn load_extension_patterns(
     extensions: &[ExtensionInfo],

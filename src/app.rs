@@ -652,6 +652,7 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                 state.current_task = Some(task);
                 state.task_start = Some(chrono::Utc::now());
                 state.task_stages_seen.clear();
+                state.active_pattern_keywords.clear();
                 state.spid_context_pcts = [None; 4];
                 state.clear_agent();
             }
@@ -697,19 +698,32 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                 state.is_discovering = false;
                 state.log(format!("Discovery found {} new tasks", new_count));
             }
-            LoopEvent::ExtensionInjected { ref name, ref task_id } => {
+            LoopEvent::ExtensionKeywordsLoaded { ref keywords } => {
+                state.extension_keywords = keywords.clone();
+            }
+            LoopEvent::ExtensionInjected { ref name, ref agent_role, ref task_id } => {
                 state.session_extensions_used.push(state::ExtensionEvent {
                     name: name.clone(),
+                    agent_role: agent_role.clone(),
                     task_id: task_id.clone(),
                 });
+                *state.extension_inject_count.entry(name.clone()).or_insert(0) += 1;
             }
-            LoopEvent::PatternsUsed { ref titles } => {
+            LoopEvent::ExtensionReferenced { ref name, .. } => {
+                *state.extension_reference_count.entry(name.clone()).or_insert(0) += 1;
+            }
+            LoopEvent::PatternApplied { .. } => {
+                state.pattern_apply_count += 1;
+            }
+            LoopEvent::PatternsUsed { ref titles, ref keywords_by_title } => {
                 for title in titles {
                     state.session_patterns.push(state::PatternEvent {
                         title: title.clone(),
                         kind: state::PatternEventKind::Used,
                     });
                 }
+                state.pattern_inject_count += titles.len();
+                state.active_pattern_keywords = keywords_by_title.clone();
             }
             LoopEvent::Log(ref msg) => {
                 // Track patterns learned from "Merged patterns: N new added" messages
@@ -793,6 +807,24 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                 state.cap_task_history();
             }
             LoopEvent::Finished => {
+                // Emit warnings for injected-but-never-referenced extensions
+                let warnings: Vec<String> = state.extension_inject_count
+                    .iter()
+                    .filter_map(|(ext_name, inject_count)| {
+                        let ref_count = state.extension_reference_count.get(ext_name).copied().unwrap_or(0);
+                        if *inject_count > 0 && ref_count == 0 {
+                            Some(format!(
+                                "Warning: Extension '{}' was injected {} times but never referenced -- check if the extension content is relevant to this task.",
+                                ext_name, inject_count
+                            ))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+                for warning in warnings {
+                    state.log(warning);
+                }
                 state.log("All work complete — loop finished");
                 let project_dir = state.buildloop_dir.parent().unwrap_or(std::path::Path::new(".")).to_path_buf();
                 enter_home_surface(&project_dir, state, Some("Build loop finished.".to_string()));
@@ -1293,6 +1325,62 @@ fn handle_agent_output(state: &mut AppState, output: AgentOutputEvent) {
 }
 
 fn handle_agent_done(state: &mut AppState, success: bool) {
+    // ─── Extension & Pattern Reference Detection ───
+    if !state.agent_output.is_empty() {
+        let agent_role_str = state
+            .current_agent
+            .as_ref()
+            .map(|(role, _)| role.to_string())
+            .unwrap_or_else(|| "unknown".to_string());
+
+        // Build lowercased output for keyword matching (join last 200 lines to bound scan cost)
+        let scan_lines = state.agent_output.len().min(200);
+        let output_text: String = state.agent_output[state.agent_output.len() - scan_lines..]
+            .iter()
+            .fold(String::new(), |mut acc, line| {
+                acc.push(' ');
+                acc.push_str(line);
+                acc
+            })
+            .to_lowercase();
+
+        // Check extension keywords (clone to avoid borrow conflict with state.log)
+        let ext_kw_snapshot: Vec<(String, Vec<String>)> = state.extension_keywords
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+        for (ext_name, keywords) in &ext_kw_snapshot {
+            let matched: Vec<String> = keywords
+                .iter()
+                .filter(|kw| kw.len() >= 4 && output_text.contains(kw.as_str()))
+                .take(5)
+                .cloned()
+                .collect();
+            if !matched.is_empty() {
+                *state.extension_reference_count.entry(ext_name.clone()).or_insert(0) += 1;
+                state.log(format!(
+                    "Extension '{}' referenced by {} (keywords: {})",
+                    ext_name, agent_role_str, matched.join(", ")
+                ));
+            }
+        }
+
+        // Check pattern keywords (clone to avoid borrow conflict with state.log)
+        let pat_kw_snapshot: Vec<(String, Vec<String>)> = state.active_pattern_keywords
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+        for (title, keywords) in &pat_kw_snapshot {
+            let has_match = keywords
+                .iter()
+                .any(|kw| kw.len() >= 4 && output_text.contains(kw.as_str()));
+            if has_match {
+                state.pattern_apply_count += 1;
+                state.log(format!("Pattern '{}' applied by {}", title, agent_role_str));
+            }
+        }
+    }
+
     if let Some((ref role, _)) = state.current_agent {
         let status = if success { "completed" } else { "FAILED" };
         state.log(format!("{} {}", role, status));

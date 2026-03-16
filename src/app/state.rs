@@ -56,6 +56,8 @@ pub enum PatternEventKind {
 #[derive(Debug, Clone)]
 pub struct ExtensionEvent {
     pub name: String,
+    #[allow(dead_code)]
+    pub agent_role: String,
     pub task_id: String,
 }
 
@@ -269,6 +271,13 @@ pub struct AppState {
     pub show_running_explorer: bool,
     pub available_extensions: Vec<ExtensionDisplayInfo>,
     pub extensions_cursor: usize,
+    // ─── Extension & Pattern Telemetry Counters ───
+    pub extension_inject_count: HashMap<String, usize>,
+    pub extension_reference_count: HashMap<String, usize>,
+    pub pattern_inject_count: usize,
+    pub pattern_apply_count: usize,
+    pub extension_keywords: HashMap<String, Vec<String>>,
+    pub active_pattern_keywords: HashMap<String, Vec<String>>,
     pub(super) pending_transition: Option<PendingTransition>,
     pub(super) tasks_file_lock: Arc<Mutex<()>>,
 }
@@ -336,6 +345,12 @@ impl AppState {
             show_running_explorer: false,
             available_extensions: Vec::new(),
             extensions_cursor: 0,
+            extension_inject_count: HashMap::new(),
+            extension_reference_count: HashMap::new(),
+            pattern_inject_count: 0,
+            pattern_apply_count: 0,
+            extension_keywords: HashMap::new(),
+            active_pattern_keywords: HashMap::new(),
             pending_transition: None,
             tasks_file_lock: Arc::new(Mutex::new(())),
         }
@@ -413,8 +428,13 @@ pub(super) enum LoopEvent {
     NextTaskUpdated(Option<String>),
     DiscoveryStarted(usize),
     DiscoveryCompleted(usize),
-    ExtensionInjected { name: String, task_id: String },
-    PatternsUsed { titles: Vec<String> },
+    ExtensionInjected { name: String, agent_role: String, task_id: String },
+    PatternsUsed { titles: Vec<String>, keywords_by_title: HashMap<String, Vec<String>> },
+    ExtensionKeywordsLoaded { keywords: HashMap<String, Vec<String>> },
+    #[allow(dead_code)]
+    ExtensionReferenced { name: String, agent_role: String, matched_keywords: Vec<String> },
+    #[allow(dead_code)]
+    PatternApplied { title: String, agent_role: String },
     Log(String),
     BackgroundLog(String),
     CountsUpdated(usize, usize),

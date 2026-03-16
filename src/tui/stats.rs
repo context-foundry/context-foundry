@@ -101,7 +101,26 @@ pub(super) fn render_dashboard_stats(frame: &mut Frame, area: Rect, state: &AppS
         Span::styled(&d_str, Style::default().fg(d_col)),
     ]));
 
-    // ─── Row 2: Patterns + Ollama | Timing ───
+    // ─── Row 2: Extensions ───
+    if !state.extension_inject_count.is_empty() {
+        let ext_parts: Vec<String> = state
+            .extension_inject_count
+            .iter()
+            .map(|(name, inj)| {
+                let refs = state.extension_reference_count.get(name).copied().unwrap_or(0);
+                format!("{} {}/{} inj, {} ref", name, inj, inj, refs)
+            })
+            .collect();
+        lines.push(Line::from(vec![
+            Span::styled("  Ext      ", Style::default().fg(Color::Rgb(227, 115, 75))),
+            Span::styled(
+                ext_parts.join("  "),
+                Style::default().fg(Color::White),
+            ),
+        ]));
+    }
+
+    // ─── Row 3: Patterns + Ollama | Timing ───
     let now = chrono::Utc::now();
     let session_elapsed = now.signed_duration_since(state.session_start);
     let session_str = format_duration_hms(session_elapsed);
@@ -113,7 +132,7 @@ pub(super) fn render_dashboard_stats(frame: &mut Frame, area: Rect, state: &AppS
 
     lines.push(Line::from(vec![
         Span::styled("  Patterns ", Style::default().fg(Color::Cyan)),
-        Span::styled(format!("{}", state.session_patterns_learned), Style::default().fg(Color::White)),
+        Span::styled(format!("{} inj, {} applied", state.pattern_inject_count, state.pattern_apply_count), Style::default().fg(Color::White)),
         Span::styled("  feat: ", Style::default().fg(Color::DarkGray)),
         Span::styled(format!("{}", state.session_feat_commits), Style::default().fg(Color::Green)),
         Span::styled("  WIP: ", Style::default().fg(Color::DarkGray)),

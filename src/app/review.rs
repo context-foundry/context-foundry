@@ -82,6 +82,15 @@ pub(super) async fn run_review_loop(
         &ctx.tasks_file_name(),
     );
     let prompt = prompts::wrap_with_extensions(&prompt, extension_context);
+    if !extension_context.is_empty() {
+        for ext_name in &ctx.config.extensions {
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::ExtensionInjected {
+                name: ext_name.clone(),
+                agent_role: AgentRole::Reviewer.to_string(),
+                task_id: task_id.to_string(),
+            }));
+        }
+    }
     let review_result = agent::run_agent(
         &AgentRole::Reviewer,
         Config::parse_provider(&ctx.config.reviewer_provider),

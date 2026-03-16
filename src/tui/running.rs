@@ -543,7 +543,9 @@ pub(super) fn render_extensions_used(
     focused: TuiPane,
 ) {
     let total = state.session_extensions_used.len();
-    let title = format!(" Extensions Used ({}) ", total);
+    let total_inj: usize = state.extension_inject_count.values().sum();
+    let total_ref: usize = state.extension_reference_count.values().sum();
+    let title = format!(" Extensions ({} inj, {} ref) ", total_inj, total_ref);
     let max_lines = area.height.saturating_sub(2) as usize;
 
     if state.session_extensions_used.is_empty() {
@@ -698,7 +700,11 @@ pub(super) fn render_status_bar(frame: &mut Frame, area: Rect, state: &AppState)
     }));
 
     // Extensions indicator (read-only during running)
-    let ext_status = format_running_extensions_status(&state.available_extensions);
+    let ext_status = format_running_extensions_status(
+        &state.available_extensions,
+        &state.extension_inject_count,
+        &state.extension_reference_count,
+    );
     if !ext_status.is_empty() {
         spans.push(Span::styled(
             format!("  {} ", ext_status),
@@ -815,7 +821,11 @@ pub(super) fn render_running_explorer_status_bar(frame: &mut Frame, area: Rect, 
     ];
 
     // Extensions indicator
-    let ext_status = format_running_extensions_status(&state.available_extensions);
+    let ext_status = format_running_extensions_status(
+        &state.available_extensions,
+        &state.extension_inject_count,
+        &state.extension_reference_count,
+    );
     if !ext_status.is_empty() {
         spans.push(Span::styled(
             format!("  {} ", ext_status),
@@ -835,7 +845,11 @@ pub(super) fn render_running_explorer_status_bar(frame: &mut Frame, area: Rect, 
     frame.render_widget(Paragraph::new(Line::from(spans)), area);
 }
 
-fn format_running_extensions_status(extensions: &[ExtensionDisplayInfo]) -> String {
+fn format_running_extensions_status(
+    extensions: &[ExtensionDisplayInfo],
+    inject_count: &std::collections::HashMap<String, usize>,
+    reference_count: &std::collections::HashMap<String, usize>,
+) -> String {
     if extensions.is_empty() {
         return String::new();
     }
@@ -847,5 +861,17 @@ fn format_running_extensions_status(extensions: &[ExtensionDisplayInfo]) -> Stri
     if active.is_empty() {
         return "Ext: none".to_string();
     }
-    format!("Ext: {} ({} active)", active.join(", "), active.len())
+    let parts: Vec<String> = active
+        .iter()
+        .map(|name| {
+            let inj = inject_count.get(*name).copied().unwrap_or(0);
+            let refs = reference_count.get(*name).copied().unwrap_or(0);
+            if inj > 0 || refs > 0 {
+                format!("{} ({} inj, {} ref)", name, inj, refs)
+            } else {
+                name.to_string()
+            }
+        })
+        .collect();
+    format!("Ext: {}", parts.join(", "))
 }
