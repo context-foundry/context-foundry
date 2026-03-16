@@ -427,7 +427,7 @@ fn handle_startup_submit(state: &mut AppState) {
                 if !spec_has_content {
                     if let Some(ref mut s) = state.startup {
                         s.status_message = Some(
-                            "SPEC.md is empty -- describe what to build, or it will just scan the codebase.".to_string(),
+                            "SPEC.md is empty -- describe what you want to build first.".to_string(),
                         );
                     }
                     return;
@@ -788,8 +788,6 @@ fn should_skip_project_dir(name: &str) -> bool {
     matches!(
         name,
         ".git"
-            | ".buildloop"
-            | ".foundry"
             | "target"
             | "node_modules"
             | ".venv"
