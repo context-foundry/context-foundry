@@ -13,12 +13,12 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::Paragraph,
+    widgets::{BorderType, Paragraph},
     Frame, Terminal,
 };
 use std::io;
 
-use crate::app::{AppPhase, AppState};
+use crate::app::{AppPhase, AppState, TuiPane};
 use crate::config::Config;
 use crate::utils::truncate_str_from_end;
 
@@ -52,6 +52,66 @@ pub fn restore_terminal(terminal: &mut Tui) -> anyhow::Result<()> {
     Ok(())
 }
 
+pub fn pane_border_style(focused: TuiPane, this_pane: TuiPane) -> Style {
+    if focused == this_pane {
+        Style::default()
+            .fg(Color::Rgb(227, 115, 75))
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(Color::DarkGray)
+    }
+}
+
+pub fn pane_border_type(focused: TuiPane, this_pane: TuiPane) -> BorderType {
+    if focused == this_pane {
+        BorderType::Thick
+    } else {
+        BorderType::Plain
+    }
+}
+
+pub fn rect_contains(area: Rect, column: u16, row: u16) -> bool {
+    column >= area.x
+        && column < area.x.saturating_add(area.width)
+        && row >= area.y
+        && row < area.y.saturating_add(area.height)
+}
+
+pub struct RunningPaneRects {
+    pub agent_output: Rect,
+    pub task_queue: Rect,
+    pub patterns_learned: Rect,
+}
+
+pub fn running_layout(area: Rect) -> RunningPaneRects {
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(5),
+            Constraint::Length(7),
+            Constraint::Min(10),
+            Constraint::Length(6),
+            Constraint::Length(1),
+        ])
+        .split(area);
+
+    let middle_cols = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
+        .split(chunks[2]);
+
+    let right_panel = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Percentage(75), Constraint::Percentage(25)])
+        .split(middle_cols[1]);
+
+    RunningPaneRects {
+        agent_output: middle_cols[0],
+        task_queue: right_panel[0],
+        patterns_learned: right_panel[1],
+    }
+}
+
 pub fn render(frame: &mut Frame, state: &AppState, config: &Config) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -72,15 +132,15 @@ pub fn render(frame: &mut Frame, state: &AppState, config: &Config) {
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
         .split(chunks[2]);
-    running::render_agent_output(frame, middle_cols[0], state);
+    running::render_agent_output(frame, middle_cols[0], state, state.focused_pane);
 
     // Right panel: task queue (75%) + patterns learned (25%)
     let right_panel = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Percentage(75), Constraint::Percentage(25)])
         .split(middle_cols[1]);
-    running::render_task_queue(frame, right_panel[0], state);
-    running::render_patterns_learned(frame, right_panel[1], state, config);
+    running::render_task_queue(frame, right_panel[0], state, state.focused_pane);
+    running::render_patterns_learned(frame, right_panel[1], state, config, state.focused_pane);
 
     // Bottom: stats panel (full width)
     stats::render_dashboard_stats(frame, chunks[3], state, config);
@@ -155,6 +215,36 @@ pub fn render_patterns(frame: &mut Frame, state: &AppState, config: &Config) {
 
 pub fn render_findings(frame: &mut Frame, state: &AppState) {
     overlays::render_findings(frame, state);
+}
+
+pub fn render_running_explorer(frame: &mut Frame, state: &AppState, config: &Config) {
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(5),
+            Constraint::Length(7),
+            Constraint::Min(10),
+            Constraint::Length(6),
+            Constraint::Length(1),
+        ])
+        .split(frame.area());
+
+    running::render_header(frame, chunks[0], state);
+    pipeline::render_pipeline_map(frame, chunks[1], state, config);
+
+    // Middle: explorer + preview (same as startup layout)
+    let middle_cols = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(36), Constraint::Percentage(64)])
+        .split(chunks[2]);
+
+    if let Some(ref explorer_state) = state.running_explorer {
+        startup::render_file_explorer_from(frame, middle_cols[0], explorer_state, state.focused_pane);
+        startup::render_file_preview_from(frame, middle_cols[1], explorer_state, state.focused_pane);
+    }
+
+    stats::render_dashboard_stats(frame, chunks[3], state, config);
+    running::render_running_explorer_status_bar(frame, chunks[4], state);
 }
 
 pub fn render_startup(frame: &mut Frame, state: &AppState) {

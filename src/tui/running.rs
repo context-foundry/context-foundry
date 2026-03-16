@@ -7,7 +7,8 @@ use ratatui::{
 };
 
 use crate::agent::AgentRole;
-use crate::app::{AppPhase, AppState};
+use crate::app::{AppPhase, AppState, TuiPane};
+use super::{pane_border_style, pane_border_type};
 use crate::utils::truncate_str;
 
 pub(super) fn render_header(frame: &mut Frame, area: Rect, state: &AppState) {
@@ -210,7 +211,7 @@ pub(super) fn style_for_line(line: &str) -> Style {
     }
 }
 
-pub(super) fn render_agent_output(frame: &mut Frame, area: Rect, state: &AppState) {
+pub(super) fn render_agent_output(frame: &mut Frame, area: Rect, state: &AppState, focused: TuiPane) {
     let inner_width = area.width.saturating_sub(2) as usize;
 
     // Pre-wrap all lines, preserving style
@@ -255,14 +256,15 @@ pub(super) fn render_agent_output(frame: &mut Frame, area: Rect, state: &AppStat
     let list = List::new(items).block(
         Block::default()
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::DarkGray))
+            .border_style(pane_border_style(focused, TuiPane::AgentOutput))
+            .border_type(pane_border_type(focused, TuiPane::AgentOutput))
             .title(title),
     );
 
     frame.render_widget(list, area);
 }
 
-pub(super) fn render_task_queue(frame: &mut Frame, area: Rect, state: &AppState) {
+pub(super) fn render_task_queue(frame: &mut Frame, area: Rect, state: &AppState, focused: TuiPane) {
     if state.task_queue.is_empty() {
         let empty = Paragraph::new(Span::styled(
             " No tasks in queue yet.",
@@ -271,7 +273,8 @@ pub(super) fn render_task_queue(frame: &mut Frame, area: Rect, state: &AppState)
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::DarkGray))
+                .border_style(pane_border_style(focused, TuiPane::TaskQueue))
+                .border_type(pane_border_type(focused, TuiPane::TaskQueue))
                 .title(Span::styled(
                     " Task Queue ",
                     Style::default()
@@ -431,7 +434,8 @@ pub(super) fn render_task_queue(frame: &mut Frame, area: Rect, state: &AppState)
     let list = List::new(items).block(
         Block::default()
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::DarkGray))
+            .border_style(pane_border_style(focused, TuiPane::TaskQueue))
+            .border_type(pane_border_type(focused, TuiPane::TaskQueue))
             .title(Span::styled(
                 title,
                 Style::default()
@@ -448,6 +452,7 @@ pub(super) fn render_patterns_learned(
     area: Rect,
     state: &AppState,
     _config: &crate::config::Config,
+    focused: TuiPane,
 ) {
     let title = format!(" Patterns Learned ({}) ", state.session_patterns.len());
     let max_lines = area.height.saturating_sub(2) as usize;
@@ -460,7 +465,8 @@ pub(super) fn render_patterns_learned(
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::DarkGray))
+                .border_style(pane_border_style(focused, TuiPane::PatternsLearned))
+                .border_type(pane_border_type(focused, TuiPane::PatternsLearned))
                 .title(Span::styled(
                     title,
                     Style::default()
@@ -497,7 +503,8 @@ pub(super) fn render_patterns_learned(
     let list = List::new(items).block(
         Block::default()
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::DarkGray))
+            .border_style(pane_border_style(focused, TuiPane::PatternsLearned))
+            .border_type(pane_border_type(focused, TuiPane::PatternsLearned))
             .title(Span::styled(
                 format!(" Patterns Learned ({}) ", state.session_patterns.len()),
                 Style::default()
@@ -657,6 +664,54 @@ pub(super) fn render_planning_status_bar(frame: &mut Frame, area: Rect, state: &
     if let Some(ref version) = state.update_available {
         spans.push(Span::styled(
             format!(" | v{} available — `foundry update`", version),
+            Style::default()
+                .fg(Color::Green)
+                .add_modifier(Modifier::BOLD),
+        ));
+    }
+
+    frame.render_widget(Paragraph::new(Line::from(spans)), area);
+}
+
+pub(super) fn render_running_explorer_status_bar(frame: &mut Frame, area: Rect, state: &AppState) {
+    let mut spans = vec![
+        Span::styled(
+            " \u{2191}\u{2193} ",
+            Style::default()
+                .fg(Color::Black)
+                .bg(Color::DarkGray)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(" navigate  "),
+        Span::styled(
+            " Enter ",
+            Style::default()
+                .fg(Color::Black)
+                .bg(Color::DarkGray)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(" open  "),
+        Span::styled(
+            " Tab ",
+            Style::default()
+                .fg(Color::Black)
+                .bg(Color::Rgb(227, 115, 75))
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(" dashboard  "),
+        Span::styled(
+            " q ",
+            Style::default()
+                .fg(Color::Black)
+                .bg(Color::DarkGray)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(" stop"),
+    ];
+
+    if let Some(ref version) = state.update_available {
+        spans.push(Span::styled(
+            format!(" | v{} available -- `foundry update`", version),
             Style::default()
                 .fg(Color::Green)
                 .add_modifier(Modifier::BOLD),

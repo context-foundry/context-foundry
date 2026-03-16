@@ -9,7 +9,8 @@ use ratatui::{
     Frame,
 };
 
-use crate::app::AppState;
+use crate::app::{AppState, StartupState, TuiPane};
+use super::{pane_border_style, pane_border_type};
 use crate::utils::truncate_str;
 
 const PLACEHOLDER_SUGGESTIONS: &[&str] = &[
@@ -399,7 +400,8 @@ fn render_file_explorer(frame: &mut Frame, area: Rect, state: &AppState) {
     let list = List::new(items).block(
         Block::default()
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::DarkGray))
+            .border_style(pane_border_style(state.focused_pane, TuiPane::Explorer))
+            .border_type(pane_border_type(state.focused_pane, TuiPane::Explorer))
             .title(Span::styled(
                 " Files ",
                 Style::default()
@@ -429,7 +431,8 @@ fn render_file_preview(frame: &mut Frame, area: Rect, state: &AppState) {
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::DarkGray))
+                .border_style(pane_border_style(state.focused_pane, TuiPane::Preview))
+                .border_type(pane_border_type(state.focused_pane, TuiPane::Preview))
                 .title(Span::styled(
                     format!(" {} ", title),
                     Style::default()
@@ -442,10 +445,12 @@ fn render_file_preview(frame: &mut Frame, area: Rect, state: &AppState) {
     }
 
     let inner_height = area.height.saturating_sub(2) as usize;
+    let scroll = startup.file_preview_scroll;
     let lines: Vec<Line> = startup
         .file_preview_content
         .iter()
         .enumerate()
+        .skip(scroll)
         .take(inner_height)
         .map(|(i, line)| {
             Line::from(vec![
@@ -463,9 +468,209 @@ fn render_file_preview(frame: &mut Frame, area: Rect, state: &AppState) {
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::DarkGray))
+                .border_style(pane_border_style(state.focused_pane, TuiPane::Preview))
+                .border_type(pane_border_type(state.focused_pane, TuiPane::Preview))
                 .title(Span::styled(
                     format!(" {} ", title),
+                    Style::default()
+                        .fg(Color::White)
+                        .add_modifier(Modifier::BOLD),
+                )),
+        );
+    frame.render_widget(paragraph, area);
+}
+
+pub(super) fn render_file_explorer_from(
+    frame: &mut Frame,
+    area: Rect,
+    startup: &StartupState,
+    focused: TuiPane,
+) {
+    let visible_height = area.height.saturating_sub(2) as usize;
+    let vis = startup.visible_indices();
+
+    let selected_vis_pos = vis
+        .iter()
+        .position(|&i| i == startup.explorer_selected)
+        .unwrap_or(0);
+
+    let scroll = if selected_vis_pos < startup.explorer_scroll {
+        selected_vis_pos
+    } else if visible_height > 0
+        && selected_vis_pos >= startup.explorer_scroll + visible_height
+    {
+        selected_vis_pos.saturating_sub(visible_height) + 1
+    } else {
+        startup.explorer_scroll
+    };
+
+    let inner_width = area.width.saturating_sub(2) as usize;
+    let show_details = inner_width > 40;
+    let size_col_width: usize = 6;
+    let date_col_width: usize = 11;
+    let detail_width = if show_details {
+        size_col_width + date_col_width
+    } else {
+        0
+    };
+
+    let items: Vec<ListItem> = vis
+        .iter()
+        .skip(scroll)
+        .take(visible_height)
+        .map(|&tree_idx| {
+            let entry = &startup.file_tree[tree_idx];
+            let indent = "  ".repeat(entry.depth);
+            let prefix = if entry.is_dir {
+                if entry.expanded { "\u{25BC} " } else { "\u{25B6} " }
+            } else {
+                "  "
+            };
+
+            let is_selected = tree_idx == startup.explorer_selected;
+            let fg_color = if entry.is_hidden {
+                Color::DarkGray
+            } else if entry.is_cf_highlight {
+                Color::Rgb(227, 115, 75)
+            } else if entry.is_dir {
+                Color::Cyan
+            } else {
+                Color::White
+            };
+            let style = if is_selected {
+                Style::default()
+                    .fg(Color::Black)
+                    .bg(fg_color)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(fg_color)
+            };
+
+            if show_details {
+                let name_str = format!("{}{}{}", indent, prefix, entry.name);
+                let name_max = inner_width.saturating_sub(detail_width);
+                let truncated_name = if name_str.len() > name_max {
+                    truncate_str(&name_str, name_max).to_string()
+                } else {
+                    format!("{:<width$}", name_str, width = name_max)
+                };
+
+                let size_str = if entry.is_dir {
+                    format!("{:>width$}", "", width = size_col_width)
+                } else {
+                    format!(
+                        "{:>width$}",
+                        format_file_size(entry.file_size),
+                        width = size_col_width
+                    )
+                };
+
+                let date_str = format!(" {:<10}", format_modified(entry.modified));
+
+                let detail_style = if is_selected {
+                    Style::default().fg(Color::Black).bg(fg_color)
+                } else {
+                    Style::default().fg(Color::DarkGray)
+                };
+
+                ListItem::new(Line::from(vec![
+                    Span::styled(truncated_name, style),
+                    Span::styled(size_str, detail_style),
+                    Span::styled(date_str, detail_style),
+                ]))
+            } else {
+                let display_name = format!("{}{}{}", indent, prefix, entry.name);
+                ListItem::new(Line::from(Span::styled(display_name, style)))
+            }
+        })
+        .collect();
+
+    let list = List::new(items).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(pane_border_style(focused, TuiPane::Explorer))
+            .border_type(pane_border_type(focused, TuiPane::Explorer))
+            .title(Span::styled(
+                " Files ",
+                Style::default()
+                    .fg(Color::White)
+                    .add_modifier(Modifier::BOLD),
+            )),
+    );
+    frame.render_widget(list, area);
+}
+
+pub(super) fn render_file_preview_from(
+    frame: &mut Frame,
+    area: Rect,
+    startup: &StartupState,
+    focused: TuiPane,
+) {
+    let title = startup
+        .file_tree
+        .get(startup.explorer_selected)
+        .map(|e| e.name.clone())
+        .unwrap_or_else(|| "Preview".to_string());
+
+    let border_style = pane_border_style(focused, TuiPane::Preview);
+    let border_type = pane_border_type(focused, TuiPane::Preview);
+
+    if startup.file_preview_content.is_empty() {
+        let empty = Paragraph::new(Span::styled(
+            " Select a file to preview",
+            Style::default().fg(Color::DarkGray),
+        ))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(border_style)
+                .border_type(border_type)
+                .title(Span::styled(
+                    format!(" {} ", title),
+                    Style::default()
+                        .fg(Color::White)
+                        .add_modifier(Modifier::BOLD),
+                )),
+        );
+        frame.render_widget(empty, area);
+        return;
+    }
+
+    let inner_height = area.height.saturating_sub(2) as usize;
+    let scroll = startup.file_preview_scroll;
+    let lines: Vec<Line> = startup
+        .file_preview_content
+        .iter()
+        .enumerate()
+        .skip(scroll)
+        .take(inner_height)
+        .map(|(i, line)| {
+            Line::from(vec![
+                Span::styled(
+                    format!("{:>4} ", i + 1),
+                    Style::default().fg(Color::DarkGray),
+                ),
+                Span::styled(line.as_str(), Style::default().fg(Color::White)),
+            ])
+        })
+        .collect();
+
+    let total = startup.file_preview_content.len();
+    let scroll_indicator = if total > inner_height {
+        format!(" {} [{}/{}] ", title, scroll + 1, total)
+    } else {
+        format!(" {} ", title)
+    };
+
+    let paragraph = Paragraph::new(lines)
+        .wrap(Wrap { trim: false })
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(border_style)
+                .border_type(border_type)
+                .title(Span::styled(
+                    scroll_indicator,
                     Style::default()
                         .fg(Color::White)
                         .add_modifier(Modifier::BOLD),
@@ -680,6 +885,7 @@ mod tests {
             explorer_selected: 0,
             explorer_scroll: 0,
             file_preview_content: vec!["content line".to_string()],
+            file_preview_scroll: 0,
             placeholder_tick: 0,
         };
         state.startup = Some(startup);

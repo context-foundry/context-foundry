@@ -57,6 +57,7 @@ impl StartupState {
             explorer_selected: 0,
             explorer_scroll: 0,
             file_preview_content,
+            file_preview_scroll: 0,
             placeholder_tick: 0,
         }
     }
@@ -353,6 +354,7 @@ fn move_explorer_selection(state: &mut AppState, delta: isize) {
     } else {
         load_file_preview(&entry.path)
     };
+    startup.file_preview_scroll = 0;
 }
 
 fn set_explorer_selection(state: &mut AppState, index: usize) {
@@ -377,6 +379,7 @@ fn set_explorer_selection(state: &mut AppState, index: usize) {
     } else {
         load_file_preview(&entry.path)
     };
+    startup.file_preview_scroll = 0;
 }
 
 fn handle_explorer_enter(state: &mut AppState) {
@@ -522,20 +525,47 @@ pub(super) fn handle_startup_mouse_at(
             {
                 match target {
                     tui::StartupMouseTarget::FileEntry(index) => {
+                        state.focused_pane = crate::app::state::TuiPane::Explorer;
                         set_explorer_selection(state, index);
                     }
-                    tui::StartupMouseTarget::PreviewLine => {}
+                    tui::StartupMouseTarget::PreviewLine => {
+                        state.focused_pane = crate::app::state::TuiPane::Preview;
+                    }
                 }
             }
         }
         MouseEventKind::ScrollUp => {
             if state.startup_scroll_debounce_ticks == 0 {
-                move_explorer_selection(state, -3);
+                match state.focused_pane {
+                    crate::app::state::TuiPane::Preview => {
+                        if let Some(startup) = state.startup.as_mut() {
+                            startup.file_preview_scroll =
+                                startup.file_preview_scroll.saturating_sub(3);
+                        }
+                    }
+                    _ => {
+                        move_explorer_selection(state, -3);
+                    }
+                }
             }
         }
         MouseEventKind::ScrollDown => {
             if state.startup_scroll_debounce_ticks == 0 {
-                move_explorer_selection(state, 3);
+                match state.focused_pane {
+                    crate::app::state::TuiPane::Preview => {
+                        if let Some(startup) = state.startup.as_mut() {
+                            let max_scroll = startup
+                                .file_preview_content
+                                .len()
+                                .saturating_sub(20); // rough visible height estimate
+                            startup.file_preview_scroll =
+                                (startup.file_preview_scroll + 3).min(max_scroll);
+                        }
+                    }
+                    _ => {
+                        move_explorer_selection(state, 3);
+                    }
+                }
             }
         }
         _ => {}
@@ -771,7 +801,7 @@ fn current_terminal_size() -> (u16, u16) {
     crossterm::terminal::size().unwrap_or((120, 40))
 }
 
-pub(super) fn classify_plan_status(plan_path: &Path) -> PlanStatus {
+pub(crate) fn classify_plan_status(plan_path: &Path) -> PlanStatus {
     if !plan_path.exists() {
         return PlanStatus::Missing;
     }
@@ -790,7 +820,7 @@ pub(super) fn classify_plan_status(plan_path: &Path) -> PlanStatus {
     }
 }
 
-pub(super) fn detect_startup_scenario(project_dir: &Path) -> StartupScenario {
+pub(crate) fn detect_startup_scenario(project_dir: &Path) -> StartupScenario {
     if !has_meaningful_project_files(project_dir) {
         return StartupScenario::EmptyProject;
     }

@@ -19,12 +19,13 @@ mod state;
 use self::context::RunContext;
 use self::contract::ContractPaths;
 use self::startup::{
-    enter_home_surface, enter_startup_surface, handle_startup_event, load_pending_task_at,
+    classify_plan_status, detect_startup_scenario, enter_home_surface, enter_startup_surface,
+    handle_startup_event, load_pending_task_at,
 };
 use self::state::{AppEvent, AppendTasksRequest, LoopEvent, PendingTransition, PlanningOutcome};
 pub use self::state::{
     AppPhase, AppState, PlanStatus, PlanningState, StartupAction, StartupScenario,
-    StartupState,
+    StartupState, TuiPane,
 };
 #[cfg(test)]
 pub use self::state::FileEntry;
@@ -134,6 +135,8 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
                     tui::render_findings(frame, &state);
                 } else if state.show_patterns {
                     tui::render_patterns(frame, &state, &config);
+                } else if state.show_running_explorer && matches!(state.phase, AppPhase::Running) {
+                    tui::render_running_explorer(frame, &state, &config);
                 } else {
                     tui::render(frame, &state, &config);
                 }
@@ -264,6 +267,9 @@ fn apply_pending_transition(
                     state.phase = AppPhase::Running;
                     state.startup = None;
                     state.planning = None;
+                    state.focused_pane = state::TuiPane::AgentOutput;
+                    state.show_running_explorer = false;
+                    state.running_explorer = None;
                 }
             }
             PendingTransition::StartPlanning { user_intent, label } => {
@@ -288,6 +294,7 @@ fn apply_pending_transition(
             }
             PendingTransition::ShowStartup { message } => {
                 enter_startup_surface(project_dir, state, message);
+                state.focused_pane = state::TuiPane::Explorer;
             }
         }
     }
@@ -778,6 +785,54 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
         AppEvent::Key(key) => {
             if state.inject_input.is_some() {
                 handle_inject_key(state, key);
+            } else if state.show_running_explorer {
+                match key.code {
+                    KeyCode::Char('q') => {
+                        if state.stop_after_task {
+                            state.stop_after_task = false;
+                            let _ = std::fs::remove_file(state.buildloop_dir.join("stop"));
+                            state.log("Stop cancelled -- resuming build");
+                        } else {
+                            state.stop_after_task = true;
+                            let _ = std::fs::create_dir_all(&state.buildloop_dir);
+                            let _ = std::fs::write(state.buildloop_dir.join("stop"), "");
+                            state.log("Stopping after current task (q again to cancel, Ctrl+C to force quit)");
+                        }
+                    }
+                    KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                        if state.stop_after_task {
+                            let _ = std::fs::remove_file(state.buildloop_dir.join("stop"));
+                            state.should_quit = true;
+                        } else {
+                            state.stop_after_task = true;
+                            let _ = std::fs::create_dir_all(&state.buildloop_dir);
+                            let _ = std::fs::write(state.buildloop_dir.join("stop"), "");
+                            state.log(
+                                "Will stop after current task completes (Ctrl+C again to force quit)",
+                            );
+                        }
+                    }
+                    KeyCode::Tab | KeyCode::BackTab => {
+                        state.show_running_explorer = false;
+                        state.focused_pane = state::TuiPane::AgentOutput;
+                    }
+                    KeyCode::Up => {
+                        move_running_explorer_selection(state, -1);
+                    }
+                    KeyCode::Down => {
+                        move_running_explorer_selection(state, 1);
+                    }
+                    KeyCode::PageUp => {
+                        move_running_explorer_selection(state, -10);
+                    }
+                    KeyCode::PageDown => {
+                        move_running_explorer_selection(state, 10);
+                    }
+                    KeyCode::Enter => {
+                        handle_running_explorer_enter(state);
+                    }
+                    _ => {}
+                }
             } else {
                 match key.code {
                     KeyCode::Char('q') => {
@@ -851,6 +906,33 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                     KeyCode::PageDown => {
                         state.task_queue_scroll = state.task_queue_scroll.saturating_sub(3);
                     }
+                    KeyCode::Tab | KeyCode::BackTab => {
+                        if state.show_running_explorer {
+                            // Return to dashboard
+                            state.show_running_explorer = false;
+                            state.focused_pane = state::TuiPane::AgentOutput;
+                        } else {
+                            // Enter explorer view -- lazily populate running_explorer
+                            if state.running_explorer.is_none() {
+                                let project_dir = state
+                                    .buildloop_dir
+                                    .parent()
+                                    .unwrap_or(std::path::Path::new("."));
+                                let scenario = detect_startup_scenario(project_dir);
+                                let plan_status = classify_plan_status(
+                                    &self::contract::ContractPaths::resolve(project_dir).tasks_path,
+                                );
+                                state.running_explorer = Some(StartupState::new(
+                                    project_dir,
+                                    scenario,
+                                    plan_status,
+                                    None,
+                                ));
+                            }
+                            state.show_running_explorer = true;
+                            state.focused_pane = state::TuiPane::Explorer;
+                        }
+                    }
                     _ => {}
                 }
             }
@@ -868,29 +950,70 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
         }
         AppEvent::Mouse(mouse) => {
             use crossterm::event::{MouseButton, MouseEventKind};
-            match mouse.kind {
-                MouseEventKind::ScrollUp => {
-                    if state.show_patterns {
-                        state.patterns_scroll = state.patterns_scroll.saturating_sub(3);
-                    } else if state.show_findings {
-                        state.findings_scroll = state.findings_scroll.saturating_sub(3);
-                    } else {
-                        state.task_queue_scroll = state.task_queue_scroll.saturating_add(3);
+            if state.show_running_explorer {
+                // Delegate to running explorer mouse handler
+                let terminal_size = crossterm::terminal::size().unwrap_or((120, 40));
+                handle_startup_mouse_at_for_running(state, mouse, terminal_size);
+            } else {
+                match mouse.kind {
+                    MouseEventKind::ScrollUp => {
+                        if state.show_patterns {
+                            state.patterns_scroll = state.patterns_scroll.saturating_sub(3);
+                        } else if state.show_findings {
+                            state.findings_scroll = state.findings_scroll.saturating_sub(3);
+                        } else {
+                            let terminal_size = crossterm::terminal::size().unwrap_or((120, 40));
+                            let area = ratatui::layout::Rect::new(0, 0, terminal_size.0, terminal_size.1);
+                            let panes = tui::running_layout(area);
+                            if tui::rect_contains(panes.agent_output, mouse.column, mouse.row) {
+                                state.focused_pane = state::TuiPane::AgentOutput;
+                                let max = state.agent_output.len().saturating_sub(1);
+                                state.scroll_offset = state.scroll_offset.saturating_add(3).min(max);
+                            } else if tui::rect_contains(panes.task_queue, mouse.column, mouse.row) {
+                                state.focused_pane = state::TuiPane::TaskQueue;
+                                let max = state.task_queue.len().saturating_sub(1);
+                                state.task_queue_scroll = state.task_queue_scroll.saturating_add(3).min(max);
+                            } else if tui::rect_contains(panes.patterns_learned, mouse.column, mouse.row) {
+                                state.focused_pane = state::TuiPane::PatternsLearned;
+                                state.patterns_scroll = state.patterns_scroll.saturating_sub(3);
+                            }
+                        }
                     }
-                }
-                MouseEventKind::ScrollDown => {
-                    if state.show_patterns {
-                        state.patterns_scroll = state.patterns_scroll.saturating_add(3);
-                    } else if state.show_findings {
-                        state.findings_scroll = state.findings_scroll.saturating_add(3);
-                    } else {
-                        state.task_queue_scroll = state.task_queue_scroll.saturating_sub(3);
+                    MouseEventKind::ScrollDown => {
+                        if state.show_patterns {
+                            state.patterns_scroll = state.patterns_scroll.saturating_add(3);
+                        } else if state.show_findings {
+                            state.findings_scroll = state.findings_scroll.saturating_add(3);
+                        } else {
+                            let terminal_size = crossterm::terminal::size().unwrap_or((120, 40));
+                            let area = ratatui::layout::Rect::new(0, 0, terminal_size.0, terminal_size.1);
+                            let panes = tui::running_layout(area);
+                            if tui::rect_contains(panes.agent_output, mouse.column, mouse.row) {
+                                state.focused_pane = state::TuiPane::AgentOutput;
+                                state.scroll_offset = state.scroll_offset.saturating_sub(3);
+                            } else if tui::rect_contains(panes.task_queue, mouse.column, mouse.row) {
+                                state.focused_pane = state::TuiPane::TaskQueue;
+                                state.task_queue_scroll = state.task_queue_scroll.saturating_sub(3);
+                            } else if tui::rect_contains(panes.patterns_learned, mouse.column, mouse.row) {
+                                state.focused_pane = state::TuiPane::PatternsLearned;
+                                state.patterns_scroll = state.patterns_scroll.saturating_add(3);
+                            }
+                        }
                     }
+                    MouseEventKind::Down(MouseButton::Left) => {
+                        let terminal_size = crossterm::terminal::size().unwrap_or((120, 40));
+                        let area = ratatui::layout::Rect::new(0, 0, terminal_size.0, terminal_size.1);
+                        let panes = tui::running_layout(area);
+                        if tui::rect_contains(panes.agent_output, mouse.column, mouse.row) {
+                            state.focused_pane = state::TuiPane::AgentOutput;
+                        } else if tui::rect_contains(panes.task_queue, mouse.column, mouse.row) {
+                            state.focused_pane = state::TuiPane::TaskQueue;
+                        } else if tui::rect_contains(panes.patterns_learned, mouse.column, mouse.row) {
+                            state.focused_pane = state::TuiPane::PatternsLearned;
+                        }
+                    }
+                    _ => {}
                 }
-                MouseEventKind::Down(MouseButton::Left) => {
-                    // Clicks in running mode are no-ops for now
-                }
-                _ => {}
             }
         }
         AppEvent::Paste(text) => {
@@ -1347,6 +1470,174 @@ pub fn show_status(project_dir: &Path) -> Result<()> {
 
 pub fn show_tasks(project_dir: &Path) -> Result<()> {
     commands::show_tasks(project_dir)
+}
+
+// ─── Running Explorer Helpers ─────────────────────────────────
+
+fn move_running_explorer_selection(state: &mut AppState, delta: isize) {
+    let Some(explorer) = state.running_explorer.as_mut() else {
+        return;
+    };
+    let vis = explorer.visible_indices();
+    if vis.is_empty() {
+        return;
+    }
+    let cur_pos = vis
+        .iter()
+        .position(|&i| i == explorer.explorer_selected)
+        .unwrap_or(0);
+    let max_pos = vis.len() - 1;
+    let new_pos = (cur_pos as isize + delta).clamp(0, max_pos as isize) as usize;
+    let new_index = vis[new_pos];
+    if new_index == explorer.explorer_selected {
+        return;
+    }
+    explorer.explorer_selected = new_index;
+    let visible_estimate: usize = 20;
+    if new_pos < explorer.explorer_scroll {
+        explorer.explorer_scroll = new_pos;
+    } else if new_pos >= explorer.explorer_scroll + visible_estimate {
+        explorer.explorer_scroll = new_pos.saturating_sub(visible_estimate) + 1;
+    }
+    // Load preview for new selection
+    let entry = &explorer.file_tree[new_index];
+    explorer.file_preview_content = if entry.is_dir {
+        vec!["<directory>".to_string()]
+    } else {
+        load_file_preview_for_running(&entry.path)
+    };
+    explorer.file_preview_scroll = 0;
+}
+
+fn handle_running_explorer_enter(state: &mut AppState) {
+    let Some(explorer) = state.running_explorer.as_mut() else {
+        return;
+    };
+    let selected = explorer.explorer_selected;
+    if selected >= explorer.file_tree.len() {
+        return;
+    }
+    if explorer.file_tree[selected].is_dir {
+        explorer.file_tree[selected].expanded = !explorer.file_tree[selected].expanded;
+        if !explorer.file_tree[selected].expanded {
+            let vis = explorer.visible_indices();
+            if !vis.contains(&explorer.explorer_selected) {
+                explorer.explorer_selected = selected;
+            }
+        }
+    } else {
+        let file_path = explorer.file_tree[selected].path.clone();
+        state.pending_transition =
+            Some(state::PendingTransition::OpenExternalEditor { file_path });
+    }
+}
+
+fn load_file_preview_for_running(path: &std::path::Path) -> Vec<String> {
+    if path.is_dir() {
+        return vec!["<directory>".to_string()];
+    }
+    match std::fs::read_to_string(path) {
+        Ok(content) => content.lines().take(500).map(|l| l.to_string()).collect(),
+        Err(_) => vec!["<binary or unreadable file>".to_string()],
+    }
+}
+
+fn handle_startup_mouse_at_for_running(
+    state: &mut AppState,
+    mouse: crossterm::event::MouseEvent,
+    terminal_size: (u16, u16),
+) {
+    use crossterm::event::{MouseButton, MouseEventKind};
+    // Running explorer uses the same 36/64 split for the middle section
+    let area = ratatui::layout::Rect::new(0, 0, terminal_size.0, terminal_size.1);
+    let chunks = ratatui::layout::Layout::default()
+        .direction(ratatui::layout::Direction::Vertical)
+        .constraints([
+            ratatui::layout::Constraint::Length(5),
+            ratatui::layout::Constraint::Length(7),
+            ratatui::layout::Constraint::Min(10),
+            ratatui::layout::Constraint::Length(6),
+            ratatui::layout::Constraint::Length(1),
+        ])
+        .split(area);
+    let middle_cols = ratatui::layout::Layout::default()
+        .direction(ratatui::layout::Direction::Horizontal)
+        .constraints([
+            ratatui::layout::Constraint::Percentage(36),
+            ratatui::layout::Constraint::Percentage(64),
+        ])
+        .split(chunks[2]);
+    let explorer_area = middle_cols[0];
+    let preview_area = middle_cols[1];
+
+    match mouse.kind {
+        MouseEventKind::Down(MouseButton::Left) => {
+            if tui::rect_contains(explorer_area, mouse.column, mouse.row) {
+                state.focused_pane = state::TuiPane::Explorer;
+                // Hit-test to select file entry
+                let inner_top = explorer_area.y + 1;
+                let inner_bottom = explorer_area.y + explorer_area.height.saturating_sub(1);
+                if mouse.row >= inner_top && mouse.row < inner_bottom {
+                    if let Some(ref mut explorer) = state.running_explorer {
+                        let relative_row = (mouse.row - inner_top) as usize;
+                        let vis = explorer.visible_indices();
+                        let vis_index = explorer.explorer_scroll + relative_row;
+                        if vis_index < vis.len() {
+                            let tree_idx = vis[vis_index];
+                            explorer.explorer_selected = tree_idx;
+                            let vis_pos = vis.iter().position(|&i| i == tree_idx).unwrap_or(0);
+                            let visible_estimate: usize = 20;
+                            if vis_pos < explorer.explorer_scroll {
+                                explorer.explorer_scroll = vis_pos;
+                            } else if vis_pos >= explorer.explorer_scroll + visible_estimate {
+                                explorer.explorer_scroll = vis_pos.saturating_sub(visible_estimate) + 1;
+                            }
+                            let entry = &explorer.file_tree[tree_idx];
+                            explorer.file_preview_content = if entry.is_dir {
+                                vec!["<directory>".to_string()]
+                            } else {
+                                load_file_preview_for_running(&entry.path)
+                            };
+                            explorer.file_preview_scroll = 0;
+                        }
+                    }
+                }
+            } else if tui::rect_contains(preview_area, mouse.column, mouse.row) {
+                state.focused_pane = state::TuiPane::Preview;
+            }
+        }
+        MouseEventKind::ScrollUp => {
+            match state.focused_pane {
+                state::TuiPane::Preview => {
+                    if let Some(ref mut explorer) = state.running_explorer {
+                        explorer.file_preview_scroll =
+                            explorer.file_preview_scroll.saturating_sub(3);
+                    }
+                }
+                _ => {
+                    move_running_explorer_selection(state, -3);
+                }
+            }
+        }
+        MouseEventKind::ScrollDown => {
+            match state.focused_pane {
+                state::TuiPane::Preview => {
+                    if let Some(ref mut explorer) = state.running_explorer {
+                        let max_scroll = explorer
+                            .file_preview_content
+                            .len()
+                            .saturating_sub(20);
+                        explorer.file_preview_scroll =
+                            (explorer.file_preview_scroll + 3).min(max_scroll);
+                    }
+                }
+                _ => {
+                    move_running_explorer_selection(state, 3);
+                }
+            }
+        }
+        _ => {}
+    }
 }
 
 #[cfg(test)]

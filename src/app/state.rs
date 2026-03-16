@@ -24,6 +24,15 @@ pub enum AppPhase {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TuiPane {
+    Explorer,
+    Preview,
+    AgentOutput,
+    TaskQueue,
+    PatternsLearned,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PlanStatus {
     Missing,
     Invalid,
@@ -95,6 +104,7 @@ pub struct StartupState {
     pub explorer_selected: usize,
     pub explorer_scroll: usize,
     pub file_preview_content: Vec<String>,
+    pub file_preview_scroll: usize,
     pub placeholder_tick: usize,
 }
 
@@ -221,6 +231,9 @@ pub struct AppState {
     pub task_start: Option<DateTime<Utc>>,
     pub task_stages_seen: Vec<AgentRole>,
     pub(super) startup_scroll_debounce_ticks: u8,
+    pub focused_pane: TuiPane,
+    pub running_explorer: Option<StartupState>,
+    pub show_running_explorer: bool,
     pub(super) pending_transition: Option<PendingTransition>,
     pub(super) tasks_file_lock: Arc<Mutex<()>>,
 }
@@ -278,6 +291,9 @@ impl AppState {
             task_start: None,
             task_stages_seen: Vec::new(),
             startup_scroll_debounce_ticks: 0,
+            focused_pane: TuiPane::Explorer,
+            running_explorer: None,
+            show_running_explorer: false,
             pending_transition: None,
             tasks_file_lock: Arc::new(Mutex::new(())),
         }
