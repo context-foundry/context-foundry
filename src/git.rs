@@ -476,7 +476,7 @@ pub fn commit_task_pr(
 
     // Annotate TASKS.md with the PR number and push the annotation
     if let Some(pr_num) = pr_number {
-        if annotate_tasks_with_pr(plan_path, pr_num).is_ok() {
+        if annotate_tasks_with_pr(plan_path, pr_num, Some(task_id)).is_ok() {
             // Stage only TASKS.md (plan_path) to avoid picking up unrelated changes
             let _ = Command::new("git")
                 .args(["add", &plan_path.to_string_lossy()])
@@ -499,6 +499,31 @@ pub fn commit_task_pr(
         .args(["checkout", &base_branch])
         .current_dir(project_dir)
         .output();
+
+    // Re-apply TASKS.md modifications (mark_done + progress indicator) to the base
+    // branch working directory. The feature branch commit captured these changes, but
+    // switching back to base reverts TASKS.md to the base version. Without this,
+    // the build loop re-parses the task as pending and causes an infinite loop.
+    if let Ok(feature_tasks_content) = Command::new("git")
+        .args(["show", &format!("{}:{}", feature_branch, plan_path.file_name().unwrap().to_string_lossy())])
+        .current_dir(project_dir)
+        .output()
+    {
+        if feature_tasks_content.status.success() {
+            let tasks_bytes = &feature_tasks_content.stdout;
+            let _ = crate::utils::atomic_write_file(plan_path, tasks_bytes);
+            // Stage and commit the TASKS.md update on the base branch
+            let _ = Command::new("git")
+                .args(["add", &plan_path.to_string_lossy()])
+                .current_dir(project_dir)
+                .output();
+            let base_msg = format!("mark {} done on base branch", task_id);
+            let _ = Command::new("git")
+                .args(["commit", "-m", &base_msg])
+                .current_dir(project_dir)
+                .output();
+        }
+    }
 
     Ok((true, pr_number))
 }
@@ -571,7 +596,7 @@ pub fn create_wip_issue(
 /// Inserts `PR:#N` before the pipeline progress indicator (e.g. `[SPID]`) so
 /// that the trailing `[XXXX]` regex in task.rs continues to match.
 /// If there is no indicator, the tag is appended at the end.
-pub fn annotate_tasks_with_pr(plan_path: &Path, pr_number: u64) -> Result<()> {
+pub fn annotate_tasks_with_pr(plan_path: &Path, pr_number: u64, task_id_filter: Option<&str>) -> Result<()> {
     use regex::Regex;
     use std::sync::LazyLock;
 
@@ -587,6 +612,13 @@ pub fn annotate_tasks_with_pr(plan_path: &Path, pr_number: u64) -> Result<()> {
         let trimmed = line.trim_start();
         // Only annotate completed tasks that don't already have a PR tag
         if trimmed.starts_with("- [x]") && !line.contains("PR:#") {
+            // If a task_id filter is set, only annotate the matching task line
+            if let Some(filter_id) = task_id_filter {
+                let id_with_colon = format!("{}:", filter_id);
+                if !trimmed.contains(&id_with_colon) {
+                    continue;
+                }
+            }
             if let Some(m) = RE_PROGRESS_TAIL.find(line) {
                 // Insert PR tag before the [SPID] indicator
                 let insert_pos = m.start();
@@ -826,7 +858,7 @@ mod tests {
         )
         .expect("write tasks");
 
-        super::annotate_tasks_with_pr(&file, 42).expect("annotate should succeed");
+        super::annotate_tasks_with_pr(&file, 42, None).expect("annotate should succeed");
         let content = fs::read_to_string(&file).expect("read tasks");
 
         assert!(content.contains("- [x] T1.1: First task PR:#42"));
@@ -847,7 +879,7 @@ mod tests {
         )
         .expect("write tasks");
 
-        super::annotate_tasks_with_pr(&file, 42).expect("annotate should succeed");
+        super::annotate_tasks_with_pr(&file, 42, None).expect("annotate should succeed");
         let content = fs::read_to_string(&file).expect("read tasks");
 
         // T1.1 should keep its original PR tag, not get a second one
@@ -869,7 +901,7 @@ mod tests {
         )
         .expect("write tasks");
 
-        super::annotate_tasks_with_pr(&file, 7).expect("annotate should succeed");
+        super::annotate_tasks_with_pr(&file, 7, None).expect("annotate should succeed");
         let content = fs::read_to_string(&file).expect("read tasks");
 
         // PR tag should appear before the [SPID] indicator
@@ -886,6 +918,42 @@ mod tests {
             "PR tag should be before [SPI!], got: {}",
             content
         );
+
+        let _ = fs::remove_dir_all(path);
+    }
+
+    #[test]
+    fn annotate_tasks_scoped_to_single_task() {
+        let path = temp_dir("foundry-annotate-scoped");
+        let file = path.join("TASKS.md");
+        fs::write(
+            &file,
+            "- [x] T1.1: First task [SPID]\n- [x] T2.1: Second task [SPID]\n- [x] T3.1: Third task [SPID]\n- [ ] T4.1: Pending task\n",
+        )
+        .expect("write tasks");
+
+        super::annotate_tasks_with_pr(&file, 99, Some("T2.1")).expect("annotate should succeed");
+        let content = fs::read_to_string(&file).expect("read tasks");
+
+        // Only T2.1 should get the PR tag
+        assert!(
+            content.contains("T2.1: Second task PR:#99 [SPID]"),
+            "T2.1 should be annotated, got: {}",
+            content
+        );
+        // T1.1 and T3.1 should NOT get the PR tag
+        assert!(
+            !content.contains("T1.1: First task PR:#99"),
+            "T1.1 should NOT be annotated, got: {}",
+            content
+        );
+        assert!(
+            !content.contains("T3.1: Third task PR:#99"),
+            "T3.1 should NOT be annotated, got: {}",
+            content
+        );
+        // Pending task should never be annotated
+        assert!(!content.contains("T4.1: Pending task PR:#99"));
 
         let _ = fs::remove_dir_all(path);
     }

@@ -615,7 +615,7 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::NextTaskUpdated(None)));
 
             // ─── HIL Mode: Create PR and Stop ────────────────────────
-            if ctx.config.mode == "hil" {
+            if ctx.config.mode == "hil" && !ctx.config.pr_per_task {
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
                     "HIL mode: task queue complete -- creating PR".to_string(),
                 )));
@@ -638,7 +638,7 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
 
                 match git::create_pr(&ctx.project_dir, &ctx.config, &pr_title, &pr_body) {
                     Ok(Some(pr_num)) => {
-                        let _ = git::annotate_tasks_with_pr(&ctx.plan_path, pr_num);
+                        let _ = git::annotate_tasks_with_pr(&ctx.plan_path, pr_num, None);
                         // Commit the annotation
                         let _ = git::commit_and_push(
                             &ctx.project_dir,
