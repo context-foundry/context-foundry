@@ -103,7 +103,7 @@ pub(super) fn render_dashboard_stats(frame: &mut Frame, area: Rect, state: &AppS
         Span::styled(&task_str, Style::default().fg(Color::White)),
     ]));
 
-    // ─── Row 3: Agent status ───
+    // ─── Row 3: left empty | Agent status on right ───
     let agent_label = state
         .current_agent
         .as_ref()
@@ -119,8 +119,10 @@ pub(super) fn render_dashboard_stats(frame: &mut Frame, area: Rect, state: &AppS
         .map(|(_, started)| format_duration_hms(now.signed_duration_since(*started)))
         .unwrap_or_default();
 
+    let left_pad = format!("{:<width$}", "", width = half_width);
     let mut agent_spans = vec![
-        Span::styled("  Agent    ", Style::default().fg(Color::Cyan)),
+        Span::styled(&left_pad, Style::default()),
+        Span::styled("Agent     ", Style::default().fg(Color::Cyan)),
         Span::styled(
             &agent_label,
             if state.current_agent.is_some() {
