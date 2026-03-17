@@ -15,7 +15,7 @@
   "pause_between_tasks_secs": 10,
   "planner_model": "opus",
   "planner_provider": "claude",
-  "preview_wrap": true,
+  "preview_wrap": false,
   "reviewer_model": "sonnet",
   "reviewer_provider": "claude"
 }

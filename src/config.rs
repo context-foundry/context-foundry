@@ -165,6 +165,9 @@ pub struct Config {
 
     /// Poll interval (seconds) for checking PR review status in Review mode.
     pub pr_poll_interval_secs: u64,
+
+    /// TUI color theme: "dark" (default), "catppuccin", or "solarized".
+    pub theme: String,
 }
 
 impl Default for Config {
@@ -227,6 +230,7 @@ impl Default for Config {
             create_issue_on_wip: false,
             preview_wrap: true,
             pr_poll_interval_secs: 30,
+            theme: "dark".into(),
         }
     }
 }

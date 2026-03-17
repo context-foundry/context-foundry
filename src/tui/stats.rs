@@ -10,6 +10,7 @@ use crate::app::AppState;
 use crate::config::Config;
 
 pub(super) fn render_dashboard_stats(frame: &mut Frame, area: Rect, state: &AppState, _config: &Config) {
+    let theme = &state.tui_theme;
     let mut lines = Vec::new();
 
     // Progress: [93/96] ████████████░░ 97%
@@ -30,19 +31,19 @@ pub(super) fn render_dashboard_stats(frame: &mut Frame, area: Rect, state: &AppS
     let bar_spans: Vec<Span> = vec![
         Span::styled(
             left_label,
-            Style::default().fg(Color::Yellow).add_modifier(ratatui::style::Modifier::BOLD),
+            Style::default().fg(theme.warning).add_modifier(ratatui::style::Modifier::BOLD),
         ),
         Span::styled(
             "\u{2588}".repeat(filled),
-            Style::default().fg(Color::Green),
+            Style::default().fg(theme.success),
         ),
         Span::styled(
             "\u{2591}".repeat(empty),
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(theme.muted),
         ),
         Span::styled(
             right_label,
-            Style::default().fg(Color::Yellow).add_modifier(ratatui::style::Modifier::BOLD),
+            Style::default().fg(theme.warning).add_modifier(ratatui::style::Modifier::BOLD),
         ),
     ];
     lines.push(Line::from(bar_spans));
@@ -88,16 +89,16 @@ pub(super) fn render_dashboard_stats(frame: &mut Frame, area: Rect, state: &AppS
     };
 
     lines.push(Line::from(vec![
-        Span::styled("  Git      ", Style::default().fg(Color::Cyan)),
+        Span::styled("  Git      ", Style::default().fg(theme.info)),
         Span::styled(format!("{:<width$}", git_status_str, width = half_width.saturating_sub(11)), Style::default().fg(git_status_color)),
-        Span::styled("Context   ", Style::default().fg(Color::Cyan)),
-        Span::styled("S:", Style::default().fg(Color::DarkGray)),
+        Span::styled("Context   ", Style::default().fg(theme.info)),
+        Span::styled("S:", Style::default().fg(theme.muted)),
         Span::styled(format!("{:<4}", s_str), Style::default().fg(s_col)),
-        Span::styled(" P:", Style::default().fg(Color::DarkGray)),
+        Span::styled(" P:", Style::default().fg(theme.muted)),
         Span::styled(format!("{:<4}", p_str), Style::default().fg(p_col)),
-        Span::styled(" I:", Style::default().fg(Color::DarkGray)),
+        Span::styled(" I:", Style::default().fg(theme.muted)),
         Span::styled(format!("{:<4}", i_str), Style::default().fg(i_col)),
-        Span::styled(" D:", Style::default().fg(Color::DarkGray)),
+        Span::styled(" D:", Style::default().fg(theme.muted)),
         Span::styled(&d_str, Style::default().fg(d_col)),
     ]));
 
@@ -112,10 +113,10 @@ pub(super) fn render_dashboard_stats(frame: &mut Frame, area: Rect, state: &AppS
             })
             .collect();
         lines.push(Line::from(vec![
-            Span::styled("  Ext      ", Style::default().fg(Color::Rgb(227, 115, 75))),
+            Span::styled("  Ext      ", Style::default().fg(theme.accent)),
             Span::styled(
                 ext_parts.join("  "),
-                Style::default().fg(Color::White),
+                Style::default().fg(theme.text),
             ),
         ]));
     }
@@ -131,19 +132,19 @@ pub(super) fn render_dashboard_stats(frame: &mut Frame, area: Rect, state: &AppS
         .unwrap_or_else(|| "--:--".to_string());
 
     lines.push(Line::from(vec![
-        Span::styled("  Patterns ", Style::default().fg(Color::Cyan)),
-        Span::styled(format!("{} inj, {} applied", state.pattern_inject_count, state.pattern_apply_count), Style::default().fg(Color::White)),
-        Span::styled("  session feat: ", Style::default().fg(Color::DarkGray)),
-        Span::styled(format!("{}", state.session_feat_commits), Style::default().fg(Color::Green)),
-        Span::styled("  session WIP: ", Style::default().fg(Color::DarkGray)),
-        Span::styled(format!("{}", state.session_wip_commits), Style::default().fg(Color::Yellow)),
-        Span::styled("  Ollama: ", Style::default().fg(Color::DarkGray)),
+        Span::styled("  Patterns ", Style::default().fg(theme.info)),
+        Span::styled(format!("{} inj, {} applied", state.pattern_inject_count, state.pattern_apply_count), Style::default().fg(theme.text)),
+        Span::styled("  session feat: ", Style::default().fg(theme.muted)),
+        Span::styled(format!("{}", state.session_feat_commits), Style::default().fg(theme.success)),
+        Span::styled("  session WIP: ", Style::default().fg(theme.muted)),
+        Span::styled(format!("{}", state.session_wip_commits), Style::default().fg(theme.warning)),
+        Span::styled("  Ollama: ", Style::default().fg(theme.muted)),
         Span::styled(format!("{:<width$}", ollama_label, width = half_width.saturating_sub(40)), Style::default().fg(ollama_color)),
-        Span::styled("Timing    ", Style::default().fg(Color::Cyan)),
-        Span::styled("session: ", Style::default().fg(Color::DarkGray)),
-        Span::styled(&session_str, Style::default().fg(Color::White)),
-        Span::styled("  task: ", Style::default().fg(Color::DarkGray)),
-        Span::styled(&task_str, Style::default().fg(Color::White)),
+        Span::styled("Timing    ", Style::default().fg(theme.info)),
+        Span::styled("session: ", Style::default().fg(theme.muted)),
+        Span::styled(&session_str, Style::default().fg(theme.text)),
+        Span::styled("  task: ", Style::default().fg(theme.muted)),
+        Span::styled(&task_str, Style::default().fg(theme.text)),
     ]));
 
     // ─── Row 3: left empty | Agent status on right ───
@@ -165,13 +166,13 @@ pub(super) fn render_dashboard_stats(frame: &mut Frame, area: Rect, state: &AppS
     let left_pad = format!("{:<width$}", "", width = half_width);
     let mut agent_spans = vec![
         Span::styled(&left_pad, Style::default()),
-        Span::styled("Agent     ", Style::default().fg(Color::Cyan)),
+        Span::styled("Agent     ", Style::default().fg(theme.info)),
         Span::styled(
             &agent_label,
             if state.current_agent.is_some() {
                 Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
             } else {
-                Style::default().fg(Color::DarkGray)
+                Style::default().fg(theme.muted)
             },
         ),
     ];
@@ -180,7 +181,7 @@ pub(super) fn render_dashboard_stats(frame: &mut Frame, area: Rect, state: &AppS
         let spinner = spinner_chars[state.tick_count % spinner_chars.len()];
         agent_spans.push(Span::styled(
             format!("  {} {} events  {}", spinner, state.events_received, agent_str),
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(theme.muted),
         ));
     }
     lines.push(Line::from(agent_spans));
@@ -189,11 +190,11 @@ pub(super) fn render_dashboard_stats(frame: &mut Frame, area: Rect, state: &AppS
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::DarkGray))
+                .border_style(Style::default().fg(theme.border))
                 .title(Span::styled(
                     " Stats ",
                     Style::default()
-                        .fg(Color::Cyan)
+                        .fg(theme.info)
                         .add_modifier(Modifier::BOLD),
                 )),
         )

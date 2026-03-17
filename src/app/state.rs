@@ -11,6 +11,7 @@ use crate::agent::{AgentOutputEvent, AgentRole};
 use crate::git;
 use crate::orchestrator::OrchestratorOutcome;
 use crate::task::{self, Task};
+use crate::tui::theme::TuiTheme;
 
 const LOG_MESSAGES_CAP: usize = 500;
 const TASK_HISTORY_CAP: usize = 200;
@@ -283,6 +284,7 @@ pub struct AppState {
     pub pattern_apply_count: usize,
     pub extension_keywords: HashMap<String, Vec<String>>,
     pub active_pattern_keywords: HashMap<String, Vec<String>>,
+    pub tui_theme: TuiTheme,
     pub(super) pending_transition: Option<PendingTransition>,
     pub(super) tasks_file_lock: Arc<Mutex<()>>,
 }
@@ -360,6 +362,7 @@ impl AppState {
             pattern_apply_count: 0,
             extension_keywords: HashMap::new(),
             active_pattern_keywords: HashMap::new(),
+            tui_theme: TuiTheme::default(),
             pending_transition: None,
             tasks_file_lock: Arc::new(Mutex::new(())),
         }

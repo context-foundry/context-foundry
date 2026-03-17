@@ -134,20 +134,20 @@ pub(super) fn render_header(frame: &mut Frame, area: Rect, state: &AppState) {
             Span::styled(
                 if state.show_running_explorer { " Explore " } else { " Dashboard " },
                 Style::default()
-                    .fg(Color::White)
-                    .bg(Color::Rgb(60, 60, 80))
+                    .fg(state.tui_theme.text)
+                    .bg(state.tui_theme.surface)
                     .add_modifier(Modifier::BOLD),
             ),
         ]),
         Line::from(Span::styled(
             task_line,
             Style::default()
-                .fg(Color::White)
+                .fg(state.tui_theme.text)
                 .add_modifier(Modifier::BOLD),
         )),
         Line::from(Span::styled(
             agent_line,
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(state.tui_theme.muted),
         )),
     ];
 
@@ -166,12 +166,12 @@ pub(super) fn render_header(frame: &mut Frame, area: Rect, state: &AppState) {
             };
             header_text.push(Line::from(Span::styled(
                 format!("  Waiting for PR #{} review... ({})", pr_num, ago_text),
-                Style::default().fg(Color::Yellow),
+                Style::default().fg(state.tui_theme.warning),
             )));
         } else {
             header_text.push(Line::from(Span::styled(
                 "  Waiting for review -- press Enter to continue",
-                Style::default().fg(Color::Yellow),
+                Style::default().fg(state.tui_theme.warning),
             )));
         }
     }
@@ -182,7 +182,7 @@ pub(super) fn render_header(frame: &mut Frame, area: Rect, state: &AppState) {
                 "  Next: {}",
                 truncate_str(next_task, area.width.saturating_sub(10) as usize)
             ),
-            Style::default().fg(Color::Cyan),
+            Style::default().fg(state.tui_theme.info),
         )));
     }
 
@@ -192,7 +192,7 @@ pub(super) fn render_header(frame: &mut Frame, area: Rect, state: &AppState) {
     let header = Paragraph::new(header_text).block(
         Block::default()
             .borders(Borders::BOTTOM)
-            .border_style(Style::default().fg(Color::DarkGray)),
+            .border_style(Style::default().fg(state.tui_theme.border)),
     );
     frame.render_widget(header, area);
 }
@@ -229,23 +229,23 @@ pub(super) fn wrap_line(line: &str, width: usize) -> Vec<String> {
     result
 }
 
-pub(super) fn style_for_line(line: &str) -> Style {
+pub(super) fn style_for_line(line: &str, theme: &super::theme::TuiTheme) -> Style {
     if line.starts_with("[stderr]") {
-        Style::default().fg(Color::Red)
+        Style::default().fg(theme.error)
     } else if line.starts_with("[tool]") {
-        Style::default().fg(Color::Cyan)
+        Style::default().fg(theme.info)
     } else if line.starts_with("[result]") {
-        Style::default().fg(Color::DarkGray)
+        Style::default().fg(theme.muted)
     } else if line.starts_with("[rate limited]") {
-        Style::default().fg(Color::Yellow)
+        Style::default().fg(theme.warning)
     } else if line.starts_with("[studio]") {
-        Style::default().fg(Color::Cyan)
+        Style::default().fg(theme.info)
     } else if line.starts_with("[injected]") {
         Style::default()
-            .fg(Color::Yellow)
+            .fg(theme.warning)
             .add_modifier(Modifier::BOLD)
     } else {
-        Style::default().fg(Color::White)
+        Style::default().fg(theme.text)
     }
 }
 
@@ -257,7 +257,7 @@ pub(super) fn render_agent_output(frame: &mut Frame, area: Rect, state: &AppStat
         .agent_output
         .iter()
         .flat_map(|line| {
-            let style = style_for_line(line);
+            let style = style_for_line(line, &state.tui_theme);
             wrap_line(line, inner_width)
                 .into_iter()
                 .map(move |chunk| (chunk, style))
@@ -288,13 +288,13 @@ pub(super) fn render_agent_output(frame: &mut Frame, area: Rect, state: &AppStat
             Style::default().fg(color).add_modifier(Modifier::BOLD),
         )
     } else {
-        Span::styled(" Agent ", Style::default().fg(Color::DarkGray))
+        Span::styled(" Agent ", Style::default().fg(state.tui_theme.muted))
     };
 
     let list = List::new(items).block(
         Block::default()
             .borders(Borders::ALL)
-            .border_style(pane_border_style(focused, TuiPane::AgentOutput))
+            .border_style(pane_border_style(focused, TuiPane::AgentOutput, &state.tui_theme))
             .border_type(pane_border_type(focused, TuiPane::AgentOutput))
             .title(title),
     );
@@ -306,17 +306,17 @@ pub(super) fn render_task_queue(frame: &mut Frame, area: Rect, state: &AppState,
     if state.task_queue.is_empty() {
         let empty = Paragraph::new(Span::styled(
             " No tasks in queue yet.",
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(state.tui_theme.muted),
         ))
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .border_style(pane_border_style(focused, TuiPane::TaskQueue))
+                .border_style(pane_border_style(focused, TuiPane::TaskQueue, &state.tui_theme))
                 .border_type(pane_border_type(focused, TuiPane::TaskQueue))
                 .title(Span::styled(
                     " Task Queue ",
                     Style::default()
-                        .fg(Color::White)
+                        .fg(state.tui_theme.text)
                         .add_modifier(Modifier::BOLD),
                 )),
         );
@@ -472,12 +472,12 @@ pub(super) fn render_task_queue(frame: &mut Frame, area: Rect, state: &AppState,
     let list = List::new(items).block(
         Block::default()
             .borders(Borders::ALL)
-            .border_style(pane_border_style(focused, TuiPane::TaskQueue))
+            .border_style(pane_border_style(focused, TuiPane::TaskQueue, &state.tui_theme))
             .border_type(pane_border_type(focused, TuiPane::TaskQueue))
             .title(Span::styled(
                 title,
                 Style::default()
-                    .fg(Color::White)
+                    .fg(state.tui_theme.text)
                     .add_modifier(Modifier::BOLD),
             )),
     );
@@ -496,23 +496,23 @@ pub(super) fn render_patterns(
 
     let used_count = state.session_patterns.iter().filter(|p| p.kind == PatternEventKind::Used).count();
     let learned_count = state.session_patterns.iter().filter(|p| p.kind == PatternEventKind::Learned).count();
-    let title = format!(" Patterns ({} used, {} learned) ", used_count, learned_count);
+    let title = format!(" Patterns ({} injected, {} learned) ", used_count, learned_count);
     let max_lines = area.height.saturating_sub(2) as usize;
 
     if state.session_patterns.is_empty() {
         let empty = Paragraph::new(Span::styled(
             " Pattern activity will appear here.",
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(state.tui_theme.muted),
         ))
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .border_style(pane_border_style(focused, TuiPane::PatternsLearned))
+                .border_style(pane_border_style(focused, TuiPane::PatternsLearned, &state.tui_theme))
                 .border_type(pane_border_type(focused, TuiPane::PatternsLearned))
                 .title(Span::styled(
                     " Patterns ",
                     Style::default()
-                        .fg(Color::Cyan)
+                        .fg(state.tui_theme.info)
                         .add_modifier(Modifier::BOLD),
                 )),
         );
@@ -548,7 +548,7 @@ pub(super) fn render_patterns(
                 ),
                 Span::styled(
                     truncate_str(&event.title, area.width.saturating_sub(14) as usize),
-                    Style::default().fg(Color::White),
+                    Style::default().fg(state.tui_theme.text),
                 ),
             ]))
         })
@@ -557,12 +557,12 @@ pub(super) fn render_patterns(
     let list = List::new(items).block(
         Block::default()
             .borders(Borders::ALL)
-            .border_style(pane_border_style(focused, TuiPane::PatternsLearned))
+            .border_style(pane_border_style(focused, TuiPane::PatternsLearned, &state.tui_theme))
             .border_type(pane_border_type(focused, TuiPane::PatternsLearned))
             .title(Span::styled(
                 title,
                 Style::default()
-                    .fg(Color::Cyan)
+                    .fg(state.tui_theme.info)
                     .add_modifier(Modifier::BOLD),
             )),
     );
@@ -584,17 +584,17 @@ pub(super) fn render_extensions_used(
     if state.session_extensions_used.is_empty() {
         let empty = Paragraph::new(Span::styled(
             " Extension usage will appear here.",
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(state.tui_theme.muted),
         ))
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .border_style(pane_border_style(focused, TuiPane::Extensions))
+                .border_style(pane_border_style(focused, TuiPane::Extensions, &state.tui_theme))
                 .border_type(pane_border_type(focused, TuiPane::Extensions))
                 .title(Span::styled(
                     " Extensions Used ",
                     Style::default()
-                        .fg(Color::Rgb(227, 115, 75))
+                        .fg(state.tui_theme.accent)
                         .add_modifier(Modifier::BOLD),
                 )),
         );
@@ -613,15 +613,15 @@ pub(super) fn render_extensions_used(
             ListItem::new(Line::from(vec![
                 Span::styled(
                     format!(" #{} ", num),
-                    Style::default().fg(Color::Rgb(227, 115, 75)),
+                    Style::default().fg(state.tui_theme.accent),
                 ),
                 Span::styled(
                     &event.name,
-                    Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+                    Style::default().fg(state.tui_theme.text).add_modifier(Modifier::BOLD),
                 ),
                 Span::styled(
                     format!(" ({})", event.task_id),
-                    Style::default().fg(Color::DarkGray),
+                    Style::default().fg(state.tui_theme.muted),
                 ),
             ]))
         })
@@ -630,12 +630,12 @@ pub(super) fn render_extensions_used(
     let list = List::new(items).block(
         Block::default()
             .borders(Borders::ALL)
-            .border_style(pane_border_style(focused, TuiPane::Extensions))
+            .border_style(pane_border_style(focused, TuiPane::Extensions, &state.tui_theme))
             .border_type(pane_border_type(focused, TuiPane::Extensions))
             .title(Span::styled(
                 title,
                 Style::default()
-                    .fg(Color::Rgb(227, 115, 75))
+                    .fg(state.tui_theme.accent)
                     .add_modifier(Modifier::BOLD),
             )),
     );
@@ -659,7 +659,7 @@ pub(super) fn render_status_bar(frame: &mut Frame, area: Rect, state: &AppState)
             " q ",
             Style::default()
                 .fg(Color::Black)
-                .bg(Color::DarkGray)
+                .bg(state.tui_theme.muted)
                 .add_modifier(Modifier::BOLD),
         ),
         Span::raw(" stop  "),
@@ -667,7 +667,7 @@ pub(super) fn render_status_bar(frame: &mut Frame, area: Rect, state: &AppState)
             " Ctrl+C ",
             Style::default()
                 .fg(Color::Black)
-                .bg(Color::DarkGray)
+                .bg(state.tui_theme.muted)
                 .add_modifier(Modifier::BOLD),
         ),
         Span::raw(" force quit  "),
@@ -675,7 +675,7 @@ pub(super) fn render_status_bar(frame: &mut Frame, area: Rect, state: &AppState)
             " ↑↓ ",
             Style::default()
                 .fg(Color::Black)
-                .bg(Color::DarkGray)
+                .bg(state.tui_theme.muted)
                 .add_modifier(Modifier::BOLD),
         ),
         Span::raw(" scroll  "),
@@ -683,7 +683,7 @@ pub(super) fn render_status_bar(frame: &mut Frame, area: Rect, state: &AppState)
             " i ",
             Style::default()
                 .fg(Color::Black)
-                .bg(Color::DarkGray)
+                .bg(state.tui_theme.muted)
                 .add_modifier(Modifier::BOLD),
         ),
         Span::raw(" inject  "),
@@ -691,7 +691,7 @@ pub(super) fn render_status_bar(frame: &mut Frame, area: Rect, state: &AppState)
             " PgUp/PgDn ",
             Style::default()
                 .fg(Color::Black)
-                .bg(Color::DarkGray)
+                .bg(state.tui_theme.muted)
                 .add_modifier(Modifier::BOLD),
         ),
         Span::raw(" queue  "),
@@ -699,7 +699,7 @@ pub(super) fn render_status_bar(frame: &mut Frame, area: Rect, state: &AppState)
             " p ",
             Style::default()
                 .fg(Color::Black)
-                .bg(Color::DarkGray)
+                .bg(state.tui_theme.muted)
                 .add_modifier(Modifier::BOLD),
         ),
         Span::raw(" patterns"),
@@ -725,20 +725,20 @@ pub(super) fn render_status_bar(frame: &mut Frame, area: Rect, state: &AppState)
             "  f ",
             Style::default()
                 .fg(Color::Black)
-                .bg(Color::DarkGray)
+                .bg(state.tui_theme.muted)
                 .add_modifier(Modifier::BOLD),
         ));
         spans.push(Span::raw(" findings"));
     }
 
-    spans.push(Span::styled(discovery_info, Style::default().fg(Color::DarkGray)));
+    spans.push(Span::styled(discovery_info, Style::default().fg(state.tui_theme.muted)));
 
     // Tab toggle -- always visible on Dashboard
     spans.push(Span::styled(
         "  Tab ",
         Style::default()
             .fg(Color::Black)
-            .bg(Color::Rgb(227, 115, 75))
+            .bg(state.tui_theme.accent)
             .add_modifier(Modifier::BOLD),
     ));
     spans.push(Span::raw(if state.show_running_explorer {
@@ -756,7 +756,7 @@ pub(super) fn render_status_bar(frame: &mut Frame, area: Rect, state: &AppState)
     if !ext_status.is_empty() {
         spans.push(Span::styled(
             format!("  {} ", ext_status),
-            Style::default().fg(Color::Rgb(227, 115, 75)),
+            Style::default().fg(state.tui_theme.accent),
         ));
     }
 
@@ -764,7 +764,7 @@ pub(super) fn render_status_bar(frame: &mut Frame, area: Rect, state: &AppState)
         spans.push(Span::styled(
             format!(" | v{} available — `foundry update`", version),
             Style::default()
-                .fg(Color::Green)
+                .fg(state.tui_theme.success)
                 .add_modifier(Modifier::BOLD),
         ));
     }
@@ -780,7 +780,7 @@ pub(super) fn render_planning_status_bar(frame: &mut Frame, area: Rect, state: &
             " q ",
             Style::default()
                 .fg(Color::Black)
-                .bg(Color::DarkGray)
+                .bg(state.tui_theme.muted)
                 .add_modifier(Modifier::BOLD),
         ),
         Span::raw(" quit  "),
@@ -788,7 +788,7 @@ pub(super) fn render_planning_status_bar(frame: &mut Frame, area: Rect, state: &
             " ↑↓ ",
             Style::default()
                 .fg(Color::Black)
-                .bg(Color::DarkGray)
+                .bg(state.tui_theme.muted)
                 .add_modifier(Modifier::BOLD),
         ),
         Span::raw(" scroll  "),
@@ -796,7 +796,7 @@ pub(super) fn render_planning_status_bar(frame: &mut Frame, area: Rect, state: &
             " p ",
             Style::default()
                 .fg(Color::Black)
-                .bg(Color::DarkGray)
+                .bg(state.tui_theme.muted)
                 .add_modifier(Modifier::BOLD),
         ),
         Span::raw(" patterns"),
@@ -807,7 +807,7 @@ pub(super) fn render_planning_status_bar(frame: &mut Frame, area: Rect, state: &
             "  f ",
             Style::default()
                 .fg(Color::Black)
-                .bg(Color::DarkGray)
+                .bg(state.tui_theme.muted)
                 .add_modifier(Modifier::BOLD),
         ));
         spans.push(Span::raw(" findings"));
@@ -816,7 +816,7 @@ pub(super) fn render_planning_status_bar(frame: &mut Frame, area: Rect, state: &
     if let Some((_ts, msg)) = state.log_messages.last() {
         spans.push(Span::styled(
             format!("  {}", truncate_str(msg, 60)),
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(state.tui_theme.muted),
         ));
     }
 
@@ -824,7 +824,7 @@ pub(super) fn render_planning_status_bar(frame: &mut Frame, area: Rect, state: &
         spans.push(Span::styled(
             format!(" | v{} available — `foundry update`", version),
             Style::default()
-                .fg(Color::Green)
+                .fg(state.tui_theme.success)
                 .add_modifier(Modifier::BOLD),
         ));
     }
@@ -838,7 +838,7 @@ pub(super) fn render_running_explorer_status_bar(frame: &mut Frame, area: Rect, 
             " \u{2191}\u{2193} ",
             Style::default()
                 .fg(Color::Black)
-                .bg(Color::DarkGray)
+                .bg(state.tui_theme.muted)
                 .add_modifier(Modifier::BOLD),
         ),
         Span::raw(" navigate  "),
@@ -846,7 +846,7 @@ pub(super) fn render_running_explorer_status_bar(frame: &mut Frame, area: Rect, 
             " Enter ",
             Style::default()
                 .fg(Color::Black)
-                .bg(Color::DarkGray)
+                .bg(state.tui_theme.muted)
                 .add_modifier(Modifier::BOLD),
         ),
         Span::raw(" open  "),
@@ -854,7 +854,7 @@ pub(super) fn render_running_explorer_status_bar(frame: &mut Frame, area: Rect, 
             " Tab ",
             Style::default()
                 .fg(Color::Black)
-                .bg(Color::Rgb(227, 115, 75))
+                .bg(state.tui_theme.accent)
                 .add_modifier(Modifier::BOLD),
         ),
         Span::raw(" dashboard  "),
@@ -862,7 +862,7 @@ pub(super) fn render_running_explorer_status_bar(frame: &mut Frame, area: Rect, 
             " q ",
             Style::default()
                 .fg(Color::Black)
-                .bg(Color::DarkGray)
+                .bg(state.tui_theme.muted)
                 .add_modifier(Modifier::BOLD),
         ),
         Span::raw(" stop"),
@@ -877,7 +877,7 @@ pub(super) fn render_running_explorer_status_bar(frame: &mut Frame, area: Rect, 
     if !ext_status.is_empty() {
         spans.push(Span::styled(
             format!("  {} ", ext_status),
-            Style::default().fg(Color::Rgb(227, 115, 75)),
+            Style::default().fg(state.tui_theme.accent),
         ));
     }
 
@@ -885,7 +885,7 @@ pub(super) fn render_running_explorer_status_bar(frame: &mut Frame, area: Rect, 
         spans.push(Span::styled(
             format!(" | v{} available -- `foundry update`", version),
             Style::default()
-                .fg(Color::Green)
+                .fg(state.tui_theme.success)
                 .add_modifier(Modifier::BOLD),
         ));
     }

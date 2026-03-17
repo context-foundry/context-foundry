@@ -98,6 +98,20 @@ If a reviewer requests changes, the TUI surfaces that status. Review mode requir
 
 The `create_issue_on_wip` flag works in any mode -- when a task fails verification and gets a `WIP()` commit, foundry auto-creates a GitHub issue with the review findings.
 
+### Pattern matching and injection
+
+At the start of each task, foundry loads all patterns from `~/.foundry/patterns/` and matches them against the task description. Matching uses keyword scoring: each pattern has `keywords` and `tech_stack` fields, and whole-word matches against the task description score points. If Ollama is running locally, semantic (embedding) matching is also used for reranking.
+
+Matched patterns are formatted and injected into the planner and reviewer agent prompts as reference data. The TUI tracks this in two places:
+
+| Metric | Where | Meaning |
+|--------|-------|---------|
+| **Injected** | Patterns panel + stats row | Patterns matched and injected into agent prompts |
+| **Learned** | Patterns panel | New patterns extracted from build artifacts |
+| **Applied** | Stats row | Injected patterns whose keywords appeared in agent output (the agent likely used the advice) |
+
+All three counters are **session-scoped** -- they reset when foundry starts and accumulate across tasks. The same pattern can be injected multiple times (once per task it matches).
+
 ### Pattern scope
 
 Patterns are global by default. They live in `~/.foundry/patterns/` and are loaded for every project on your machine. A lesson learned building project A is available when building project B.
@@ -247,6 +261,18 @@ Optional:
 
 Legacy projects that still use `ARCHITECTURE.md` and `IMPL_PLAN.md` continue to work. Foundry prefers `SPEC.md` and `TASKS.md` when both are present.
 
+### CLAUDE.md and foundry agents
+
+Every agent foundry spawns is a Claude Code CLI invocation with `cwd` set to the project directory. Claude Code's normal CLAUDE.md loading applies -- your global `~/.claude/CLAUDE.md`, the project's `CLAUDE.md`, and any `.claude/rules/*.md` files are all loaded into the agent's context.
+
+This is mostly beneficial: project conventions (coding style, architecture rules, naming patterns) help agents write better code. However, it can cause problems when your CLAUDE.md contains **meta-workflow instructions** -- things like "run the SPID pipeline," "spawn sub-agents for verification," or "always create an implementation plan before coding." These conflict with foundry's own orchestration, since each agent is already running inside a pipeline stage.
+
+Foundry handles this by appending a system-level override to every agent:
+
+> *You are running as a single stage in Context Foundry's autonomous pipeline. Ignore any CLAUDE.md instructions about orchestration workflows, build pipelines, SPID stages, doubt loops, sub-agent spawning, or multi-step implementation processes. Foundry handles all orchestration. Focus only on your assigned role and task.*
+
+This preserves useful project conventions while neutralizing workflow directives. You do not need to modify your CLAUDE.md to use foundry, but be aware that any instructions about orchestration, pipelines, or sub-agent workflows will be overridden.
+
 ## Agent Prompts
 
 All agent prompts are defined in [`src/prompts.rs`](src/prompts.rs). Each agent has a dedicated prompt function:
@@ -270,13 +296,28 @@ Key design decisions in the prompt system:
 
 ## Extensions
 
-Extensions are domain-specific knowledge packages that teach foundry's agents how to work with technologies, APIs, or workflows that aren't in Claude's training data. Foundry discovers extensions automatically from `~/.foundry/extensions/` and project-local `extensions/` directories.
+Extensions are human-authored, read-only domain knowledge packages. They teach foundry's agents how to work with technologies, APIs, or workflows that aren't in Claude's training data. Foundry discovers extensions automatically from `~/.foundry/extensions/` and project-local `extensions/` directories.
 
-An extension is a folder containing a `CLAUDE.md` (domain rules) and optionally a patterns JSON (learned issues). For example, a Roblox extension might teach agents to use CFrame instead of Position for moving parts, or a Workday Extend extension might document that WIDs are tenant-specific.
+An extension is a folder containing a `CLAUDE.md` (domain rules) and optionally a patterns JSON (domain-specific patterns). For example, a Roblox extension might teach agents to use CFrame instead of Position for moving parts, or a Workday Extend extension might document that WIDs are tenant-specific.
+
+### Extensions vs patterns
+
+Extensions and patterns both inject knowledge into agent prompts, but they serve different purposes:
+
+|  | Extensions | Patterns |
+|---|---|---|
+| **What** | Domain knowledge packages (CLAUDE.md + optional patterns) | Individual issue/solution pairs |
+| **Created by** | Humans only -- foundry never writes extensions | Foundry's pattern extractor agent after each task |
+| **Selection** | Manual -- user picks on startup screen | Automatic -- keyword/semantic matching per task |
+| **Injection** | CLAUDE.md prepended verbatim to every agent prompt | Matched patterns injected into planner/reviewer only |
+| **Scope** | Per-project (user selects which apply) | Global (all patterns match against all tasks) |
+| **Always on** | Yes -- if selected, every agent gets the full content regardless of task | No -- only patterns whose keywords match the task |
+
+Extensions can carry their own patterns (shown as `(3p)` in the TUI). These extension patterns are merged into the global pattern pool and go through the same keyword matching as regular patterns. So an extension bundles two things: mandatory domain rules (CLAUDE.md) that are always injected, and optional domain-specific patterns (JSON) that are selectively matched.
 
 ### Extension contracts
 
-On the startup screen, foundry shows a checkbox panel listing all discovered extensions with their pattern counts. Select the ones relevant to your build:
+On the startup screen, foundry shows a checkbox panel listing all discovered extensions with their pattern counts (`(3p)` = 3 patterns in that extension). Select the ones relevant to your build:
 
 ```
 ┌ Extensions ──────────────────────────────────────┐

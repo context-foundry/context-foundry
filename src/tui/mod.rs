@@ -3,6 +3,7 @@ mod pipeline;
 mod running;
 mod startup;
 mod stats;
+pub mod theme;
 
 use crossterm::{
     event::{DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture},
@@ -11,7 +12,7 @@ use crossterm::{
 };
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{BorderType, Paragraph},
     Frame, Terminal,
@@ -52,13 +53,13 @@ pub fn restore_terminal(terminal: &mut Tui) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn pane_border_style(focused: TuiPane, this_pane: TuiPane) -> Style {
+pub fn pane_border_style(focused: TuiPane, this_pane: TuiPane, theme: &theme::TuiTheme) -> Style {
     if focused == this_pane {
         Style::default()
-            .fg(Color::Rgb(227, 115, 75))
+            .fg(theme.accent)
             .add_modifier(Modifier::BOLD)
     } else {
-        Style::default().fg(Color::DarkGray)
+        Style::default().fg(theme.border)
     }
 }
 
@@ -175,14 +176,14 @@ pub fn render(frame: &mut Frame, state: &AppState, config: &Config) {
                 1,
             );
             let hint = Paragraph::new(Line::from(vec![
-                Span::styled(" Enter ", Style::default().fg(Color::DarkGray)),
-                Span::styled("add to end  ", Style::default().fg(Color::DarkGray)),
-                Span::styled(" !text ", Style::default().fg(Color::Yellow)),
-                Span::styled("run next  ", Style::default().fg(Color::DarkGray)),
-                Span::styled(" Esc ", Style::default().fg(Color::DarkGray)),
-                Span::styled("cancel", Style::default().fg(Color::DarkGray)),
+                Span::styled(" Enter ", Style::default().fg(state.tui_theme.muted)),
+                Span::styled("add to end  ", Style::default().fg(state.tui_theme.muted)),
+                Span::styled(" !text ", Style::default().fg(state.tui_theme.warning)),
+                Span::styled("run next  ", Style::default().fg(state.tui_theme.muted)),
+                Span::styled(" Esc ", Style::default().fg(state.tui_theme.muted)),
+                Span::styled("cancel", Style::default().fg(state.tui_theme.muted)),
             ]))
-            .style(Style::default().bg(Color::DarkGray));
+            .style(Style::default().bg(state.tui_theme.muted));
             frame.render_widget(hint, hint_area);
 
             // Input line
@@ -203,18 +204,18 @@ pub fn render(frame: &mut Frame, state: &AppState, config: &Config) {
                 Span::styled(
                     prompt_label,
                     Style::default()
-                        .fg(Color::Yellow)
+                        .fg(state.tui_theme.warning)
                         .add_modifier(Modifier::BOLD),
                 ),
-                Span::styled(display, Style::default().fg(Color::White)),
+                Span::styled(display, Style::default().fg(state.tui_theme.text)),
                 Span::styled(
                     "\u{2588}",
                     Style::default()
-                        .fg(Color::White)
+                        .fg(state.tui_theme.text)
                         .add_modifier(Modifier::SLOW_BLINK),
                 ),
             ]))
-            .style(Style::default().bg(Color::DarkGray));
+            .style(Style::default().bg(state.tui_theme.muted));
             frame.render_widget(bar, inject_area);
         }
     }
@@ -250,8 +251,8 @@ pub fn render_running_explorer(frame: &mut Frame, state: &AppState, config: &Con
         .split(chunks[2]);
 
     if let Some(ref explorer_state) = state.running_explorer {
-        startup::render_file_explorer_from(frame, middle_cols[0], explorer_state, state.focused_pane);
-        startup::render_file_preview_from(frame, middle_cols[1], explorer_state, state.focused_pane);
+        startup::render_file_explorer_from(frame, middle_cols[0], explorer_state, state.focused_pane, &state.tui_theme);
+        startup::render_file_preview_from(frame, middle_cols[1], explorer_state, state.focused_pane, &state.tui_theme);
     }
 
     stats::render_dashboard_stats(frame, chunks[3], state, config);

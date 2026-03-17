@@ -619,6 +619,18 @@ pub async fn run_agent(
     cmd.arg("--output-format");
     cmd.arg("stream-json");
     cmd.arg("--verbose");
+    // Override any CLAUDE.md instructions that conflict with foundry's orchestration.
+    // Users' CLAUDE.md files may contain workflow directives (build pipelines, sub-agent
+    // spawning, doubt loops) meant for interactive sessions. These conflict with foundry's
+    // own pipeline stages. The append-system-prompt preserves useful project conventions
+    // from CLAUDE.md while neutralizing meta-workflow instructions.
+    cmd.arg("--append-system-prompt");
+    cmd.arg(concat!(
+        "IMPORTANT: You are running as a single stage in Context Foundry's autonomous pipeline. ",
+        "Ignore any CLAUDE.md instructions about orchestration workflows, build pipelines, ",
+        "SPID stages, doubt loops, sub-agent spawning, or multi-step implementation processes. ",
+        "Foundry handles all orchestration. Focus only on your assigned role and task.",
+    ));
     if let Some(tools) = allowed_tools {
         cmd.arg("--tools");
         cmd.arg(tools.join(","));
@@ -810,8 +822,32 @@ fn read_pty_output(
                         if tx.send(event).is_err() {
                             return; // Channel closed
                         }
+                        // Emit Usage event if a result was just parsed
+                        LAST_RESULT_USAGE.with(|cell| {
+                            if let Some(usage) = cell.take() {
+                                let _ = tx.send(AgentOutputEvent::Usage {
+                                    cost_usd: usage.cost_usd,
+                                    input_tokens: usage.input_tokens,
+                                    output_tokens: usage.output_tokens,
+                                    context_window: usage.context_window,
+                                });
+                            }
+                        });
                     }
-                    ParsedClaudeLine::Ignore => continue,
+                    ParsedClaudeLine::Ignore => {
+                        // Drain usage even when the Result event itself was suppressed
+                        LAST_RESULT_USAGE.with(|cell| {
+                            if let Some(usage) = cell.take() {
+                                let _ = tx.send(AgentOutputEvent::Usage {
+                                    cost_usd: usage.cost_usd,
+                                    input_tokens: usage.input_tokens,
+                                    output_tokens: usage.output_tokens,
+                                    context_window: usage.context_window,
+                                });
+                            }
+                        });
+                        continue;
+                    }
                     ParsedClaudeLine::Unparsed => {
                         let cleaned = strip_ansi(line);
                         if !cleaned.is_empty() {
@@ -931,9 +967,20 @@ fn parse_claude_json(v: &Value, model_name: &str) -> ParsedClaudeLine {
     };
 
     match kind {
-        "assistant" => parse_claude_assistant_message(v)
-            .map(ParsedClaudeLine::Event)
-            .unwrap_or(ParsedClaudeLine::Ignore),
+        "assistant" => {
+            if let Some(usage) = v.get("message").and_then(|m| m.get("usage")) {
+                let turn_input =
+                    usage.get("input_tokens").and_then(|t| t.as_u64()).unwrap_or(0)
+                    + usage.get("cache_creation_input_tokens").and_then(|t| t.as_u64()).unwrap_or(0)
+                    + usage.get("cache_read_input_tokens").and_then(|t| t.as_u64()).unwrap_or(0);
+                if turn_input > 0 {
+                    LAST_TURN_INPUT_TOKENS.with(|c| c.set(turn_input));
+                }
+            }
+            parse_claude_assistant_message(v)
+                .map(ParsedClaudeLine::Event)
+                .unwrap_or(ParsedClaudeLine::Ignore)
+        }
         "user" => parse_claude_user_message(v)
             .map(ParsedClaudeLine::Event)
             .unwrap_or(ParsedClaudeLine::Ignore),
@@ -1184,7 +1231,7 @@ fn parse_claude_result_event(v: &Value) -> Option<AgentOutputEvent> {
     LAST_RESULT_USAGE.with(|cell| {
         let cost = v.get("total_cost_usd").and_then(|c| c.as_f64()).unwrap_or(0.0);
         let usage = v.get("usage");
-        let input_tokens = usage
+        let cumulative_input = usage
             .and_then(|u| u.get("cache_creation_input_tokens"))
             .and_then(|t| t.as_u64())
             .unwrap_or(0)
@@ -1201,6 +1248,16 @@ fn parse_claude_result_event(v: &Value) -> Option<AgentOutputEvent> {
             .and_then(|t| t.as_u64())
             .unwrap_or(0);
 
+        // Use per-turn input tokens from the last assistant event if available.
+        // Falls back to cumulative total when no assistant event was seen
+        // (e.g., single-turn session or stripped stream).
+        let last_turn = LAST_TURN_INPUT_TOKENS.with(|c| c.get());
+        let estimated_input = if last_turn > 0 {
+            last_turn
+        } else {
+            cumulative_input
+        };
+
         // Find context window from modelUsage (first model entry)
         let context_window = v
             .get("modelUsage")
@@ -1212,7 +1269,7 @@ fn parse_claude_result_event(v: &Value) -> Option<AgentOutputEvent> {
 
         cell.set(Some(ResultUsage {
             cost_usd: cost,
-            input_tokens,
+            input_tokens: estimated_input,
             output_tokens,
             context_window,
         }));
@@ -1250,6 +1307,10 @@ struct ResultUsage {
 
 thread_local! {
     static LAST_RESULT_USAGE: std::cell::Cell<Option<ResultUsage>> = const { std::cell::Cell::new(None) };
+}
+
+thread_local! {
+    static LAST_TURN_INPUT_TOKENS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
 }
 
 fn parse_claude_system_event(v: &Value) -> Option<AgentOutputEvent> {
@@ -1719,6 +1780,51 @@ mod tests {
             }
             other => panic!("expected Stderr, got {:?}", other),
         }
+    }
+
+    #[test]
+    fn parse_result_uses_per_turn_input_tokens() {
+        // Reset thread-local state
+        LAST_TURN_INPUT_TOKENS.with(|c| c.set(0));
+        LAST_RESULT_USAGE.with(|c| c.set(None));
+
+        // 1. Parse an assistant event with per-turn usage
+        let assistant_json = r#"{"type":"assistant","message":{"content":[{"type":"text","text":"hello"}],"usage":{"input_tokens":50000,"cache_creation_input_tokens":10000,"cache_read_input_tokens":30000,"output_tokens":500}}}"#;
+        let _ = parse_stream_event(assistant_json);
+
+        // Verify thread-local was set: 50000 + 10000 + 30000 = 90000
+        let stored = LAST_TURN_INPUT_TOKENS.with(|c| c.get());
+        assert_eq!(stored, 90_000, "LAST_TURN_INPUT_TOKENS should be 90000");
+
+        // 2. Parse a result event with cumulative usage (much larger, simulating multi-turn)
+        let result_json = r#"{"type":"result","subtype":"success","result":"done","usage":{"input_tokens":200000,"cache_creation_input_tokens":50000,"cache_read_input_tokens":100000,"output_tokens":20000},"num_turns":10,"total_cost_usd":0.5,"modelUsage":{"claude-sonnet-4-20250514":{"contextWindow":200000}}}"#;
+        let _ = parse_stream_event(result_json);
+
+        // 3. Verify the ResultUsage used per-turn (90000), not cumulative estimate
+        let usage = LAST_RESULT_USAGE.with(|c| c.take());
+        assert!(usage.is_some(), "LAST_RESULT_USAGE should be set");
+        let usage = usage.unwrap();
+        assert_eq!(usage.input_tokens, 90_000, "input_tokens should be per-turn value (90000), not cumulative");
+        assert_eq!(usage.output_tokens, 20_000);
+        assert_eq!(usage.context_window, 200_000);
+        assert!((usage.cost_usd - 0.5).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn parse_result_falls_back_to_cumulative_without_assistant() {
+        // Reset thread-local state
+        LAST_TURN_INPUT_TOKENS.with(|c| c.set(0));
+        LAST_RESULT_USAGE.with(|c| c.set(None));
+
+        // Parse a result event WITHOUT a preceding assistant event
+        let result_json = r#"{"type":"result","subtype":"success","result":"done","usage":{"input_tokens":100000,"cache_creation_input_tokens":20000,"cache_read_input_tokens":50000,"output_tokens":5000},"num_turns":5,"total_cost_usd":0.1,"modelUsage":{"claude-sonnet-4-20250514":{"contextWindow":200000}}}"#;
+        let _ = parse_stream_event(result_json);
+
+        // Should fall back to cumulative: 100000 + 20000 + 50000 = 170000
+        let usage = LAST_RESULT_USAGE.with(|c| c.take());
+        assert!(usage.is_some(), "LAST_RESULT_USAGE should be set");
+        let usage = usage.unwrap();
+        assert_eq!(usage.input_tokens, 170_000, "input_tokens should be cumulative fallback (170000)");
     }
 
     #[test]

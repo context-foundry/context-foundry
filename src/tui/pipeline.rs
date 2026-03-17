@@ -12,9 +12,10 @@ use crate::config::Config;
 use crate::utils::truncate_str;
 
 pub(super) fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppState, config: &Config) {
+    let theme = &state.tui_theme;
     let active_role = state.current_agent.as_ref().map(|(role, _)| role.clone());
 
-    let pipe_color = Color::Rgb(227, 115, 75); // Claude Code orange (#E3734B)
+    let pipe_color = theme.accent;
     let box_width = 14usize;
 
     let roles = config.role_configs();
@@ -69,10 +70,10 @@ pub(super) fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppStat
         let (border_color, text_style) = match active_connected {
             Some(ai) if i == ai => (
                 pipe_color,
-                Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+                Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
             ),
             Some(ai) if i < ai => (Color::Green, Style::default().fg(Color::Green)),
-            _ => (Color::DarkGray, Style::default().fg(Color::DarkGray)),
+            _ => (theme.muted, Style::default().fg(theme.muted)),
         };
 
         StageInfo { label, model_label, kind_label: kind, border_color, text_style }
@@ -100,33 +101,33 @@ pub(super) fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppStat
             model_label: truncate_str(&discovery_model, 14).to_string(),
             kind_label: "TASKS.md",
             border_color: if state.run_mode == "sprint" || state.run_mode == "review" {
-                Color::DarkGray
+                theme.muted
             } else if discovery_active {
                 pipe_color
             } else if discovery_used {
                 Color::Green
             } else {
-                Color::DarkGray
+                theme.muted
             },
             text_style: if state.run_mode == "sprint" || state.run_mode == "review" {
-                Style::default().fg(Color::DarkGray)
+                Style::default().fg(theme.muted)
             } else if discovery_active {
-                Style::default().fg(Color::White).add_modifier(Modifier::BOLD)
+                Style::default().fg(theme.text).add_modifier(Modifier::BOLD)
             } else if discovery_used {
                 Style::default().fg(Color::Green)
             } else {
-                Style::default().fg(Color::DarkGray)
+                Style::default().fg(theme.muted)
             },
         },
         StageInfo {
             label: "PATTERNS",
             model_label: truncate_str(&patterns_model, 14).to_string(),
             kind_label: "~/.foundry/",
-            border_color: if patterns_used { Color::Green } else { Color::DarkGray },
+            border_color: if patterns_used { Color::Green } else { theme.muted },
             text_style: if patterns_used {
                 Style::default().fg(Color::Green)
             } else {
-                Style::default().fg(Color::DarkGray)
+                Style::default().fg(theme.muted)
             },
         },
     ];
@@ -150,14 +151,14 @@ pub(super) fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppStat
         ));
         s.push(Span::styled("\u{2502}", Style::default().fg(color)));
     }
-    fn box_model(s: &mut Vec<Span>, width: usize, model: &str, color: Color) {
+    fn box_model(s: &mut Vec<Span>, width: usize, model: &str, color: Color, muted: Color) {
         let pad_total = width.saturating_sub(model.len());
         let left = pad_total / 2;
         let right = pad_total - left;
         s.push(Span::styled("\u{2502}", Style::default().fg(color)));
         s.push(Span::styled(
             format!("{}{}{}", " ".repeat(left), model, " ".repeat(right)),
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(muted),
         ));
         s.push(Span::styled("\u{2502}", Style::default().fg(color)));
     }
@@ -179,8 +180,8 @@ pub(super) fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppStat
     for (i, stage) in connected.iter().enumerate() {
         box_top(&mut top_spans, box_width, stage.border_color);
         box_mid(&mut mid_spans, box_width, stage.label, stage.text_style, stage.border_color);
-        box_model(&mut model_spans, box_width, &stage.model_label, stage.border_color);
-        box_model(&mut kind_spans, box_width, stage.kind_label, stage.border_color);
+        box_model(&mut model_spans, box_width, &stage.model_label, stage.border_color, theme.muted);
+        box_model(&mut kind_spans, box_width, stage.kind_label, stage.border_color, theme.muted);
         box_bot(&mut bot_spans, box_width, stage.border_color);
 
         if i < connected.len() - 1 {
@@ -206,8 +207,8 @@ pub(super) fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppStat
     for (i, stage) in disconnected.iter().enumerate() {
         box_top(&mut top_spans, box_width, stage.border_color);
         box_mid(&mut mid_spans, box_width, stage.label, stage.text_style, stage.border_color);
-        box_model(&mut model_spans, box_width, &stage.model_label, stage.border_color);
-        box_model(&mut kind_spans, box_width, stage.kind_label, stage.border_color);
+        box_model(&mut model_spans, box_width, &stage.model_label, stage.border_color, theme.muted);
+        box_model(&mut kind_spans, box_width, stage.kind_label, stage.border_color, theme.muted);
         box_bot(&mut bot_spans, box_width, stage.border_color);
 
         if i < disconnected.len() - 1 {
@@ -231,11 +232,11 @@ pub(super) fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppStat
     let pipeline = Paragraph::new(lines).block(
         Block::default()
             .borders(Borders::BOTTOM)
-            .border_style(Style::default().fg(Color::DarkGray))
+            .border_style(Style::default().fg(theme.border))
             .title(Span::styled(
                 " Pipeline ",
                 Style::default()
-                    .fg(Color::Cyan)
+                    .fg(theme.info)
                     .add_modifier(Modifier::BOLD),
             )),
     );

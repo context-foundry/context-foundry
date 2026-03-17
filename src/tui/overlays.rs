@@ -37,22 +37,23 @@ pub(super) fn render_findings(frame: &mut Frame, state: &AppState) {
 }
 
 fn render_findings_list(frame: &mut Frame, area: Rect, state: &AppState) {
+    let theme = &state.tui_theme;
     let Some(ref outcome) = state.last_orchestrator_outcome else {
         let empty = Paragraph::new(vec![
             Line::from(""),
             Line::from(Span::styled(
                 "  No review findings available.",
-                Style::default().fg(Color::DarkGray),
+                Style::default().fg(theme.muted),
             )),
         ])
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::DarkGray))
+                .border_style(Style::default().fg(theme.border))
                 .title(Span::styled(
                     " Review Findings ",
                     Style::default()
-                        .fg(Color::Cyan)
+                        .fg(theme.info)
                         .add_modifier(Modifier::BOLD),
                 )),
         );
@@ -76,7 +77,7 @@ fn render_findings_list(frame: &mut Frame, area: Rect, state: &AppState) {
         "unresolved findings"
     };
     display_lines.push(Line::from(vec![
-        Span::styled("  Status: ", Style::default().fg(Color::White)),
+        Span::styled("  Status: ", Style::default().fg(theme.text)),
         Span::styled(
             status_label,
             Style::default()
@@ -86,7 +87,7 @@ fn render_findings_list(frame: &mut Frame, area: Rect, state: &AppState) {
     ]));
     display_lines.push(Line::from(Span::styled(
         format!("  Iterations: {}", outcome.iterations),
-        Style::default().fg(Color::White),
+        Style::default().fg(theme.text),
     )));
     display_lines.push(Line::from(""));
 
@@ -95,7 +96,7 @@ fn render_findings_list(frame: &mut Frame, area: Rect, state: &AppState) {
     display_lines.push(Line::from(Span::styled(
         format!("  Findings ({})", finding_count),
         Style::default()
-            .fg(Color::White)
+            .fg(theme.text)
             .add_modifier(Modifier::BOLD),
     )));
     display_lines.push(Line::from(""));
@@ -103,7 +104,7 @@ fn render_findings_list(frame: &mut Frame, area: Rect, state: &AppState) {
     if outcome.final_review.findings.is_empty() {
         display_lines.push(Line::from(Span::styled(
             "  No findings.",
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(theme.muted),
         )));
         display_lines.push(Line::from(""));
     } else {
@@ -120,7 +121,7 @@ fn render_findings_list(frame: &mut Frame, area: Rect, state: &AppState) {
                 Span::styled(format!(" {} ", severity_label), severity_style),
                 Span::styled(
                     truncate_str(&finding.description, desc_width).to_string(),
-                    Style::default().fg(Color::White),
+                    Style::default().fg(theme.text),
                 ),
             ]));
 
@@ -130,7 +131,7 @@ fn render_findings_list(frame: &mut Frame, area: Rect, state: &AppState) {
                         "      at {}",
                         truncate_str(&finding.location, inner_width.saturating_sub(9))
                     ),
-                    Style::default().fg(Color::DarkGray),
+                    Style::default().fg(theme.muted),
                 )));
             }
 
@@ -140,7 +141,7 @@ fn render_findings_list(frame: &mut Frame, area: Rect, state: &AppState) {
                         "      Suggestion: {}",
                         truncate_str(&finding.suggestion, inner_width.saturating_sub(18))
                     ),
-                    Style::default().fg(Color::Cyan),
+                    Style::default().fg(theme.info),
                 )));
             }
 
@@ -153,7 +154,7 @@ fn render_findings_list(frame: &mut Frame, area: Rect, state: &AppState) {
     display_lines.push(Line::from(Span::styled(
         format!("  Validated Claims ({})", validated_count),
         Style::default()
-            .fg(Color::Green)
+            .fg(theme.success)
             .add_modifier(Modifier::BOLD),
     )));
     display_lines.push(Line::from(""));
@@ -161,7 +162,7 @@ fn render_findings_list(frame: &mut Frame, area: Rect, state: &AppState) {
     if outcome.final_review.validated.is_empty() {
         display_lines.push(Line::from(Span::styled(
             "  No claims validated.",
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(theme.muted),
         )));
     } else {
         for claim in &outcome.final_review.validated {
@@ -170,7 +171,7 @@ fn render_findings_list(frame: &mut Frame, area: Rect, state: &AppState) {
                     "  \u{2713} {}",
                     truncate_str(claim, inner_width.saturating_sub(4))
                 ),
-                Style::default().fg(Color::Green),
+                Style::default().fg(theme.success),
             )));
         }
     }
@@ -194,11 +195,11 @@ fn render_findings_list(frame: &mut Frame, area: Rect, state: &AppState) {
     let paragraph = Paragraph::new(visible).block(
         Block::default()
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::DarkGray))
+            .border_style(Style::default().fg(theme.border))
             .title(Span::styled(
                 title,
                 Style::default()
-                    .fg(Color::Cyan)
+                    .fg(theme.info)
                     .add_modifier(Modifier::BOLD),
             )),
     );
@@ -211,7 +212,7 @@ fn render_findings_status_bar(frame: &mut Frame, area: Rect, state: &AppState) {
             " f ",
             Style::default()
                 .fg(Color::Black)
-                .bg(Color::Cyan)
+                .bg(state.tui_theme.info)
                 .add_modifier(Modifier::BOLD),
         ),
         Span::raw(" back  "),
@@ -219,7 +220,7 @@ fn render_findings_status_bar(frame: &mut Frame, area: Rect, state: &AppState) {
             " ↑↓ ",
             Style::default()
                 .fg(Color::Black)
-                .bg(Color::DarkGray)
+                .bg(state.tui_theme.muted)
                 .add_modifier(Modifier::BOLD),
         ),
         Span::raw(" scroll  "),
@@ -227,7 +228,7 @@ fn render_findings_status_bar(frame: &mut Frame, area: Rect, state: &AppState) {
             " q ",
             Style::default()
                 .fg(Color::Black)
-                .bg(Color::DarkGray)
+                .bg(state.tui_theme.muted)
                 .add_modifier(Modifier::BOLD),
         ),
         Span::raw(" quit"),
@@ -237,7 +238,7 @@ fn render_findings_status_bar(frame: &mut Frame, area: Rect, state: &AppState) {
         spans.push(Span::styled(
             format!(" | v{} available", version),
             Style::default()
-                .fg(Color::Green)
+                .fg(state.tui_theme.success)
                 .add_modifier(Modifier::BOLD),
         ));
     }
@@ -246,6 +247,7 @@ fn render_findings_status_bar(frame: &mut Frame, area: Rect, state: &AppState) {
 }
 
 fn render_patterns_list(frame: &mut Frame, area: Rect, state: &AppState, config: &Config) {
+    let theme = &state.tui_theme;
     use crate::patterns;
 
     // Use cached patterns (populated when 'p' is pressed) to avoid
@@ -266,26 +268,26 @@ fn render_patterns_list(frame: &mut Frame, area: Rect, state: &AppState, config:
             Line::from(""),
             Line::from(Span::styled(
                 "  No patterns learned yet.",
-                Style::default().fg(Color::DarkGray),
+                Style::default().fg(theme.muted),
             )),
             Line::from(""),
             Line::from(Span::styled(
                 "  Patterns are extracted after each task completes.",
-                Style::default().fg(Color::DarkGray),
+                Style::default().fg(theme.muted),
             )),
             Line::from(Span::styled(
                 format!("  They will appear in: {}", patterns_dir.display()),
-                Style::default().fg(Color::DarkGray),
+                Style::default().fg(theme.muted),
             )),
         ])
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::DarkGray))
+                .border_style(Style::default().fg(theme.border))
                 .title(Span::styled(
                     " Learned Patterns ",
                     Style::default()
-                        .fg(Color::Cyan)
+                        .fg(theme.info)
                         .add_modifier(Modifier::BOLD),
                 )),
         );
@@ -322,12 +324,12 @@ fn render_patterns_list(frame: &mut Frame, area: Rect, state: &AppState, config:
                         .saturating_sub(severity.len() + freq_label.len() + auto_label.len() + 4),
                 ),
                 Style::default()
-                    .fg(Color::White)
+                    .fg(theme.text)
                     .add_modifier(Modifier::BOLD),
             ),
             Span::styled(
                 format!("{}{}", freq_label, auto_label),
-                Style::default().fg(Color::DarkGray),
+                Style::default().fg(theme.muted),
             ),
         ]));
 
@@ -348,7 +350,7 @@ fn render_patterns_list(frame: &mut Frame, area: Rect, state: &AppState, config:
                         "      Fix: {}",
                         truncate_str(&solution.planner, inner_width.saturating_sub(11))
                     ),
-                    Style::default().fg(Color::Cyan),
+                    Style::default().fg(theme.info),
                 )));
             }
         }
@@ -375,11 +377,11 @@ fn render_patterns_list(frame: &mut Frame, area: Rect, state: &AppState, config:
     let paragraph = Paragraph::new(visible).block(
         Block::default()
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::DarkGray))
+            .border_style(Style::default().fg(theme.border))
             .title(Span::styled(
                 title,
                 Style::default()
-                    .fg(Color::Cyan)
+                    .fg(theme.info)
                     .add_modifier(Modifier::BOLD),
             )),
     );
@@ -393,7 +395,7 @@ fn render_patterns_status_bar(frame: &mut Frame, area: Rect, state: &AppState) {
             " p ",
             Style::default()
                 .fg(Color::Black)
-                .bg(Color::Cyan)
+                .bg(state.tui_theme.info)
                 .add_modifier(Modifier::BOLD),
         ),
         Span::raw(back_label),
@@ -401,7 +403,7 @@ fn render_patterns_status_bar(frame: &mut Frame, area: Rect, state: &AppState) {
             " ↑↓ ",
             Style::default()
                 .fg(Color::Black)
-                .bg(Color::DarkGray)
+                .bg(state.tui_theme.muted)
                 .add_modifier(Modifier::BOLD),
         ),
         Span::raw(" scroll  "),
@@ -409,7 +411,7 @@ fn render_patterns_status_bar(frame: &mut Frame, area: Rect, state: &AppState) {
             " q ",
             Style::default()
                 .fg(Color::Black)
-                .bg(Color::DarkGray)
+                .bg(state.tui_theme.muted)
                 .add_modifier(Modifier::BOLD),
         ),
         Span::raw(" quit"),
@@ -419,7 +421,7 @@ fn render_patterns_status_bar(frame: &mut Frame, area: Rect, state: &AppState) {
         spans.push(Span::styled(
             format!(" | v{} available", version),
             Style::default()
-                .fg(Color::Green)
+                .fg(state.tui_theme.success)
                 .add_modifier(Modifier::BOLD),
         ));
     }

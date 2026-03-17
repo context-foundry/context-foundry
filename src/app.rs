@@ -48,6 +48,7 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
     let shutdown = Arc::new(AtomicBool::new(false));
     let mut state = AppState::new(buildloop_dir);
     state.run_mode = config.run_mode.clone();
+    state.tui_theme = crate::tui::theme::from_name(&config.theme);
 
     // Git/GH readiness checks (advisory, non-blocking)
     for msg in git::check_git_readiness(project_dir) {

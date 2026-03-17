@@ -310,8 +310,8 @@ fn render_startup_summary(frame: &mut Frame, area: Rect, state: &AppState) {
             Span::styled(
                 if state.show_run_view { " Dashboard " } else { " Explore " },
                 Style::default()
-                    .fg(Color::White)
-                    .bg(Color::Rgb(60, 60, 80))
+                    .fg(state.tui_theme.text)
+                    .bg(state.tui_theme.surface)
                     .add_modifier(Modifier::BOLD),
             ),
         ]),
@@ -321,32 +321,32 @@ fn render_startup_summary(frame: &mut Frame, area: Rect, state: &AppState) {
                 if startup.has_spec { "yes" } else { "no" },
                 startup.plan_status_label()
             ),
-            Style::default().fg(Color::Gray),
+            Style::default().fg(state.tui_theme.muted),
         )),
         Line::from(Span::styled(
             format!(
                 "  Tasks: {}/{} complete",
                 state.completed_count, state.total_count
             ),
-            Style::default().fg(Color::Gray),
+            Style::default().fg(state.tui_theme.muted),
         )),
         Line::from(Span::styled(
             format!("  Git: {}", git_summary),
             Style::default().fg(if startup.git_context.is_none() {
                 Color::Red
             } else {
-                Color::Gray
+                state.tui_theme.muted
             }),
         )),
         Line::from(Span::styled(
             format!("  {}", startup.summary_headline()),
             Style::default()
-                .fg(Color::White)
+                .fg(state.tui_theme.text)
                 .add_modifier(Modifier::BOLD),
         )),
         Line::from(Span::styled(
             format!("  {}", startup.summary_detail()),
-            Style::default().fg(Color::Gray),
+            Style::default().fg(state.tui_theme.muted),
         )),
     ];
 
@@ -360,7 +360,7 @@ fn render_startup_summary(frame: &mut Frame, area: Rect, state: &AppState) {
                 "  Recent: {}",
                 truncate_str(commit, area.width.saturating_sub(12) as usize)
             ),
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(state.tui_theme.muted),
         )));
     }
 
@@ -371,7 +371,7 @@ fn render_startup_summary(frame: &mut Frame, area: Rect, state: &AppState) {
                 truncate_str(next_task, area.width.saturating_sub(10) as usize)
             ),
             Style::default()
-                .fg(Color::Cyan)
+                .fg(state.tui_theme.info)
                 .add_modifier(Modifier::BOLD),
         )));
     }
@@ -382,14 +382,14 @@ fn render_startup_summary(frame: &mut Frame, area: Rect, state: &AppState) {
                 "  {}",
                 truncate_str(message, area.width.saturating_sub(4) as usize)
             ),
-            Style::default().fg(Color::Yellow),
+            Style::default().fg(state.tui_theme.warning),
         )));
     }
 
     let summary = Paragraph::new(lines).block(
         Block::default()
             .borders(Borders::BOTTOM)
-            .border_style(Style::default().fg(Color::DarkGray)),
+            .border_style(Style::default().fg(state.tui_theme.border)),
     );
     frame.render_widget(summary, area);
 }
@@ -420,6 +420,7 @@ fn render_file_explorer(frame: &mut Frame, area: Rect, state: &AppState) {
     let Some(startup) = state.startup.as_ref() else {
         return;
     };
+    let theme = &state.tui_theme;
 
     let visible_height = area.height.saturating_sub(2) as usize;
     let vis = startup.visible_indices();
@@ -467,13 +468,13 @@ fn render_file_explorer(frame: &mut Frame, area: Rect, state: &AppState) {
 
             let is_selected = tree_idx == startup.explorer_selected;
             let fg_color = if entry.is_hidden {
-                Color::DarkGray
+                theme.muted
             } else if entry.is_cf_highlight {
-                Color::Rgb(227, 115, 75) // CF orange
+                theme.accent
             } else if entry.is_dir {
-                Color::Cyan
+                theme.info
             } else {
-                Color::White
+                theme.text
             };
             let style = if is_selected {
                 Style::default()
@@ -509,7 +510,7 @@ fn render_file_explorer(frame: &mut Frame, area: Rect, state: &AppState) {
                 let detail_style = if is_selected {
                     Style::default().fg(Color::Black).bg(fg_color)
                 } else {
-                    Style::default().fg(Color::DarkGray)
+                    Style::default().fg(theme.muted)
                 };
 
                 ListItem::new(Line::from(vec![
@@ -532,19 +533,19 @@ fn render_file_explorer(frame: &mut Frame, area: Rect, state: &AppState) {
     let has_dirs = startup.file_tree.iter().any(|e| e.is_dir);
     let mut block = Block::default()
         .borders(Borders::ALL)
-        .border_style(pane_border_style(state.focused_pane, TuiPane::Explorer))
+        .border_style(pane_border_style(state.focused_pane, TuiPane::Explorer, theme))
         .border_type(pane_border_type(state.focused_pane, TuiPane::Explorer))
         .title(Span::styled(
             " Files ",
             Style::default()
-                .fg(Color::White)
+                .fg(theme.text)
                 .add_modifier(Modifier::BOLD),
         ));
     if has_dirs {
         block = block.title_top(
             Line::from(Span::styled(
                 expand_label,
-                Style::default().fg(Color::DarkGray),
+                Style::default().fg(theme.muted),
             ))
             .right_aligned(),
         );
@@ -569,23 +570,23 @@ fn render_file_preview(frame: &mut Frame, area: Rect, state: &AppState) {
     if startup.file_preview_content.is_empty() {
         let empty = Paragraph::new(Span::styled(
             " Select a file to preview",
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(state.tui_theme.muted),
         ))
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .border_style(pane_border_style(state.focused_pane, TuiPane::Preview))
+                .border_style(pane_border_style(state.focused_pane, TuiPane::Preview, &state.tui_theme))
                 .border_type(pane_border_type(state.focused_pane, TuiPane::Preview))
                 .title(Span::styled(
                     format!(" {} ", title),
                     Style::default()
-                        .fg(Color::White)
+                        .fg(state.tui_theme.text)
                         .add_modifier(Modifier::BOLD),
                 ))
                 .title_top(
                     Line::from(Span::styled(
                         wrap_label,
-                        Style::default().fg(Color::DarkGray),
+                        Style::default().fg(state.tui_theme.muted),
                     ))
                     .right_aligned(),
                 ),
@@ -606,27 +607,27 @@ fn render_file_preview(frame: &mut Frame, area: Rect, state: &AppState) {
             Line::from(vec![
                 Span::styled(
                     format!("{:>4} ", i + 1),
-                    Style::default().fg(Color::DarkGray),
+                    Style::default().fg(state.tui_theme.muted),
                 ),
-                Span::styled(line.as_str(), Style::default().fg(Color::White)),
+                Span::styled(line.as_str(), Style::default().fg(state.tui_theme.text)),
             ])
         })
         .collect();
 
     let block = Block::default()
         .borders(Borders::ALL)
-        .border_style(pane_border_style(state.focused_pane, TuiPane::Preview))
+        .border_style(pane_border_style(state.focused_pane, TuiPane::Preview, &state.tui_theme))
         .border_type(pane_border_type(state.focused_pane, TuiPane::Preview))
         .title(Span::styled(
             format!(" {} ", title),
             Style::default()
-                .fg(Color::White)
+                .fg(state.tui_theme.text)
                 .add_modifier(Modifier::BOLD),
         ))
         .title_top(
             Line::from(Span::styled(
                 wrap_label,
-                Style::default().fg(Color::DarkGray),
+                Style::default().fg(state.tui_theme.muted),
             ))
             .right_aligned(),
         );
@@ -642,6 +643,7 @@ pub(super) fn render_file_explorer_from(
     area: Rect,
     startup: &StartupState,
     focused: TuiPane,
+    theme: &super::theme::TuiTheme,
 ) {
     let visible_height = area.height.saturating_sub(2) as usize;
     let vis = startup.visible_indices();
@@ -686,13 +688,13 @@ pub(super) fn render_file_explorer_from(
 
             let is_selected = tree_idx == startup.explorer_selected;
             let fg_color = if entry.is_hidden {
-                Color::DarkGray
+                theme.muted
             } else if entry.is_cf_highlight {
-                Color::Rgb(227, 115, 75)
+                theme.accent
             } else if entry.is_dir {
-                Color::Cyan
+                theme.info
             } else {
-                Color::White
+                theme.text
             };
             let style = if is_selected {
                 Style::default()
@@ -727,7 +729,7 @@ pub(super) fn render_file_explorer_from(
                 let detail_style = if is_selected {
                     Style::default().fg(Color::Black).bg(fg_color)
                 } else {
-                    Style::default().fg(Color::DarkGray)
+                    Style::default().fg(theme.muted)
                 };
 
                 ListItem::new(Line::from(vec![
@@ -750,19 +752,19 @@ pub(super) fn render_file_explorer_from(
     let has_dirs = startup.file_tree.iter().any(|e| e.is_dir);
     let mut block = Block::default()
         .borders(Borders::ALL)
-        .border_style(pane_border_style(focused, TuiPane::Explorer))
+        .border_style(pane_border_style(focused, TuiPane::Explorer, theme))
         .border_type(pane_border_type(focused, TuiPane::Explorer))
         .title(Span::styled(
             " Files ",
             Style::default()
-                .fg(Color::White)
+                .fg(theme.text)
                 .add_modifier(Modifier::BOLD),
         ));
     if has_dirs {
         block = block.title_top(
             Line::from(Span::styled(
                 expand_label,
-                Style::default().fg(Color::DarkGray),
+                Style::default().fg(theme.muted),
             ))
             .right_aligned(),
         );
@@ -776,6 +778,7 @@ pub(super) fn render_file_preview_from(
     area: Rect,
     startup: &StartupState,
     focused: TuiPane,
+    theme: &super::theme::TuiTheme,
 ) {
     let title = startup
         .file_tree
@@ -783,14 +786,14 @@ pub(super) fn render_file_preview_from(
         .map(|e| e.name.clone())
         .unwrap_or_else(|| "Preview".to_string());
 
-    let border_style = pane_border_style(focused, TuiPane::Preview);
+    let border_style = pane_border_style(focused, TuiPane::Preview, theme);
     let border_type = pane_border_type(focused, TuiPane::Preview);
     let wrap_label = if startup.preview_wrap { "[wrap] " } else { "[no-wrap] " };
 
     if startup.file_preview_content.is_empty() {
         let empty = Paragraph::new(Span::styled(
             " Select a file to preview",
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(theme.muted),
         ))
         .block(
             Block::default()
@@ -800,13 +803,13 @@ pub(super) fn render_file_preview_from(
                 .title(Span::styled(
                     format!(" {} ", title),
                     Style::default()
-                        .fg(Color::White)
+                        .fg(theme.text)
                         .add_modifier(Modifier::BOLD),
                 ))
                 .title_top(
                     Line::from(Span::styled(
                         wrap_label,
-                        Style::default().fg(Color::DarkGray),
+                        Style::default().fg(theme.muted),
                     ))
                     .right_aligned(),
                 ),
@@ -827,9 +830,9 @@ pub(super) fn render_file_preview_from(
             Line::from(vec![
                 Span::styled(
                     format!("{:>4} ", i + 1),
-                    Style::default().fg(Color::DarkGray),
+                    Style::default().fg(theme.muted),
                 ),
-                Span::styled(line.as_str(), Style::default().fg(Color::White)),
+                Span::styled(line.as_str(), Style::default().fg(theme.text)),
             ])
         })
         .collect();
@@ -848,13 +851,13 @@ pub(super) fn render_file_preview_from(
         .title(Span::styled(
             scroll_indicator,
             Style::default()
-                .fg(Color::White)
+                .fg(theme.text)
                 .add_modifier(Modifier::BOLD),
         ))
         .title_top(
             Line::from(Span::styled(
                 wrap_label,
-                Style::default().fg(Color::DarkGray),
+                Style::default().fg(theme.muted),
             ))
             .right_aligned(),
         );
@@ -878,24 +881,24 @@ fn render_input_prompt(frame: &mut Frame, area: Rect, state: &AppState) {
             Span::styled(
                 " > ",
                 Style::default()
-                    .fg(Color::Rgb(227, 115, 75))
+                    .fg(state.tui_theme.accent)
                     .add_modifier(Modifier::BOLD),
             ),
-            Span::styled(placeholder, Style::default().fg(Color::DarkGray)),
+            Span::styled(placeholder, Style::default().fg(state.tui_theme.muted)),
         ])
     } else {
         Line::from(vec![
             Span::styled(
                 " > ",
                 Style::default()
-                    .fg(Color::Rgb(227, 115, 75))
+                    .fg(state.tui_theme.accent)
                     .add_modifier(Modifier::BOLD),
             ),
             Span::styled(
                 startup.intent_input.as_str(),
-                Style::default().fg(Color::White),
+                Style::default().fg(state.tui_theme.text),
             ),
-            Span::styled("\u{2588}", Style::default().fg(Color::White)),
+            Span::styled("\u{2588}", Style::default().fg(state.tui_theme.text)),
         ])
     };
 
@@ -904,11 +907,11 @@ fn render_input_prompt(frame: &mut Frame, area: Rect, state: &AppState) {
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Rgb(227, 115, 75)))
+                .border_style(Style::default().fg(state.tui_theme.accent))
                 .title(Span::styled(
                     " What do you want to do? ",
                     Style::default()
-                        .fg(Color::Rgb(227, 115, 75))
+                        .fg(state.tui_theme.accent)
                         .add_modifier(Modifier::BOLD),
                 )),
         );
@@ -921,7 +924,7 @@ pub(super) fn render_startup_status_bar(frame: &mut Frame, area: Rect, state: &A
             " \u{2191}\u{2193} ",
             Style::default()
                 .fg(Color::Black)
-                .bg(Color::DarkGray)
+                .bg(state.tui_theme.muted)
                 .add_modifier(Modifier::BOLD),
         ),
         Span::raw(" navigate  "),
@@ -929,7 +932,7 @@ pub(super) fn render_startup_status_bar(frame: &mut Frame, area: Rect, state: &A
             " Enter ",
             Style::default()
                 .fg(Color::Black)
-                .bg(Color::DarkGray)
+                .bg(state.tui_theme.muted)
                 .add_modifier(Modifier::BOLD),
         ),
         Span::raw(" submit  "),
@@ -937,7 +940,7 @@ pub(super) fn render_startup_status_bar(frame: &mut Frame, area: Rect, state: &A
             " Ctrl+U ",
             Style::default()
                 .fg(Color::Black)
-                .bg(Color::DarkGray)
+                .bg(state.tui_theme.muted)
                 .add_modifier(Modifier::BOLD),
         ),
         Span::raw(" clear  "),
@@ -945,7 +948,7 @@ pub(super) fn render_startup_status_bar(frame: &mut Frame, area: Rect, state: &A
             " Esc ",
             Style::default()
                 .fg(Color::Black)
-                .bg(Color::DarkGray)
+                .bg(state.tui_theme.muted)
                 .add_modifier(Modifier::BOLD),
         ),
         Span::raw(" quit"),
@@ -955,7 +958,7 @@ pub(super) fn render_startup_status_bar(frame: &mut Frame, area: Rect, state: &A
         "  Tab ",
         Style::default()
             .fg(Color::Black)
-            .bg(Color::Rgb(227, 115, 75))
+            .bg(state.tui_theme.accent)
             .add_modifier(Modifier::BOLD),
     ));
     spans.push(Span::raw(if state.show_run_view {
@@ -985,7 +988,7 @@ pub(super) fn render_startup_status_bar(frame: &mut Frame, area: Rect, state: &A
             "  ^F ",
             Style::default()
                 .fg(Color::Black)
-                .bg(Color::DarkGray)
+                .bg(state.tui_theme.muted)
                 .add_modifier(Modifier::BOLD),
         ));
         spans.push(Span::raw(" findings"));
@@ -995,14 +998,14 @@ pub(super) fn render_startup_status_bar(frame: &mut Frame, area: Rect, state: &A
     let ext_status = format_extensions_status(&state.available_extensions);
     spans.push(Span::styled(
         format!("  {} ", ext_status),
-        Style::default().fg(Color::Rgb(227, 115, 75)),
+        Style::default().fg(state.tui_theme.accent),
     ));
     if !state.available_extensions.is_empty() {
         spans.push(Span::styled(
             " ^E ",
             Style::default()
                 .fg(Color::Black)
-                .bg(Color::DarkGray)
+                .bg(state.tui_theme.muted)
                 .add_modifier(Modifier::BOLD),
         ));
         spans.push(Span::raw("focus"));
@@ -1012,7 +1015,7 @@ pub(super) fn render_startup_status_bar(frame: &mut Frame, area: Rect, state: &A
         spans.push(Span::styled(
             format!(" | v{} available", version),
             Style::default()
-                .fg(Color::Green)
+                .fg(state.tui_theme.success)
                 .add_modifier(Modifier::BOLD),
         ));
     }
@@ -1021,12 +1024,12 @@ pub(super) fn render_startup_status_bar(frame: &mut Frame, area: Rect, state: &A
 }
 
 fn render_extensions_panel(frame: &mut Frame, area: Rect, state: &AppState) {
-    let border_style = pane_border_style(state.focused_pane, TuiPane::Extensions);
+    let border_style = pane_border_style(state.focused_pane, TuiPane::Extensions, &state.tui_theme);
     let border_type = pane_border_type(state.focused_pane, TuiPane::Extensions);
     let title_span = Span::styled(
         " Extensions ",
         Style::default()
-            .fg(Color::Rgb(227, 115, 75))
+            .fg(state.tui_theme.accent)
             .add_modifier(Modifier::BOLD),
     );
 
@@ -1034,11 +1037,11 @@ fn render_extensions_panel(frame: &mut Frame, area: Rect, state: &AppState) {
         let paragraph = Paragraph::new(vec![
             Line::from(Span::styled(
                 "  No extensions found.",
-                Style::default().fg(Color::DarkGray),
+                Style::default().fg(state.tui_theme.muted),
             )),
             Line::from(Span::styled(
                 "  Add to ~/.foundry/extensions/",
-                Style::default().fg(Color::DarkGray),
+                Style::default().fg(state.tui_theme.muted),
             )),
         ])
         .block(
@@ -1073,20 +1076,20 @@ fn render_extensions_panel(frame: &mut Frame, area: Rect, state: &AppState) {
             let name_style = if is_cursor {
                 Style::default()
                     .fg(Color::Black)
-                    .bg(Color::Rgb(227, 115, 75))
+                    .bg(state.tui_theme.accent)
                     .add_modifier(Modifier::BOLD)
             } else if ext.selected {
                 Style::default().fg(Color::Green)
             } else {
-                Style::default().fg(Color::White)
+                Style::default().fg(state.tui_theme.text)
             };
 
             let desc_style = if is_cursor {
                 Style::default()
                     .fg(Color::Black)
-                    .bg(Color::Rgb(227, 115, 75))
+                    .bg(state.tui_theme.accent)
             } else {
-                Style::default().fg(Color::DarkGray)
+                Style::default().fg(state.tui_theme.muted)
             };
 
             Line::from(vec![
@@ -1132,15 +1135,16 @@ mod tests {
 
     #[test]
     fn style_for_line_uses_expected_semantic_colors() {
-        assert_eq!(style_for_line("[stderr] boom").fg, Some(Color::Red));
-        assert_eq!(style_for_line("[tool] read").fg, Some(Color::Cyan));
-        assert_eq!(style_for_line("[result] ok").fg, Some(Color::DarkGray));
+        let theme = crate::tui::theme::TuiTheme::default();
+        assert_eq!(style_for_line("[stderr] boom", &theme).fg, Some(Color::Red));
+        assert_eq!(style_for_line("[tool] read", &theme).fg, Some(Color::Cyan));
+        assert_eq!(style_for_line("[result] ok", &theme).fg, Some(Color::DarkGray));
         assert_eq!(
-            style_for_line("[rate limited] wait").fg,
+            style_for_line("[rate limited] wait", &theme).fg,
             Some(Color::Yellow)
         );
-        assert_eq!(style_for_line("[studio] note").fg, Some(Color::Cyan));
-        assert_eq!(style_for_line("plain text").fg, Some(Color::White));
+        assert_eq!(style_for_line("[studio] note", &theme).fg, Some(Color::Cyan));
+        assert_eq!(style_for_line("plain text", &theme).fg, Some(Color::White));
     }
 
     #[test]
