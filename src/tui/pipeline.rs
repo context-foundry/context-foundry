@@ -51,7 +51,7 @@ pub(super) fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppStat
     .iter()
     .enumerate()
     .map(|(i, (label, role_idx, kind))| {
-        let model_label = if let Some(ri) = role_idx {
+        let mut model_label = if let Some(ri) = role_idx {
             if *ri < roles.len() {
                 let (_name, provider, model) = roles[*ri];
                 let display = Config::display_provider_model(provider, model);
@@ -66,6 +66,13 @@ pub(super) fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppStat
         } else {
             String::new()
         };
+
+        // Override IMPLEMENT label for dual-build mode
+        if i == 2 && state.dual_build.active {
+            let a = &state.dual_build.models[0];
+            let b = &state.dual_build.models[1];
+            model_label = truncate_str(&format!("{} + {}", a, b), 14).to_string();
+        }
 
         let (border_color, text_style) = match active_connected {
             Some(ai) if i == ai => (

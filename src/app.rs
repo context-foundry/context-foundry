@@ -587,6 +587,7 @@ fn handle_planning_event(state: &mut AppState, event: AppEvent, config: &Config)
             }
         }
         AppEvent::AgentDone(success) => handle_agent_done(state, success),
+        AppEvent::DualBuildOutput(idx, output) => handle_dual_build_output(state, idx, output),
         AppEvent::PlanningFinished(outcome) => apply_planning_outcome(state, outcome),
         AppEvent::OrchestratorFinished(outcome) => apply_orchestrator_outcome(state, outcome),
         AppEvent::Key(key) => handle_planning_key(state, key, config),
@@ -660,6 +661,7 @@ fn handle_planning_key(state: &mut AppState, key: event::KeyEvent, config: &Conf
 fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
     match event {
         AppEvent::AgentOutput(output) => handle_agent_output(state, output),
+        AppEvent::DualBuildOutput(idx, output) => handle_dual_build_output(state, idx, output),
         AppEvent::AgentDone(success) => handle_agent_done(state, success),
         AppEvent::LoopEvent(le) => match le {
             LoopEvent::TaskStarted(task) => {
@@ -678,7 +680,35 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                 }
                 state.set_agent(role, &model);
             }
+            LoopEvent::DualBuildStarted { models } => {
+                state.dual_build = state::DualBuildState {
+                    active: true,
+                    streams: [Vec::new(), Vec::new()],
+                    event_counts: [0, 0],
+                    models: models.clone(),
+                    tab: 0,
+                    context_pcts: [None, None],
+                    finished: [false, false],
+                    comparison: None,
+                };
+                state.log(format!("Dual build started: {} vs {}", models[0], models[1]));
+            }
+            LoopEvent::DualBuildStreamDone(idx, success) => {
+                if idx < 2 {
+                    state.dual_build.finished[idx] = true;
+                    let status = if success { "completed" } else { "failed" };
+                    state.log(format!("Builder {} ({}): {}", idx + 1, state.dual_build.models[idx], status));
+                }
+            }
+            LoopEvent::DualBuildComparisonReady(comparison) => {
+                state.log(format!(
+                    "Dual build comparison: winner = {} ({})",
+                    comparison.labels[comparison.winner], comparison.reason
+                ));
+                state.dual_build.comparison = Some(comparison);
+            }
             LoopEvent::TaskCompleted(id, success) => {
+                state.reset_dual_build();
                 let status = if success { "done" } else { "WIP" };
                 if success {
                     state.session_feat_commits += 1;
@@ -1006,6 +1036,18 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                     }
                     KeyCode::Char('i') => {
                         state.inject_input = Some(String::new());
+                    }
+                    KeyCode::Char('1') => {
+                        if state.dual_build.active {
+                            state.dual_build.tab = 0;
+                            state.dual_build.comparison = None;
+                        }
+                    }
+                    KeyCode::Char('2') => {
+                        if state.dual_build.active {
+                            state.dual_build.tab = 1;
+                            state.dual_build.comparison = None;
+                        }
                     }
                     KeyCode::Up => {
                         if state.show_findings {
@@ -1390,6 +1432,60 @@ fn handle_agent_output(state: &mut AppState, output: AgentOutputEvent) {
         } else {
             state.scroll_offset = 0;
         }
+    }
+}
+
+fn handle_dual_build_output(state: &mut AppState, idx: usize, output: AgentOutputEvent) {
+    if idx >= 2 { return; }
+    state.dual_build.event_counts[idx] += 1;
+
+    match &output {
+        AgentOutputEvent::Text(text) => {
+            state.dual_build.streams[idx].push(text.clone());
+        }
+        AgentOutputEvent::ToolUse { tool, input_preview } => {
+            let msg = if input_preview.is_empty() {
+                format!("[tool] {}", tool)
+            } else {
+                format!("[tool] {} -- {}", tool, input_preview)
+            };
+            state.dual_build.streams[idx].push(msg);
+        }
+        AgentOutputEvent::ToolResult { output_preview } => {
+            if !output_preview.is_empty() {
+                let first_line = output_preview.lines().next().unwrap_or("");
+                let display = if first_line.len() > 100 {
+                    format!("[result] {}...", truncate_str(first_line, 100))
+                } else {
+                    format!("[result] {}", first_line)
+                };
+                state.dual_build.streams[idx].push(display);
+            }
+        }
+        AgentOutputEvent::Stderr(line) => {
+            state.dual_build.streams[idx].push(format!("[stderr] {}", line));
+        }
+        AgentOutputEvent::Result(text) => {
+            state.dual_build.streams[idx].push(String::new());
+            for line in text.lines().take(10) {
+                state.dual_build.streams[idx].push(line.to_string());
+            }
+        }
+        AgentOutputEvent::Usage { cost_usd, input_tokens, output_tokens, context_window } => {
+            state.session_cost_usd += cost_usd;
+            let total_tokens = input_tokens + output_tokens;
+            if *context_window > 0 {
+                let pct = ((total_tokens as f64 / *context_window as f64) * 100.0).min(100.0) as u8;
+                state.dual_build.context_pcts[idx] = Some(pct);
+            }
+        }
+    }
+
+    // Cap stream buffer
+    let cap = AGENT_OUTPUT_CAP;
+    if state.dual_build.streams[idx].len() > cap {
+        let excess = state.dual_build.streams[idx].len() - cap;
+        state.dual_build.streams[idx].drain(..excess);
     }
 }
 

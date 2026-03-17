@@ -44,6 +44,10 @@ pub struct Config {
     pub scout_model: String,
     pub planner_model: String,
     pub builder_model: String,
+    /// Dual-model execution: e.g. ["claude:opus", "codex:"].
+    /// When len >= 2, overrides builder_model/builder_provider.
+    /// Format: "provider:model" where provider is "claude" or "codex".
+    pub builder_models: Vec<String>,
     pub reviewer_model: String,
     pub fixer_model: String,
     pub discovery_model: String,
@@ -176,6 +180,7 @@ impl Default for Config {
             scout_model: "sonnet".into(),
             planner_model: "opus".into(),
             builder_model: "opus".into(),
+            builder_models: Vec::new(),
             reviewer_model: "sonnet".into(),
             fixer_model: "sonnet".into(),
             discovery_model: "opus".into(),
@@ -278,6 +283,19 @@ impl Config {
         match value.trim().to_lowercase().as_str() {
             "codex" => ModelProvider::Codex,
             _ => ModelProvider::Claude,
+        }
+    }
+
+    /// Split a "provider:model" spec into (provider, model) tuple.
+    /// If no `:` is found, the entire string is treated as the provider.
+    pub fn parse_model_spec(spec: &str) -> (String, String) {
+        match spec.find(':') {
+            Some(pos) => {
+                let provider = spec[..pos].trim().to_string();
+                let model = spec[pos + 1..].trim().to_string();
+                (provider, model)
+            }
+            None => (spec.trim().to_string(), String::new()),
         }
     }
 

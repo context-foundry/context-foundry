@@ -211,6 +211,29 @@ pub(super) enum PendingTransition {
     },
 }
 
+// ─── Dual Build State ─────────────────────────────────────
+
+#[derive(Debug, Clone)]
+pub struct DualBuildComparison {
+    pub labels: [String; 2],
+    pub diff_stats: [String; 2],        // e.g. "+312/-44"
+    pub test_results: [String; 2],      // "PASS" or "FAIL"
+    pub winner: usize,                  // 0 or 1
+    pub reason: String,                 // "smaller diff, all tests pass"
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct DualBuildState {
+    pub active: bool,
+    pub streams: [Vec<String>; 2],
+    pub event_counts: [usize; 2],
+    pub models: [String; 2],
+    pub tab: usize,
+    pub context_pcts: [Option<u8>; 2],
+    pub finished: [bool; 2],
+    pub comparison: Option<DualBuildComparison>,
+}
+
 pub struct AppState {
     pub buildloop_dir: PathBuf,
     pub phase: AppPhase,
@@ -268,6 +291,7 @@ pub struct AppState {
     pub session_start: DateTime<Utc>,
     pub session_cost_usd: f64,
     pub agent_context_pct: Option<u8>, // Context window % used by current/last agent
+    pub dual_build: DualBuildState,
     pub spid_context_pcts: [Option<u8>; 4], // Per-stage context %: [Scout, Plan, Implement, Doubt]
     pub task_start: Option<DateTime<Utc>>,
     pub task_stages_seen: Vec<AgentRole>,
@@ -347,6 +371,7 @@ impl AppState {
             session_start: Utc::now(),
             session_cost_usd: 0.0,
             agent_context_pct: None,
+            dual_build: DualBuildState::default(),
             spid_context_pcts: [None; 4],
             task_start: None,
             task_stages_seen: Vec::new(),
@@ -381,6 +406,10 @@ impl AppState {
         self.current_agent_model = None;
         self.agent_output.clear();
         self.scroll_offset = 0;
+    }
+
+    pub(super) fn reset_dual_build(&mut self) {
+        self.dual_build = DualBuildState::default();
     }
 
     pub(super) fn set_agent(&mut self, role: AgentRole, model: &str) {
@@ -422,6 +451,7 @@ pub struct TaskPipelineHistory {
 pub(super) enum AppEvent {
     AgentOutput(AgentOutputEvent),
     AgentDone(bool),
+    DualBuildOutput(usize, AgentOutputEvent),
     PlanningFinished(PlanningOutcome),
     OrchestratorFinished(crate::orchestrator::OrchestratorOutcome),
     LoopEvent(LoopEvent),
@@ -436,6 +466,9 @@ pub(super) enum AppEvent {
 pub(super) enum LoopEvent {
     TaskStarted(Task),
     AgentStarted(AgentRole, String),
+    DualBuildStarted { models: [String; 2] },
+    DualBuildStreamDone(usize, bool),
+    DualBuildComparisonReady(DualBuildComparison),
     TaskCompleted(String, bool),
     NextTaskUpdated(Option<String>),
     DiscoveryStarted(usize),

@@ -252,9 +252,38 @@ pub(super) fn style_for_line(line: &str, theme: &super::theme::TuiTheme) -> Styl
 pub(super) fn render_agent_output(frame: &mut Frame, area: Rect, state: &AppState, focused: TuiPane) {
     let inner_width = area.width.saturating_sub(2) as usize;
 
-    // Pre-wrap all lines, preserving style
-    let wrapped: Vec<(String, Style)> = state
-        .agent_output
+    // Determine which output lines to render
+    let (output_lines, scroll_offset) = if state.dual_build.active {
+        if state.dual_build.comparison.is_some() {
+            // Comparison view -- build lines from DualBuildComparison
+            let comp = state.dual_build.comparison.as_ref().unwrap();
+            let mut lines = Vec::new();
+            lines.push(String::new());
+            lines.push("  Dual Build Comparison".to_string());
+            lines.push(format!("  {}", "\u{2500}".repeat(40)));
+            for i in 0..2 {
+                let icon = if i == comp.winner { "\u{2713}" } else { " " };
+                lines.push(format!(
+                    "  {} Builder {} ({}):  {}  Tests: {}",
+                    icon, i + 1, comp.labels[i], comp.diff_stats[i], comp.test_results[i],
+                ));
+            }
+            lines.push(String::new());
+            lines.push(format!("  Winner: {} ({})", comp.labels[comp.winner], comp.reason));
+            lines.push(String::new());
+            lines.push("  Press 1/2 to review each stream's output".to_string());
+            (lines, 0usize)
+        } else {
+            // Show active tab's stream
+            let tab = state.dual_build.tab;
+            (state.dual_build.streams[tab].clone(), state.scroll_offset)
+        }
+    } else {
+        (state.agent_output.clone(), state.scroll_offset)
+    };
+
+    // Pre-wrap all lines
+    let wrapped: Vec<(String, Style)> = output_lines
         .iter()
         .flat_map(|line| {
             let style = style_for_line(line, &state.tui_theme);
@@ -264,17 +293,51 @@ pub(super) fn render_agent_output(frame: &mut Frame, area: Rect, state: &AppStat
         })
         .collect();
 
-    let max_lines = area.height.saturating_sub(2) as usize;
+    let max_lines = if state.dual_build.active && state.dual_build.comparison.is_none() {
+        area.height.saturating_sub(3) as usize  // 1 extra line for tab header
+    } else {
+        area.height.saturating_sub(2) as usize
+    };
     let total_lines = wrapped.len();
-    let start = total_lines.saturating_sub(max_lines + state.scroll_offset);
-    let end = total_lines.saturating_sub(state.scroll_offset);
+    let start = total_lines.saturating_sub(max_lines + scroll_offset);
+    let end = total_lines.saturating_sub(scroll_offset);
 
     let items: Vec<ListItem> = wrapped[start..end]
         .iter()
         .map(|(text, style)| ListItem::new(Span::styled(text.as_str(), *style)))
         .collect();
 
-    let title = if let Some((ref role, _)) = state.current_agent {
+    // Build tab header for dual mode
+    let mut title_spans = Vec::new();
+    if state.dual_build.active && state.dual_build.comparison.is_none() {
+        for i in 0..2 {
+            let label = &state.dual_build.models[i];
+            let count = state.dual_build.event_counts[i];
+            let done = state.dual_build.finished[i];
+            let status = if done { "done" } else { "running" };
+            let tab_text = format!(" {}: {} ({} events, {}) ", i + 1, label, count, status);
+            let style = if i == state.dual_build.tab {
+                Style::default().fg(state.tui_theme.accent).add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(state.tui_theme.muted)
+            };
+            title_spans.push(Span::styled(tab_text, style));
+        }
+    }
+
+    let title = if state.dual_build.active {
+        if state.dual_build.comparison.is_some() {
+            Span::styled(
+                " Dual Build Results ",
+                Style::default().fg(state.tui_theme.accent).add_modifier(Modifier::BOLD),
+            )
+        } else {
+            Span::styled(
+                " Dual Build ",
+                Style::default().fg(state.tui_theme.accent).add_modifier(Modifier::BOLD),
+            )
+        }
+    } else if let Some((ref role, _)) = state.current_agent {
         let color = match role {
             AgentRole::Scout => Color::LightBlue,
             AgentRole::Planner => Color::Magenta,
@@ -291,7 +354,14 @@ pub(super) fn render_agent_output(frame: &mut Frame, area: Rect, state: &AppStat
         Span::styled(" Agent ", Style::default().fg(state.tui_theme.muted))
     };
 
-    let list = List::new(items).block(
+    // If dual-build with tab header, prepend tab line as first ListItem
+    let mut all_items = Vec::new();
+    if state.dual_build.active && state.dual_build.comparison.is_none() && !title_spans.is_empty() {
+        all_items.push(ListItem::new(Line::from(title_spans)));
+    }
+    all_items.extend(items);
+
+    let list = List::new(all_items).block(
         Block::default()
             .borders(Borders::ALL)
             .border_style(pane_border_style(focused, TuiPane::AgentOutput, &state.tui_theme))

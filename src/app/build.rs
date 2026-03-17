@@ -3,7 +3,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
-use crate::agent::{self, AgentResult, AgentRole};
+use crate::agent::{self, AgentOutputEvent, AgentResult, AgentRole};
 use crate::complexity::{self, TaskComplexity};
 use crate::config::Config;
 use crate::{
@@ -18,6 +18,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use super::context::RunContext;
+use super::state::DualBuildComparison;
 use super::{review, AppEvent, LoopEvent};
 use crate::extensions;
 use crate::utils::atomic_write_file;
@@ -303,6 +304,280 @@ async fn adaptive_sleep(config: &Config, rate_limited: bool, full_secs: u64) {
     } else {
         tokio::time::sleep(Duration::from_millis(ADAPTIVE_PAUSE_MIN_MS)).await;
     }
+}
+
+// ─── Dual Build ─────────────────────────────────────────────
+
+/// Run two builder models sequentially in git worktrees, collect diffs,
+/// compare, and apply the winner's patch to the main project directory.
+async fn run_dual_builders(
+    task_id: &str,
+    task_desc: &str,
+    ctx: &RunContext,
+    tx: &mpsc::UnboundedSender<AppEvent>,
+    skip_planner: bool,
+    extension_context: &str,
+    builder_specs: &[(String, String); 2],
+) -> (bool, bool) {
+    // Build display labels for each spec
+    let labels: [String; 2] = [
+        Config::display_provider_model(&builder_specs[0].0, &builder_specs[0].1),
+        Config::display_provider_model(&builder_specs[1].0, &builder_specs[1].1),
+    ];
+
+    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::DualBuildStarted {
+        models: labels.clone(),
+    }));
+
+    let arena_dir = ctx.buildloop_dir.join("arena");
+    let _ = std::fs::create_dir_all(&arena_dir);
+
+    let mut successes = [false; 2];
+    let mut diff_stats = [String::new(), String::new()];
+    let mut diff_sizes = [0usize; 2];
+    let mut patches = [String::new(), String::new()];
+    let mut last_rl = false;
+
+    for idx in 0..2 {
+        let wt_path = arena_dir.join(format!("builder-{}", idx));
+
+        // Remove stale worktree if it exists
+        if wt_path.exists() {
+            let _ = std::process::Command::new("git")
+                .args(["worktree", "remove", "--force"])
+                .arg(&wt_path)
+                .current_dir(&ctx.project_dir)
+                .output();
+        }
+
+        // Create worktree
+        let wt_result = std::process::Command::new("git")
+            .args(["worktree", "add", "--detach"])
+            .arg(&wt_path)
+            .arg("HEAD")
+            .current_dir(&ctx.project_dir)
+            .output();
+
+        match wt_result {
+            Ok(output) if output.status.success() => {}
+            Ok(output) => {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                    "Dual build: failed to create worktree {}: {}", idx, stderr.trim()
+                ))));
+                return (false, false);
+            }
+            Err(e) => {
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                    "Dual build: git worktree command failed: {}", e
+                ))));
+                return (false, false);
+            }
+        }
+
+        // Copy current-plan.md into the worktree's .buildloop/
+        let wt_buildloop = wt_path.join(".buildloop");
+        let _ = std::fs::create_dir_all(&wt_buildloop);
+        let _ = std::fs::copy(&ctx.current_plan, wt_buildloop.join("current-plan.md"));
+
+        // Copy SPEC and TASKS files at their relative paths
+        if let Ok(rel) = ctx.spec_path.strip_prefix(&ctx.project_dir) {
+            let dest = wt_path.join(rel);
+            if let Some(parent) = dest.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            let _ = std::fs::copy(&ctx.spec_path, &dest);
+        }
+        if let Ok(rel) = ctx.plan_path.strip_prefix(&ctx.project_dir) {
+            let dest = wt_path.join(rel);
+            if let Some(parent) = dest.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            let _ = std::fs::copy(&ctx.plan_path, &dest);
+        }
+
+        // Build the prompt
+        let prompt = if skip_planner {
+            prompts::builder_direct_prompt(
+                task_id,
+                task_desc,
+                &ctx.spec_file_name(),
+                &ctx.tasks_file_name(),
+            )
+        } else {
+            prompts::builder_prompt(
+                task_id,
+                task_desc,
+                &ctx.spec_file_name(),
+                &ctx.tasks_file_name(),
+            )
+        };
+        let prompt = prompts::wrap_with_extensions(&prompt, extension_context);
+
+        // Create agent channel and forward events as DualBuildOutput
+        let (agent_tx, mut agent_rx) = mpsc::unbounded_channel::<AgentOutputEvent>();
+        let fwd_tx = tx.clone();
+        let fwd_handle = tokio::spawn(async move {
+            while let Some(evt) = agent_rx.recv().await {
+                let _ = fwd_tx.send(AppEvent::DualBuildOutput(idx, evt));
+            }
+        });
+
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::AgentStarted(
+            AgentRole::Builder,
+            labels[idx].clone(),
+        )));
+
+        let build_result = agent::run_agent(
+            &AgentRole::Builder,
+            Config::parse_provider(&builder_specs[idx].0),
+            &builder_specs[idx].1,
+            &prompt,
+            &wt_path,
+            agent_tx,
+            &ctx.log_dir,
+            None,
+            ctx.config.agent_timeout_secs,
+            Some(ctx.shutdown.clone()),
+        )
+        .await;
+
+        let _ = fwd_handle.await;
+        let rl = was_rate_limited(&build_result);
+        last_rl = last_rl || rl;
+        successes[idx] = build_result.map(|r| r.success).unwrap_or(false);
+
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::DualBuildStreamDone(idx, successes[idx])));
+
+        // Collect diff stats
+        let shortstat = std::process::Command::new("git")
+            .args(["diff", "HEAD", "--shortstat"])
+            .current_dir(&wt_path)
+            .output()
+            .ok()
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+            .unwrap_or_default();
+
+        // Parse shortstat into a summary and line count
+        let mut insertions = 0usize;
+        let mut deletions = 0usize;
+        for part in shortstat.split(',') {
+            let part = part.trim();
+            if part.contains("insertion") {
+                if let Some(n) = part.split_whitespace().next().and_then(|s| s.parse::<usize>().ok()) {
+                    insertions = n;
+                }
+            }
+            if part.contains("deletion") {
+                if let Some(n) = part.split_whitespace().next().and_then(|s| s.parse::<usize>().ok()) {
+                    deletions = n;
+                }
+            }
+        }
+        diff_stats[idx] = format!("+{}/-{}", insertions, deletions);
+        diff_sizes[idx] = insertions + deletions;
+
+        // Generate full patch
+        patches[idx] = std::process::Command::new("git")
+            .args(["diff", "HEAD"])
+            .current_dir(&wt_path)
+            .output()
+            .ok()
+            .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
+            .unwrap_or_default();
+
+        // Adaptive sleep between builders (only after first one)
+        if idx == 0 {
+            adaptive_sleep(&ctx.config, rl, ctx.config.pause_between_agents_secs).await;
+        }
+    }
+
+    // Select winner
+    let winner = if successes[0] && successes[1] {
+        if diff_sizes[0] <= diff_sizes[1] { 0 } else { 1 }
+    } else if successes[0] {
+        0
+    } else if successes[1] {
+        1
+    } else {
+        0
+    };
+
+    let reason = if successes[0] && successes[1] {
+        if diff_sizes[0] <= diff_sizes[1] {
+            "smaller diff".to_string()
+        } else {
+            "smaller diff".to_string()
+        }
+    } else if successes[0] && !successes[1] {
+        "only passing builder".to_string()
+    } else if !successes[0] && successes[1] {
+        "only passing builder".to_string()
+    } else {
+        "both failed, picked first".to_string()
+    };
+
+    let comparison = DualBuildComparison {
+        labels: labels.clone(),
+        diff_stats: diff_stats.clone(),
+        test_results: [
+            if successes[0] { "PASS".to_string() } else { "FAIL".to_string() },
+            if successes[1] { "PASS".to_string() } else { "FAIL".to_string() },
+        ],
+        winner,
+        reason,
+    };
+
+    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::DualBuildComparisonReady(comparison)));
+
+    // Apply winner's patch to main project_dir
+    if !patches[winner].is_empty() {
+        let patch_path = ctx.buildloop_dir.join("winner.patch");
+        let _ = std::fs::write(&patch_path, &patches[winner]);
+        let apply_result = std::process::Command::new("git")
+            .args(["apply"])
+            .arg(&patch_path)
+            .current_dir(&ctx.project_dir)
+            .output();
+        match apply_result {
+            Ok(output) if output.status.success() => {}
+            Ok(output) => {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                    "Dual build: patch apply failed: {}", stderr.trim()
+                ))));
+            }
+            Err(e) => {
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                    "Dual build: git apply command failed: {}", e
+                ))));
+            }
+        }
+    }
+
+    // Copy build-claims.md from winner's worktree if it exists
+    let winner_wt = arena_dir.join(format!("builder-{}", winner));
+    let winner_claims = winner_wt.join(".buildloop").join("build-claims.md");
+    if winner_claims.exists() {
+        let _ = std::fs::copy(&winner_claims, ctx.buildloop_dir.join("build-claims.md"));
+    }
+
+    // Cleanup worktrees
+    for idx in 0..2 {
+        let wt = arena_dir.join(format!("builder-{}", idx));
+        if wt.exists() {
+            let _ = std::process::Command::new("git")
+                .args(["worktree", "remove", "--force"])
+                .arg(&wt)
+                .current_dir(&ctx.project_dir)
+                .output();
+        }
+    }
+    let _ = std::fs::remove_dir_all(&arena_dir);
+
+    let _ = tx.send(AppEvent::AgentDone(successes[winner]));
+
+    (successes[winner], last_rl)
 }
 
 /// Background task that polls `gh pr view` for review status and sends
@@ -916,6 +1191,22 @@ async fn process_task(
     let task_desc = &task_info.description;
     let patterns_extracted = ctx.buildloop_dir.join("patterns-extracted.json");
 
+    // Clean up stale dual-build worktrees from previous sessions
+    let arena_dir = ctx.buildloop_dir.join("arena");
+    if arena_dir.exists() {
+        for idx in 0..2 {
+            let wt = arena_dir.join(format!("builder-{}", idx));
+            if wt.exists() {
+                let _ = std::process::Command::new("git")
+                    .args(["worktree", "remove", "--force"])
+                    .arg(&wt)
+                    .current_dir(&ctx.project_dir)
+                    .output();
+            }
+        }
+        let _ = std::fs::remove_dir_all(&arena_dir);
+    }
+
     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::TaskStarted(
         task_info.clone(),
     )));
@@ -1284,55 +1575,69 @@ async fn process_task(
         }
     }
 
-    // ─── Run Builder ─────────────────────────────────────────
-    let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
-    let fwd_tx = tx.clone();
-    let fwd_handle = tokio::spawn(async move {
-        while let Some(evt) = agent_rx.recv().await {
-            let _ = fwd_tx.send(AppEvent::AgentOutput(evt));
-        }
-    });
-
-    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::AgentStarted(
-        AgentRole::Builder,
-        Config::display_provider_model(&ctx.config.builder_provider, &ctx.config.builder_model),
-    )));
-
-    let prompt = if skip_planner {
-        prompts::builder_direct_prompt(
-            task_id,
-            task_desc,
-            &ctx.spec_file_name(),
-            &ctx.tasks_file_name(),
-        )
+    // ─── Run Builder(s) ──────────────────────────────────────
+    let dual_mode = ctx.config.builder_models.len() >= 2;
+    let (build_ok, builder_rate_limited) = if dual_mode {
+        let specs: Vec<(String, String)> = ctx.config.builder_models.iter()
+            .map(|s| Config::parse_model_spec(s))
+            .collect();
+        let specs_arr = [specs[0].clone(), specs[1].clone()];
+        run_dual_builders(
+            task_id, task_desc, ctx, tx, skip_planner, extension_context, &specs_arr,
+        ).await
     } else {
-        prompts::builder_prompt(
-            task_id,
-            task_desc,
-            &ctx.spec_file_name(),
-            &ctx.tasks_file_name(),
-        )
-    };
-    let prompt = prompts::wrap_with_extensions(&prompt, extension_context);
-    emit_extension_injections(tx, &ctx.config.extensions, extension_context, &AgentRole::Builder, task_id);
-    let build_result = agent::run_agent(
-        &AgentRole::Builder,
-        Config::parse_provider(&ctx.config.builder_provider),
-        &ctx.config.builder_model,
-        &prompt,
-        &ctx.project_dir,
-        agent_tx,
-        &ctx.log_dir,
-        None,
-        ctx.config.agent_timeout_secs,
-        Some(ctx.shutdown.clone()),
-    )
-    .await;
+        // Original single-builder path
+        let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
+        let fwd_tx = tx.clone();
+        let fwd_handle = tokio::spawn(async move {
+            while let Some(evt) = agent_rx.recv().await {
+                let _ = fwd_tx.send(AppEvent::AgentOutput(evt));
+            }
+        });
 
-    let _ = fwd_handle.await;
-    last_rate_limited = was_rate_limited(&build_result);
-    let build_ok = build_result.map(|r| r.success).unwrap_or(false);
-    let _ = tx.send(AppEvent::AgentDone(build_ok));
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::AgentStarted(
+            AgentRole::Builder,
+            Config::display_provider_model(&ctx.config.builder_provider, &ctx.config.builder_model),
+        )));
+
+        let prompt = if skip_planner {
+            prompts::builder_direct_prompt(
+                task_id,
+                task_desc,
+                &ctx.spec_file_name(),
+                &ctx.tasks_file_name(),
+            )
+        } else {
+            prompts::builder_prompt(
+                task_id,
+                task_desc,
+                &ctx.spec_file_name(),
+                &ctx.tasks_file_name(),
+            )
+        };
+        let prompt = prompts::wrap_with_extensions(&prompt, extension_context);
+        emit_extension_injections(tx, &ctx.config.extensions, extension_context, &AgentRole::Builder, task_id);
+        let build_result = agent::run_agent(
+            &AgentRole::Builder,
+            Config::parse_provider(&ctx.config.builder_provider),
+            &ctx.config.builder_model,
+            &prompt,
+            &ctx.project_dir,
+            agent_tx,
+            &ctx.log_dir,
+            None,
+            ctx.config.agent_timeout_secs,
+            Some(ctx.shutdown.clone()),
+        )
+        .await;
+
+        let _ = fwd_handle.await;
+        let rl = was_rate_limited(&build_result);
+        let ok = build_result.map(|r| r.success).unwrap_or(false);
+        let _ = tx.send(AppEvent::AgentDone(ok));
+        (ok, rl)
+    };
+    last_rate_limited = builder_rate_limited;
 
     if !build_ok {
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(

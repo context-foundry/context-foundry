@@ -71,7 +71,27 @@ pub(super) fn render_dashboard_stats(frame: &mut Frame, area: Rect, state: &AppS
 
     let (s_str, s_col) = ctx_pct_span(state.spid_context_pcts[0]);
     let (p_str, p_col) = ctx_pct_span(state.spid_context_pcts[1]);
-    let (i_str, i_col) = ctx_pct_span(state.spid_context_pcts[2]);
+    let (i_str, i_col) = if state.dual_build.active
+        && state.dual_build.context_pcts[0].is_some()
+        && state.dual_build.context_pcts[1].is_some()
+    {
+        let (a_str, _) = ctx_pct_span(state.dual_build.context_pcts[0]);
+        let (b_str, _) = ctx_pct_span(state.dual_build.context_pcts[1]);
+        let max_pct = std::cmp::max(
+            state.dual_build.context_pcts[0].unwrap_or(0),
+            state.dual_build.context_pcts[1].unwrap_or(0),
+        );
+        let col = if max_pct >= 90 {
+            Color::Red
+        } else if max_pct >= 70 {
+            Color::Yellow
+        } else {
+            Color::Green
+        };
+        (format!("{}/{}", a_str, b_str), col)
+    } else {
+        ctx_pct_span(state.spid_context_pcts[2])
+    };
     let (d_str, d_col) = ctx_pct_span(state.spid_context_pcts[3]);
 
     let git_status_str = if state.git_initialized {
