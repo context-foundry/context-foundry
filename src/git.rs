@@ -350,6 +350,33 @@ pub fn commit_task_pr(
                     .rsplit('/')
                     .next()
                     .and_then(|s| s.parse::<u64>().ok());
+            } else {
+                // PR create failed (likely already exists) -- try to find existing PR
+                if let Ok(list_output) = Command::new("gh")
+                    .args([
+                        "pr", "list",
+                        "--head", &feature_branch,
+                        "--json", "number",
+                        "--limit", "1",
+                    ])
+                    .current_dir(project_dir)
+                    .output()
+                {
+                    if list_output.status.success() {
+                        if let Ok(json) = serde_json::from_slice::<serde_json::Value>(&list_output.stdout) {
+                            if let Some(n) = json.as_array()
+                                .and_then(|arr| arr.first())
+                                .and_then(|obj| obj["number"].as_u64())
+                            {
+                                pr_number = Some(n);
+                                eprintln!(
+                                    "[foundry] Existing PR #{} found for {} -- reusing",
+                                    n, task_id
+                                );
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -411,6 +438,7 @@ pub fn commit_task_pr(
                 .args(["commit", "-m", &base_msg])
                 .current_dir(project_dir)
                 .output();
+            let _ = maybe_push_commit(project_dir, config.auto_push_remote.as_deref());
         }
     }
 

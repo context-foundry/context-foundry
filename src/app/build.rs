@@ -314,6 +314,7 @@ async fn poll_pr_review(
     tx: mpsc::UnboundedSender<AppEvent>,
     review_gate: Arc<AtomicBool>,
 ) {
+    let mut last_decision = String::new();
     loop {
         // Check gate FIRST (before sleeping), so first poll is immediate
         if !review_gate.load(Ordering::Relaxed) {
@@ -347,7 +348,7 @@ async fn poll_pr_review(
                         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::PrClosed(pr_number)));
                         return;
                     }
-                    if review_decision == "CHANGES_REQUESTED" {
+                    if review_decision == "CHANGES_REQUESTED" && review_decision != last_decision {
                         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BackgroundLog(
                             format!(
                                 "PR #{}: changes requested -- update the code or press Enter to skip",
@@ -355,6 +356,7 @@ async fn poll_pr_review(
                             ),
                         )));
                     }
+                    last_decision = review_decision.to_string();
                 }
                 // Still open/in review -- continue polling
             }
