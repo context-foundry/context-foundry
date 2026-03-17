@@ -22,7 +22,7 @@ pub(super) async fn spawn_inline_planning_task(
 
     let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
     let forward_tx = event_tx.clone();
-    tokio::spawn(async move {
+    let fwd_handle = tokio::spawn(async move {
         while let Some(evt) = agent_rx.recv().await {
             let _ = forward_tx.send(AppEvent::AgentOutput(evt));
         }
@@ -31,6 +31,11 @@ pub(super) async fn spawn_inline_planning_task(
     let outcome =
         run_gap_analysis_iteration(&ctx, 1, &pattern_context, user_intent.as_deref(), agent_tx)
             .await;
+
+    // Wait for the forwarding task to drain all agent events (including Usage)
+    // before signaling completion. Without this, PlanningFinished can arrive
+    // before the Usage event, causing spid_context_pcts to stay blank.
+    let _ = fwd_handle.await;
 
     let _ = event_tx.send(AppEvent::PlanningFinished(outcome));
 }
@@ -64,7 +69,7 @@ pub(super) async fn run_append_tasks(
 
     let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
     let forward_tx = event_tx.clone();
-    tokio::spawn(async move {
+    let fwd_handle = tokio::spawn(async move {
         while let Some(evt) = agent_rx.recv().await {
             let _ = forward_tx.send(AppEvent::AgentOutput(evt));
         }
@@ -121,6 +126,7 @@ pub(super) async fn run_append_tasks(
         },
     };
 
+    let _ = fwd_handle.await;
     let _ = event_tx.send(AppEvent::PlanningFinished(outcome));
 }
 

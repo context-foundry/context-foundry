@@ -906,7 +906,11 @@ fn resolve_project_name(project_dir: &Path) -> String {
             {
                 let name = rest.trim();
                 // Skip generic placeholder headers -- fall through to directory name
-                if !name.is_empty() && name != "Project Brief" {
+                if !name.is_empty()
+                    && name != "Project Brief"
+                    && name != "Specification"
+                    && name != "Architecture"
+                {
                     return name.to_string();
                 }
             }

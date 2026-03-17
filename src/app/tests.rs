@@ -881,16 +881,18 @@ fn startup_text_input_on_needs_queue_starts_build() {
         event::KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
     );
 
-    // NeedsQueue with text writes SPEC.md and returns to startup for review
-    assert!(matches!(
-        state.pending_transition,
-        Some(PendingTransition::ShowStartup { .. })
-    ));
-
-    // NeedsQueue with text should write SPEC.md
-    let spec_path = dir.join("SPEC.md");
-    let spec_content = std::fs::read_to_string(&spec_path).expect("SPEC.md should exist");
-    assert!(spec_content.contains("auth bugs"));
+    // NeedsQueue with text treats input as a task description (AppendTasks),
+    // not a SPEC.md overwrite. SPEC.md already exists in NeedsQueue scenario.
+    match &state.pending_transition {
+        Some(PendingTransition::AppendTasks(req)) => {
+            assert!(req.description.contains("auth bugs"),
+                "expected description to contain user input, got: {}", req.description);
+        }
+        other => panic!(
+            "expected AppendTasks transition, got: {:?}",
+            other
+        ),
+    }
 
     let _ = std::fs::remove_dir_all(dir);
 }

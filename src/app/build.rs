@@ -496,7 +496,7 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
 
             let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
             let fwd_tx = tx.clone();
-            tokio::spawn(async move {
+            let fwd_handle = tokio::spawn(async move {
                 while let Some(evt) = agent_rx.recv().await {
                     let _ = fwd_tx.send(AppEvent::AgentOutput(evt));
                 }
@@ -536,6 +536,7 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
             )
             .await;
 
+            let _ = fwd_handle.await;
             let _ = tx.send(AppEvent::AgentDone(
                 scout_result.as_ref().map(|r| r.success).unwrap_or(false),
             ));
@@ -737,7 +738,7 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
 
             let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
             let fwd_tx = tx.clone();
-            tokio::spawn(async move {
+            let fwd_handle = tokio::spawn(async move {
                 while let Some(evt) = agent_rx.recv().await {
                     let _ = fwd_tx.send(AppEvent::AgentOutput(evt));
                 }
@@ -778,6 +779,7 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
             )
             .await;
 
+            let _ = fwd_handle.await;
             let _ = tx.send(AppEvent::AgentDone(
                 result.as_ref().map(|r| r.success).unwrap_or(false),
             ));
@@ -988,7 +990,7 @@ async fn process_task(
 
         let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
         let fwd_tx = tx.clone();
-        tokio::spawn(async move {
+        let fwd_handle = tokio::spawn(async move {
             while let Some(evt) = agent_rx.recv().await {
                 let _ = fwd_tx.send(AppEvent::AgentOutput(evt));
             }
@@ -1024,6 +1026,7 @@ async fn process_task(
         )
         .await;
 
+        let _ = fwd_handle.await;
         last_rate_limited = was_rate_limited(&scout_result);
         let scout_ok = scout_result.map(|r| r.success).unwrap_or(false);
         let _ = tx.send(AppEvent::AgentDone(scout_ok));
@@ -1087,7 +1090,7 @@ async fn process_task(
             // ─── Run Planner ─────────────────────────────────────────
             let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
             let fwd_tx = tx.clone();
-            tokio::spawn(async move {
+            let fwd_handle = tokio::spawn(async move {
                 while let Some(evt) = agent_rx.recv().await {
                     let _ = fwd_tx.send(AppEvent::AgentOutput(evt));
                 }
@@ -1124,6 +1127,7 @@ async fn process_task(
             )
             .await;
 
+            let _ = fwd_handle.await;
             last_rate_limited = was_rate_limited(&plan_result);
             let plan_ok = plan_result.map(|r| r.success).unwrap_or(false);
             let _ = tx.send(AppEvent::AgentDone(plan_ok));
@@ -1227,7 +1231,7 @@ async fn process_task(
 
             let (agent_tx2, mut agent_rx2) = mpsc::unbounded_channel();
             let fwd_tx2 = tx.clone();
-            tokio::spawn(async move {
+            let fwd_handle2 = tokio::spawn(async move {
                 while let Some(evt) = agent_rx2.recv().await {
                     let _ = fwd_tx2.send(AppEvent::AgentOutput(evt));
                 }
@@ -1253,6 +1257,7 @@ async fn process_task(
                 Some(ctx.shutdown.clone()),
             ).await;
 
+            let _ = fwd_handle2.await;
             last_rate_limited = was_rate_limited(&retry_result);
             let _ = tx.send(AppEvent::AgentDone(
                 retry_result.as_ref().map(|r| r.success).unwrap_or(false),
@@ -1280,7 +1285,7 @@ async fn process_task(
     // ─── Run Builder ─────────────────────────────────────────
     let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
     let fwd_tx = tx.clone();
-    tokio::spawn(async move {
+    let fwd_handle = tokio::spawn(async move {
         while let Some(evt) = agent_rx.recv().await {
             let _ = fwd_tx.send(AppEvent::AgentOutput(evt));
         }
@@ -1322,6 +1327,7 @@ async fn process_task(
     )
     .await;
 
+    let _ = fwd_handle.await;
     last_rate_limited = was_rate_limited(&build_result);
     let build_ok = build_result.map(|r| r.success).unwrap_or(false);
     let _ = tx.send(AppEvent::AgentDone(build_ok));

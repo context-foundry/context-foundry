@@ -57,7 +57,7 @@ pub(super) async fn run_review_loop(
 
     let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
     let fwd_tx = tx.clone();
-    tokio::spawn(async move {
+    let fwd_handle = tokio::spawn(async move {
         while let Some(evt) = agent_rx.recv().await {
             let _ = fwd_tx.send(AppEvent::AgentOutput(evt));
         }
@@ -105,6 +105,7 @@ pub(super) async fn run_review_loop(
     )
     .await;
 
+    let _ = fwd_handle.await;
     let _ = tx.send(AppEvent::AgentDone(
         review_result.as_ref().map(|r| r.success).unwrap_or(false),
     ));
