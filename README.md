@@ -1,8 +1,8 @@
 # Foundry
 
-Autonomous build loop that plans, builds, reviews, and learns — forever.
+Autonomous build loop that plans, builds, reviews, and learns.
 
-Foundry reads a `TASKS.md` task list and works through it using Claude Code agents in a TUI, committing each completed task. When all tasks are done, it discovers new work and keeps going.
+Foundry reads a `TASKS.md` task list and works through it using Claude Code agents in a TUI, committing each completed task. Three [run modes](#run-modes) control what happens next: run forever with discovery (Auto), stop when done (Sprint), or pause for human review after each task (Review).
 
 ## Demos
 
@@ -68,6 +68,36 @@ The TUI shows these indicators in the task queue with color coding, and they sur
 
 **Long-term: pattern learning.** After each validated task, a pattern extractor agent scans the build artifacts, review findings, and plan to extract reusable lessons (e.g., "CFrame not Position for moving Roblox parts" or "always validate UTF-8 boundaries before string slicing"). These get saved as structured JSON to `~/.foundry/patterns/`. On the next task — in any project — matched patterns are injected into the planner and reviewer prompts as reference data. Patterns that recur 3+ times get auto-promoted, meaning they're always included. This is how the system gets better over time: a mistake made once becomes a check applied everywhere.
 
+### Run modes
+
+Foundry has three run modes that control how the pipeline advances between tasks. Toggle with `Ctrl+M` on the startup screen or set `run_mode` in `.foundry.json`.
+
+| Mode | Behavior | Discovery | PRs |
+|------|----------|-----------|-----|
+| **Auto** (default) | Runs all tasks, then discovers new work and keeps going indefinitely | Yes | No |
+| **Sprint** | Runs all tasks, then stops | No | No |
+| **Review** | Runs one task at a time, creates a PR per task, pauses for approval | No | Yes (per task) |
+
+**Auto** is the fully autonomous mode. The loop never stops on its own -- when the task queue empties, a discovery agent scans the codebase for new work and appends it to `TASKS.md`. This is the mode shown in the demo videos.
+
+**Sprint** is semi-autonomous. It works through every pending task with the same pipeline as Auto (scout, plan, implement, verify, commit), but stops when the queue is empty instead of running discovery. Use this when you have a known task list and want foundry to finish, not find more work.
+
+**Review** is the human-in-the-loop mode for team workflows. After each task completes, foundry pushes a feature branch (`foundry/{task_id}`), creates a GitHub PR, and pauses. The TUI shows `PAUSED (Review)` and waits for either:
+- The user to press Enter to continue manually, or
+- GitHub PR approval, which foundry detects by polling `gh pr view` (configurable via `pr_poll_interval_secs`, default 30s)
+
+If a reviewer requests changes, the TUI surfaces that status. Review mode requires the `gh` CLI to be installed and authenticated.
+
+```json
+{
+  "run_mode": "review",
+  "pr_poll_interval_secs": 30,
+  "create_issue_on_wip": true
+}
+```
+
+The `create_issue_on_wip` flag works in any mode -- when a task fails verification and gets a `WIP()` commit, foundry auto-creates a GitHub issue with the review findings.
+
 ### Pattern scope
 
 Patterns are global by default. They live in `~/.foundry/patterns/` and are loaded for every project on your machine. A lesson learned building project A is available when building project B.
@@ -76,7 +106,7 @@ If you want per-project isolation, set `patterns_dir` in `.foundry.json` to a pr
 
 ### Discovery
 
-When all tasks in `TASKS.md` are complete, foundry doesn't stop. A discovery agent scans the codebase — reading architecture docs, looking for TODOs/FIXMEs, checking for failed tests, spotting inconsistencies — and appends new tasks to `TASKS.md`. The loop then works through those. If discovery finds nothing, it sleeps and tries again later.
+In Auto mode, when all tasks in `TASKS.md` are complete, foundry doesn't stop. A discovery agent scans the codebase -- reading architecture docs, looking for TODOs/FIXMEs, checking for failed tests, spotting inconsistencies -- and appends new tasks to `TASKS.md`. The loop then works through those. If discovery finds nothing, it backs off with an increasing cooldown (configurable via `discovery_cooldown_minutes`). In Sprint and Review modes, discovery is disabled and the pipeline stops when the queue empties.
 
 ## Install
 
@@ -204,6 +234,7 @@ Optional:
 - **`.foundry.json`** — Override defaults:
   ```json
   {
+    "run_mode": "auto",
     "planner_model": "opus",
     "builder_model": "sonnet",
     "reviewer_model": "opus",
