@@ -1,6 +1,6 @@
 use ratatui::style::Color;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct TuiTheme {
     pub accent: Color,
     pub border: Color,
@@ -21,7 +21,7 @@ fn normalize_theme_name(name: &str) -> String {
         .collect()
 }
 
-fn builtin_themes() -> Vec<(&'static str, TuiTheme)> {
+pub fn builtin_themes() -> Vec<(&'static str, TuiTheme)> {
     vec![
         (
             "dark",
@@ -76,6 +76,17 @@ pub fn from_name(name: &str) -> TuiTheme {
         .find(|(n, _)| normalize_theme_name(n) == normalized)
         .map(|(_, t)| t.clone())
         .unwrap_or_else(|| themes[0].1.clone())
+}
+
+/// Cycle to the next built-in theme. Returns (new theme, theme name).
+pub fn cycle_next(current: &TuiTheme) -> (TuiTheme, &'static str) {
+    let themes = builtin_themes();
+    let current_idx = themes
+        .iter()
+        .position(|(_, t)| t == current)
+        .unwrap_or(0);
+    let next_idx = (current_idx + 1) % themes.len();
+    (themes[next_idx].1.clone(), themes[next_idx].0)
 }
 
 impl Default for TuiTheme {

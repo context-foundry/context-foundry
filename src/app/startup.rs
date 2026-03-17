@@ -362,6 +362,11 @@ pub(super) fn handle_startup_key(state: &mut AppState, key: event::KeyEvent) {
                 }
             }
         }
+        KeyCode::Char('t') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+            let (new_theme, name) = crate::tui::theme::cycle_next(&state.tui_theme);
+            state.tui_theme = new_theme;
+            state.log(format!("Theme: {}", name));
+        }
         KeyCode::Char('f')
             if key.modifiers.contains(KeyModifiers::CONTROL)
                 && state.last_orchestrator_outcome.is_some() =>

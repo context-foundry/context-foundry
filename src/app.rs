@@ -627,6 +627,11 @@ fn handle_planning_key(state: &mut AppState, key: event::KeyEvent, config: &Conf
                 refresh_patterns_cache(state, config);
             }
         }
+        KeyCode::Char('t') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+            let (new_theme, name) = crate::tui::theme::cycle_next(&state.tui_theme);
+            state.tui_theme = new_theme;
+            state.log(format!("Theme: {}", name));
+        }
         KeyCode::Up => {
             if state.show_findings {
                 state.findings_scroll = state.findings_scroll.saturating_sub(3);
@@ -1036,6 +1041,11 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                     }
                     KeyCode::Char('i') => {
                         state.inject_input = Some(String::new());
+                    }
+                    KeyCode::Char('t') => {
+                        let (new_theme, name) = crate::tui::theme::cycle_next(&state.tui_theme);
+                        state.tui_theme = new_theme;
+                        state.log(format!("Theme: {}", name));
                     }
                     KeyCode::Char('1') => {
                         if state.dual_build.active {
