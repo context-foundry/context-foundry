@@ -396,6 +396,12 @@ async fn run_dual_builders(
             let _ = std::fs::copy(&ctx.plan_path, &dest);
         }
 
+        // Copy CLAUDE.md into worktree (may be untracked/gitignored)
+        let claude_md_src = ctx.project_dir.join("CLAUDE.md");
+        if claude_md_src.exists() {
+            let _ = std::fs::copy(&claude_md_src, wt_path.join("CLAUDE.md"));
+        }
+
         // Build the prompt
         let prompt = if skip_planner {
             prompts::builder_direct_prompt(
@@ -504,14 +510,8 @@ async fn run_dual_builders(
     };
 
     let reason = if successes[0] && successes[1] {
-        if diff_sizes[0] <= diff_sizes[1] {
-            "smaller diff".to_string()
-        } else {
-            "smaller diff".to_string()
-        }
-    } else if successes[0] && !successes[1] {
-        "only passing builder".to_string()
-    } else if !successes[0] && successes[1] {
+        format!("{} had smaller diff", labels[winner])
+    } else if successes[0] || successes[1] {
         "only passing builder".to_string()
     } else {
         "both failed, picked first".to_string()
@@ -530,8 +530,8 @@ async fn run_dual_builders(
 
     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::DualBuildComparisonReady(comparison)));
 
-    // Apply winner's patch to main project_dir
-    if !patches[winner].is_empty() {
+    // Apply winner's patch to main project_dir (skip if both builders failed)
+    if successes[winner] && !patches[winner].is_empty() {
         let patch_path = ctx.buildloop_dir.join("winner.patch");
         let _ = std::fs::write(&patch_path, &patches[winner]);
         let apply_result = std::process::Command::new("git")
@@ -1576,6 +1576,7 @@ async fn process_task(
     }
 
     // ─── Run Builder(s) ──────────────────────────────────────
+    emit_extension_injections(tx, &ctx.config.extensions, extension_context, &AgentRole::Builder, task_id);
     let dual_mode = ctx.config.builder_models.len() >= 2;
     let (build_ok, builder_rate_limited) = if dual_mode {
         let specs: Vec<(String, String)> = ctx.config.builder_models.iter()
@@ -1616,7 +1617,6 @@ async fn process_task(
             )
         };
         let prompt = prompts::wrap_with_extensions(&prompt, extension_context);
-        emit_extension_injections(tx, &ctx.config.extensions, extension_context, &AgentRole::Builder, task_id);
         let build_result = agent::run_agent(
             &AgentRole::Builder,
             Config::parse_provider(&ctx.config.builder_provider),

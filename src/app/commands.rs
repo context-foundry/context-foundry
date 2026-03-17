@@ -79,14 +79,23 @@ fn required_providers(
         ProviderCommandMode::Plan => {
             vec![("planner", Config::parse_provider(&config.planner_provider))]
         }
-        ProviderCommandMode::Run => vec![
-            ("planner", Config::parse_provider(&config.planner_provider)),
-            ("builder", Config::parse_provider(&config.builder_provider)),
-            (
-                "discovery",
-                Config::parse_provider(&config.discovery_provider),
-            ),
-        ],
+        ProviderCommandMode::Run => {
+            let mut v = vec![
+                ("planner", Config::parse_provider(&config.planner_provider)),
+                ("builder", Config::parse_provider(&config.builder_provider)),
+                (
+                    "discovery",
+                    Config::parse_provider(&config.discovery_provider),
+                ),
+            ];
+            if config.builder_models.len() >= 2 {
+                for spec in config.builder_models.iter().take(2) {
+                    let (provider_str, _model) = Config::parse_model_spec(spec);
+                    v.push(("builder (dual)", Config::parse_provider(&provider_str)));
+                }
+            }
+            v
+        }
         ProviderCommandMode::Design => vec![
             (
                 "orchestrator-proposer",
