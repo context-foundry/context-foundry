@@ -597,11 +597,9 @@ fn handle_startup_submit(state: &mut AppState) {
                     }));
             }
         }
-        StartupScenario::EmptyProject | StartupScenario::NeedsQueue => {
+        StartupScenario::EmptyProject => {
             if !text.is_empty() {
                 // Save user's description as SPEC.md so the bootstrap scout has context.
-                // This applies to both EmptyProject and NeedsQueue -- the user typed
-                // something they want built, and the scout needs to read it.
                 let project_dir = state.buildloop_dir.parent()
                     .unwrap_or(std::path::Path::new("."))
                     .to_path_buf();
@@ -615,13 +613,25 @@ fn handle_startup_submit(state: &mut AppState) {
                 state.pending_transition = Some(PendingTransition::ShowStartup {
                     message: Some("SPEC.md created -- review it, then press Enter to start.".to_string()),
                 });
-            } else if matches!(scenario, StartupScenario::EmptyProject) {
+            } else {
                 // Empty project with no description -- nudge the user to type something
                 if let Some(ref mut s) = state.startup {
                     s.status_message = Some(
                         "Describe what you want to build -- an empty project needs direction.".to_string(),
                     );
                 }
+            }
+        }
+        StartupScenario::NeedsQueue => {
+            if !text.is_empty() {
+                // Spec already exists -- treat user text as a task description
+                let label = format!("Bootstrap: {}", truncate_str(&text, 48));
+                state.pending_transition =
+                    Some(PendingTransition::AppendTasks(AppendTasksRequest {
+                        description: text,
+                        label,
+                        seed_spec_from_description: false,
+                    }));
             } else {
                 // NeedsQueue with empty input -- check if SPEC.md has content
                 let project_dir = state.buildloop_dir.parent()
@@ -895,7 +905,8 @@ fn resolve_project_name(project_dir: &Path) -> String {
                 .or_else(|| trimmed.strip_prefix("#"))
             {
                 let name = rest.trim();
-                if !name.is_empty() {
+                // Skip generic placeholder headers -- fall through to directory name
+                if !name.is_empty() && name != "Project Brief" {
                     return name.to_string();
                 }
             }

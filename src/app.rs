@@ -148,6 +148,14 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
             None => break,
         }
 
+        // When user requests stop, kill the running agent immediately.
+        // Discovery and other read-only agents have nothing critical to preserve.
+        if state.stop_after_task {
+            shutdown.store(true, Ordering::Relaxed);
+        } else {
+            shutdown.store(false, Ordering::Relaxed);
+        }
+
         if let Some(editor_path) =
             apply_pending_transition(project_dir, &config, &event_tx, &mut state, &shutdown)
         {
