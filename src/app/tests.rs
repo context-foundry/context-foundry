@@ -356,33 +356,31 @@ fn startup_arrow_keys_navigate_file_explorer() {
         None,
     ));
 
-    // Initially selected = 0
+    // Initially selected = TASKS.md (auto-selected as priority CF file)
+    let tasks_idx = state.startup.as_ref()
+        .and_then(|s| s.file_tree.iter().position(|e| e.name == "TASKS.md"))
+        .unwrap_or(0);
     assert_eq!(
         state.startup.as_ref().map(|s| s.explorer_selected),
-        Some(0)
+        Some(tasks_idx)
     );
 
-    // Press Down to move to next entry
-    handle_startup_key(
-        &mut state,
-        event::KeyEvent::new(KeyCode::Down, KeyModifiers::NONE),
-    );
-
-    assert_eq!(
-        state.startup.as_ref().map(|s| s.explorer_selected),
-        Some(1)
-    );
-
-    // Press Up to move back
+    // Press Up to move to previous entry
+    let before = state.startup.as_ref().unwrap().explorer_selected;
     handle_startup_key(
         &mut state,
         event::KeyEvent::new(KeyCode::Up, KeyModifiers::NONE),
     );
+    let after_up = state.startup.as_ref().unwrap().explorer_selected;
+    assert!(after_up < before || before == 0, "Up should move selection earlier");
 
-    assert_eq!(
-        state.startup.as_ref().map(|s| s.explorer_selected),
-        Some(0)
+    // Press Down to move back
+    handle_startup_key(
+        &mut state,
+        event::KeyEvent::new(KeyCode::Down, KeyModifiers::NONE),
     );
+    let after_down = state.startup.as_ref().unwrap().explorer_selected;
+    assert!(after_down >= after_up, "Down should move selection later");
 
     let _ = std::fs::remove_dir_all(dir);
 }

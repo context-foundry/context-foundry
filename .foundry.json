@@ -9,7 +9,7 @@
   "builder_provider": "claude",
   "discovery_model": "opus",
   "discovery_provider": "claude",
-  "dual_selection": "both",
+  "dual_selection": "first",
   "extensions": [],
   "fixer_model": "sonnet",
   "fixer_provider": "claude",

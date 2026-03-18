@@ -28,9 +28,19 @@ impl StartupState {
         let actions = vec![StartupAction::ScanProject];
 
         let file_tree = build_file_tree(project_dir);
-        let file_preview_content = if let Some(first) = file_tree.first() {
-            if !first.is_dir {
-                load_file_preview(&first.path)
+
+        // Auto-select the most relevant CF file: TASKS.md > SPEC.md > UPDATED_SPECS.md > CLAUDE.md
+        let priority_files = ["TASKS.md", "SPEC.md", "UPDATED_SPECS.md", "CLAUDE.md"];
+        let initial_selected = priority_files
+            .iter()
+            .find_map(|name| {
+                file_tree.iter().position(|e| e.name == *name && e.is_cf_highlight)
+            })
+            .unwrap_or(0);
+
+        let file_preview_content = if let Some(entry) = file_tree.get(initial_selected) {
+            if !entry.is_dir {
+                load_file_preview(&entry.path)
             } else {
                 Vec::new()
             }
@@ -45,14 +55,7 @@ impl StartupState {
             selected_action: 0,
             actions,
             entering_intent: true, // always show input
-            intent_input: if scenario != StartupScenario::EmptyProject {
-                std::fs::read_to_string(contract_paths.updated_specs_path())
-                    .unwrap_or_default()
-                    .trim()
-                    .to_string()
-            } else {
-                String::new()
-            },
+            intent_input: String::new(),
             status_message,
             git_context: crate::git::gather_git_context(project_dir),
             tasks_file_name: contract_paths.tasks_file_name(),
@@ -63,7 +66,7 @@ impl StartupState {
             spec_preview_lines: load_spec_preview_lines(project_dir),
             spec_scroll_offset: 0,
             file_tree,
-            explorer_selected: 0,
+            explorer_selected: initial_selected,
             explorer_scroll: 0,
             file_preview_content,
             file_preview_scroll: 0,
@@ -167,7 +170,7 @@ fn build_file_tree_recursive(
             is_dir,
             is_cf_highlight,
             is_hidden,
-            expanded: true,
+            expanded: false,
             file_size: if is_dir { 0 } else { file_size },
             modified,
         });
@@ -181,7 +184,7 @@ fn build_file_tree_recursive(
 }
 
 fn is_context_foundry_file(name: &str, path: &Path, base_dir: &Path) -> bool {
-    if matches!(name, "TASKS.md" | "SPEC.md" | "CLAUDE.md") {
+    if matches!(name, "TASKS.md" | "SPEC.md" | "UPDATED_SPECS.md" | "CLAUDE.md") {
         return true;
     }
     let relative = path.strip_prefix(base_dir).unwrap_or(path);

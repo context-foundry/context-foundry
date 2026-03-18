@@ -1228,7 +1228,7 @@ async fn process_task(
             "Reusing scout report from previous task".to_string(),
         )));
     } else {
-        let scout_tools: &[&str] = &["Read", "Glob", "Grep", "Bash"];
+        let scout_tools: &[&str] = &["Read", "Write", "Glob", "Grep", "Bash"];
 
         let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
         let fwd_tx = tx.clone();

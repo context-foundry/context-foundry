@@ -1,0 +1,1589 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Context Foundry -- Technical Reference</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --surface-hover: #1c2330;
+      --border: #30363d;
+      --text: #e6edf3;
+      --text-muted: #8b949e;
+      --accent: #f0a500;
+      --accent-hover: #f5b832;
+      --accent-subtle: rgba(240, 165, 0, 0.15);
+      --success: #39d353;
+      --warning: #f0a500;
+      --error: #f85149;
+      --info: #58a6ff;
+      --radius: 4px;
+      --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 0.9rem;
+      line-height: 1.6;
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem;
+    }
+
+    h1 {
+      color: var(--accent);
+      font-size: 1.5rem;
+      border-bottom: 2px solid var(--accent);
+      padding-bottom: 0.5rem;
+      margin-bottom: 0.25rem;
+    }
+
+    h2 {
+      color: var(--accent);
+      font-size: 1.25rem;
+      border-left: 3px solid var(--accent);
+      padding-left: 0.75rem;
+      margin-top: 3rem;
+      margin-bottom: 1rem;
+    }
+    h2::before {
+      content: "> ";
+      color: var(--text-muted);
+    }
+
+    h3 {
+      color: var(--text);
+      font-size: 1.05rem;
+      margin-top: 2rem;
+      margin-bottom: 0.5rem;
+    }
+
+    p { margin: 0.75rem 0; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1rem 0;
+      font-size: 0.85rem;
+    }
+    th {
+      background: var(--surface);
+      color: var(--accent);
+      text-align: left;
+      padding: 0.5rem 0.75rem;
+      border: 1px solid var(--border);
+      font-weight: 600;
+    }
+    td {
+      padding: 0.5rem 0.75rem;
+      border: 1px solid var(--border);
+      vertical-align: top;
+    }
+    tr:hover {
+      background: var(--surface-hover);
+    }
+
+    details {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin: 1rem 0;
+      padding: 0;
+    }
+    summary {
+      padding: 0.75rem 1rem;
+      cursor: pointer;
+      color: var(--accent);
+      font-weight: 600;
+    }
+    details[open] summary {
+      border-bottom: 1px solid var(--border);
+    }
+    details > div, details > table {
+      padding: 1rem;
+    }
+
+    pre {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem;
+      overflow-x: auto;
+      font-size: 0.8rem;
+      line-height: 1.5;
+    }
+    code {
+      font-family: var(--font-mono);
+      font-size: 0.85em;
+      background: var(--surface);
+      padding: 0.15em 0.3em;
+      border-radius: 3px;
+    }
+    pre code {
+      background: none;
+      padding: 0;
+    }
+
+    .diagram-container {
+      margin: 1.5rem 0;
+      overflow-x: auto;
+    }
+    .diagram-container svg {
+      max-width: 100%;
+      height: auto;
+    }
+
+    nav {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem 1.5rem;
+      margin: 1.5rem 0;
+    }
+    nav a {
+      color: var(--info);
+      text-decoration: none;
+    }
+    nav a:hover {
+      color: var(--accent);
+      text-decoration: underline;
+    }
+    nav ol {
+      margin: 0;
+      padding-left: 1.5rem;
+    }
+    nav li {
+      margin: 0.25rem 0;
+    }
+
+    a { color: var(--info); }
+    a:hover { color: var(--accent); }
+
+    .pass { color: var(--success); }
+    .fail { color: var(--error); }
+    .warn { color: var(--warning); }
+    .info { color: var(--info); }
+    .muted { color: var(--text-muted); }
+    .mono { font-family: var(--font-mono); }
+
+    header .subtitle {
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      margin-top: 0.25rem;
+    }
+
+    footer {
+      margin-top: 3rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--border);
+      color: var(--text-muted);
+      font-size: 0.8rem;
+    }
+
+    ul { padding-left: 1.5rem; }
+    li { margin: 0.25rem 0; }
+
+    @media print {
+      body {
+        background: white;
+        color: black;
+        font-size: 10pt;
+        max-width: none;
+        padding: 0.5in;
+      }
+      nav { display: none; }
+      details { border: 1px solid #ccc; }
+      details[open] > summary { border-bottom: 1px solid #ccc; }
+      details > summary::after { content: none; }
+      h2 { color: black; border-left-color: #666; page-break-after: avoid; }
+      h2::before { color: #666; }
+      h3 { page-break-after: avoid; }
+      table { page-break-inside: avoid; }
+      th { background: #eee; color: black; }
+      td { border-color: #ccc; }
+      tr:hover { background: none; }
+      pre { border-color: #ccc; background: #f5f5f5; }
+      a { color: black; text-decoration: underline; }
+      .diagram-container svg text { fill: black !important; }
+      .diagram-container svg rect { stroke: #333 !important; }
+      .diagram-container svg line, .diagram-container svg path { stroke: #333 !important; }
+      @page { size: letter; margin: 0.75in; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>CONTEXT FOUNDRY</h1>
+  <div class="subtitle">Technical Reference Manual -- foundry v0.5.2 -- Generated 2026-03-17</div>
+</header>
+
+<nav>
+  <ol>
+    <li><a href="#system-overview">System Overview</a></li>
+    <li><a href="#spid-pipeline">SPID Pipeline</a></li>
+    <li><a href="#execution-modes">Execution Modes</a></li>
+    <li><a href="#dual-model-arena">Dual-Model Arena</a></li>
+    <li><a href="#git-integration">Git Integration</a></li>
+    <li><a href="#tui-layout">TUI Layout</a></li>
+    <li><a href="#configuration">Configuration Reference</a></li>
+    <li><a href="#extensions">Extensions</a></li>
+    <li><a href="#mcp-tools">MCP Tools</a></li>
+    <li><a href="#pattern-store">Pattern Store</a></li>
+    <li><a href="#samsara">Samsara / Discovery</a></li>
+  </ol>
+</nav>
+
+<main>
+
+<!-- ================================================================ -->
+<!-- SECTION 1: SYSTEM OVERVIEW                                       -->
+<!-- ================================================================ -->
+<section id="system-overview">
+<h2>System Overview</h2>
+
+<p>
+Context Foundry is an autonomous build loop that runs AI coding agents through a
+structured pipeline (Scout, Plan, Implement, Doubt) to complete software engineering
+tasks. Written in Rust (foundry v0.5.2), it provides a ratatui-based TUI dashboard,
+pattern learning, extension system, dual-model execution arena, and full git
+integration with PR workflows. The system reads tasks from TASKS.md, processes each
+through the SPID pipeline, and commits results -- optionally creating per-task pull
+requests for human review.
+</p>
+
+<div class="diagram-container">
+<svg viewBox="0 0 900 560" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 7" refX="10" refY="3.5"
+            markerWidth="8" markerHeight="6" orient="auto-start-reverse">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#58a6ff"/>
+    </marker>
+  </defs>
+
+  <!-- CLI Layer -->
+  <rect x="20" y="20" width="170" height="60" rx="4" fill="#161b22" stroke="#58a6ff" stroke-width="1.5"/>
+  <text x="105" y="42" text-anchor="middle" fill="#f0a500" font-family="monospace" font-size="12" font-weight="bold">CLI Layer</text>
+  <text x="105" y="58" text-anchor="middle" fill="#8b949e" font-family="monospace" font-size="10">main.rs: 7 subcommands</text>
+  <text x="105" y="70" text-anchor="middle" fill="#8b949e" font-family="monospace" font-size="9">Run Status Tasks Plan</text>
+
+  <!-- App Layer -->
+  <rect x="250" y="20" width="190" height="60" rx="4" fill="#161b22" stroke="#58a6ff" stroke-width="1.5"/>
+  <text x="345" y="42" text-anchor="middle" fill="#f0a500" font-family="monospace" font-size="12" font-weight="bold">App Layer</text>
+  <text x="345" y="58" text-anchor="middle" fill="#8b949e" font-family="monospace" font-size="10">app/: Event-driven</text>
+  <text x="345" y="70" text-anchor="middle" fill="#8b949e" font-family="monospace" font-size="9">mpsc AppEvent channel</text>
+
+  <!-- Agent Layer -->
+  <rect x="500" y="20" width="180" height="60" rx="4" fill="#161b22" stroke="#58a6ff" stroke-width="1.5"/>
+  <text x="590" y="42" text-anchor="middle" fill="#f0a500" font-family="monospace" font-size="12" font-weight="bold">Agent Layer</text>
+  <text x="590" y="58" text-anchor="middle" fill="#8b949e" font-family="monospace" font-size="10">agent.rs: PTY spawn</text>
+  <text x="590" y="70" text-anchor="middle" fill="#8b949e" font-family="monospace" font-size="9">claude / codex CLI</text>
+
+  <!-- TUI Layer -->
+  <rect x="720" y="20" width="160" height="60" rx="4" fill="#161b22" stroke="#58a6ff" stroke-width="1.5"/>
+  <text x="800" y="42" text-anchor="middle" fill="#f0a500" font-family="monospace" font-size="12" font-weight="bold">TUI Layer</text>
+  <text x="800" y="58" text-anchor="middle" fill="#8b949e" font-family="monospace" font-size="10">tui/: ratatui</text>
+  <text x="800" y="70" text-anchor="middle" fill="#8b949e" font-family="monospace" font-size="9">pipeline+stats+output</text>
+
+  <!-- Build Pipeline -->
+  <rect x="250" y="130" width="190" height="70" rx="4" fill="#161b22" stroke="#58a6ff" stroke-width="1.5"/>
+  <text x="345" y="152" text-anchor="middle" fill="#f0a500" font-family="monospace" font-size="12" font-weight="bold">Build Pipeline</text>
+  <text x="345" y="168" text-anchor="middle" fill="#8b949e" font-family="monospace" font-size="10">app/build.rs</text>
+  <text x="345" y="184" text-anchor="middle" fill="#8b949e" font-family="monospace" font-size="9">SPID: Scout Plan Impl Doubt Ship</text>
+
+  <!-- Git Integration -->
+  <rect x="500" y="130" width="180" height="70" rx="4" fill="#161b22" stroke="#58a6ff" stroke-width="1.5"/>
+  <text x="590" y="152" text-anchor="middle" fill="#f0a500" font-family="monospace" font-size="12" font-weight="bold">Git Integration</text>
+  <text x="590" y="168" text-anchor="middle" fill="#8b949e" font-family="monospace" font-size="10">git.rs</text>
+  <text x="590" y="184" text-anchor="middle" fill="#8b949e" font-family="monospace" font-size="9">commit_and_push, PR flow</text>
+
+  <!-- Dual-Model Arena -->
+  <rect x="20" y="130" width="170" height="70" rx="4" fill="#161b22" stroke="#58a6ff" stroke-width="1.5"/>
+  <text x="105" y="152" text-anchor="middle" fill="#f0a500" font-family="monospace" font-size="12" font-weight="bold">Dual-Model Arena</text>
+  <text x="105" y="168" text-anchor="middle" fill="#8b949e" font-family="monospace" font-size="10">.buildloop/arena/</text>
+  <text x="105" y="184" text-anchor="middle" fill="#8b949e" font-family="monospace" font-size="9">parallel worktrees</text>
+
+  <!-- Pattern Store -->
+  <rect x="20" y="260" width="170" height="60" rx="4" fill="#161b22" stroke="#58a6ff" stroke-width="1.5"/>
+  <text x="105" y="282" text-anchor="middle" fill="#f0a500" font-family="monospace" font-size="12" font-weight="bold">Pattern Store</text>
+  <text x="105" y="298" text-anchor="middle" fill="#8b949e" font-family="monospace" font-size="10">~/.foundry/patterns/</text>
+  <text x="105" y="310" text-anchor="middle" fill="#8b949e" font-family="monospace" font-size="9">JSON keyword+semantic</text>
+
+  <!-- Extension System -->
+  <rect x="250" y="260" width="190" height="60" rx="4" fill="#161b22" stroke="#58a6ff" stroke-width="1.5"/>
+  <text x="345" y="282" text-anchor="middle" fill="#f0a500" font-family="monospace" font-size="12" font-weight="bold">Extension System</text>
+  <text x="345" y="298" text-anchor="middle" fill="#8b949e" font-family="monospace" font-size="10">extensions.rs</text>
+  <text x="345" y="310" text-anchor="middle" fill="#8b949e" font-family="monospace" font-size="9">discover + load CLAUDE.md</text>
+
+  <!-- MCP Server -->
+  <rect x="500" y="260" width="180" height="60" rx="4" fill="#161b22" stroke="#58a6ff" stroke-width="1.5"/>
+  <text x="590" y="282" text-anchor="middle" fill="#f0a500" font-family="monospace" font-size="12" font-weight="bold">MCP Server</text>
+  <text x="590" y="298" text-anchor="middle" fill="#8b949e" font-family="monospace" font-size="10">Model Context Protocol</text>
+  <text x="590" y="310" text-anchor="middle" fill="#8b949e" font-family="monospace" font-size="9">5 tools for agents</text>
+
+  <!-- Arrows -->
+  <!-- CLI -> App -->
+  <line x1="190" y1="50" x2="248" y2="50" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="219" y="44" text-anchor="middle" fill="#8b949e" font-family="monospace" font-size="8">dispatch</text>
+
+  <!-- App -> Agent -->
+  <line x1="440" y1="40" x2="498" y2="40" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="469" y="34" text-anchor="middle" fill="#8b949e" font-family="monospace" font-size="8">spawn</text>
+
+  <!-- Agent -> App (return) -->
+  <line x1="498" y1="65" x2="442" y2="65" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="469" y="76" text-anchor="middle" fill="#8b949e" font-family="monospace" font-size="8">events</text>
+
+  <!-- App -> TUI -->
+  <line x1="440" y1="22" x2="440" y2="15" stroke="none"/>
+  <line x1="345" y1="20" x2="345" y2="10" stroke="#58a6ff" stroke-width="1" stroke-dasharray="3"/>
+  <line x1="680" y1="50" x2="718" y2="50" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="699" y="44" text-anchor="middle" fill="#8b949e" font-family="monospace" font-size="8">AppEvent</text>
+
+  <!-- App -> Build Pipeline -->
+  <line x1="345" y1="80" x2="345" y2="128" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="365" y="108" fill="#8b949e" font-family="monospace" font-size="8">process_task()</text>
+
+  <!-- Build Pipeline -> Agent -->
+  <line x1="440" y1="155" x2="498" y2="60" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="480" y="100" fill="#8b949e" font-family="monospace" font-size="8">run_agent()</text>
+
+  <!-- Build Pipeline -> Git -->
+  <line x1="440" y1="165" x2="498" y2="165" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="469" y="158" text-anchor="middle" fill="#8b949e" font-family="monospace" font-size="8">commit/PR</text>
+
+  <!-- Build Pipeline -> Dual Arena -->
+  <line x1="248" y1="165" x2="192" y2="165" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="220" y="158" text-anchor="middle" fill="#8b949e" font-family="monospace" font-size="8">dual</text>
+
+  <!-- Pattern Store -> Build Pipeline -->
+  <line x1="105" y1="258" x2="270" y2="200" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="170" y="222" fill="#8b949e" font-family="monospace" font-size="8">inject at plan</text>
+
+  <!-- Extension System -> Agent -->
+  <line x1="345" y1="258" x2="550" y2="82" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="430" y="175" fill="#8b949e" font-family="monospace" font-size="8">wrap_with_extensions()</text>
+
+  <!-- MCP -> Pattern Store -->
+  <line x1="498" y1="290" x2="192" y2="290" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="345" y="284" text-anchor="middle" fill="#8b949e" font-family="monospace" font-size="8">read/write patterns</text>
+</svg>
+</div>
+
+</section>
+
+<!-- ================================================================ -->
+<!-- SECTION 2: SPID PIPELINE                                         -->
+<!-- ================================================================ -->
+<section id="spid-pipeline">
+<h2>SPID Pipeline</h2>
+
+<p>
+The build loop executes a 5-stage pipeline per task: Scout, Plan, Implement, Doubt,
+Ship. Two ancillary stages -- Discovery and Pattern Extraction -- run outside the
+per-task pipeline (Discovery triggers when all tasks complete; Pattern Extraction
+runs after each successful task).
+</p>
+
+<div class="diagram-container">
+<svg viewBox="0 0 900 520" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="arr2" viewBox="0 0 10 7" refX="10" refY="3.5"
+            markerWidth="8" markerHeight="6" orient="auto-start-reverse">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#58a6ff"/>
+    </marker>
+    <marker id="arr-green" viewBox="0 0 10 7" refX="10" refY="3.5"
+            markerWidth="8" markerHeight="6" orient="auto-start-reverse">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#39d353"/>
+    </marker>
+    <marker id="arr-red" viewBox="0 0 10 7" refX="10" refY="3.5"
+            markerWidth="8" markerHeight="6" orient="auto-start-reverse">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#f85149"/>
+    </marker>
+  </defs>
+
+  <!-- Decision: scout-report exists? (fast mode) -->
+  <polygon points="85,40 145,20 205,40 145,60" fill="#161b22" stroke="#f0a500" stroke-width="1.5"/>
+  <text x="145" y="37" text-anchor="middle" fill="#e6edf3" font-family="monospace" font-size="8">scout-report</text>
+  <text x="145" y="47" text-anchor="middle" fill="#e6edf3" font-family="monospace" font-size="8">exists?</text>
+
+  <!-- Skip arrow (yes) -->
+  <line x1="145" y1="60" x2="145" y2="80" stroke="#39d353" stroke-width="1" marker-end="url(#arr-green)"/>
+  <text x="155" y="73" fill="#39d353" font-family="monospace" font-size="8">yes: skip</text>
+
+  <!-- No: proceed to SCOUT -->
+  <line x1="205" y1="40" x2="230" y2="40" stroke="#58a6ff" stroke-width="1.5"/>
+  <text x="215" y="34" fill="#8b949e" font-family="monospace" font-size="8">no</text>
+
+  <!-- Fast mode label -->
+  <text x="85" y="16" fill="#f0a500" font-family="monospace" font-size="9" font-weight="bold">FAST MODE</text>
+
+  <!-- SCOUT box -->
+  <rect x="230" y="10" width="130" height="100" rx="4" fill="#161b22" stroke="#58a6ff" stroke-width="1.5"/>
+  <text x="295" y="28" text-anchor="middle" fill="#f0a500" font-family="monospace" font-size="12" font-weight="bold">SCOUT</text>
+  <text x="295" y="42" text-anchor="middle" fill="#8b949e" font-family="monospace" font-size="9">AgentRole::Scout</text>
+  <text x="240" y="56" fill="#e6edf3" font-family="monospace" font-size="8">In: TASKS, SPEC, src</text>
+  <text x="240" y="68" fill="#e6edf3" font-family="monospace" font-size="8">Out: scout-report.md</text>
+  <text x="240" y="80" fill="#8b949e" font-family="monospace" font-size="8">Skip: fast + report</text>
+  <text x="240" y="92" fill="#8b949e" font-family="monospace" font-size="8">exists</text>
+  <text x="240" y="104" fill="#8b949e" font-family="monospace" font-size="8">Prompt: scout()</text>
+
+  <!-- Arrow SCOUT -> PLAN -->
+  <line x1="360" y1="55" x2="400" y2="55" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arr2)"/>
+
+  <!-- Skip arrow merges at PLAN -->
+  <path d="M 145,80 L 145,130 L 400,130 L 400,80" fill="none" stroke="#39d353" stroke-width="1" stroke-dasharray="4"/>
+
+  <!-- PLAN box -->
+  <rect x="400" y="10" width="130" height="120" rx="4" fill="#161b22" stroke="#58a6ff" stroke-width="1.5"/>
+  <text x="465" y="28" text-anchor="middle" fill="#f0a500" font-family="monospace" font-size="12" font-weight="bold">PLAN</text>
+  <text x="465" y="42" text-anchor="middle" fill="#8b949e" font-family="monospace" font-size="9">AgentRole::Planner</text>
+  <text x="410" y="56" fill="#e6edf3" font-family="monospace" font-size="8">In: scout-report,</text>
+  <text x="410" y="68" fill="#e6edf3" font-family="monospace" font-size="8">  patterns, extensions</text>
+  <text x="410" y="80" fill="#e6edf3" font-family="monospace" font-size="8">Out: current-plan.md</text>
+  <text x="410" y="92" fill="#8b949e" font-family="monospace" font-size="8">Skip: simple task +</text>
+  <text x="410" y="104" fill="#8b949e" font-family="monospace" font-size="8">skip_planner_for_simple</text>
+  <text x="410" y="116" fill="#8b949e" font-family="monospace" font-size="8">Lookahead: task N+1</text>
+
+  <!-- Arrow PLAN -> IMPLEMENT -->
+  <line x1="530" y1="55" x2="570" y2="55" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arr2)"/>
+
+  <!-- IMPLEMENT box -->
+  <rect x="570" y="10" width="130" height="100" rx="4" fill="#161b22" stroke="#58a6ff" stroke-width="1.5"/>
+  <text x="635" y="28" text-anchor="middle" fill="#f0a500" font-family="monospace" font-size="12" font-weight="bold">IMPLEMENT</text>
+  <text x="635" y="42" text-anchor="middle" fill="#8b949e" font-family="monospace" font-size="9">AgentRole::Builder</text>
+  <text x="580" y="56" fill="#e6edf3" font-family="monospace" font-size="8">In: current-plan.md</text>
+  <text x="580" y="68" fill="#e6edf3" font-family="monospace" font-size="8">Out: build-claims.md</text>
+  <text x="580" y="80" fill="#8b949e" font-family="monospace" font-size="8">Dual: parallel worktrees</text>
+  <text x="580" y="92" fill="#8b949e" font-family="monospace" font-size="8">Prompt: builder()</text>
+
+  <!-- Arrow IMPLEMENT -> Decision diamond -->
+  <line x1="700" y1="55" x2="730" y2="55" stroke="#58a6ff" stroke-width="1.5"/>
+
+  <!-- Decision: batch_doubt && !last_task? -->
+  <polygon points="780,55 830,35 880,55 830,75" fill="#161b22" stroke="#f0a500" stroke-width="1.5"/>
+  <text x="830" y="50" text-anchor="middle" fill="#e6edf3" font-family="monospace" font-size="7">batch &&</text>
+  <text x="830" y="60" text-anchor="middle" fill="#e6edf3" font-family="monospace" font-size="7">!last?</text>
+
+  <!-- Decision arrow into diamond -->
+  <line x1="730" y1="55" x2="778" y2="55" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arr2)"/>
+
+  <!-- yes: skip doubt, go to SHIP -->
+  <line x1="830" y1="75" x2="830" y2="220" stroke="#39d353" stroke-width="1" marker-end="url(#arr-green)"/>
+  <text x="838" y="150" fill="#39d353" font-family="monospace" font-size="8">yes: skip</text>
+
+  <!-- DOUBT box -->
+  <rect x="230" y="170" width="130" height="120" rx="4" fill="#161b22" stroke="#58a6ff" stroke-width="1.5"/>
+  <text x="295" y="188" text-anchor="middle" fill="#f0a500" font-family="monospace" font-size="12" font-weight="bold">DOUBT</text>
+  <text x="295" y="202" text-anchor="middle" fill="#8b949e" font-family="monospace" font-size="9">Reviewer + Fixer</text>
+  <text x="240" y="216" fill="#e6edf3" font-family="monospace" font-size="8">In: build-claims.md</text>
+  <text x="240" y="228" fill="#e6edf3" font-family="monospace" font-size="8">Out: review-report.md</text>
+  <text x="240" y="240" fill="#8b949e" font-family="monospace" font-size="8">Gate: claims > 10 bytes</text>
+  <text x="240" y="252" fill="#8b949e" font-family="monospace" font-size="8">On FAIL: Fixer (2 pass)</text>
+  <text x="240" y="264" fill="#8b949e" font-family="monospace" font-size="8">Skip: backpressure_only</text>
+  <text x="240" y="276" fill="#8b949e" font-family="monospace" font-size="8">Prompt: reviewer()</text>
+
+  <!-- Arrow from decision to DOUBT (no) -->
+  <path d="M 830,35 L 830,20 L 215,20 L 215,220 L 228,220" fill="none" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arr2)"/>
+  <text x="212" y="140" fill="#8b949e" font-family="monospace" font-size="8">no</text>
+
+  <!-- DOUBT -> SHIP -->
+  <line x1="360" y1="240" x2="430" y2="240" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arr2)"/>
+
+  <!-- Verdict labels -->
+  <text x="380" y="234" fill="#39d353" font-family="monospace" font-size="8">PASS: feat()</text>
+  <text x="380" y="256" fill="#f85149" font-family="monospace" font-size="8">FAIL: WIP()</text>
+
+  <!-- SHIP box -->
+  <rect x="430" y="200" width="150" height="100" rx="4" fill="#161b22" stroke="#58a6ff" stroke-width="1.5"/>
+  <text x="505" y="218" text-anchor="middle" fill="#f0a500" font-family="monospace" font-size="12" font-weight="bold">SHIP</text>
+  <text x="505" y="232" text-anchor="middle" fill="#8b949e" font-family="monospace" font-size="9">No agent -- git only</text>
+  <text x="440" y="246" fill="#e6edf3" font-family="monospace" font-size="8">Auto: commit_and_push()</text>
+  <text x="440" y="258" fill="#e6edf3" font-family="monospace" font-size="8">Review: commit_task_pr()</text>
+  <text x="440" y="270" fill="#8b949e" font-family="monospace" font-size="8">Branch: foundry/{task_id}</text>
+  <text x="440" y="282" fill="#8b949e" font-family="monospace" font-size="8">Push: --force-with-lease</text>
+  <text x="440" y="294" fill="#8b949e" font-family="monospace" font-size="8">WIP: skip PR creation</text>
+
+  <!-- Skip doubt merge arrow to SHIP -->
+  <line x1="830" y1="220" x2="830" y2="250" stroke="#39d353" stroke-width="1"/>
+  <line x1="830" y1="250" x2="582" y2="250" stroke="#39d353" stroke-width="1" marker-end="url(#arr-green)"/>
+
+  <!-- Disconnected boxes: DISCOVERY and PATTERNS -->
+  <rect x="230" y="360" width="150" height="70" rx="4" fill="#161b22" stroke="#58a6ff" stroke-width="1.5" stroke-dasharray="4"/>
+  <text x="305" y="382" text-anchor="middle" fill="#f0a500" font-family="monospace" font-size="11" font-weight="bold">DISCOVERY</text>
+  <text x="305" y="396" text-anchor="middle" fill="#8b949e" font-family="monospace" font-size="9">AgentRole::Discovery</text>
+  <text x="240" y="410" fill="#8b949e" font-family="monospace" font-size="8">Runs when all tasks done</text>
+  <text x="240" y="422" fill="#8b949e" font-family="monospace" font-size="8">Appends to TASKS.md</text>
+
+  <rect x="430" y="360" width="150" height="70" rx="4" fill="#161b22" stroke="#58a6ff" stroke-width="1.5" stroke-dasharray="4"/>
+  <text x="505" y="382" text-anchor="middle" fill="#f0a500" font-family="monospace" font-size="11" font-weight="bold">PATTERNS</text>
+  <text x="505" y="396" text-anchor="middle" fill="#8b949e" font-family="monospace" font-size="9">Pattern Extraction</text>
+  <text x="440" y="410" fill="#8b949e" font-family="monospace" font-size="8">Runs after each feat()</text>
+  <text x="440" y="422" fill="#8b949e" font-family="monospace" font-size="8">Writes patterns-extracted</text>
+
+  <text x="230" y="470" fill="#8b949e" font-family="monospace" font-size="9">Dashed = ancillary (outside per-task pipeline)</text>
+
+  <!-- Backpressure label -->
+  <rect x="630" y="360" width="230" height="50" rx="4" fill="#161b22" stroke="#f85149" stroke-width="1" stroke-dasharray="4"/>
+  <text x="745" y="380" text-anchor="middle" fill="#f85149" font-family="monospace" font-size="10" font-weight="bold">BACKPRESSURE MODE</text>
+  <text x="745" y="396" text-anchor="middle" fill="#8b949e" font-family="monospace" font-size="8">Skips DOUBT entirely. Relies on</text>
+  <text x="745" y="406" text-anchor="middle" fill="#8b949e" font-family="monospace" font-size="8">build/test/lint verification.</text>
+</svg>
+</div>
+
+<h3>Pipeline Variants</h3>
+<table>
+  <tr>
+    <th>Variant</th>
+    <th>Trigger</th>
+    <th>Behavior</th>
+  </tr>
+  <tr>
+    <td><strong>Full</strong></td>
+    <td><code>pipeline_mode: "full"</code> (default)</td>
+    <td>All 5 stages run for every task</td>
+  </tr>
+  <tr>
+    <td><strong>Fast</strong></td>
+    <td><code>pipeline_mode: "fast"</code></td>
+    <td>Scout skipped when scout-report.md exists. Doubt can be batched to end of session.</td>
+  </tr>
+  <tr>
+    <td><strong>Backpressure</strong></td>
+    <td><code>pipeline_mode: "backpressure"</code> or <code>backpressure_only: true</code></td>
+    <td>Skip LLM review entirely. Rely on build/test/lint commands for verification.</td>
+  </tr>
+  <tr>
+    <td><strong>Batched Doubt</strong></td>
+    <td><code>batch_doubt: true</code></td>
+    <td>Doubt runs only on the last pending task. All prior tasks skip Doubt. The final Doubt audits all accumulated changes.</td>
+  </tr>
+</table>
+
+</section>
+
+<!-- ================================================================ -->
+<!-- SECTION 3: EXECUTION MODES                                       -->
+<!-- ================================================================ -->
+<section id="execution-modes">
+<h2>Execution Modes</h2>
+
+<table>
+  <tr>
+    <th>Mode</th>
+    <th>run_mode</th>
+    <th>Task Source</th>
+    <th>Review Gate</th>
+    <th>WIP Commits</th>
+    <th>PR Poller</th>
+    <th>Ctrl+M</th>
+  </tr>
+  <tr>
+    <td><strong>Auto (Loop)</strong></td>
+    <td><code>"auto"</code></td>
+    <td>TASKS.md, then Discovery appends more</td>
+    <td>None -- auto-commits after Doubt</td>
+    <td>On Doubt FAIL: WIP commit preserves progress</td>
+    <td>Not used</td>
+    <td>Cycles to "sprint"</td>
+  </tr>
+  <tr>
+    <td><strong>Sprint</strong></td>
+    <td><code>"sprint"</code></td>
+    <td>TASKS.md only -- no Discovery</td>
+    <td>None -- auto-commits after Doubt</td>
+    <td>On Doubt FAIL: WIP commit preserves progress</td>
+    <td>Not used</td>
+    <td>Cycles to "review"</td>
+  </tr>
+  <tr>
+    <td><strong>Review</strong></td>
+    <td><code>"review"</code></td>
+    <td>TASKS.md, one task at a time</td>
+    <td>Human gate: waits for Enter or PR approval</td>
+    <td>On Doubt FAIL: WIP commit on feature branch</td>
+    <td>Polls every <code>pr_poll_interval_secs</code> (default 30s) for PR approval/close</td>
+    <td>Cycles to "auto"</td>
+  </tr>
+</table>
+
+<h3>Ctrl+D: Dual-Selection States</h3>
+
+<p>
+Ctrl+D cycles through the <code>DualSelection</code> enum (<code>state.rs:216-251</code>).
+When <code>builder_models</code> has 2+ entries, this controls which model(s) execute:
+</p>
+
+<table>
+  <tr>
+    <th>State</th>
+    <th>Behavior</th>
+    <th>Next (Ctrl+D)</th>
+  </tr>
+  <tr>
+    <td><strong>Off</strong> (default)</td>
+    <td>Single-model execution using <code>builder_model</code>/<code>builder_provider</code></td>
+    <td>First</td>
+  </tr>
+  <tr>
+    <td><strong>First</strong></td>
+    <td>Uses first entry from <code>builder_models</code> array</td>
+    <td>Second</td>
+  </tr>
+  <tr>
+    <td><strong>Second</strong></td>
+    <td>Uses second entry from <code>builder_models</code> array</td>
+    <td>Both</td>
+  </tr>
+  <tr>
+    <td><strong>Both</strong></td>
+    <td><code>run_dual_pipelines()</code> -- both models in parallel git worktrees</td>
+    <td>First</td>
+  </tr>
+</table>
+
+<p class="muted">
+Note: After "Both", cycling returns to "First" (not "Off"). Confirmed from
+<code>DualSelection::next()</code> at <code>state.rs:243-249</code>.
+</p>
+
+<p>
+Ctrl+M cycles <code>run_mode</code> through: auto -> sprint -> review -> auto.
+</p>
+
+</section>
+
+<!-- ================================================================ -->
+<!-- SECTION 4: DUAL-MODEL ARENA                                      -->
+<!-- ================================================================ -->
+<section id="dual-model-arena">
+<h2>Dual-Model Arena</h2>
+
+<p>
+When <code>builder_models</code> has 2+ entries and <code>dual_selection</code> is "both",
+<code>run_dual_pipelines()</code> forks execution into two independent git worktrees.
+Each model runs the full Plan-Implement-Doubt pipeline independently in its own copy
+of the project.
+</p>
+
+<h3>Worktree Layout</h3>
+<pre><code>.buildloop/arena/
+├── pipeline-0-{provider}/    (git worktree for model[0])
+│   ├── .buildloop/
+│   │   ├── scout-report.md   (copied from main)
+│   │   ├── current-plan.md   (generated by model[0]'s planner)
+│   │   ├── build-claims.md   (generated by model[0]'s builder)
+│   │   └── review-report.md  (generated by model[0]'s reviewer)
+│   └── ... (full project copy)
+└── pipeline-1-{provider}/    (git worktree for model[1])
+    ├── .buildloop/
+    │   ├── scout-report.md
+    │   ├── current-plan.md
+    │   ├── build-claims.md
+    │   └── review-report.md
+    └── ... (full project copy)</code></pre>
+
+<h3>Event Tagging</h3>
+<p>
+Each pipeline wraps its events with <code>AppEvent::DualPipelineEvent(usize, Box&lt;AppEvent&gt;)</code>
+where the <code>usize</code> is the pipeline index (0 or 1). The TUI dispatches these to the
+correct stream in <code>DualBuildState.streams[idx]</code>.
+</p>
+
+<h3>TUI Tab Bar</h3>
+<p>
+The agent output pane shows a tab bar when dual build is active.
+<code>DualBuildState.tab</code> (0 or 1) controls which stream is displayed.
+The tab bar shows model labels from <code>DualBuildState.models[0]</code> and
+<code>DualBuildState.models[1]</code>.
+</p>
+
+<h3>Winner Selection</h3>
+<p>
+No automated winner selection runs. The human evaluates both worktrees and decides
+which to keep.
+</p>
+
+<h3>Per-Pipeline State</h3>
+<p>Tracked in <code>DualBuildState</code> (<code>state.rs:254-264</code>):</p>
+<table>
+  <tr><th>Field</th><th>Type</th><th>Purpose</th></tr>
+  <tr><td><code>streams</code></td><td><code>[Vec&lt;String&gt;; 2]</code></td><td>Agent output lines per pipeline</td></tr>
+  <tr><td><code>event_counts</code></td><td><code>[usize; 2]</code></td><td>Event count per pipeline</td></tr>
+  <tr><td><code>models</code></td><td><code>[String; 2]</code></td><td>Model display labels</td></tr>
+  <tr><td><code>context_pcts</code></td><td><code>[Option&lt;u8&gt;; 2]</code></td><td>Context window usage per pipeline</td></tr>
+  <tr><td><code>finished</code></td><td><code>[bool; 2]</code></td><td>Completion flag per pipeline</td></tr>
+  <tr><td><code>stages</code></td><td><code>[Option&lt;AgentRole&gt;; 2]</code></td><td>Current SPID stage per pipeline</td></tr>
+  <tr><td><code>stage_models</code></td><td><code>[String; 2]</code></td><td>Model label for current stage per pipeline</td></tr>
+</table>
+
+</section>
+
+<!-- ================================================================ -->
+<!-- SECTION 5: GIT INTEGRATION                                       -->
+<!-- ================================================================ -->
+<section id="git-integration">
+<h2>Git Integration</h2>
+
+<h3>commit_task_pr Flow (Review Mode)</h3>
+
+<div class="diagram-container">
+<svg viewBox="0 0 900 680" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="arr3" viewBox="0 0 10 7" refX="10" refY="3.5"
+            markerWidth="8" markerHeight="6" orient="auto-start-reverse">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#58a6ff"/>
+    </marker>
+  </defs>
+
+  <!-- Lifelines -->
+  <text x="200" y="18" text-anchor="middle" fill="#f0a500" font-family="monospace" font-size="12" font-weight="bold">Foundry</text>
+  <line x1="200" y1="25" x2="200" y2="670" stroke="#30363d" stroke-width="1" stroke-dasharray="4"/>
+  <text x="600" y="18" text-anchor="middle" fill="#f0a500" font-family="monospace" font-size="12" font-weight="bold">Git / GitHub</text>
+  <line x1="600" y1="25" x2="600" y2="670" stroke="#30363d" stroke-width="1" stroke-dasharray="4"/>
+
+  <!-- Step a: Remember base branch -->
+  <rect x="100" y="35" width="200" height="20" rx="3" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+  <text x="200" y="49" text-anchor="middle" fill="#e6edf3" font-family="monospace" font-size="9">Remember base branch</text>
+
+  <!-- Step b: checkout -B -->
+  <line x1="200" y1="65" x2="598" y2="65" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arr3)"/>
+  <text x="400" y="60" text-anchor="middle" fill="#8b949e" font-family="monospace" font-size="9">git checkout -B foundry/{task_id}</text>
+
+  <!-- Step c: stage -->
+  <line x1="200" y1="90" x2="598" y2="90" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arr3)"/>
+  <text x="400" y="85" text-anchor="middle" fill="#8b949e" font-family="monospace" font-size="9">git add -A && git reset -- .buildloop/logs/</text>
+
+  <!-- Step d: check staged -->
+  <line x1="200" y1="115" x2="598" y2="115" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arr3)"/>
+  <text x="400" y="110" text-anchor="middle" fill="#8b949e" font-family="monospace" font-size="9">git diff --cached --quiet</text>
+
+  <!-- Alt: nothing staged -->
+  <rect x="40" y="130" width="840" height="30" rx="3" fill="none" stroke="#f85149" stroke-width="1" stroke-dasharray="4"/>
+  <text x="50" y="148" fill="#f85149" font-family="monospace" font-size="9">alt [nothing staged]: checkout base, delete branch, return (false, None)</text>
+
+  <!-- Step f: commit -->
+  <line x1="200" y1="175" x2="598" y2="175" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arr3)"/>
+  <text x="400" y="170" text-anchor="middle" fill="#8b949e" font-family="monospace" font-size="9">git commit -m "feat({task_id}): {desc}"</text>
+  <text x="400" y="182" text-anchor="middle" fill="#8b949e" font-family="monospace" font-size="8">(or "WIP" prefix if is_wip)</text>
+
+  <!-- Step g: push -->
+  <line x1="200" y1="200" x2="598" y2="200" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arr3)"/>
+  <text x="400" y="196" text-anchor="middle" fill="#8b949e" font-family="monospace" font-size="9">git push --force-with-lease -u {remote} foundry/{task_id}</text>
+
+  <!-- Step h: PR create -->
+  <rect x="40" y="215" width="840" height="55" rx="3" fill="none" stroke="#39d353" stroke-width="1" stroke-dasharray="4"/>
+  <text x="50" y="230" fill="#39d353" font-family="monospace" font-size="9">alt [push OK && !is_wip]:</text>
+  <line x1="200" y1="240" x2="598" y2="240" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arr3)"/>
+  <text x="400" y="236" text-anchor="middle" fill="#8b949e" font-family="monospace" font-size="9">gh pr create --base {base} --title "feat({task_id}): ..."</text>
+
+  <!-- Step i: fallback -->
+  <line x1="200" y1="260" x2="598" y2="260" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arr3)"/>
+  <text x="400" y="256" text-anchor="middle" fill="#8b949e" font-family="monospace" font-size="8">if create fails: gh pr list --head foundry/{task_id} (find existing PR)</text>
+
+  <!-- Step j: annotate -->
+  <rect x="100" y="285" width="200" height="20" rx="3" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+  <text x="200" y="299" text-anchor="middle" fill="#e6edf3" font-family="monospace" font-size="9">annotate_tasks_with_pr()</text>
+
+  <!-- Step k: push annotation -->
+  <line x1="200" y1="315" x2="598" y2="315" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arr3)"/>
+  <text x="400" y="310" text-anchor="middle" fill="#8b949e" font-family="monospace" font-size="9">Stage TASKS.md, commit annotation, push --force-with-lease</text>
+
+  <!-- Step l: checkout base -->
+  <line x1="200" y1="345" x2="598" y2="345" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arr3)"/>
+  <text x="400" y="340" text-anchor="middle" fill="#8b949e" font-family="monospace" font-size="9">git checkout {base_branch}</text>
+
+  <!-- Step m: copy TASKS.md -->
+  <line x1="598" y1="370" x2="202" y2="370" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arr3)"/>
+  <text x="400" y="365" text-anchor="middle" fill="#8b949e" font-family="monospace" font-size="9">git show foundry/{task_id}:TASKS.md (copy to base)</text>
+
+  <!-- Step n: mark done on base -->
+  <line x1="200" y1="395" x2="598" y2="395" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arr3)"/>
+  <text x="400" y="390" text-anchor="middle" fill="#8b949e" font-family="monospace" font-size="9">Stage TASKS.md, commit "mark {task_id} done", push to auto_push_remote</text>
+
+  <!-- Return value -->
+  <rect x="100" y="415" width="200" height="20" rx="3" fill="#161b22" stroke="#39d353" stroke-width="1"/>
+  <text x="200" y="429" text-anchor="middle" fill="#39d353" font-family="monospace" font-size="9">return (true, pr_number)</text>
+</svg>
+</div>
+
+<h3>commit_and_push (Auto/Sprint Mode)</h3>
+<p>The simpler flow for auto and sprint modes:</p>
+<ol>
+  <li><code>git add -A</code></li>
+  <li><code>git reset -- .buildloop/logs/</code></li>
+  <li><code>git diff --cached --quiet</code> (bail if nothing staged)</li>
+  <li><code>git commit -m "feat({task_id}): {desc}"</code> (or WIP prefix)</li>
+  <li><code>maybe_push_commit()</code> -- push to <code>auto_push_remote</code> if set</li>
+</ol>
+
+<h3>Key Details</h3>
+<table>
+  <tr><th>Aspect</th><th>Detail</th></tr>
+  <tr><td>Branch naming</td><td><code>foundry/{task_id}</code> (task_id lowercased, e.g. <code>foundry/t1.1</code>)</td></tr>
+  <tr><td>Push strategy</td><td><code>--force-with-lease</code> (safe force push, fails if upstream diverged)</td></tr>
+  <tr><td><code>auto_push_remote</code></td><td>Defaults to <code>None</code> (local commits only). When set, pushes to that remote.</td></tr>
+  <tr><td>WIP commits</td><td>When <code>is_wip</code> is true, branch + commit still happen, but PR creation is skipped.</td></tr>
+  <tr><td><code>create_issue_on_wip</code></td><td>When enabled and task is WIP, <code>create_wip_issue()</code> creates a GitHub issue with review findings.</td></tr>
+</table>
+
+</section>
+
+<!-- ================================================================ -->
+<!-- SECTION 6: TUI LAYOUT                                            -->
+<!-- ================================================================ -->
+<section id="tui-layout">
+<h2>TUI Layout</h2>
+
+<p>
+The running screen layout is defined in <code>tui/mod.rs:122-165</code>. Five vertical
+zones, with the middle zone split 60/40 horizontally.
+</p>
+
+<pre><code>┌────────────────────────────────────────────────────────────────────────┐
+│ HEADER (5 lines)                                                       │
+│  Project name │ Phase badge (Startup/Planning/Running)                  │
+│  Mode badge (auto/sprint/review) │ Task: T1.1 -- description           │
+│  Agent: IMPLEMENT (claude:opus) ⠋ 2m34s                                │
+│  [dual tab bar when active: model[0] │ model[1]]                       │
+├────────────────────────────────────────────────────────────────────────┤
+│ PIPELINE DIAGRAM (7 lines)                                             │
+│  ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐ │
+│  │  SCOUT   │──>│   PLAN   │──>│IMPLEMENT │──>│  DOUBT   │──>│  SHIP    │ │
+│  │ sonnet   │   │  opus    │   │  opus    │   │ sonnet   │   │ GitHub   │ │
+│  │scout-rpt │   │curr-plan │   │bld-claim │   │fresh ctx │   │ git+pr   │ │
+│  └──────────┘   └──────────┘   └──────────┘   └──────────┘   └──────────┘ │
+│  ┌──────────┐   ┌──────────┐  (disconnected)                            │
+│  │ DISCOVER │   │ PATTERNS │                                             │
+│  └──────────┘   └──────────┘                                             │
+├──────────────────────────────────┬─────────────────────────────────────┤
+│ AGENT OUTPUT (60% width)         │ TASK QUEUE (40% width, min 6 lines) │
+│  [scrollable log of agent text,  │  H1.1: Create overview...           │
+│   tool calls, tool results]      │  D32.1: Fix pipeline bug...         │
+│                                  │  (H=yellow, D=blue, T=white)        │
+│  Events: AppEvent::AgentOutput   │                                     │
+│                                  ├─────────────────────────────────────┤
+│                                  │ PATTERNS LEARNED (6 lines)          │
+│                                  │  [pattern activity feed]            │
+│                                  ├─────────────────────────────────────┤
+│                                  │ EXTENSIONS USED (6 lines)           │
+│                                  │  [extension injection feed]         │
+├──────────────────────────────────┴─────────────────────────────────────┤
+│ STATS PANEL (6 lines)                                                  │
+│  Progress: [████████░░░░] 3/7 │ Git: main (3 dirty)                   │
+│  Context%: S:45% P:72% I:89% D:-- │ Patterns: 3 injected, 1 used     │
+│  Session: 12m │ Cost: $0.47 │ Commits: 2 feat, 0 WIP                  │
+│  Agent: IMPLEMENT (claude:opus) running... ⠋                           │
+├────────────────────────────────────────────────────────────────────────┤
+│ STATUS BAR (1 line)                                                    │
+│  q stop  Ctrl+C quit  ↑↓ scroll  i inject  PgUp/PgDn queue  p patt   │
+│  ^T theme  Tab explore  [Enter continue]  [f findings]                 │
+└────────────────────────────────────────────────────────────────────────┘</code></pre>
+
+<h3>Pane-to-Event Mapping</h3>
+<table>
+  <tr>
+    <th>Pane</th>
+    <th>Widget</th>
+    <th>Driven by AppEvent</th>
+  </tr>
+  <tr>
+    <td>Header</td>
+    <td><code>render_header</code></td>
+    <td><code>LoopEvent::TaskStarted</code>, <code>LoopEvent::AgentStarted</code>, <code>DualBuildStarted</code></td>
+  </tr>
+  <tr>
+    <td>Pipeline Diagram</td>
+    <td><code>render_pipeline_map</code></td>
+    <td><code>LoopEvent::AgentStarted</code> (highlights active stage)</td>
+  </tr>
+  <tr>
+    <td>Agent Output</td>
+    <td><code>render_agent_output</code></td>
+    <td><code>AppEvent::AgentOutput(AgentOutputEvent::*)</code>, <code>DualPipelineEvent</code></td>
+  </tr>
+  <tr>
+    <td>Task Queue</td>
+    <td><code>render_task_queue</code></td>
+    <td><code>LoopEvent::QueueUpdated</code>, <code>LoopEvent::TaskCompleted</code></td>
+  </tr>
+  <tr>
+    <td>Patterns Learned</td>
+    <td><code>render_patterns</code></td>
+    <td><code>LoopEvent::PatternsUsed</code></td>
+  </tr>
+  <tr>
+    <td>Extensions Used</td>
+    <td><code>render_extensions_used</code></td>
+    <td><code>LoopEvent::ExtensionInjected</code></td>
+  </tr>
+  <tr>
+    <td>Stats Panel</td>
+    <td><code>render_dashboard_stats</code></td>
+    <td><code>AppEvent::AgentOutput(Usage{...})</code>, <code>LoopEvent::CountsUpdated</code></td>
+  </tr>
+  <tr>
+    <td>Status Bar</td>
+    <td><code>render_status_bar</code></td>
+    <td><code>AppPhase</code> changes, <code>awaiting_review</code>, <code>awaiting_pr</code></td>
+  </tr>
+</table>
+
+<h3>Keybinds</h3>
+<p>From <code>tui/running.rs:695-814</code>:</p>
+<table>
+  <tr><th>Key</th><th>Action</th></tr>
+  <tr><td><code>q</code></td><td>Stop after current task</td></tr>
+  <tr><td><code>Ctrl+C</code></td><td>Force quit</td></tr>
+  <tr><td><code>↑↓</code></td><td>Scroll agent output</td></tr>
+  <tr><td><code>i</code></td><td>Inject text into running agent</td></tr>
+  <tr><td><code>PgUp/PgDn</code></td><td>Scroll task queue</td></tr>
+  <tr><td><code>p</code></td><td>Toggle pattern overlay</td></tr>
+  <tr><td><code>^T</code></td><td>Cycle TUI theme (dark -> catppuccin -> solarized -> dark)</td></tr>
+  <tr><td><code>Tab</code></td><td>Toggle explore/dashboard view</td></tr>
+  <tr><td><code>Enter</code></td><td>Continue (when awaiting review) or skip wait (when awaiting PR)</td></tr>
+  <tr><td><code>f</code></td><td>Toggle findings (when orchestrator outcome exists)</td></tr>
+</table>
+
+</section>
+
+<!-- ================================================================ -->
+<!-- SECTION 7: CONFIGURATION REFERENCE                               -->
+<!-- ================================================================ -->
+<section id="configuration">
+<h2>Configuration Reference</h2>
+
+<details>
+  <summary>Configuration Reference (.foundry.json) -- 55 fields</summary>
+  <table>
+    <tr>
+      <th>Field</th>
+      <th>Type</th>
+      <th>Default</th>
+      <th>Description</th>
+    </tr>
+    <tr>
+      <td><code>scout_model</code></td>
+      <td>String</td>
+      <td><code>"sonnet"</code></td>
+      <td>Model name for Scout agent</td>
+    </tr>
+    <tr>
+      <td><code>planner_model</code></td>
+      <td>String</td>
+      <td><code>"opus"</code></td>
+      <td>Model name for Planner agent</td>
+    </tr>
+    <tr>
+      <td><code>builder_model</code></td>
+      <td>String</td>
+      <td><code>"opus"</code></td>
+      <td>Model name for Builder agent</td>
+    </tr>
+    <tr>
+      <td><code>builder_models</code></td>
+      <td>Vec&lt;String&gt;</td>
+      <td><code>[]</code></td>
+      <td>Dual-model execution specs, format "provider:model". When len >= 2, overrides builder_model/builder_provider.</td>
+    </tr>
+    <tr>
+      <td><code>dual_selection</code></td>
+      <td>String</td>
+      <td><code>""</code> (off)</td>
+      <td>Dual-build selection: "first", "second", "both", or "" (off). Ctrl+D cycles through states.</td>
+    </tr>
+    <tr>
+      <td><code>reviewer_model</code></td>
+      <td>String</td>
+      <td><code>"sonnet"</code></td>
+      <td>Model name for Reviewer agent</td>
+    </tr>
+    <tr>
+      <td><code>fixer_model</code></td>
+      <td>String</td>
+      <td><code>"sonnet"</code></td>
+      <td>Model name for Fixer agent</td>
+    </tr>
+    <tr>
+      <td><code>discovery_model</code></td>
+      <td>String</td>
+      <td><code>"opus"</code></td>
+      <td>Model name for Discovery agent</td>
+    </tr>
+    <tr>
+      <td><code>scout_provider</code></td>
+      <td>String</td>
+      <td><code>"claude"</code></td>
+      <td>Provider for Scout: "claude" or "codex"</td>
+    </tr>
+    <tr>
+      <td><code>planner_provider</code></td>
+      <td>String</td>
+      <td><code>"claude"</code></td>
+      <td>Provider for Planner</td>
+    </tr>
+    <tr>
+      <td><code>builder_provider</code></td>
+      <td>String</td>
+      <td><code>"claude"</code></td>
+      <td>Provider for Builder</td>
+    </tr>
+    <tr>
+      <td><code>reviewer_provider</code></td>
+      <td>String</td>
+      <td><code>"claude"</code></td>
+      <td>Provider for Reviewer</td>
+    </tr>
+    <tr>
+      <td><code>fixer_provider</code></td>
+      <td>String</td>
+      <td><code>"claude"</code></td>
+      <td>Provider for Fixer</td>
+    </tr>
+    <tr>
+      <td><code>discovery_provider</code></td>
+      <td>String</td>
+      <td><code>"claude"</code></td>
+      <td>Provider for Discovery</td>
+    </tr>
+    <tr>
+      <td><code>studio_claude_model</code></td>
+      <td>String</td>
+      <td><code>"opus"</code></td>
+      <td>Claude model for Studio mode</td>
+    </tr>
+    <tr>
+      <td><code>studio_codex_model</code></td>
+      <td>String</td>
+      <td><code>""</code></td>
+      <td>Codex model for Studio mode</td>
+    </tr>
+    <tr>
+      <td><code>studio_theme</code></td>
+      <td>String</td>
+      <td><code>"foundry"</code></td>
+      <td>Studio UI theme name</td>
+    </tr>
+    <tr>
+      <td><code>studio_custom_themes</code></td>
+      <td>BTreeMap&lt;String, StudioThemeConfig&gt;</td>
+      <td><code>{}</code></td>
+      <td>Custom Studio theme definitions</td>
+    </tr>
+    <tr>
+      <td><code>pause_between_tasks_secs</code></td>
+      <td>u64</td>
+      <td><code>10</code></td>
+      <td>Seconds to wait between tasks</td>
+    </tr>
+    <tr>
+      <td><code>pause_between_agents_secs</code></td>
+      <td>u64</td>
+      <td><code>3</code></td>
+      <td>Seconds to wait between agent spawns</td>
+    </tr>
+    <tr>
+      <td><code>pause_between_cycles_secs</code></td>
+      <td>u64</td>
+      <td><code>30</code></td>
+      <td>Seconds to wait between discovery cycles</td>
+    </tr>
+    <tr>
+      <td><code>agent_timeout_secs</code></td>
+      <td>u64</td>
+      <td><code>600</code></td>
+      <td>Max seconds before killing an agent (10 min)</td>
+    </tr>
+    <tr>
+      <td><code>patterns_dir</code></td>
+      <td>String</td>
+      <td><code>"~/.foundry/patterns"</code></td>
+      <td>Directory for global pattern store</td>
+    </tr>
+    <tr>
+      <td><code>backpressure_only</code></td>
+      <td>bool</td>
+      <td><code>false</code></td>
+      <td>Skip LLM review, rely on build/test/lint only</td>
+    </tr>
+    <tr>
+      <td><code>simple_planner_model</code></td>
+      <td>String</td>
+      <td><code>"sonnet"</code></td>
+      <td>Override planner model for Simple tasks</td>
+    </tr>
+    <tr>
+      <td><code>simple_builder_model</code></td>
+      <td>String</td>
+      <td><code>"sonnet"</code></td>
+      <td>Override builder model for Simple tasks</td>
+    </tr>
+    <tr>
+      <td><code>simple_reviewer_model</code></td>
+      <td>String</td>
+      <td><code>""</code></td>
+      <td>Override reviewer for Simple tasks ("" = skip review)</td>
+    </tr>
+    <tr>
+      <td><code>max_pattern_injection</code></td>
+      <td>usize</td>
+      <td><code>10</code></td>
+      <td>Max patterns injected into agent prompts</td>
+    </tr>
+    <tr>
+      <td><code>planning_iterations</code></td>
+      <td>u64</td>
+      <td><code>0</code></td>
+      <td>Max iterations for <code>foundry plan</code> mode (0 = unlimited)</td>
+    </tr>
+    <tr>
+      <td><code>adaptive_pauses</code></td>
+      <td>bool</td>
+      <td><code>true</code></td>
+      <td>Skip full sleep when agent was not rate-limited (500ms min)</td>
+    </tr>
+    <tr>
+      <td><code>auto_push_remote</code></td>
+      <td>Option&lt;String&gt;</td>
+      <td><code>null</code></td>
+      <td>Git remote to auto-push after commits (null = local only)</td>
+    </tr>
+    <tr>
+      <td><code>semantic_match_enabled</code></td>
+      <td>bool</td>
+      <td><code>true</code></td>
+      <td>Enable semantic pattern matching via Ollama embeddings</td>
+    </tr>
+    <tr>
+      <td><code>embedding_model</code></td>
+      <td>String</td>
+      <td><code>"nomic-embed-text"</code></td>
+      <td>Ollama embedding model name</td>
+    </tr>
+    <tr>
+      <td><code>ollama_url</code></td>
+      <td>String</td>
+      <td><code>"http://127.0.0.1:11435"</code></td>
+      <td>Ollama API base URL for embeddings</td>
+    </tr>
+    <tr>
+      <td><code>embedding_timeout_ms</code></td>
+      <td>u64</td>
+      <td><code>2000</code></td>
+      <td>Timeout for Ollama embedding requests in milliseconds</td>
+    </tr>
+    <tr>
+      <td><code>orchestrator_proposer_provider</code></td>
+      <td>String</td>
+      <td><code>"claude"</code></td>
+      <td>Design mode: proposer model provider</td>
+    </tr>
+    <tr>
+      <td><code>orchestrator_proposer_model</code></td>
+      <td>String</td>
+      <td><code>"opus"</code></td>
+      <td>Design mode: proposer model name</td>
+    </tr>
+    <tr>
+      <td><code>orchestrator_reviewer_provider</code></td>
+      <td>String</td>
+      <td><code>"claude"</code></td>
+      <td>Design mode: reviewer model provider</td>
+    </tr>
+    <tr>
+      <td><code>orchestrator_reviewer_model</code></td>
+      <td>String</td>
+      <td><code>"opus"</code></td>
+      <td>Design mode: reviewer model name</td>
+    </tr>
+    <tr>
+      <td><code>orchestrator_max_iterations</code></td>
+      <td>usize</td>
+      <td><code>3</code></td>
+      <td>Design mode: max proposal/review iterations</td>
+    </tr>
+    <tr>
+      <td><code>orchestrator_accept_policy</code></td>
+      <td>String</td>
+      <td><code>"no-high-medium"</code></td>
+      <td>Design mode: acceptance policy ("no-high", "no-high-medium", "no-findings")</td>
+    </tr>
+    <tr>
+      <td><code>review_mode</code></td>
+      <td>String</td>
+      <td><code>"diff-only"</code></td>
+      <td>Reviewer input: "diff-only" or "file-list"</td>
+    </tr>
+    <tr>
+      <td><code>skip_planner_for_simple</code></td>
+      <td>bool</td>
+      <td><code>true</code></td>
+      <td>Skip planner for Simple-complexity tasks</td>
+    </tr>
+    <tr>
+      <td><code>discovery_cooldown_minutes</code></td>
+      <td>u64</td>
+      <td><code>5</code></td>
+      <td>Minutes before running discovery after last H-task</td>
+    </tr>
+    <tr>
+      <td><code>planner_lookahead</code></td>
+      <td>bool</td>
+      <td><code>true</code></td>
+      <td>Pre-plan task N+1 while building task N</td>
+    </tr>
+    <tr>
+      <td><code>pattern_extraction_model</code></td>
+      <td>String</td>
+      <td><code>"sonnet"</code></td>
+      <td>Model for pattern extraction (lightweight)</td>
+    </tr>
+    <tr>
+      <td><code>run_mode</code></td>
+      <td>String</td>
+      <td><code>"auto"</code></td>
+      <td>Execution mode: "auto", "sprint", or "review"</td>
+    </tr>
+    <tr>
+      <td><code>pipeline_mode</code></td>
+      <td>String</td>
+      <td><code>"full"</code></td>
+      <td>Pipeline mode: "full", "fast", or "backpressure"</td>
+    </tr>
+    <tr>
+      <td><code>batch_doubt</code></td>
+      <td>bool</td>
+      <td><code>false</code></td>
+      <td>Defer doubt to last task only</td>
+    </tr>
+    <tr>
+      <td><code>extensions</code></td>
+      <td>Vec&lt;String&gt;</td>
+      <td><code>[]</code></td>
+      <td>Selected extension names (e.g., ["roblox", "extend"])</td>
+    </tr>
+    <tr>
+      <td><code>create_issue_on_wip</code></td>
+      <td>bool</td>
+      <td><code>false</code></td>
+      <td>Create GitHub issue on WIP (failed) commits</td>
+    </tr>
+    <tr>
+      <td><code>preview_wrap</code></td>
+      <td>bool</td>
+      <td><code>true</code></td>
+      <td>Preview pane word-wrap preference</td>
+    </tr>
+    <tr>
+      <td><code>pr_poll_interval_secs</code></td>
+      <td>u64</td>
+      <td><code>30</code></td>
+      <td>Seconds between PR review status checks</td>
+    </tr>
+    <tr>
+      <td><code>theme</code></td>
+      <td>String</td>
+      <td><code>"dark"</code></td>
+      <td>TUI color theme: "dark", "catppuccin", or "solarized"</td>
+    </tr>
+  </table>
+</details>
+
+</section>
+
+<!-- ================================================================ -->
+<!-- SECTION 8: EXTENSIONS                                            -->
+<!-- ================================================================ -->
+<section id="extensions">
+<h2>Extensions</h2>
+
+<p>
+Extensions provide domain-specific knowledge to agents. They are discovered from
+<code>~/.foundry/extensions/</code> (global) and <code>&lt;project&gt;/extensions/</code>
+(local). Each extension directory must contain a <code>CLAUDE.md</code> file.
+Project-local extensions override global ones with the same name. Extension context
+is prepended to agent prompts via <code>wrap_with_extensions()</code>.
+</p>
+
+<h3>8.1 Roblox</h3>
+<p><code>extensions/roblox/</code></p>
+<ul>
+  <li><strong>Purpose:</strong> Domain knowledge for Roblox world generation using Lune scripting and .rbxl/.rbxm files.</li>
+  <li><strong>Key files:</strong> <code>CLAUDE.md</code>, <code>patterns/roblox-common-issues.json</code></li>
+  <li><strong>Critical patterns:</strong>
+    <ul>
+      <li>Use <code>add_to_world.luau</code>, NOT <code>generate_world.luau</code> -- terrain has varying elevations</li>
+      <li>Use CFrame, not Position, for moving parts (Position does not persist in Lune)</li>
+      <li>Do not extract and reapply rotation -- offset CFrame directly to preserve rotation</li>
+    </ul>
+  </li>
+  <li><strong>Gotchas:</strong> Generating worlds from scratch causes floating/sinking objects due to terrain elevation.</li>
+</ul>
+
+<h3>8.2 Workday Extend</h3>
+<p><code>extensions/extend/</code></p>
+<ul>
+  <li><strong>Purpose:</strong> Workday Extend PaaS application development -- building custom apps inside Workday tenants.</li>
+  <li><strong>Key files:</strong> <code>CLAUDE.md</code>, <code>WORKDAY_EXTEND_DEVELOPER_GUIDE.md</code>, <code>WORKDAY_EXTEND_ARCHITECTURE.md</code>, <code>orchestrations-integrations-guide.md</code>, <code>security-reporting-birt-notes.md</code>, <code>LATEST_DEVELOPMENTS.md</code>, <code>patterns/extend-common-issues.json</code></li>
+  <li><strong>Critical rules:</strong>
+    <ul>
+      <li>No local file-based development -- Extend apps built entirely in browser App Builder</li>
+      <li>Security policy activation is mandatory after ANY security change</li>
+      <li>Credentials never migrate between tenants</li>
+      <li>WIDs are tenant-specific -- use Reference IDs instead</li>
+      <li>CORS requires explicit configuration for REST API clients</li>
+      <li>Test before every biannual Workday release</li>
+    </ul>
+  </li>
+  <li><strong>Gotchas:</strong> Extend requires a license; not all Workday customers have access.</li>
+</ul>
+
+<h3>8.3 Recon</h3>
+<p><code>extensions/recon/</code></p>
+<ul>
+  <li><strong>Purpose:</strong> Fleet reconnaissance from a management server -- inventory lookups, iDRAC queries, racadm commands, batch operations against Dell servers.</li>
+  <li><strong>Key files:</strong> <code>CLAUDE.md</code>, <code>config/inventory-schema.json</code>, <code>templates/idrac-checks.md</code>, <code>templates/batch-loops.md</code>, <code>patterns/recon-common-issues.json</code></li>
+  <li><strong>Critical rules:</strong>
+    <ul>
+      <li>Always use <code>grep -w</code> (whole-word match) for hostname lookups</li>
+      <li>SSH to iDRAC needs <code>-o ConnectTimeout=5</code> to avoid hanging loops</li>
+      <li>Always label batch output with the current hostname</li>
+      <li>Quote variables in loops</li>
+    </ul>
+  </li>
+  <li><strong>Gotchas:</strong> Unlabeled batch output is useless; always prefix with hostname.</li>
+</ul>
+
+<h3>8.4 Flowise</h3>
+<p><code>extensions/flowise/</code></p>
+<ul>
+  <li><strong>Purpose:</strong> Building Flowise AgentFlow v2 workflows. Output is single JSON files.</li>
+  <li><strong>Key files:</strong> <code>CLAUDE.md</code>, <code>FLOWISE.md</code>, <code>patterns/flowise-expertise.json</code>, <code>example-flows/masterclass-2025/*.json</code>, <code>node-templates/*.json</code></li>
+  <li><strong>Critical rules:</strong>
+    <ul>
+      <li>Use HTML span format for ALL variable references: <code>&lt;span class="variable"&gt;$flow.state.varName&lt;/span&gt;</code></li>
+      <li>Use correct field names: <code>llmStructuredOutput</code>, <code>llmUpdateState</code>, <code>directReplyMessage</code></li>
+      <li>Every flow needs a Start node with proper <code>startInput</code> configuration</li>
+    </ul>
+  </li>
+  <li><strong>Gotchas:</strong> Follow the validation checklist in FLOWISE.md before importing.</li>
+</ul>
+
+<h3>8.5 Mindcraft</h3>
+<p><code>extensions/mindcraft/</code></p>
+<ul>
+  <li><strong>Purpose:</strong> Python orchestrator for an AI Minecraft bot ("Andy") that plays autonomously.</li>
+  <li><strong>Key files:</strong> No CLAUDE.md. Only <code>__pycache__</code> remnants of Python modules: <code>client</code>, <code>detector</code>, <code>goals</code>, <code>learner</code>, <code>models</code>, <code>monitor</code>, <code>orchestrator</code>, <code>persistence</code>, <code>planner</code>. Config in <code>config/</code>.</li>
+  <li><strong>Architecture:</strong> Monitors bot state, assigns goals, recalls bot if too far from spawn.</li>
+  <li><strong>Gotchas:</strong> The Python source files were cleaned up; only cached bytecode remains. Documentation is based on the root CLAUDE.md description and module names.</li>
+</ul>
+
+</section>
+
+<!-- ================================================================ -->
+<!-- SECTION 9: MCP TOOLS                                             -->
+<!-- ================================================================ -->
+<section id="mcp-tools">
+<h2>MCP Tools</h2>
+
+<p>
+Context Foundry exposes five MCP (Model Context Protocol) tools that allow AI agents
+to interact with the pattern store and delegate work. The MCP server source is not in
+this repo (only __pycache__ remnants in tools/); documentation is derived from
+CLAUDE.md and the patterns module API.
+</p>
+
+<table>
+  <tr>
+    <th>Tool</th>
+    <th>Signature</th>
+    <th>Reads/Writes</th>
+    <th>Usage Note</th>
+  </tr>
+  <tr>
+    <td><code>read_global_patterns</code></td>
+    <td><code>read_global_patterns(category: str)</code></td>
+    <td>Reads <code>~/.foundry/patterns/*.json</code></td>
+    <td>Load patterns before starting work; category is typically "common-issues"</td>
+  </tr>
+  <tr>
+    <td><code>save_global_patterns</code></td>
+    <td><code>save_global_patterns(patterns: list, category: str)</code></td>
+    <td>Writes to <code>~/.foundry/patterns/{category}.json</code></td>
+    <td>Save newly discovered patterns after solving issues</td>
+  </tr>
+  <tr>
+    <td><code>merge_project_patterns</code></td>
+    <td><code>merge_project_patterns(path: str, category: str)</code></td>
+    <td>Reads project patterns, writes to global store</td>
+    <td>Promotes project-local patterns to <code>~/.foundry/patterns/</code>; deduplicates by pattern_id</td>
+  </tr>
+  <tr>
+    <td><code>delegate_to_claude_code</code></td>
+    <td><code>delegate_to_claude_code(task: str, ...)</code></td>
+    <td>Spawns a fresh Claude Code instance</td>
+    <td>Delegate subtasks to a fresh agent with independent context</td>
+  </tr>
+  <tr>
+    <td><code>search_skills</code></td>
+    <td><code>search_skills(query: str)</code></td>
+    <td>Reads pattern store and skills index</td>
+    <td>Find reusable code patterns and skills by keyword search</td>
+  </tr>
+</table>
+
+</section>
+
+<!-- ================================================================ -->
+<!-- SECTION 10: PATTERN STORE                                        -->
+<!-- ================================================================ -->
+<section id="pattern-store">
+<h2>Pattern Store</h2>
+
+<p>
+Location: <code>~/.foundry/patterns/</code> (configurable via <code>patterns_dir</code>
+in .foundry.json). Tilde is expanded via <code>$HOME</code> (or
+<code>$LOCALAPPDATA</code>/<code>$USERPROFILE</code> on Windows). Fallback:
+<code>/tmp/.foundry/patterns/</code> if HOME is unset.
+</p>
+
+<h3>JSON Schema</h3>
+<p>From <code>src/patterns.rs:17-41</code>:</p>
+<pre><code>{
+  "pattern_id": "string (unique identifier)",
+  "title": "string",
+  "first_seen": "string (ISO date)",
+  "last_seen": "string (ISO date)",
+  "frequency": 0,
+  "severity": "HIGH | MEDIUM | LOW | null",
+  "keywords": ["string"],
+  "tech_stack": ["string"],
+  "issue": "string | null",
+  "solution": {
+    "planner": "string (advice for planner agent)",
+    "reviewer": "string (advice for reviewer agent, alias: validator)"
+  },
+  "auto_apply": false,
+  "learned_from": "string | null (project/task that produced this pattern)"
+}</code></pre>
+
+<h3>Supported JSON Formats</h3>
+<p>Three formats are accepted:</p>
+<ul>
+  <li>Bare array: <code>[{...}, {...}]</code></li>
+  <li>Wrapper object: <code>{"patterns": [{...}]}</code> (via <code>PatternWrapper</code> struct)</li>
+  <li>Single object: <code>{...}</code></li>
+</ul>
+
+<h3>Pattern Matching at Plan Time</h3>
+<ul>
+  <li><strong>Keyword scoring:</strong> Each pattern's <code>keywords</code> array is compared against the task description and codebase context. Higher overlap = higher score.</li>
+  <li><strong>Auto-apply bonus:</strong> Patterns with <code>frequency >= 3</code> get <code>auto_apply: true</code> and a +2 score bonus.</li>
+  <li><strong>Semantic matching (optional):</strong> When <code>semantic_match_enabled</code> is true, uses Ollama (<code>embedding_model</code>, default "nomic-embed-text") to compute cosine similarity. Circuit breaker with 60s cooldown on failure.</li>
+  <li><strong>Injection cap:</strong> Top <code>max_pattern_injection</code> (default 10) patterns are injected into planner and reviewer prompts as "REFERENCE DATA" blocks.</li>
+</ul>
+
+<h3>Pattern Lifecycle</h3>
+<ol>
+  <li>After each task: pattern_extraction agent writes <code>.buildloop/patterns-extracted.json</code></li>
+  <li>Extraction model: <code>pattern_extraction_model</code> (default "sonnet")</li>
+  <li><code>merge_patterns()</code> deduplicates by <code>pattern_id</code>, increments <code>frequency</code> on duplicates, updates <code>last_seen</code></li>
+  <li>Auto-apply graduation: patterns reaching frequency >= 3 gain <code>auto_apply: true</code></li>
+</ol>
+
+</section>
+
+<!-- ================================================================ -->
+<!-- SECTION 11: SAMSARA / DISCOVERY                                  -->
+<!-- ================================================================ -->
+<section id="samsara">
+<h2>Samsara / Discovery</h2>
+
+<p>
+When all tasks in TASKS.md are complete AND <code>run_mode</code> is "auto" (not sprint
+or review), the Discovery stage triggers. The name "Samsara" refers to the cycle of
+rebirth -- after Discovery, the build loop restarts with new tasks, forming an
+infinite improvement cycle.
+</p>
+
+<h3>Discovery Agent</h3>
+<p>The Discovery agent (<code>AgentRole::Discovery</code>) scans:</p>
+<ul>
+  <li>Codebase for bugs, gaps, missing features</li>
+  <li>Build output and test results</li>
+  <li>Git history for context</li>
+  <li>Build history from prior session tasks (injected into prompt for focus)</li>
+</ul>
+
+<h3>Output</h3>
+<p>
+Appends new tasks under a <code>## Discovery Round N</code> header in TASKS.md.
+</p>
+
+<h3>Task ID Convention</h3>
+<p>
+Format: <code>D{round}.{sub}</code> -- e.g., <code>D33.1</code>, <code>D33.2</code>.
+The <code>highest_discovery_round()</code> function (<code>task.rs:188-214</code>) parses
+both section headers (<code>## Discovery Round N</code>) and task ID regex
+(<code>D(\d+)\.</code>) to find the max round number.
+</p>
+
+<h3>Cooldown</h3>
+<p>
+<code>discovery_cooldown_minutes</code> (default 5). When Discovery finds 0 new tasks,
+the cooldown doubles (up to 30 minutes maximum). This prevents tight loops of empty
+discovery scans.
+</p>
+
+<h3>Prompts</h3>
+<p>
+<code>prompts::discovery()</code> for scanning, <code>prompts::append_tasks()</code> for
+writing new tasks to TASKS.md.
+</p>
+
+<h3>Samsara Loop</h3>
+<pre><code>┌─────────────┐
+│  TASKS.md   │<──────────────────────────────┐
+│  (pending)  │                               │
+└──────┬──────┘                               │
+       │                                      │
+       v                                      │
+┌─────────────┐    ┌───────────┐    ┌─────────┴───────┐
+│ SPID Pipeline│──>│   SHIP    │──>│    DISCOVERY     │
+│ per task     │    │ commit/PR │    │ scan codebase   │
+└─────────────┘    └───────────┘    │ append new tasks │
+                                    └─────────────────┘
+                                    (auto mode only)</code></pre>
+
+</section>
+
+</main>
+
+<footer>
+  Context Foundry Technical Reference -- Generated 2026-03-17 -- foundry v0.5.2<br>
+  Source: <code>src/</code> (Rust), <code>extensions/</code> (domain knowledge), <code>~/.foundry/patterns/</code> (learned patterns)
+</footer>
+
+<script>
+window.addEventListener('beforeprint', function() {
+  document.querySelectorAll('details:not([open])').forEach(function(d) {
+    d.setAttribute('data-was-closed', '');
+    d.open = true;
+  });
+});
+window.addEventListener('afterprint', function() {
+  document.querySelectorAll('details[data-was-closed]').forEach(function(d) {
+    d.open = false;
+    d.removeAttribute('data-was-closed');
+  });
+});
+</script>
+
+</body>
+</html>
