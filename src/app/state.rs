@@ -211,15 +211,43 @@ pub(super) enum PendingTransition {
     },
 }
 
-// ─── Dual Build State ─────────────────────────────────────
+// ─── Dual Pipeline State ──────────────────────────────────
 
-#[derive(Debug, Clone)]
-pub struct DualBuildComparison {
-    pub labels: [String; 2],
-    pub diff_stats: [String; 2],        // e.g. "+312/-44"
-    pub test_results: [String; 2],      // "PASS" or "FAIL"
-    pub winner: usize,                  // 0 or 1
-    pub reason: String,                 // "smaller diff, all tests pass"
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DualSelection {
+    Off,
+    First,
+    Second,
+    Both,
+}
+
+impl DualSelection {
+    pub fn from_str(s: &str) -> Self {
+        match s {
+            "first" => Self::First,
+            "second" => Self::Second,
+            "both" => Self::Both,
+            _ => Self::Off,
+        }
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Off => "",
+            Self::First => "first",
+            Self::Second => "second",
+            Self::Both => "both",
+        }
+    }
+
+    pub fn next(self) -> Self {
+        match self {
+            Self::Off => Self::First,
+            Self::First => Self::Second,
+            Self::Second => Self::Both,
+            Self::Both => Self::First,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -231,7 +259,8 @@ pub struct DualBuildState {
     pub tab: usize,
     pub context_pcts: [Option<u8>; 2],
     pub finished: [bool; 2],
-    pub comparison: Option<DualBuildComparison>,
+    pub stages: [Option<AgentRole>; 2],      // Current SPID stage per pipeline
+    pub stage_models: [String; 2],           // Model label for current stage
 }
 
 pub struct AppState {
@@ -263,6 +292,8 @@ pub struct AppState {
     pub inject_input: Option<String>,
     pub show_run_view: bool, // Tab toggle: startup shows run view (pipeline+queue+config)
     pub run_mode: String,    // "auto", "sprint", or "review"
+    pub dual_selection: DualSelection, // Ctrl+D cycle: Off, First, Second, Both
+    pub builder_model_specs: Vec<String>, // raw config values (e.g., ["claude:opus", "codex:"])
     pub awaiting_review: bool,
     pub(super) review_gate: Option<Arc<AtomicBool>>,
     pub awaiting_pr: Option<u64>,
@@ -344,6 +375,8 @@ impl AppState {
             inject_input: None,
             show_run_view: false,
             run_mode: "auto".into(),
+            dual_selection: DualSelection::Off,
+            builder_model_specs: Vec::new(),
             awaiting_review: false,
             review_gate: None,
             awaiting_pr: None,
@@ -451,7 +484,8 @@ pub struct TaskPipelineHistory {
 pub(super) enum AppEvent {
     AgentOutput(AgentOutputEvent),
     AgentDone(bool),
-    DualBuildOutput(usize, AgentOutputEvent),
+    /// Wraps any event with a pipeline index for full-pipeline dual execution.
+    DualPipelineEvent(usize, Box<AppEvent>),
     PlanningFinished(PlanningOutcome),
     OrchestratorFinished(crate::orchestrator::OrchestratorOutcome),
     LoopEvent(LoopEvent),
@@ -468,7 +502,6 @@ pub(super) enum LoopEvent {
     AgentStarted(AgentRole, String),
     DualBuildStarted { models: [String; 2] },
     DualBuildStreamDone(usize, bool),
-    DualBuildComparisonReady(DualBuildComparison),
     TaskCompleted(String, bool),
     NextTaskUpdated(Option<String>),
     DiscoveryStarted(usize),

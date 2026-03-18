@@ -77,20 +77,15 @@ pub(super) async fn run_append_tasks(
 
     let prompt =
         prompts::append_tasks_prompt(&description, &ctx.tasks_file_name(), &ctx.spec_file_name());
-    // Use Sonnet with repo-reading tools for light expansion.
-    // The agent does a quick scan of the project structure to write
-    // specific, context-aware task descriptions.
-    let provider = agent::ModelProvider::Claude;
-    let model = "sonnet";
     let result = agent::run_agent(
         &AgentRole::Planner,
-        provider,
-        model,
+        agent::ModelProvider::Claude,
+        "sonnet",
         &prompt,
         &ctx.project_dir,
         agent_tx,
         &ctx.log_dir,
-        Some(&["Read", "Write", "Glob", "Grep"]),
+        Some(&["Read", "Edit", "Write"]),
         ctx.config.agent_timeout_secs,
         Some(ctx.shutdown.clone()),
     )

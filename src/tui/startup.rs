@@ -314,6 +314,31 @@ fn render_startup_summary(frame: &mut Frame, area: Rect, state: &AppState) {
                     .bg(state.tui_theme.surface)
                     .add_modifier(Modifier::BOLD),
             ),
+            match state.dual_selection {
+                crate::app::DualSelection::Off => Span::raw(""),
+                crate::app::DualSelection::First => {
+                    let (p, m) = crate::config::Config::parse_model_spec(
+                        state.builder_model_specs.first().map(|s| s.as_str()).unwrap_or(""),
+                    );
+                    Span::styled(
+                        format!("  {} ", crate::config::Config::display_provider_model(&p, &m)),
+                        Style::default().fg(Color::Black).bg(Color::Magenta).add_modifier(Modifier::BOLD),
+                    )
+                }
+                crate::app::DualSelection::Second => {
+                    let (p, m) = crate::config::Config::parse_model_spec(
+                        state.builder_model_specs.get(1).map(|s| s.as_str()).unwrap_or(""),
+                    );
+                    Span::styled(
+                        format!("  {} ", crate::config::Config::display_provider_model(&p, &m)),
+                        Style::default().fg(Color::Black).bg(Color::Magenta).add_modifier(Modifier::BOLD),
+                    )
+                }
+                crate::app::DualSelection::Both => Span::styled(
+                    "  Dual Pipeline ",
+                    Style::default().fg(Color::Black).bg(Color::Magenta).add_modifier(Modifier::BOLD),
+                ),
+            },
         ]),
         Line::from(Span::styled(
             format!(
@@ -982,6 +1007,35 @@ pub(super) fn render_startup_status_bar(frame: &mut Frame, area: Rect, state: &A
         "sprint" => " review",
         _ => " auto",
     }));
+    // Dual-pipeline toggle
+    {
+        use crate::app::DualSelection;
+        let short = |spec: &str| -> String {
+            let (p, m) = crate::config::Config::parse_model_spec(spec);
+            if m.is_empty() { p } else { format!("{p}:{m}") }
+        };
+        let (bg, label) = match state.dual_selection {
+            DualSelection::Off => (state.tui_theme.muted, " dual".to_string()),
+            DualSelection::First => {
+                let s = state.builder_model_specs.first().map(|s| short(s)).unwrap_or_default();
+                (Color::Magenta, format!(" {s}"))
+            }
+            DualSelection::Second => {
+                let s = state.builder_model_specs.get(1).map(|s| short(s)).unwrap_or_default();
+                (Color::Magenta, format!(" {s}"))
+            }
+            DualSelection::Both => {
+                let s0 = state.builder_model_specs.first().map(|s| short(s)).unwrap_or_default();
+                let s1 = state.builder_model_specs.get(1).map(|s| short(s)).unwrap_or_default();
+                (Color::Magenta, format!(" {s0}+{s1}"))
+            }
+        };
+        spans.push(Span::styled(
+            "  ^D ",
+            Style::default().fg(Color::Black).bg(bg).add_modifier(Modifier::BOLD),
+        ));
+        spans.push(Span::raw(label));
+    }
     spans.push(Span::styled(
         "  ^T ",
         Style::default()

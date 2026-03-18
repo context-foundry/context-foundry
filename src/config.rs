@@ -48,6 +48,9 @@ pub struct Config {
     /// When len >= 2, overrides builder_model/builder_provider.
     /// Format: "provider:model" where provider is "claude" or "codex".
     pub builder_models: Vec<String>,
+    /// Dual-build selection: "first", "second", "both", or empty (off).
+    /// Ctrl+D cycles through model[0]-only, model[1]-only, both pipelines.
+    pub dual_selection: String,
     pub reviewer_model: String,
     pub fixer_model: String,
     pub discovery_model: String,
@@ -181,6 +184,7 @@ impl Default for Config {
             planner_model: "opus".into(),
             builder_model: "opus".into(),
             builder_models: Vec::new(),
+            dual_selection: String::new(),
             reviewer_model: "sonnet".into(),
             fixer_model: "sonnet".into(),
             discovery_model: "opus".into(),
@@ -357,6 +361,41 @@ impl Config {
         }
         let json = serde_json::to_string_pretty(&value).unwrap_or_default();
         let _ = crate::utils::atomic_write_file(&config_path, json.as_bytes());
+    }
+
+    pub fn save_dual_selection(project_dir: &Path, selection: &str) {
+        let config_path = project_dir.join(".foundry.json");
+        let content =
+            std::fs::read_to_string(&config_path).unwrap_or_else(|_| "{}".to_string());
+        let mut value: serde_json::Value =
+            serde_json::from_str(&content).unwrap_or(serde_json::json!({}));
+        value["dual_selection"] = serde_json::json!(selection);
+        let json = serde_json::to_string_pretty(&value).unwrap_or_default();
+        let _ = crate::utils::atomic_write_file(&config_path, json.as_bytes());
+    }
+
+    /// Create a Config clone with all role providers/models overridden for a
+    /// specific pipeline spec (e.g. "claude:opus" or "codex:").
+    pub fn for_pipeline(&self, spec: &str) -> Config {
+        let (provider, model) = Self::parse_model_spec(spec);
+        let mut config = self.clone();
+        config.scout_provider = provider.clone();
+        config.planner_provider = provider.clone();
+        config.builder_provider = provider.clone();
+        config.reviewer_provider = provider.clone();
+        config.fixer_provider = provider.clone();
+        config.discovery_provider = provider.clone();
+        if !model.is_empty() {
+            config.scout_model = model.clone();
+            config.planner_model = model.clone();
+            config.builder_model = model.clone();
+            config.reviewer_model = model.clone();
+            config.fixer_model = model.clone();
+        }
+        // Disable dual in the forked config so process_task runs single-pipeline
+        config.builder_models.clear();
+        config.dual_selection.clear();
+        config
     }
 
     /// Return (role_name, provider, model) tuples for all build-loop roles.

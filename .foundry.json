@@ -2,9 +2,14 @@
   "agent_timeout_secs": 900,
   "backpressure_only": false,
   "builder_model": "opus",
+  "builder_models": [
+    "claude:opus",
+    "codex:"
+  ],
   "builder_provider": "claude",
   "discovery_model": "opus",
   "discovery_provider": "claude",
+  "dual_selection": "both",
   "extensions": [],
   "fixer_model": "sonnet",
   "fixer_provider": "claude",
@@ -17,5 +22,6 @@
   "planner_provider": "claude",
   "preview_wrap": false,
   "reviewer_model": "sonnet",
-  "reviewer_provider": "claude"
+  "reviewer_provider": "claude",
+  "run_mode": "auto"
 }

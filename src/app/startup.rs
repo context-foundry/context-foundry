@@ -45,7 +45,14 @@ impl StartupState {
             selected_action: 0,
             actions,
             entering_intent: true, // always show input
-            intent_input: String::new(),
+            intent_input: if scenario != StartupScenario::EmptyProject {
+                std::fs::read_to_string(contract_paths.updated_specs_path())
+                    .unwrap_or_default()
+                    .trim()
+                    .to_string()
+            } else {
+                String::new()
+            },
             status_message,
             git_context: crate::git::gather_git_context(project_dir),
             tasks_file_name: contract_paths.tasks_file_name(),
@@ -362,6 +369,41 @@ pub(super) fn handle_startup_key(state: &mut AppState, key: event::KeyEvent) {
                 }
             }
         }
+        KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+            if state.builder_model_specs.len() >= 2 {
+                use crate::app::state::DualSelection;
+                let next = state.dual_selection.next();
+                state.dual_selection = next;
+                let project_dir = state.buildloop_dir.parent().unwrap_or(std::path::Path::new("."));
+                Config::save_dual_selection(project_dir, next.as_str());
+                // Show label for current selection
+                let label = match next {
+                    DualSelection::First => {
+                        let (p, m) = Config::parse_model_spec(&state.builder_model_specs[0]);
+                        format!("Pipeline: {} only", Config::display_provider_model(&p, &m))
+                    }
+                    DualSelection::Second => {
+                        let (p, m) = Config::parse_model_spec(&state.builder_model_specs[1]);
+                        format!("Pipeline: {} only", Config::display_provider_model(&p, &m))
+                    }
+                    DualSelection::Both => {
+                        let (p0, m0) = Config::parse_model_spec(&state.builder_model_specs[0]);
+                        let (p1, m1) = Config::parse_model_spec(&state.builder_model_specs[1]);
+                        format!("Pipeline: {} + {}", Config::display_provider_model(&p0, &m0), Config::display_provider_model(&p1, &m1))
+                    }
+                    DualSelection::Off => "Pipeline: default (single)".into(),
+                };
+                if let Some(ref mut s) = state.startup {
+                    s.status_message = Some(label);
+                }
+            } else {
+                if let Some(ref mut s) = state.startup {
+                    s.status_message = Some(
+                        "Dual-build requires builder_models with 2+ entries in .foundry.json".into(),
+                    );
+                }
+            }
+        }
         KeyCode::Char('t') if key.modifiers.contains(KeyModifiers::CONTROL) => {
             let (new_theme, name) = crate::tui::theme::cycle_next(&state.tui_theme);
             state.tui_theme = new_theme;
@@ -430,6 +472,14 @@ pub(super) fn handle_startup_intent_input(state: &mut AppState, key: event::KeyE
         }
         KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
             startup.intent_input.clear();
+        }
+        KeyCode::Char('n') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+            // Clear input and delete UPDATED_SPECS.md so next startup is fresh
+            startup.intent_input.clear();
+            let project_dir = state.buildloop_dir.parent()
+                .unwrap_or(std::path::Path::new("."));
+            let updated_specs = super::contract::ContractPaths::resolve(project_dir).updated_specs_path.clone();
+            let _ = std::fs::remove_file(&updated_specs);
         }
         KeyCode::Char(c) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
             startup.intent_input.push(c);
@@ -569,6 +619,17 @@ fn handle_startup_submit(state: &mut AppState) {
     let scenario = startup.scenario;
     startup.intent_input.clear();
     startup.status_message = None;
+
+    // Persist enhancement description to UPDATED_SPECS.md (not for new projects)
+    if !text.is_empty() && scenario != StartupScenario::EmptyProject {
+        let project_dir = state.buildloop_dir.parent()
+            .unwrap_or(std::path::Path::new("."));
+        let updated_specs = super::contract::ContractPaths::resolve(project_dir).updated_specs_path.clone();
+        let _ = crate::utils::atomic_write_file(
+            &updated_specs,
+            text.as_bytes(),
+        );
+    }
 
     match scenario {
         StartupScenario::QueueReady => {

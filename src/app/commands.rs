@@ -228,8 +228,7 @@ pub(super) async fn run_headless(project_dir: &Path) -> Result<()> {
                 | LoopEvent::PatternsUsed { .. }
                 | LoopEvent::PrPollChecked
                 | LoopEvent::DualBuildStarted { .. }
-                | LoopEvent::DualBuildStreamDone(_, _)
-                | LoopEvent::DualBuildComparisonReady(_) => {}
+                | LoopEvent::DualBuildStreamDone(_, _) => {}
                 LoopEvent::PrApproved(pr_num) => {
                     eprintln!("[log] PR #{} approved -- resuming pipeline", pr_num);
                 }
@@ -246,7 +245,7 @@ pub(super) async fn run_headless(project_dir: &Path) -> Result<()> {
                 update_version = Some(version);
             }
             AppEvent::AgentDone(_)
-            | AppEvent::DualBuildOutput(_, _)
+            | AppEvent::DualPipelineEvent(_, _)
             | AppEvent::PlanningFinished(_)
             | AppEvent::OrchestratorFinished(_)
             | AppEvent::Key(_)

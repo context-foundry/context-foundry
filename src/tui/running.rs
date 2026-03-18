@@ -92,6 +92,8 @@ pub(super) fn render_header(frame: &mut Frame, area: Rect, state: &AppState) {
             Span::styled(
                 if matches!(state.phase, AppPhase::Startup) {
                     " STOPPED "
+                } else if matches!(state.phase, AppPhase::Planning) {
+                    " PLANNING "
                 } else if state.stop_after_task {
                     " STOPPING "
                 } else if state.awaiting_review {
@@ -107,6 +109,8 @@ pub(super) fn render_header(frame: &mut Frame, area: Rect, state: &AppState) {
                     .fg(Color::Black)
                     .bg(if matches!(state.phase, AppPhase::Startup) {
                         Color::DarkGray
+                    } else if matches!(state.phase, AppPhase::Planning) {
+                        Color::Magenta
                     } else if state.stop_after_task || state.awaiting_review {
                         Color::Yellow
                     } else {
@@ -254,30 +258,9 @@ pub(super) fn render_agent_output(frame: &mut Frame, area: Rect, state: &AppStat
 
     // Determine which output lines to render
     let (output_lines, scroll_offset) = if state.dual_build.active {
-        if state.dual_build.comparison.is_some() {
-            // Comparison view -- build lines from DualBuildComparison
-            let comp = state.dual_build.comparison.as_ref().unwrap();
-            let mut lines = Vec::new();
-            lines.push(String::new());
-            lines.push("  Dual Build Comparison".to_string());
-            lines.push(format!("  {}", "\u{2500}".repeat(40)));
-            for i in 0..2 {
-                let icon = if i == comp.winner { "\u{2713}" } else { " " };
-                lines.push(format!(
-                    "  {} Builder {} ({}):  {}  Tests: {}",
-                    icon, i + 1, comp.labels[i], comp.diff_stats[i], comp.test_results[i],
-                ));
-            }
-            lines.push(String::new());
-            lines.push(format!("  Winner: {} ({})", comp.labels[comp.winner], comp.reason));
-            lines.push(String::new());
-            lines.push("  Press 1/2 to review each stream's output".to_string());
-            (lines, 0usize)
-        } else {
-            // Show active tab's stream
-            let tab = state.dual_build.tab;
-            (state.dual_build.streams[tab].clone(), state.scroll_offset)
-        }
+        // Show active tab's stream
+        let tab = state.dual_build.tab;
+        (state.dual_build.streams[tab].clone(), state.scroll_offset)
     } else {
         (state.agent_output.clone(), state.scroll_offset)
     };
@@ -293,7 +276,7 @@ pub(super) fn render_agent_output(frame: &mut Frame, area: Rect, state: &AppStat
         })
         .collect();
 
-    let max_lines = if state.dual_build.active && state.dual_build.comparison.is_none() {
+    let max_lines = if state.dual_build.active {
         area.height.saturating_sub(3) as usize  // 1 extra line for tab header
     } else {
         area.height.saturating_sub(2) as usize
@@ -309,13 +292,17 @@ pub(super) fn render_agent_output(frame: &mut Frame, area: Rect, state: &AppStat
 
     // Build tab header for dual mode
     let mut title_spans = Vec::new();
-    if state.dual_build.active && state.dual_build.comparison.is_none() {
+    if state.dual_build.active {
         for i in 0..2 {
             let label = &state.dual_build.models[i];
             let count = state.dual_build.event_counts[i];
             let done = state.dual_build.finished[i];
-            let status = if done { "done" } else { "running" };
-            let tab_text = format!(" {}: {} ({} events, {}) ", i + 1, label, count, status);
+            let stage = state.dual_build.stages[i]
+                .as_ref()
+                .map(|r| format!("{}", r))
+                .unwrap_or_else(|| "...".to_string());
+            let status = if done { "done".to_string() } else { stage };
+            let tab_text = format!(" {}: {} [{}] ({}ev) ", i + 1, label, status, count);
             let style = if i == state.dual_build.tab {
                 Style::default().fg(state.tui_theme.accent).add_modifier(Modifier::BOLD)
             } else {
@@ -326,17 +313,10 @@ pub(super) fn render_agent_output(frame: &mut Frame, area: Rect, state: &AppStat
     }
 
     let title = if state.dual_build.active {
-        if state.dual_build.comparison.is_some() {
-            Span::styled(
-                " Dual Build Results ",
-                Style::default().fg(state.tui_theme.accent).add_modifier(Modifier::BOLD),
-            )
-        } else {
-            Span::styled(
-                " Dual Build ",
-                Style::default().fg(state.tui_theme.accent).add_modifier(Modifier::BOLD),
-            )
-        }
+        Span::styled(
+            " Dual Pipeline ",
+            Style::default().fg(state.tui_theme.accent).add_modifier(Modifier::BOLD),
+        )
     } else if let Some((ref role, _)) = state.current_agent {
         let color = match role {
             AgentRole::Scout => Color::LightBlue,
@@ -356,7 +336,7 @@ pub(super) fn render_agent_output(frame: &mut Frame, area: Rect, state: &AppStat
 
     // If dual-build with tab header, prepend tab line as first ListItem
     let mut all_items = Vec::new();
-    if state.dual_build.active && state.dual_build.comparison.is_none() && !title_spans.is_empty() {
+    if state.dual_build.active && !title_spans.is_empty() {
         all_items.push(ListItem::new(Line::from(title_spans)));
     }
     all_items.extend(items);
@@ -889,13 +869,6 @@ pub(super) fn render_planning_status_bar(frame: &mut Frame, area: Rect, state: &
                 .add_modifier(Modifier::BOLD),
         ));
         spans.push(Span::raw(" findings"));
-    }
-
-    if let Some((_ts, msg)) = state.log_messages.last() {
-        spans.push(Span::styled(
-            format!("  {}", truncate_str(msg, 60)),
-            Style::default().fg(state.tui_theme.muted),
-        ));
     }
 
     if let Some(ref version) = state.update_available {

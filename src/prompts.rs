@@ -721,47 +721,24 @@ RULES:
 
 pub fn append_tasks_prompt(description: &str, tasks_file: &str, _spec_file: &str) -> String {
     format!(
-        r#"The user wants to add work to the task queue. Your job is to understand what they mean, create comprehensive tasks, and append them to {tasks_file}.
+        r#"Expand the user's request into comprehensive task(s) and append them to {tasks_file}.
 
 USER REQUEST: {description}
 
-STEP 1 — QUICK CONTEXT (spend ~10 seconds, not more):
-- Read CLAUDE.md if it exists (project conventions)
-- Glob for project structure files (package.json, Cargo.toml, pyproject.toml, etc.)
-- Grep for relevant existing code related to the user's request
-- This is NOT a full scout — just enough to write specific task descriptions
+STEPS:
+1. Read the LAST 20 lines of {tasks_file} to find the task ID format and next number
+2. Write comprehensive task(s) using Edit to append at the end of {tasks_file}
 
-STEP 2 — CREATE TASKS:
-- Read {tasks_file} to find the next available task group number
-- Write FEWER, LARGER tasks — not many small ones
-- Each task will be executed by a multi-agent system (Claude Code) that can read many files,
-  make multiple changes, run builds and tests, and spawn sub-agents — all in one session
-- Bundle related work into single tasks. Example:
-  BAD (3 tasks, 12 agent spawns):
-    - [ ] T6.1: Add /admin route
-    - [ ] T6.2: Create AdminDashboard component
-    - [ ] T6.3: Add admin middleware
-  GOOD (1 task, 4 agent spawns):
-    - [ ] T6.1: Add admin system with protected /admin route, user management dashboard component, and role-based auth middleware
-- A single task can touch 5-10 files — the builder handles this naturally
-- Only split into separate tasks when the work is truly independent (different features, different subsystems)
-
-STEP 3 — APPEND:
-- Append tasks to the END of {tasks_file}
-- Do NOT modify existing tasks
-
-EXACT FORMAT (parser is strict):
-- [ ] T<N>.1: Detailed task description covering the full scope of work
-
-Correct:   - [ ] T6.1: Add admin system with protected /admin route in backend, AdminDashboard component with user table in frontend, and role-based auth middleware that checks user.role
-Incorrect: - [ ] **T6.1** - Add admin page
+TASK FORMAT (parser is strict):
+- [ ] H<N>.1: Comprehensive task description covering the full scope of work
 
 RULES:
+- Write FEWER, LARGER tasks -- each runs through a full multi-agent pipeline
+- Bundle related work into single tasks (a single task can touch 5-15 files)
+- Expand the user's brief description into specific, actionable detail
+- Do NOT read source files, grep, or glob -- just format the task well
 - Do NOT modify existing tasks
-- Fewer tasks with more scope is BETTER than many small tasks
-- Each task should describe a complete, coherent unit of work
-- Reference actual project files/patterns you found, not generic descriptions
-- If {tasks_file} does not exist, create it with a Task Queue header first"#
+- Only use Read and Edit tools -- nothing else"#
     )
 }
 
@@ -921,8 +898,5 @@ mod tests {
         assert!(discovery.contains("ARCHITECTURE.md"));
         assert!(discovery.contains("IMPL_PLAN.md"));
 
-        let append = append_tasks_prompt("fix login", "IMPL_PLAN.md", "ARCHITECTURE.md");
-        assert!(append.contains("IMPL_PLAN.md"));
-        assert!(!append.contains("SPEC.md"));
     }
 }

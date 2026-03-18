@@ -24,7 +24,7 @@ use self::startup::{
 };
 use self::state::{AppEvent, AppendTasksRequest, LoopEvent, PendingTransition, PlanningOutcome};
 pub use self::state::{
-    AppPhase, AppState, ExtensionDisplayInfo, PatternEventKind,
+    AppPhase, AppState, DualSelection, ExtensionDisplayInfo, PatternEventKind,
     PlanStatus, PlanningState, StartupAction, StartupScenario, StartupState, TuiPane,
 };
 pub use self::state::FileEntry;
@@ -48,6 +48,10 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
     let shutdown = Arc::new(AtomicBool::new(false));
     let mut state = AppState::new(buildloop_dir);
     state.run_mode = config.run_mode.clone();
+    state.builder_model_specs = config.builder_models.clone();
+    if config.builder_models.len() >= 2 {
+        state.dual_selection = state::DualSelection::from_str(&config.dual_selection);
+    }
     state.tui_theme = crate::tui::theme::from_name(&config.theme);
 
     // Git/GH readiness checks (advisory, non-blocking)
@@ -379,9 +383,11 @@ fn spawn_build_loop(
         task::count_pending(&tasks)
     ));
 
-    // Apply runtime mode toggle (user may have toggled auto/review on startup screen)
+    // Apply runtime toggles (user may have toggled mode/dual-build on startup screen)
     let mut loop_config = config.clone();
     loop_config.run_mode = state.run_mode.clone();
+    loop_config.dual_selection = state.dual_selection.as_str().to_string();
+    loop_config.builder_models = state.builder_model_specs.clone();
 
     let review_gate = Arc::new(AtomicBool::new(false));
     state.review_gate = Some(review_gate.clone());
@@ -452,9 +458,6 @@ fn spawn_append_tasks(
         return;
     }
 
-    // run_append_tasks always uses Claude sonnet regardless of planner config.
-    let actual_model = "sonnet";
-
     state.phase = AppPhase::Planning;
     state.startup = None;
     state.planning = Some(PlanningState {
@@ -470,8 +473,6 @@ fn spawn_append_tasks(
     state.current_task = None;
     state.next_task_hint = None;
     state.is_discovering = false;
-    state.set_agent(AgentRole::Planner, &Config::display_provider_model("claude", actual_model));
-    state.log(format!("Planning started — {}", request.label));
 
     let run_context = RunContext::new(project_dir, config.clone(), shutdown.clone(), state.tasks_file_lock.clone(), Arc::new(AtomicBool::new(false)));
     let event_tx = event_tx.clone();
@@ -484,17 +485,9 @@ fn prepare_append_tasks_start(
     project_dir: &Path,
     state: &mut AppState,
     request: &AppendTasksRequest,
-    claude_available: bool,
+    _claude_available: bool,
 ) -> bool {
-    // Describe-work always uses Claude (Codex has no tool restriction support).
-    // Fail fast before writing any files if claude CLI is not installed.
-    if !claude_available {
-        let message =
-            "Describe work requires the claude CLI, but it was not found on PATH.".to_string();
-        state.log(message.clone());
-        enter_startup_surface(project_dir, state, Some(message));
-        return false;
-    }
+    // Task append is now deterministic (no LLM) -- no CLI check needed.
 
     if request.seed_spec_from_description {
         if let Err(e) = seed_spec_from_brief(project_dir, &request.description) {
@@ -587,7 +580,8 @@ fn handle_planning_event(state: &mut AppState, event: AppEvent, config: &Config)
             }
         }
         AppEvent::AgentDone(success) => handle_agent_done(state, success),
-        AppEvent::DualBuildOutput(idx, output) => handle_dual_build_output(state, idx, output),
+
+        AppEvent::DualPipelineEvent(idx, inner) => handle_dual_pipeline_event(state, idx, *inner, config),
         AppEvent::PlanningFinished(outcome) => apply_planning_outcome(state, outcome),
         AppEvent::OrchestratorFinished(outcome) => apply_orchestrator_outcome(state, outcome),
         AppEvent::Key(key) => handle_planning_key(state, key, config),
@@ -666,7 +660,8 @@ fn handle_planning_key(state: &mut AppState, key: event::KeyEvent, config: &Conf
 fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
     match event {
         AppEvent::AgentOutput(output) => handle_agent_output(state, output),
-        AppEvent::DualBuildOutput(idx, output) => handle_dual_build_output(state, idx, output),
+
+        AppEvent::DualPipelineEvent(idx, inner) => handle_dual_pipeline_event(state, idx, *inner, config),
         AppEvent::AgentDone(success) => handle_agent_done(state, success),
         AppEvent::LoopEvent(le) => match le {
             LoopEvent::TaskStarted(task) => {
@@ -694,23 +689,17 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                     tab: 0,
                     context_pcts: [None, None],
                     finished: [false, false],
-                    comparison: None,
+                    stages: [None, None],
+                    stage_models: [String::new(), String::new()],
                 };
-                state.log(format!("Dual build started: {} vs {}", models[0], models[1]));
+                state.log(format!("Dual pipeline started: {} vs {}", models[0], models[1]));
             }
             LoopEvent::DualBuildStreamDone(idx, success) => {
                 if idx < 2 {
                     state.dual_build.finished[idx] = true;
                     let status = if success { "completed" } else { "failed" };
-                    state.log(format!("Builder {} ({}): {}", idx + 1, state.dual_build.models[idx], status));
+                    state.log(format!("Pipeline {} ({}): {}", idx + 1, state.dual_build.models[idx], status));
                 }
-            }
-            LoopEvent::DualBuildComparisonReady(comparison) => {
-                state.log(format!(
-                    "Dual build comparison: winner = {} ({})",
-                    comparison.labels[comparison.winner], comparison.reason
-                ));
-                state.dual_build.comparison = Some(comparison);
             }
             LoopEvent::TaskCompleted(id, success) => {
                 state.reset_dual_build();
@@ -1050,13 +1039,11 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                     KeyCode::Char('1') => {
                         if state.dual_build.active {
                             state.dual_build.tab = 0;
-                            state.dual_build.comparison = None;
                         }
                     }
                     KeyCode::Char('2') => {
                         if state.dual_build.active {
                             state.dual_build.tab = 1;
-                            state.dual_build.comparison = None;
                         }
                     }
                     KeyCode::Up => {
@@ -1496,6 +1483,36 @@ fn handle_dual_build_output(state: &mut AppState, idx: usize, output: AgentOutpu
     if state.dual_build.streams[idx].len() > cap {
         let excess = state.dual_build.streams[idx].len() - cap;
         state.dual_build.streams[idx].drain(..excess);
+    }
+}
+
+fn handle_dual_pipeline_event(state: &mut AppState, idx: usize, event: AppEvent, _config: &Config) {
+    if idx >= 2 { return; }
+    match event {
+        AppEvent::AgentOutput(output) => {
+            handle_dual_build_output(state, idx, output);
+        }
+        AppEvent::AgentDone(_success) => {
+            // Individual agent done within a pipeline -- not the whole pipeline
+        }
+        AppEvent::LoopEvent(le) => match le {
+            LoopEvent::AgentStarted(role, model) => {
+                state.dual_build.stages[idx] = Some(role);
+                state.dual_build.stage_models[idx] = model;
+            }
+            LoopEvent::Log(msg) => {
+                state.dual_build.streams[idx].push(format!("[log] {}", msg));
+                state.dual_build.event_counts[idx] += 1;
+            }
+            LoopEvent::TaskCompleted(_id, _success) => {
+                // Pipeline finished
+                state.dual_build.finished[idx] = true;
+            }
+            _ => {
+                // Other loop events from the pipeline -- ignore at top level
+            }
+        },
+        _ => {}
     }
 }
 

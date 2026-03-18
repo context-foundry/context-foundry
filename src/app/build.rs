@@ -3,7 +3,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
-use crate::agent::{self, AgentOutputEvent, AgentResult, AgentRole};
+use crate::agent::{self, AgentResult, AgentRole};
 use crate::complexity::{self, TaskComplexity};
 use crate::config::Config;
 use crate::{
@@ -18,7 +18,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use super::context::RunContext;
-use super::state::DualBuildComparison;
+use super::state::DualSelection;
 use super::{review, AppEvent, LoopEvent};
 use crate::extensions;
 use crate::utils::atomic_write_file;
@@ -306,23 +306,32 @@ async fn adaptive_sleep(config: &Config, rate_limited: bool, full_secs: u64) {
     }
 }
 
-// ─── Dual Build ─────────────────────────────────────────────
+// ─── Dual Pipeline ──────────────────────────────────────────
 
-/// Run two builder models sequentially in git worktrees, collect diffs,
-/// compare, and apply the winner's patch to the main project directory.
-async fn run_dual_builders(
-    task_id: &str,
-    task_desc: &str,
-    ctx: &RunContext,
-    tx: &mpsc::UnboundedSender<AppEvent>,
-    skip_planner: bool,
-    extension_context: &str,
-    builder_specs: &[(String, String); 2],
-) -> (bool, bool) {
-    // Build display labels for each spec
+/// Run two complete SPID pipelines in parallel, each in its own git worktree.
+/// Each pipeline runs Scout, Plan, Implement, and Doubt independently.
+/// The human evaluates both results -- no automated winner selection.
+fn run_dual_pipelines<'a>(
+    task_info: &'a Task,
+    ctx: &'a RunContext,
+    tx: &'a mpsc::UnboundedSender<AppEvent>,
+    skip_scout: bool,
+    cached_patterns: &'a [patterns::Pattern],
+    patterns_dir: &'a std::path::Path,
+    extension_context: &'a str,
+    specs: &'a [String; 2],
+) -> std::pin::Pin<Box<dyn std::future::Future<Output = (bool, bool)> + Send + 'a>> {
+    Box::pin(async move {
+    // Build display labels
     let labels: [String; 2] = [
-        Config::display_provider_model(&builder_specs[0].0, &builder_specs[0].1),
-        Config::display_provider_model(&builder_specs[1].0, &builder_specs[1].1),
+        {
+            let (p, m) = Config::parse_model_spec(&specs[0]);
+            Config::display_provider_model(&p, &m)
+        },
+        {
+            let (p, m) = Config::parse_model_spec(&specs[1]);
+            Config::display_provider_model(&p, &m)
+        },
     ];
 
     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::DualBuildStarted {
@@ -332,16 +341,14 @@ async fn run_dual_builders(
     let arena_dir = ctx.buildloop_dir.join("arena");
     let _ = std::fs::create_dir_all(&arena_dir);
 
-    let mut successes = [false; 2];
-    let mut diff_stats = [String::new(), String::new()];
-    let mut diff_sizes = [0usize; 2];
-    let mut patches = [String::new(), String::new()];
-    let mut last_rl = false;
+    // Create worktrees and RunContexts for each pipeline
+    let mut wt_contexts: Vec<(PathBuf, RunContext)> = Vec::new();
 
     for idx in 0..2 {
-        let wt_path = arena_dir.join(format!("builder-{}", idx));
+        let (provider, _) = Config::parse_model_spec(&specs[idx]);
+        let wt_path = arena_dir.join(format!("pipeline-{}-{}", idx, provider));
 
-        // Remove stale worktree if it exists
+        // Remove stale worktree
         if wt_path.exists() {
             let _ = std::process::Command::new("git")
                 .args(["worktree", "remove", "--force"])
@@ -363,24 +370,35 @@ async fn run_dual_builders(
             Ok(output) => {
                 let stderr = String::from_utf8_lossy(&output.stderr);
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                    "Dual build: failed to create worktree {}: {}", idx, stderr.trim()
+                    "Dual pipeline: failed to create worktree {}: {}", labels[idx], stderr.trim()
                 ))));
+                // Clean up any previously created worktrees
+                for (_p, prev_ctx) in &wt_contexts {
+                    let _ = std::process::Command::new("git")
+                        .args(["worktree", "remove", "--force"])
+                        .arg(&prev_ctx.project_dir)
+                        .current_dir(&ctx.project_dir)
+                        .output();
+                }
                 return (false, false);
             }
             Err(e) => {
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                    "Dual build: git worktree command failed: {}", e
+                    "Dual pipeline: git worktree command failed: {}", e
                 ))));
+                for (_p, prev_ctx) in &wt_contexts {
+                    let _ = std::process::Command::new("git")
+                        .args(["worktree", "remove", "--force"])
+                        .arg(&prev_ctx.project_dir)
+                        .current_dir(&ctx.project_dir)
+                        .output();
+                }
                 return (false, false);
             }
         }
 
-        // Copy current-plan.md into the worktree's .buildloop/
-        let wt_buildloop = wt_path.join(".buildloop");
-        let _ = std::fs::create_dir_all(&wt_buildloop);
-        let _ = std::fs::copy(&ctx.current_plan, wt_buildloop.join("current-plan.md"));
-
-        // Copy SPEC and TASKS files at their relative paths
+        // Copy state files into worktree
+        // SPEC and TASKS at their relative paths
         if let Ok(rel) = ctx.spec_path.strip_prefix(&ctx.project_dir) {
             let dest = wt_path.join(rel);
             if let Some(parent) = dest.parent() {
@@ -395,189 +413,86 @@ async fn run_dual_builders(
             }
             let _ = std::fs::copy(&ctx.plan_path, &dest);
         }
-
-        // Copy CLAUDE.md into worktree (may be untracked/gitignored)
+        // CLAUDE.md (may be untracked/gitignored)
         let claude_md_src = ctx.project_dir.join("CLAUDE.md");
         if claude_md_src.exists() {
             let _ = std::fs::copy(&claude_md_src, wt_path.join("CLAUDE.md"));
         }
 
-        // Build the prompt
-        let prompt = if skip_planner {
-            prompts::builder_direct_prompt(
-                task_id,
-                task_desc,
-                &ctx.spec_file_name(),
-                &ctx.tasks_file_name(),
-            )
-        } else {
-            prompts::builder_prompt(
-                task_id,
-                task_desc,
-                &ctx.spec_file_name(),
-                &ctx.tasks_file_name(),
-            )
-        };
-        let prompt = prompts::wrap_with_extensions(&prompt, extension_context);
+        // Create pipeline-specific config with all roles using this provider/model
+        let pipeline_config = ctx.config.for_pipeline(&specs[idx]);
 
-        // Create agent channel and forward events as DualBuildOutput
-        let (agent_tx, mut agent_rx) = mpsc::unbounded_channel::<AgentOutputEvent>();
-        let fwd_tx = tx.clone();
-        let fwd_handle = tokio::spawn(async move {
-            while let Some(evt) = agent_rx.recv().await {
-                let _ = fwd_tx.send(AppEvent::DualBuildOutput(idx, evt));
-            }
-        });
-
-        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::AgentStarted(
-            AgentRole::Builder,
-            labels[idx].clone(),
-        )));
-
-        let build_result = agent::run_agent(
-            &AgentRole::Builder,
-            Config::parse_provider(&builder_specs[idx].0),
-            &builder_specs[idx].1,
-            &prompt,
+        // Create RunContext for this worktree
+        let wt_ctx = RunContext::new(
             &wt_path,
-            agent_tx,
-            &ctx.log_dir,
-            None,
-            ctx.config.agent_timeout_secs,
-            Some(ctx.shutdown.clone()),
-        )
-        .await;
+            pipeline_config,
+            ctx.shutdown.clone(),
+            ctx.tasks_file_lock.clone(),
+            ctx.review_gate.clone(),
+        );
 
-        let _ = fwd_handle.await;
-        let rl = was_rate_limited(&build_result);
-        last_rl = last_rl || rl;
-        successes[idx] = build_result.map(|r| r.success).unwrap_or(false);
-
-        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::DualBuildStreamDone(idx, successes[idx])));
-
-        // Collect diff stats
-        let shortstat = std::process::Command::new("git")
-            .args(["diff", "HEAD", "--shortstat"])
-            .current_dir(&wt_path)
-            .output()
-            .ok()
-            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-            .unwrap_or_default();
-
-        // Parse shortstat into a summary and line count
-        let mut insertions = 0usize;
-        let mut deletions = 0usize;
-        for part in shortstat.split(',') {
-            let part = part.trim();
-            if part.contains("insertion") {
-                if let Some(n) = part.split_whitespace().next().and_then(|s| s.parse::<usize>().ok()) {
-                    insertions = n;
-                }
-            }
-            if part.contains("deletion") {
-                if let Some(n) = part.split_whitespace().next().and_then(|s| s.parse::<usize>().ok()) {
-                    deletions = n;
-                }
-            }
-        }
-        diff_stats[idx] = format!("+{}/-{}", insertions, deletions);
-        diff_sizes[idx] = insertions + deletions;
-
-        // Generate full patch
-        patches[idx] = std::process::Command::new("git")
-            .args(["diff", "HEAD"])
-            .current_dir(&wt_path)
-            .output()
-            .ok()
-            .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
-            .unwrap_or_default();
-
-        // Adaptive sleep between builders (only after first one)
-        if idx == 0 {
-            adaptive_sleep(&ctx.config, rl, ctx.config.pause_between_agents_secs).await;
-        }
+        wt_contexts.push((wt_path, wt_ctx));
     }
 
-    // Select winner
-    let winner = if successes[0] && successes[1] {
-        if diff_sizes[0] <= diff_sizes[1] { 0 } else { 1 }
-    } else if successes[0] {
-        0
-    } else if successes[1] {
-        1
-    } else {
-        0
-    };
+    // Run both pipelines concurrently with forwarding channels.
+    // Use tokio::join! (not spawn) since process_task borrows are not 'static.
+    let ((_wt0, wt_ctx0), (_wt1, wt_ctx1)) = (
+        wt_contexts.remove(0),
+        wt_contexts.remove(0),
+    );
 
-    let reason = if successes[0] && successes[1] {
-        format!("{} had smaller diff", labels[winner])
-    } else if successes[0] || successes[1] {
-        "only passing builder".to_string()
-    } else {
-        "both failed, picked first".to_string()
-    };
-
-    let comparison = DualBuildComparison {
-        labels: labels.clone(),
-        diff_stats: diff_stats.clone(),
-        test_results: [
-            if successes[0] { "PASS".to_string() } else { "FAIL".to_string() },
-            if successes[1] { "PASS".to_string() } else { "FAIL".to_string() },
-        ],
-        winner,
-        reason,
-    };
-
-    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::DualBuildComparisonReady(comparison)));
-
-    // Apply winner's patch to main project_dir (skip if both builders failed)
-    if successes[winner] && !patches[winner].is_empty() {
-        let patch_path = ctx.buildloop_dir.join("winner.patch");
-        let _ = std::fs::write(&patch_path, &patches[winner]);
-        let apply_result = std::process::Command::new("git")
-            .args(["apply"])
-            .arg(&patch_path)
-            .current_dir(&ctx.project_dir)
-            .output();
-        match apply_result {
-            Ok(output) if output.status.success() => {}
-            Ok(output) => {
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                    "Dual build: patch apply failed: {}", stderr.trim()
-                ))));
-            }
-            Err(e) => {
-                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                    "Dual build: git apply command failed: {}", e
-                ))));
-            }
+    // Pipeline 0 forwarding channel
+    let (tx0, mut rx0) = mpsc::unbounded_channel::<AppEvent>();
+    let fwd0 = tx.clone();
+    tokio::spawn(async move {
+        while let Some(event) = rx0.recv().await {
+            let _ = fwd0.send(AppEvent::DualPipelineEvent(0, Box::new(event)));
         }
-    }
+    });
 
-    // Copy build-claims.md from winner's worktree if it exists
-    let winner_wt = arena_dir.join(format!("builder-{}", winner));
-    let winner_claims = winner_wt.join(".buildloop").join("build-claims.md");
-    if winner_claims.exists() {
-        let _ = std::fs::copy(&winner_claims, ctx.buildloop_dir.join("build-claims.md"));
-    }
-
-    // Cleanup worktrees
-    for idx in 0..2 {
-        let wt = arena_dir.join(format!("builder-{}", idx));
-        if wt.exists() {
-            let _ = std::process::Command::new("git")
-                .args(["worktree", "remove", "--force"])
-                .arg(&wt)
-                .current_dir(&ctx.project_dir)
-                .output();
+    // Pipeline 1 forwarding channel
+    let (tx1, mut rx1) = mpsc::unbounded_channel::<AppEvent>();
+    let fwd1 = tx.clone();
+    tokio::spawn(async move {
+        while let Some(event) = rx1.recv().await {
+            let _ = fwd1.send(AppEvent::DualPipelineEvent(1, Box::new(event)));
         }
-    }
-    let _ = std::fs::remove_dir_all(&arena_dir);
+    });
 
-    let _ = tx.send(AppEvent::AgentDone(successes[winner]));
+    let patterns0 = cached_patterns.to_vec();
+    let patterns1 = cached_patterns.to_vec();
+    let ext0 = extension_context.to_string();
+    let ext1 = extension_context.to_string();
+    let pdir0 = patterns_dir.to_path_buf();
+    let pdir1 = patterns_dir.to_path_buf();
 
-    (successes[winner], last_rl)
+    let (result0, result1) = tokio::join!(
+        async {
+            let r = process_task(task_info, &wt_ctx0, &tx0, skip_scout, &patterns0, &pdir0, &ext0).await;
+            let _ = tx0.send(AppEvent::LoopEvent(LoopEvent::TaskCompleted(task_info.id.clone(), r.0)));
+            r
+        },
+        async {
+            let r = process_task(task_info, &wt_ctx1, &tx1, skip_scout, &patterns1, &pdir1, &ext1).await;
+            let _ = tx1.send(AppEvent::LoopEvent(LoopEvent::TaskCompleted(task_info.id.clone(), r.0)));
+            r
+        }
+    );
+
+    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::DualBuildStreamDone(0, result0.0)));
+    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::DualBuildStreamDone(1, result1.0)));
+
+    let any_success = result0.0 || result1.0;
+    let any_rate_limited = result0.1 || result1.1;
+
+    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+        "Both pipelines complete. Results in .buildloop/arena/ -- evaluate and merge manually."
+    ))));
+
+    // Do NOT clean up worktrees -- human evaluates results
+
+    (any_success, any_rate_limited)
+    }) // end Box::pin
 }
 
 /// Background task that polls `gh pr view` for review status and sends
@@ -1187,6 +1102,38 @@ async fn process_task(
     patterns_dir: &std::path::Path,
     extension_context: &str,
 ) -> (bool, bool) {
+    // Handle dual selection: Both forks two pipelines, First/Second override provider
+    let dual_sel = DualSelection::from_str(&ctx.config.dual_selection);
+    if ctx.config.builder_models.len() >= 2 {
+        match dual_sel {
+            DualSelection::Both => {
+                let specs = [
+                    ctx.config.builder_models[0].clone(),
+                    ctx.config.builder_models[1].clone(),
+                ];
+                return run_dual_pipelines(
+                    task_info, ctx, tx, skip_scout, cached_patterns, patterns_dir, extension_context, &specs,
+                ).await;
+            }
+            DualSelection::First | DualSelection::Second => {
+                let spec_idx = if dual_sel == DualSelection::First { 0 } else { 1 };
+                let pipeline_config = ctx.config.for_pipeline(&ctx.config.builder_models[spec_idx]);
+                let override_ctx = RunContext::new(
+                    &ctx.project_dir,
+                    pipeline_config,
+                    ctx.shutdown.clone(),
+                    ctx.tasks_file_lock.clone(),
+                    ctx.review_gate.clone(),
+                );
+                // Box::pin to break async recursion (override_ctx has dual_selection cleared)
+                return Box::pin(process_task(
+                    task_info, &override_ctx, tx, skip_scout, cached_patterns, patterns_dir, extension_context,
+                )).await;
+            }
+            DualSelection::Off => {} // fall through to normal pipeline
+        }
+    }
+
     let task_id = &task_info.id;
     let task_desc = &task_info.description;
     let patterns_extracted = ctx.buildloop_dir.join("patterns-extracted.json");
@@ -1194,14 +1141,16 @@ async fn process_task(
     // Clean up stale dual-build worktrees from previous sessions
     let arena_dir = ctx.buildloop_dir.join("arena");
     if arena_dir.exists() {
-        for idx in 0..2 {
-            let wt = arena_dir.join(format!("builder-{}", idx));
-            if wt.exists() {
-                let _ = std::process::Command::new("git")
-                    .args(["worktree", "remove", "--force"])
-                    .arg(&wt)
-                    .current_dir(&ctx.project_dir)
-                    .output();
+        if let Ok(entries) = std::fs::read_dir(&arena_dir) {
+            for entry in entries.flatten() {
+                let wt = entry.path();
+                if wt.is_dir() {
+                    let _ = std::process::Command::new("git")
+                        .args(["worktree", "remove", "--force"])
+                        .arg(&wt)
+                        .current_dir(&ctx.project_dir)
+                        .output();
+                }
             }
         }
         let _ = std::fs::remove_dir_all(&arena_dir);
@@ -1575,18 +1524,9 @@ async fn process_task(
         }
     }
 
-    // ─── Run Builder(s) ──────────────────────────────────────
+    // ─── Run Builder ────────────────────────────────────────
     emit_extension_injections(tx, &ctx.config.extensions, extension_context, &AgentRole::Builder, task_id);
-    let dual_mode = ctx.config.builder_models.len() >= 2;
-    let (build_ok, builder_rate_limited) = if dual_mode {
-        let specs: Vec<(String, String)> = ctx.config.builder_models.iter()
-            .map(|s| Config::parse_model_spec(s))
-            .collect();
-        let specs_arr = [specs[0].clone(), specs[1].clone()];
-        run_dual_builders(
-            task_id, task_desc, ctx, tx, skip_planner, extension_context, &specs_arr,
-        ).await
-    } else {
+    let (build_ok, builder_rate_limited) = {
         // Original single-builder path
         let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
         let fwd_tx = tx.clone();

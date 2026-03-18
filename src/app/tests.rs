@@ -265,7 +265,8 @@ fn seed_spec_from_brief_writes_minimal_spec() {
 }
 
 #[test]
-fn prepare_append_tasks_start_does_not_seed_spec_when_claude_is_missing() {
+fn prepare_append_tasks_start_works_without_claude_cli() {
+    // Task append is deterministic (no LLM) -- claude CLI not required.
     let dir = temp_project_dir("foundry-append-no-claude");
     let mut state = AppState::new(dir.join(".buildloop"));
     let request = super::state::AppendTasksRequest {
@@ -276,8 +277,9 @@ fn prepare_append_tasks_start_does_not_seed_spec_when_claude_is_missing() {
 
     let can_start = prepare_append_tasks_start(&dir, &mut state, &request, false);
 
-    assert!(!can_start);
-    assert!(!dir.join("SPEC.md").exists());
+    assert!(can_start);
+    // SPEC.md seeded from description
+    assert!(dir.join("SPEC.md").exists());
 
     let _ = std::fs::remove_dir_all(dir);
 }

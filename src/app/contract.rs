@@ -4,11 +4,13 @@ pub(super) const SPEC_FILE_NAME: &str = "SPEC.md";
 pub(super) const LEGACY_SPEC_FILE_NAME: &str = "ARCHITECTURE.md";
 pub(super) const TASKS_FILE_NAME: &str = "TASKS.md";
 pub(super) const LEGACY_TASKS_FILE_NAME: &str = "IMPL_PLAN.md";
+pub(super) const UPDATED_SPECS_FILE_NAME: &str = "UPDATED_SPECS.md";
 
 #[derive(Debug, Clone)]
 pub(super) struct ContractPaths {
     pub(super) spec_path: PathBuf,
     pub(super) tasks_path: PathBuf,
+    pub(super) updated_specs_path: PathBuf,
     spec_conflict: bool,
     tasks_conflict: bool,
 }
@@ -23,6 +25,7 @@ impl ContractPaths {
         Self {
             spec_path,
             tasks_path,
+            updated_specs_path: project_dir.join(UPDATED_SPECS_FILE_NAME),
             spec_conflict,
             tasks_conflict,
         }
@@ -34,6 +37,10 @@ impl ContractPaths {
 
     pub(super) fn tasks_file_name(&self) -> String {
         file_name(&self.tasks_path)
+    }
+
+    pub(super) fn updated_specs_path(&self) -> &Path {
+        &self.updated_specs_path
     }
 
     pub(super) fn warnings(&self) -> Vec<String> {
