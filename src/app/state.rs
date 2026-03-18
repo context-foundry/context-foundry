@@ -321,6 +321,8 @@ pub struct AppState {
     pub session_review_low: usize,
     pub session_start: DateTime<Utc>,
     pub session_cost_usd: f64,
+    pub session_input_tokens: u64,
+    pub session_output_tokens: u64,
     pub agent_context_pct: Option<u8>, // Context window % used by current/last agent
     pub dual_build: DualBuildState,
     pub spid_context_pcts: [Option<u8>; 4], // Per-stage context %: [Scout, Plan, Implement, Doubt]
@@ -342,6 +344,8 @@ pub struct AppState {
     pub tui_theme: TuiTheme,
     pub(super) pending_transition: Option<PendingTransition>,
     pub(super) tasks_file_lock: Arc<Mutex<()>>,
+    /// Shared cost counter (millicents) — written by TUI event handler, read by build loop.
+    pub(super) session_cost_millicents: Arc<std::sync::atomic::AtomicU64>,
 }
 
 impl AppState {
@@ -403,6 +407,8 @@ impl AppState {
             session_review_low: 0,
             session_start: Utc::now(),
             session_cost_usd: 0.0,
+            session_input_tokens: 0,
+            session_output_tokens: 0,
             agent_context_pct: None,
             dual_build: DualBuildState::default(),
             spid_context_pcts: [None; 4],
@@ -423,6 +429,7 @@ impl AppState {
             tui_theme: TuiTheme::default(),
             pending_transition: None,
             tasks_file_lock: Arc::new(Mutex::new(())),
+            session_cost_millicents: Arc::new(std::sync::atomic::AtomicU64::new(0)),
         }
     }
 

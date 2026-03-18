@@ -22,17 +22,73 @@ fn normalize_theme_name(name: &str) -> String {
 }
 
 /// Detect whether the terminal supports truecolor (24-bit RGB).
-/// Checks COLORTERM env var and WT_SESSION (Windows Terminal).
+/// Checks COLORTERM, WT_SESSION, TERM_PROGRAM, KONSOLE_VERSION, and TERM.
+/// Result is cached on first call via `std::sync::OnceLock`.
 fn supports_truecolor() -> bool {
+    static TRUECOLOR: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *TRUECOLOR.get_or_init(detect_truecolor)
+}
+
+/// Override truecolor detection from config. Call once at startup if
+/// the user has set `truecolor` in `.foundry.json`.
+pub fn set_truecolor_override(value: bool) {
+    TRUECOLOR_OVERRIDE.store(if value { 1 } else { 2 }, std::sync::atomic::Ordering::Relaxed);
+}
+
+static TRUECOLOR_OVERRIDE: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+
+fn detect_truecolor() -> bool {
+    // Check config override first (0 = unset, 1 = true, 2 = false)
+    match TRUECOLOR_OVERRIDE.load(std::sync::atomic::Ordering::Relaxed) {
+        1 => return true,
+        2 => return false,
+        _ => {}
+    }
+
+    // COLORTERM is the standard signal
     if let Ok(ct) = std::env::var("COLORTERM") {
-        if ct == "truecolor" || ct == "24bit" {
+        let ct_lower = ct.to_ascii_lowercase();
+        if ct_lower == "truecolor" || ct_lower == "24bit" {
             return true;
         }
     }
+
     // Windows Terminal always supports truecolor
     if std::env::var("WT_SESSION").is_ok() {
         return true;
     }
+
+    // Known truecolor-capable terminal programs
+    if let Ok(tp) = std::env::var("TERM_PROGRAM") {
+        let tp_lower = tp.to_ascii_lowercase();
+        if matches!(
+            tp_lower.as_str(),
+            "iterm.app" | "hyper" | "wezterm" | "alacritty" | "vscode"
+        ) {
+            return true;
+        }
+    }
+
+    // KDE Konsole supports truecolor
+    if std::env::var("KONSOLE_VERSION").is_ok() {
+        return true;
+    }
+
+    // ConEmu / Cmder on Windows
+    if std::env::var("ConEmuPID").is_ok() {
+        return true;
+    }
+
+    // tmux often strips COLORTERM but passes through Tc capability.
+    // If TERM contains "256color" inside tmux, it very likely supports truecolor.
+    if std::env::var("TMUX").is_ok() {
+        if let Ok(term) = std::env::var("TERM") {
+            if term.contains("256color") {
+                return true;
+            }
+        }
+    }
+
     false
 }
 

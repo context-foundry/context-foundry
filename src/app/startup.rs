@@ -152,7 +152,7 @@ fn build_file_tree_recursive(
         let path = item.path();
         let is_dir = path.is_dir();
         let is_hidden = file_name.starts_with('.');
-        let is_skipped_dir = is_dir && should_skip_project_dir(&file_name);
+        let is_skipped_dir = is_dir && should_skip_dir_in_context(&file_name, dir);
 
         let is_cf_highlight = is_context_foundry_file(&file_name, &path, base_dir);
         let (file_size, modified) = match std::fs::metadata(&path) {
@@ -1193,6 +1193,21 @@ fn should_skip_project_dir(name: &str) -> bool {
             | "coverage"
             | "vendor"
     )
+}
+
+/// Check if a directory should be skipped based on its name and parent path.
+/// Filters `.buildloop/logs/` while allowing `logs/` in user project directories.
+fn should_skip_dir_in_context(name: &str, parent_dir: &Path) -> bool {
+    if should_skip_project_dir(name) {
+        return true;
+    }
+    // Filter .buildloop/logs/ — these are internal JSONL agent log files
+    if name == "logs" {
+        if let Some(parent_name) = parent_dir.file_name() {
+            return parent_name == ".buildloop";
+        }
+    }
+    false
 }
 
 fn is_meaningful_project_file(name: &str) -> bool {

@@ -179,6 +179,10 @@ const RUN_AGENT_CODEX_MAX_ATTEMPTS: usize = 2;
 #[derive(Debug)]
 struct ProviderProgressState {
     last_progress_at: Instant,
+    /// Timestamp of last raw bytes received from PTY — secondary progress signal.
+    /// When parsed events fail (e.g. unparseable JSON), raw bytes still indicate
+    /// the agent is alive and working.
+    last_raw_bytes_at: Instant,
     last_transport_issue_at: Option<Instant>,
     transport_issue_count: usize,
 }
@@ -187,6 +191,7 @@ impl ProviderProgressState {
     fn new(now: Instant) -> Self {
         Self {
             last_progress_at: now,
+            last_raw_bytes_at: now,
             last_transport_issue_at: None,
             transport_issue_count: 0,
         }
@@ -194,8 +199,14 @@ impl ProviderProgressState {
 
     fn record_progress_at(&mut self, now: Instant) {
         self.last_progress_at = now;
+        self.last_raw_bytes_at = now;
         self.last_transport_issue_at = None;
         self.transport_issue_count = 0;
+    }
+
+    /// Record that raw bytes were received from PTY, even if they didn't parse.
+    fn record_raw_bytes_at(&mut self, now: Instant) {
+        self.last_raw_bytes_at = now;
     }
 
     fn record_transport_issue_at(&mut self, now: Instant) {
@@ -205,6 +216,14 @@ impl ProviderProgressState {
 
     fn no_progress_for(&self, now: Instant) -> Duration {
         now.saturating_duration_since(self.last_progress_at)
+    }
+
+    /// Returns true only when BOTH parsed events AND raw bytes have stopped.
+    /// This prevents killing an active agent whose output is unparseable.
+    fn is_truly_idle(&self, now: Instant, timeout: Duration) -> bool {
+        let no_parsed = self.no_progress_for(now) >= timeout;
+        let no_raw = now.saturating_duration_since(self.last_raw_bytes_at) >= timeout;
+        no_parsed && no_raw
     }
 
     fn transport_stalled(&self, now: Instant) -> bool {
@@ -460,7 +479,7 @@ pub async fn run_provider_session(options: ProviderRunOptions<'_>) -> Result<Age
                         break;
                     }
 
-                    if progress_snapshot.no_progress_for(now) >= Duration::from_secs(timeout_secs) {
+                    if progress_snapshot.is_truly_idle(now, Duration::from_secs(timeout_secs)) {
                         let _ = child.kill();
                         let _ = child.wait();
                         let message = format!(
@@ -720,8 +739,7 @@ pub async fn run_agent(
                         .lock()
                         .unwrap_or_else(|poisoned| poisoned.into_inner());
 
-                    if progress_snapshot.no_progress_for(now)
-                        >= Duration::from_secs(timeout_secs)
+                    if progress_snapshot.is_truly_idle(now, Duration::from_secs(timeout_secs))
                     {
                         drop(progress_snapshot);
                         let _ = child.kill();
@@ -810,6 +828,13 @@ fn read_pty_output(
                     continue;
                 }
 
+                // Record raw bytes as secondary progress signal — even if
+                // the line fails to parse, receiving bytes means the agent is alive.
+                {
+                    let mut guard = progress.lock().unwrap_or_else(|p| p.into_inner());
+                    guard.record_raw_bytes_at(Instant::now());
+                }
+
                 // Persist raw output to log file
                 if let Some(ref mut f) = log_file {
                     use std::io::Write;
@@ -884,6 +909,12 @@ fn read_provider_output(
                 let line = buf.trim_end();
                 if line.is_empty() {
                     continue;
+                }
+
+                // Record raw bytes as secondary progress signal
+                {
+                    let mut guard = progress.lock().unwrap_or_else(|p| p.into_inner());
+                    guard.record_raw_bytes_at(Instant::now());
                 }
 
                 if let Some(ref mut f) = log_file {

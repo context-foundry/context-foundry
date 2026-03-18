@@ -19,6 +19,9 @@ pub(super) struct RunContext {
     pub(super) shutdown: Arc<AtomicBool>,
     pub(super) review_gate: Arc<AtomicBool>,
     pub(super) tasks_file_lock: Arc<Mutex<()>>,
+    /// Cumulative session cost in millicents (1 USD = 100_000 millicents).
+    /// Shared between build loop and output forwarding tasks.
+    pub(super) session_cost_millicents: Arc<std::sync::atomic::AtomicU64>,
 }
 
 impl RunContext {
@@ -39,6 +42,7 @@ impl RunContext {
             shutdown,
             review_gate,
             tasks_file_lock,
+            session_cost_millicents: Arc::new(std::sync::atomic::AtomicU64::new(0)),
         }
     }
 

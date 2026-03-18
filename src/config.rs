@@ -175,6 +175,18 @@ pub struct Config {
 
     /// TUI color theme: "dark" (default), "catppuccin", or "solarized".
     pub theme: String,
+
+    /// Override truecolor detection: true forces RGB, false forces ANSI-256.
+    /// When None (default), auto-detection is used.
+    pub truecolor: Option<bool>,
+
+    /// Optional build/compile command to run after builder completes.
+    /// If set, output is checked before proceeding to doubt stage.
+    pub build_command: Option<String>,
+
+    /// Maximum session cost in USD. When reached, the loop pauses.
+    /// 0.0 (default) means no limit.
+    pub cost_limit: f64,
 }
 
 impl Default for Config {
@@ -240,6 +252,9 @@ impl Default for Config {
             preview_wrap: true,
             pr_poll_interval_secs: 30,
             theme: "dark".into(),
+            truecolor: None,
+            build_command: None,
+            cost_limit: 0.0,
         }
     }
 }

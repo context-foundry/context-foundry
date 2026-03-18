@@ -52,6 +52,9 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
     if config.builder_models.len() >= 2 {
         state.dual_selection = state::DualSelection::from_str(&config.dual_selection);
     }
+    if let Some(tc) = config.truecolor {
+        crate::tui::theme::set_truecolor_override(tc);
+    }
     state.tui_theme = crate::tui::theme::from_name(&config.theme);
 
     // Git/GH readiness checks (advisory, non-blocking)
@@ -395,7 +398,8 @@ fn spawn_build_loop(
     state.awaiting_pr = None;
     state.pr_poll_last_check = None;
 
-    let run_context = RunContext::new(project_dir, loop_config, shutdown.clone(), state.tasks_file_lock.clone(), review_gate);
+    let mut run_context = RunContext::new(project_dir, loop_config, shutdown.clone(), state.tasks_file_lock.clone(), review_gate);
+    run_context.session_cost_millicents = state.session_cost_millicents.clone();
     let loop_tx = event_tx.clone();
     tokio::spawn(async move {
         build::build_loop(run_context, loop_tx).await;
@@ -1400,6 +1404,11 @@ fn handle_agent_output(state: &mut AppState, output: AgentOutputEvent) {
             context_window,
         } => {
             state.session_cost_usd += cost_usd;
+            state.session_input_tokens += input_tokens;
+            state.session_output_tokens += output_tokens;
+            // Update shared atomic for build loop cost-limit check
+            let millicents = (cost_usd * 100_000.0) as u64;
+            state.session_cost_millicents.fetch_add(millicents, std::sync::atomic::Ordering::Relaxed);
             let total_tokens = input_tokens + output_tokens;
             if context_window > 0 {
                 let pct = ((total_tokens as f64 / context_window as f64) * 100.0).min(100.0) as u8;
@@ -1470,6 +1479,8 @@ fn handle_dual_build_output(state: &mut AppState, idx: usize, output: AgentOutpu
         }
         AgentOutputEvent::Usage { cost_usd, input_tokens, output_tokens, context_window } => {
             state.session_cost_usd += cost_usd;
+            state.session_input_tokens += input_tokens;
+            state.session_output_tokens += output_tokens;
             let total_tokens = input_tokens + output_tokens;
             if *context_window > 0 {
                 let pct = ((total_tokens as f64 / *context_window as f64) * 100.0).min(100.0) as u8;

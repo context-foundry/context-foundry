@@ -23,6 +23,41 @@ use super::{review, AppEvent, LoopEvent};
 use crate::extensions;
 use crate::utils::atomic_write_file;
 
+// ─── Crash Recovery Checkpoint ───────────────────────────────
+// Write partial progress to checkpoint.json after each SPID stage.
+// On restart, detect checkpoint and resume from last completed step.
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct Checkpoint {
+    task_id: String,
+    task_desc: String,
+    completed_stage: String, // "scout", "planner", "builder", "done"
+    timestamp: String,
+}
+
+fn write_checkpoint(buildloop_dir: &std::path::Path, task_id: &str, task_desc: &str, stage: &str) {
+    let checkpoint = Checkpoint {
+        task_id: task_id.to_string(),
+        task_desc: task_desc.to_string(),
+        completed_stage: stage.to_string(),
+        timestamp: chrono::Utc::now().to_rfc3339(),
+    };
+    let path = buildloop_dir.join("checkpoint.json");
+    if let Ok(json) = serde_json::to_string_pretty(&checkpoint) {
+        let _ = std::fs::write(&path, json);
+    }
+}
+
+fn read_checkpoint(buildloop_dir: &std::path::Path) -> Option<Checkpoint> {
+    let path = buildloop_dir.join("checkpoint.json");
+    let content = std::fs::read_to_string(&path).ok()?;
+    serde_json::from_str(&content).ok()
+}
+
+fn clear_checkpoint(buildloop_dir: &std::path::Path) {
+    let _ = std::fs::remove_file(buildloop_dir.join("checkpoint.json"));
+}
+
 // ─── Prerequisite Gates ──────────────────────────────────────
 // Programmatic checks that block a pipeline stage from running
 // if its preconditions aren't met. This is deterministic enforcement
@@ -670,6 +705,31 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
         cached_patterns.extend(ext_patterns);
     }
 
+    // ─── Crash Recovery ───────────────────────────────────────────
+    // If a previous run crashed mid-task, detect the checkpoint and
+    // log it so the user knows we're aware. The task will be re-processed
+    // from scratch (it's still pending in TASKS.md), but at least we
+    // don't lose awareness of what happened.
+    if let Some(checkpoint) = read_checkpoint(&ctx.buildloop_dir) {
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+            "Crash recovery: found checkpoint for {} at stage '{}' ({}). Resuming from task queue.",
+            checkpoint.task_id, checkpoint.completed_stage, checkpoint.timestamp,
+        ))));
+
+        // If the builder completed but the task wasn't marked done (crash during doubt/commit),
+        // and build-claims.md exists, we can skip straight to doubt on the next process_task run.
+        // The scout report and plan are also likely still on disk.
+        if checkpoint.completed_stage == "builder" {
+            let claims_exist = ctx.buildloop_dir.join("build-claims.md").exists();
+            if claims_exist {
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+                    "Builder had completed — build-claims.md found, will attempt to resume at doubt stage".to_string(),
+                )));
+            }
+        }
+        clear_checkpoint(&ctx.buildloop_dir);
+    }
+
     // ─── Scout State ──────────────────────────────────────────────
     // Scout runs once at session start, then reuses the report for
     // subsequent tasks unless the previous commit touched structural files.
@@ -857,6 +917,24 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                     tasks.len(),
                 )));
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::QueueUpdated(tasks)));
+            }
+
+            // Check cost limit
+            if ctx.config.cost_limit > 0.0 {
+                let cost_millicents = ctx.session_cost_millicents.load(std::sync::atomic::Ordering::Relaxed);
+                let cost_usd = cost_millicents as f64 / 100_000.0;
+                if cost_usd >= ctx.config.cost_limit {
+                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                        "Cost limit reached: ${:.2} >= ${:.2} — pausing loop",
+                        cost_usd, ctx.config.cost_limit
+                    ))));
+                    if let Some(la) = lookahead.take() {
+                        la.handle.abort();
+                        let _ = std::fs::remove_file(lookahead_plan_path(&ctx, &la.task_id));
+                    }
+                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Finished));
+                    return;
+                }
             }
 
             let stop_file = ctx.stop_file();
@@ -1295,6 +1373,9 @@ async fn process_task(
         }
     }
 
+    // Checkpoint: scout completed
+    write_checkpoint(&ctx.buildloop_dir, task_id, task_desc, "scout");
+
     // Helper: progress indicator characters.
     let scout_char = if skip_scout { "-" } else { "S" };
     let planner_char = if skip_planner { "-" } else { "P" };
@@ -1420,6 +1501,9 @@ async fn process_task(
             let _ = task::update_task_progress(&ctx.plan_path, task_id, &format!("{}{}..", scout_char, planner_char));
         }
     }
+
+    // Checkpoint: planner completed
+    write_checkpoint(&ctx.buildloop_dir, task_id, task_desc, "planner");
 
     // ─── Gate: Extension Contracts ──────────────────────────────
     if !ctx.config.extensions.is_empty() {
@@ -1596,6 +1680,50 @@ async fn process_task(
     {
         let _lock = ctx.tasks_file_lock.lock().unwrap_or_else(|e| e.into_inner());
         let _ = task::update_task_progress(&ctx.plan_path, task_id, &format!("{}{}I.", scout_char, planner_char));
+    }
+
+    // Checkpoint: builder completed
+    write_checkpoint(&ctx.buildloop_dir, task_id, task_desc, "builder");
+
+    // ─── Gate: Build/Compile Verification ──────────────────────
+    if let Some(ref build_cmd) = ctx.config.build_command {
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+            "Running build command: {}", build_cmd
+        ))));
+        let build_output = std::process::Command::new(if cfg!(target_os = "windows") { "cmd" } else { "sh" })
+            .args(if cfg!(target_os = "windows") { vec!["/C", build_cmd] } else { vec!["-c", build_cmd] })
+            .current_dir(&ctx.project_dir)
+            .output();
+
+        match build_output {
+            Ok(output) if !output.status.success() => {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                let combined = format!("{}\n{}", stdout, stderr);
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                    "BUILD GATE FAILED for {} — build command exited {}: {}",
+                    task_id,
+                    output.status,
+                    crate::utils::truncate_str(combined.trim(), 500),
+                ))));
+                {
+                    let _lock = ctx.tasks_file_lock.lock().unwrap_or_else(|e| e.into_inner());
+                    let _ = task::update_task_progress(&ctx.plan_path, task_id, &format!("{}{}I-!", scout_char, planner_char));
+                }
+                let _ = commit_wip_for_mode(ctx, task_id, task_desc);
+                return (false, last_rate_limited);
+            }
+            Err(e) => {
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                    "Build command failed to execute: {} — skipping gate", e
+                ))));
+            }
+            Ok(_) => {
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+                    "Build gate passed".to_string(),
+                )));
+            }
+        }
     }
 
     adaptive_sleep(&ctx.config, last_rate_limited, ctx.config.pause_between_agents_secs).await;
@@ -1861,6 +1989,9 @@ async fn process_task(
             .current_dir(&ctx.project_dir)
             .output();
     }
+
+    // Clear checkpoint — task completed successfully (committed or WIP)
+    clear_checkpoint(&ctx.buildloop_dir);
 
     (validated, last_rate_limited)
 }

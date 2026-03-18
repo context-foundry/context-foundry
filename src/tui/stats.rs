@@ -151,15 +151,40 @@ pub(super) fn render_dashboard_stats(frame: &mut Frame, area: Rect, state: &AppS
         .map(|ts| format_duration_hms(now.signed_duration_since(ts)))
         .unwrap_or_else(|| "--:--".to_string());
 
+    // Format token counts compactly: 1234 → "1.2K", 1234567 → "1.2M"
+    let fmt_tokens = |n: u64| -> String {
+        if n >= 1_000_000 { format!("{:.1}M", n as f64 / 1_000_000.0) }
+        else if n >= 1_000 { format!("{:.0}K", n as f64 / 1_000.0) }
+        else { format!("{}", n) }
+    };
+    let cost_str = format!(
+        "${:.2} ({}in / {}out)",
+        state.session_cost_usd,
+        fmt_tokens(state.session_input_tokens),
+        fmt_tokens(state.session_output_tokens),
+    );
+    let cost_color = if state.session_cost_usd >= 10.0 {
+        Color::Red
+    } else if state.session_cost_usd >= 5.0 {
+        Color::Yellow
+    } else {
+        theme.text
+    };
+
     lines.push(Line::from(vec![
         Span::styled("  Patterns ", Style::default().fg(theme.info)),
         Span::styled(format!("{} inj, {} applied", state.pattern_inject_count, state.pattern_apply_count), Style::default().fg(theme.text)),
-        Span::styled("  session feat: ", Style::default().fg(theme.muted)),
+        Span::styled("  feat: ", Style::default().fg(theme.muted)),
         Span::styled(format!("{}", state.session_feat_commits), Style::default().fg(theme.success)),
-        Span::styled("  session WIP: ", Style::default().fg(theme.muted)),
+        Span::styled("  WIP: ", Style::default().fg(theme.muted)),
         Span::styled(format!("{}", state.session_wip_commits), Style::default().fg(theme.warning)),
         Span::styled("  Ollama: ", Style::default().fg(theme.muted)),
-        Span::styled(format!("{:<width$}", ollama_label, width = half_width.saturating_sub(40)), Style::default().fg(ollama_color)),
+        Span::styled(format!("{:<width$}", ollama_label, width = half_width.saturating_sub(34)), Style::default().fg(ollama_color)),
+        Span::styled("Cost      ", Style::default().fg(theme.info)),
+        Span::styled(&cost_str, Style::default().fg(cost_color)),
+    ]));
+    lines.push(Line::from(vec![
+        Span::styled(format!("{:<width$}", "", width = half_width), Style::default()),
         Span::styled("Timing    ", Style::default().fg(theme.info)),
         Span::styled("session: ", Style::default().fg(theme.muted)),
         Span::styled(&session_str, Style::default().fg(theme.text)),

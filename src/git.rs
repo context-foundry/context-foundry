@@ -156,6 +156,40 @@ pub fn gather_git_context(project_dir: &Path) -> Option<GitContext> {
     })
 }
 
+/// Ensure the project directory is a git repo with at least one commit.
+/// Silently initializes if needed — idempotent.
+fn ensure_git_initialized(project_dir: &Path) {
+    // Check for .git directory
+    let has_git = project_dir.join(".git").exists();
+    if !has_git {
+        let _ = Command::new("git")
+            .arg("init")
+            .current_dir(project_dir)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+    }
+
+    // Check if HEAD exists (repo has at least one commit)
+    let has_head = Command::new("git")
+        .args(["rev-parse", "HEAD"])
+        .current_dir(project_dir)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false);
+
+    if !has_head {
+        let _ = Command::new("git")
+            .args(["commit", "--allow-empty", "-m", "Initial commit\n\nAutomated by: foundry"])
+            .current_dir(project_dir)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+    }
+}
+
 pub fn commit_and_push(
     project_dir: &Path,
     config: &Config,
@@ -163,6 +197,10 @@ pub fn commit_and_push(
     task_desc: &str,
     is_wip: bool,
 ) -> Result<bool> {
+    // Ensure git is initialized and has at least one commit (HEAD exists).
+    // Without HEAD, `git add -A` succeeds but `git commit` fails in some edge cases.
+    ensure_git_initialized(project_dir);
+
     // Stage all changes except .buildloop/logs
     Command::new("git")
         .args(["add", "-A"])
@@ -237,6 +275,8 @@ pub fn commit_task_pr(
     plan_path: &Path,
     is_wip: bool,
 ) -> Result<(bool, Option<u64>)> {
+    ensure_git_initialized(project_dir);
+
     // Remember the base branch so we can return to it after the PR.
     let base_branch = {
         let out = Command::new("git")

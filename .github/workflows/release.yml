@@ -61,6 +61,8 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
 
@@ -72,4 +74,23 @@ jobs:
             foundry-x86_64-apple-darwin/foundry-x86_64-apple-darwin.tar.gz
             foundry-aarch64-apple-darwin/foundry-aarch64-apple-darwin.tar.gz
             foundry-x86_64-pc-windows-msvc/foundry-x86_64-pc-windows-msvc.zip
+            install.sh
+            install.ps1
           generate_release_notes: true
+          body: |
+            ## Install
+
+            **Unix (macOS / Linux):**
+            ```sh
+            curl -fsSL https://raw.githubusercontent.com/context-foundry/context-foundry/main/install.sh | sh
+            ```
+
+            **Windows (PowerShell):**
+            ```powershell
+            irm https://raw.githubusercontent.com/context-foundry/context-foundry/main/install.ps1 | iex
+            ```
+
+            **npm:**
+            ```sh
+            npm install -g @context-foundry/foundry
+            ```
