@@ -1,6 +1,9 @@
 # One-liner install: irm https://raw.githubusercontent.com/context-foundry/context-foundry/main/install.ps1 | iex
 $ErrorActionPreference = "Stop"
 
+# Force TLS 1.2 (older PowerShell defaults to TLS 1.0 which GitHub rejects)
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
 $Repo = "context-foundry/context-foundry"
 $Target = "x86_64-pc-windows-msvc"
 $InstallDir = if ($env:FOUNDRY_INSTALL_DIR) { $env:FOUNDRY_INSTALL_DIR } else { "$env:USERPROFILE\.local\bin" }
