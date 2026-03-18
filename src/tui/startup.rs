@@ -1062,17 +1062,6 @@ pub(super) fn render_startup_status_bar(frame: &mut Frame, area: Rect, state: &A
         format!("  {} ", ext_status),
         Style::default().fg(state.tui_theme.accent),
     ));
-    if !state.available_extensions.is_empty() {
-        spans.push(Span::styled(
-            " ^E ",
-            Style::default()
-                .fg(Color::Black)
-                .bg(state.tui_theme.muted)
-                .add_modifier(Modifier::BOLD),
-        ));
-        spans.push(Span::raw("focus"));
-    }
-
     if let Some(ref version) = state.update_available {
         spans.push(Span::styled(
             format!(" | v{} available", version),

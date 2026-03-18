@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Context Foundry</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --border: #30363d;
+      --text: #e6edf3;
+      --text-muted: #8b949e;
+      --accent: #f0a500;
+      --accent-subtle: rgba(240, 165, 0, 0.15);
+      --radius: 4px;
+      --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+    }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 0.9rem;
+      line-height: 1.7;
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 3rem 1.5rem;
+    }
+    h1 {
+      color: var(--accent);
+      font-size: 1.5rem;
+      border-bottom: 2px solid var(--accent);
+      padding-bottom: 0.5rem;
+      margin-bottom: 0.25rem;
+    }
+    h2 {
+      color: var(--accent);
+      font-size: 1.15rem;
+      border-left: 3px solid var(--accent);
+      padding-left: 0.75rem;
+      margin-top: 2.5rem;
+      margin-bottom: 0.75rem;
+    }
+    p { margin: 0.75rem 0; }
+    pre {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem 1.25rem;
+      overflow-x: auto;
+      font-size: 0.85rem;
+      line-height: 1.5;
+    }
+    code {
+      background: var(--surface);
+      padding: 0.15rem 0.4rem;
+      border-radius: var(--radius);
+      font-size: 0.85rem;
+    }
+    pre code { background: none; padding: 0; }
+    .hook {
+      font-size: 1.05rem;
+      color: var(--text);
+      margin-bottom: 0.25rem;
+    }
+    .subtitle {
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      margin-top: 0;
+    }
+    .muted { color: var(--text-muted); }
+    footer {
+      margin-top: 3rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--border);
+      color: var(--text-muted);
+      font-size: 0.8rem;
+    }
+    svg text { font-family: var(--font-mono); }
+    @media print {
+      body { background: white; color: black; max-width: none; padding: 0.5in; }
+      pre { border: 1px solid #ccc; }
+      h1, h2 { color: #333; }
+      footer { color: #666; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Context Foundry</h1>
+  <p class="hook">A self-hosted build loop that runs AI agents against your codebase and improves them over time.</p>
+  <p class="subtitle">Rust CLI &middot; v0.5.2 &middot; MIT License</p>
+</header>
+
+<section id="what">
+  <h2>What it does</h2>
+  <p>Context Foundry takes a task queue (<code>TASKS.md</code>) and processes each task through a four-stage pipeline:</p>
+  <p><strong>Scout</strong> reads the codebase -- file structure, imports, existing patterns -- and writes a report of what exists and what matters for the current task.</p>
+  <p><strong>Plan</strong> reads the scout report and writes a step-by-step implementation plan with exact file operations, function signatures, and verification commands.</p>
+  <p><strong>Implement</strong> executes the plan: creates and modifies files, runs the build, runs tests, and records what it claims to have done in <code>build-claims.md</code>.</p>
+  <p><strong>Doubt</strong> is a fresh-context reviewer that audits the builder's claims against the actual code. It reads <code>build-claims.md</code>, re-runs verification, and fixes issues it finds. If everything passes, the task ships as a git commit.</p>
+  <p>Input: a task description. Output: a verified git commit.</p>
+</section>
+
+<section id="how">
+  <h2>How it works</h2>
+  <svg width="680" height="200" viewBox="0 0 680 200" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <marker id="arrow" markerWidth="8" markerHeight="8" refX="8" refY="4" orient="auto">
+        <path d="M0,0 L8,4 L0,8 Z" fill="#8b949e"/>
+      </marker>
+    </defs>
+    <text x="10" y="65" fill="#e6edf3" font-size="12">TASKS.md</text>
+    <line x1="75" y1="65" x2="100" y2="65" stroke="#8b949e" stroke-width="1.5" marker-end="url(#arrow)"/>
+    <rect x="100" y="47" width="90" height="36" fill="#161b22" stroke="#30363d" stroke-width="1" rx="4"/>
+    <text x="145" y="65" fill="#e6edf3" font-size="12" text-anchor="middle" dominant-baseline="central">Scout</text>
+    <line x1="190" y1="65" x2="220" y2="65" stroke="#8b949e" stroke-width="1.5" marker-end="url(#arrow)"/>
+    <rect x="220" y="47" width="90" height="36" fill="#161b22" stroke="#30363d" stroke-width="1" rx="4"/>
+    <text x="265" y="65" fill="#e6edf3" font-size="12" text-anchor="middle" dominant-baseline="central">Plan</text>
+    <line x1="310" y1="65" x2="340" y2="65" stroke="#8b949e" stroke-width="1.5" marker-end="url(#arrow)"/>
+    <rect x="340" y="47" width="90" height="36" fill="#161b22" stroke="#30363d" stroke-width="1" rx="4"/>
+    <text x="385" y="65" fill="#e6edf3" font-size="12" text-anchor="middle" dominant-baseline="central">Implement</text>
+    <line x1="430" y1="65" x2="460" y2="65" stroke="#8b949e" stroke-width="1.5" marker-end="url(#arrow)"/>
+    <rect x="460" y="47" width="90" height="36" fill="#161b22" stroke="#30363d" stroke-width="1" rx="4"/>
+    <text x="505" y="65" fill="#e6edf3" font-size="12" text-anchor="middle" dominant-baseline="central">Doubt</text>
+    <line x1="550" y1="65" x2="580" y2="65" stroke="#8b949e" stroke-width="1.5" marker-end="url(#arrow)"/>
+    <text x="585" y="65" fill="#e6edf3" font-size="12">git commit</text>
+    <polyline points="620,75 620,160 265,160 265,83" fill="none" stroke="#8b949e" stroke-width="1.5" stroke-dasharray="4" marker-end="url(#arrow)"/>
+    <text x="440" y="155" fill="#8b949e" font-size="10">patterns</text>
+  </svg>
+  <p>After each successful task, the system extracts patterns -- recurring issues and their solutions -- and stores them as JSON. Before planning the next task, matching patterns are injected into the planner's context. The more tasks it completes, the fewer mistakes the reviewer catches.</p>
+  <p>The builder stage can run two models in parallel (e.g., Claude and Codex) in isolated git worktrees. The fastest passing build wins. If one model rate-limits or fails, the other continues. You configure this with <code>builder_models</code> in <code>.foundry.json</code>.</p>
+</section>
+
+<section id="why">
+  <h2>Why it matters</h2>
+  <p><strong>Pattern learning.</strong> Most AI coding tools treat every task as if it's the first. Context Foundry accumulates institutional knowledge -- patterns extracted from past builds are fed back into future plans. The system gets better at your codebase over time.</p>
+  <p><strong>Dual-model arena.</strong> Run two different models against the same task. Compare outputs. Pick the winner automatically or manually. No single-vendor lock-in.</p>
+  <p><strong>Self-hosted, CLI-native.</strong> Rust binary with a TUI. Your code stays on your machine. No cloud service, no API proxy, no telemetry. Swap providers per pipeline role (planner=opus, builder=codex, reviewer=sonnet) via config.</p>
+</section>
+
+<section id="config">
+  <h2>Configuration</h2>
+  <p>Everything lives in <code>.foundry.json</code> at your project root:</p>
+  <pre><code>{
+  "builder_models": ["claude:opus", "codex:"],
+  "dual_selection": "first",
+  "planner_model": "opus",
+  "reviewer_model": "sonnet",
+  "agent_timeout_secs": 900,
+  "run_mode": "auto"
+}</code></pre>
+  <p>Per-role provider and model. Dual-build selection. That's it.</p>
+</section>
+
+<footer>
+  Context Foundry v0.5.2 &middot;
+  <a href="https://github.com/context-foundry/context-foundry" style="color: var(--accent);">github.com/context-foundry/context-foundry</a>
+</footer>
+
+</body>
+</html>

@@ -221,7 +221,7 @@ impl Default for Config {
 
             patterns_dir: "~/.foundry/patterns".into(),
 
-            backpressure_only: false,
+            backpressure_only: true,
             simple_planner_model: "sonnet".into(),
             simple_builder_model: "sonnet".into(),
             simple_reviewer_model: String::new(),
@@ -246,7 +246,7 @@ impl Default for Config {
             pattern_extraction_model: "sonnet".into(),
             run_mode: "auto".into(),
             pipeline_mode: "full".into(),
-            batch_doubt: false,
+            batch_doubt: true,
             extensions: Vec::new(),
             create_issue_on_wip: false,
             preview_wrap: true,

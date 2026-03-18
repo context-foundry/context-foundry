@@ -403,6 +403,7 @@ mod tests {
         let config = Config {
             builder_provider: "codex".into(),
             fixer_provider: "codex".into(),
+            backpressure_only: false,
             ..Config::default()
         };
 

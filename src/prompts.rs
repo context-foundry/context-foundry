@@ -705,8 +705,13 @@ relative to this work rather than surveying the entire codebase:
     format!(
         r#"Find real bugs, gaps, and missing work in this project. Append new tasks to {tasks_file}.
 {build_history_block}
-Read {spec_file}, {tasks_file}, CLAUDE.md, and the source code. Run the build and tests.
-Check recent git history (git log --oneline -20 --name-only).
+Read {spec_file}, {tasks_file}, and CLAUDE.md. Run the build and tests.
+
+EFFICIENCY: Focus your investigation on what changed recently rather than scanning
+the entire source tree from scratch:
+1. Run `git log --oneline -20 --name-only` to see what changed
+2. Read only the files that appear in recent commits or that are referenced by build_history above
+3. Do NOT read every source file -- only investigate files related to recent changes or failures
 
 Prioritize: bugs > security > missing features > enhancements > refactoring.
 
@@ -755,7 +760,7 @@ RULES:
 - Expand the user's brief description into specific, actionable detail
 - Do NOT read source files, grep, or glob -- just format the task well
 - Do NOT modify existing tasks
-- Only use Read and Edit tools -- nothing else"#
+- Only use Read, Edit, and Write tools -- nothing else"#
     )
 }
 

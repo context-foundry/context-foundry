@@ -26,14 +26,46 @@ pub(super) async fn run_review_loop(
         return (false, 0);
     }
 
-    let files_list = files_changed.join("\n");
+    // When diff is too large or not used, enrich the file list with
+    // a compact stat summary (+/- lines per file) so the reviewer knows
+    // where the bulk of changes are and can read files selectively.
+    let files_list = {
+        let stat_output = std::process::Command::new("git")
+            .args(["diff", "--stat", "HEAD"])
+            .current_dir(&ctx.project_dir)
+            .output();
+        match stat_output {
+            Ok(out) if out.status.success() => {
+                let stat = String::from_utf8_lossy(&out.stdout);
+                if stat.trim().is_empty() {
+                    files_changed.join("\n")
+                } else {
+                    format!("{}\n\nDiff stat:\n{}", files_changed.join("\n"), stat.trim())
+                }
+            }
+            _ => files_changed.join("\n"),
+        }
+    };
 
     // Determine whether to pass a diff or file list to the reviewer.
+    // For large diffs (> 50KB / ~12K tokens), fall back to file list with
+    // stat summary so the reviewer reads files selectively instead of
+    // consuming context window on a massive inline diff.
+    const DIFF_SIZE_LIMIT: usize = 50_000;
+
     let diff_for_review = if ctx.config.review_mode == "diff-only" {
         let diff = get_diff_for_review(&ctx.project_dir);
         if diff.is_empty() {
             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
                 "Diff is empty, falling back to file list for review".to_string(),
+            )));
+            None
+        } else if diff.len() > DIFF_SIZE_LIMIT {
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+                format!(
+                    "Diff too large ({}KB) -- using file list with stat summary instead",
+                    diff.len() / 1024,
+                ),
             )));
             None
         } else {

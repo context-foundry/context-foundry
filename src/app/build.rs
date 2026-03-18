@@ -131,7 +131,6 @@ fn spawn_lookahead_planner(
     next_task: &Task,
     ctx: &RunContext,
     tx: &mpsc::UnboundedSender<AppEvent>,
-    extension_context: String,
 ) -> LookaheadHandle {
     let task_id = next_task.id.clone();
     let task_desc = next_task.description.clone();
@@ -183,7 +182,7 @@ fn spawn_lookahead_planner(
             &ctx.tasks_file_name(),
             &plan_file,
         );
-        let prompt = prompts::wrap_with_extensions(&prompt, &extension_context);
+        // Lookahead planner writes plans, not code -- skip extension context.
 
         let (agent_tx, _agent_rx) = mpsc::unbounded_channel();
         let result = agent::run_agent(
@@ -733,7 +732,14 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
     // ─── Scout State ──────────────────────────────────────────────
     // Scout runs once at session start, then reuses the report for
     // subsequent tasks unless the previous commit touched structural files.
-    let mut scout_has_run = false;
+    // If a recent scout-report exists on disk (< 10 min old), reuse it
+    // across Foundry restarts to avoid re-scouting the same codebase.
+    let scout_report_path = ctx.buildloop_dir.join("scout-report.md");
+    let mut scout_has_run = scout_report_path.exists()
+        && std::fs::metadata(&scout_report_path)
+            .and_then(|m| m.modified())
+            .map(|mtime| mtime.elapsed().map(|d| d.as_secs() < 600).unwrap_or(false))
+            .unwrap_or(false);
 
     // ─── Bootstrap Scout ──────────────────────────────────────────
     // If TASKS.md has no pending tasks, run a bootstrap scout that
@@ -772,8 +778,7 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                 &ctx.spec_file_name(),
                 &ctx.tasks_file_name(),
             );
-            let prompt = prompts::wrap_with_extensions(&prompt, &extension_context);
-            emit_extension_injections(&tx, &ctx.config.extensions, &extension_context, &AgentRole::Scout, "bootstrap");
+            // Scout is read-only investigation -- skip extension context to save tokens.
             let scout_result = agent::run_agent(
                 &AgentRole::Scout,
                 Config::parse_provider(&ctx.config.scout_provider),
@@ -906,7 +911,7 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                 if let Some(next_task) = task::nth_pending(&fresh_tasks, 0) {
                     let next_complexity = complexity::classify_task(&next_task.description);
                     if next_complexity != TaskComplexity::Simple {
-                        lookahead = Some(spawn_lookahead_planner(next_task, &ctx, &tx, extension_context.clone()));
+                        lookahead = Some(spawn_lookahead_planner(next_task, &ctx, &tx));
                     }
                 }
             }
@@ -1033,8 +1038,7 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                 &ctx.tasks_file_name(),
                 build_history.as_deref(),
             );
-            let prompt = prompts::wrap_with_extensions(&prompt, &extension_context);
-            emit_extension_injections(&tx, &ctx.config.extensions, &extension_context, &AgentRole::Discovery, &format!("discovery-{}", discovery_round));
+            // Discovery finds new work -- skip extension context to save tokens.
             let result = agent::run_agent(
                 &AgentRole::Discovery,
                 Config::parse_provider(&ctx.config.discovery_provider),
@@ -1330,8 +1334,7 @@ async fn process_task(
             &ctx.spec_file_name(),
             &ctx.tasks_file_name(),
         );
-        let scout_prompt_text = prompts::wrap_with_extensions(&scout_prompt_text, extension_context);
-        emit_extension_injections(tx, &ctx.config.extensions, extension_context, &AgentRole::Scout, task_id);
+        // Scout is read-only investigation -- skip extension context to save tokens.
         let scout_result = agent::run_agent(
             &AgentRole::Scout,
             Config::parse_provider(&ctx.config.scout_provider),
@@ -1434,8 +1437,7 @@ async fn process_task(
                 &ctx.spec_file_name(),
                 &ctx.tasks_file_name(),
             );
-            let prompt = prompts::wrap_with_extensions(&prompt, extension_context);
-            emit_extension_injections(tx, &ctx.config.extensions, extension_context, &AgentRole::Planner, task_id);
+            // Planner writes plans, not code -- skip extension context to save tokens.
             let plan_result = agent::run_agent(
                 &AgentRole::Planner,
                 Config::parse_provider(&ctx.config.planner_provider),
@@ -1552,8 +1554,7 @@ async fn process_task(
                 reason,
                 crate::utils::truncate_str(&failed_output, 500),
             );
-            let retry_prompt = prompts::wrap_with_extensions(&retry_prompt, extension_context);
-            emit_extension_injections(tx, &ctx.config.extensions, extension_context, &AgentRole::Planner, task_id);
+            // Planner retry -- skip extension context to save tokens.
 
             let (agent_tx2, mut agent_rx2) = mpsc::unbounded_channel();
             let fwd_tx2 = tx.clone();
@@ -1951,7 +1952,17 @@ async fn process_task(
         committed
     };
 
-    if validated {
+    // Skip pattern extraction for trivial tasks (< 3 files changed or
+    // reviewer found no issues). These tasks rarely produce interesting patterns.
+    // Use HEAD~1..HEAD because this runs AFTER the commit, so unstaged diff is empty.
+    let changed_file_count = std::process::Command::new("git")
+        .args(["diff", "--name-only", "HEAD~1", "HEAD"])
+        .current_dir(&ctx.project_dir)
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).lines().count())
+        .unwrap_or(0);
+
+    if validated && changed_file_count >= 3 {
         // Fire-and-forget: pattern extraction runs in the background so the
         // loop can start the next task immediately.  It writes to a separate
         // patterns directory, not to the source tree, so there is no conflict.

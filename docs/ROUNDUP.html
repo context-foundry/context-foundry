@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Context Foundry -- The Roundup</title>
+  <style>
+    :root {
+      --bg: #1a1008;
+      --surface: #2a1a0e;
+      --surface-hover: #362214;
+      --border: #4a3220;
+      --text: #e8dcc8;
+      --text-muted: #a89478;
+      --accent: #d4821a;
+      --accent-hover: #e09530;
+      --accent-subtle: rgba(212, 130, 26, 0.15);
+      --gold: #e8b84b;
+      --success: #5a9e45;
+      --error: #c0392b;
+      --radius: 6px;
+      --font-body: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+      --font-heading: Georgia, 'Times New Roman', serif;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-body);
+      font-size: 0.9rem;
+      line-height: 1.7;
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem;
+    }
+
+    h1 {
+      font-family: var(--font-heading);
+      color: var(--gold);
+      font-size: 2.25rem;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      margin-bottom: 0.25rem;
+      border: none;
+    }
+
+    h2 {
+      color: var(--gold);
+      font-size: 1.35rem;
+      font-family: var(--font-heading);
+      margin-top: 3rem;
+      margin-bottom: 1rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 2px solid var(--border);
+    }
+
+    h2::before { content: "\2605  "; color: var(--accent); }
+
+    h3 {
+      color: var(--accent);
+      font-size: 1.05rem;
+      margin-top: 2rem;
+      margin-bottom: 0.5rem;
+    }
+
+    p { margin: 0.75rem 0; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1rem 0;
+      font-size: 0.85rem;
+    }
+
+    th {
+      background: var(--surface);
+      color: var(--gold);
+      text-align: left;
+      padding: 0.5rem 0.75rem;
+      border: 1px solid var(--border);
+      font-weight: 600;
+    }
+
+    td {
+      padding: 0.5rem 0.75rem;
+      border: 1px solid var(--border);
+      vertical-align: top;
+    }
+
+    tr:hover { background: var(--surface-hover); }
+
+    code {
+      background: var(--surface);
+      padding: 0.15rem 0.4rem;
+      border-radius: 3px;
+      font-size: 0.85em;
+      color: var(--accent);
+    }
+
+    pre {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem 1.25rem;
+      overflow-x: auto;
+      font-size: 0.8rem;
+      line-height: 1.5;
+    }
+
+    pre code { background: none; padding: 0; color: var(--text); }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    .muted { color: var(--text-muted); }
+
+    .subtitle { color: var(--text-muted); font-size: 0.9rem; margin-top: 0; }
+
+    footer {
+      margin-top: 3rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--border);
+      color: var(--text-muted);
+      font-size: 0.8rem;
+    }
+
+    .card-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 1.5rem;
+      margin: 1.5rem 0;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+    }
+
+    .card:hover { border-color: var(--accent); }
+
+    .card h3 { margin-top: 0; color: var(--gold); font-family: var(--font-heading); }
+
+    .card .archetype {
+      color: var(--accent);
+      font-style: italic;
+      font-size: 0.85rem;
+      margin-bottom: 0.75rem;
+      display: block;
+    }
+
+    .card-grid .card:nth-child(5) { grid-column: 1 / -1; }
+
+    .divider {
+      text-align: center;
+      color: var(--border);
+      font-size: 0.75rem;
+      margin: 3rem 0 2rem 0;
+      letter-spacing: 0.3em;
+      user-select: none;
+    }
+
+    .diagram-container { overflow-x: auto; margin: 1.5rem 0; }
+
+    svg text { font-family: var(--font-body); }
+
+    @media print {
+      body { background: white; color: black; max-width: none; padding: 0.5in; }
+      h1, h2, h3 { color: #333; }
+      th { background: #eee; color: black; }
+      td { border-color: #ccc; }
+      .card { border-color: #ccc; }
+    }
+
+    @media (max-width: 700px) {
+      .card-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- SECTION 1: MASTHEAD -->
+  <header>
+    <h1>Y'all Need a Smarter Build Loop</h1>
+    <p class="subtitle">Context Foundry is a self-hosted AI agent pipeline that runs your build loop,
+    learns from its mistakes, and gets better every ride.</p>
+    <p class="subtitle" style="font-size: 0.8rem;">Rust CLI &middot; v0.5.2 &middot; MIT License</p>
+  </header>
+
+  <p>Context Foundry takes a task queue and drives each task through a four-stage pipeline: Scout reads the territory, Plan draws the route, Implement drives the herd, and Doubt inspects every steer at the gate. The system extracts patterns from solved problems and feeds them back into future plans, so it gets better at your codebase over time. It runs on your machine, calls the AI providers you choose, and commits verified code to git. No cloud service. No vendor lock-in. Just a Rust binary and a terminal.</p>
+
+  <div class="divider">--*--*--*--*--*--*--*--*--*--</div>
+
+  <!-- SECTION 2: THE TRAIL DRIVE -->
+  <h2>The Trail Drive</h2>
+
+  <p>Every task follows the trail from start to pen. The SPID pipeline has four stages plus a Ship step that handles git. Two ancillary stages -- Discovery and Pattern Extraction -- run outside the per-task trail.</p>
+
+  <div class="diagram-container">
+    <svg viewBox="0 0 820 280" xmlns="http://www.w3.org/2000/svg">
+      <!-- Trail path (dashed) -->
+      <path d="M 40,100 C 70,100 80,100 100,100 S 200,160 260,160 S 360,100 420,100 S 520,160 580,160 S 680,100 740,100 L 790,100"
+            stroke="#4a3220" stroke-width="3" fill="none" stroke-dasharray="8 4" />
+
+      <!-- Start label -->
+      <text x="20" y="90" fill="#a89478" font-size="10">TASKS.md</text>
+
+      <!-- SCOUT waypoint -->
+      <circle cx="100" cy="100" r="8" fill="#d4821a" />
+      <text x="100" y="80" fill="#e8b84b" font-size="14" font-weight="bold" text-anchor="middle">SCOUT</text>
+      <text x="100" y="122" fill="#e8dcc8" font-size="10" text-anchor="middle">Reads the territory</text>
+
+      <!-- PLAN waypoint -->
+      <circle cx="260" cy="160" r="8" fill="#d4821a" />
+      <text x="260" y="140" fill="#e8b84b" font-size="14" font-weight="bold" text-anchor="middle">PLAN</text>
+      <text x="260" y="182" fill="#e8dcc8" font-size="10" text-anchor="middle">Draws the route</text>
+
+      <!-- IMPLEMENT waypoint -->
+      <circle cx="420" cy="100" r="8" fill="#d4821a" />
+      <text x="420" y="80" fill="#e8b84b" font-size="14" font-weight="bold" text-anchor="middle">IMPLEMENT</text>
+      <text x="420" y="122" fill="#e8dcc8" font-size="10" text-anchor="middle">Drives the herd</text>
+
+      <!-- DOUBT waypoint -->
+      <circle cx="580" cy="160" r="8" fill="#d4821a" />
+      <text x="580" y="140" fill="#e8b84b" font-size="14" font-weight="bold" text-anchor="middle">DOUBT</text>
+      <text x="580" y="182" fill="#e8dcc8" font-size="10" text-anchor="middle">Inspects at the gate</text>
+
+      <!-- SHIP waypoint -->
+      <circle cx="740" cy="100" r="8" fill="#d4821a" />
+      <text x="740" y="80" fill="#e8b84b" font-size="14" font-weight="bold" text-anchor="middle">SHIP</text>
+      <text x="740" y="122" fill="#e8dcc8" font-size="10" text-anchor="middle">Brands and ships</text>
+
+      <!-- End label -->
+      <text x="790" y="90" fill="#a89478" font-size="10" text-anchor="end">git commit</text>
+
+      <!-- Ancillary: DISCOVERY -->
+      <circle cx="340" cy="230" r="5" fill="none" stroke="#4a3220" stroke-dasharray="3 2" />
+      <line x1="340" y1="225" x2="340" y2="165" stroke="#4a3220" stroke-dasharray="3 2" stroke-width="1" />
+      <text x="340" y="248" fill="#a89478" font-size="10" text-anchor="middle">DISCOVERY</text>
+
+      <!-- Ancillary: PATTERNS -->
+      <circle cx="500" cy="230" r="5" fill="none" stroke="#4a3220" stroke-dasharray="3 2" />
+      <line x1="500" y1="225" x2="500" y2="135" stroke="#4a3220" stroke-dasharray="3 2" stroke-width="1" />
+      <text x="500" y="248" fill="#a89478" font-size="10" text-anchor="middle">PATTERNS</text>
+    </svg>
+  </div>
+
+  <h3>Scout -- "Rides Ahead"</h3>
+
+  <p>The scout rides ahead and maps the territory before the herd moves. It reads TASKS.md, SPEC.md, and your source files, then writes a report of what exists and what matters for the current task.</p>
+
+  <table>
+    <tr><th>Aspect</th><th>Detail</th></tr>
+    <tr><td>Agent</td><td><code>AgentRole::Scout</code></td></tr>
+    <tr><td>Input</td><td>TASKS.md, SPEC.md, source files</td></tr>
+    <tr><td>Output</td><td><code>.buildloop/scout-report.md</code></td></tr>
+    <tr><td>Skip when</td><td>Fast mode and scout-report.md already exists</td></tr>
+  </table>
+
+  <h3>Plan -- "Draws the Route"</h3>
+
+  <p>The planner reads the scout report, loads matching patterns from the brand book, and writes a step-by-step implementation plan with exact file operations, function signatures, and verification commands. No ambiguity -- the plan is for a machine, not a human.</p>
+
+  <table>
+    <tr><th>Aspect</th><th>Detail</th></tr>
+    <tr><td>Agent</td><td><code>AgentRole::Planner</code></td></tr>
+    <tr><td>Input</td><td>scout-report.md, matched patterns, extension contracts</td></tr>
+    <tr><td>Output</td><td><code>.buildloop/current-plan.md</code></td></tr>
+    <tr><td>Skip when</td><td><code>skip_planner_for_simple</code> is true and task complexity is Simple</td></tr>
+  </table>
+
+  <h3>Implement -- "Drives the Herd"</h3>
+
+  <p>The builder takes the plan and drives the cattle down the trail. It creates and modifies files, runs the build, runs tests, and records what it claims to have done. In dual mode, two builders fork into separate worktrees and drive independent herds.</p>
+
+  <table>
+    <tr><th>Aspect</th><th>Detail</th></tr>
+    <tr><td>Agent</td><td><code>AgentRole::Builder</code></td></tr>
+    <tr><td>Input</td><td><code>.buildloop/current-plan.md</code></td></tr>
+    <tr><td>Output</td><td><code>.buildloop/build-claims.md</code></td></tr>
+    <tr><td>Dual mode</td><td>Parallel git worktrees under <code>.buildloop/arena/</code></td></tr>
+  </table>
+
+  <h3>Doubt -- "The Trail Boss"</h3>
+
+  <p>The trail boss inspects every steer at the gate before they enter the pen. A fresh-context reviewer reads the builder's claims, re-runs verification, and fixes issues it finds. If everything passes, the task ships as <code>feat()</code>. If not, it ships as <code>WIP()</code> and the herd keeps moving.</p>
+
+  <table>
+    <tr><th>Aspect</th><th>Detail</th></tr>
+    <tr><td>Agent</td><td>Reviewer + Fixer (fresh context)</td></tr>
+    <tr><td>Input</td><td><code>.buildloop/build-claims.md</code></td></tr>
+    <tr><td>Output</td><td><code>.buildloop/review-report.md</code></td></tr>
+    <tr><td>On PASS</td><td>Commit as <code>feat(task_id): description</code></td></tr>
+    <tr><td>On FAIL</td><td>Fixer runs (2 passes), then commit as <code>WIP(task_id): description</code></td></tr>
+    <tr><td>Skip when</td><td><code>backpressure_only</code> is true, or <code>batch_doubt</code> defers to last task</td></tr>
+  </table>
+
+  <div class="divider">--*--*--*--*--*--*--*--*--*--</div>
+
+  <!-- SECTION 3: THE RANCH HANDS -->
+  <h2>The Ranch Hands</h2>
+
+  <p>Four ways to run the outfit. Each ranch hand has their own style. Cycle between the first three with Ctrl+M. The fourth is controlled by Ctrl+D -- it works alongside any of the other three.</p>
+
+  <div class="card-grid">
+
+    <div class="card">
+      <h3>The Tireless Hand</h3>
+      <span class="archetype">Loop Mode -- keeps riding until there's nothing left to do</span>
+      <p>Processes every task in TASKS.md, then runs Discovery to find more work. When the trail ends, it finds a new trail. Never stops unless you tell it to.</p>
+      <table>
+        <tr><td>run_mode</td><td><code>"auto"</code></td></tr>
+        <tr><td>Task source</td><td>TASKS.md + Discovery appends more</td></tr>
+        <tr><td>Review gate</td><td>None -- auto-commits after Doubt</td></tr>
+        <tr><td>Commit</td><td><code>feat()</code> on pass, <code>WIP()</code> on fail</td></tr>
+        <tr><td>Hotkey</td><td>Ctrl+M (cycles to Sprint)</td></tr>
+      </table>
+    </div>
+
+    <div class="card">
+      <h3>The Hard Rider</h3>
+      <span class="archetype">Sprint Mode -- rides hard, stops when the job's done</span>
+      <p>Burns through TASKS.md and stops. No Discovery, no new trails. You told it what to do and it does exactly that.</p>
+      <table>
+        <tr><td>run_mode</td><td><code>"sprint"</code></td></tr>
+        <tr><td>Task source</td><td>TASKS.md only -- no Discovery</td></tr>
+        <tr><td>Review gate</td><td>None -- auto-commits after Doubt</td></tr>
+        <tr><td>Commit</td><td><code>feat()</code> on pass, <code>WIP()</code> on fail</td></tr>
+        <tr><td>Hotkey</td><td>Ctrl+M (cycles to Review)</td></tr>
+      </table>
+    </div>
+
+    <div class="card">
+      <h3>The Foreman</h3>
+      <span class="archetype">Review Mode -- won't let anything ship without a sign-off</span>
+      <p>One task at a time. After Doubt, it creates a PR on a <code>foundry/{task_id}</code> branch and waits for human approval. Press Enter to continue or let the PR poller detect approval.</p>
+      <table>
+        <tr><td>run_mode</td><td><code>"review"</code></td></tr>
+        <tr><td>Task source</td><td>TASKS.md, one task at a time</td></tr>
+        <tr><td>Review gate</td><td>Human gate -- waits for Enter or PR approval</td></tr>
+        <tr><td>Commit</td><td>Per-task PR on <code>foundry/{task_id}</code> branch</td></tr>
+        <tr><td>PR poller</td><td>Every <code>pr_poll_interval_secs</code> (default 30s)</td></tr>
+        <tr><td>Hotkey</td><td>Ctrl+M (cycles to Auto)</td></tr>
+      </table>
+    </div>
+
+    <div class="card">
+      <h3>The Racing Pair</h3>
+      <span class="archetype">Dual Mode -- two cowboys racing to see who ropes the steer first</span>
+      <p>Orthogonal to the modes above. When <code>builder_models</code> has 2+ entries, Ctrl+D cycles through which model(s) execute: Off, First only, Second only, or Both. Works with any run_mode.</p>
+      <table>
+        <tr><td>Control</td><td>Ctrl+D (cycles: Off -&gt; First -&gt; Second -&gt; Both -&gt; First)</td></tr>
+        <tr><td>When Both</td><td>Two builders fork into parallel git worktrees</td></tr>
+        <tr><td>Selection</td><td>Human picks the winner</td></tr>
+        <tr><td>Config</td><td><code>builder_models: ["claude:opus", "codex:o4-mini"]</code></td></tr>
+      </table>
+    </div>
+
+  </div>
+
+  <div class="divider">--*--*--*--*--*--*--*--*--*--</div>
+
+  <!-- SECTION 4: THE PATTERN BRAND -->
+  <h2>The Pattern Brand</h2>
+
+  <p>Every solved problem gets branded with a pattern_id so the herd can be identified and sorted at the gate. Patterns live in <code>~/.foundry/patterns/</code> as JSON files. Before planning each task, matching patterns are loaded and injected into the planner's context. The more cattle you drive, the fewer strays at the gate.</p>
+
+  <h3>The Brand Mark (JSON Schema)</h3>
+
+  <pre><code>{
+  "pattern_id":   "string -- unique identifier",
+  "title":        "string -- human-readable name",
+  "severity":     "HIGH | MEDIUM | LOW",
+  "keywords":     ["array", "of", "match", "terms"],
+  "tech_stack":   ["rust", "react", "python"],
+  "issue":        "string -- what went wrong",
+  "solution": {
+    "planner":    "string -- advice injected into planner prompt",
+    "reviewer":   "string -- advice injected into reviewer prompt"
+  },
+  "frequency":    42,
+  "first_seen":   "2026-01-15",
+  "last_seen":    "2026-03-17",
+  "auto_apply":   false,
+  "learned_from": "project-name"
+}</code></pre>
+
+  <h3>How Patterns Are Matched</h3>
+
+  <p>At plan time, the system loads all patterns from <code>~/.foundry/patterns/</code> and matches them against the current task description using keyword overlap. If <code>semantic_match_enabled</code> is true, Ollama embeddings provide semantic similarity scoring alongside keyword matching. Up to <code>max_pattern_injection</code> (default 10) patterns are injected into the planner and reviewer prompts as reference data.</p>
+
+  <p>Local patterns (project-level JSON files) can be promoted to the global registry using <code>merge_project_patterns()</code>, available as an MCP tool. This is how a solved problem in one project prevents the same mistake in every future project.</p>
+
+  <div class="divider">--*--*--*--*--*--*--*--*--*--</div>
+
+  <!-- SECTION 5: THE ARENA -->
+  <h2>The Arena</h2>
+
+  <p>Two cowboys out of the chute at the same time. The human judge decides who scored.</p>
+
+  <p>When <code>builder_models</code> lists two or more model specs (e.g., <code>["claude:opus", "codex:o4-mini"]</code>), the arena is available. Ctrl+D cycles through four states: Off (single model), First only, Second only, and Both. In Both mode, <code>run_dual_pipelines()</code> forks execution into two independent git worktrees.</p>
+
+  <h3>How It Works</h3>
+
+  <ol>
+    <li>Two git worktrees are created under <code>.buildloop/arena/pipeline-0-{provider}/</code> and <code>.buildloop/arena/pipeline-1-{provider}/</code></li>
+    <li>Each worktree gets a full copy of the project</li>
+    <li>Each model runs the full Plan-Implement-Doubt pipeline independently in its own worktree</li>
+    <li>Events are tagged by pipeline index (0 or 1) via <code>DualPipelineEvent</code></li>
+    <li>The TUI shows a tabbed view -- one tab per model -- so you can watch both trails simultaneously</li>
+    <li>When both finish, the human evaluates and picks the winner</li>
+  </ol>
+
+  <h3>Worktree Layout</h3>
+
+  <pre><code>.buildloop/arena/
+  pipeline-0-claude/     (git worktree for model[0])
+    .buildloop/
+      scout-report.md    (copied from main)
+      current-plan.md    (generated by model[0])
+      build-claims.md    (generated by model[0])
+      review-report.md   (generated by model[0])
+  pipeline-1-codex/      (git worktree for model[1])
+    .buildloop/
+      scout-report.md
+      current-plan.md
+      build-claims.md
+      review-report.md</code></pre>
+
+  <h3>Ctrl+D Cycle</h3>
+
+  <table>
+    <tr><th>State</th><th>Behavior</th><th>Next (Ctrl+D)</th></tr>
+    <tr><td>Off (default)</td><td>Single-model execution using <code>builder_model</code>/<code>builder_provider</code></td><td>First</td></tr>
+    <tr><td>First</td><td>Uses first entry from <code>builder_models</code> array</td><td>Second</td></tr>
+    <tr><td>Second</td><td>Uses second entry from <code>builder_models</code> array</td><td>Both</td></tr>
+    <tr><td>Both</td><td><code>run_dual_pipelines()</code> -- both models in parallel worktrees</td><td>First</td></tr>
+  </table>
+
+  <p class="muted">Note: After Both, Ctrl+D returns to First, not Off. The cycle is First -&gt; Second -&gt; Both -&gt; First.</p>
+
+  <div class="divider">--*--*--*--*--*--*--*--*--*--</div>
+
+  <!-- SECTION 6: THE DEED -->
+  <h2>The Deed</h2>
+
+  <p>Every ranch has a title document. Yours is <code>.foundry.json</code> at the project root. Here are the fields that matter most.</p>
+
+  <table>
+    <tr><th>Field</th><th>Type</th><th>Default</th><th>Description</th></tr>
+    <tr><td><code>run_mode</code></td><td>String</td><td><code>"auto"</code></td><td>Execution mode: "auto", "sprint", or "review"</td></tr>
+    <tr><td><code>pipeline_mode</code></td><td>String</td><td><code>"full"</code></td><td>Pipeline mode: "full", "fast", or "backpressure"</td></tr>
+    <tr><td><code>builder_model</code></td><td>String</td><td><code>"opus"</code></td><td>Model name for Builder agent</td></tr>
+    <tr><td><code>builder_provider</code></td><td>String</td><td><code>"claude"</code></td><td>Provider for Builder: "claude" or "codex"</td></tr>
+    <tr><td><code>builder_models</code></td><td>Vec&lt;String&gt;</td><td><code>[]</code></td><td>Dual-model specs, format "provider:model". Overrides builder_model when len &gt;= 2.</td></tr>
+    <tr><td><code>dual_selection</code></td><td>String</td><td><code>""</code> (off)</td><td>Dual-build selection: "first", "second", "both", or "" (off)</td></tr>
+    <tr><td><code>scout_model</code></td><td>String</td><td><code>"sonnet"</code></td><td>Model name for Scout agent</td></tr>
+    <tr><td><code>planner_model</code></td><td>String</td><td><code>"opus"</code></td><td>Model name for Planner agent</td></tr>
+    <tr><td><code>reviewer_model</code></td><td>String</td><td><code>"sonnet"</code></td><td>Model name for Reviewer agent</td></tr>
+    <tr><td><code>fixer_model</code></td><td>String</td><td><code>"sonnet"</code></td><td>Model name for Fixer agent</td></tr>
+    <tr><td><code>agent_timeout_secs</code></td><td>u64</td><td><code>600</code></td><td>Max seconds before killing an agent (10 min)</td></tr>
+    <tr><td><code>batch_doubt</code></td><td>bool</td><td><code>false</code></td><td>Defer Doubt to last task only</td></tr>
+    <tr><td><code>backpressure_only</code></td><td>bool</td><td><code>false</code></td><td>Skip LLM review, rely on build/test/lint only</td></tr>
+    <tr><td><code>skip_planner_for_simple</code></td><td>bool</td><td><code>true</code></td><td>Skip planner for Simple-complexity tasks</td></tr>
+    <tr><td><code>auto_push_remote</code></td><td>Option&lt;String&gt;</td><td><code>null</code></td><td>Git remote to auto-push after commits (null = local only)</td></tr>
+    <tr><td><code>pr_poll_interval_secs</code></td><td>u64</td><td><code>30</code></td><td>Seconds between PR review status checks</td></tr>
+    <tr><td><code>create_issue_on_wip</code></td><td>bool</td><td><code>false</code></td><td>Create GitHub issue on WIP (failed) commits</td></tr>
+    <tr><td><code>theme</code></td><td>String</td><td><code>"dark"</code></td><td>TUI color theme: "dark", "catppuccin", or "solarized"</td></tr>
+    <tr><td><code>patterns_dir</code></td><td>String</td><td><code>"~/.foundry/patterns"</code></td><td>Directory for global pattern store</td></tr>
+    <tr><td><code>max_pattern_injection</code></td><td>usize</td><td><code>10</code></td><td>Max patterns injected into agent prompts</td></tr>
+    <tr><td><code>semantic_match_enabled</code></td><td>bool</td><td><code>true</code></td><td>Enable semantic pattern matching via Ollama embeddings</td></tr>
+    <tr><td><code>extensions</code></td><td>Vec&lt;String&gt;</td><td><code>[]</code></td><td>Selected extension names (e.g., ["roblox", "extend"])</td></tr>
+  </table>
+
+  <div class="divider">--*--*--*--*--*--*--*--*--*--</div>
+
+  <!-- SECTION 7: THE POSSE -->
+  <h2>The Posse</h2>
+
+  <p>Specialist deputies, each with their own jurisdiction. Extensions provide domain-specific knowledge to agents. They are discovered from <code>~/.foundry/extensions/</code> (global) and <code>&lt;project&gt;/extensions/</code> (local). Each extension directory contains a <code>CLAUDE.md</code> file whose contents are prepended to agent prompts.</p>
+
+  <div class="card-grid">
+
+    <div class="card">
+      <h3>Roblox</h3>
+      <span class="archetype">extensions/roblox/</span>
+      <p>World generation using Lune scripting and .rbxl/.rbxm files. Key files: <code>CLAUDE.md</code>, <code>patterns/roblox-common-issues.json</code>. Gotcha: use <code>add_to_world.luau</code>, never <code>generate_world.luau</code> -- terrain has varying elevations that cause floating objects.</p>
+    </div>
+
+    <div class="card">
+      <h3>Workday Extend</h3>
+      <span class="archetype">extensions/extend/</span>
+      <p>Workday Extend PaaS application development. Key files: <code>CLAUDE.md</code>, <code>WORKDAY_EXTEND_DEVELOPER_GUIDE.md</code>, <code>WORKDAY_EXTEND_ARCHITECTURE.md</code>. Gotcha: apps are metadata-driven with no arbitrary code execution -- WIDs are tenant-specific, always use Reference IDs instead.</p>
+    </div>
+
+    <div class="card">
+      <h3>Recon</h3>
+      <span class="archetype">extensions/recon/</span>
+      <p>Fleet reconnaissance from a management server -- inventory lookups, iDRAC queries, racadm commands against Dell servers. Key files: <code>CLAUDE.md</code>, <code>config/inventory-schema.json</code>. Gotcha: always use <code>grep -w</code> for hostname lookups and label batch output with the current hostname.</p>
+    </div>
+
+    <div class="card">
+      <h3>Flowise</h3>
+      <span class="archetype">extensions/flowise/</span>
+      <p>Building Flowise AgentFlow v2 workflows. Output is single JSON files. Key files: <code>CLAUDE.md</code>, <code>FLOWISE.md</code>, <code>node-templates/*.json</code>. Gotcha: use HTML span format for all variable references and follow the validation checklist before importing.</p>
+    </div>
+
+    <div class="card">
+      <h3>Mindcraft</h3>
+      <span class="archetype">extensions/mindcraft/</span>
+      <p>Python orchestrator for an AI Minecraft bot that plays autonomously. Monitors bot state, assigns goals, recalls the bot if it wanders too far from spawn. Architecture: client, detector, goals, learner, monitor, orchestrator, persistence, planner modules.</p>
+    </div>
+
+  </div>
+
+  <div class="divider">--*--*--*--*--*--*--*--*--*--</div>
+
+  <!-- SECTION 8: TRAIL'S END -->
+  <h2>Trail's End</h2>
+
+  <p>Here is what matters for architects evaluating this system.</p>
+
+  <ul>
+    <li><strong>No cloud lock-in.</strong> Self-hosted Rust binary. Your code stays on your machine. Swap providers per pipeline role -- Opus for planning, Sonnet for review, Codex for building -- via config, not code changes.</li>
+    <li><strong>Pattern learning compounds over time.</strong> Every solved problem is extracted into a reusable pattern. Before planning each new task, matching patterns are injected into the agent's context. The system gets better at your codebase the more you use it.</li>
+    <li><strong>The doubt loop catches what self-review misses.</strong> A fresh-context reviewer audits every build. It has no knowledge of what the builder intended -- only what the builder claims and what the code actually does. This separation of concerns catches blind spots that self-review cannot.</li>
+    <li><strong>The dual-model arena absorbs uncertainty.</strong> Run two different models against the same task in isolated worktrees. Compare outputs. Pick the winner. No single-vendor dependency.</li>
+    <li><strong>Everything is a config change.</strong> Pipeline mode, execution mode, model selection, pattern injection limits, PR polling intervals, extension selection -- all in one <code>.foundry.json</code> file. No infrastructure changes required to change behavior.</li>
+  </ul>
+
+  <footer>
+    Context Foundry v0.5.2 &middot; Self-hosted &middot; MIT License
+  </footer>
+
+</body>
+</html>

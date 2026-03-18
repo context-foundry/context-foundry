@@ -20,8 +20,8 @@
   "pause_between_tasks_secs": 10,
   "planner_model": "opus",
   "planner_provider": "claude",
-  "preview_wrap": false,
+  "preview_wrap": true,
   "reviewer_model": "sonnet",
   "reviewer_provider": "claude",
-  "run_mode": "auto"
+  "run_mode": "sprint"
 }

@@ -491,7 +491,8 @@ fn prepare_append_tasks_start(
     request: &AppendTasksRequest,
     _claude_available: bool,
 ) -> bool {
-    // Task append is now deterministic (no LLM) -- no CLI check needed.
+    // Task append uses an LLM to expand descriptions but works without
+    // claude CLI (falls back gracefully). Check removed for simplicity.
 
     if request.seed_spec_from_description {
         if let Err(e) = seed_spec_from_brief(project_dir, &request.description) {
@@ -1135,7 +1136,8 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                         } else {
                             let terminal_size = crossterm::terminal::size().unwrap_or((120, 40));
                             let area = ratatui::layout::Rect::new(0, 0, terminal_size.0, terminal_size.1);
-                            let panes = tui::running_layout(area);
+                            let has_ext = state.available_extensions.iter().any(|e| e.selected) || !state.session_extensions_used.is_empty();
+                            let panes = tui::running_layout(area, has_ext);
                             if tui::rect_contains(panes.agent_output, mouse.column, mouse.row) {
                                 state.focused_pane = state::TuiPane::AgentOutput;
                                 let max = state.agent_output.len().saturating_sub(1);
@@ -1147,7 +1149,7 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                             } else if tui::rect_contains(panes.patterns, mouse.column, mouse.row) {
                                 state.focused_pane = state::TuiPane::PatternsLearned;
                                 state.patterns_scroll = state.patterns_scroll.saturating_sub(3);
-                            } else if tui::rect_contains(panes.extensions_used, mouse.column, mouse.row) {
+                            } else if panes.extensions_used.is_some_and(|r| tui::rect_contains(r, mouse.column, mouse.row)) {
                                 state.focused_pane = state::TuiPane::Extensions;
                             }
                         }
@@ -1160,7 +1162,8 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                         } else {
                             let terminal_size = crossterm::terminal::size().unwrap_or((120, 40));
                             let area = ratatui::layout::Rect::new(0, 0, terminal_size.0, terminal_size.1);
-                            let panes = tui::running_layout(area);
+                            let has_ext = state.available_extensions.iter().any(|e| e.selected) || !state.session_extensions_used.is_empty();
+                            let panes = tui::running_layout(area, has_ext);
                             if tui::rect_contains(panes.agent_output, mouse.column, mouse.row) {
                                 state.focused_pane = state::TuiPane::AgentOutput;
                                 state.scroll_offset = state.scroll_offset.saturating_sub(3);
@@ -1170,7 +1173,7 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                             } else if tui::rect_contains(panes.patterns, mouse.column, mouse.row) {
                                 state.focused_pane = state::TuiPane::PatternsLearned;
                                 state.patterns_scroll = state.patterns_scroll.saturating_add(3);
-                            } else if tui::rect_contains(panes.extensions_used, mouse.column, mouse.row) {
+                            } else if panes.extensions_used.is_some_and(|r| tui::rect_contains(r, mouse.column, mouse.row)) {
                                 state.focused_pane = state::TuiPane::Extensions;
                             }
                         }
@@ -1178,14 +1181,15 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                     MouseEventKind::Down(MouseButton::Left) => {
                         let terminal_size = crossterm::terminal::size().unwrap_or((120, 40));
                         let area = ratatui::layout::Rect::new(0, 0, terminal_size.0, terminal_size.1);
-                        let panes = tui::running_layout(area);
+                        let has_ext = state.available_extensions.iter().any(|e| e.selected) || !state.session_extensions_used.is_empty();
+                            let panes = tui::running_layout(area, has_ext);
                         if tui::rect_contains(panes.agent_output, mouse.column, mouse.row) {
                             state.focused_pane = state::TuiPane::AgentOutput;
                         } else if tui::rect_contains(panes.task_queue, mouse.column, mouse.row) {
                             state.focused_pane = state::TuiPane::TaskQueue;
                         } else if tui::rect_contains(panes.patterns, mouse.column, mouse.row) {
                             state.focused_pane = state::TuiPane::PatternsLearned;
-                        } else if tui::rect_contains(panes.extensions_used, mouse.column, mouse.row) {
+                        } else if panes.extensions_used.is_some_and(|r| tui::rect_contains(r, mouse.column, mouse.row)) {
                             state.focused_pane = state::TuiPane::Extensions;
                         }
                     }

@@ -2,6 +2,22 @@
 
 Context Foundry is a pattern-learning system that helps AI agents improve over time by capturing and sharing solutions to common problems.
 
+## Build & Install
+
+After any code change, rebuild and install:
+
+```bash
+cd ~/homelab/context-foundry && cargo build --release && cp target/release/foundry ~/.cargo/bin/
+```
+
+Run from any project directory:
+
+```bash
+cd ~/some-project && foundry
+```
+
+**IMPORTANT:** The running TUI does NOT hot-reload. You must quit the TUI, rebuild, and restart to pick up changes. If you see errors like `No such tool available: Write`, you are running a stale binary.
+
 ## Global Patterns
 
 Patterns are stored in `~/.context-foundry/patterns/`. Read them before starting work:

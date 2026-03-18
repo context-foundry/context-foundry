@@ -82,10 +82,10 @@ pub struct RunningPaneRects {
     pub agent_output: Rect,
     pub task_queue: Rect,
     pub patterns: Rect,
-    pub extensions_used: Rect,
+    pub extensions_used: Option<Rect>,
 }
 
-pub fn running_layout(area: Rect) -> RunningPaneRects {
+pub fn running_layout(area: Rect, has_extensions: bool) -> RunningPaneRects {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -102,20 +102,35 @@ pub fn running_layout(area: Rect) -> RunningPaneRects {
         .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
         .split(chunks[2]);
 
-    let right_panel = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Min(6),
-            Constraint::Length(6),
-            Constraint::Length(6),
-        ])
-        .split(middle_cols[1]);
-
-    RunningPaneRects {
-        agent_output: middle_cols[0],
-        task_queue: right_panel[0],
-        patterns: right_panel[1],
-        extensions_used: right_panel[2],
+    if has_extensions {
+        let right_panel = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Min(6),
+                Constraint::Length(6),
+                Constraint::Length(6),
+            ])
+            .split(middle_cols[1]);
+        RunningPaneRects {
+            agent_output: middle_cols[0],
+            task_queue: right_panel[0],
+            patterns: right_panel[1],
+            extensions_used: Some(right_panel[2]),
+        }
+    } else {
+        let right_panel = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Min(6),
+                Constraint::Length(6),
+            ])
+            .split(middle_cols[1]);
+        RunningPaneRects {
+            agent_output: middle_cols[0],
+            task_queue: right_panel[0],
+            patterns: right_panel[1],
+            extensions_used: None,
+        }
     }
 }
 
@@ -141,18 +156,34 @@ pub fn render(frame: &mut Frame, state: &AppState, config: &Config) {
         .split(chunks[2]);
     running::render_agent_output(frame, middle_cols[0], state, state.focused_pane);
 
-    // Right panel: task queue + patterns + extensions used
-    let right_panel = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Min(6),      // Task queue (fills remaining space)
-            Constraint::Length(6),   // Patterns (4 content lines + 2 border)
-            Constraint::Length(6),   // Extensions Used (4 content lines + 2 border)
-        ])
-        .split(middle_cols[1]);
-    running::render_task_queue(frame, right_panel[0], state, state.focused_pane);
-    running::render_patterns(frame, right_panel[1], state, config, state.focused_pane);
-    running::render_extensions_used(frame, right_panel[2], state, state.focused_pane);
+    // Right panel: task queue + patterns (+ extensions used if any selected)
+    let has_extensions = !state.available_extensions.iter().all(|e| !e.selected)
+        || !state.session_extensions_used.is_empty();
+    let _right_panel = if has_extensions {
+        let panel = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Min(6),      // Task queue (fills remaining space)
+                Constraint::Length(6),   // Patterns (4 content lines + 2 border)
+                Constraint::Length(6),   // Extensions Used (4 content lines + 2 border)
+            ])
+            .split(middle_cols[1]);
+        running::render_task_queue(frame, panel[0], state, state.focused_pane);
+        running::render_patterns(frame, panel[1], state, config, state.focused_pane);
+        running::render_extensions_used(frame, panel[2], state, state.focused_pane);
+        panel
+    } else {
+        let panel = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Min(6),      // Task queue (fills remaining space)
+                Constraint::Length(6),   // Patterns (4 content lines + 2 border)
+            ])
+            .split(middle_cols[1]);
+        running::render_task_queue(frame, panel[0], state, state.focused_pane);
+        running::render_patterns(frame, panel[1], state, config, state.focused_pane);
+        panel
+    };
 
     // Bottom: stats panel (full width)
     stats::render_dashboard_stats(frame, chunks[3], state, config);
