@@ -9,7 +9,7 @@ const { execSync } = require("child_process");
 const os = require("os");
 const zlib = require("zlib");
 
-const VERSION = "0.5.2";
+const VERSION = "0.6.0";
 const REPO = "context-foundry/context-foundry";
 
 function getTarget() {
