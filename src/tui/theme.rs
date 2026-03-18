@@ -21,6 +21,53 @@ fn normalize_theme_name(name: &str) -> String {
         .collect()
 }
 
+/// Detect whether the terminal supports truecolor (24-bit RGB).
+/// Checks COLORTERM env var and WT_SESSION (Windows Terminal).
+fn supports_truecolor() -> bool {
+    if let Ok(ct) = std::env::var("COLORTERM") {
+        if ct == "truecolor" || ct == "24bit" {
+            return true;
+        }
+    }
+    // Windows Terminal always supports truecolor
+    if std::env::var("WT_SESSION").is_ok() {
+        return true;
+    }
+    false
+}
+
+/// Downgrade an RGB color to the nearest ANSI-256 index.
+fn rgb_to_ansi256(r: u8, g: u8, b: u8) -> Color {
+    // Map each channel to the 6-level cube (values 0-5)
+    let ri = if r < 48 { 0u8 } else { ((r as u16 - 35) / 40).min(5) as u8 };
+    let gi = if g < 48 { 0u8 } else { ((g as u16 - 35) / 40).min(5) as u8 };
+    let bi = if b < 48 { 0u8 } else { ((b as u16 - 35) / 40).min(5) as u8 };
+    let idx = 16 + 36 * ri + 6 * gi + bi;
+    Color::Indexed(idx)
+}
+
+/// If the terminal doesn't support truecolor, downgrade RGB colors to ANSI-256.
+fn adapt_color(color: Color) -> Color {
+    match color {
+        Color::Rgb(r, g, b) if !supports_truecolor() => rgb_to_ansi256(r, g, b),
+        other => other,
+    }
+}
+
+fn adapt_theme(theme: TuiTheme) -> TuiTheme {
+    TuiTheme {
+        accent: adapt_color(theme.accent),
+        border: adapt_color(theme.border),
+        text: adapt_color(theme.text),
+        muted: adapt_color(theme.muted),
+        success: adapt_color(theme.success),
+        warning: adapt_color(theme.warning),
+        error: adapt_color(theme.error),
+        info: adapt_color(theme.info),
+        surface: adapt_color(theme.surface),
+    }
+}
+
 pub fn builtin_themes() -> Vec<(&'static str, TuiTheme)> {
     vec![
         (
@@ -71,22 +118,25 @@ pub fn builtin_themes() -> Vec<(&'static str, TuiTheme)> {
 pub fn from_name(name: &str) -> TuiTheme {
     let normalized = normalize_theme_name(name);
     let themes = builtin_themes();
-    themes
+    let theme = themes
         .iter()
         .find(|(n, _)| normalize_theme_name(n) == normalized)
         .map(|(_, t)| t.clone())
-        .unwrap_or_else(|| themes[0].1.clone())
+        .unwrap_or_else(|| themes[0].1.clone());
+    adapt_theme(theme)
 }
 
 /// Cycle to the next built-in theme. Returns (new theme, theme name).
 pub fn cycle_next(current: &TuiTheme) -> (TuiTheme, &'static str) {
     let themes = builtin_themes();
-    let current_idx = themes
+    // Compare against adapted themes so cycling works regardless of color mode
+    let adapted: Vec<_> = themes.iter().map(|(n, t)| (*n, adapt_theme(t.clone()))).collect();
+    let current_idx = adapted
         .iter()
         .position(|(_, t)| t == current)
         .unwrap_or(0);
     let next_idx = (current_idx + 1) % themes.len();
-    (themes[next_idx].1.clone(), themes[next_idx].0)
+    (adapt_theme(themes[next_idx].1.clone()), themes[next_idx].0)
 }
 
 impl Default for TuiTheme {
