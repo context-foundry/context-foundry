@@ -37,12 +37,15 @@ fn supports_truecolor() -> bool {
 }
 
 /// Downgrade an RGB color to the nearest ANSI-256 index.
+/// ANSI-256 cube levels: 0, 95, 135, 175, 215, 255.
+/// Breakpoints are midpoints: 48, 115, 155, 195, 235.
 fn rgb_to_ansi256(r: u8, g: u8, b: u8) -> Color {
-    // Map each channel to the 6-level cube (values 0-5)
-    let ri = if r < 48 { 0u8 } else { ((r as u16 - 35) / 40).min(5) as u8 };
-    let gi = if g < 48 { 0u8 } else { ((g as u16 - 35) / 40).min(5) as u8 };
-    let bi = if b < 48 { 0u8 } else { ((b as u16 - 35) / 40).min(5) as u8 };
-    let idx = 16 + 36 * ri + 6 * gi + bi;
+    fn channel_to_cube(v: u8) -> u8 {
+        if v < 48 { 0 }
+        else if v < 115 { 1 }
+        else { ((v as u16 - 35) / 40).min(5) as u8 }
+    }
+    let idx = 16 + 36 * channel_to_cube(r) + 6 * channel_to_cube(g) + channel_to_cube(b);
     Color::Indexed(idx)
 }
 

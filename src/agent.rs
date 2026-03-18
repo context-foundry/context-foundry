@@ -364,7 +364,7 @@ pub async fn run_provider_session(options: ProviderRunOptions<'_>) -> Result<Age
     let pty_system = native_pty_system();
     let pair = pty_system.openpty(PtySize {
         rows: 24,
-        cols: 80,
+        cols: 4096, // wide enough to avoid wrapping JSON lines; must fit i16 for ConPTY
         pixel_width: 0,
         pixel_height: 0,
     })?;
@@ -646,7 +646,7 @@ pub async fn run_agent(
     let pty_system = native_pty_system();
     let pair = pty_system.openpty(PtySize {
         rows: 24,
-        cols: 80,
+        cols: 4096, // wide enough to avoid wrapping JSON lines; must fit i16 for ConPTY
         pixel_width: 0,
         pixel_height: 0,
     })?;
@@ -850,7 +850,7 @@ fn read_pty_output(
                     }
                     ParsedClaudeLine::Unparsed => {
                         let cleaned = strip_ansi(line);
-                        if !cleaned.is_empty() {
+                        if !cleaned.is_empty() && !is_api_noise(&cleaned) {
                             note_provider_stderr_line(ModelProvider::Claude, &cleaned, progress);
                             if tx.send(AgentOutputEvent::Stderr(cleaned)).is_err() {
                                 return;
@@ -941,7 +941,7 @@ fn read_provider_output(
                 }
 
                 let cleaned = strip_ansi(line);
-                if !cleaned.is_empty() {
+                if !cleaned.is_empty() && !is_api_noise(&cleaned) {
                     note_provider_stderr_line(provider, &cleaned, progress);
                     if tx.send(AgentOutputEvent::Stderr(cleaned)).is_err() {
                         return;
@@ -1493,6 +1493,30 @@ fn parse_stream_event(line: &str) -> Option<AgentOutputEvent> {
 /// Handles CSI (`\x1b[...X`), OSC (`\x1b]...BEL` / `\x1b]...\x1b\\`),
 /// simple two-byte escapes (`\x1b X`), and stray control chars (BEL, etc.).
 /// Returns the cleaned string. Empty after trim means the line was pure noise.
+/// Filter out raw API response fragments that leak through when the PTY
+/// wraps long JSON lines (common on Windows). These are noise from the
+/// Claude CLI's stderr or split stream-json lines.
+fn is_api_noise(line: &str) -> bool {
+    let l = line.trim();
+    // Fragments of base64-encoded content blocks
+    if l.len() > 60 && l.chars().all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '/' || c == '=') {
+        return true;
+    }
+    // Raw API JSON fragments (usage, session, content_block, etc.)
+    if l.contains("\"cache_creation_input_tokens\"")
+        || l.contains("\"cache_read_input_tokens\"")
+        || l.contains("\"stop_reason\":")
+        || l.contains("\"stop_sequence\":")
+        || l.contains("\"session_id\":")
+        || l.contains("\"parent_tool_use_id\":")
+        || l.contains("\"service_tier\":")
+        || l.contains("\"inference_profile\"")
+    {
+        return true;
+    }
+    false
+}
+
 fn strip_ansi(line: &str) -> String {
     let mut out = String::with_capacity(line.len());
     let mut chars = line.chars().peekable();
