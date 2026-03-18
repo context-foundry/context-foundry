@@ -1,10 +1,27 @@
+/// Platform-specific preamble appended to every agent prompt on Windows.
+/// Prevents agents from creating junk directories by using absolute Windows
+/// paths as shell arguments (backslashes get interpreted as escape chars).
+fn platform_preamble() -> &'static str {
+    if cfg!(windows) {
+        "\n\nPLATFORM NOTE: You are running on Windows. \
+         ALWAYS use relative paths (e.g. `.buildloop/current-plan.md`, `src/main.ts`). \
+         NEVER use absolute Windows paths in shell commands — backslashes are interpreted \
+         as escape characters by bash and will create junk directories. \
+         The working directory is already set to the project root."
+    } else {
+        ""
+    }
+}
+
 /// Prepend extension contract context to any agent prompt.
 /// If extension_context is empty, return prompt unchanged.
+/// On Windows, appends a platform preamble warning about path handling.
 pub fn wrap_with_extensions(prompt: &str, extension_context: &str) -> String {
+    let preamble = platform_preamble();
     if extension_context.trim().is_empty() {
-        prompt.to_string()
+        format!("{}{}", prompt, preamble)
     } else {
-        format!("{}\n\n{}", extension_context, prompt)
+        format!("{}\n\n{}{}", extension_context, prompt, preamble)
     }
 }
 
