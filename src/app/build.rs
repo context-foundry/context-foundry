@@ -1,5 +1,7 @@
+use std::sync::atomic::AtomicUsize;
 use std::time::{Duration, Instant};
 
+use futures::future::join_all;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
@@ -354,6 +356,449 @@ async fn adaptive_sleep(config: &Config, rate_limited: bool, full_secs: u64) {
     } else {
         tokio::time::sleep(Duration::from_millis(ADAPTIVE_PAUSE_MIN_MS)).await;
     }
+}
+
+// ─── Parallel Builder ─────────────────────────────────────
+
+/// A single file operation parsed from the plan's `## File Operations` section.
+#[derive(Debug, Clone)]
+struct FileOp {
+    /// The raw text block for this file operation (everything from the ### header
+    /// to just before the next ### header or ## section).
+    raw_block: String,
+    /// The file path extracted from the header, e.g. "src/config.rs".
+    file_path: String,
+}
+
+/// Parse the `## File Operations` section of current-plan.md into individual FileOp entries.
+/// Each entry captures the full text block for one file operation.
+fn parse_file_operations(plan_content: &str) -> Vec<FileOp> {
+    let lines: Vec<&str> = plan_content.lines().collect();
+
+    // Find "## File Operations" header
+    let section_start = match lines.iter().position(|l| {
+        let trimmed = l.trim();
+        trimmed.starts_with("## File Operations")
+    }) {
+        Some(i) => i + 1,
+        None => return Vec::new(),
+    };
+
+    // Find the next ## header after File Operations (end boundary)
+    let section_end = lines[section_start..]
+        .iter()
+        .position(|l| {
+            let trimmed = l.trim();
+            trimmed.starts_with("## ") && !trimmed.starts_with("## File Operations")
+        })
+        .map(|i| section_start + i)
+        .unwrap_or(lines.len());
+
+    // Scan for ### headers within the section
+    let mut ops = Vec::new();
+    let mut current_header_idx: Option<usize> = None;
+
+    for idx in section_start..section_end {
+        let line = lines[idx];
+        if line.trim().starts_with("### ") {
+            // Save previous block
+            if let Some(start) = current_header_idx {
+                if let Some(op) = extract_file_op(&lines[start..idx]) {
+                    ops.push(op);
+                }
+            }
+            current_header_idx = Some(idx);
+        }
+    }
+    // Save last block
+    if let Some(start) = current_header_idx {
+        if let Some(op) = extract_file_op(&lines[start..section_end]) {
+            ops.push(op);
+        }
+    }
+
+    ops
+}
+
+/// Extract a FileOp from a slice of lines starting with a ### header.
+fn extract_file_op(lines: &[&str]) -> Option<FileOp> {
+    if lines.is_empty() {
+        return None;
+    }
+    let header = lines[0].trim();
+    // Extract file path from formats like:
+    //   "### 1. MODIFY src/config.rs"
+    //   "### 1. [CREATE] src/foo.rs"
+    let file_path = if let Some(after_bracket) = header.split(']').nth(1) {
+        // Format: ### N. [OP] path
+        after_bracket.split_whitespace().next()
+    } else {
+        // Format: ### N. OP path -- take last whitespace-separated token that looks like a path
+        header
+            .split_whitespace()
+            .find(|token| token.contains('/') || token.contains('.'))
+    };
+
+    let file_path = file_path?.to_string();
+    if file_path.is_empty() {
+        return None;
+    }
+
+    let raw_block = lines.join("\n");
+    Some(FileOp {
+        raw_block,
+        file_path,
+    })
+}
+
+/// Group file operations into independent batches for parallel execution.
+/// Files that import each other are grouped together. Files with no
+/// cross-references are independent.
+fn build_dependency_groups(ops: &[FileOp], project_dir: &std::path::Path) -> Vec<Vec<usize>> {
+    let n = ops.len();
+    if n == 0 {
+        return Vec::new();
+    }
+
+    // Collect stems and paths for matching
+    let stems: Vec<String> = ops
+        .iter()
+        .map(|op| {
+            std::path::Path::new(&op.file_path)
+                .file_stem()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .into_owned()
+        })
+        .collect();
+
+    // Union-find for grouping
+    let mut parent: Vec<usize> = (0..n).collect();
+
+    fn find(parent: &mut [usize], i: usize) -> usize {
+        let mut root = i;
+        while parent[root] != root {
+            root = parent[root];
+        }
+        // Path compression
+        let mut cur = i;
+        while parent[cur] != root {
+            let next = parent[cur];
+            parent[cur] = root;
+            cur = next;
+        }
+        root
+    }
+
+    fn union(parent: &mut [usize], a: usize, b: usize) {
+        let ra = find(parent, a);
+        let rb = find(parent, b);
+        if ra != rb {
+            parent[ra] = rb;
+        }
+    }
+
+    // For each file, check if it references other files in the ops list
+    for i in 0..n {
+        // Read actual file content (if exists)
+        let file_content = std::fs::read_to_string(project_dir.join(&ops[i].file_path))
+            .unwrap_or_default();
+        // Combine actual file content with the raw_block from the plan
+        let combined = format!("{}\n{}", file_content, ops[i].raw_block);
+
+        for j in 0..n {
+            if i == j {
+                continue;
+            }
+            // Check if file i references file j by stem name or path
+            if combined.contains(&stems[j]) || combined.contains(&ops[j].file_path) {
+                union(&mut parent, i, j);
+            }
+        }
+    }
+
+    // Collect groups
+    let mut groups: std::collections::HashMap<usize, Vec<usize>> = std::collections::HashMap::new();
+    for i in 0..n {
+        let root = find(&mut parent, i);
+        groups.entry(root).or_default().push(i);
+    }
+
+    groups.into_values().collect()
+}
+
+/// Orchestrate parallel builder sub-agents, each in a git worktree.
+#[allow(clippy::too_many_arguments)]
+async fn run_parallel_builder(
+    task_info: &Task,
+    ctx: &RunContext,
+    tx: &mpsc::UnboundedSender<AppEvent>,
+    ops: &[FileOp],
+    groups: &[Vec<usize>],
+    extension_context: &str,
+) -> (bool, bool) {
+    let task_id = &task_info.id;
+    let task_desc = &task_info.description;
+    let total_slots = groups.len();
+    let independent_count = groups.iter().filter(|g| g.len() == 1).count();
+
+    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+        "Parallel builder: {} slots ({} independent files, {} grouped)",
+        total_slots,
+        independent_count,
+        total_slots - independent_count
+    ))));
+
+    let base_dir = ctx.buildloop_dir.join("parallel-build");
+    let _ = std::fs::create_dir_all(&base_dir);
+
+    // Create worktrees for each slot
+    let mut slot_contexts: Vec<(PathBuf, RunContext)> = Vec::new();
+
+    for (slot_idx, _group) in groups.iter().enumerate() {
+        let slot_dir = base_dir.join(format!("slot-{}", slot_idx));
+
+        // Remove stale worktree
+        if slot_dir.exists() {
+            let _ = std::process::Command::new("git")
+                .args(["worktree", "remove", "--force"])
+                .arg(&slot_dir)
+                .current_dir(&ctx.project_dir)
+                .output();
+        }
+
+        // Create worktree
+        let wt_result = std::process::Command::new("git")
+            .args(["worktree", "add", "--detach"])
+            .arg(&slot_dir)
+            .arg("HEAD")
+            .current_dir(&ctx.project_dir)
+            .output();
+
+        match wt_result {
+            Ok(output) if output.status.success() => {}
+            Ok(output) => {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                    "Parallel builder: failed to create worktree slot-{}: {}",
+                    slot_idx,
+                    stderr.trim()
+                ))));
+                // Clean up previously created worktrees
+                for (prev_dir, _) in &slot_contexts {
+                    let _ = std::process::Command::new("git")
+                        .args(["worktree", "remove", "--force"])
+                        .arg(prev_dir)
+                        .current_dir(&ctx.project_dir)
+                        .output();
+                }
+                let _ = std::fs::remove_dir_all(&base_dir);
+                return (false, false);
+            }
+            Err(e) => {
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                    "Parallel builder: git worktree command failed: {}",
+                    e
+                ))));
+                for (prev_dir, _) in &slot_contexts {
+                    let _ = std::process::Command::new("git")
+                        .args(["worktree", "remove", "--force"])
+                        .arg(prev_dir)
+                        .current_dir(&ctx.project_dir)
+                        .output();
+                }
+                let _ = std::fs::remove_dir_all(&base_dir);
+                return (false, false);
+            }
+        }
+
+        // Copy state files into worktree
+        if let Ok(rel) = ctx.spec_path.strip_prefix(&ctx.project_dir) {
+            let dest = slot_dir.join(rel);
+            if let Some(parent) = dest.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            let _ = std::fs::copy(&ctx.spec_path, &dest);
+        }
+        if let Ok(rel) = ctx.plan_path.strip_prefix(&ctx.project_dir) {
+            let dest = slot_dir.join(rel);
+            if let Some(parent) = dest.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            let _ = std::fs::copy(&ctx.plan_path, &dest);
+        }
+        // Copy current-plan.md
+        let plan_src = ctx.buildloop_dir.join("current-plan.md");
+        if plan_src.exists() {
+            let wt_buildloop = slot_dir.join(".buildloop");
+            let _ = std::fs::create_dir_all(&wt_buildloop);
+            let _ = std::fs::copy(&plan_src, wt_buildloop.join("current-plan.md"));
+        }
+        // CLAUDE.md
+        let claude_md_src = ctx.project_dir.join("CLAUDE.md");
+        if claude_md_src.exists() {
+            let _ = std::fs::copy(&claude_md_src, slot_dir.join("CLAUDE.md"));
+        }
+
+        let wt_ctx = RunContext::new(
+            &slot_dir,
+            ctx.config.clone(),
+            ctx.shutdown.clone(),
+            ctx.tasks_file_lock.clone(),
+            ctx.review_gate.clone(),
+        );
+
+        slot_contexts.push((slot_dir, wt_ctx));
+    }
+
+    // Send initial progress
+    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::ParallelBuilderProgress {
+        total: total_slots,
+        done: 0,
+    }));
+
+    // Build scoped prompts and spawn agents concurrently
+    let done_counter = Arc::new(AtomicUsize::new(0));
+    let mut futures_vec = Vec::new();
+
+    for (slot_idx, group) in groups.iter().enumerate() {
+        // Collect raw blocks for this group
+        let joined_blocks: String = group
+            .iter()
+            .map(|&idx| ops[idx].raw_block.as_str())
+            .collect::<Vec<_>>()
+            .join("\n\n");
+
+        let prompt = prompts::parallel_builder_prompt(
+            task_id,
+            task_desc,
+            &joined_blocks,
+            &ctx.spec_file_name(),
+            &ctx.tasks_file_name(),
+        );
+        let prompt = prompts::wrap_with_extensions(&prompt, extension_context);
+
+        let provider = Config::parse_provider(&ctx.config.builder_provider);
+        let model = ctx.config.builder_model.clone();
+        let wt_project_dir = slot_contexts[slot_idx].1.project_dir.clone();
+        let wt_log_dir = slot_contexts[slot_idx].1.log_dir.clone();
+        let _ = std::fs::create_dir_all(&wt_log_dir);
+        let timeout = ctx.config.agent_timeout_secs;
+        let shutdown = ctx.shutdown.clone();
+        let counter = done_counter.clone();
+        let slot_tx = tx.clone();
+        let total = total_slots;
+
+        let fut = async move {
+            // Create forwarding channel for this slot
+            let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
+            let fwd_tx = slot_tx.clone();
+            let fwd_slot_idx = slot_idx;
+            tokio::spawn(async move {
+                while let Some(evt) = agent_rx.recv().await {
+                    // Forward as log messages with slot prefix
+                    if let crate::agent::AgentOutputEvent::Text(ref text) = evt {
+                        let _ = fwd_tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                            "[slot-{}] {}",
+                            fwd_slot_idx, text
+                        ))));
+                    }
+                }
+            });
+
+            let result = agent::run_agent(
+                &AgentRole::Builder,
+                provider,
+                &model,
+                &prompt,
+                &wt_project_dir,
+                agent_tx,
+                &wt_log_dir,
+                None,
+                timeout,
+                Some(shutdown),
+            )
+            .await;
+
+            let done = counter.fetch_add(1, Ordering::Relaxed) + 1;
+            let _ = slot_tx.send(AppEvent::LoopEvent(LoopEvent::ParallelBuilderProgress {
+                total,
+                done,
+            }));
+
+            let rl = was_rate_limited(&result);
+            let ok = result.map(|r| r.success).unwrap_or(false);
+            (slot_idx, ok, rl)
+        };
+
+        futures_vec.push(fut);
+    }
+
+    let results = join_all(futures_vec).await;
+
+    // Merge results: copy files from worktrees back to main project
+    let mut all_ok = true;
+    let mut any_rate_limited = false;
+    let mut combined_claims = String::new();
+
+    for (slot_idx, ok, rl) in &results {
+        if !ok {
+            all_ok = false;
+        }
+        if *rl {
+            any_rate_limited = true;
+        }
+
+        // Copy modified files from worktree to main project
+        let group = &groups[*slot_idx];
+        let (ref wt_dir, _) = slot_contexts[*slot_idx];
+        for &op_idx in group {
+            let src = wt_dir.join(&ops[op_idx].file_path);
+            let dest = ctx.project_dir.join(&ops[op_idx].file_path);
+            if src.exists() {
+                if let Some(parent) = dest.parent() {
+                    let _ = std::fs::create_dir_all(parent);
+                }
+                if let Err(e) = std::fs::copy(&src, &dest) {
+                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                        "Parallel builder: failed to copy {} from slot-{}: {}",
+                        ops[op_idx].file_path, slot_idx, e
+                    ))));
+                }
+            }
+        }
+
+        // Collect build-claims
+        let wt_claims = wt_dir.join(".buildloop").join("build-claims.md");
+        if let Ok(content) = std::fs::read_to_string(&wt_claims) {
+            combined_claims.push_str(&format!("\n\n--- Slot {} ---\n\n{}", slot_idx, content));
+        }
+    }
+
+    // Write combined claims
+    if !combined_claims.is_empty() {
+        let claims_path = ctx.buildloop_dir.join("build-claims.md");
+        let header = format!("# Build Claims -- {} (parallel builder)\n", task_id);
+        let _ = atomic_write_file(&claims_path, format!("{}{}", header, combined_claims).as_bytes());
+    }
+
+    // Clean up all worktrees
+    for (wt_dir, _) in &slot_contexts {
+        let _ = std::process::Command::new("git")
+            .args(["worktree", "remove", "--force"])
+            .arg(wt_dir)
+            .current_dir(&ctx.project_dir)
+            .output();
+    }
+    let _ = std::fs::remove_dir_all(&base_dir);
+
+    // Send final progress
+    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::ParallelBuilderProgress {
+        total: total_slots,
+        done: total_slots,
+    }));
+
+    (all_ok, any_rate_limited)
 }
 
 // ─── Dual Pipeline ──────────────────────────────────────────
@@ -2074,7 +2519,37 @@ async fn process_task(
         &AgentRole::Builder,
         task_id,
     );
-    let (build_ok, builder_rate_limited) = {
+
+    // Check if parallel builder should be used
+    let parallel_data: Option<(Vec<FileOp>, Vec<Vec<usize>>)> = if ctx.config.parallel_builder && !skip_planner {
+        let plan_content = std::fs::read_to_string(&ctx.current_plan).unwrap_or_default();
+        let file_ops = parse_file_operations(&plan_content);
+        if file_ops.len() >= ctx.config.parallel_builder_min_files {
+            let groups = build_dependency_groups(&file_ops, &ctx.project_dir);
+            let independent_count = groups.iter().filter(|g| g.len() == 1).count();
+            if independent_count >= ctx.config.parallel_builder_min_files {
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                    "Parallel builder: {} file ops, {} independent -- activating",
+                    file_ops.len(), independent_count
+                ))));
+                Some((file_ops, groups))
+            } else {
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                    "Parallel builder: only {} independent ops (need {}) -- using sequential",
+                    independent_count, ctx.config.parallel_builder_min_files
+                ))));
+                None
+            }
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    let (build_ok, builder_rate_limited) = if let Some((ref file_ops, ref groups)) = parallel_data {
+        run_parallel_builder(task_info, ctx, tx, file_ops, groups, extension_context).await
+    } else {
         // Original single-builder path
         let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
         let fwd_tx = tx.clone();

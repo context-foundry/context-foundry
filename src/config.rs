@@ -213,6 +213,14 @@ pub struct Config {
     /// below this value are logged as warnings but not auto-fixed.
     /// Range 0.0-1.0, default 0.5.
     pub confidence_threshold: f64,
+
+    /// Enable parallel builder: split multi-file plans into concurrent
+    /// sub-agents, each in its own git worktree. Experimental.
+    pub parallel_builder: bool,
+
+    /// Minimum independent file operations in the plan before parallel
+    /// builder activates. Below this threshold the sequential builder runs.
+    pub parallel_builder_min_files: usize,
 }
 
 impl Default for Config {
@@ -287,6 +295,8 @@ impl Default for Config {
             cost_limit: 0.0,
             review_multipass_threshold: 8,
             confidence_threshold: 0.5,
+            parallel_builder: false,
+            parallel_builder_min_files: 3,
         }
     }
 }

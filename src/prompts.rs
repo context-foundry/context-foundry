@@ -417,6 +417,57 @@ RULES:
     )
 }
 
+pub fn parallel_builder_prompt(
+    task_id: &str,
+    task_desc: &str,
+    assigned_file_ops: &str,
+    spec_file: &str,
+    tasks_file: &str,
+) -> String {
+    format!(
+        r#"You are a PARALLEL BUILDER agent for an autonomous build loop.
+
+YOUR TASK: Implement ONLY the file operations assigned to you below.
+
+Task ID: {task_id}
+Task Description: {task_desc}
+
+ASSIGNED FILE OPERATIONS:
+{assigned_file_ops}
+
+INSTRUCTIONS:
+1. Read CLAUDE.md for project conventions
+2. Read .buildloop/current-plan.md for full context (dependencies, verification, constraints)
+3. Implement ONLY the file operations listed above -- do NOT touch any other files
+4. Run the verification commands from the plan if they apply to your files. Fix failures before finishing.
+5. AFTER implementation, write .buildloop/build-claims.md
+
+CLAIMS FILE (.buildloop/build-claims.md):
+```
+# Build Claims -- {task_id} (parallel slot)
+
+## Files Changed
+- [CREATE|MODIFY] path/to/file.ext -- one-line description
+
+## Verification Results
+- Build: PASS|FAIL (exact command run)
+
+## Claims
+- [ ] Specific verifiable statement
+
+## Gaps and Assumptions
+- anything you are NOT confident about
+```
+
+RULES:
+- You are one of several parallel builder agents -- ONLY implement your assigned files
+- Do NOT modify {spec_file}, CLAUDE.md, or {tasks_file}
+- Do NOT read files in .buildloop/logs/
+- If a verification step fails on YOUR files, fix it before moving on
+- The claims file is your handoff to the auditor -- be specific, not vague"#
+    )
+}
+
 pub fn builder_direct_prompt(
     task_id: &str,
     task_desc: &str,

@@ -333,7 +333,8 @@ pub(super) async fn run_headless(project_dir: &Path, output_format: Option<Strin
                 | LoopEvent::ShipStarted
                 | LoopEvent::ShipDone
                 | LoopEvent::DualBuildStarted { .. }
-                | LoopEvent::DualBuildStreamDone(_, _) => {}
+                | LoopEvent::DualBuildStreamDone(_, _)
+                | LoopEvent::ParallelBuilderProgress { .. } => {}
                 LoopEvent::PrApproved(pr_num) => {
                     eprintln!("[log] PR #{} approved -- resuming pipeline", pr_num);
                 }

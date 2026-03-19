@@ -148,6 +148,12 @@ pub(super) fn render_header(frame: &mut Frame, area: Rect, state: &AppState) {
         String::new()
     };
 
+    let agent_line = if let Some((total, done)) = state.parallel_builder_progress {
+        format!("{} [parallel: {}/{}]", agent_line, done, total)
+    } else {
+        agent_line
+    };
+
     let brand = if state.project_name.is_empty() {
         "  FOUNDRY ".to_string()
     } else {

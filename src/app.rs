@@ -952,6 +952,14 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
             LoopEvent::ShipDone => {
                 state.ship_active = false;
             }
+            LoopEvent::ParallelBuilderProgress { total, done } => {
+                state.parallel_builder_progress = if done >= total {
+                    None // Clear when all done
+                } else {
+                    Some((total, done))
+                };
+                state.log(format!("Parallel builder: {}/{} slots complete", done, total));
+            }
             LoopEvent::PrPollChecked => {
                 state.pr_poll_last_check = Some(std::time::Instant::now());
             }

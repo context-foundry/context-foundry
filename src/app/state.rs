@@ -346,6 +346,7 @@ pub struct AppState {
     pub active_pattern_keywords: HashMap<String, Vec<String>>,
     pub tui_theme: TuiTheme,
     pub ship_active: bool,
+    pub parallel_builder_progress: Option<(usize, usize)>, // (total, done) when parallel builder active
     pub(super) pending_transition: Option<PendingTransition>,
     pub(super) tasks_file_lock: Arc<Mutex<()>>,
     /// Shared cost counter (millicents) — written by TUI event handler, read by build loop.
@@ -432,6 +433,7 @@ impl AppState {
             active_pattern_keywords: HashMap::new(),
             tui_theme: TuiTheme::default(),
             ship_active: false,
+            parallel_builder_progress: None,
             pending_transition: None,
             tasks_file_lock: Arc::new(Mutex::new(())),
             session_cost_millicents: Arc::new(std::sync::atomic::AtomicU64::new(0)),
@@ -564,5 +566,9 @@ pub(super) enum LoopEvent {
     PrPollChecked,
     ShipStarted,
     ShipDone,
+    ParallelBuilderProgress {
+        total: usize,
+        done: usize,
+    },
     Finished,
 }
