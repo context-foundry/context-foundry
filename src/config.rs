@@ -7,6 +7,10 @@ fn default_true() -> bool {
     true
 }
 
+fn default_archive_keep() -> usize {
+    3
+}
+
 #[derive(Debug, Clone, Deserialize, Default)]
 #[serde(default)]
 pub struct StudioThemeConfig {
@@ -204,6 +208,18 @@ pub struct Config {
     /// 0.0 (default) means no limit.
     pub cost_limit: f64,
 
+    /// Auto-archive completed phases in TASKS.md to TASKS-ARCHIVE.md.
+    #[serde(default = "default_true")]
+    pub auto_archive_tasks: bool,
+
+    /// Number of completed tasks to keep at the start of each archived phase.
+    #[serde(default = "default_archive_keep")]
+    pub archive_keep_first: usize,
+
+    /// Number of completed tasks to keep at the end of each archived phase.
+    #[serde(default = "default_archive_keep")]
+    pub archive_keep_last: usize,
+
     /// Multi-pass review threshold: when changed file count exceeds this,
     /// split review into per-file passes plus an integration pass.
     /// 0 disables multi-pass (always single-pass review).
@@ -293,6 +309,9 @@ impl Default for Config {
             truecolor: None,
             build_command: None,
             cost_limit: 0.0,
+            auto_archive_tasks: true,
+            archive_keep_first: 3,
+            archive_keep_last: 3,
             review_multipass_threshold: 8,
             confidence_threshold: 0.5,
             parallel_builder: false,

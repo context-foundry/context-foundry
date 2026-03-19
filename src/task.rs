@@ -213,6 +213,145 @@ pub fn highest_discovery_round(plan_path: &Path) -> usize {
     max_round
 }
 
+/// Archive completed phases from TASKS.md to TASKS-ARCHIVE.md.
+/// For each phase where all tasks are `[x]`, keep the first `keep_first` and
+/// last `keep_last` tasks in TASKS.md and move the rest to the archive.
+/// Returns the number of tasks archived.
+pub fn archive_completed_phases(
+    tasks_path: &Path,
+    keep_first: usize,
+    keep_last: usize,
+) -> Result<usize> {
+    let content = fs::read_to_string(tasks_path)?;
+    let lines: Vec<&str> = content.lines().collect();
+
+    // Parse into phases: (header_line_idx, Vec<task_line_idx>)
+    let mut phases: Vec<(usize, Vec<usize>)> = Vec::new();
+    let mut current_phase: Option<(usize, Vec<usize>)> = None;
+
+    for (i, line) in lines.iter().enumerate() {
+        if line.starts_with("## ") {
+            if let Some(phase) = current_phase.take() {
+                phases.push(phase);
+            }
+            current_phase = Some((i, Vec::new()));
+        } else if let Some(ref mut phase) = current_phase {
+            let trimmed = line.trim_start();
+            if trimmed.starts_with("- [x] ") || trimmed.starts_with("- [ ] ") {
+                phase.1.push(i);
+            }
+        }
+    }
+    if let Some(phase) = current_phase {
+        phases.push(phase);
+    }
+
+    // Identify phases eligible for archiving:
+    // - All tasks are [x] (no pending)
+    // - More tasks than keep_first + keep_last (otherwise nothing to archive)
+    let keep_total = keep_first + keep_last;
+    let mut lines_to_archive: Vec<usize> = Vec::new();
+    let mut archive_annotations: Vec<(usize, usize, usize)> = Vec::new(); // (header_idx, archived_count, retained_count)
+
+    for (header_idx, task_indices) in &phases {
+        if task_indices.is_empty() {
+            continue;
+        }
+        // Check all tasks are completed
+        let all_completed = task_indices
+            .iter()
+            .all(|&i| lines[i].trim_start().starts_with("- [x] "));
+        if !all_completed {
+            continue;
+        }
+        if task_indices.len() <= keep_total {
+            continue;
+        }
+        // Archive the middle: skip first keep_first and last keep_last
+        let archive_start = keep_first;
+        let archive_end = task_indices.len() - keep_last;
+        for &idx in &task_indices[archive_start..archive_end] {
+            lines_to_archive.push(idx);
+        }
+        let archived_count = archive_end - archive_start;
+        let retained_count = task_indices.len() - archived_count;
+        archive_annotations.push((*header_idx, archived_count, retained_count));
+    }
+
+    if lines_to_archive.is_empty() {
+        return Ok(0);
+    }
+
+    let total_archived = lines_to_archive.len();
+
+    // Build archive content
+    let archive_path = tasks_path.with_file_name("TASKS-ARCHIVE.md");
+    let mut archive_content = if archive_path.exists() {
+        fs::read_to_string(&archive_path).unwrap_or_default()
+    } else {
+        "# Archived Tasks\n\n".to_string()
+    };
+
+    // Group archived lines by their phase header for readable archive output
+    let mut current_header: Option<String> = None;
+    for &line_idx in &lines_to_archive {
+        // Find the phase header for this line
+        let header = phases
+            .iter()
+            .filter(|(h, _)| *h < line_idx)
+            .next_back()
+            .map(|(h, _)| lines[*h]);
+        if let Some(h) = header {
+            if current_header.as_deref() != Some(h) {
+                archive_content.push_str(&format!("\n{}\n\n", h));
+                current_header = Some(h.to_string());
+            }
+        }
+        archive_content.push_str(lines[line_idx]);
+        archive_content.push('\n');
+    }
+
+    // Write archive
+    atomic_write_file(&archive_path, archive_content.as_bytes())?;
+
+    // Rebuild TASKS.md without archived lines, adding annotation to headers
+    let archived_set: std::collections::HashSet<usize> = lines_to_archive.into_iter().collect();
+    let mut new_lines: Vec<String> = Vec::new();
+
+    for (i, line) in lines.iter().enumerate() {
+        if archived_set.contains(&i) {
+            // Check if this is the first archived line in its phase -- insert marker
+            let is_first_in_phase = !archived_set.contains(&(i.saturating_sub(1)))
+                || i == 0;
+            if is_first_in_phase {
+                let count = archived_set.iter().filter(|&&idx| {
+                    // Count archived lines in the same phase
+                    let phase = phases.iter().find(|(_, tasks)| tasks.contains(&idx));
+                    let this_phase = phases.iter().find(|(_, tasks)| tasks.contains(&i));
+                    phase.map(|p| p.0) == this_phase.map(|p| p.0)
+                }).count();
+                new_lines.push(format!("  ... ({} tasks archived to TASKS-ARCHIVE.md)", count));
+            }
+            continue;
+        }
+        // Annotate phase headers with archive counts
+        if let Some(&(_, archived, retained)) = archive_annotations
+            .iter()
+            .find(|(h, _, _)| *h == i)
+        {
+            let header = line.to_string();
+            new_lines.push(format!("{} ({} archived, {} retained)", header, archived, retained));
+        } else {
+            new_lines.push(line.to_string());
+        }
+    }
+
+    let new_content = new_lines.join("\n") + "\n";
+    atomic_write_file(tasks_path, new_content.as_bytes())?;
+
+    Ok(total_archived)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

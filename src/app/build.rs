@@ -1113,6 +1113,30 @@ fn emit_extension_injections(
 pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEvent>) {
     ctx.ensure_runtime_dirs();
 
+    // ─── Archive completed phases ─────────────────────────────────
+    if ctx.config.auto_archive_tasks {
+        let tasks_path = ctx.project_dir.join(ctx.tasks_file_name());
+        match crate::task::archive_completed_phases(
+            &tasks_path,
+            ctx.config.archive_keep_first,
+            ctx.config.archive_keep_last,
+        ) {
+            Ok(0) => {}
+            Ok(n) => {
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                    "Archived {} completed tasks to TASKS-ARCHIVE.md",
+                    n
+                ))));
+            }
+            Err(e) => {
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                    "Warning: task archiving failed: {}",
+                    e
+                ))));
+            }
+        }
+    }
+
     // ─── Observatory Session ─────────────────────────────────────
     let session_id = observatory::generate_session_id();
     let mut ctx = ctx;
