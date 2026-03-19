@@ -1006,6 +1006,7 @@ RULES:
     )
 }
 
+#[allow(dead_code)]
 pub fn fixer_prompt(
     task_id: &str,
     task_desc: &str,

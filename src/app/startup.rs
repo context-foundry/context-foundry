@@ -399,12 +399,10 @@ pub(super) fn handle_startup_key(state: &mut AppState, key: event::KeyEvent) {
                 if let Some(ref mut s) = state.startup {
                     s.status_message = Some(label);
                 }
-            } else {
-                if let Some(ref mut s) = state.startup {
-                    s.status_message = Some(
-                        "Dual-build requires builder_models with 2+ entries in .foundry.json".into(),
-                    );
-                }
+            } else if let Some(ref mut s) = state.startup {
+                s.status_message = Some(
+                    "Dual-build requires builder_models with 2+ entries in .foundry.json".into(),
+                );
             }
         }
         KeyCode::Char('t') if key.modifiers.contains(KeyModifiers::CONTROL) => {

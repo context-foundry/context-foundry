@@ -10,6 +10,7 @@ use crate::config::Config;
 use super::contract::ContractPaths;
 
 #[derive(Debug, Clone, Serialize)]
+#[allow(dead_code)]
 pub enum FailureType {
     Timeout,
     Crash,
@@ -20,6 +21,7 @@ pub enum FailureType {
 }
 
 impl FailureType {
+    #[allow(dead_code)]
     pub fn from_exit_kind(kind: &AgentExitKind) -> Self {
         match kind {
             AgentExitKind::TimedOut => FailureType::Timeout,
@@ -64,6 +66,7 @@ impl StageResult {
         }
     }
 
+    #[allow(dead_code)]
     pub fn with_partial_results(mut self, results: Vec<String>) -> Self {
         self.partial_results = results;
         self

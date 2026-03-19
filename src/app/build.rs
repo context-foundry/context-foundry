@@ -345,6 +345,7 @@ async fn adaptive_sleep(config: &Config, rate_limited: bool, full_secs: u64) {
 /// Run two complete SPID pipelines in parallel, each in its own git worktree.
 /// Each pipeline runs Scout, Plan, Implement, and Doubt independently.
 /// The human evaluates both results -- no automated winner selection.
+#[allow(clippy::too_many_arguments)]
 fn run_dual_pipelines<'a>(
     task_info: &'a Task,
     ctx: &'a RunContext,
@@ -519,9 +520,9 @@ fn run_dual_pipelines<'a>(
     let any_success = result0.0 || result1.0;
     let any_rate_limited = result0.1 || result1.1;
 
-    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-        "Both pipelines complete. Results in .buildloop/arena/ -- evaluate and merge manually."
-    ))));
+    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+        "Both pipelines complete. Results in .buildloop/arena/ -- evaluate and merge manually.".to_string()
+    )));
 
     // Do NOT clean up worktrees -- human evaluates results
 
