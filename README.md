@@ -66,7 +66,7 @@ The TUI shows these indicators in the task queue with color coding, and they sur
 
 **Why a fresh context matters.** The verify agent runs in a completely separate Claude session with no shared history from the builder. This is intentional. A model that just wrote the code retains its reasoning context and is less likely to question its own decisions. An independent instance -- given only the claims and the code -- catches bugs the author is blind to. This is the same multi-instance review architecture described in Anthropic's [Claude Certified Architect](https://www.anthropic.com/certifications) program as a production best practice for reliable AI-generated code.
 
-**Long-term: pattern learning.** After each validated task, a pattern extractor agent scans the build artifacts, review findings, and plan to extract reusable lessons (e.g., "CFrame not Position for moving Roblox parts" or "always validate UTF-8 boundaries before string slicing"). These get saved as structured JSON to `~/.foundry/patterns/`. On the next task — in any project — matched patterns are injected into the planner and reviewer prompts as reference data. Patterns that recur 3+ times get auto-promoted, meaning they're always included. This is how the system gets better over time: a mistake made once becomes a check applied everywhere.
+**Long-term: pattern learning.** After each validated task, a pattern extractor agent scans the build artifacts, review findings, and plan to extract reusable lessons (e.g., "CFrame not Position for moving Roblox parts" or "always validate UTF-8 boundaries before string slicing"). These get saved as structured JSON to `~/.foundry/patterns/`. On the next task — in any project — matched patterns are injected into the planner and reviewer prompts as reference data. Patterns that recur 3+ times get auto-promoted (`auto_apply`), meaning they're scored higher when they match -- but they still require at least one keyword or tech_stack overlap with the task to be included. This is how the system gets better over time: a mistake made once becomes a check applied everywhere.
 
 ### Run modes
 
@@ -111,6 +111,47 @@ Matched patterns are formatted and injected into the planner and reviewer agent 
 | **Applied** | Stats row | Injected patterns whose keywords appeared in agent output (the agent likely used the advice) |
 
 All three counters are **session-scoped** -- they reset when foundry starts and accumulate across tasks. The same pattern can be injected multiple times (once per task it matches).
+
+### Semantic matching with Ollama
+
+Keyword matching works well when patterns and tasks share obvious terms, but it misses semantic connections. A task like "build a korg 808 emulator" should match audio/DSP design patterns, but it won't if the pattern's keywords are "oscillator," "waveform," or "sample rate" -- none of those words appear in the task description. Rigid keyword matching can only find what it's been told to look for; it can't generalize.
+
+When Ollama is running locally, foundry uses embedding-based semantic matching to close this gap. Task descriptions and pattern texts are converted to vector embeddings via a local model, and cosine similarity identifies patterns that are conceptually related even when they share zero keywords. The semantic scores are used as a reranking boost on top of keyword scores -- keyword matching is always the baseline, and semantic matching augments it.
+
+**Setup:**
+
+1. Install [Ollama](https://ollama.ai)
+2. Pull the embedding model:
+   ```bash
+   ollama pull nomic-embed-text
+   ```
+3. Start Ollama (or let it run as a background service)
+
+That's it. Foundry detects Ollama automatically on startup. No configuration is required for the default setup.
+
+**Model choice:** `nomic-embed-text` is a 137M parameter embedding model (~274 MB). It's small enough to run on any machine alongside foundry without noticeable resource impact, and its embedding quality is sufficient for pattern-to-task matching. This is not a chat model -- it only produces vector embeddings for similarity comparison.
+
+**Configuration** (all optional, in `.foundry.json`):
+
+```json
+{
+  "semantic_match_enabled": true,
+  "embedding_model": "nomic-embed-text",
+  "ollama_url": "http://127.0.0.1:11435",
+  "embedding_timeout_ms": 2000
+}
+```
+
+| Field | Default | Purpose |
+|-------|---------|---------|
+| `semantic_match_enabled` | `true` | Set to `false` to disable semantic matching entirely |
+| `embedding_model` | `"nomic-embed-text"` | Ollama model name for embeddings |
+| `ollama_url` | `"http://127.0.0.1:11435"` | Ollama API endpoint |
+| `embedding_timeout_ms` | `2000` | Timeout per embedding request (ms) |
+
+**Graceful degradation:** If Ollama is not running, the model isn't pulled, or a request fails, foundry falls back to keyword-only matching with no user intervention. A circuit breaker suppresses retries for 60 seconds after a failure, so a down Ollama instance doesn't add latency to every task. The TUI logs which matching mode was used (`semantic`, `keyword-only`, or `cooldown`).
+
+**Embedding cache:** Pattern embeddings are cached at `~/.foundry/cache/pattern-embeddings.json`. The cache is keyed by a blake3 hash of each pattern's content, so it auto-invalidates when patterns change. On a warm cache, semantic matching adds no Ollama calls for patterns -- only the task description needs embedding.
 
 ### Pattern scope
 
@@ -309,9 +350,9 @@ Extensions and patterns both inject knowledge into agent prompts, but they serve
 | **What** | Domain knowledge packages (CLAUDE.md + optional patterns) | Individual issue/solution pairs |
 | **Created by** | Humans only -- foundry never writes extensions | Foundry's pattern extractor agent after each task |
 | **Selection** | Manual -- user picks on startup screen | Automatic -- keyword/semantic matching per task |
-| **Injection** | CLAUDE.md prepended verbatim to every agent prompt | Matched patterns injected into planner/reviewer only |
+| **Injection** | CLAUDE.md prepended verbatim to builder and reviewer prompts | Matched patterns injected into planner/reviewer only |
 | **Scope** | Per-project (user selects which apply) | Global (all patterns match against all tasks) |
-| **Always on** | Yes -- if selected, every agent gets the full content regardless of task | No -- only patterns whose keywords match the task |
+| **Always on** | Yes -- if selected, builder and reviewer get the full content regardless of task | No -- only patterns whose keywords match the task |
 
 Extensions can carry their own patterns (shown as `(3p)` in the TUI). These extension patterns are merged into the global pattern pool and go through the same keyword matching as regular patterns. So an extension bundles two things: mandatory domain rules (CLAUDE.md) that are always injected, and optional domain-specific patterns (JSON) that are selectively matched.
 
@@ -328,7 +369,7 @@ On the startup screen, foundry shows a checkbox panel listing all discovered ext
 └──────────────────────────────────────────────────┘
 ```
 
-Selected extensions are **programmatically injected** into every agent's prompt -- the scout, planner, builder, and reviewer all receive the extension's CLAUDE.md and patterns as prepended context. This is deterministic enforcement, not a suggestion the agent may or may not follow. The extension context is a contract that the pipeline guarantees.
+Selected extensions are **programmatically injected** into the builder and reviewer prompts as prepended context. Scout and planner skip extension injection to save tokens -- they investigate and plan without domain-specific rules, while the agents that write and audit code get the full extension context. This is deterministic enforcement, not a suggestion the agent may or may not follow.
 
 The status bar shows active extensions at all times: `Extensions: flowise (1 active)` or `Extensions: none`.
 
