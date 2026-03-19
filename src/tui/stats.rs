@@ -171,20 +171,22 @@ pub(super) fn render_dashboard_stats(frame: &mut Frame, area: Rect, state: &AppS
         theme.text
     };
 
+    let patterns_left = format!(
+        "{} inj, {} applied  feat: {}  WIP: {}",
+        state.pattern_inject_count, state.pattern_apply_count,
+        state.session_feat_commits, state.session_wip_commits,
+    );
     lines.push(Line::from(vec![
         Span::styled("  Patterns ", Style::default().fg(theme.info)),
-        Span::styled(format!("{} inj, {} applied", state.pattern_inject_count, state.pattern_apply_count), Style::default().fg(theme.text)),
-        Span::styled("  feat: ", Style::default().fg(theme.muted)),
-        Span::styled(format!("{}", state.session_feat_commits), Style::default().fg(theme.success)),
-        Span::styled("  WIP: ", Style::default().fg(theme.muted)),
-        Span::styled(format!("{}", state.session_wip_commits), Style::default().fg(theme.warning)),
-        Span::styled("  Ollama: ", Style::default().fg(theme.muted)),
-        Span::styled(format!("{:<width$}", ollama_label, width = half_width.saturating_sub(34)), Style::default().fg(ollama_color)),
+        Span::styled(format!("{:<width$}", patterns_left, width = half_width.saturating_sub(11)), Style::default().fg(theme.text)),
         Span::styled("Cost      ", Style::default().fg(theme.info)),
         Span::styled(&cost_str, Style::default().fg(cost_color)),
     ]));
+
+    let ollama_left = format!("Ollama: {}", ollama_label);
     lines.push(Line::from(vec![
-        Span::styled(format!("{:<width$}", "", width = half_width), Style::default()),
+        Span::styled("  ", Style::default()),
+        Span::styled(format!("{:<width$}", ollama_left, width = half_width.saturating_sub(2)), Style::default().fg(ollama_color)),
         Span::styled("Timing    ", Style::default().fg(theme.info)),
         Span::styled("session: ", Style::default().fg(theme.muted)),
         Span::styled(&session_str, Style::default().fg(theme.text)),
