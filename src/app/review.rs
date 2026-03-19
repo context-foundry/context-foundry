@@ -231,6 +231,19 @@ pub(super) async fn run_review_loop(
         ))));
     }
 
+    let (conf_count, conf_total) = count_confidence_coverage(&ctx.review_report);
+    if conf_total > 0 {
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+            "Confidence: {}/{} findings have confidence scores",
+            conf_count, conf_total
+        ))));
+    }
+
+    let low_conf_warnings = log_low_confidence_findings(&ctx.review_report, ctx.config.confidence_threshold);
+    for warning in &low_conf_warnings {
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(warning.clone())));
+    }
+
     let passed = verdict_pass || (high == 0 && medium == 0);
 
     if passed {
@@ -463,6 +476,19 @@ async fn run_multipass_review(
         ))));
     }
 
+    let (conf_count, conf_total) = count_confidence_coverage(&ctx.review_report);
+    if conf_total > 0 {
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+            "Confidence: {}/{} findings have confidence scores",
+            conf_count, conf_total
+        ))));
+    }
+
+    let low_conf_warnings = log_low_confidence_findings(&ctx.review_report, ctx.config.confidence_threshold);
+    for warning in &low_conf_warnings {
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(warning.clone())));
+    }
+
     let passed = verdict_pass || (high == 0 && medium == 0);
 
     if passed {
@@ -681,6 +707,93 @@ fn count_provenance_coverage(report_path: &Path) -> (usize, usize) {
     }
 
     (with_provenance, total)
+}
+
+/// Parse findings from review report and return log messages for findings
+/// below the confidence threshold.
+fn log_low_confidence_findings(report_path: &Path, threshold: f64) -> Vec<String> {
+    let content = match std::fs::read_to_string(report_path) {
+        Ok(c) => c,
+        Err(_) => return Vec::new(),
+    };
+
+    let json_str = extract_json_from_report(&content);
+    if json_str.is_empty() {
+        return Vec::new();
+    }
+
+    let v: serde_json::Value = match serde_json::from_str(&json_str) {
+        Ok(v) => v,
+        Err(_) => return Vec::new(),
+    };
+
+    let mut warnings: Vec<String> = Vec::new();
+
+    for key in &["high", "medium", "low"] {
+        if let Some(arr) = v.get(*key).and_then(|a| a.as_array()) {
+            for finding in arr {
+                let confidence = finding
+                    .get("confidence")
+                    .and_then(|c| c.as_f64())
+                    .unwrap_or(1.0);
+                if confidence < threshold {
+                    let file = finding
+                        .get("file")
+                        .and_then(|f| f.as_str())
+                        .unwrap_or("unknown");
+                    let line = finding
+                        .get("line")
+                        .and_then(|l| l.as_u64())
+                        .unwrap_or(0);
+                    warnings.push(format!(
+                        "Low-confidence finding in {}:{} -- consider manual review (confidence: {:.2})",
+                        file, line, confidence
+                    ));
+                }
+            }
+        }
+    }
+
+    warnings
+}
+
+/// Count how many findings have a confidence field populated.
+/// Returns (with_confidence, total_findings).
+fn count_confidence_coverage(report_path: &Path) -> (usize, usize) {
+    let content = match std::fs::read_to_string(report_path) {
+        Ok(c) => c,
+        Err(_) => return (0, 0),
+    };
+
+    let json_str = extract_json_from_report(&content);
+    if json_str.is_empty() {
+        return (0, 0);
+    }
+
+    let v: serde_json::Value = match serde_json::from_str(&json_str) {
+        Ok(v) => v,
+        Err(_) => return (0, 0),
+    };
+
+    let mut with_confidence = 0usize;
+    let mut total = 0usize;
+
+    for key in &["high", "medium", "low"] {
+        if let Some(arr) = v.get(*key).and_then(|a| a.as_array()) {
+            for finding in arr {
+                total += 1;
+                if finding
+                    .get("confidence")
+                    .and_then(|c| c.as_f64())
+                    .is_some()
+                {
+                    with_confidence += 1;
+                }
+            }
+        }
+    }
+
+    (with_confidence, total)
 }
 
 fn parse_audit_findings(report_path: &Path) -> (usize, usize, usize) {
@@ -935,5 +1048,89 @@ mod tests {
         assert_eq!(total, 1);
 
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn log_low_confidence_findings_returns_warnings_below_threshold() {
+        let dir = temp_dir("foundry-review-confidence");
+        let report = dir.join("report.md");
+        std::fs::write(&report, r#"# Report
+```json
+{
+  "high": [
+    {"file": "a.rs", "line": 10, "issue": "real bug", "fixed": true, "category": "logic", "source_evidence": {"snippet": "x", "line_range": [10, 10], "reasoning": "r"}, "confidence": 0.95},
+    {"file": "b.rs", "line": 20, "issue": "maybe bug", "fixed": true, "category": "logic", "source_evidence": {"snippet": "y", "line_range": [20, 20], "reasoning": "r"}, "confidence": 0.3}
+  ],
+  "medium": [
+    {"file": "c.rs", "line": 30, "issue": "uncertain", "fixed": true, "category": "error-handling", "source_evidence": {"snippet": "z", "line_range": [30, 30], "reasoning": "r"}, "confidence": 0.45}
+  ],
+  "low": []
+}
+```
+"#).expect("failed to write report");
+
+        let warnings = super::log_low_confidence_findings(&report, 0.5);
+        assert_eq!(warnings.len(), 2, "should have 2 low-confidence findings below 0.5");
+        assert!(warnings[0].contains("b.rs:20"), "first warning should mention b.rs:20");
+        assert!(warnings[1].contains("c.rs:30"), "second warning should mention c.rs:30");
+        assert!(warnings[0].contains("consider manual review"), "warning should suggest manual review");
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn log_low_confidence_findings_treats_missing_confidence_as_high() {
+        let dir = temp_dir("foundry-review-confidence-missing");
+        let report = dir.join("report.md");
+        std::fs::write(&report, r#"# Report
+```json
+{
+  "high": [
+    {"file": "a.rs", "line": 10, "issue": "bug", "fixed": true, "category": "logic"}
+  ],
+  "medium": [],
+  "low": []
+}
+```
+"#).expect("failed to write report");
+
+        let warnings = super::log_low_confidence_findings(&report, 0.5);
+        assert!(warnings.is_empty(), "findings without confidence field should default to 1.0 (high confidence)");
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn count_confidence_coverage_counts_findings_with_confidence() {
+        let dir = temp_dir("foundry-review-confidence-coverage");
+        let report = dir.join("report.md");
+        std::fs::write(&report, r#"# Report
+```json
+{
+  "high": [
+    {"file": "a.rs", "line": 1, "issue": "bug", "fixed": true, "category": "logic", "confidence": 0.9},
+    {"file": "b.rs", "line": 2, "issue": "bug2", "fixed": true, "category": "logic"}
+  ],
+  "medium": [],
+  "low": [
+    {"file": "c.rs", "line": 3, "issue": "style", "category": "style", "confidence": 0.4}
+  ]
+}
+```
+"#).expect("failed to write report");
+
+        let (with_conf, total) = super::count_confidence_coverage(&report);
+        assert_eq!(with_conf, 2, "two findings have confidence scores");
+        assert_eq!(total, 3, "three total findings");
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn count_confidence_coverage_returns_zero_for_missing_file() {
+        let path = std::path::PathBuf::from("/tmp/nonexistent-confidence-test.md");
+        let (with_conf, total) = super::count_confidence_coverage(&path);
+        assert_eq!(with_conf, 0);
+        assert_eq!(total, 0);
     }
 }

@@ -192,6 +192,11 @@ pub struct Config {
     /// split review into per-file passes plus an integration pass.
     /// 0 disables multi-pass (always single-pass review).
     pub review_multipass_threshold: usize,
+
+    /// Confidence threshold for reviewer findings. Findings with confidence
+    /// below this value are logged as warnings but not auto-fixed.
+    /// Range 0.0-1.0, default 0.5.
+    pub confidence_threshold: f64,
 }
 
 impl Default for Config {
@@ -261,6 +266,7 @@ impl Default for Config {
             build_command: None,
             cost_limit: 0.0,
             review_multipass_threshold: 8,
+            confidence_threshold: 0.5,
         }
     }
 }

@@ -634,13 +634,13 @@ For each claim from build-claims.md:
 ```json
 {{
   "high": [
-    {{"file": "path/to/file", "line": 42, "issue": "Description", "fixed": true, "category": "security|logic|race|crash", "source_evidence": {{"snippet": "the exact code line(s) that triggered this finding", "line_range": [40, 45], "reasoning": "One-line chain: what the code does -> why it is wrong -> what the consequence is"}}}}
+    {{"file": "path/to/file", "line": 42, "issue": "Description", "fixed": true, "category": "security|logic|race|crash", "source_evidence": {{"snippet": "the exact code line(s) that triggered this finding", "line_range": [40, 45], "reasoning": "One-line chain: what the code does -> why it is wrong -> what the consequence is"}}, "confidence": 0.85}}
   ],
   "medium": [
-    {{"file": "path/to/file", "line": 10, "issue": "Description", "fixed": true, "category": "error-handling|api-contract|resource-leak", "source_evidence": {{"snippet": "the exact code line(s) that triggered this finding", "line_range": [8, 13], "reasoning": "One-line chain: what the code does -> why it is wrong -> what the consequence is"}}}}
+    {{"file": "path/to/file", "line": 10, "issue": "Description", "fixed": true, "category": "error-handling|api-contract|resource-leak", "source_evidence": {{"snippet": "the exact code line(s) that triggered this finding", "line_range": [8, 13], "reasoning": "One-line chain: what the code does -> why it is wrong -> what the consequence is"}}, "confidence": 0.85}}
   ],
   "low": [
-    {{"file": "path/to/file", "line": 5, "issue": "Description", "category": "style|hardcoded|inconsistency", "source_evidence": {{"snippet": "the exact code line(s) that triggered this finding", "line_range": [3, 7], "reasoning": "One-line chain: what the code does -> why it is wrong -> what the consequence is"}}}}
+    {{"file": "path/to/file", "line": 5, "issue": "Description", "category": "style|hardcoded|inconsistency", "source_evidence": {{"snippet": "the exact code line(s) that triggered this finding", "line_range": [3, 7], "reasoning": "One-line chain: what the code does -> why it is wrong -> what the consequence is"}}, "confidence": 0.85}}
   ]
 }}
 ```
@@ -650,6 +650,16 @@ PROVENANCE RULES (source_evidence):
 - snippet: copy the exact source line(s) that triggered the finding (1-5 lines max, verbatim from the file)
 - line_range: [start_line, end_line] of the code region you analyzed to reach this conclusion
 - reasoning: a single sentence in the form "X does Y, which causes Z" -- no filler words
+
+CONFIDENCE SCORING:
+- EVERY finding MUST include a "confidence" field: a float from 0.0 to 1.0
+- 1.0 = certain this is a real bug with the described impact
+- 0.8+ = high confidence, strong evidence in the code
+- 0.5-0.8 = moderate confidence, likely an issue but could be intentional
+- <0.5 = low confidence, might be a false positive or context-dependent
+- Base your confidence on: how clear the evidence is, whether you can trace the bug to a concrete failure, and whether the surrounding code suggests intentional behavior
+- Findings below the project's confidence threshold will be logged for manual review instead of auto-fixed
+- When in doubt, assign lower confidence -- it is better to flag for human review than to fix a false positive
 
 VERDICT RULES:
 - PASS if: all runtime checks pass AND all high/medium issues were fixed and verified
@@ -755,13 +765,13 @@ WRITE YOUR FINDINGS to .buildloop/review-report.md in this format:
 ```json
 {{
   "high": [
-    {{"file": "{file_path}", "line": 42, "issue": "Description", "fixed": false, "category": "security|logic|crash", "source_evidence": {{"snippet": "the exact code line(s) that triggered this finding", "line_range": [40, 45], "reasoning": "One-line chain: what the code does -> why it is wrong -> what the consequence is"}}}}
+    {{"file": "{file_path}", "line": 42, "issue": "Description", "fixed": false, "category": "security|logic|crash", "source_evidence": {{"snippet": "the exact code line(s) that triggered this finding", "line_range": [40, 45], "reasoning": "One-line chain: what the code does -> why it is wrong -> what the consequence is"}}, "confidence": 0.85}}
   ],
   "medium": [
-    {{"file": "{file_path}", "line": 10, "issue": "Description", "fixed": false, "category": "error-handling|resource-leak", "source_evidence": {{"snippet": "the exact code line(s) that triggered this finding", "line_range": [8, 13], "reasoning": "One-line chain: what the code does -> why it is wrong -> what the consequence is"}}}}
+    {{"file": "{file_path}", "line": 10, "issue": "Description", "fixed": false, "category": "error-handling|resource-leak", "source_evidence": {{"snippet": "the exact code line(s) that triggered this finding", "line_range": [8, 13], "reasoning": "One-line chain: what the code does -> why it is wrong -> what the consequence is"}}, "confidence": 0.85}}
   ],
   "low": [
-    {{"file": "{file_path}", "line": 5, "issue": "Description", "fixed": false, "category": "style|inconsistency", "source_evidence": {{"snippet": "the exact code line(s) that triggered this finding", "line_range": [3, 7], "reasoning": "One-line chain: what the code does -> why it is wrong -> what the consequence is"}}}}
+    {{"file": "{file_path}", "line": 5, "issue": "Description", "fixed": false, "category": "style|inconsistency", "source_evidence": {{"snippet": "the exact code line(s) that triggered this finding", "line_range": [3, 7], "reasoning": "One-line chain: what the code does -> why it is wrong -> what the consequence is"}}, "confidence": 0.85}}
   ]
 }}
 ```
@@ -771,6 +781,16 @@ PROVENANCE RULES (source_evidence):
 - snippet: copy the exact source line(s) that triggered the finding (1-5 lines max, verbatim from the file)
 - line_range: [start_line, end_line] of the code region you analyzed to reach this conclusion
 - reasoning: a single sentence in the form "X does Y, which causes Z" -- no filler words
+
+CONFIDENCE SCORING:
+- EVERY finding MUST include a "confidence" field: a float from 0.0 to 1.0
+- 1.0 = certain this is a real bug with the described impact
+- 0.8+ = high confidence, strong evidence in the code
+- 0.5-0.8 = moderate confidence, likely an issue but could be intentional
+- <0.5 = low confidence, might be a false positive or context-dependent
+- Base your confidence on: how clear the evidence is, whether you can trace the bug to a concrete failure, and whether the surrounding code suggests intentional behavior
+- Findings below the project's confidence threshold will be logged for manual review instead of auto-fixed
+- When in doubt, assign lower confidence -- it is better to flag for human review than to fix a false positive
 
 Set "fixed" to false for all findings -- you are read-only and must NOT modify any code files.
 
@@ -945,13 +965,13 @@ For each claim from build-claims.md:
 ```json
 {{
   "high": [
-    {{"file": "path/to/file", "line": 42, "issue": "Description", "fixed": true, "category": "security|logic|race|crash", "source_evidence": {{"snippet": "the exact code line(s) that triggered this finding", "line_range": [40, 45], "reasoning": "One-line chain: what the code does -> why it is wrong -> what the consequence is"}}}}
+    {{"file": "path/to/file", "line": 42, "issue": "Description", "fixed": true, "category": "security|logic|race|crash", "source_evidence": {{"snippet": "the exact code line(s) that triggered this finding", "line_range": [40, 45], "reasoning": "One-line chain: what the code does -> why it is wrong -> what the consequence is"}}, "confidence": 0.85}}
   ],
   "medium": [
-    {{"file": "path/to/file", "line": 10, "issue": "Description", "fixed": true, "category": "error-handling|api-contract|resource-leak", "source_evidence": {{"snippet": "the exact code line(s) that triggered this finding", "line_range": [8, 13], "reasoning": "One-line chain: what the code does -> why it is wrong -> what the consequence is"}}}}
+    {{"file": "path/to/file", "line": 10, "issue": "Description", "fixed": true, "category": "error-handling|api-contract|resource-leak", "source_evidence": {{"snippet": "the exact code line(s) that triggered this finding", "line_range": [8, 13], "reasoning": "One-line chain: what the code does -> why it is wrong -> what the consequence is"}}, "confidence": 0.85}}
   ],
   "low": [
-    {{"file": "path/to/file", "line": 5, "issue": "Description", "category": "style|hardcoded|inconsistency", "source_evidence": {{"snippet": "the exact code line(s) that triggered this finding", "line_range": [3, 7], "reasoning": "One-line chain: what the code does -> why it is wrong -> what the consequence is"}}}}
+    {{"file": "path/to/file", "line": 5, "issue": "Description", "category": "style|hardcoded|inconsistency", "source_evidence": {{"snippet": "the exact code line(s) that triggered this finding", "line_range": [3, 7], "reasoning": "One-line chain: what the code does -> why it is wrong -> what the consequence is"}}, "confidence": 0.85}}
   ]
 }}
 ```
@@ -961,6 +981,16 @@ PROVENANCE RULES (source_evidence):
 - snippet: copy the exact source line(s) that triggered the finding (1-5 lines max, verbatim from the file)
 - line_range: [start_line, end_line] of the code region you analyzed to reach this conclusion
 - reasoning: a single sentence in the form "X does Y, which causes Z" -- no filler words
+
+CONFIDENCE SCORING:
+- EVERY finding MUST include a "confidence" field: a float from 0.0 to 1.0
+- 1.0 = certain this is a real bug with the described impact
+- 0.8+ = high confidence, strong evidence in the code
+- 0.5-0.8 = moderate confidence, likely an issue but could be intentional
+- <0.5 = low confidence, might be a false positive or context-dependent
+- Base your confidence on: how clear the evidence is, whether you can trace the bug to a concrete failure, and whether the surrounding code suggests intentional behavior
+- Findings below the project's confidence threshold will be logged for manual review instead of auto-fixed
+- When in doubt, assign lower confidence -- it is better to flag for human review than to fix a false positive
 
 VERDICT RULES:
 - PASS if: all runtime checks pass AND all high/medium issues were fixed and verified
@@ -1419,5 +1449,23 @@ mod tests {
         assert!(integration.contains(needle_1), "reviewer_integration_prompt missing borderline 1");
         assert!(integration.contains(needle_2), "reviewer_integration_prompt missing borderline 2");
         assert!(integration.contains(needle_3), "reviewer_integration_prompt missing borderline 3");
+    }
+
+    #[test]
+    fn test_reviewer_prompts_contain_confidence_schema() {
+        let needle = "\"confidence\":";
+        let scoring_section = "CONFIDENCE SCORING";
+
+        let main = reviewer_prompt("T1", "test", "file.rs", 1, "", None, "SPEC.md", "TASKS.md");
+        assert!(main.contains(needle), "reviewer_prompt missing confidence in schema");
+        assert!(main.contains(scoring_section), "reviewer_prompt missing CONFIDENCE SCORING section");
+
+        let per_file = reviewer_per_file_prompt("T1", "test", "src/foo.rs", "", "SPEC.md", "TASKS.md");
+        assert!(per_file.contains(needle), "reviewer_per_file_prompt missing confidence in schema");
+        assert!(per_file.contains(scoring_section), "reviewer_per_file_prompt missing CONFIDENCE SCORING section");
+
+        let integration = reviewer_integration_prompt("T1", "test", "file.rs", "{}", "", None, "SPEC.md", "TASKS.md");
+        assert!(integration.contains(needle), "reviewer_integration_prompt missing confidence in schema");
+        assert!(integration.contains(scoring_section), "reviewer_integration_prompt missing CONFIDENCE SCORING section");
     }
 }
