@@ -10,7 +10,7 @@ use crate::prompts;
 use super::context::RunContext;
 use super::{AppEvent, LoopEvent};
 
-/// Returns `(passed, fix_passes)` so the caller can persist the pipeline progress indicator.
+/// Returns `(passed, fix_passes, (high, medium, low))` so the caller can persist the pipeline progress indicator.
 pub(super) async fn run_review_loop(
     task_id: &str,
     task_desc: &str,
@@ -18,13 +18,13 @@ pub(super) async fn run_review_loop(
     pattern_context: &str,
     extension_context: &str,
     tx: &mpsc::UnboundedSender<AppEvent>,
-) -> (bool, usize) {
+) -> (bool, usize, (usize, usize, usize)) {
     let files_changed = get_changed_files(&ctx.project_dir);
     if files_changed.is_empty() {
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
             "No changed files to review".to_string(),
         )));
-        return (false, 0);
+        return (false, 0, (0, 0, 0));
     }
 
     // When diff is too large or not used, enrich the file list with
@@ -180,7 +180,7 @@ pub(super) async fn run_review_loop(
             fix_passes: 0,
             passed: false,
         }));
-        return (false, 0);
+        return (false, 0, (0, 0, 0));
     }
 
     // Detect whether the reviewer applied fixes by checking for new file changes.
@@ -210,11 +210,11 @@ pub(super) async fn run_review_loop(
             fix_passes,
             passed: false,
         }));
-        return (false, fix_passes);
+        return (false, fix_passes, (0, 0, 0));
     }
 
     let verdict_pass = check_review_passed(&ctx.review_report);
-    let (high, medium, _low) = parse_audit_findings(&ctx.review_report);
+    let (high, medium, low) = parse_audit_findings(&ctx.review_report);
 
     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
         "Review: verdict={}, {} high, {} medium findings",
@@ -262,7 +262,7 @@ pub(super) async fn run_review_loop(
         fix_passes,
         passed,
     }));
-    (passed, fix_passes)
+    (passed, fix_passes, (high, medium, low))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -276,7 +276,7 @@ async fn run_multipass_review(
     files_changed: &[String],
     files_list: &str,
     diff_for_review: Option<&str>,
-) -> (bool, usize) {
+) -> (bool, usize, (usize, usize, usize)) {
     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
         "Multi-pass review: {} files exceed threshold ({}), running per-file analysis",
         files_changed.len(),
@@ -284,7 +284,7 @@ async fn run_multipass_review(
     ))));
 
     let mut all_per_file_findings: Vec<serde_json::Value> = Vec::new();
-    let per_file_tools: &[&str] = &["Read", "Glob", "Grep", "Bash"];
+    let per_file_tools: &[&str] = &["Read", "Glob", "Grep", "Write", "Bash"];
 
     for (i, file) in files_changed.iter().enumerate() {
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
@@ -430,7 +430,7 @@ async fn run_multipass_review(
             fix_passes: 0,
             passed: false,
         }));
-        return (false, 0);
+        return (false, 0, (0, 0, 0));
     }
 
     // Detect if integration reviewer made fixes.
@@ -455,11 +455,11 @@ async fn run_multipass_review(
             fix_passes,
             passed: false,
         }));
-        return (false, fix_passes);
+        return (false, fix_passes, (0, 0, 0));
     }
 
     let verdict_pass = check_review_passed(&ctx.review_report);
-    let (high, medium, _low) = parse_audit_findings(&ctx.review_report);
+    let (high, medium, low) = parse_audit_findings(&ctx.review_report);
 
     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
         "Integration review: verdict={}, {} high, {} medium findings",
@@ -508,7 +508,7 @@ async fn run_multipass_review(
         passed,
     }));
 
-    (passed, fix_passes)
+    (passed, fix_passes, (high, medium, low))
 }
 
 fn get_diff_for_review(project_dir: &Path) -> String {
