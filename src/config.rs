@@ -144,6 +144,11 @@ pub struct Config {
     /// builder's own verification commands passed (exit code 0).
     pub skip_doubt_for_simple: bool,
 
+    /// Consecutive doubt passes required before learned doubt confidence
+    /// can skip the doubt stage for matching task shapes (Simple/Medium only).
+    /// 0 disables learned doubt confidence entirely.
+    pub doubt_confidence_threshold: usize,
+
     /// Minutes to wait before running discovery after the last H-prefixed
     /// (human-injected) task completes. Doubles (up to 30 min) when discovery
     /// finds 0 new tasks.
@@ -265,6 +270,7 @@ impl Default for Config {
             skip_planner_for_simple: true,
             skip_scout_for_simple: true,
             skip_doubt_for_simple: true,
+            doubt_confidence_threshold: 5,
             discovery_cooldown_minutes: 5,
             planner_lookahead: true,
             pattern_extraction_model: "sonnet".into(),

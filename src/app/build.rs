@@ -20,6 +20,7 @@ use std::sync::Arc;
 use super::context::{FailureType, RunContext, StageResult};
 use super::state::DualSelection;
 use super::{review, AppEvent, LoopEvent};
+use crate::doubt_confidence;
 use crate::extensions;
 use crate::utils::atomic_write_file;
 
@@ -2108,6 +2109,23 @@ async fn process_task(
         return (false, last_rate_limited);
     }
 
+    // Learned doubt confidence: check if this task shape has enough
+    // consecutive passes to skip doubt (T15.9 fine-grained filter).
+    let doubt_confidence = doubt_confidence::check_doubt_confidence(
+        task_desc,
+        task_complexity,
+        ctx.config.doubt_confidence_threshold,
+        &ctx.config.embedding_model,
+        ctx.config.embedding_timeout_ms,
+        &ctx.config.ollama_url,
+    )
+    .await;
+    if !doubt_confidence.log_message.is_empty() {
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+            doubt_confidence.log_message.clone(),
+        )));
+    }
+
     // Batch doubt: skip for all tasks except the last pending one
     let pending_count = task::count_pending(&task::parse_tasks(&ctx.plan_path).unwrap_or_default());
     let skip_for_batch = ctx.config.batch_doubt && pending_count > 1;
@@ -2119,7 +2137,8 @@ async fn process_task(
     let skip_doubt_simple = ctx.config.skip_doubt_for_simple
         && task_complexity == TaskComplexity::Simple
         && build_ok;
-    let skip_verify = skip_doubt_simple || skip_for_batch;
+    let skip_doubt_confidence = doubt_confidence.should_skip && build_ok;
+    let skip_verify = skip_doubt_simple || skip_for_batch || skip_doubt_confidence;
 
     let (validated, _fix_passes, review_findings) = if ctx.config.backpressure_only {
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
@@ -2132,10 +2151,16 @@ async fn process_task(
             pending_count
         ))));
         (true, 0usize, (0, 0, 0))
-    } else if skip_verify {
+    } else if skip_doubt_simple {
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
             "Simple task with passing build checks -- skipping doubt".to_string(),
         )));
+        (true, 0usize, (0, 0, 0))
+    } else if skip_doubt_confidence {
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+            "Learned confidence -- skipping doubt ({})",
+            doubt_confidence.log_message
+        ))));
         (true, 0usize, (0, 0, 0))
     } else {
         // ─── Gate: Reviewer Prerequisites ─────────────────────
@@ -2170,6 +2195,25 @@ async fn process_task(
             }
         }
     };
+
+    // Record doubt result for learned confidence (only when doubt actually ran)
+    if !skip_verify && !ctx.config.backpressure_only {
+        let record_task_desc = task_desc.to_string();
+        let record_model = ctx.config.embedding_model.clone();
+        let record_timeout = ctx.config.embedding_timeout_ms;
+        let record_url = ctx.config.ollama_url.clone();
+        let record_passed = validated;
+        tokio::spawn(async move {
+            doubt_confidence::record_doubt_result(
+                &record_task_desc,
+                record_passed,
+                &record_model,
+                record_timeout,
+                &record_url,
+            )
+            .await;
+        });
+    }
 
     if validated {
         let mut result =

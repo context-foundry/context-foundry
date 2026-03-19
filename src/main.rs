@@ -6,6 +6,7 @@ mod agent;
 mod app;
 mod complexity;
 mod config;
+mod doubt_confidence;
 mod embeddings;
 mod extensions;
 mod git;

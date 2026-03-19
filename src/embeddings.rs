@@ -36,7 +36,7 @@ fn now_ms() -> u64 {
         .as_millis() as u64
 }
 
-fn is_available() -> bool {
+pub fn is_available() -> bool {
     now_ms() >= state().cooldown_until_ms.load(Ordering::Relaxed)
 }
 
@@ -157,7 +157,7 @@ pub async fn embed_batch(
 
 // ─── Vector Math ─────────────────────────────────────────────
 
-fn normalize(v: &[f32]) -> Vec<f32> {
+pub fn normalize(v: &[f32]) -> Vec<f32> {
     let mag: f32 = v.iter().map(|x| x * x).sum::<f32>().sqrt();
     if mag < 1e-10 {
         return v.to_vec();
