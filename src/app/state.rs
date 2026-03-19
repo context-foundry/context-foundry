@@ -259,8 +259,8 @@ pub struct DualBuildState {
     pub tab: usize,
     pub context_pcts: [Option<u8>; 2],
     pub finished: [bool; 2],
-    pub stages: [Option<AgentRole>; 2],      // Current SPID stage per pipeline
-    pub stage_models: [String; 2],           // Model label for current stage
+    pub stages: [Option<AgentRole>; 2], // Current SPID stage per pipeline
+    pub stage_models: [String; 2],      // Model label for current stage
 }
 
 pub struct AppState {
@@ -306,7 +306,7 @@ pub struct AppState {
     pub patterns_cache: Option<Vec<crate::patterns::Pattern>>,
     pub patterns_dir_cache: Option<std::path::PathBuf>,
     pub last_pattern_match_mode: Option<String>, // "semantic", "keyword-only", "cooldown"
-    pub session_patterns: Vec<PatternEvent>, // pattern activity (learned + used) this session
+    pub session_patterns: Vec<PatternEvent>,     // pattern activity (learned + used) this session
     pub session_extensions_used: Vec<ExtensionEvent>, // extension injections this session
     pub session_feat_commits: usize,
     pub session_wip_commits: usize,
@@ -475,6 +475,14 @@ impl AppState {
             self.task_history.remove(&key);
         }
     }
+
+    pub(crate) fn dual_arena_ready(&self) -> bool {
+        self.dual_selection == DualSelection::Both
+            && self.dual_build.active
+            && self.dual_build.finished.iter().all(|done| *done)
+            && self.current_task.is_some()
+            && self.current_agent.is_none()
+    }
 }
 
 // ─── Task Pipeline History ────────────────────────────────────
@@ -507,7 +515,9 @@ pub(super) enum AppEvent {
 pub(super) enum LoopEvent {
     TaskStarted(Task),
     AgentStarted(AgentRole, String),
-    DualBuildStarted { models: [String; 2] },
+    DualBuildStarted {
+        models: [String; 2],
+    },
     DualBuildStreamDone(usize, bool),
     TaskCompleted(String, bool),
     TaskReport {
@@ -522,9 +532,18 @@ pub(super) enum LoopEvent {
     NextTaskUpdated(Option<String>),
     DiscoveryStarted(usize),
     DiscoveryCompleted(usize),
-    ExtensionInjected { name: String, agent_role: String, task_id: String },
-    PatternsUsed { titles: Vec<String>, keywords_by_title: HashMap<String, Vec<String>> },
-    ExtensionKeywordsLoaded { keywords: HashMap<String, Vec<String>> },
+    ExtensionInjected {
+        name: String,
+        agent_role: String,
+        task_id: String,
+    },
+    PatternsUsed {
+        titles: Vec<String>,
+        keywords_by_title: HashMap<String, Vec<String>>,
+    },
+    ExtensionKeywordsLoaded {
+        keywords: HashMap<String, Vec<String>>,
+    },
     Log(String),
     BackgroundLog(String),
     CountsUpdated(usize, usize),

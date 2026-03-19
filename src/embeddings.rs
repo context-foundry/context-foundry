@@ -48,16 +48,12 @@ fn mark_failed() {
 
 #[cfg(test)]
 fn force_cooldown(until_ms: u64) {
-    state()
-        .cooldown_until_ms
-        .store(until_ms, Ordering::Relaxed);
+    state().cooldown_until_ms.store(until_ms, Ordering::Relaxed);
 }
 
 #[cfg(test)]
 fn clear_cooldown() {
-    state()
-        .cooldown_until_ms
-        .store(0, Ordering::Relaxed);
+    state().cooldown_until_ms.store(0, Ordering::Relaxed);
 }
 
 // ─── Canonical Text ──────────────────────────────────────────
@@ -109,11 +105,15 @@ fn embed_batch_sync(
     let output = std::process::Command::new("curl")
         .args([
             "-s",
-            "-X", "POST",
+            "-X",
+            "POST",
             &url,
-            "-H", "Content-Type: application/json",
-            "-d", &body.to_string(),
-            "--max-time", &format!("{:.0}", timeout_secs),
+            "-H",
+            "Content-Type: application/json",
+            "-d",
+            &body.to_string(),
+            "--max-time",
+            &format!("{:.0}", timeout_secs),
         ])
         .output()
         .map_err(|e| format!("curl failed: {}", e))?;
@@ -453,9 +453,18 @@ mod tests {
 
     #[test]
     fn normalize_task_text_strips_id_prefix() {
-        assert_eq!(normalize_task_text("T1.1: Build the login page"), "build the login page");
-        assert_eq!(normalize_task_text("D2.3: Fix broken import"), "fix broken import");
-        assert_eq!(normalize_task_text("H1.1: Add smiley face"), "add smiley face");
+        assert_eq!(
+            normalize_task_text("T1.1: Build the login page"),
+            "build the login page"
+        );
+        assert_eq!(
+            normalize_task_text("D2.3: Fix broken import"),
+            "fix broken import"
+        );
+        assert_eq!(
+            normalize_task_text("H1.1: Add smiley face"),
+            "add smiley face"
+        );
     }
 
     #[test]
@@ -536,10 +545,7 @@ mod tests {
         let loaded: EmbeddingCache = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(loaded.schema_version, CACHE_SCHEMA_VERSION);
         assert_eq!(loaded.entries.len(), 1);
-        assert_eq!(
-            loaded.entries["test-pattern"].content_hash,
-            "abc123"
-        );
+        assert_eq!(loaded.entries["test-pattern"].content_hash, "abc123");
     }
 
     #[test]
@@ -579,8 +585,15 @@ mod tests {
 
         // Load the cache from disk (exercises real file I/O + deserialization)
         let loaded = load_cache_from(&cache_file);
-        assert_eq!(loaded.entries.len(), 1, "cache file should load with 1 entry");
-        assert!(loaded.entries.contains_key(&stale_key), "stale key should exist in loaded cache");
+        assert_eq!(
+            loaded.entries.len(),
+            1,
+            "cache file should load with 1 entry"
+        );
+        assert!(
+            loaded.entries.contains_key(&stale_key),
+            "stale key should exist in loaded cache"
+        );
 
         // Exercise the lookup logic from match_patterns_semantic (lines 280-294):
         // Current model is "nomic-embed-text", so the cache key differs from "old-model:hash"
@@ -597,7 +610,10 @@ mod tests {
         // the model mismatch in the inner check must reject it
         let entry = loaded.entries.get(&stale_key).expect("stale key exists");
         let model_matches = entry.model == current_model;
-        assert!(!model_matches, "entry.model 'old-model' must not match current model 'nomic-embed-text'");
+        assert!(
+            !model_matches,
+            "entry.model 'old-model' must not match current model 'nomic-embed-text'"
+        );
 
         // Now write a VALID cache entry under the correct model and verify it IS a hit
         let mut valid_cache = loaded;
@@ -619,15 +635,25 @@ mod tests {
 
         // Valid entry lookup succeeds
         let hit = reloaded.entries.get(&valid_key);
-        assert!(hit.is_some(), "valid entry must be found under correct model key");
+        assert!(
+            hit.is_some(),
+            "valid entry must be found under correct model key"
+        );
         let hit = hit.unwrap();
         assert_eq!(hit.model, current_model);
         assert_eq!(hit.content_hash, hash);
         assert_eq!(hit.embedding, valid_embedding);
 
         // Stale entry still exists but is ignored by the lookup logic
-        assert!(reloaded.entries.contains_key(&stale_key), "stale entry persists in cache file");
-        assert_eq!(reloaded.entries.len(), 2, "cache has both stale and valid entries");
+        assert!(
+            reloaded.entries.contains_key(&stale_key),
+            "stale entry persists in cache file"
+        );
+        assert_eq!(
+            reloaded.entries.len(),
+            2,
+            "cache has both stale and valid entries"
+        );
     }
 
     #[test]
@@ -826,9 +852,15 @@ mod tests {
         // Reload and verify stale entry was removed
         let reloaded = load_cache_from(&cache_file);
         assert_eq!(reloaded.entries.len(), 2);
-        assert!(reloaded.entries.contains_key(&format!("{}:{}", model, hash_1)));
-        assert!(reloaded.entries.contains_key(&format!("{}:{}", model, hash_2)));
-        assert!(!reloaded.entries.contains_key(&format!("{}:{}", model, stale_hash)));
+        assert!(reloaded
+            .entries
+            .contains_key(&format!("{}:{}", model, hash_1)));
+        assert!(reloaded
+            .entries
+            .contains_key(&format!("{}:{}", model, hash_2)));
+        assert!(!reloaded
+            .entries
+            .contains_key(&format!("{}:{}", model, stale_hash)));
     }
 
     #[test]

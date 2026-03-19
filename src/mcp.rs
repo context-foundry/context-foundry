@@ -148,7 +148,12 @@ fn handle_resources_read(
 ) -> JsonRpcResponse {
     let id = request.id.clone().unwrap_or(Value::Null);
 
-    let uri = match request.params.as_ref().and_then(|p| p.get("uri")).and_then(|u| u.as_str()) {
+    let uri = match request
+        .params
+        .as_ref()
+        .and_then(|p| p.get("uri"))
+        .and_then(|u| u.as_str())
+    {
         Some(u) => u.to_string(),
         None => return make_error_response(id, -32602, "missing uri parameter"),
     };
@@ -193,7 +198,11 @@ fn build_pattern_catalog(config: &Config) -> Result<String> {
         .collect();
 
     // Sort by frequency descending, then title ascending as tiebreaker
-    entries.sort_by(|a, b| b.frequency.cmp(&a.frequency).then_with(|| a.title.cmp(&b.title)));
+    entries.sort_by(|a, b| {
+        b.frequency
+            .cmp(&a.frequency)
+            .then_with(|| a.title.cmp(&b.title))
+    });
 
     Ok(serde_json::to_string_pretty(&entries)?)
 }
@@ -420,7 +429,11 @@ mod tests {
     fn test_handle_resources_read_missing_uri() {
         let dir = tempfile::tempdir().unwrap();
         let config = Config::default();
-        let req = mock_request(Some(Value::from(4)), "resources/read", Some(serde_json::json!({})));
+        let req = mock_request(
+            Some(Value::from(4)),
+            "resources/read",
+            Some(serde_json::json!({})),
+        );
         let resp = handle_resources_read(&req, dir.path(), &config);
 
         assert!(resp.result.is_none());

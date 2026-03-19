@@ -34,7 +34,9 @@ impl StartupState {
         let initial_selected = priority_files
             .iter()
             .find_map(|name| {
-                file_tree.iter().position(|e| e.name == *name && e.is_cf_highlight)
+                file_tree
+                    .iter()
+                    .position(|e| e.name == *name && e.is_cf_highlight)
             })
             .unwrap_or(0);
 
@@ -184,13 +186,14 @@ fn build_file_tree_recursive(
 }
 
 fn is_context_foundry_file(name: &str, path: &Path, base_dir: &Path) -> bool {
-    if matches!(name, "TASKS.md" | "SPEC.md" | "UPDATED_SPECS.md" | "CLAUDE.md") {
+    if matches!(
+        name,
+        "TASKS.md" | "SPEC.md" | "UPDATED_SPECS.md" | "CLAUDE.md"
+    ) {
         return true;
     }
     let relative = path.strip_prefix(base_dir).unwrap_or(path);
-    relative
-        .components()
-        .any(|c| c.as_os_str() == ".buildloop")
+    relative.components().any(|c| c.as_os_str() == ".buildloop")
 }
 
 fn load_file_preview(path: &Path) -> Vec<String> {
@@ -223,7 +226,12 @@ pub(super) fn handle_startup_event(state: &mut AppState, event: AppEvent) {
         }
         AppEvent::OllamaStatus(connected) => {
             state.last_pattern_match_mode = Some(
-                if connected { "semantic" } else { "keyword-only" }.to_string(),
+                if connected {
+                    "semantic"
+                } else {
+                    "keyword-only"
+                }
+                .to_string(),
             );
         }
         _ => {}
@@ -352,7 +360,10 @@ pub(super) fn handle_startup_key(state: &mut AppState, key: event::KeyEvent) {
                 "sprint" => "review".into(),
                 _ => "auto".into(),
             };
-            let project_dir = state.buildloop_dir.parent().unwrap_or(std::path::Path::new("."));
+            let project_dir = state
+                .buildloop_dir
+                .parent()
+                .unwrap_or(std::path::Path::new("."));
             Config::save_run_mode(project_dir, &state.run_mode);
             // Warn if gh CLI not available when switching to review mode
             if state.run_mode == "review" {
@@ -366,7 +377,10 @@ pub(super) fn handle_startup_key(state: &mut AppState, key: event::KeyEvent) {
             } else {
                 // Clear any previous gh warning when switching away from review
                 if let Some(ref mut s) = state.startup {
-                    if s.status_message.as_ref().is_some_and(|m| m.contains("gh CLI")) {
+                    if s.status_message
+                        .as_ref()
+                        .is_some_and(|m| m.contains("gh CLI"))
+                    {
                         s.status_message = None;
                     }
                 }
@@ -377,7 +391,10 @@ pub(super) fn handle_startup_key(state: &mut AppState, key: event::KeyEvent) {
                 use crate::app::state::DualSelection;
                 let next = state.dual_selection.next();
                 state.dual_selection = next;
-                let project_dir = state.buildloop_dir.parent().unwrap_or(std::path::Path::new("."));
+                let project_dir = state
+                    .buildloop_dir
+                    .parent()
+                    .unwrap_or(std::path::Path::new("."));
                 Config::save_dual_selection(project_dir, next.as_str());
                 // Show label for current selection
                 let label = match next {
@@ -392,7 +409,11 @@ pub(super) fn handle_startup_key(state: &mut AppState, key: event::KeyEvent) {
                     DualSelection::Both => {
                         let (p0, m0) = Config::parse_model_spec(&state.builder_model_specs[0]);
                         let (p1, m1) = Config::parse_model_spec(&state.builder_model_specs[1]);
-                        format!("Pipeline: {} + {}", Config::display_provider_model(&p0, &m0), Config::display_provider_model(&p1, &m1))
+                        format!(
+                            "Pipeline: {} + {}",
+                            Config::display_provider_model(&p0, &m0),
+                            Config::display_provider_model(&p1, &m1)
+                        )
                     }
                     DualSelection::Off => "Pipeline: default (single)".into(),
                 };
@@ -477,9 +498,13 @@ pub(super) fn handle_startup_intent_input(state: &mut AppState, key: event::KeyE
         KeyCode::Char('n') if key.modifiers.contains(KeyModifiers::CONTROL) => {
             // Clear input and delete UPDATED_SPECS.md so next startup is fresh
             startup.intent_input.clear();
-            let project_dir = state.buildloop_dir.parent()
+            let project_dir = state
+                .buildloop_dir
+                .parent()
                 .unwrap_or(std::path::Path::new("."));
-            let updated_specs = super::contract::ContractPaths::resolve(project_dir).updated_specs_path.clone();
+            let updated_specs = super::contract::ContractPaths::resolve(project_dir)
+                .updated_specs_path
+                .clone();
             let _ = std::fs::remove_file(&updated_specs);
         }
         KeyCode::Char(c) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
@@ -605,8 +630,7 @@ fn handle_explorer_enter(state: &mut AppState) {
     } else {
         // Open file in external editor
         let file_path = startup.file_tree[selected].path.clone();
-        state.pending_transition =
-            Some(PendingTransition::OpenExternalEditor { file_path });
+        state.pending_transition = Some(PendingTransition::OpenExternalEditor { file_path });
     }
 }
 
@@ -623,13 +647,14 @@ fn handle_startup_submit(state: &mut AppState) {
 
     // Persist enhancement description to UPDATED_SPECS.md (not for new projects)
     if !text.is_empty() && scenario != StartupScenario::EmptyProject {
-        let project_dir = state.buildloop_dir.parent()
+        let project_dir = state
+            .buildloop_dir
+            .parent()
             .unwrap_or(std::path::Path::new("."));
-        let updated_specs = super::contract::ContractPaths::resolve(project_dir).updated_specs_path.clone();
-        let _ = crate::utils::atomic_write_file(
-            &updated_specs,
-            text.as_bytes(),
-        );
+        let updated_specs = super::contract::ContractPaths::resolve(project_dir)
+            .updated_specs_path
+            .clone();
+        let _ = crate::utils::atomic_write_file(&updated_specs, text.as_bytes());
     }
 
     match scenario {
@@ -667,7 +692,9 @@ fn handle_startup_submit(state: &mut AppState) {
         StartupScenario::EmptyProject => {
             if !text.is_empty() {
                 // Save user's description as SPEC.md so the bootstrap scout has context.
-                let project_dir = state.buildloop_dir.parent()
+                let project_dir = state
+                    .buildloop_dir
+                    .parent()
                     .unwrap_or(std::path::Path::new("."))
                     .to_path_buf();
                 let spec_path = super::contract::ContractPaths::resolve(&project_dir).spec_path;
@@ -678,13 +705,16 @@ fn handle_startup_submit(state: &mut AppState) {
                 // Return to startup so the user can review SPEC.md before starting.
                 // The scenario will re-detect as NeedsQueue (spec exists, no tasks yet).
                 state.pending_transition = Some(PendingTransition::ShowStartup {
-                    message: Some("SPEC.md created -- review it, then press Enter to start.".to_string()),
+                    message: Some(
+                        "SPEC.md created -- review it, then press Enter to start.".to_string(),
+                    ),
                 });
             } else {
                 // Empty project with no description -- nudge the user to type something
                 if let Some(ref mut s) = state.startup {
                     s.status_message = Some(
-                        "Describe what you want to build -- an empty project needs direction.".to_string(),
+                        "Describe what you want to build -- an empty project needs direction."
+                            .to_string(),
                     );
                 }
             }
@@ -701,16 +731,22 @@ fn handle_startup_submit(state: &mut AppState) {
                     }));
             } else {
                 // NeedsQueue with empty input -- check if SPEC.md has content
-                let project_dir = state.buildloop_dir.parent()
+                let project_dir = state
+                    .buildloop_dir
+                    .parent()
                     .unwrap_or(std::path::Path::new("."));
                 let spec_path = super::contract::ContractPaths::resolve(project_dir).spec_path;
                 let spec_has_content = std::fs::read_to_string(&spec_path)
-                    .map(|c| c.lines().any(|l| !l.starts_with('#') && !l.trim().is_empty()))
+                    .map(|c| {
+                        c.lines()
+                            .any(|l| !l.starts_with('#') && !l.trim().is_empty())
+                    })
                     .unwrap_or(false);
                 if !spec_has_content {
                     if let Some(ref mut s) = state.startup {
                         s.status_message = Some(
-                            "SPEC.md is empty -- describe what you want to build first.".to_string(),
+                            "SPEC.md is empty -- describe what you want to build first."
+                                .to_string(),
                         );
                     }
                     return;
@@ -752,9 +788,7 @@ pub(super) fn handle_startup_mouse_at(
                         set_explorer_selection(state, index);
                         // Toggle folder expanded/collapsed on click
                         if let Some(startup) = state.startup.as_mut() {
-                            if index < startup.file_tree.len()
-                                && startup.file_tree[index].is_dir
-                            {
+                            if index < startup.file_tree.len() && startup.file_tree[index].is_dir {
                                 startup.file_tree[index].expanded =
                                     !startup.file_tree[index].expanded;
                             }
@@ -825,10 +859,7 @@ pub(super) fn handle_startup_mouse_at(
                 match state.focused_pane {
                     crate::app::state::TuiPane::Preview => {
                         if let Some(startup) = state.startup.as_mut() {
-                            let max_scroll = startup
-                                .file_preview_content
-                                .len()
-                                .saturating_sub(1);
+                            let max_scroll = startup.file_preview_content.len().saturating_sub(1);
                             startup.file_preview_scroll =
                                 (startup.file_preview_scroll + 3).min(max_scroll);
                         }
@@ -854,6 +885,7 @@ pub(super) fn enter_home_surface(
     populate_task_history_from_progress(project_dir, state);
     state.project_name = resolve_project_name(project_dir);
     state.clear_agent();
+    state.reset_dual_build();
     state.current_task = None;
     state.is_discovering = false;
     state.stop_after_task = false;

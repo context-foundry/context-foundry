@@ -39,8 +39,6 @@ impl ContractPaths {
         file_name(&self.tasks_path)
     }
 
-
-
     pub(super) fn warnings(&self) -> Vec<String> {
         let mut warnings = Vec::new();
 

@@ -120,10 +120,7 @@ pub fn running_layout(area: Rect, has_extensions: bool) -> RunningPaneRects {
     } else {
         let right_panel = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Min(6),
-                Constraint::Length(6),
-            ])
+            .constraints([Constraint::Min(6), Constraint::Length(6)])
             .split(middle_cols[1]);
         RunningPaneRects {
             agent_output: middle_cols[0],
@@ -138,8 +135,8 @@ pub fn render(frame: &mut Frame, state: &AppState, config: &Config) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(5),  // Header
-            Constraint::Length(7),  // Pipeline map (3 lines inside box + borders)
+            Constraint::Length(5), // Header
+            Constraint::Length(7), // Pipeline map (3 lines inside box + borders)
             Constraint::Min(10),   // Middle: agent output + task queue
             Constraint::Length(6), // Bottom: stats (progress bar + 3 content rows + borders)
             Constraint::Length(1), // Status bar
@@ -163,9 +160,9 @@ pub fn render(frame: &mut Frame, state: &AppState, config: &Config) {
         let panel = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Min(6),      // Task queue (fills remaining space)
-                Constraint::Length(6),   // Patterns (4 content lines + 2 border)
-                Constraint::Length(6),   // Extensions Used (4 content lines + 2 border)
+                Constraint::Min(6),    // Task queue (fills remaining space)
+                Constraint::Length(6), // Patterns (4 content lines + 2 border)
+                Constraint::Length(6), // Extensions Used (4 content lines + 2 border)
             ])
             .split(middle_cols[1]);
         running::render_task_queue(frame, panel[0], state, state.focused_pane);
@@ -176,8 +173,8 @@ pub fn render(frame: &mut Frame, state: &AppState, config: &Config) {
         let panel = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Min(6),      // Task queue (fills remaining space)
-                Constraint::Length(6),   // Patterns (4 content lines + 2 border)
+                Constraint::Min(6),    // Task queue (fills remaining space)
+                Constraint::Length(6), // Patterns (4 content lines + 2 border)
             ])
             .split(middle_cols[1]);
         running::render_task_queue(frame, panel[0], state, state.focused_pane);
@@ -282,8 +279,20 @@ pub fn render_running_explorer(frame: &mut Frame, state: &AppState, config: &Con
         .split(chunks[2]);
 
     if let Some(ref explorer_state) = state.running_explorer {
-        startup::render_file_explorer_from(frame, middle_cols[0], explorer_state, state.focused_pane, &state.tui_theme);
-        startup::render_file_preview_from(frame, middle_cols[1], explorer_state, state.focused_pane, &state.tui_theme);
+        startup::render_file_explorer_from(
+            frame,
+            middle_cols[0],
+            explorer_state,
+            state.focused_pane,
+            &state.tui_theme,
+        );
+        startup::render_file_preview_from(
+            frame,
+            middle_cols[1],
+            explorer_state,
+            state.focused_pane,
+            &state.tui_theme,
+        );
     }
 
     stats::render_dashboard_stats(frame, chunks[3], state, config);

@@ -224,7 +224,10 @@ pub(super) fn create_execution_contract(state: &mut StudioState) -> Result<()> {
     let contract_name = format!("Custom Contract {}", Utc::now().format("%H:%M:%S"));
     let file_name = format!("contract-{}.md", Utc::now().format("%Y%m%d-%H%M%S"));
     let path = dir.join(&file_name);
-    atomic_write_file(&path, new_execution_contract_content(&contract_name).as_bytes())?;
+    atomic_write_file(
+        &path,
+        new_execution_contract_content(&contract_name).as_bytes(),
+    )?;
     atomic_write_file(&attachment_sidecar_path(&path), b"[]\n")?;
     let (contracts, selected_index) =
         load_execution_contracts_with_selection(&state.project_dir, Some(&file_name))?;

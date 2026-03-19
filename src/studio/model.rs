@@ -285,9 +285,7 @@ pub(super) enum PendingStudioAction {
         action_label: &'static str,
     },
     #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
-    PickExecutionContractAttachment {
-        contract_path: PathBuf,
-    },
+    PickExecutionContractAttachment { contract_path: PathBuf },
 }
 
 pub(super) struct EditorGuideState {

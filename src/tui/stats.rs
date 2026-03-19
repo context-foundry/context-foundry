@@ -9,14 +9,23 @@ use ratatui::{
 use crate::app::AppState;
 use crate::config::Config;
 
-pub(super) fn render_dashboard_stats(frame: &mut Frame, area: Rect, state: &AppState, _config: &Config) {
+pub(super) fn render_dashboard_stats(
+    frame: &mut Frame,
+    area: Rect,
+    state: &AppState,
+    _config: &Config,
+) {
     let theme = &state.tui_theme;
     let mut lines = Vec::new();
 
     // Progress: [93/96] ████████████░░ 97%
     let completed = state.completed_count;
     let total = state.total_count;
-    let pct = if total > 0 { completed * 100 / total } else { 0 };
+    let pct = if total > 0 {
+        completed * 100 / total
+    } else {
+        0
+    };
     let left_label = format!(" [{}/{}] ", completed, total);
     let right_label = format!(" {}%", pct);
     let bar_width = (area.width.saturating_sub(4) as usize)
@@ -31,19 +40,20 @@ pub(super) fn render_dashboard_stats(frame: &mut Frame, area: Rect, state: &AppS
     let bar_spans: Vec<Span> = vec![
         Span::styled(
             left_label,
-            Style::default().fg(theme.warning).add_modifier(ratatui::style::Modifier::BOLD),
+            Style::default()
+                .fg(theme.warning)
+                .add_modifier(ratatui::style::Modifier::BOLD),
         ),
         Span::styled(
             "\u{2588}".repeat(filled),
             Style::default().fg(theme.success),
         ),
-        Span::styled(
-            "\u{2591}".repeat(empty),
-            Style::default().fg(theme.muted),
-        ),
+        Span::styled("\u{2591}".repeat(empty), Style::default().fg(theme.muted)),
         Span::styled(
             right_label,
-            Style::default().fg(theme.warning).add_modifier(ratatui::style::Modifier::BOLD),
+            Style::default()
+                .fg(theme.warning)
+                .add_modifier(ratatui::style::Modifier::BOLD),
         ),
     ];
     lines.push(Line::from(bar_spans));
@@ -96,7 +106,10 @@ pub(super) fn render_dashboard_stats(frame: &mut Frame, area: Rect, state: &AppS
 
     let git_status_str = if state.git_initialized {
         let remote_part = state.git_remote.as_deref().unwrap_or("no remote");
-        format!("{} | {} | {} dirty", state.git_branch, remote_part, state.git_dirty_count)
+        format!(
+            "{} | {} | {} dirty",
+            state.git_branch, remote_part, state.git_dirty_count
+        )
     } else {
         "not initialized".to_string()
     };
@@ -110,7 +123,14 @@ pub(super) fn render_dashboard_stats(frame: &mut Frame, area: Rect, state: &AppS
 
     lines.push(Line::from(vec![
         Span::styled("  Git      ", Style::default().fg(theme.info)),
-        Span::styled(format!("{:<width$}", git_status_str, width = half_width.saturating_sub(11)), Style::default().fg(git_status_color)),
+        Span::styled(
+            format!(
+                "{:<width$}",
+                git_status_str,
+                width = half_width.saturating_sub(11)
+            ),
+            Style::default().fg(git_status_color),
+        ),
         Span::styled("Context   ", Style::default().fg(theme.info)),
         Span::styled("S:", Style::default().fg(theme.muted)),
         Span::styled(format!("{:<4}", s_str), Style::default().fg(s_col)),
@@ -128,16 +148,17 @@ pub(super) fn render_dashboard_stats(frame: &mut Frame, area: Rect, state: &AppS
             .extension_inject_count
             .iter()
             .map(|(name, inj)| {
-                let refs = state.extension_reference_count.get(name).copied().unwrap_or(0);
+                let refs = state
+                    .extension_reference_count
+                    .get(name)
+                    .copied()
+                    .unwrap_or(0);
                 format!("{} {} inj, {} ref", name, inj, refs)
             })
             .collect();
         lines.push(Line::from(vec![
             Span::styled("  Ext      ", Style::default().fg(theme.accent)),
-            Span::styled(
-                ext_parts.join("  "),
-                Style::default().fg(theme.text),
-            ),
+            Span::styled(ext_parts.join("  "), Style::default().fg(theme.text)),
         ]));
     }
 
@@ -153,9 +174,13 @@ pub(super) fn render_dashboard_stats(frame: &mut Frame, area: Rect, state: &AppS
 
     // Format token counts compactly: 1234 → "1.2K", 1234567 → "1.2M"
     let fmt_tokens = |n: u64| -> String {
-        if n >= 1_000_000 { format!("{:.1}M", n as f64 / 1_000_000.0) }
-        else if n >= 1_000 { format!("{:.0}K", n as f64 / 1_000.0) }
-        else { format!("{}", n) }
+        if n >= 1_000_000 {
+            format!("{:.1}M", n as f64 / 1_000_000.0)
+        } else if n >= 1_000 {
+            format!("{:.0}K", n as f64 / 1_000.0)
+        } else {
+            format!("{}", n)
+        }
     };
     let cost_str = format!(
         "${:.2} ({}in / {}out)",
@@ -173,12 +198,21 @@ pub(super) fn render_dashboard_stats(frame: &mut Frame, area: Rect, state: &AppS
 
     let patterns_left = format!(
         "{} inj, {} applied  feat: {}  WIP: {}",
-        state.pattern_inject_count, state.pattern_apply_count,
-        state.session_feat_commits, state.session_wip_commits,
+        state.pattern_inject_count,
+        state.pattern_apply_count,
+        state.session_feat_commits,
+        state.session_wip_commits,
     );
     lines.push(Line::from(vec![
         Span::styled("  Patterns ", Style::default().fg(theme.info)),
-        Span::styled(format!("{:<width$}", patterns_left, width = half_width.saturating_sub(11)), Style::default().fg(theme.text)),
+        Span::styled(
+            format!(
+                "{:<width$}",
+                patterns_left,
+                width = half_width.saturating_sub(11)
+            ),
+            Style::default().fg(theme.text),
+        ),
         Span::styled("Cost      ", Style::default().fg(theme.info)),
         Span::styled(&cost_str, Style::default().fg(cost_color)),
     ]));
@@ -186,7 +220,14 @@ pub(super) fn render_dashboard_stats(frame: &mut Frame, area: Rect, state: &AppS
     let ollama_left = format!("Ollama: {}", ollama_label);
     lines.push(Line::from(vec![
         Span::styled("  ", Style::default()),
-        Span::styled(format!("{:<width$}", ollama_left, width = half_width.saturating_sub(2)), Style::default().fg(ollama_color)),
+        Span::styled(
+            format!(
+                "{:<width$}",
+                ollama_left,
+                width = half_width.saturating_sub(2)
+            ),
+            Style::default().fg(ollama_color),
+        ),
         Span::styled("Timing    ", Style::default().fg(theme.info)),
         Span::styled("session: ", Style::default().fg(theme.muted)),
         Span::styled(&session_str, Style::default().fg(theme.text)),
@@ -217,7 +258,9 @@ pub(super) fn render_dashboard_stats(frame: &mut Frame, area: Rect, state: &AppS
         Span::styled(
             &agent_label,
             if state.current_agent.is_some() {
-                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD)
             } else {
                 Style::default().fg(theme.muted)
             },
@@ -227,7 +270,10 @@ pub(super) fn render_dashboard_stats(frame: &mut Frame, area: Rect, state: &AppS
         let spinner_chars = ['|', '/', '-', '\\'];
         let spinner = spinner_chars[state.tick_count % spinner_chars.len()];
         agent_spans.push(Span::styled(
-            format!("  {} {} events  {}", spinner, state.events_received, agent_str),
+            format!(
+                "  {} {} events  {}",
+                spinner, state.events_received, agent_str
+            ),
             Style::default().fg(theme.muted),
         ));
     }
@@ -240,9 +286,7 @@ pub(super) fn render_dashboard_stats(frame: &mut Frame, area: Rect, state: &AppS
                 .border_style(Style::default().fg(theme.border))
                 .title(Span::styled(
                     " Stats ",
-                    Style::default()
-                        .fg(theme.info)
-                        .add_modifier(Modifier::BOLD),
+                    Style::default().fg(theme.info).add_modifier(Modifier::BOLD),
                 )),
         )
         .wrap(Wrap { trim: false });

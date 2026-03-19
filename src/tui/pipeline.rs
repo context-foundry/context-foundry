@@ -11,14 +11,60 @@ use crate::app::AppState;
 use crate::config::Config;
 use crate::utils::truncate_str;
 
-pub(super) fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppState, config: &Config) {
+fn effective_pipeline_configs(config: &Config, state: &AppState) -> Vec<Config> {
+    let mut display_config = config.clone();
+    display_config.builder_models = state.builder_model_specs.clone();
+    display_config.dual_selection = state.dual_selection.as_str().to_string();
+    display_config.selected_pipeline_configs(&display_config.dual_selection)
+}
+
+fn join_stage_labels<I>(labels: I) -> String
+where
+    I: IntoIterator<Item = String>,
+{
+    let mut unique = Vec::new();
+    for label in labels {
+        if !label.is_empty() && !unique.contains(&label) {
+            unique.push(label);
+        }
+    }
+    unique.join(" + ")
+}
+
+fn stage_model_label(configs: &[Config], stage: &str) -> String {
+    join_stage_labels(configs.iter().map(|config| match stage {
+        "SCOUT" => Config::display_provider_model(&config.scout_provider, &config.scout_model),
+        "PLAN" => Config::display_provider_model(&config.planner_provider, &config.planner_model),
+        "IMPLEMENT" => {
+            Config::display_provider_model(&config.builder_provider, &config.builder_model)
+        }
+        "DOUBT" => {
+            Config::display_provider_model(&config.reviewer_provider, &config.reviewer_model)
+        }
+        "DISCOVER" => {
+            Config::display_provider_model(&config.discovery_provider, &config.discovery_model)
+        }
+        _ => String::new(),
+    }))
+}
+
+pub(super) fn render_pipeline_map(
+    frame: &mut Frame,
+    area: Rect,
+    state: &AppState,
+    config: &Config,
+) {
     let theme = &state.tui_theme;
-    let active_role = state.current_agent.as_ref().map(|(role, _)| role.clone());
+    let active_role = if state.dual_build.active {
+        state.dual_build.stages[state.dual_build.tab].clone()
+    } else {
+        state.current_agent.as_ref().map(|(role, _)| role.clone())
+    };
 
     let pipe_color = theme.accent;
     let box_width = 14usize;
 
-    let roles = config.role_configs();
+    let pipeline_configs = effective_pipeline_configs(config, state);
 
     // ─── Connected pipeline stages (left side) ─────────────
     struct StageInfo {
@@ -38,41 +84,21 @@ pub(super) fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppStat
         _ => None,
     });
 
-    // DOUBT box model label: use reviewer config directly
-    let verify_model = Config::display_provider_model(&config.reviewer_provider, &config.reviewer_model);
-
     let connected: Vec<StageInfo> = [
-        ("SCOUT", Some(0), "scout-report"),
-        ("PLAN", Some(1), "current-plan"),
-        ("IMPLEMENT", Some(2), "build-claims"),
-        ("DOUBT", None, "fresh context"),
-        ("SHIP", None, "git + pr"),
+        ("SCOUT", "scout-report"),
+        ("PLAN", "current-plan"),
+        ("IMPLEMENT", "build-claims"),
+        ("DOUBT", "fresh context"),
+        ("SHIP", "git + pr"),
     ]
     .iter()
     .enumerate()
-    .map(|(i, (label, role_idx, kind))| {
-        let mut model_label = if let Some(ri) = role_idx {
-            if *ri < roles.len() {
-                let (_name, provider, model) = roles[*ri];
-                let display = Config::display_provider_model(provider, model);
-                truncate_str(&display, 14).to_string()
-            } else {
-                String::new()
-            }
-        } else if *label == "DOUBT" {
-            truncate_str(&verify_model, 14).to_string()
-        } else if *label == "SHIP" {
+    .map(|(i, (label, kind))| {
+        let model_label = if *label == "SHIP" {
             "GitHub".to_string()
         } else {
-            String::new()
+            truncate_str(&stage_model_label(&pipeline_configs, label), 14).to_string()
         };
-
-        // Override IMPLEMENT label for dual-build mode
-        if i == 2 && state.dual_build.active {
-            let a = &state.dual_build.models[0];
-            let b = &state.dual_build.models[1];
-            model_label = truncate_str(&format!("{} + {}", a, b), 14).to_string();
-        }
 
         let (border_color, text_style) = match active_connected {
             Some(ai) if i == ai => (
@@ -83,7 +109,13 @@ pub(super) fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppStat
             _ => (theme.muted, Style::default().fg(theme.muted)),
         };
 
-        StageInfo { label, model_label, kind_label: kind, border_color, text_style }
+        StageInfo {
+            label,
+            model_label,
+            kind_label: kind,
+            border_color,
+            text_style,
+        }
     })
     .collect();
 
@@ -92,12 +124,10 @@ pub(super) fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppStat
     let discovery_used = state.is_discovering || state.discovery_round > 0;
     let patterns_used = state.session_patterns_learned > 0;
 
-    // Find Discovery and Patterns model labels from role_configs
-    let discovery_model = roles.iter()
-        .find(|(name, _, _)| *name == "Discovery")
-        .map(|(_, provider, model)| Config::display_provider_model(provider, model))
-        .unwrap_or_default();
-    let patterns_model = roles.iter()
+    let discovery_model = stage_model_label(&pipeline_configs, "DISCOVER");
+    let patterns_model = config
+        .role_configs()
+        .iter()
         .find(|(name, _, _)| *name == "Patterns")
         .map(|(_, provider, model)| Config::display_provider_model(provider, model))
         .unwrap_or_default();
@@ -130,7 +160,11 @@ pub(super) fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppStat
             label: "PATTERNS",
             model_label: truncate_str(&patterns_model, 14).to_string(),
             kind_label: "~/.foundry/",
-            border_color: if patterns_used { Color::Green } else { theme.muted },
+            border_color: if patterns_used {
+                Color::Green
+            } else {
+                theme.muted
+            },
             text_style: if patterns_used {
                 Style::default().fg(Color::Green)
             } else {
@@ -186,9 +220,27 @@ pub(super) fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppStat
     // Connected stages with arrows
     for (i, stage) in connected.iter().enumerate() {
         box_top(&mut top_spans, box_width, stage.border_color);
-        box_mid(&mut mid_spans, box_width, stage.label, stage.text_style, stage.border_color);
-        box_model(&mut model_spans, box_width, &stage.model_label, stage.border_color, theme.muted);
-        box_model(&mut kind_spans, box_width, stage.kind_label, stage.border_color, theme.muted);
+        box_mid(
+            &mut mid_spans,
+            box_width,
+            stage.label,
+            stage.text_style,
+            stage.border_color,
+        );
+        box_model(
+            &mut model_spans,
+            box_width,
+            &stage.model_label,
+            stage.border_color,
+            theme.muted,
+        );
+        box_model(
+            &mut kind_spans,
+            box_width,
+            stage.kind_label,
+            stage.border_color,
+            theme.muted,
+        );
         box_bot(&mut bot_spans, box_width, stage.border_color);
 
         if i < connected.len() - 1 {
@@ -213,9 +265,27 @@ pub(super) fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppStat
     // Disconnected stages (no arrows)
     for (i, stage) in disconnected.iter().enumerate() {
         box_top(&mut top_spans, box_width, stage.border_color);
-        box_mid(&mut mid_spans, box_width, stage.label, stage.text_style, stage.border_color);
-        box_model(&mut model_spans, box_width, &stage.model_label, stage.border_color, theme.muted);
-        box_model(&mut kind_spans, box_width, stage.kind_label, stage.border_color, theme.muted);
+        box_mid(
+            &mut mid_spans,
+            box_width,
+            stage.label,
+            stage.text_style,
+            stage.border_color,
+        );
+        box_model(
+            &mut model_spans,
+            box_width,
+            &stage.model_label,
+            stage.border_color,
+            theme.muted,
+        );
+        box_model(
+            &mut kind_spans,
+            box_width,
+            stage.kind_label,
+            stage.border_color,
+            theme.muted,
+        );
         box_bot(&mut bot_spans, box_width, stage.border_color);
 
         if i < disconnected.len() - 1 {
@@ -242,9 +312,7 @@ pub(super) fn render_pipeline_map(frame: &mut Frame, area: Rect, state: &AppStat
             .border_style(Style::default().fg(theme.border))
             .title(Span::styled(
                 " Pipeline ",
-                Style::default()
-                    .fg(theme.info)
-                    .add_modifier(Modifier::BOLD),
+                Style::default().fg(theme.info).add_modifier(Modifier::BOLD),
             )),
     );
     frame.render_widget(pipeline, area);

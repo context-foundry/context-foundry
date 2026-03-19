@@ -8,7 +8,10 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::{agent::ModelProvider, utils::{atomic_write_file_best_effort, truncate_str}};
+use crate::{
+    agent::ModelProvider,
+    utils::{atomic_write_file_best_effort, truncate_str},
+};
 
 use super::{
     model::{
@@ -219,7 +222,8 @@ fn assess_codex_exec_help(help_text: &str) -> ProviderReadiness {
 }
 
 fn check_claude_auth() -> Result<AuthCheck> {
-    let output = ModelProvider::Claude.std_command()
+    let output = ModelProvider::Claude
+        .std_command()
         .args(["auth", "status", "--json"])
         .output()
         .context("failed to run `claude auth status --json`")?;
@@ -568,7 +572,11 @@ pub(super) fn display_model_name(model: &str) -> &str {
 }
 
 fn command_exists(command: &str) -> bool {
-    let lookup_cmd = if cfg!(target_os = "windows") { "where" } else { "which" };
+    let lookup_cmd = if cfg!(target_os = "windows") {
+        "where"
+    } else {
+        "which"
+    };
     std::process::Command::new(lookup_cmd)
         .arg(command)
         .output()

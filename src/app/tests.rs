@@ -1,21 +1,22 @@
 use super::startup::{
-    classify_plan_status, detect_startup_scenario, enter_home_surface,
-    handle_startup_event, handle_startup_key, handle_startup_mouse_at, load_pending_task_at,
+    classify_plan_status, detect_startup_scenario, enter_home_surface, handle_startup_event,
+    handle_startup_key, handle_startup_mouse_at, load_pending_task_at,
 };
 use super::state::{
     AppEvent, AppPhase, AppState, LoopEvent, PendingTransition, PlanStatus, PlanningOutcome,
     PlanningState, StartupScenario, StartupState,
 };
 use super::{
-    apply_orchestrator_outcome, apply_pending_transition, apply_planning_outcome, handle_agent_done,
-    handle_event, prepare_append_tasks_start, process_received_event, seed_spec_from_brief,
+    apply_orchestrator_outcome, apply_pending_transition, apply_planning_outcome,
+    handle_agent_done, handle_event, prepare_append_tasks_start, process_received_event,
+    seed_spec_from_brief,
 };
-use crate::config::Config;
 use crate::agent::{AgentOutputEvent, AgentRole};
-use crate::task::Task;
-use std::collections::HashMap;
+use crate::config::Config;
 use crate::orchestrator::{Finding, OrchestratorOutcome, ProposerOutput, ReviewerOutput};
+use crate::task::Task;
 use crossterm::event::{self, KeyCode, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::mpsc;
@@ -191,7 +192,6 @@ fn startup_empty_input_on_needs_queue_sets_planning_transition() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
-
 #[test]
 fn enter_home_surface_keeps_fresh_directories_on_startup() {
     let dir = temp_project_dir("foundry-home-empty");
@@ -343,10 +343,7 @@ fn startup_arrow_keys_navigate_file_explorer() {
         "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n",
     );
     write_file(&dir.join("README.md"), "# README\n");
-    write_file(
-        &dir.join("TASKS.md"),
-        "# Plan\n\n- [ ] T1.1: One\n",
-    );
+    write_file(&dir.join("TASKS.md"), "# Plan\n\n- [ ] T1.1: One\n");
 
     let mut state = AppState::new(dir.join(".buildloop"));
     state.startup = Some(StartupState::new(
@@ -357,7 +354,9 @@ fn startup_arrow_keys_navigate_file_explorer() {
     ));
 
     // Initially selected = TASKS.md (auto-selected as priority CF file)
-    let tasks_idx = state.startup.as_ref()
+    let tasks_idx = state
+        .startup
+        .as_ref()
         .and_then(|s| s.file_tree.iter().position(|e| e.name == "TASKS.md"))
         .unwrap_or(0);
     assert_eq!(
@@ -372,7 +371,10 @@ fn startup_arrow_keys_navigate_file_explorer() {
         event::KeyEvent::new(KeyCode::Up, KeyModifiers::NONE),
     );
     let after_up = state.startup.as_ref().unwrap().explorer_selected;
-    assert!(after_up < before || before == 0, "Up should move selection earlier");
+    assert!(
+        after_up < before || before == 0,
+        "Up should move selection earlier"
+    );
 
     // Press Down to move back
     handle_startup_key(
@@ -524,10 +526,7 @@ fn startup_clicking_preview_does_not_change_explorer_selection() {
         &dir.join("Cargo.toml"),
         "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n",
     );
-    write_file(
-        &dir.join("TASKS.md"),
-        "# Plan\n\n- [ ] T1.1: One\n",
-    );
+    write_file(&dir.join("TASKS.md"), "# Plan\n\n- [ ] T1.1: One\n");
 
     let mut state = AppState::new(dir.join(".buildloop"));
     state.startup = Some(StartupState::new(
@@ -611,8 +610,18 @@ fn startup_scroll_events_are_debounced_immediately_after_click() {
 
     // Tick to expire debounce
     let (_event_tx, mut event_rx) = mpsc::unbounded_channel::<AppEvent>();
-    process_received_event(&mut state, AppEvent::Tick, &mut event_rx, &Config::default());
-    process_received_event(&mut state, AppEvent::Tick, &mut event_rx, &Config::default());
+    process_received_event(
+        &mut state,
+        AppEvent::Tick,
+        &mut event_rx,
+        &Config::default(),
+    );
+    process_received_event(
+        &mut state,
+        AppEvent::Tick,
+        &mut event_rx,
+        &Config::default(),
+    );
 
     // Scroll after debounce -- should work now
     handle_startup_mouse_at(
@@ -627,9 +636,7 @@ fn startup_scroll_events_are_debounced_immediately_after_click() {
     );
 
     // Explorer selection should have changed (moved by 3)
-    assert!(
-        state.startup.as_ref().unwrap().explorer_selected > initial_selected
-    );
+    assert!(state.startup.as_ref().unwrap().explorer_selected > initial_selected);
 
     let _ = std::fs::remove_dir_all(dir);
 }
@@ -820,7 +827,6 @@ fn startup_typing_and_enter_queues_append_transition() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
-
 #[test]
 fn startup_empty_input_on_needs_queue_starts_build() {
     let dir = temp_project_dir("foundry-startup-scan-empty");
@@ -885,13 +891,13 @@ fn startup_text_input_on_needs_queue_starts_build() {
     // not a SPEC.md overwrite. SPEC.md already exists in NeedsQueue scenario.
     match &state.pending_transition {
         Some(PendingTransition::AppendTasks(req)) => {
-            assert!(req.description.contains("auth bugs"),
-                "expected description to contain user input, got: {}", req.description);
+            assert!(
+                req.description.contains("auth bugs"),
+                "expected description to contain user input, got: {}",
+                req.description
+            );
         }
-        other => panic!(
-            "expected AppendTasks transition, got: {:?}",
-            other
-        ),
+        other => panic!("expected AppendTasks transition, got: {:?}", other),
     }
 
     let _ = std::fs::remove_dir_all(dir);
@@ -1072,7 +1078,6 @@ fn running_queue_updated_event_populates_task_queue() {
     assert!(!state.task_queue[1].completed);
 }
 
-
 #[test]
 fn test_orchestrator_outcome_accepted_shows_startup() {
     let dir = temp_project_dir("foundry-orch-accepted");
@@ -1099,8 +1104,16 @@ fn test_orchestrator_outcome_accepted_shows_startup() {
 
     match &state.pending_transition {
         Some(PendingTransition::ShowStartup { message: Some(m) }) => {
-            assert!(m.contains("accepted"), "message should contain 'accepted': {}", m);
-            assert!(m.contains("2 iteration(s)"), "message should contain '2 iteration(s)': {}", m);
+            assert!(
+                m.contains("accepted"),
+                "message should contain 'accepted': {}",
+                m
+            );
+            assert!(
+                m.contains("2 iteration(s)"),
+                "message should contain '2 iteration(s)': {}",
+                m
+            );
         }
         other => panic!("expected ShowStartup transition, got {:?}", other),
     }
@@ -1204,8 +1217,14 @@ fn test_planning_event_iteration_line_updates_iteration_count() {
     );
     let planning = state.planning.as_ref().unwrap();
     assert_eq!(planning.orchestrator_iteration, 2);
-    assert_eq!(planning.orchestrator_role_label.as_deref(), Some("Proposing"));
-    assert_eq!(planning.orchestrator_role_model.as_deref(), Some("Claude opus"));
+    assert_eq!(
+        planning.orchestrator_role_label.as_deref(),
+        Some("Proposing")
+    );
+    assert_eq!(
+        planning.orchestrator_role_model.as_deref(),
+        Some("Claude opus")
+    );
 }
 
 #[test]
@@ -1232,8 +1251,14 @@ fn test_planning_event_reviewing_line_updates_role() {
         &Config::default(),
     );
     let planning = state.planning.as_ref().unwrap();
-    assert_eq!(planning.orchestrator_role_label.as_deref(), Some("Reviewing"));
-    assert_eq!(planning.orchestrator_role_model.as_deref(), Some("Codex codex-5.4"));
+    assert_eq!(
+        planning.orchestrator_role_label.as_deref(),
+        Some("Reviewing")
+    );
+    assert_eq!(
+        planning.orchestrator_role_model.as_deref(),
+        Some("Codex codex-5.4")
+    );
 }
 
 #[test]
@@ -1259,7 +1284,10 @@ fn test_planning_event_review_line_updates_finding_count() {
         &mut event_rx,
         &Config::default(),
     );
-    assert_eq!(state.planning.as_ref().unwrap().orchestrator_finding_count, 3);
+    assert_eq!(
+        state.planning.as_ref().unwrap().orchestrator_finding_count,
+        3
+    );
 }
 
 #[test]
@@ -1616,14 +1644,24 @@ fn test_agent_started_discovery_overwrites_agent_state() {
 fn test_extension_reference_detection_finds_keywords() {
     let dir = temp_project_dir("ext-ref-detect");
     let mut state = AppState::new(dir.join(".buildloop"));
-    state.extension_keywords = HashMap::from([
-        ("roblox".to_string(), vec!["cframe".to_string(), "workspace".to_string(), "baseplate".to_string()]),
-    ]);
+    state.extension_keywords = HashMap::from([(
+        "roblox".to_string(),
+        vec![
+            "cframe".to_string(),
+            "workspace".to_string(),
+            "baseplate".to_string(),
+        ],
+    )]);
     state.current_agent = Some((AgentRole::Builder, chrono::Utc::now()));
-    state.agent_output.push("Using CFrame to position the part".to_string());
+    state
+        .agent_output
+        .push("Using CFrame to position the part".to_string());
     handle_agent_done(&mut state, true);
     assert_eq!(state.extension_reference_count.get("roblox"), Some(&1));
-    assert!(state.log_messages.iter().any(|(_, msg)| msg.contains("Extension 'roblox' referenced")));
+    assert!(state
+        .log_messages
+        .iter()
+        .any(|(_, msg)| msg.contains("Extension 'roblox' referenced")));
     let _ = std::fs::remove_dir_all(dir);
 }
 
@@ -1631,11 +1669,18 @@ fn test_extension_reference_detection_finds_keywords() {
 fn test_extension_reference_detection_no_match() {
     let dir = temp_project_dir("ext-ref-nomatch");
     let mut state = AppState::new(dir.join(".buildloop"));
-    state.extension_keywords = HashMap::from([
-        ("roblox".to_string(), vec!["cframe".to_string(), "workspace".to_string(), "baseplate".to_string()]),
-    ]);
+    state.extension_keywords = HashMap::from([(
+        "roblox".to_string(),
+        vec![
+            "cframe".to_string(),
+            "workspace".to_string(),
+            "baseplate".to_string(),
+        ],
+    )]);
     state.current_agent = Some((AgentRole::Builder, chrono::Utc::now()));
-    state.agent_output.push("Writing unit tests for the parser".to_string());
+    state
+        .agent_output
+        .push("Writing unit tests for the parser".to_string());
     handle_agent_done(&mut state, true);
     assert!(state.extension_reference_count.get("roblox").is_none());
     let _ = std::fs::remove_dir_all(dir);
@@ -1645,14 +1690,24 @@ fn test_extension_reference_detection_no_match() {
 fn test_pattern_apply_detection_finds_keywords() {
     let dir = temp_project_dir("pat-apply-detect");
     let mut state = AppState::new(dir.join(".buildloop"));
-    state.active_pattern_keywords = HashMap::from([
-        ("SQLite case sensitivity".to_string(), vec!["func.lower".to_string(), "case-insensitive".to_string(), "sqlite".to_string()]),
-    ]);
+    state.active_pattern_keywords = HashMap::from([(
+        "SQLite case sensitivity".to_string(),
+        vec![
+            "func.lower".to_string(),
+            "case-insensitive".to_string(),
+            "sqlite".to_string(),
+        ],
+    )]);
     state.current_agent = Some((AgentRole::Builder, chrono::Utc::now()));
-    state.agent_output.push("Using func.lower() for case-insensitive matching".to_string());
+    state
+        .agent_output
+        .push("Using func.lower() for case-insensitive matching".to_string());
     handle_agent_done(&mut state, true);
     assert_eq!(state.pattern_apply_count, 1);
-    assert!(state.log_messages.iter().any(|(_, msg)| msg.contains("Pattern 'SQLite case sensitivity' applied")));
+    assert!(state
+        .log_messages
+        .iter()
+        .any(|(_, msg)| msg.contains("Pattern 'SQLite case sensitivity' applied")));
     let _ = std::fs::remove_dir_all(dir);
 }
 
@@ -1660,11 +1715,14 @@ fn test_pattern_apply_detection_finds_keywords() {
 fn test_pattern_apply_detection_no_match() {
     let dir = temp_project_dir("pat-apply-nomatch");
     let mut state = AppState::new(dir.join(".buildloop"));
-    state.active_pattern_keywords = HashMap::from([
-        ("SQLite case sensitivity".to_string(), vec!["func.lower".to_string(), "case-insensitive".to_string()]),
-    ]);
+    state.active_pattern_keywords = HashMap::from([(
+        "SQLite case sensitivity".to_string(),
+        vec!["func.lower".to_string(), "case-insensitive".to_string()],
+    )]);
     state.current_agent = Some((AgentRole::Builder, chrono::Utc::now()));
-    state.agent_output.push("Implementing the HTTP server".to_string());
+    state
+        .agent_output
+        .push("Implementing the HTTP server".to_string());
     handle_agent_done(&mut state, true);
     assert_eq!(state.pattern_apply_count, 0);
     let _ = std::fs::remove_dir_all(dir);
@@ -1712,7 +1770,10 @@ fn test_patterns_used_event_increments_counters() {
     ]);
     handle_event(
         &mut state,
-        AppEvent::LoopEvent(LoopEvent::PatternsUsed { titles, keywords_by_title }),
+        AppEvent::LoopEvent(LoopEvent::PatternsUsed {
+            titles,
+            keywords_by_title,
+        }),
         &config,
     );
     assert_eq!(state.pattern_inject_count, 2);
@@ -1733,7 +1794,8 @@ fn test_build_completion_warns_unused_extensions() {
         AppEvent::LoopEvent(LoopEvent::Finished),
         &config,
     );
-    assert!(state.log_messages.iter().any(|(_, msg)| msg.contains("Warning: Extension 'roblox' was injected 4 times but never referenced")));
+    assert!(state.log_messages.iter().any(|(_, msg)| msg
+        .contains("Warning: Extension 'roblox' was injected 4 times but never referenced")));
     let _ = std::fs::remove_dir_all(dir);
 }
 
@@ -1749,7 +1811,10 @@ fn test_build_completion_no_warning_when_referenced() {
         AppEvent::LoopEvent(LoopEvent::Finished),
         &config,
     );
-    assert!(!state.log_messages.iter().any(|(_, msg)| msg.contains("Warning: Extension 'roblox'")));
+    assert!(!state
+        .log_messages
+        .iter()
+        .any(|(_, msg)| msg.contains("Warning: Extension 'roblox'")));
     let _ = std::fs::remove_dir_all(dir);
 }
 
@@ -1757,15 +1822,21 @@ fn test_build_completion_no_warning_when_referenced() {
 fn test_keyword_minimum_length_filter() {
     let dir = temp_project_dir("kw-min-len");
     let mut state = AppState::new(dir.join(".buildloop"));
-    state.extension_keywords = HashMap::from([
-        ("recon".to_string(), vec!["ssh".to_string(), "idrac".to_string(), "racadm".to_string()]),
-    ]);
+    state.extension_keywords = HashMap::from([(
+        "recon".to_string(),
+        vec!["ssh".to_string(), "idrac".to_string(), "racadm".to_string()],
+    )]);
     state.current_agent = Some((AgentRole::Builder, chrono::Utc::now()));
-    state.agent_output.push("Using ssh to connect and running racadm commands".to_string());
+    state
+        .agent_output
+        .push("Using ssh to connect and running racadm commands".to_string());
     handle_agent_done(&mut state, true);
     assert_eq!(state.extension_reference_count.get("recon"), Some(&1));
     // The log should mention racadm (>= 4 chars) but NOT ssh (< 4 chars)
-    let ref_log = state.log_messages.iter().find(|(_, msg)| msg.contains("Extension 'recon' referenced"));
+    let ref_log = state
+        .log_messages
+        .iter()
+        .find(|(_, msg)| msg.contains("Extension 'recon' referenced"));
     assert!(ref_log.is_some());
     let (_, log_msg) = ref_log.unwrap();
     assert!(log_msg.contains("racadm"));
@@ -1777,9 +1848,8 @@ fn test_keyword_minimum_length_filter() {
 fn test_active_pattern_keywords_cleared_on_task_start() {
     let dir = temp_project_dir("pat-kw-clear");
     let mut state = AppState::new(dir.join(".buildloop"));
-    state.active_pattern_keywords = HashMap::from([
-        ("Old Pattern".to_string(), vec!["stale_keyword".to_string()]),
-    ]);
+    state.active_pattern_keywords =
+        HashMap::from([("Old Pattern".to_string(), vec!["stale_keyword".to_string()])]);
     let task = Task {
         id: "T2.1".to_string(),
         description: "New task".to_string(),

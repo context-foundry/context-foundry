@@ -93,12 +93,7 @@ RULES:
     )
 }
 
-pub fn scout_prompt(
-    task_id: &str,
-    task_desc: &str,
-    spec_file: &str,
-    tasks_file: &str,
-) -> String {
+pub fn scout_prompt(task_id: &str, task_desc: &str, spec_file: &str, tasks_file: &str) -> String {
     format!(
         r#"You are the SCOUT agent. Investigate the codebase before planning begins.
 
@@ -501,14 +496,8 @@ pub fn reviewer_prompt(
     };
 
     let changes_section = match diff {
-        Some(d) => format!(
-            "CHANGES (git diff):\n```diff\n{}\n```",
-            d
-        ),
-        None => format!(
-            "FILES CHANGED:\n{}",
-            files_changed
-        ),
+        Some(d) => format!("CHANGES (git diff):\n```diff\n{}\n```", d),
+        None => format!("FILES CHANGED:\n{}", files_changed),
     };
 
     format!(
@@ -687,9 +676,7 @@ pub fn reviewer_per_file_prompt(
     let changes_block = if file_diff.is_empty() {
         format!("Read the file {file_path} to review its contents.")
     } else {
-        format!(
-            "CHANGES (git diff for this file):\n```diff\n{file_diff}\n```"
-        )
+        format!("CHANGES (git diff for this file):\n```diff\n{file_diff}\n```")
     };
 
     format!(
@@ -825,14 +812,8 @@ pub fn reviewer_integration_prompt(
     };
 
     let changes_section = match diff {
-        Some(d) => format!(
-            "CHANGES (git diff):\n```diff\n{}\n```",
-            d
-        ),
-        None => format!(
-            "FILES CHANGED:\n{}",
-            files_changed
-        ),
+        Some(d) => format!("CHANGES (git diff):\n```diff\n{}\n```", d),
+        None => format!("FILES CHANGED:\n{}", files_changed),
     };
 
     format!(
@@ -1058,7 +1039,14 @@ IMPORTANT:
 
 #[allow(clippy::type_complexity)]
 pub fn format_stage_results_for_prompt(
-    results: &[(String, bool, Option<String>, String, Vec<String>, Vec<String>)],
+    results: &[(
+        String,
+        bool,
+        Option<String>,
+        String,
+        Vec<String>,
+        Vec<String>,
+    )],
 ) -> String {
     if results.is_empty() {
         return String::new();
@@ -1300,7 +1288,16 @@ mod tests {
             "planner prompt must close reference data block"
         );
 
-        let reviewer = reviewer_prompt("T1", "test task", "file.rs", 1, patterns, None, "SPEC.md", "TASKS.md");
+        let reviewer = reviewer_prompt(
+            "T1",
+            "test task",
+            "file.rs",
+            1,
+            patterns,
+            None,
+            "SPEC.md",
+            "TASKS.md",
+        );
         assert!(
             reviewer.contains("--- BEGIN REFERENCE DATA (non-authoritative"),
             "reviewer prompt must wrap pattern context in reference data block"
@@ -1319,7 +1316,16 @@ mod tests {
             "empty pattern context should not produce a reference block"
         );
 
-        let reviewer = reviewer_prompt("T1", "test task", "file.rs", 1, "", None, "SPEC.md", "TASKS.md");
+        let reviewer = reviewer_prompt(
+            "T1",
+            "test task",
+            "file.rs",
+            1,
+            "",
+            None,
+            "SPEC.md",
+            "TASKS.md",
+        );
         assert!(
             !reviewer.contains("BEGIN REFERENCE DATA"),
             "empty pattern context should not produce a reference block"
@@ -1349,12 +1355,18 @@ mod tests {
         let discovery = discovery_prompt(1, "ARCHITECTURE.md", "IMPL_PLAN.md", None);
         assert!(discovery.contains("ARCHITECTURE.md"));
         assert!(discovery.contains("IMPL_PLAN.md"));
-
     }
 
     #[test]
     fn test_fixer_prompt_includes_error_context() {
-        let prompt = fixer_prompt("T1", "test task", 1, "SPEC.md", "TASKS.md", "Builder timed out after 300s");
+        let prompt = fixer_prompt(
+            "T1",
+            "test task",
+            1,
+            "SPEC.md",
+            "TASKS.md",
+            "Builder timed out after 300s",
+        );
         assert!(
             prompt.contains("Structured Error Context"),
             "fixer prompt must include error context section when provided"
@@ -1377,14 +1389,31 @@ mod tests {
     #[test]
     fn test_format_stage_results_for_prompt_empty() {
         let result = format_stage_results_for_prompt(&[]);
-        assert!(result.is_empty(), "empty stage results should produce empty string");
+        assert!(
+            result.is_empty(),
+            "empty stage results should produce empty string"
+        );
     }
 
     #[test]
     fn test_format_stage_results_for_prompt_with_entries() {
         let results = vec![
-            ("Scout".to_string(), true, None, "Investigate codebase".to_string(), vec!["scout-report.md".to_string()], vec![]),
-            ("Builder".to_string(), false, Some("Timeout".to_string()), "Implement changes".to_string(), vec![], vec!["Try simpler approach".to_string()]),
+            (
+                "Scout".to_string(),
+                true,
+                None,
+                "Investigate codebase".to_string(),
+                vec!["scout-report.md".to_string()],
+                vec![],
+            ),
+            (
+                "Builder".to_string(),
+                false,
+                Some("Timeout".to_string()),
+                "Implement changes".to_string(),
+                vec![],
+                vec!["Try simpler approach".to_string()],
+            ),
         ];
         let output = format_stage_results_for_prompt(&results);
         assert!(output.contains("### Pipeline Stage Results"));
@@ -1411,16 +1440,37 @@ mod tests {
         let provenance_rule = "PROVENANCE RULES";
 
         let main = reviewer_prompt("T1", "test", "file.rs", 1, "", None, "SPEC.md", "TASKS.md");
-        assert!(main.contains(needle), "reviewer_prompt missing source_evidence in schema");
-        assert!(main.contains(provenance_rule), "reviewer_prompt missing PROVENANCE RULES section");
+        assert!(
+            main.contains(needle),
+            "reviewer_prompt missing source_evidence in schema"
+        );
+        assert!(
+            main.contains(provenance_rule),
+            "reviewer_prompt missing PROVENANCE RULES section"
+        );
 
-        let per_file = reviewer_per_file_prompt("T1", "test", "src/foo.rs", "", "SPEC.md", "TASKS.md");
-        assert!(per_file.contains(needle), "reviewer_per_file_prompt missing source_evidence in schema");
-        assert!(per_file.contains(provenance_rule), "reviewer_per_file_prompt missing PROVENANCE RULES section");
+        let per_file =
+            reviewer_per_file_prompt("T1", "test", "src/foo.rs", "", "SPEC.md", "TASKS.md");
+        assert!(
+            per_file.contains(needle),
+            "reviewer_per_file_prompt missing source_evidence in schema"
+        );
+        assert!(
+            per_file.contains(provenance_rule),
+            "reviewer_per_file_prompt missing PROVENANCE RULES section"
+        );
 
-        let integration = reviewer_integration_prompt("T1", "test", "file.rs", "{}", "", None, "SPEC.md", "TASKS.md");
-        assert!(integration.contains(needle), "reviewer_integration_prompt missing source_evidence in schema");
-        assert!(integration.contains(provenance_rule), "reviewer_integration_prompt missing PROVENANCE RULES section");
+        let integration = reviewer_integration_prompt(
+            "T1", "test", "file.rs", "{}", "", None, "SPEC.md", "TASKS.md",
+        );
+        assert!(
+            integration.contains(needle),
+            "reviewer_integration_prompt missing source_evidence in schema"
+        );
+        assert!(
+            integration.contains(provenance_rule),
+            "reviewer_integration_prompt missing PROVENANCE RULES section"
+        );
     }
 
     #[test]
@@ -1432,24 +1482,63 @@ mod tests {
 
         // Main reviewer prompt
         let main = reviewer_prompt("T1", "test", "file.rs", 1, "", None, "SPEC.md", "TASKS.md");
-        assert!(main.contains(needle_header), "reviewer_prompt missing BORDERLINE CASES header");
-        assert!(main.contains(needle_1), "reviewer_prompt missing borderline 1");
-        assert!(main.contains(needle_2), "reviewer_prompt missing borderline 2");
-        assert!(main.contains(needle_3), "reviewer_prompt missing borderline 3");
+        assert!(
+            main.contains(needle_header),
+            "reviewer_prompt missing BORDERLINE CASES header"
+        );
+        assert!(
+            main.contains(needle_1),
+            "reviewer_prompt missing borderline 1"
+        );
+        assert!(
+            main.contains(needle_2),
+            "reviewer_prompt missing borderline 2"
+        );
+        assert!(
+            main.contains(needle_3),
+            "reviewer_prompt missing borderline 3"
+        );
 
         // Per-file reviewer prompt
-        let per_file = reviewer_per_file_prompt("T1", "test", "src/foo.rs", "", "SPEC.md", "TASKS.md");
-        assert!(per_file.contains(needle_header), "reviewer_per_file_prompt missing BORDERLINE CASES header");
-        assert!(per_file.contains(needle_1), "reviewer_per_file_prompt missing borderline 1");
-        assert!(per_file.contains(needle_2), "reviewer_per_file_prompt missing borderline 2");
-        assert!(per_file.contains(needle_3), "reviewer_per_file_prompt missing borderline 3");
+        let per_file =
+            reviewer_per_file_prompt("T1", "test", "src/foo.rs", "", "SPEC.md", "TASKS.md");
+        assert!(
+            per_file.contains(needle_header),
+            "reviewer_per_file_prompt missing BORDERLINE CASES header"
+        );
+        assert!(
+            per_file.contains(needle_1),
+            "reviewer_per_file_prompt missing borderline 1"
+        );
+        assert!(
+            per_file.contains(needle_2),
+            "reviewer_per_file_prompt missing borderline 2"
+        );
+        assert!(
+            per_file.contains(needle_3),
+            "reviewer_per_file_prompt missing borderline 3"
+        );
 
         // Integration reviewer prompt
-        let integration = reviewer_integration_prompt("T1", "test", "file.rs", "{}", "", None, "SPEC.md", "TASKS.md");
-        assert!(integration.contains(needle_header), "reviewer_integration_prompt missing BORDERLINE CASES header");
-        assert!(integration.contains(needle_1), "reviewer_integration_prompt missing borderline 1");
-        assert!(integration.contains(needle_2), "reviewer_integration_prompt missing borderline 2");
-        assert!(integration.contains(needle_3), "reviewer_integration_prompt missing borderline 3");
+        let integration = reviewer_integration_prompt(
+            "T1", "test", "file.rs", "{}", "", None, "SPEC.md", "TASKS.md",
+        );
+        assert!(
+            integration.contains(needle_header),
+            "reviewer_integration_prompt missing BORDERLINE CASES header"
+        );
+        assert!(
+            integration.contains(needle_1),
+            "reviewer_integration_prompt missing borderline 1"
+        );
+        assert!(
+            integration.contains(needle_2),
+            "reviewer_integration_prompt missing borderline 2"
+        );
+        assert!(
+            integration.contains(needle_3),
+            "reviewer_integration_prompt missing borderline 3"
+        );
     }
 
     #[test]
@@ -1458,15 +1547,36 @@ mod tests {
         let scoring_section = "CONFIDENCE SCORING";
 
         let main = reviewer_prompt("T1", "test", "file.rs", 1, "", None, "SPEC.md", "TASKS.md");
-        assert!(main.contains(needle), "reviewer_prompt missing confidence in schema");
-        assert!(main.contains(scoring_section), "reviewer_prompt missing CONFIDENCE SCORING section");
+        assert!(
+            main.contains(needle),
+            "reviewer_prompt missing confidence in schema"
+        );
+        assert!(
+            main.contains(scoring_section),
+            "reviewer_prompt missing CONFIDENCE SCORING section"
+        );
 
-        let per_file = reviewer_per_file_prompt("T1", "test", "src/foo.rs", "", "SPEC.md", "TASKS.md");
-        assert!(per_file.contains(needle), "reviewer_per_file_prompt missing confidence in schema");
-        assert!(per_file.contains(scoring_section), "reviewer_per_file_prompt missing CONFIDENCE SCORING section");
+        let per_file =
+            reviewer_per_file_prompt("T1", "test", "src/foo.rs", "", "SPEC.md", "TASKS.md");
+        assert!(
+            per_file.contains(needle),
+            "reviewer_per_file_prompt missing confidence in schema"
+        );
+        assert!(
+            per_file.contains(scoring_section),
+            "reviewer_per_file_prompt missing CONFIDENCE SCORING section"
+        );
 
-        let integration = reviewer_integration_prompt("T1", "test", "file.rs", "{}", "", None, "SPEC.md", "TASKS.md");
-        assert!(integration.contains(needle), "reviewer_integration_prompt missing confidence in schema");
-        assert!(integration.contains(scoring_section), "reviewer_integration_prompt missing CONFIDENCE SCORING section");
+        let integration = reviewer_integration_prompt(
+            "T1", "test", "file.rs", "{}", "", None, "SPEC.md", "TASKS.md",
+        );
+        assert!(
+            integration.contains(needle),
+            "reviewer_integration_prompt missing confidence in schema"
+        );
+        assert!(
+            integration.contains(scoring_section),
+            "reviewer_integration_prompt missing CONFIDENCE SCORING section"
+        );
     }
 }

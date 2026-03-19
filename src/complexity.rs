@@ -16,14 +16,21 @@ pub enum TaskComplexity {
 // ─── Keywords ───────────────────────────────────────────────────────
 
 const SIMPLE_KEYWORDS: &[&str] = &[
-    "rename", "add", "change", "update", "fix", "set", "remove", "delete",
-    "move", "typo", "color", "label", "text", "value", "flag", "toggle",
-    "bump", "version",
+    "rename", "add", "change", "update", "fix", "set", "remove", "delete", "move", "typo", "color",
+    "label", "text", "value", "flag", "toggle", "bump", "version",
 ];
 
 const COMPLEX_KEYWORDS: &[&str] = &[
-    "architect", "redesign", "refactor", "migrate", "rewrite", "system",
-    "framework", "engine", "infrastructure", "overhaul",
+    "architect",
+    "redesign",
+    "refactor",
+    "migrate",
+    "rewrite",
+    "system",
+    "framework",
+    "engine",
+    "infrastructure",
+    "overhaul",
 ];
 
 // ─── Classifier ─────────────────────────────────────────────────────
@@ -82,17 +89,26 @@ mod tests {
 
     #[test]
     fn simple_bump_version() {
-        assert_eq!(classify_task("bump version to 1.2.3"), TaskComplexity::Simple);
+        assert_eq!(
+            classify_task("bump version to 1.2.3"),
+            TaskComplexity::Simple
+        );
     }
 
     #[test]
     fn complex_keyword_refactor() {
-        assert_eq!(classify_task("refactor auth module"), TaskComplexity::Complex);
+        assert_eq!(
+            classify_task("refactor auth module"),
+            TaskComplexity::Complex
+        );
     }
 
     #[test]
     fn complex_keyword_migrate() {
-        assert_eq!(classify_task("migrate database to PostgreSQL"), TaskComplexity::Complex);
+        assert_eq!(
+            classify_task("migrate database to PostgreSQL"),
+            TaskComplexity::Complex
+        );
     }
 
     #[test]
@@ -103,13 +119,19 @@ mod tests {
 
     #[test]
     fn medium_no_keywords() {
-        assert_eq!(classify_task("implement caching layer"), TaskComplexity::Medium);
+        assert_eq!(
+            classify_task("implement caching layer"),
+            TaskComplexity::Medium
+        );
     }
 
     #[test]
     fn medium_simple_keyword_but_long() {
         // 80+ chars with a simple keyword stays medium (not simple).
-        let desc = format!("update the configuration file with new settings for the deployment pipeline across {}", "all environments");
+        let desc = format!(
+            "update the configuration file with new settings for the deployment pipeline across {}",
+            "all environments"
+        );
         assert!(desc.len() >= 80);
         assert_eq!(classify_task(&desc), TaskComplexity::Medium);
     }
@@ -117,7 +139,10 @@ mod tests {
     #[test]
     fn complex_beats_simple_when_both_present() {
         // "refactor" is complex, "fix" is simple -- complex wins.
-        assert_eq!(classify_task("fix and refactor auth"), TaskComplexity::Complex);
+        assert_eq!(
+            classify_task("fix and refactor auth"),
+            TaskComplexity::Complex
+        );
     }
 
     #[test]

@@ -22,12 +22,12 @@ use self::startup::{
     classify_plan_status, detect_startup_scenario, enter_home_surface, enter_startup_surface,
     handle_startup_event, load_pending_task_at,
 };
+pub use self::state::FileEntry;
 use self::state::{AppEvent, AppendTasksRequest, LoopEvent, PendingTransition, PlanningOutcome};
 pub use self::state::{
-    AppPhase, AppState, DualSelection, ExtensionDisplayInfo, PatternEventKind,
-    PlanStatus, PlanningState, StartupAction, StartupScenario, StartupState, TuiPane,
+    AppPhase, AppState, DualSelection, ExtensionDisplayInfo, PatternEventKind, PlanStatus,
+    PlanningState, StartupAction, StartupScenario, StartupState, TuiPane,
 };
-pub use self::state::FileEntry;
 use crate::agent::{AgentOutputEvent, AgentRole};
 use crate::config::Config;
 use crate::git;
@@ -218,7 +218,9 @@ fn spawn_terminal_event_reader(
                     break;
                 };
                 let app_event = match evt {
-                    Event::Key(key) if key.kind == event::KeyEventKind::Press => Some(AppEvent::Key(key)),
+                    Event::Key(key) if key.kind == event::KeyEventKind::Press => {
+                        Some(AppEvent::Key(key))
+                    }
                     Event::Key(_) => None, // Ignore Release/Repeat (Windows fires both)
                     Event::Mouse(mouse) => Some(AppEvent::Mouse(mouse)),
                     Event::Paste(text) => Some(AppEvent::Paste(text)),
@@ -398,7 +400,13 @@ fn spawn_build_loop(
     state.awaiting_pr = None;
     state.pr_poll_last_check = None;
 
-    let mut run_context = RunContext::new(project_dir, loop_config, shutdown.clone(), state.tasks_file_lock.clone(), review_gate);
+    let mut run_context = RunContext::new(
+        project_dir,
+        loop_config,
+        shutdown.clone(),
+        state.tasks_file_lock.clone(),
+        review_gate,
+    );
     run_context.session_cost_millicents = state.session_cost_millicents.clone();
     let loop_tx = event_tx.clone();
     tokio::spawn(async move {
@@ -438,7 +446,13 @@ fn spawn_inline_planning(
     );
     state.log(format!("Planning started — {}", label));
 
-    let run_context = RunContext::new(project_dir, config.clone(), shutdown.clone(), state.tasks_file_lock.clone(), Arc::new(AtomicBool::new(false)));
+    let run_context = RunContext::new(
+        project_dir,
+        config.clone(),
+        shutdown.clone(),
+        state.tasks_file_lock.clone(),
+        Arc::new(AtomicBool::new(false)),
+    );
     let event_tx = event_tx.clone();
     tokio::spawn(async move {
         planning::spawn_inline_planning_task(run_context, event_tx, user_intent).await;
@@ -478,7 +492,13 @@ fn spawn_append_tasks(
     state.next_task_hint = None;
     state.is_discovering = false;
 
-    let run_context = RunContext::new(project_dir, config.clone(), shutdown.clone(), state.tasks_file_lock.clone(), Arc::new(AtomicBool::new(false)));
+    let run_context = RunContext::new(
+        project_dir,
+        config.clone(),
+        shutdown.clone(),
+        state.tasks_file_lock.clone(),
+        Arc::new(AtomicBool::new(false)),
+    );
     let event_tx = event_tx.clone();
     tokio::spawn(async move {
         planning::run_append_tasks(run_context, event_tx, request.description).await;
@@ -547,8 +567,7 @@ fn handle_planning_event(state: &mut AppState, event: AppEvent, config: &Config)
                                 }
                             }
                             if rest.contains("proposer") {
-                                planning.orchestrator_role_label =
-                                    Some("Proposing".to_string());
+                                planning.orchestrator_role_label = Some("Proposing".to_string());
                                 if let Some(paren_open) = rest.find('(') {
                                     if let Some(paren_close) = rest.find(')') {
                                         if paren_close > paren_open + 1 {
@@ -559,22 +578,19 @@ fn handle_planning_event(state: &mut AppState, event: AppEvent, config: &Config)
                                 }
                             }
                         }
-                        if let Some(rest) = last_line.strip_prefix("[orchestrator] Reviewing with ") {
+                        if let Some(rest) = last_line.strip_prefix("[orchestrator] Reviewing with ")
+                        {
                             planning.orchestrator_role_label = Some("Reviewing".to_string());
                             let model_str = rest.trim_end_matches("...");
                             if !model_str.is_empty() {
                                 planning.orchestrator_role_model = Some(model_str.to_string());
                             }
                         }
-                        if let Some(rest) =
-                            last_line.strip_prefix("[orchestrator] Review: ")
-                        {
+                        if let Some(rest) = last_line.strip_prefix("[orchestrator] Review: ") {
                             if let Some(paren_start) = rest.find('(') {
                                 let after_paren = &rest[paren_start + 1..];
                                 if let Some(space) = after_paren.find(' ') {
-                                    if let Ok(count) =
-                                        after_paren[..space].parse::<usize>()
-                                    {
+                                    if let Ok(count) = after_paren[..space].parse::<usize>() {
                                         planning.orchestrator_finding_count = count;
                                     }
                                 }
@@ -586,7 +602,9 @@ fn handle_planning_event(state: &mut AppState, event: AppEvent, config: &Config)
         }
         AppEvent::AgentDone(success) => handle_agent_done(state, success),
 
-        AppEvent::DualPipelineEvent(idx, inner) => handle_dual_pipeline_event(state, idx, *inner, config),
+        AppEvent::DualPipelineEvent(idx, inner) => {
+            handle_dual_pipeline_event(state, idx, *inner, config)
+        }
         AppEvent::PlanningFinished(outcome) => apply_planning_outcome(state, outcome),
         AppEvent::OrchestratorFinished(outcome) => apply_orchestrator_outcome(state, outcome),
         AppEvent::Key(key) => handle_planning_key(state, key, config),
@@ -599,7 +617,12 @@ fn handle_planning_event(state: &mut AppState, event: AppEvent, config: &Config)
         }
         AppEvent::OllamaStatus(connected) => {
             state.last_pattern_match_mode = Some(
-                if connected { "semantic" } else { "keyword-only" }.to_string(),
+                if connected {
+                    "semantic"
+                } else {
+                    "keyword-only"
+                }
+                .to_string(),
             );
         }
         AppEvent::LoopEvent(_) => {}
@@ -666,7 +689,9 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
     match event {
         AppEvent::AgentOutput(output) => handle_agent_output(state, output),
 
-        AppEvent::DualPipelineEvent(idx, inner) => handle_dual_pipeline_event(state, idx, *inner, config),
+        AppEvent::DualPipelineEvent(idx, inner) => {
+            handle_dual_pipeline_event(state, idx, *inner, config)
+        }
         AppEvent::AgentDone(success) => handle_agent_done(state, success),
         AppEvent::LoopEvent(le) => match le {
             LoopEvent::TaskStarted(task) => {
@@ -697,13 +722,21 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                     stages: [None, None],
                     stage_models: [String::new(), String::new()],
                 };
-                state.log(format!("Dual pipeline started: {} vs {}", models[0], models[1]));
+                state.log(format!(
+                    "Dual pipeline started: {} vs {}",
+                    models[0], models[1]
+                ));
             }
             LoopEvent::DualBuildStreamDone(idx, success) => {
                 if idx < 2 {
                     state.dual_build.finished[idx] = true;
                     let status = if success { "completed" } else { "failed" };
-                    state.log(format!("Pipeline {} ({}): {}", idx + 1, state.dual_build.models[idx], status));
+                    state.log(format!(
+                        "Pipeline {} ({}): {}",
+                        idx + 1,
+                        state.dual_build.models[idx],
+                        status
+                    ));
                 }
             }
             LoopEvent::TaskCompleted(id, success) => {
@@ -751,15 +784,25 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
             LoopEvent::ExtensionKeywordsLoaded { ref keywords } => {
                 state.extension_keywords = keywords.clone();
             }
-            LoopEvent::ExtensionInjected { ref name, ref agent_role, ref task_id } => {
+            LoopEvent::ExtensionInjected {
+                ref name,
+                ref agent_role,
+                ref task_id,
+            } => {
                 state.session_extensions_used.push(state::ExtensionEvent {
                     name: name.clone(),
                     agent_role: agent_role.clone(),
                     task_id: task_id.clone(),
                 });
-                *state.extension_inject_count.entry(name.clone()).or_insert(0) += 1;
+                *state
+                    .extension_inject_count
+                    .entry(name.clone())
+                    .or_insert(0) += 1;
             }
-            LoopEvent::PatternsUsed { ref titles, ref keywords_by_title } => {
+            LoopEvent::PatternsUsed {
+                ref titles,
+                ref keywords_by_title,
+            } => {
                 for title in titles {
                     state.session_patterns.push(state::PatternEvent {
                         title: title.clone(),
@@ -788,11 +831,21 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                         for part in rest.split(',') {
                             let trimmed = part.trim();
                             if trimmed.ends_with("high") {
-                                if let Ok(n) = trimmed.split_whitespace().next().unwrap_or("0").parse::<usize>() {
+                                if let Ok(n) = trimmed
+                                    .split_whitespace()
+                                    .next()
+                                    .unwrap_or("0")
+                                    .parse::<usize>()
+                                {
                                     state.session_review_high += n;
                                 }
                             } else if trimmed.ends_with("medium") {
-                                if let Ok(n) = trimmed.split_whitespace().next().unwrap_or("0").parse::<usize>() {
+                                if let Ok(n) = trimmed
+                                    .split_whitespace()
+                                    .next()
+                                    .unwrap_or("0")
+                                    .parse::<usize>()
+                                {
                                     state.session_review_medium += n;
                                 }
                             }
@@ -855,7 +908,10 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                 state.awaiting_pr = pr_num;
                 state.pr_poll_last_check = None;
                 if let Some(num) = pr_num {
-                    state.log(format!("Awaiting PR #{} review -- press Enter to skip or wait for approval", num));
+                    state.log(format!(
+                        "Awaiting PR #{} review -- press Enter to skip or wait for approval",
+                        num
+                    ));
                 } else {
                     state.log("Awaiting review -- press Enter or 'c' to continue");
                 }
@@ -880,7 +936,10 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                 let _ = std::fs::create_dir_all(&state.buildloop_dir);
                 let _ = std::fs::write(state.buildloop_dir.join("stop"), "");
                 state.stop_after_task = true;
-                state.log(format!("PR #{} was closed without merge -- stopping", pr_num));
+                state.log(format!(
+                    "PR #{} was closed without merge -- stopping",
+                    pr_num
+                ));
             }
             LoopEvent::PrPollChecked => {
                 state.pr_poll_last_check = Some(std::time::Instant::now());
@@ -905,16 +964,38 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                     state.log(warning);
                 }
                 state.log("All work complete — loop finished");
-                let project_dir = state.buildloop_dir.parent().unwrap_or(std::path::Path::new(".")).to_path_buf();
-                enter_home_surface(&project_dir, state, Some("Build loop finished.".to_string()));
+                let project_dir = state
+                    .buildloop_dir
+                    .parent()
+                    .unwrap_or(std::path::Path::new("."))
+                    .to_path_buf();
+                enter_home_surface(
+                    &project_dir,
+                    state,
+                    Some("Build loop finished.".to_string()),
+                );
             }
         },
         AppEvent::Key(key) => {
             if state.inject_input.is_some() {
                 handle_inject_key(state, key);
+            } else if state.dual_arena_ready()
+                && matches!(key.code, KeyCode::Char('q') | KeyCode::Esc)
+            {
+                let project_dir = state
+                    .buildloop_dir
+                    .parent()
+                    .unwrap_or(std::path::Path::new("."))
+                    .to_path_buf();
+                enter_home_surface(
+                    &project_dir,
+                    state,
+                    Some("Arena results preserved in .buildloop/arena/".to_string()),
+                );
             } else if state.show_running_explorer {
                 // Review gate: Enter/c clears the review pause (must be before other handlers)
-                if state.awaiting_review && matches!(key.code, KeyCode::Enter | KeyCode::Char('c')) {
+                if state.awaiting_review && matches!(key.code, KeyCode::Enter | KeyCode::Char('c'))
+                {
                     state.awaiting_review = false;
                     if let Some(ref gate) = state.review_gate {
                         gate.store(false, Ordering::Relaxed);
@@ -923,68 +1004,72 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                     state.awaiting_pr = None;
                     state.pr_poll_last_check = None;
                 } else {
-                match key.code {
-                    KeyCode::Char('q') => {
-                        if state.stop_after_task {
-                            state.stop_after_task = false;
-                            let _ = std::fs::remove_file(state.buildloop_dir.join("stop"));
-                            state.log("Stop cancelled -- resuming build");
-                        } else {
-                            state.stop_after_task = true;
-                            let _ = std::fs::create_dir_all(&state.buildloop_dir);
-                            let _ = std::fs::write(state.buildloop_dir.join("stop"), "");
-                            state.log("Stopping after current task (q again to cancel, Ctrl+C to force quit)");
+                    match key.code {
+                        KeyCode::Char('q') => {
+                            if state.stop_after_task {
+                                state.stop_after_task = false;
+                                let _ = std::fs::remove_file(state.buildloop_dir.join("stop"));
+                                state.log("Stop cancelled -- resuming build");
+                            } else {
+                                state.stop_after_task = true;
+                                let _ = std::fs::create_dir_all(&state.buildloop_dir);
+                                let _ = std::fs::write(state.buildloop_dir.join("stop"), "");
+                                state.log("Stopping after current task (q again to cancel, Ctrl+C to force quit)");
+                            }
                         }
-                    }
-                    KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                        if state.stop_after_task {
-                            let _ = std::fs::remove_file(state.buildloop_dir.join("stop"));
-                            state.should_quit = true;
-                        } else {
-                            state.stop_after_task = true;
-                            let _ = std::fs::create_dir_all(&state.buildloop_dir);
-                            let _ = std::fs::write(state.buildloop_dir.join("stop"), "");
-                            state.log(
+                        KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                            if state.stop_after_task {
+                                let _ = std::fs::remove_file(state.buildloop_dir.join("stop"));
+                                state.should_quit = true;
+                            } else {
+                                state.stop_after_task = true;
+                                let _ = std::fs::create_dir_all(&state.buildloop_dir);
+                                let _ = std::fs::write(state.buildloop_dir.join("stop"), "");
+                                state.log(
                                 "Will stop after current task completes (Ctrl+C again to force quit)",
                             );
+                            }
                         }
-                    }
-                    KeyCode::Tab | KeyCode::BackTab => {
-                        state.show_running_explorer = false;
-                        state.focused_pane = state::TuiPane::AgentOutput;
-                    }
-                    KeyCode::Up => {
-                        move_running_explorer_selection(state, -1);
-                    }
-                    KeyCode::Down => {
-                        move_running_explorer_selection(state, 1);
-                    }
-                    KeyCode::PageUp => {
-                        move_running_explorer_selection(state, -10);
-                    }
-                    KeyCode::PageDown => {
-                        move_running_explorer_selection(state, 10);
-                    }
-                    KeyCode::Enter => {
-                        handle_running_explorer_enter(state);
-                    }
-                    KeyCode::Char('a') => {
-                        if let Some(ref mut explorer) = state.running_explorer {
-                            startup::toggle_expand_all(explorer);
+                        KeyCode::Tab | KeyCode::BackTab => {
+                            state.show_running_explorer = false;
+                            state.focused_pane = state::TuiPane::AgentOutput;
                         }
-                    }
-                    KeyCode::Char('w') => {
-                        let project_dir = state.buildloop_dir.parent().unwrap_or(std::path::Path::new("."));
-                        if let Some(ref mut explorer) = state.running_explorer {
-                            startup::toggle_preview_wrap(explorer, project_dir);
+                        KeyCode::Up => {
+                            move_running_explorer_selection(state, -1);
                         }
+                        KeyCode::Down => {
+                            move_running_explorer_selection(state, 1);
+                        }
+                        KeyCode::PageUp => {
+                            move_running_explorer_selection(state, -10);
+                        }
+                        KeyCode::PageDown => {
+                            move_running_explorer_selection(state, 10);
+                        }
+                        KeyCode::Enter => {
+                            handle_running_explorer_enter(state);
+                        }
+                        KeyCode::Char('a') => {
+                            if let Some(ref mut explorer) = state.running_explorer {
+                                startup::toggle_expand_all(explorer);
+                            }
+                        }
+                        KeyCode::Char('w') => {
+                            let project_dir = state
+                                .buildloop_dir
+                                .parent()
+                                .unwrap_or(std::path::Path::new("."));
+                            if let Some(ref mut explorer) = state.running_explorer {
+                                startup::toggle_preview_wrap(explorer, project_dir);
+                            }
+                        }
+                        _ => {}
                     }
-                    _ => {}
-                }
                 } // close review-gate else
             } else {
                 // Review gate: Enter/c clears the review pause (must be before other handlers)
-                if state.awaiting_review && matches!(key.code, KeyCode::Enter | KeyCode::Char('c')) {
+                if state.awaiting_review && matches!(key.code, KeyCode::Enter | KeyCode::Char('c'))
+                {
                     state.awaiting_review = false;
                     if let Some(ref gate) = state.review_gate {
                         gate.store(false, Ordering::Relaxed);
@@ -993,122 +1078,125 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                     state.awaiting_pr = None;
                     state.pr_poll_last_check = None;
                 } else {
-                match key.code {
-                    KeyCode::Char('q') => {
-                        if state.stop_after_task {
-                            // Cancel stop -- resume running
-                            state.stop_after_task = false;
-                            let _ = std::fs::remove_file(state.buildloop_dir.join("stop"));
-                            state.log("Stop cancelled -- resuming build");
-                        } else {
-                            // Request stop after current task
-                            state.stop_after_task = true;
-                            let _ = std::fs::create_dir_all(&state.buildloop_dir);
-                            let _ = std::fs::write(state.buildloop_dir.join("stop"), "");
-                            state.log("Stopping after current task (q again to cancel, Ctrl+C to force quit)");
+                    match key.code {
+                        KeyCode::Char('q') => {
+                            if state.stop_after_task {
+                                // Cancel stop -- resume running
+                                state.stop_after_task = false;
+                                let _ = std::fs::remove_file(state.buildloop_dir.join("stop"));
+                                state.log("Stop cancelled -- resuming build");
+                            } else {
+                                // Request stop after current task
+                                state.stop_after_task = true;
+                                let _ = std::fs::create_dir_all(&state.buildloop_dir);
+                                let _ = std::fs::write(state.buildloop_dir.join("stop"), "");
+                                state.log("Stopping after current task (q again to cancel, Ctrl+C to force quit)");
+                            }
                         }
-                    }
-                    KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                        if state.stop_after_task {
-                            // Second Ctrl+C: quit immediately
-                            let _ = std::fs::remove_file(state.buildloop_dir.join("stop"));
-                            state.should_quit = true;
-                        } else {
-                            state.stop_after_task = true;
-                            let _ = std::fs::create_dir_all(&state.buildloop_dir);
-                            let _ = std::fs::write(state.buildloop_dir.join("stop"), "");
-                            state.log(
+                        KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                            if state.stop_after_task {
+                                // Second Ctrl+C: quit immediately
+                                let _ = std::fs::remove_file(state.buildloop_dir.join("stop"));
+                                state.should_quit = true;
+                            } else {
+                                state.stop_after_task = true;
+                                let _ = std::fs::create_dir_all(&state.buildloop_dir);
+                                let _ = std::fs::write(state.buildloop_dir.join("stop"), "");
+                                state.log(
                                 "Will stop after current task completes (Ctrl+C again to force quit)",
                             );
-                        }
-                    }
-                    KeyCode::Char('f') => {
-                        if state.last_orchestrator_outcome.is_some() {
-                            state.show_findings = !state.show_findings;
-                            state.findings_scroll = 0;
-                        }
-                    }
-                    KeyCode::Char('p') => {
-                        if state.show_patterns {
-                            state.show_patterns = false;
-                        } else {
-                            state.show_patterns = true;
-                            refresh_patterns_cache(state, config);
-                        }
-                    }
-                    KeyCode::Char('i') => {
-                        state.inject_input = Some(String::new());
-                    }
-                    KeyCode::Char('t') => {
-                        let (new_theme, name) = crate::tui::theme::cycle_next(&state.tui_theme);
-                        state.tui_theme = new_theme;
-                        state.log(format!("Theme: {}", name));
-                    }
-                    KeyCode::Char('1') => {
-                        if state.dual_build.active {
-                            state.dual_build.tab = 0;
-                        }
-                    }
-                    KeyCode::Char('2') => {
-                        if state.dual_build.active {
-                            state.dual_build.tab = 1;
-                        }
-                    }
-                    KeyCode::Up => {
-                        if state.show_findings {
-                            state.findings_scroll = state.findings_scroll.saturating_sub(3);
-                        } else if state.show_patterns {
-                            state.patterns_scroll = state.patterns_scroll.saturating_sub(3);
-                        } else {
-                            let max = state.agent_output.len().saturating_sub(1);
-                            state.scroll_offset = state.scroll_offset.saturating_add(3).min(max);
-                        }
-                    }
-                    KeyCode::Down => {
-                        if state.show_findings {
-                            state.findings_scroll = state.findings_scroll.saturating_add(3);
-                        } else if state.show_patterns {
-                            state.patterns_scroll = state.patterns_scroll.saturating_add(3);
-                        } else {
-                            state.scroll_offset = state.scroll_offset.saturating_sub(3);
-                        }
-                    }
-                    KeyCode::PageUp => {
-                        let max = state.task_queue.len().saturating_sub(1);
-                        state.task_queue_scroll = state.task_queue_scroll.saturating_add(3).min(max);
-                    }
-                    KeyCode::PageDown => {
-                        state.task_queue_scroll = state.task_queue_scroll.saturating_sub(3);
-                    }
-                    KeyCode::Tab | KeyCode::BackTab => {
-                        if state.show_running_explorer {
-                            // Return to dashboard
-                            state.show_running_explorer = false;
-                            state.focused_pane = state::TuiPane::AgentOutput;
-                        } else {
-                            // Enter explorer view -- lazily populate running_explorer
-                            if state.running_explorer.is_none() {
-                                let project_dir = state
-                                    .buildloop_dir
-                                    .parent()
-                                    .unwrap_or(std::path::Path::new("."));
-                                let scenario = detect_startup_scenario(project_dir);
-                                let plan_status = classify_plan_status(
-                                    &self::contract::ContractPaths::resolve(project_dir).tasks_path,
-                                );
-                                state.running_explorer = Some(StartupState::new(
-                                    project_dir,
-                                    scenario,
-                                    plan_status,
-                                    None,
-                                ));
                             }
-                            state.show_running_explorer = true;
-                            state.focused_pane = state::TuiPane::Explorer;
                         }
+                        KeyCode::Char('f') => {
+                            if state.last_orchestrator_outcome.is_some() {
+                                state.show_findings = !state.show_findings;
+                                state.findings_scroll = 0;
+                            }
+                        }
+                        KeyCode::Char('p') => {
+                            if state.show_patterns {
+                                state.show_patterns = false;
+                            } else {
+                                state.show_patterns = true;
+                                refresh_patterns_cache(state, config);
+                            }
+                        }
+                        KeyCode::Char('i') => {
+                            state.inject_input = Some(String::new());
+                        }
+                        KeyCode::Char('t') => {
+                            let (new_theme, name) = crate::tui::theme::cycle_next(&state.tui_theme);
+                            state.tui_theme = new_theme;
+                            state.log(format!("Theme: {}", name));
+                        }
+                        KeyCode::Char('1') => {
+                            if state.dual_build.active {
+                                state.dual_build.tab = 0;
+                            }
+                        }
+                        KeyCode::Char('2') => {
+                            if state.dual_build.active {
+                                state.dual_build.tab = 1;
+                            }
+                        }
+                        KeyCode::Up => {
+                            if state.show_findings {
+                                state.findings_scroll = state.findings_scroll.saturating_sub(3);
+                            } else if state.show_patterns {
+                                state.patterns_scroll = state.patterns_scroll.saturating_sub(3);
+                            } else {
+                                let max = state.agent_output.len().saturating_sub(1);
+                                state.scroll_offset =
+                                    state.scroll_offset.saturating_add(3).min(max);
+                            }
+                        }
+                        KeyCode::Down => {
+                            if state.show_findings {
+                                state.findings_scroll = state.findings_scroll.saturating_add(3);
+                            } else if state.show_patterns {
+                                state.patterns_scroll = state.patterns_scroll.saturating_add(3);
+                            } else {
+                                state.scroll_offset = state.scroll_offset.saturating_sub(3);
+                            }
+                        }
+                        KeyCode::PageUp => {
+                            let max = state.task_queue.len().saturating_sub(1);
+                            state.task_queue_scroll =
+                                state.task_queue_scroll.saturating_add(3).min(max);
+                        }
+                        KeyCode::PageDown => {
+                            state.task_queue_scroll = state.task_queue_scroll.saturating_sub(3);
+                        }
+                        KeyCode::Tab | KeyCode::BackTab => {
+                            if state.show_running_explorer {
+                                // Return to dashboard
+                                state.show_running_explorer = false;
+                                state.focused_pane = state::TuiPane::AgentOutput;
+                            } else {
+                                // Enter explorer view -- lazily populate running_explorer
+                                if state.running_explorer.is_none() {
+                                    let project_dir = state
+                                        .buildloop_dir
+                                        .parent()
+                                        .unwrap_or(std::path::Path::new("."));
+                                    let scenario = detect_startup_scenario(project_dir);
+                                    let plan_status = classify_plan_status(
+                                        &self::contract::ContractPaths::resolve(project_dir)
+                                            .tasks_path,
+                                    );
+                                    state.running_explorer = Some(StartupState::new(
+                                        project_dir,
+                                        scenario,
+                                        plan_status,
+                                        None,
+                                    ));
+                                }
+                                state.show_running_explorer = true;
+                                state.focused_pane = state::TuiPane::Explorer;
+                            }
+                        }
+                        _ => {}
                     }
-                    _ => {}
-                }
                 } // close review-gate else
             }
         }
@@ -1120,7 +1208,12 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
         }
         AppEvent::OllamaStatus(connected) => {
             state.last_pattern_match_mode = Some(
-                if connected { "semantic" } else { "keyword-only" }.to_string(),
+                if connected {
+                    "semantic"
+                } else {
+                    "keyword-only"
+                }
+                .to_string(),
             );
         }
         AppEvent::Mouse(mouse) => {
@@ -1138,21 +1231,29 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                             state.findings_scroll = state.findings_scroll.saturating_sub(3);
                         } else {
                             let terminal_size = crossterm::terminal::size().unwrap_or((120, 40));
-                            let area = ratatui::layout::Rect::new(0, 0, terminal_size.0, terminal_size.1);
-                            let has_ext = state.available_extensions.iter().any(|e| e.selected) || !state.session_extensions_used.is_empty();
+                            let area =
+                                ratatui::layout::Rect::new(0, 0, terminal_size.0, terminal_size.1);
+                            let has_ext = state.available_extensions.iter().any(|e| e.selected)
+                                || !state.session_extensions_used.is_empty();
                             let panes = tui::running_layout(area, has_ext);
                             if tui::rect_contains(panes.agent_output, mouse.column, mouse.row) {
                                 state.focused_pane = state::TuiPane::AgentOutput;
                                 let max = state.agent_output.len().saturating_sub(1);
-                                state.scroll_offset = state.scroll_offset.saturating_add(3).min(max);
-                            } else if tui::rect_contains(panes.task_queue, mouse.column, mouse.row) {
+                                state.scroll_offset =
+                                    state.scroll_offset.saturating_add(3).min(max);
+                            } else if tui::rect_contains(panes.task_queue, mouse.column, mouse.row)
+                            {
                                 state.focused_pane = state::TuiPane::TaskQueue;
                                 let max = state.task_queue.len().saturating_sub(1);
-                                state.task_queue_scroll = state.task_queue_scroll.saturating_add(3).min(max);
+                                state.task_queue_scroll =
+                                    state.task_queue_scroll.saturating_add(3).min(max);
                             } else if tui::rect_contains(panes.patterns, mouse.column, mouse.row) {
                                 state.focused_pane = state::TuiPane::PatternsLearned;
                                 state.patterns_scroll = state.patterns_scroll.saturating_sub(3);
-                            } else if panes.extensions_used.is_some_and(|r| tui::rect_contains(r, mouse.column, mouse.row)) {
+                            } else if panes
+                                .extensions_used
+                                .is_some_and(|r| tui::rect_contains(r, mouse.column, mouse.row))
+                            {
                                 state.focused_pane = state::TuiPane::Extensions;
                             }
                         }
@@ -1164,35 +1265,46 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                             state.findings_scroll = state.findings_scroll.saturating_add(3);
                         } else {
                             let terminal_size = crossterm::terminal::size().unwrap_or((120, 40));
-                            let area = ratatui::layout::Rect::new(0, 0, terminal_size.0, terminal_size.1);
-                            let has_ext = state.available_extensions.iter().any(|e| e.selected) || !state.session_extensions_used.is_empty();
+                            let area =
+                                ratatui::layout::Rect::new(0, 0, terminal_size.0, terminal_size.1);
+                            let has_ext = state.available_extensions.iter().any(|e| e.selected)
+                                || !state.session_extensions_used.is_empty();
                             let panes = tui::running_layout(area, has_ext);
                             if tui::rect_contains(panes.agent_output, mouse.column, mouse.row) {
                                 state.focused_pane = state::TuiPane::AgentOutput;
                                 state.scroll_offset = state.scroll_offset.saturating_sub(3);
-                            } else if tui::rect_contains(panes.task_queue, mouse.column, mouse.row) {
+                            } else if tui::rect_contains(panes.task_queue, mouse.column, mouse.row)
+                            {
                                 state.focused_pane = state::TuiPane::TaskQueue;
                                 state.task_queue_scroll = state.task_queue_scroll.saturating_sub(3);
                             } else if tui::rect_contains(panes.patterns, mouse.column, mouse.row) {
                                 state.focused_pane = state::TuiPane::PatternsLearned;
                                 state.patterns_scroll = state.patterns_scroll.saturating_add(3);
-                            } else if panes.extensions_used.is_some_and(|r| tui::rect_contains(r, mouse.column, mouse.row)) {
+                            } else if panes
+                                .extensions_used
+                                .is_some_and(|r| tui::rect_contains(r, mouse.column, mouse.row))
+                            {
                                 state.focused_pane = state::TuiPane::Extensions;
                             }
                         }
                     }
                     MouseEventKind::Down(MouseButton::Left) => {
                         let terminal_size = crossterm::terminal::size().unwrap_or((120, 40));
-                        let area = ratatui::layout::Rect::new(0, 0, terminal_size.0, terminal_size.1);
-                        let has_ext = state.available_extensions.iter().any(|e| e.selected) || !state.session_extensions_used.is_empty();
-                            let panes = tui::running_layout(area, has_ext);
+                        let area =
+                            ratatui::layout::Rect::new(0, 0, terminal_size.0, terminal_size.1);
+                        let has_ext = state.available_extensions.iter().any(|e| e.selected)
+                            || !state.session_extensions_used.is_empty();
+                        let panes = tui::running_layout(area, has_ext);
                         if tui::rect_contains(panes.agent_output, mouse.column, mouse.row) {
                             state.focused_pane = state::TuiPane::AgentOutput;
                         } else if tui::rect_contains(panes.task_queue, mouse.column, mouse.row) {
                             state.focused_pane = state::TuiPane::TaskQueue;
                         } else if tui::rect_contains(panes.patterns, mouse.column, mouse.row) {
                             state.focused_pane = state::TuiPane::PatternsLearned;
-                        } else if panes.extensions_used.is_some_and(|r| tui::rect_contains(r, mouse.column, mouse.row)) {
+                        } else if panes
+                            .extensions_used
+                            .is_some_and(|r| tui::rect_contains(r, mouse.column, mouse.row))
+                        {
                             state.focused_pane = state::TuiPane::Extensions;
                         }
                     }
@@ -1415,7 +1527,9 @@ fn handle_agent_output(state: &mut AppState, output: AgentOutputEvent) {
             state.session_output_tokens += output_tokens;
             // Update shared atomic for build loop cost-limit check
             let millicents = (cost_usd * 100_000.0) as u64;
-            state.session_cost_millicents.fetch_add(millicents, std::sync::atomic::Ordering::Relaxed);
+            state
+                .session_cost_millicents
+                .fetch_add(millicents, std::sync::atomic::Ordering::Relaxed);
             let total_tokens = input_tokens + output_tokens;
             if context_window > 0 {
                 let pct = ((total_tokens as f64 / context_window as f64) * 100.0).min(100.0) as u8;
@@ -1449,14 +1563,19 @@ fn handle_agent_output(state: &mut AppState, output: AgentOutputEvent) {
 }
 
 fn handle_dual_build_output(state: &mut AppState, idx: usize, output: AgentOutputEvent) {
-    if idx >= 2 { return; }
+    if idx >= 2 {
+        return;
+    }
     state.dual_build.event_counts[idx] += 1;
 
     match &output {
         AgentOutputEvent::Text(text) => {
             state.dual_build.streams[idx].push(text.clone());
         }
-        AgentOutputEvent::ToolUse { tool, input_preview } => {
+        AgentOutputEvent::ToolUse {
+            tool,
+            input_preview,
+        } => {
             let msg = if input_preview.is_empty() {
                 format!("[tool] {}", tool)
             } else {
@@ -1484,7 +1603,12 @@ fn handle_dual_build_output(state: &mut AppState, idx: usize, output: AgentOutpu
                 state.dual_build.streams[idx].push(line.to_string());
             }
         }
-        AgentOutputEvent::Usage { cost_usd, input_tokens, output_tokens, context_window } => {
+        AgentOutputEvent::Usage {
+            cost_usd,
+            input_tokens,
+            output_tokens,
+            context_window,
+        } => {
             state.session_cost_usd += cost_usd;
             state.session_input_tokens += input_tokens;
             state.session_output_tokens += output_tokens;
@@ -1505,7 +1629,9 @@ fn handle_dual_build_output(state: &mut AppState, idx: usize, output: AgentOutpu
 }
 
 fn handle_dual_pipeline_event(state: &mut AppState, idx: usize, event: AppEvent, _config: &Config) {
-    if idx >= 2 { return; }
+    if idx >= 2 {
+        return;
+    }
     match event {
         AppEvent::AgentOutput(output) => {
             handle_dual_build_output(state, idx, output);
@@ -1555,7 +1681,8 @@ pub(super) fn handle_agent_done(state: &mut AppState, success: bool) {
             .to_lowercase();
 
         // Check extension keywords (clone to avoid borrow conflict with state.log)
-        let ext_kw_snapshot: Vec<(String, Vec<String>)> = state.extension_keywords
+        let ext_kw_snapshot: Vec<(String, Vec<String>)> = state
+            .extension_keywords
             .iter()
             .map(|(k, v)| (k.clone(), v.clone()))
             .collect();
@@ -1567,16 +1694,22 @@ pub(super) fn handle_agent_done(state: &mut AppState, success: bool) {
                 .cloned()
                 .collect();
             if !matched.is_empty() {
-                *state.extension_reference_count.entry(ext_name.clone()).or_insert(0) += 1;
+                *state
+                    .extension_reference_count
+                    .entry(ext_name.clone())
+                    .or_insert(0) += 1;
                 state.log(format!(
                     "Extension '{}' referenced by {} (keywords: {})",
-                    ext_name, agent_role_str, matched.join(", ")
+                    ext_name,
+                    agent_role_str,
+                    matched.join(", ")
                 ));
             }
         }
 
         // Check pattern keywords (clone to avoid borrow conflict with state.log)
-        let pat_kw_snapshot: Vec<(String, Vec<String>)> = state.active_pattern_keywords
+        let pat_kw_snapshot: Vec<(String, Vec<String>)> = state
+            .active_pattern_keywords
             .iter()
             .map(|(k, v)| (k.clone(), v.clone()))
             .collect();
@@ -1858,8 +1991,7 @@ fn handle_running_explorer_enter(state: &mut AppState) {
         }
     } else {
         let file_path = explorer.file_tree[selected].path.clone();
-        state.pending_transition =
-            Some(state::PendingTransition::OpenExternalEditor { file_path });
+        state.pending_transition = Some(state::PendingTransition::OpenExternalEditor { file_path });
     }
 }
 
@@ -1905,16 +2037,31 @@ fn handle_startup_mouse_at_for_running(
         MouseEventKind::Down(MouseButton::Left) => {
             // Check toggle buttons first (border row)
             if let Some(ref explorer) = state.running_explorer {
-                if let Some(tui::StartupMouseTarget::ExpandAllToggle) = tui::explorer_toggle_hit_test(explorer_area, mouse.column, mouse.row, &explorer.file_tree) {
+                if let Some(tui::StartupMouseTarget::ExpandAllToggle) =
+                    tui::explorer_toggle_hit_test(
+                        explorer_area,
+                        mouse.column,
+                        mouse.row,
+                        &explorer.file_tree,
+                    )
+                {
                     state.focused_pane = state::TuiPane::Explorer;
                     if let Some(ref mut ex) = state.running_explorer {
                         startup::toggle_expand_all(ex);
                     }
                     return;
                 }
-                if let Some(tui::StartupMouseTarget::WrapToggle) = tui::preview_toggle_hit_test(preview_area, mouse.column, mouse.row, explorer.preview_wrap) {
+                if let Some(tui::StartupMouseTarget::WrapToggle) = tui::preview_toggle_hit_test(
+                    preview_area,
+                    mouse.column,
+                    mouse.row,
+                    explorer.preview_wrap,
+                ) {
                     state.focused_pane = state::TuiPane::Preview;
-                    let project_dir = state.buildloop_dir.parent().unwrap_or(std::path::Path::new("."));
+                    let project_dir = state
+                        .buildloop_dir
+                        .parent()
+                        .unwrap_or(std::path::Path::new("."));
                     if let Some(ref mut ex) = state.running_explorer {
                         startup::toggle_preview_wrap(ex, project_dir);
                     }
@@ -1940,19 +2087,18 @@ fn handle_startup_mouse_at_for_running(
                             if vis_pos < explorer.explorer_scroll {
                                 explorer.explorer_scroll = vis_pos;
                             } else if vis_pos >= explorer.explorer_scroll + visible_estimate {
-                                explorer.explorer_scroll = vis_pos.saturating_sub(visible_estimate) + 1;
+                                explorer.explorer_scroll =
+                                    vis_pos.saturating_sub(visible_estimate) + 1;
                             }
                             // Toggle folder expanded/collapsed on click
                             if explorer.file_tree[tree_idx].is_dir {
                                 explorer.file_tree[tree_idx].expanded =
                                     !explorer.file_tree[tree_idx].expanded;
-                                explorer.file_preview_content =
-                                    vec!["<directory>".to_string()];
+                                explorer.file_preview_content = vec!["<directory>".to_string()];
                             } else {
-                                explorer.file_preview_content =
-                                    load_file_preview_for_running(
-                                        &explorer.file_tree[tree_idx].path,
-                                    );
+                                explorer.file_preview_content = load_file_preview_for_running(
+                                    &explorer.file_tree[tree_idx].path,
+                                );
                             }
                             explorer.file_preview_scroll = 0;
                         }
@@ -1962,36 +2108,28 @@ fn handle_startup_mouse_at_for_running(
                 state.focused_pane = state::TuiPane::Preview;
             }
         }
-        MouseEventKind::ScrollUp => {
-            match state.focused_pane {
-                state::TuiPane::Preview => {
-                    if let Some(ref mut explorer) = state.running_explorer {
-                        explorer.file_preview_scroll =
-                            explorer.file_preview_scroll.saturating_sub(3);
-                    }
-                }
-                _ => {
-                    move_running_explorer_selection(state, -3);
+        MouseEventKind::ScrollUp => match state.focused_pane {
+            state::TuiPane::Preview => {
+                if let Some(ref mut explorer) = state.running_explorer {
+                    explorer.file_preview_scroll = explorer.file_preview_scroll.saturating_sub(3);
                 }
             }
-        }
-        MouseEventKind::ScrollDown => {
-            match state.focused_pane {
-                state::TuiPane::Preview => {
-                    if let Some(ref mut explorer) = state.running_explorer {
-                        let max_scroll = explorer
-                            .file_preview_content
-                            .len()
-                            .saturating_sub(1);
-                        explorer.file_preview_scroll =
-                            (explorer.file_preview_scroll + 3).min(max_scroll);
-                    }
-                }
-                _ => {
-                    move_running_explorer_selection(state, 3);
+            _ => {
+                move_running_explorer_selection(state, -3);
+            }
+        },
+        MouseEventKind::ScrollDown => match state.focused_pane {
+            state::TuiPane::Preview => {
+                if let Some(ref mut explorer) = state.running_explorer {
+                    let max_scroll = explorer.file_preview_content.len().saturating_sub(1);
+                    explorer.file_preview_scroll =
+                        (explorer.file_preview_scroll + 3).min(max_scroll);
                 }
             }
-        }
+            _ => {
+                move_running_explorer_selection(state, 3);
+            }
+        },
         _ => {}
     }
 }

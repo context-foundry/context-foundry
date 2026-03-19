@@ -320,11 +320,17 @@ impl Config {
             std::env::var("LOCALAPPDATA")
                 .or_else(|_| std::env::var("USERPROFILE").map(|p| format!("{}\\.foundry", p)))
                 .ok()
-                .map(|p| std::path::PathBuf::from(p).join(".foundry").join("config.json"))
+                .map(|p| {
+                    std::path::PathBuf::from(p)
+                        .join(".foundry")
+                        .join("config.json")
+                })
         } else {
-            std::env::var("HOME")
-                .ok()
-                .map(|h| std::path::PathBuf::from(h).join(".foundry").join("config.json"))
+            std::env::var("HOME").ok().map(|h| {
+                std::path::PathBuf::from(h)
+                    .join(".foundry")
+                    .join("config.json")
+            })
         }
     }
 
@@ -399,12 +405,16 @@ impl Config {
         }
     }
 
+    pub fn display_model_spec(spec: &str) -> String {
+        let (provider, model) = Self::parse_model_spec(spec);
+        Self::display_provider_model(&provider, &model)
+    }
+
     /// Persist the preview wrap preference to .foundry.json without
     /// overwriting other config fields.
     pub fn save_preview_wrap(project_dir: &Path, wrap: bool) {
         let config_path = project_dir.join(".foundry.json");
-        let content =
-            std::fs::read_to_string(&config_path).unwrap_or_else(|_| "{}".to_string());
+        let content = std::fs::read_to_string(&config_path).unwrap_or_else(|_| "{}".to_string());
         let mut value: serde_json::Value =
             serde_json::from_str(&content).unwrap_or(serde_json::json!({}));
         value["preview_wrap"] = serde_json::json!(wrap);
@@ -414,8 +424,7 @@ impl Config {
 
     pub fn save_extensions(project_dir: &Path, extensions: &[String]) {
         let config_path = project_dir.join(".foundry.json");
-        let content =
-            std::fs::read_to_string(&config_path).unwrap_or_else(|_| "{}".to_string());
+        let content = std::fs::read_to_string(&config_path).unwrap_or_else(|_| "{}".to_string());
         let mut value: serde_json::Value =
             serde_json::from_str(&content).unwrap_or(serde_json::json!({}));
         value["extensions"] = serde_json::json!(extensions);
@@ -427,8 +436,7 @@ impl Config {
     /// Also removes the legacy "mode" key if present, to prevent it from shadowing.
     pub fn save_run_mode(project_dir: &Path, run_mode: &str) {
         let config_path = project_dir.join(".foundry.json");
-        let content =
-            std::fs::read_to_string(&config_path).unwrap_or_else(|_| "{}".to_string());
+        let content = std::fs::read_to_string(&config_path).unwrap_or_else(|_| "{}".to_string());
         let mut value: serde_json::Value =
             serde_json::from_str(&content).unwrap_or(serde_json::json!({}));
         value["run_mode"] = serde_json::json!(run_mode);
@@ -443,8 +451,7 @@ impl Config {
 
     pub fn save_dual_selection(project_dir: &Path, selection: &str) {
         let config_path = project_dir.join(".foundry.json");
-        let content =
-            std::fs::read_to_string(&config_path).unwrap_or_else(|_| "{}".to_string());
+        let content = std::fs::read_to_string(&config_path).unwrap_or_else(|_| "{}".to_string());
         let mut value: serde_json::Value =
             serde_json::from_str(&content).unwrap_or(serde_json::json!({}));
         value["dual_selection"] = serde_json::json!(selection);
@@ -452,10 +459,45 @@ impl Config {
         let _ = crate::utils::atomic_write_file(&config_path, json.as_bytes());
     }
 
-    /// Create a Config clone with all role providers/models overridden for a
-    /// specific pipeline spec (e.g. "claude:opus" or "codex:").
+    fn model_provider_hint(model: &str) -> Option<ModelProvider> {
+        let lower = model.trim().to_ascii_lowercase();
+        if lower.is_empty() {
+            return None;
+        }
+
+        if lower.starts_with("claude") || matches!(lower.as_str(), "opus" | "sonnet" | "haiku") {
+            return Some(ModelProvider::Claude);
+        }
+
+        if lower.starts_with("codex")
+            || lower.starts_with("gpt-")
+            || matches!(lower.as_str(), "o1" | "o3" | "o4")
+            || lower.starts_with("o1-")
+            || lower.starts_with("o3-")
+            || lower.starts_with("o4-")
+        {
+            return Some(ModelProvider::Codex);
+        }
+
+        None
+    }
+
+    fn normalize_model_for_provider(provider: ModelProvider, model: &str) -> String {
+        match Self::model_provider_hint(model) {
+            Some(owner) if owner != provider => String::new(),
+            _ => model.trim().to_string(),
+        }
+    }
+
+    /// Create a Config clone with all build-loop role providers overridden for
+    /// a specific pipeline spec (e.g. "claude:opus" or "codex:").
+    ///
+    /// The builder stage uses the spec's explicit model. Other stages keep
+    /// their configured model only when it is compatible with the selected
+    /// provider; otherwise they fall back to the provider default model.
     pub fn for_pipeline(&self, spec: &str) -> Config {
         let (provider, model) = Self::parse_model_spec(spec);
+        let provider_kind = Self::parse_provider(&provider);
         let mut config = self.clone();
         config.scout_provider = provider.clone();
         config.planner_provider = provider.clone();
@@ -463,17 +505,37 @@ impl Config {
         config.reviewer_provider = provider.clone();
         config.fixer_provider = provider.clone();
         config.discovery_provider = provider.clone();
-        if !model.is_empty() {
-            config.scout_model = model.clone();
-            config.planner_model = model.clone();
-            config.builder_model = model.clone();
-            config.reviewer_model = model.clone();
-            config.fixer_model = model.clone();
-        }
+        config.scout_model = Self::normalize_model_for_provider(provider_kind, &self.scout_model);
+        config.planner_model =
+            Self::normalize_model_for_provider(provider_kind, &self.planner_model);
+        config.builder_model = model;
+        config.reviewer_model =
+            Self::normalize_model_for_provider(provider_kind, &self.reviewer_model);
+        config.fixer_model = Self::normalize_model_for_provider(provider_kind, &self.fixer_model);
+        config.discovery_model =
+            Self::normalize_model_for_provider(provider_kind, &self.discovery_model);
         // Disable dual in the forked config so process_task runs single-pipeline
         config.builder_models.clear();
         config.dual_selection.clear();
         config
+    }
+
+    /// Return the effective pipeline configs for the active dual selection.
+    /// Single-selection modes return one config; dual mode returns two.
+    pub fn selected_pipeline_configs(&self, selection: &str) -> Vec<Config> {
+        match selection {
+            "first" if !self.builder_models.is_empty() => {
+                vec![self.for_pipeline(&self.builder_models[0])]
+            }
+            "second" if self.builder_models.len() >= 2 => {
+                vec![self.for_pipeline(&self.builder_models[1])]
+            }
+            "both" if self.builder_models.len() >= 2 => vec![
+                self.for_pipeline(&self.builder_models[0]),
+                self.for_pipeline(&self.builder_models[1]),
+            ],
+            _ => vec![self.clone()],
+        }
     }
 
     /// Return (role_name, provider, model) tuples for all build-loop roles.
@@ -524,6 +586,62 @@ mod tests {
             "Claude Opus"
         );
         assert_eq!(Config::display_provider_model("codex", ""), "Codex");
+        assert_eq!(Config::display_model_spec("codex:gpt-5.4"), "Codex Gpt-5.4");
+    }
+
+    #[test]
+    fn for_pipeline_overrides_all_providers_and_clears_incompatible_models() {
+        let config = Config::default();
+        let pipeline = config.for_pipeline("codex:");
+
+        assert_eq!(pipeline.scout_provider, "codex");
+        assert_eq!(pipeline.planner_provider, "codex");
+        assert_eq!(pipeline.builder_provider, "codex");
+        assert_eq!(pipeline.reviewer_provider, "codex");
+        assert_eq!(pipeline.fixer_provider, "codex");
+        assert_eq!(pipeline.discovery_provider, "codex");
+
+        assert_eq!(pipeline.scout_model, "");
+        assert_eq!(pipeline.planner_model, "");
+        assert_eq!(pipeline.builder_model, "");
+        assert_eq!(pipeline.reviewer_model, "");
+        assert_eq!(pipeline.fixer_model, "");
+        assert_eq!(pipeline.discovery_model, "");
+    }
+
+    #[test]
+    fn for_pipeline_keeps_compatible_role_models_and_uses_builder_spec_model() {
+        let mut config = Config::default();
+        config.scout_model = "sonnet".into();
+        config.planner_model = "opus".into();
+        config.builder_model = "sonnet".into();
+        config.reviewer_model = "haiku".into();
+        config.fixer_model = "sonnet".into();
+        config.discovery_model = "opus".into();
+
+        let pipeline = config.for_pipeline("claude:opus");
+
+        assert_eq!(pipeline.scout_model, "sonnet");
+        assert_eq!(pipeline.planner_model, "opus");
+        assert_eq!(pipeline.builder_model, "opus");
+        assert_eq!(pipeline.reviewer_model, "haiku");
+        assert_eq!(pipeline.fixer_model, "sonnet");
+        assert_eq!(pipeline.discovery_model, "opus");
+    }
+
+    #[test]
+    fn selected_pipeline_configs_expand_both_selection() {
+        let mut config = Config::default();
+        config.builder_models = vec!["claude:opus".into(), "codex:".into()];
+
+        let selected = config.selected_pipeline_configs("both");
+
+        assert_eq!(selected.len(), 2);
+        assert_eq!(selected[0].builder_provider, "claude");
+        assert_eq!(selected[0].builder_model, "opus");
+        assert_eq!(selected[1].builder_provider, "codex");
+        assert_eq!(selected[1].builder_model, "");
+        assert_eq!(selected[1].planner_model, "");
     }
 
     #[test]
@@ -551,7 +669,10 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         fs::write(dir.path().join(".foundry.json"), "{ not valid json").unwrap();
         let config = Config::load(dir.path());
-        assert_eq!(config.agent_timeout_secs, Config::default().agent_timeout_secs);
+        assert_eq!(
+            config.agent_timeout_secs,
+            Config::default().agent_timeout_secs
+        );
         assert_eq!(config.planner_model, Config::default().planner_model);
     }
 
@@ -608,7 +729,10 @@ mod tests {
         fs::write(&path, "{}").unwrap();
         fs::set_permissions(&path, fs::Permissions::from_mode(0o000)).unwrap();
         let config = Config::load(dir.path());
-        assert_eq!(config.agent_timeout_secs, Config::default().agent_timeout_secs);
+        assert_eq!(
+            config.agent_timeout_secs,
+            Config::default().agent_timeout_secs
+        );
         // Restore permissions so tempdir cleanup succeeds
         fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();
     }

@@ -225,7 +225,10 @@ fn parse_reviewer_output(response: &str) -> ReviewerOutput {
         status: "findings".to_string(),
         findings: vec![Finding {
             severity: "high".to_string(),
-            description: format!("Reviewer output was not valid JSON: {}", truncate_str(response, 200)),
+            description: format!(
+                "Reviewer output was not valid JSON: {}",
+                truncate_str(response, 200)
+            ),
             location: String::new(),
             suggestion: "Review the raw reviewer output manually.".to_string(),
         }],
@@ -289,12 +292,10 @@ fn is_accepted(review: &ReviewerOutput, policy: AcceptPolicy) -> bool {
     match policy {
         AcceptPolicy::RequireClean => false, // findings exist, so not clean
         AcceptPolicy::AllowLowAndMedium => !review.findings.iter().any(|f| severity_is(f, "high")),
-        AcceptPolicy::AllowLowOnly => {
-            !review
-                .findings
-                .iter()
-                .any(|f| severity_is(f, "high") || severity_is(f, "medium"))
-        }
+        AcceptPolicy::AllowLowOnly => !review
+            .findings
+            .iter()
+            .any(|f| severity_is(f, "high") || severity_is(f, "medium")),
     }
 }
 
@@ -368,16 +369,16 @@ pub async fn orchestrate(
 
         on_event(&format!(
             "Iteration {}/{}: proposer ({} {})...",
-            iteration,
-            config.max_iterations,
-            config.proposer_provider,
-            config.proposer_model,
+            iteration, config.max_iterations, config.proposer_provider, config.proposer_model,
         ));
 
         // Run proposer
         send_separator(
             &event_tx,
-            &format!("--- Proposer pass (iteration {}/{}) ---", iteration, config.max_iterations),
+            &format!(
+                "--- Proposer pass (iteration {}/{}) ---",
+                iteration, config.max_iterations
+            ),
         );
         let prompt = proposer_prompt(intent, findings_text.as_deref());
         let proposer_result = run_agent_and_capture(
@@ -423,8 +424,16 @@ pub async fn orchestrate(
 
         let review = parse_reviewer_output(&reviewer_result);
         let finding_count = review.findings.len();
-        let high_count = review.findings.iter().filter(|f| f.severity.eq_ignore_ascii_case("high")).count();
-        let medium_count = review.findings.iter().filter(|f| f.severity.eq_ignore_ascii_case("medium")).count();
+        let high_count = review
+            .findings
+            .iter()
+            .filter(|f| f.severity.eq_ignore_ascii_case("high"))
+            .count();
+        let medium_count = review
+            .findings
+            .iter()
+            .filter(|f| f.severity.eq_ignore_ascii_case("medium"))
+            .count();
 
         on_event(&format!(
             "Review: {} ({} findings: {} high, {} medium, {} low, {} validated)",
@@ -439,10 +448,7 @@ pub async fn orchestrate(
         let accepted = is_accepted(&review, config.accept_policy);
 
         if accepted {
-            on_event(&format!(
-                "Accepted after {} iteration(s).",
-                iteration,
-            ));
+            on_event(&format!("Accepted after {} iteration(s).", iteration,));
 
             return Ok(OrchestratorOutcome {
                 artifact,
@@ -472,7 +478,9 @@ pub async fn orchestrate(
     Ok(OrchestratorOutcome {
         artifact: last_artifact.unwrap_or(ProposerOutput {
             artifact_type: "analysis".to_string(),
-            artifact_text: "Orchestrator reached max iterations without producing an accepted artifact.".to_string(),
+            artifact_text:
+                "Orchestrator reached max iterations without producing an accepted artifact."
+                    .to_string(),
             rationale: String::new(),
             claims: Vec::new(),
         }),
@@ -879,7 +887,10 @@ mod tests {
             }],
             validated: Vec::new(),
         };
-        assert!(!is_accepted(&review_high_upper, AcceptPolicy::AllowLowAndMedium));
+        assert!(!is_accepted(
+            &review_high_upper,
+            AcceptPolicy::AllowLowAndMedium
+        ));
 
         let review_high_title = ReviewerOutput {
             status: "findings".to_string(),
@@ -891,7 +902,10 @@ mod tests {
             }],
             validated: Vec::new(),
         };
-        assert!(!is_accepted(&review_high_title, AcceptPolicy::AllowLowAndMedium));
+        assert!(!is_accepted(
+            &review_high_title,
+            AcceptPolicy::AllowLowAndMedium
+        ));
 
         let review_medium_upper = ReviewerOutput {
             status: "findings".to_string(),
@@ -903,7 +917,10 @@ mod tests {
             }],
             validated: Vec::new(),
         };
-        assert!(!is_accepted(&review_medium_upper, AcceptPolicy::AllowLowOnly));
+        assert!(!is_accepted(
+            &review_medium_upper,
+            AcceptPolicy::AllowLowOnly
+        ));
 
         let review_medium_title = ReviewerOutput {
             status: "findings".to_string(),
@@ -915,7 +932,10 @@ mod tests {
             }],
             validated: Vec::new(),
         };
-        assert!(!is_accepted(&review_medium_title, AcceptPolicy::AllowLowOnly));
+        assert!(!is_accepted(
+            &review_medium_title,
+            AcceptPolicy::AllowLowOnly
+        ));
 
         let review_low_upper = ReviewerOutput {
             status: "findings".to_string(),
@@ -984,7 +1004,8 @@ mod tests {
 
     #[test]
     fn extract_json_skips_braces_inside_string_values() {
-        let input = r#"{"artifact_type":"code","artifact_text":"x } y","rationale":"test","claims":[]}"#;
+        let input =
+            r#"{"artifact_type":"code","artifact_text":"x } y","rationale":"test","claims":[]}"#;
         let result = extract_json::<ProposerOutput>(input);
         assert!(result.is_some());
         let parsed = result.unwrap();

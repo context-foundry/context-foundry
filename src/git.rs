@@ -182,7 +182,12 @@ fn ensure_git_initialized(project_dir: &Path) {
 
     if !has_head {
         let _ = Command::new("git")
-            .args(["commit", "--allow-empty", "-m", "Initial commit\n\nAutomated by: foundry"])
+            .args([
+                "commit",
+                "--allow-empty",
+                "-m",
+                "Initial commit\n\nAutomated by: foundry",
+            ])
             .current_dir(project_dir)
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -258,7 +263,11 @@ pub fn get_head_sha(project_dir: &Path) -> Option<String> {
         .ok()?;
     if output.status.success() {
         let sha = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        if sha.is_empty() { None } else { Some(sha) }
+        if sha.is_empty() {
+            None
+        } else {
+            Some(sha)
+        }
     } else {
         None
     }
@@ -389,10 +398,14 @@ pub fn commit_task_pr(
 
         let pr_result = Command::new("gh")
             .args([
-                "pr", "create",
-                "--base", &base_branch,
-                "--title", &pr_title,
-                "--body", &pr_body,
+                "pr",
+                "create",
+                "--base",
+                &base_branch,
+                "--title",
+                &pr_title,
+                "--body",
+                &pr_body,
             ])
             .current_dir(project_dir)
             .output();
@@ -408,17 +421,24 @@ pub fn commit_task_pr(
                 // PR create failed (likely already exists) -- try to find existing PR
                 if let Ok(list_output) = Command::new("gh")
                     .args([
-                        "pr", "list",
-                        "--head", &feature_branch,
-                        "--json", "number",
-                        "--limit", "1",
+                        "pr",
+                        "list",
+                        "--head",
+                        &feature_branch,
+                        "--json",
+                        "number",
+                        "--limit",
+                        "1",
                     ])
                     .current_dir(project_dir)
                     .output()
                 {
                     if list_output.status.success() {
-                        if let Ok(json) = serde_json::from_slice::<serde_json::Value>(&list_output.stdout) {
-                            if let Some(n) = json.as_array()
+                        if let Ok(json) =
+                            serde_json::from_slice::<serde_json::Value>(&list_output.stdout)
+                        {
+                            if let Some(n) = json
+                                .as_array()
                                 .and_then(|arr| arr.first())
                                 .and_then(|obj| obj["number"].as_u64())
                             {
@@ -475,7 +495,14 @@ pub fn commit_task_pr(
     // switching back to base reverts TASKS.md to the base version. Without this,
     // the build loop re-parses the task as pending and causes an infinite loop.
     if let Ok(feature_tasks_content) = Command::new("git")
-        .args(["show", &format!("{}:{}", feature_branch, plan_path.file_name().unwrap().to_string_lossy())])
+        .args([
+            "show",
+            &format!(
+                "{}:{}",
+                feature_branch,
+                plan_path.file_name().unwrap().to_string_lossy()
+            ),
+        ])
         .current_dir(project_dir)
         .output()
     {
@@ -579,7 +606,11 @@ pub fn create_wip_issue(
 /// Inserts `PR:#N` before the pipeline progress indicator (e.g. `[SPID]`) so
 /// that the trailing `[XXXX]` regex in task.rs continues to match.
 /// If there is no indicator, the tag is appended at the end.
-pub fn annotate_tasks_with_pr(plan_path: &Path, pr_number: u64, task_id_filter: Option<&str>) -> Result<()> {
+pub fn annotate_tasks_with_pr(
+    plan_path: &Path,
+    pr_number: u64,
+    task_id_filter: Option<&str>,
+) -> Result<()> {
     use regex::Regex;
     use std::sync::LazyLock;
 
@@ -746,11 +777,22 @@ mod tests {
         fs::write(repo_dir.join("feature.txt"), "new code\n").expect("write feature");
 
         // No remote, so push will fail but commit + branch should succeed
-        let result = commit_task_pr(&repo_dir, &Config::default(), "T1.1", "Add feature", &repo_dir.join("TASKS.md"), false);
+        let result = commit_task_pr(
+            &repo_dir,
+            &Config::default(),
+            "T1.1",
+            "Add feature",
+            &repo_dir.join("TASKS.md"),
+            false,
+        );
         assert!(result.is_ok() || result.is_err()); // push may fail, that's fine
 
         // After the call, we should be back on the base branch
-        assert_eq!(current_branch(&repo_dir), base, "should return to base branch");
+        assert_eq!(
+            current_branch(&repo_dir),
+            base,
+            "should return to base branch"
+        );
 
         // The feature branch should exist with the commit
         let branches = Command::new("git")
@@ -789,9 +831,15 @@ mod tests {
         init_repo(&repo_dir);
 
         // No changes -- should return (false, None) and clean up the branch
-        let (committed, pr) =
-            commit_task_pr(&repo_dir, &Config::default(), "T2.1", "No changes", &repo_dir.join("TASKS.md"), false)
-                .expect("should not error");
+        let (committed, pr) = commit_task_pr(
+            &repo_dir,
+            &Config::default(),
+            "T2.1",
+            "No changes",
+            &repo_dir.join("TASKS.md"),
+            false,
+        )
+        .expect("should not error");
         assert!(!committed);
         assert!(pr.is_none());
 
@@ -1017,11 +1065,8 @@ mod tests {
         git(&repo_dir, &["commit", "-m", "add tasks"]);
 
         // A code change so the commit is non-empty
-        fs::write(
-            repo_dir.join("wip-feature.txt"),
-            "work in progress\n",
-        )
-        .expect("write wip feature");
+        fs::write(repo_dir.join("wip-feature.txt"), "work in progress\n")
+            .expect("write wip feature");
 
         // Call with is_wip=true
         let result = commit_task_pr(
@@ -1087,11 +1132,7 @@ mod tests {
         // Push initial commit so remote has the base branch
         git(&repo_dir2, &["push", "-u", "origin", "HEAD"]);
 
-        fs::write(
-            repo_dir2.join("TASKS.md"),
-            "- [ ] T2.1: WIP task 2\n",
-        )
-        .expect("write tasks");
+        fs::write(repo_dir2.join("TASKS.md"), "- [ ] T2.1: WIP task 2\n").expect("write tasks");
         git(&repo_dir2, &["add", "TASKS.md"]);
         git(&repo_dir2, &["commit", "-m", "add tasks"]);
 

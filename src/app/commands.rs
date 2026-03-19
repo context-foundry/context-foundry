@@ -88,7 +88,11 @@ pub(crate) fn ensure_required_providers_available(
 }
 
 pub(crate) fn provider_binary_is_available(provider: ModelProvider) -> bool {
-    let lookup_cmd = if cfg!(target_os = "windows") { "where" } else { "which" };
+    let lookup_cmd = if cfg!(target_os = "windows") {
+        "where"
+    } else {
+        "which"
+    };
     std::process::Command::new(lookup_cmd)
         .arg(provider.slug())
         .output()
@@ -167,7 +171,9 @@ pub(super) async fn run_headless(project_dir: &Path, output_format: Option<Strin
     let headless_review_gate = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
     let mut config = Config::load(project_dir);
     if config.run_mode == "review" {
-        eprintln!("[foundry] review mode is not supported in headless mode -- falling back to auto");
+        eprintln!(
+            "[foundry] review mode is not supported in headless mode -- falling back to auto"
+        );
         config.run_mode = "auto".to_string();
     }
     let config_snapshot_data = (
@@ -224,7 +230,8 @@ pub(super) async fn run_headless(project_dir: &Path, output_format: Option<Strin
     let json_output = output_format.as_deref() == Some("json");
     let session_start = std::time::Instant::now();
     let mut task_results: Vec<TaskResult> = Vec::new();
-    let mut task_descriptions: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    let mut task_descriptions: std::collections::HashMap<String, String> =
+        std::collections::HashMap::new();
     let mut patterns_injected: usize = 0;
     let mut feat_commits: usize = 0;
     let mut wip_commits: usize = 0;
@@ -274,7 +281,11 @@ pub(super) async fn run_headless(project_dir: &Path, output_format: Option<Strin
                 LoopEvent::TaskCompleted(id, ok) => {
                     let status = if ok { "DONE" } else { "WIP" };
                     eprintln!("=== {} {} ===\n", id, status);
-                    if ok { feat_commits += 1; } else { wip_commits += 1; }
+                    if ok {
+                        feat_commits += 1;
+                    } else {
+                        wip_commits += 1;
+                    }
                 }
                 LoopEvent::DiscoveryStarted(round) => {
                     eprintln!("\n=== DISCOVERY ROUND {} ===", round);
@@ -289,14 +300,26 @@ pub(super) async fn run_headless(project_dir: &Path, output_format: Option<Strin
                 LoopEvent::PatternsUsed { titles, .. } => {
                     patterns_injected += titles.len();
                 }
-                LoopEvent::TaskReport { task_id, status, commit_sha, findings_high, findings_medium, findings_low, duration_secs } => {
+                LoopEvent::TaskReport {
+                    task_id,
+                    status,
+                    commit_sha,
+                    findings_high,
+                    findings_medium,
+                    findings_low,
+                    duration_secs,
+                } => {
                     let description = task_descriptions.get(&task_id).cloned().unwrap_or_default();
                     task_results.push(TaskResult {
                         id: task_id,
                         description,
                         status,
                         commit_sha,
-                        findings: FindingCounts { high: findings_high, medium: findings_medium, low: findings_low },
+                        findings: FindingCounts {
+                            high: findings_high,
+                            medium: findings_medium,
+                            low: findings_low,
+                        },
                         duration_secs,
                     });
                 }
@@ -354,7 +377,11 @@ pub(super) async fn run_headless(project_dir: &Path, output_format: Option<Strin
                 reviewer_model: config_snapshot_data.4.clone(),
             },
         };
-        println!("{}", serde_json::to_string_pretty(&report).unwrap_or_else(|e| format!("{{\"error\": \"{}\"}}", e)));
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&report)
+                .unwrap_or_else(|e| format!("{{\"error\": \"{}\"}}", e))
+        );
     }
 
     if let Some(version) = update_version {
@@ -558,15 +585,11 @@ mod tests {
             ..Config::default()
         };
 
-        let missing =
-            missing_provider_commands(&config, ProviderCommandMode::Design, |provider| {
-                provider == ModelProvider::Claude
-            });
+        let missing = missing_provider_commands(&config, ProviderCommandMode::Design, |provider| {
+            provider == ModelProvider::Claude
+        });
 
-        assert_eq!(
-            missing.get("codex"),
-            Some(&vec!["orchestrator-proposer"])
-        );
+        assert_eq!(missing.get("codex"), Some(&vec!["orchestrator-proposer"]));
         assert!(!missing.contains_key("claude"));
     }
 
@@ -580,8 +603,7 @@ mod tests {
             ..Config::default()
         };
 
-        let missing =
-            missing_provider_commands(&config, ProviderCommandMode::Design, |_| true);
+        let missing = missing_provider_commands(&config, ProviderCommandMode::Design, |_| true);
 
         assert!(missing.is_empty());
     }

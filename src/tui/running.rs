@@ -6,10 +6,82 @@ use ratatui::{
     Frame,
 };
 
+use super::{pane_border_style, pane_border_type};
 use crate::agent::AgentRole;
 use crate::app::{AppPhase, AppState, ExtensionDisplayInfo, TuiPane};
-use super::{pane_border_style, pane_border_type};
+use crate::config::Config;
 use crate::utils::truncate_str;
+
+fn short_model_spec(spec: &str) -> String {
+    let (provider, model) = Config::parse_model_spec(spec);
+    if model.is_empty() {
+        provider
+    } else {
+        format!("{provider}:{model}")
+    }
+}
+
+fn dual_mode_badge_label(state: &AppState) -> Option<String> {
+    if state.builder_model_specs.len() < 2 {
+        return None;
+    }
+
+    match state.dual_selection {
+        crate::app::DualSelection::Off => None,
+        crate::app::DualSelection::First => state
+            .builder_model_specs
+            .first()
+            .map(|spec| Config::display_model_spec(spec)),
+        crate::app::DualSelection::Second => state
+            .builder_model_specs
+            .get(1)
+            .map(|spec| Config::display_model_spec(spec)),
+        crate::app::DualSelection::Both => Some("Dual Pipeline".to_string()),
+    }
+}
+
+fn dual_toggle_label(state: &AppState) -> (Color, String) {
+    use crate::app::DualSelection;
+
+    match state.dual_selection {
+        DualSelection::Off => (state.tui_theme.muted, " dual".to_string()),
+        DualSelection::First => (
+            Color::Magenta,
+            format!(
+                " {}",
+                state
+                    .builder_model_specs
+                    .first()
+                    .map(|spec| short_model_spec(spec))
+                    .unwrap_or_default()
+            ),
+        ),
+        DualSelection::Second => (
+            Color::Magenta,
+            format!(
+                " {}",
+                state
+                    .builder_model_specs
+                    .get(1)
+                    .map(|spec| short_model_spec(spec))
+                    .unwrap_or_default()
+            ),
+        ),
+        DualSelection::Both => {
+            let first = state
+                .builder_model_specs
+                .first()
+                .map(|spec| short_model_spec(spec))
+                .unwrap_or_default();
+            let second = state
+                .builder_model_specs
+                .get(1)
+                .map(|spec| short_model_spec(spec))
+                .unwrap_or_default();
+            (Color::Magenta, format!(" {first}+{second}"))
+        }
+    }
+}
 
 pub(super) fn render_header(frame: &mut Frame, area: Rect, state: &AppState) {
     let desc_width = area.width.saturating_sub(10) as usize;
@@ -39,7 +111,10 @@ pub(super) fn render_header(frame: &mut Frame, area: Rect, state: &AppState) {
             } else {
                 String::new()
             };
-            format!("  Design — {}: {}{}{}", iter_label, role, model_suffix, findings)
+            format!(
+                "  Design — {}: {}{}{}",
+                iter_label, role, model_suffix, findings
+            )
         } else {
             format!("  Planning — {}", planning.label)
         }
@@ -94,6 +169,8 @@ pub(super) fn render_header(frame: &mut Frame, area: Rect, state: &AppState) {
                     " STOPPED "
                 } else if matches!(state.phase, AppPhase::Planning) {
                     " PLANNING "
+                } else if state.dual_arena_ready() {
+                    " ARENA READY "
                 } else if state.stop_after_task {
                     " STOPPING "
                 } else if state.awaiting_review {
@@ -109,7 +186,8 @@ pub(super) fn render_header(frame: &mut Frame, area: Rect, state: &AppState) {
                     .fg(Color::Black)
                     .bg(if matches!(state.phase, AppPhase::Startup) {
                         Color::DarkGray
-                    } else if matches!(state.phase, AppPhase::Planning) {
+                    } else if matches!(state.phase, AppPhase::Planning) || state.dual_arena_ready()
+                    {
                         Color::Magenta
                     } else if state.stop_after_task || state.awaiting_review {
                         Color::Yellow
@@ -136,7 +214,11 @@ pub(super) fn render_header(frame: &mut Frame, area: Rect, state: &AppState) {
             ),
             Span::raw("  "),
             Span::styled(
-                if state.show_running_explorer { " Explore " } else { " Dashboard " },
+                if state.show_running_explorer {
+                    " Explore "
+                } else {
+                    " Dashboard "
+                },
                 Style::default()
                     .fg(state.tui_theme.text)
                     .bg(state.tui_theme.surface)
@@ -154,6 +236,17 @@ pub(super) fn render_header(frame: &mut Frame, area: Rect, state: &AppState) {
             Style::default().fg(state.tui_theme.muted),
         )),
     ];
+
+    if let Some(label) = dual_mode_badge_label(state) {
+        header_text[0].spans.push(Span::raw("  "));
+        header_text[0].spans.push(Span::styled(
+            format!(" {label} "),
+            Style::default()
+                .fg(Color::Black)
+                .bg(Color::Magenta)
+                .add_modifier(Modifier::BOLD),
+        ));
+    }
 
     if state.awaiting_review {
         if let Some(pr_num) = state.awaiting_pr {
@@ -253,7 +346,12 @@ pub(super) fn style_for_line(line: &str, theme: &super::theme::TuiTheme) -> Styl
     }
 }
 
-pub(super) fn render_agent_output(frame: &mut Frame, area: Rect, state: &AppState, focused: TuiPane) {
+pub(super) fn render_agent_output(
+    frame: &mut Frame,
+    area: Rect,
+    state: &AppState,
+    focused: TuiPane,
+) {
     let inner_width = area.width.saturating_sub(2) as usize;
 
     // Determine which output lines to render
@@ -277,7 +375,7 @@ pub(super) fn render_agent_output(frame: &mut Frame, area: Rect, state: &AppStat
         .collect();
 
     let max_lines = if state.dual_build.active {
-        area.height.saturating_sub(3) as usize  // 1 extra line for tab header
+        area.height.saturating_sub(3) as usize // 1 extra line for tab header
     } else {
         area.height.saturating_sub(2) as usize
     };
@@ -304,7 +402,9 @@ pub(super) fn render_agent_output(frame: &mut Frame, area: Rect, state: &AppStat
             let status = if done { "done".to_string() } else { stage };
             let tab_text = format!(" {}: {} [{}] ({}ev) ", i + 1, label, status, count);
             let style = if i == state.dual_build.tab {
-                Style::default().fg(state.tui_theme.accent).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(state.tui_theme.accent)
+                    .add_modifier(Modifier::BOLD)
             } else {
                 Style::default().fg(state.tui_theme.muted)
             };
@@ -315,7 +415,9 @@ pub(super) fn render_agent_output(frame: &mut Frame, area: Rect, state: &AppStat
     let title = if state.dual_build.active {
         Span::styled(
             " Dual Pipeline ",
-            Style::default().fg(state.tui_theme.accent).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(state.tui_theme.accent)
+                .add_modifier(Modifier::BOLD),
         )
     } else if let Some((ref role, _)) = state.current_agent {
         let color = match role {
@@ -344,7 +446,11 @@ pub(super) fn render_agent_output(frame: &mut Frame, area: Rect, state: &AppStat
     let list = List::new(all_items).block(
         Block::default()
             .borders(Borders::ALL)
-            .border_style(pane_border_style(focused, TuiPane::AgentOutput, &state.tui_theme))
+            .border_style(pane_border_style(
+                focused,
+                TuiPane::AgentOutput,
+                &state.tui_theme,
+            ))
             .border_type(pane_border_type(focused, TuiPane::AgentOutput))
             .title(title),
     );
@@ -361,7 +467,11 @@ pub(super) fn render_task_queue(frame: &mut Frame, area: Rect, state: &AppState,
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .border_style(pane_border_style(focused, TuiPane::TaskQueue, &state.tui_theme))
+                .border_style(pane_border_style(
+                    focused,
+                    TuiPane::TaskQueue,
+                    &state.tui_theme,
+                ))
                 .border_type(pane_border_type(focused, TuiPane::TaskQueue))
                 .title(Span::styled(
                     " Task Queue ",
@@ -522,7 +632,11 @@ pub(super) fn render_task_queue(frame: &mut Frame, area: Rect, state: &AppState,
     let list = List::new(items).block(
         Block::default()
             .borders(Borders::ALL)
-            .border_style(pane_border_style(focused, TuiPane::TaskQueue, &state.tui_theme))
+            .border_style(pane_border_style(
+                focused,
+                TuiPane::TaskQueue,
+                &state.tui_theme,
+            ))
             .border_type(pane_border_type(focused, TuiPane::TaskQueue))
             .title(Span::styled(
                 title,
@@ -544,9 +658,20 @@ pub(super) fn render_patterns(
 ) {
     use crate::app::PatternEventKind;
 
-    let used_count = state.session_patterns.iter().filter(|p| p.kind == PatternEventKind::Used).count();
-    let learned_count = state.session_patterns.iter().filter(|p| p.kind == PatternEventKind::Learned).count();
-    let title = format!(" Patterns ({} injected, {} learned) ", used_count, learned_count);
+    let used_count = state
+        .session_patterns
+        .iter()
+        .filter(|p| p.kind == PatternEventKind::Used)
+        .count();
+    let learned_count = state
+        .session_patterns
+        .iter()
+        .filter(|p| p.kind == PatternEventKind::Learned)
+        .count();
+    let title = format!(
+        " Patterns ({} injected, {} learned) ",
+        used_count, learned_count
+    );
     let max_lines = area.height.saturating_sub(2) as usize;
 
     if state.session_patterns.is_empty() {
@@ -557,7 +682,11 @@ pub(super) fn render_patterns(
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .border_style(pane_border_style(focused, TuiPane::PatternsLearned, &state.tui_theme))
+                .border_style(pane_border_style(
+                    focused,
+                    TuiPane::PatternsLearned,
+                    &state.tui_theme,
+                ))
                 .border_type(pane_border_type(focused, TuiPane::PatternsLearned))
                 .title(Span::styled(
                     " Patterns ",
@@ -571,9 +700,7 @@ pub(super) fn render_patterns(
     }
 
     let total_patterns = state.session_patterns.len();
-    let scroll = state
-        .patterns_scroll
-        .min(total_patterns.saturating_sub(1));
+    let scroll = state.patterns_scroll.min(total_patterns.saturating_sub(1));
     let items: Vec<ListItem> = state
         .session_patterns
         .iter()
@@ -588,14 +715,8 @@ pub(super) fn render_patterns(
                 PatternEventKind::Learned => ("new", Color::Yellow),
             };
             ListItem::new(Line::from(vec![
-                Span::styled(
-                    format!(" #{} ", num),
-                    Style::default().fg(color),
-                ),
-                Span::styled(
-                    format!("[{}] ", label),
-                    Style::default().fg(color),
-                ),
+                Span::styled(format!(" #{} ", num), Style::default().fg(color)),
+                Span::styled(format!("[{}] ", label), Style::default().fg(color)),
                 Span::styled(
                     truncate_str(&event.title, area.width.saturating_sub(14) as usize),
                     Style::default().fg(state.tui_theme.text),
@@ -607,7 +728,11 @@ pub(super) fn render_patterns(
     let list = List::new(items).block(
         Block::default()
             .borders(Borders::ALL)
-            .border_style(pane_border_style(focused, TuiPane::PatternsLearned, &state.tui_theme))
+            .border_style(pane_border_style(
+                focused,
+                TuiPane::PatternsLearned,
+                &state.tui_theme,
+            ))
             .border_type(pane_border_type(focused, TuiPane::PatternsLearned))
             .title(Span::styled(
                 title,
@@ -639,7 +764,11 @@ pub(super) fn render_extensions_used(
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .border_style(pane_border_style(focused, TuiPane::Extensions, &state.tui_theme))
+                .border_style(pane_border_style(
+                    focused,
+                    TuiPane::Extensions,
+                    &state.tui_theme,
+                ))
                 .border_type(pane_border_type(focused, TuiPane::Extensions))
                 .title(Span::styled(
                     " Extensions Used ",
@@ -667,7 +796,9 @@ pub(super) fn render_extensions_used(
                 ),
                 Span::styled(
                     &event.name,
-                    Style::default().fg(state.tui_theme.text).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(state.tui_theme.text)
+                        .add_modifier(Modifier::BOLD),
                 ),
                 Span::styled(
                     format!(" ({})", event.task_id),
@@ -680,7 +811,11 @@ pub(super) fn render_extensions_used(
     let list = List::new(items).block(
         Block::default()
             .borders(Borders::ALL)
-            .border_style(pane_border_style(focused, TuiPane::Extensions, &state.tui_theme))
+            .border_style(pane_border_style(
+                focused,
+                TuiPane::Extensions,
+                &state.tui_theme,
+            ))
             .border_type(pane_border_type(focused, TuiPane::Extensions))
             .title(Span::styled(
                 title,
@@ -712,7 +847,11 @@ pub(super) fn render_status_bar(frame: &mut Frame, area: Rect, state: &AppState)
                 .bg(state.tui_theme.muted)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::raw(" stop  "),
+        Span::raw(if state.dual_arena_ready() {
+            " startup  "
+        } else {
+            " stop  "
+        }),
         Span::styled(
             " Ctrl+C ",
             Style::default()
@@ -763,6 +902,16 @@ pub(super) fn render_status_bar(frame: &mut Frame, area: Rect, state: &AppState)
         Span::raw(" theme"),
     ];
 
+    let (dual_bg, dual_label) = dual_toggle_label(state);
+    spans.push(Span::styled(
+        "  ^D ",
+        Style::default()
+            .fg(Color::Black)
+            .bg(dual_bg)
+            .add_modifier(Modifier::BOLD),
+    ));
+    spans.push(Span::raw(dual_label));
+
     if state.awaiting_review {
         spans.push(Span::styled(
             "  Enter ",
@@ -789,7 +938,10 @@ pub(super) fn render_status_bar(frame: &mut Frame, area: Rect, state: &AppState)
         spans.push(Span::raw(" findings"));
     }
 
-    spans.push(Span::styled(discovery_info, Style::default().fg(state.tui_theme.muted)));
+    spans.push(Span::styled(
+        discovery_info,
+        Style::default().fg(state.tui_theme.muted),
+    ));
 
     // Tab toggle -- always visible on Dashboard
     spans.push(Span::styled(

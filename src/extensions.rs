@@ -49,10 +49,7 @@ pub fn discover_extensions(project_dir: &Path) -> Vec<ExtensionInfo> {
             seen.insert(ext.name.clone(), i);
         }
     }
-    let mut deduped: Vec<ExtensionInfo> = seen
-        .into_values()
-        .map(|i| results[i].clone())
-        .collect();
+    let mut deduped: Vec<ExtensionInfo> = seen.into_values().map(|i| results[i].clone()).collect();
     deduped.sort_by(|a, b| a.name.cmp(&b.name));
     deduped
 }
@@ -136,7 +133,10 @@ pub fn load_extension_context(extensions: &[ExtensionInfo], selected: &[String])
     let mut context = String::new();
     for name in selected {
         let Some(ext) = extensions.iter().find(|e| e.name == *name) else {
-            eprintln!("warning: selected extension '{}' not found in discovered extensions", name);
+            eprintln!(
+                "warning: selected extension '{}' not found in discovered extensions",
+                name
+            );
             continue;
         };
         let content = match std::fs::read_to_string(&ext.claude_md_path) {
@@ -231,7 +231,8 @@ pub fn extract_keywords(claude_md_path: &Path) -> Vec<String> {
         for (i, part) in parts.iter().enumerate() {
             if i % 2 == 1 {
                 let term = part.trim();
-                if term.len() >= 3 && term.len() <= 40 && !term.chars().all(|c| c.is_ascii_digit()) {
+                if term.len() >= 3 && term.len() <= 40 && !term.chars().all(|c| c.is_ascii_digit())
+                {
                     keywords.insert(term.to_lowercase());
                 }
             }
@@ -242,7 +243,8 @@ pub fn extract_keywords(claude_md_path: &Path) -> Vec<String> {
         for (i, part) in bold_parts.iter().enumerate() {
             if i % 2 == 1 {
                 let term = part.trim();
-                if term.len() >= 3 && term.len() <= 40 && !term.chars().all(|c| c.is_ascii_digit()) {
+                if term.len() >= 3 && term.len() <= 40 && !term.chars().all(|c| c.is_ascii_digit())
+                {
                     keywords.insert(term.to_lowercase());
                 }
             }
@@ -256,10 +258,7 @@ pub fn extract_keywords(claude_md_path: &Path) -> Vec<String> {
 }
 
 /// Load all pattern JSON files from selected extensions' patterns directories.
-pub fn load_extension_patterns(
-    extensions: &[ExtensionInfo],
-    selected: &[String],
-) -> Vec<Pattern> {
+pub fn load_extension_patterns(extensions: &[ExtensionInfo], selected: &[String]) -> Vec<Pattern> {
     let mut all_patterns = Vec::new();
     for name in selected {
         let Some(ext) = extensions.iter().find(|e| e.name == *name) else {

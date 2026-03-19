@@ -17,7 +17,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use super::context::{RunContext, StageResult, FailureType};
+use super::context::{FailureType, RunContext, StageResult};
 use super::state::DualSelection;
 use super::{review, AppEvent, LoopEvent};
 use crate::extensions;
@@ -73,7 +73,9 @@ enum GateResult {
 fn gate_builder(ctx: &RunContext) -> GateResult {
     let plan = &ctx.current_plan;
     if !plan.exists() {
-        return GateResult::Fail("current-plan.md does not exist -- planner may have failed".into());
+        return GateResult::Fail(
+            "current-plan.md does not exist -- planner may have failed".into(),
+        );
     }
     match std::fs::read_to_string(plan) {
         Ok(content) if content.trim().is_empty() => {
@@ -82,7 +84,8 @@ fn gate_builder(ctx: &RunContext) -> GateResult {
         Ok(content) => {
             if !content.contains("## File Operations") || !content.contains("## Verification") {
                 GateResult::Fail(
-                    "current-plan.md missing required sections (File Operations, Verification)".into(),
+                    "current-plan.md missing required sections (File Operations, Verification)"
+                        .into(),
                 )
             } else {
                 GateResult::Pass
@@ -96,7 +99,9 @@ fn gate_builder(ctx: &RunContext) -> GateResult {
 fn gate_reviewer(ctx: &RunContext) -> GateResult {
     let claims = ctx.buildloop_dir.join("build-claims.md");
     if !claims.exists() {
-        return GateResult::Fail("build-claims.md does not exist -- builder may have failed".into());
+        return GateResult::Fail(
+            "build-claims.md does not exist -- builder may have failed".into(),
+        );
     }
     match std::fs::metadata(&claims) {
         Ok(meta) if meta.len() < 10 => {
@@ -171,8 +176,11 @@ fn spawn_lookahead_planner(
             patterns::match_patterns(&all_patterns, &task_desc)
         };
 
-        let pattern_context =
-            patterns::format_patterns_for_prompt(&matched, "planner", ctx.config.max_pattern_injection);
+        let pattern_context = patterns::format_patterns_for_prompt(
+            &matched,
+            "planner",
+            ctx.config.max_pattern_injection,
+        );
 
         let prompt = prompts::planner_lookahead_prompt(
             &task_id,
@@ -350,183 +358,189 @@ fn run_dual_pipelines<'a>(
     task_info: &'a Task,
     ctx: &'a RunContext,
     tx: &'a mpsc::UnboundedSender<AppEvent>,
-    skip_scout: bool,
     cached_patterns: &'a [patterns::Pattern],
     patterns_dir: &'a std::path::Path,
     extension_context: &'a str,
-    specs: &'a [String; 2],
+    configs: [Config; 2],
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = (bool, bool)> + Send + 'a>> {
     Box::pin(async move {
-    // Build display labels
-    let labels: [String; 2] = [
-        {
-            let (p, m) = Config::parse_model_spec(&specs[0]);
-            Config::display_provider_model(&p, &m)
-        },
-        {
-            let (p, m) = Config::parse_model_spec(&specs[1]);
-            Config::display_provider_model(&p, &m)
-        },
-    ];
+        let labels = [
+            Config::display_provider_model(&configs[0].builder_provider, &configs[0].builder_model),
+            Config::display_provider_model(&configs[1].builder_provider, &configs[1].builder_model),
+        ];
 
-    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::DualBuildStarted {
-        models: labels.clone(),
-    }));
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::DualBuildStarted {
+            models: labels.clone(),
+        }));
 
-    let arena_dir = ctx.buildloop_dir.join("arena");
-    let _ = std::fs::create_dir_all(&arena_dir);
+        let arena_dir = ctx.buildloop_dir.join("arena");
+        let _ = std::fs::create_dir_all(&arena_dir);
 
-    // Create worktrees and RunContexts for each pipeline
-    let mut wt_contexts: Vec<(PathBuf, RunContext)> = Vec::new();
+        // Create worktrees and RunContexts for each pipeline
+        let mut wt_contexts: Vec<(PathBuf, RunContext)> = Vec::new();
 
-    for idx in 0..2 {
-        let (provider, _) = Config::parse_model_spec(&specs[idx]);
-        let wt_path = arena_dir.join(format!("pipeline-{}-{}", idx, provider));
+        for (idx, pipeline_config) in configs.into_iter().enumerate() {
+            let provider = pipeline_config.builder_provider.clone();
+            let wt_path = arena_dir.join(format!("pipeline-{}-{}", idx, provider));
 
-        // Remove stale worktree
-        if wt_path.exists() {
-            let _ = std::process::Command::new("git")
-                .args(["worktree", "remove", "--force"])
+            // Remove stale worktree
+            if wt_path.exists() {
+                let _ = std::process::Command::new("git")
+                    .args(["worktree", "remove", "--force"])
+                    .arg(&wt_path)
+                    .current_dir(&ctx.project_dir)
+                    .output();
+            }
+
+            // Create worktree
+            let wt_result = std::process::Command::new("git")
+                .args(["worktree", "add", "--detach"])
                 .arg(&wt_path)
+                .arg("HEAD")
                 .current_dir(&ctx.project_dir)
                 .output();
-        }
 
-        // Create worktree
-        let wt_result = std::process::Command::new("git")
-            .args(["worktree", "add", "--detach"])
-            .arg(&wt_path)
-            .arg("HEAD")
-            .current_dir(&ctx.project_dir)
-            .output();
-
-        match wt_result {
-            Ok(output) if output.status.success() => {}
-            Ok(output) => {
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                    "Dual pipeline: failed to create worktree {}: {}", labels[idx], stderr.trim()
-                ))));
-                // Clean up any previously created worktrees
-                for (_p, prev_ctx) in &wt_contexts {
-                    let _ = std::process::Command::new("git")
-                        .args(["worktree", "remove", "--force"])
-                        .arg(&prev_ctx.project_dir)
-                        .current_dir(&ctx.project_dir)
-                        .output();
+            match wt_result {
+                Ok(output) if output.status.success() => {}
+                Ok(output) => {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                        "Dual pipeline: failed to create worktree {}: {}",
+                        labels[idx],
+                        stderr.trim()
+                    ))));
+                    // Clean up any previously created worktrees
+                    for (_p, prev_ctx) in &wt_contexts {
+                        let _ = std::process::Command::new("git")
+                            .args(["worktree", "remove", "--force"])
+                            .arg(&prev_ctx.project_dir)
+                            .current_dir(&ctx.project_dir)
+                            .output();
+                    }
+                    return (false, false);
                 }
-                return (false, false);
-            }
-            Err(e) => {
-                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                    "Dual pipeline: git worktree command failed: {}", e
-                ))));
-                for (_p, prev_ctx) in &wt_contexts {
-                    let _ = std::process::Command::new("git")
-                        .args(["worktree", "remove", "--force"])
-                        .arg(&prev_ctx.project_dir)
-                        .current_dir(&ctx.project_dir)
-                        .output();
+                Err(e) => {
+                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                        "Dual pipeline: git worktree command failed: {}",
+                        e
+                    ))));
+                    for (_p, prev_ctx) in &wt_contexts {
+                        let _ = std::process::Command::new("git")
+                            .args(["worktree", "remove", "--force"])
+                            .arg(&prev_ctx.project_dir)
+                            .current_dir(&ctx.project_dir)
+                            .output();
+                    }
+                    return (false, false);
                 }
-                return (false, false);
             }
-        }
 
-        // Copy state files into worktree
-        // SPEC and TASKS at their relative paths
-        if let Ok(rel) = ctx.spec_path.strip_prefix(&ctx.project_dir) {
-            let dest = wt_path.join(rel);
-            if let Some(parent) = dest.parent() {
-                let _ = std::fs::create_dir_all(parent);
+            // Copy state files into worktree
+            // SPEC and TASKS at their relative paths
+            if let Ok(rel) = ctx.spec_path.strip_prefix(&ctx.project_dir) {
+                let dest = wt_path.join(rel);
+                if let Some(parent) = dest.parent() {
+                    let _ = std::fs::create_dir_all(parent);
+                }
+                let _ = std::fs::copy(&ctx.spec_path, &dest);
             }
-            let _ = std::fs::copy(&ctx.spec_path, &dest);
-        }
-        if let Ok(rel) = ctx.plan_path.strip_prefix(&ctx.project_dir) {
-            let dest = wt_path.join(rel);
-            if let Some(parent) = dest.parent() {
-                let _ = std::fs::create_dir_all(parent);
+            if let Ok(rel) = ctx.plan_path.strip_prefix(&ctx.project_dir) {
+                let dest = wt_path.join(rel);
+                if let Some(parent) = dest.parent() {
+                    let _ = std::fs::create_dir_all(parent);
+                }
+                let _ = std::fs::copy(&ctx.plan_path, &dest);
             }
-            let _ = std::fs::copy(&ctx.plan_path, &dest);
+            // CLAUDE.md (may be untracked/gitignored)
+            let claude_md_src = ctx.project_dir.join("CLAUDE.md");
+            if claude_md_src.exists() {
+                let _ = std::fs::copy(&claude_md_src, wt_path.join("CLAUDE.md"));
+            }
+
+            // Create RunContext for this worktree
+            let wt_ctx = RunContext::new(
+                &wt_path,
+                pipeline_config,
+                ctx.shutdown.clone(),
+                ctx.tasks_file_lock.clone(),
+                ctx.review_gate.clone(),
+            );
+
+            wt_contexts.push((wt_path, wt_ctx));
         }
-        // CLAUDE.md (may be untracked/gitignored)
-        let claude_md_src = ctx.project_dir.join("CLAUDE.md");
-        if claude_md_src.exists() {
-            let _ = std::fs::copy(&claude_md_src, wt_path.join("CLAUDE.md"));
-        }
 
-        // Create pipeline-specific config with all roles using this provider/model
-        let pipeline_config = ctx.config.for_pipeline(&specs[idx]);
+        // Run both pipelines concurrently with forwarding channels.
+        // Use tokio::join! (not spawn) since process_task borrows are not 'static.
+        let ((_wt0, wt_ctx0), (_wt1, wt_ctx1)) = (wt_contexts.remove(0), wt_contexts.remove(0));
 
-        // Create RunContext for this worktree
-        let wt_ctx = RunContext::new(
-            &wt_path,
-            pipeline_config,
-            ctx.shutdown.clone(),
-            ctx.tasks_file_lock.clone(),
-            ctx.review_gate.clone(),
-        );
+        // Pipeline 0 forwarding channel
+        let (tx0, mut rx0) = mpsc::unbounded_channel::<AppEvent>();
+        let fwd0 = tx.clone();
+        tokio::spawn(async move {
+            while let Some(event) = rx0.recv().await {
+                let _ = fwd0.send(AppEvent::DualPipelineEvent(0, Box::new(event)));
+            }
+        });
 
-        wt_contexts.push((wt_path, wt_ctx));
-    }
+        // Pipeline 1 forwarding channel
+        let (tx1, mut rx1) = mpsc::unbounded_channel::<AppEvent>();
+        let fwd1 = tx.clone();
+        tokio::spawn(async move {
+            while let Some(event) = rx1.recv().await {
+                let _ = fwd1.send(AppEvent::DualPipelineEvent(1, Box::new(event)));
+            }
+        });
 
-    // Run both pipelines concurrently with forwarding channels.
-    // Use tokio::join! (not spawn) since process_task borrows are not 'static.
-    let ((_wt0, wt_ctx0), (_wt1, wt_ctx1)) = (
-        wt_contexts.remove(0),
-        wt_contexts.remove(0),
-    );
+        let patterns0 = cached_patterns.to_vec();
+        let patterns1 = cached_patterns.to_vec();
+        let ext0 = extension_context.to_string();
+        let ext1 = extension_context.to_string();
+        let pdir0 = patterns_dir.to_path_buf();
+        let pdir1 = patterns_dir.to_path_buf();
 
-    // Pipeline 0 forwarding channel
-    let (tx0, mut rx0) = mpsc::unbounded_channel::<AppEvent>();
-    let fwd0 = tx.clone();
-    tokio::spawn(async move {
-        while let Some(event) = rx0.recv().await {
-            let _ = fwd0.send(AppEvent::DualPipelineEvent(0, Box::new(event)));
-        }
-    });
+        let fut0 = async {
+            process_task(task_info, &wt_ctx0, &tx0, false, &patterns0, &pdir0, &ext0).await
+        };
+        let fut1 = async {
+            process_task(task_info, &wt_ctx1, &tx1, false, &patterns1, &pdir1, &ext1).await
+        };
+        tokio::pin!(fut0);
+        tokio::pin!(fut1);
 
-    // Pipeline 1 forwarding channel
-    let (tx1, mut rx1) = mpsc::unbounded_channel::<AppEvent>();
-    let fwd1 = tx.clone();
-    tokio::spawn(async move {
-        while let Some(event) = rx1.recv().await {
-            let _ = fwd1.send(AppEvent::DualPipelineEvent(1, Box::new(event)));
-        }
-    });
+        let (result0, result1) = tokio::select! {
+            r0 = &mut fut0 => {
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::DualBuildStreamDone(0, r0.0)));
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                    "Pipeline 1 complete -- waiting for Pipeline 2 ({})",
+                    labels[1]
+                ))));
+                let r1 = fut1.await;
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::DualBuildStreamDone(1, r1.0)));
+                (r0, r1)
+            }
+            r1 = &mut fut1 => {
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::DualBuildStreamDone(1, r1.0)));
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                    "Pipeline 2 complete -- waiting for Pipeline 1 ({})",
+                    labels[0]
+                ))));
+                let r0 = fut0.await;
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::DualBuildStreamDone(0, r0.0)));
+                (r0, r1)
+            }
+        };
 
-    let patterns0 = cached_patterns.to_vec();
-    let patterns1 = cached_patterns.to_vec();
-    let ext0 = extension_context.to_string();
-    let ext1 = extension_context.to_string();
-    let pdir0 = patterns_dir.to_path_buf();
-    let pdir1 = patterns_dir.to_path_buf();
+        let any_success = result0.0 || result1.0;
+        let any_rate_limited = result0.1 || result1.1;
 
-    let (result0, result1) = tokio::join!(
-        async {
-            let r = process_task(task_info, &wt_ctx0, &tx0, skip_scout, &patterns0, &pdir0, &ext0).await;
-            let _ = tx0.send(AppEvent::LoopEvent(LoopEvent::TaskCompleted(task_info.id.clone(), r.0)));
-            r
-        },
-        async {
-            let r = process_task(task_info, &wt_ctx1, &tx1, skip_scout, &patterns1, &pdir1, &ext1).await;
-            let _ = tx1.send(AppEvent::LoopEvent(LoopEvent::TaskCompleted(task_info.id.clone(), r.0)));
-            r
-        }
-    );
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+            "Both pipelines complete. Results in .buildloop/arena/ -- evaluate and merge manually."
+                .to_string(),
+        )));
 
-    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::DualBuildStreamDone(0, result0.0)));
-    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::DualBuildStreamDone(1, result1.0)));
+        // Do NOT clean up worktrees -- human evaluates results
 
-    let any_success = result0.0 || result1.0;
-    let any_rate_limited = result0.1 || result1.1;
-
-    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
-        "Both pipelines complete. Results in .buildloop/arena/ -- evaluate and merge manually.".to_string()
-    )));
-
-    // Do NOT clean up worktrees -- human evaluates results
-
-    (any_success, any_rate_limited)
+        (any_success, any_rate_limited)
     }) // end Box::pin
 }
 
@@ -548,9 +562,11 @@ async fn poll_pr_review(
 
         let result = tokio::process::Command::new("gh")
             .args([
-                "pr", "view",
+                "pr",
+                "view",
                 &pr_number.to_string(),
-                "--json", "reviewDecision,state",
+                "--json",
+                "reviewDecision,state",
             ])
             .current_dir(&project_dir)
             .output()
@@ -574,21 +590,20 @@ async fn poll_pr_review(
                         return;
                     }
                     if review_decision == "CHANGES_REQUESTED" && review_decision != last_decision {
-                        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BackgroundLog(
-                            format!(
-                                "PR #{}: changes requested -- update the code or press Enter to skip",
-                                pr_number
-                            ),
-                        )));
+                        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BackgroundLog(format!(
+                            "PR #{}: changes requested -- update the code or press Enter to skip",
+                            pr_number
+                        ))));
                     }
                     last_decision = review_decision.to_string();
                 }
                 // Still open/in review -- continue polling
             }
             _ => {
-                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BackgroundLog(
-                    format!("gh pr view {} failed -- will retry", pr_number),
-                )));
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BackgroundLog(format!(
+                    "gh pr view {} failed -- will retry",
+                    pr_number
+                ))));
             }
         }
 
@@ -647,10 +662,8 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
 
     // ─── Extension Contract Loading ─────────────────────────────
     let discovered_extensions = extensions::discover_extensions(&ctx.project_dir);
-    let extension_context = extensions::load_extension_context(
-        &discovered_extensions,
-        &ctx.config.extensions,
-    );
+    let extension_context =
+        extensions::load_extension_context(&discovered_extensions, &ctx.config.extensions);
     if !ctx.config.extensions.is_empty() {
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
             "Extensions active: {}",
@@ -693,10 +706,8 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
     let mut cached_patterns = patterns::load_patterns(&patterns_dir);
 
     // Merge extension patterns into the pool
-    let ext_patterns = extensions::load_extension_patterns(
-        &discovered_extensions,
-        &ctx.config.extensions,
-    );
+    let ext_patterns =
+        extensions::load_extension_patterns(&discovered_extensions, &ctx.config.extensions);
     if !ext_patterns.is_empty() {
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
             "Loaded {} extension patterns",
@@ -763,10 +774,7 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
 
             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::AgentStarted(
                 AgentRole::Scout,
-                Config::display_provider_model(
-                    &ctx.config.scout_provider,
-                    &ctx.config.scout_model,
-                ),
+                Config::display_provider_model(&ctx.config.scout_provider, &ctx.config.scout_model),
             )));
 
             // Read SPEC.md for user intent if it exists
@@ -855,7 +863,6 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                         lookahead = None;
                     }
                 }
-
             }
 
             // Backup state files before the builder runs -- scaffold tools
@@ -865,8 +872,21 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
             // Skip scout if it already ran this session AND the last commit
             // didn't touch any structural files (SPEC.md, Cargo.toml, etc.)
             let skip_scout = scout_has_run && !last_commit_touched_structural(&ctx.project_dir);
-            let (success, task_rate_limited) = process_task(&task_info, &ctx, &tx, skip_scout, &cached_patterns, &patterns_dir, &extension_context).await;
-            scout_has_run = true;
+            let dual_arena_mode = ctx.config.builder_models.len() >= 2
+                && DualSelection::from_str(&ctx.config.dual_selection) == DualSelection::Both;
+            let (success, task_rate_limited) = process_task(
+                &task_info,
+                &ctx,
+                &tx,
+                skip_scout,
+                &cached_patterns,
+                &patterns_dir,
+                &extension_context,
+            )
+            .await;
+            if !dual_arena_mode {
+                scout_has_run = true;
+            }
 
             // Restore state files if the builder deleted or truncated them
             let restored = restore_state_files(&ctx, &state_backup, &tx);
@@ -875,6 +895,13 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                     "Restored {} state file(s) deleted during build",
                     restored
                 ))));
+            }
+
+            if dual_arena_mode {
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+                    "Dual arena complete -- inspect the tabs or .buildloop/arena/, then press q to return to startup.".to_string(),
+                )));
+                return;
             }
 
             // mark_done is now called inside process_task, right before
@@ -894,7 +921,9 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
 
             // Collect build claims for targeted discovery
             if success {
-                if let Ok(claims) = std::fs::read_to_string(ctx.buildloop_dir.join("build-claims.md")) {
+                if let Ok(claims) =
+                    std::fs::read_to_string(ctx.buildloop_dir.join("build-claims.md"))
+                {
                     session_build_claims.push(format!("## {}\n{}", task_info.id, claims));
                 }
             }
@@ -927,7 +956,9 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
 
             // Check cost limit
             if ctx.config.cost_limit > 0.0 {
-                let cost_millicents = ctx.session_cost_millicents.load(std::sync::atomic::Ordering::Relaxed);
+                let cost_millicents = ctx
+                    .session_cost_millicents
+                    .load(std::sync::atomic::Ordering::Relaxed);
                 let cost_usd = cost_millicents as f64 / 100_000.0;
                 if cost_usd >= ctx.config.cost_limit {
                     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
@@ -955,16 +986,22 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                 return;
             }
 
-            adaptive_sleep(&ctx.config, task_rate_limited, ctx.config.pause_between_tasks_secs).await;
+            adaptive_sleep(
+                &ctx.config,
+                task_rate_limited,
+                ctx.config.pause_between_tasks_secs,
+            )
+            .await;
         } else {
             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::NextTaskUpdated(None)));
 
             // ─── Sprint Mode: Stop when queue empties ────────────────
             if ctx.config.run_mode == "sprint" {
                 let done_count = task::count_completed(&tasks);
-                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
-                    format!("Sprint complete -- all {} tasks done", done_count),
-                )));
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                    "Sprint complete -- all {} tasks done",
+                    done_count
+                ))));
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Finished));
                 return;
             }
@@ -990,7 +1027,8 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                         "Skipping discovery (cooldown: {} minutes remaining)",
                         remaining_mins
                     ))));
-                    tokio::time::sleep(Duration::from_secs(ctx.config.pause_between_cycles_secs)).await;
+                    tokio::time::sleep(Duration::from_secs(ctx.config.pause_between_cycles_secs))
+                        .await;
                     if ctx.is_stop_requested() {
                         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
                             "Stop requested during discovery cooldown -- shutting down".to_string(),
@@ -1008,7 +1046,9 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
 
             discovery_round += 1;
 
-            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::DiscoveryStarted(discovery_round)));
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::DiscoveryStarted(
+                discovery_round,
+            )));
 
             let pre_count = tasks.len();
 
@@ -1083,7 +1123,8 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
 
             if new_tasks == 0 {
                 // Double the discovery cooldown (up to 30 min) when discovery finds nothing
-                effective_cooldown_minutes = (effective_cooldown_minutes * 2).min(MAX_COOLDOWN_MINUTES);
+                effective_cooldown_minutes =
+                    (effective_cooldown_minutes * 2).min(MAX_COOLDOWN_MINUTES);
 
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
                     "No new tasks found — waiting before next scan...".to_string(),
@@ -1184,7 +1225,10 @@ fn trim_verification_section(content: &str) -> (String, Option<(usize, usize)>) 
     let all_lines: Vec<&str> = content.lines().collect();
 
     // Find the start of ## Verification Results
-    let section_start = match all_lines.iter().position(|line| line.starts_with("## Verification Results")) {
+    let section_start = match all_lines
+        .iter()
+        .position(|line| line.starts_with("## Verification Results"))
+    {
         Some(idx) => idx,
         None => return (content.to_string(), None),
     };
@@ -1288,22 +1332,31 @@ async fn process_task(
     patterns_dir: &std::path::Path,
     extension_context: &str,
 ) -> (bool, bool) {
-    // Handle dual selection: Both forks two pipelines, First/Second override provider
+    // Handle dual selection: Both forks two full pipelines, First/Second
+    // resolve an effective single-pipeline config before any stage starts.
     let dual_sel = DualSelection::from_str(&ctx.config.dual_selection);
+    let selected_configs = ctx
+        .config
+        .selected_pipeline_configs(&ctx.config.dual_selection);
     if ctx.config.builder_models.len() >= 2 {
         match dual_sel {
-            DualSelection::Both => {
-                let specs = [
-                    ctx.config.builder_models[0].clone(),
-                    ctx.config.builder_models[1].clone(),
-                ];
+            DualSelection::Both if selected_configs.len() == 2 => {
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::TaskStarted(
+                    task_info.clone(),
+                )));
                 return run_dual_pipelines(
-                    task_info, ctx, tx, skip_scout, cached_patterns, patterns_dir, extension_context, &specs,
-                ).await;
+                    task_info,
+                    ctx,
+                    tx,
+                    cached_patterns,
+                    patterns_dir,
+                    extension_context,
+                    [selected_configs[0].clone(), selected_configs[1].clone()],
+                )
+                .await;
             }
-            DualSelection::First | DualSelection::Second => {
-                let spec_idx = if dual_sel == DualSelection::First { 0 } else { 1 };
-                let pipeline_config = ctx.config.for_pipeline(&ctx.config.builder_models[spec_idx]);
+            DualSelection::First | DualSelection::Second if selected_configs.len() == 1 => {
+                let pipeline_config = selected_configs[0].clone();
                 let override_ctx = RunContext::new(
                     &ctx.project_dir,
                     pipeline_config,
@@ -1313,10 +1366,17 @@ async fn process_task(
                 );
                 // Box::pin to break async recursion (override_ctx has dual_selection cleared)
                 return Box::pin(process_task(
-                    task_info, &override_ctx, tx, skip_scout, cached_patterns, patterns_dir, extension_context,
-                )).await;
+                    task_info,
+                    &override_ctx,
+                    tx,
+                    skip_scout,
+                    cached_patterns,
+                    patterns_dir,
+                    extension_context,
+                ))
+                .await;
             }
-            DualSelection::Off => {} // fall through to normal pipeline
+            _ => {} // fall through to normal pipeline
         }
     }
 
@@ -1371,7 +1431,9 @@ async fn process_task(
         .await;
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
             "Pattern matching ({}): cache {}/{} hit",
-            result.mode, result.cache_hits, result.cache_hits + result.cache_misses
+            result.mode,
+            result.cache_hits,
+            result.cache_hits + result.cache_misses
         ))));
         scored.into_iter().map(|(p, _)| p).collect::<Vec<_>>()
     } else {
@@ -1380,8 +1442,11 @@ async fn process_task(
 
     let pattern_context =
         patterns::format_patterns_for_prompt(&matched, "planner", ctx.config.max_pattern_injection);
-    let reviewer_pattern_context =
-        patterns::format_patterns_for_prompt(&matched, "reviewer", ctx.config.max_pattern_injection);
+    let reviewer_pattern_context = patterns::format_patterns_for_prompt(
+        &matched,
+        "reviewer",
+        ctx.config.max_pattern_injection,
+    );
 
     if !matched.is_empty() {
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
@@ -1392,9 +1457,17 @@ async fn process_task(
         let keywords_by_title: HashMap<String, Vec<String>> = matched
             .iter()
             .filter(|p| !p.keywords.is_empty())
-            .map(|p| (p.title.clone(), p.keywords.iter().map(|k| k.to_lowercase()).collect()))
+            .map(|p| {
+                (
+                    p.title.clone(),
+                    p.keywords.iter().map(|k| k.to_lowercase()).collect(),
+                )
+            })
             .collect();
-        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::PatternsUsed { titles, keywords_by_title }));
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::PatternsUsed {
+            titles,
+            keywords_by_title,
+        }));
     }
 
     // Classify task complexity to decide whether to skip the planner.
@@ -1428,10 +1501,7 @@ async fn process_task(
 
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::AgentStarted(
             AgentRole::Scout,
-            Config::display_provider_model(
-                &ctx.config.scout_provider,
-                &ctx.config.scout_model,
-            ),
+            Config::display_provider_model(&ctx.config.scout_provider, &ctx.config.scout_model),
         )));
 
         let scout_prompt_text = prompts::scout_prompt(
@@ -1461,9 +1531,10 @@ async fn process_task(
         let _ = tx.send(AppEvent::AgentDone(scout_ok));
 
         if !scout_ok {
-            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
-                format!("Scout failed for {} — continuing without report", task_id),
-            )));
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                "Scout failed for {} — continuing without report",
+                task_id
+            ))));
             stage_results.push(StageResult::failure(
                 "Scout",
                 &format!("Investigate codebase for {}", task_id),
@@ -1488,10 +1559,9 @@ async fn process_task(
         }
     }
 
-    if !skip_scout
-        && stage_results.last().map(|r| r.stage.as_str()) != Some("Scout")
-    {
-        let mut result = StageResult::success("Scout", &format!("Investigate codebase for {}", task_id));
+    if !skip_scout && stage_results.last().map(|r| r.stage.as_str()) != Some("Scout") {
+        let mut result =
+            StageResult::success("Scout", &format!("Investigate codebase for {}", task_id));
         if ctx.buildloop_dir.join("scout-report.md").exists() {
             result.partial_results.push("scout-report.md".to_string());
         }
@@ -1511,9 +1581,10 @@ async fn process_task(
         } else {
             "detailed medium task (>= 80 chars)"
         };
-        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
-            format!("Skipping planner for {}", reason),
-        )));
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+            "Skipping planner for {}",
+            reason
+        ))));
     } else {
         // ─── Check for Look-Ahead Plan ───────────────────────────
         let la_plan = lookahead_plan_path(ctx, task_id);
@@ -1581,14 +1652,24 @@ async fn process_task(
 
             if !plan_ok || !ctx.current_plan.exists() {
                 {
-                    let _lock = ctx.tasks_file_lock.lock().unwrap_or_else(|e| e.into_inner());
-                    let _ = task::update_task_progress(&ctx.plan_path, task_id, &format!("{}P--!", scout_char));
+                    let _lock = ctx
+                        .tasks_file_lock
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner());
+                    let _ = task::update_task_progress(
+                        &ctx.plan_path,
+                        task_id,
+                        &format!("{}P--!", scout_char),
+                    );
                 }
                 stage_results.push(StageResult::failure(
                     "Planner",
                     &format!("Create implementation plan for {}", task_id),
                     FailureType::Crash,
-                    vec!["Retry with a simpler task description".to_string(), "Check if SPEC.md has enough context".to_string()],
+                    vec![
+                        "Retry with a simpler task description".to_string(),
+                        "Check if SPEC.md has enough context".to_string(),
+                    ],
                 ));
                 let committed = commit_wip_for_mode(ctx, task_id, task_desc);
                 let message = if committed {
@@ -1617,8 +1698,15 @@ async fn process_task(
                     task_id
                 ))));
                 {
-                    let _lock = ctx.tasks_file_lock.lock().unwrap_or_else(|e| e.into_inner());
-                    let _ = task::update_task_progress(&ctx.plan_path, task_id, &format!("{}P..", scout_char));
+                    let _lock = ctx
+                        .tasks_file_lock
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner());
+                    let _ = task::update_task_progress(
+                        &ctx.plan_path,
+                        task_id,
+                        &format!("{}P..", scout_char),
+                    );
                 }
                 stage_results.push(StageResult::failure(
                     "Planner",
@@ -1633,13 +1721,23 @@ async fn process_task(
 
         // Planner completed -- persist progress indicator.
         {
-            let _lock = ctx.tasks_file_lock.lock().unwrap_or_else(|e| e.into_inner());
-            let _ = task::update_task_progress(&ctx.plan_path, task_id, &format!("{}{}..", scout_char, planner_char));
+            let _lock = ctx
+                .tasks_file_lock
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            let _ = task::update_task_progress(
+                &ctx.plan_path,
+                task_id,
+                &format!("{}{}..", scout_char, planner_char),
+            );
         }
     }
 
     if !skip_planner {
-        let mut result = StageResult::success("Planner", &format!("Create implementation plan for {}", task_id));
+        let mut result = StageResult::success(
+            "Planner",
+            &format!("Create implementation plan for {}", task_id),
+        );
         if ctx.current_plan.exists() {
             result.partial_results.push("current-plan.md".to_string());
         }
@@ -1655,13 +1753,18 @@ async fn process_task(
         if let Err(errors) = extensions::validate_extensions(&discovered, &ctx.config.extensions) {
             for err in &errors {
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                    "GATE BLOCKED: {}", err
+                    "GATE BLOCKED: {}",
+                    err
                 ))));
             }
             {
-                let _lock = ctx.tasks_file_lock.lock().unwrap_or_else(|e| e.into_inner());
+                let _lock = ctx
+                    .tasks_file_lock
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner());
                 let _ = task::update_task_progress(
-                    &ctx.plan_path, task_id,
+                    &ctx.plan_path,
+                    task_id,
                     &format!("{}{}--!", scout_char, planner_char),
                 );
             }
@@ -1715,7 +1818,8 @@ async fn process_task(
             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::AgentStarted(
                 AgentRole::Planner,
                 Config::display_provider_model(
-                    &ctx.config.planner_provider, &ctx.config.planner_model,
+                    &ctx.config.planner_provider,
+                    &ctx.config.planner_model,
                 ),
             )));
 
@@ -1730,7 +1834,8 @@ async fn process_task(
                 None,
                 ctx.config.agent_timeout_secs,
                 Some(ctx.shutdown.clone()),
-            ).await;
+            )
+            .await;
 
             let _ = fwd_handle2.await;
             last_rate_limited = was_rate_limited(&retry_result);
@@ -1741,30 +1846,48 @@ async fn process_task(
             // Check gate again after retry
             if let GateResult::Fail(reason2) = gate_builder(ctx) {
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                    "GATE BLOCKED builder for {} after retry: {}", task_id, reason2
+                    "GATE BLOCKED builder for {} after retry: {}",
+                    task_id, reason2
                 ))));
                 {
-                    let _lock = ctx.tasks_file_lock.lock().unwrap_or_else(|e| e.into_inner());
-                    let _ = task::update_task_progress(&ctx.plan_path, task_id, &format!("{}{}--!", scout_char, planner_char));
+                    let _lock = ctx
+                        .tasks_file_lock
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner());
+                    let _ = task::update_task_progress(
+                        &ctx.plan_path,
+                        task_id,
+                        &format!("{}{}--!", scout_char, planner_char),
+                    );
                 }
                 stage_results.push(StageResult::failure(
                     "BuilderGate",
                     "Validate plan structure (File Operations + Verification sections)",
                     FailureType::GateFail,
-                    vec!["Planner failed to produce valid plan after retry".to_string(), format!("Gate reason: {}", reason2)],
+                    vec![
+                        "Planner failed to produce valid plan after retry".to_string(),
+                        format!("Gate reason: {}", reason2),
+                    ],
                 ));
                 let _ = commit_wip_for_mode(ctx, task_id, task_desc);
                 return (false, last_rate_limited);
             }
 
             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                "Planner retry succeeded for {}", task_id
+                "Planner retry succeeded for {}",
+                task_id
             ))));
         }
     }
 
     // ─── Run Builder ────────────────────────────────────────
-    emit_extension_injections(tx, &ctx.config.extensions, extension_context, &AgentRole::Builder, task_id);
+    emit_extension_injections(
+        tx,
+        &ctx.config.extensions,
+        extension_context,
+        &AgentRole::Builder,
+        task_id,
+    );
     let (build_ok, builder_rate_limited) = {
         // Original single-builder path
         let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
@@ -1824,14 +1947,24 @@ async fn process_task(
             task_id
         ))));
         {
-            let _lock = ctx.tasks_file_lock.lock().unwrap_or_else(|e| e.into_inner());
-            let _ = task::update_task_progress(&ctx.plan_path, task_id, &format!("{}{}I-!", scout_char, planner_char));
+            let _lock = ctx
+                .tasks_file_lock
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            let _ = task::update_task_progress(
+                &ctx.plan_path,
+                task_id,
+                &format!("{}{}I-!", scout_char, planner_char),
+            );
         }
         stage_results.push(StageResult::failure(
             "Builder",
             &format!("Implement changes for {}", task_id),
             FailureType::Crash,
-            vec!["Check build-claims.md for partial progress".to_string(), "Review the plan for overly ambitious scope".to_string()],
+            vec![
+                "Check build-claims.md for partial progress".to_string(),
+                "Review the plan for overly ambitious scope".to_string(),
+            ],
         ));
         let _ = commit_wip_for_mode(ctx, task_id, task_desc);
         return (false, last_rate_limited);
@@ -1839,12 +1972,20 @@ async fn process_task(
 
     // Builder completed -- persist progress indicator.
     {
-        let _lock = ctx.tasks_file_lock.lock().unwrap_or_else(|e| e.into_inner());
-        let _ = task::update_task_progress(&ctx.plan_path, task_id, &format!("{}{}I.", scout_char, planner_char));
+        let _lock = ctx
+            .tasks_file_lock
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let _ = task::update_task_progress(
+            &ctx.plan_path,
+            task_id,
+            &format!("{}{}I.", scout_char, planner_char),
+        );
     }
 
     {
-        let mut result = StageResult::success("Builder", &format!("Implement changes for {}", task_id));
+        let mut result =
+            StageResult::success("Builder", &format!("Implement changes for {}", task_id));
         if ctx.buildloop_dir.join("build-claims.md").exists() {
             result.partial_results.push("build-claims.md".to_string());
         }
@@ -1857,12 +1998,21 @@ async fn process_task(
     // ─── Gate: Build/Compile Verification ──────────────────────
     if let Some(ref build_cmd) = ctx.config.build_command {
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-            "Running build command: {}", build_cmd
+            "Running build command: {}",
+            build_cmd
         ))));
-        let build_output = std::process::Command::new(if cfg!(target_os = "windows") { "cmd" } else { "sh" })
-            .args(if cfg!(target_os = "windows") { vec!["/C", build_cmd] } else { vec!["-c", build_cmd] })
-            .current_dir(&ctx.project_dir)
-            .output();
+        let build_output = std::process::Command::new(if cfg!(target_os = "windows") {
+            "cmd"
+        } else {
+            "sh"
+        })
+        .args(if cfg!(target_os = "windows") {
+            vec!["/C", build_cmd]
+        } else {
+            vec!["-c", build_cmd]
+        })
+        .current_dir(&ctx.project_dir)
+        .output();
 
         match build_output {
             Ok(output) if !output.status.success() => {
@@ -1876,8 +2026,15 @@ async fn process_task(
                     crate::utils::truncate_str(combined.trim(), 500),
                 ))));
                 {
-                    let _lock = ctx.tasks_file_lock.lock().unwrap_or_else(|e| e.into_inner());
-                    let _ = task::update_task_progress(&ctx.plan_path, task_id, &format!("{}{}I-!", scout_char, planner_char));
+                    let _lock = ctx
+                        .tasks_file_lock
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner());
+                    let _ = task::update_task_progress(
+                        &ctx.plan_path,
+                        task_id,
+                        &format!("{}{}I-!", scout_char, planner_char),
+                    );
                 }
                 stage_results.push(StageResult::failure(
                     "BuildGate",
@@ -1890,7 +2047,8 @@ async fn process_task(
             }
             Err(e) => {
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                    "Build command failed to execute: {} — skipping gate", e
+                    "Build command failed to execute: {} — skipping gate",
+                    e
                 ))));
             }
             Ok(_) => {
@@ -1903,12 +2061,18 @@ async fn process_task(
 
     // ─── Trim Verbose Build Output ──────────────────────────────
     if let Some((orig, trimmed)) = trim_build_claims(ctx) {
-        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
-            format!("Trimmed test output from {} to {} lines", orig, trimmed),
-        )));
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+            "Trimmed test output from {} to {} lines",
+            orig, trimmed
+        ))));
     }
 
-    adaptive_sleep(&ctx.config, last_rate_limited, ctx.config.pause_between_agents_secs).await;
+    adaptive_sleep(
+        &ctx.config,
+        last_rate_limited,
+        ctx.config.pause_between_agents_secs,
+    )
+    .await;
 
     // Check stop between builder and reviewer
     if ctx.is_stop_requested() {
@@ -1928,18 +2092,15 @@ async fn process_task(
     }
 
     // Batch doubt: skip for all tasks except the last pending one
-    let pending_count = task::count_pending(
-        &task::parse_tasks(&ctx.plan_path).unwrap_or_default(),
-    );
+    let pending_count = task::count_pending(&task::parse_tasks(&ctx.plan_path).unwrap_or_default());
     let skip_for_batch = ctx.config.batch_doubt && pending_count > 1;
 
     // Skip verify for simple tasks when the builder's own checks passed.
     // The builder already ran build/test/lint -- verify adds a fresh-context
     // audit which is most valuable for complex tasks with blind spots.
-    let skip_verify = (task_complexity == TaskComplexity::Simple
-        && build_ok
-        && !ctx.config.backpressure_only)
-        || skip_for_batch;
+    let skip_verify =
+        (task_complexity == TaskComplexity::Simple && build_ok && !ctx.config.backpressure_only)
+            || skip_for_batch;
 
     let (validated, _fix_passes, review_findings) = if ctx.config.backpressure_only {
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
@@ -1947,9 +2108,10 @@ async fn process_task(
         )));
         (true, 0usize, (0, 0, 0))
     } else if skip_for_batch {
-        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
-            format!("Batch doubt: deferring review ({} tasks remaining)", pending_count),
-        )));
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+            "Batch doubt: deferring review ({} tasks remaining)",
+            pending_count
+        ))));
         (true, 0usize, (0, 0, 0))
     } else if skip_verify {
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
@@ -1966,16 +2128,33 @@ async fn process_task(
                 ))));
                 // Don't block -- reviewer can fall back to reading changed files.
                 // But log it clearly so we know the builder didn't produce claims.
-                review::run_review_loop(task_id, task_desc, ctx, &reviewer_pattern_context, extension_context, tx).await
+                review::run_review_loop(
+                    task_id,
+                    task_desc,
+                    ctx,
+                    &reviewer_pattern_context,
+                    extension_context,
+                    tx,
+                )
+                .await
             }
             GateResult::Pass => {
-                review::run_review_loop(task_id, task_desc, ctx, &reviewer_pattern_context, extension_context, tx).await
+                review::run_review_loop(
+                    task_id,
+                    task_desc,
+                    ctx,
+                    &reviewer_pattern_context,
+                    extension_context,
+                    tx,
+                )
+                .await
             }
         }
     };
 
     if validated {
-        let mut result = StageResult::success("Reviewer", &format!("Validate changes for {}", task_id));
+        let mut result =
+            StageResult::success("Reviewer", &format!("Validate changes for {}", task_id));
         if ctx.review_report.exists() {
             result.partial_results.push("review-report.md".to_string());
         }
@@ -1985,7 +2164,10 @@ async fn process_task(
             "Reviewer",
             &format!("Validate changes for {}", task_id),
             FailureType::ReviewFail,
-            vec!["Review found HIGH/MEDIUM issues that were not fixed".to_string(), "Check review-report.md for specific findings".to_string()],
+            vec![
+                "Review found HIGH/MEDIUM issues that were not fixed".to_string(),
+                "Check review-report.md for specific findings".to_string(),
+            ],
         ));
     }
 
@@ -1994,10 +2176,17 @@ async fn process_task(
     // Agents may overwrite TASKS.md during their run, stripping intermediate
     // indicators, so the final write must be the last mutation before commit.
     {
-        let doubt_char = if skip_verify || ctx.config.backpressure_only { "-" } else { "D" };
+        let doubt_char = if skip_verify || ctx.config.backpressure_only {
+            "-"
+        } else {
+            "D"
+        };
         let fail_char = if !validated { "!" } else { "" };
         let progress = format!("{}{}I{}{}", scout_char, planner_char, doubt_char, fail_char);
-        let _lock = ctx.tasks_file_lock.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = ctx
+            .tasks_file_lock
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let _ = task::update_task_progress(&ctx.plan_path, task_id, &progress);
         if validated {
             let _ = task::mark_done(&ctx.plan_path, task_info.line_number);
@@ -2006,31 +2195,45 @@ async fn process_task(
 
     let committed = if ctx.config.run_mode == "review" {
         // Review mode: branch, commit, push, create PR, return to base
-        match git::commit_task_pr(&ctx.project_dir, &ctx.config, task_id, task_desc, &ctx.plan_path, !validated) {
+        match git::commit_task_pr(
+            &ctx.project_dir,
+            &ctx.config,
+            task_id,
+            task_desc,
+            &ctx.plan_path,
+            !validated,
+        ) {
             Ok((committed, pr_num)) => {
                 if committed {
                     let prefix = if validated { "feat" } else { "WIP" };
                     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                        "Committed {}({})", prefix, task_id
+                        "Committed {}({})",
+                        prefix, task_id
                     ))));
                 }
                 if let Some(pr) = pr_num {
-                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
-                        format!("PR #{} created for {}", pr, task_id),
-                    )));
+                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                        "PR #{} created for {}",
+                        pr, task_id
+                    ))));
                 }
 
                 // Create GitHub issue for WIP commits in review mode
                 if committed && !validated && ctx.config.create_issue_on_wip {
                     let stage_ctx = prompts::format_stage_results_for_prompt(
-                        &stage_results.iter().map(|r| (
-                            r.stage.clone(),
-                            r.success,
-                            r.failure_type.as_ref().map(|f| format!("{:?}", f)),
-                            r.attempted_action.clone(),
-                            r.partial_results.clone(),
-                            r.suggestions.clone(),
-                        )).collect::<Vec<_>>(),
+                        &stage_results
+                            .iter()
+                            .map(|r| {
+                                (
+                                    r.stage.clone(),
+                                    r.success,
+                                    r.failure_type.as_ref().map(|f| format!("{:?}", f)),
+                                    r.attempted_action.clone(),
+                                    r.partial_results.clone(),
+                                    r.suggestions.clone(),
+                                )
+                            })
+                            .collect::<Vec<_>>(),
                     );
                     match git::create_wip_issue(
                         &ctx.project_dir,
@@ -2040,19 +2243,22 @@ async fn process_task(
                         &stage_ctx,
                     ) {
                         Ok(Some(issue_num)) => {
-                            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
-                                format!("Issue #{} created for WIP({})", issue_num, task_id),
-                            )));
+                            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                                "Issue #{} created for WIP({})",
+                                issue_num, task_id
+                            ))));
                         }
                         Ok(None) => {
-                            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
-                                format!("Issue created for WIP({}) but could not parse issue number", task_id),
-                            )));
+                            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                                "Issue created for WIP({}) but could not parse issue number",
+                                task_id
+                            ))));
                         }
                         Err(e) => {
-                            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
-                                format!("Failed to create issue for WIP({}): {}", task_id, e),
-                            )));
+                            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                                "Failed to create issue for WIP({}): {}",
+                                task_id, e
+                            ))));
                         }
                     }
                 }
@@ -2061,7 +2267,8 @@ async fn process_task(
                 ctx.review_gate.store(true, Ordering::Relaxed);
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::WaitingForReview(pr_num)));
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
-                    "Waiting for PR review -- press Enter to continue or wait for approval".to_string(),
+                    "Waiting for PR review -- press Enter to continue or wait for approval"
+                        .to_string(),
                 )));
 
                 // Spawn background PR poller if we have a PR number
@@ -2071,7 +2278,14 @@ async fn process_task(
                     let poll_interval = ctx.config.pr_poll_interval_secs;
                     let review_gate_clone = ctx.review_gate.clone();
                     Some(tokio::spawn(async move {
-                        poll_pr_review(pr_number, project_dir, poll_interval, tx_poll, review_gate_clone).await;
+                        poll_pr_review(
+                            pr_number,
+                            project_dir,
+                            poll_interval,
+                            tx_poll,
+                            review_gate_clone,
+                        )
+                        .await;
                     }))
                 } else {
                     None
@@ -2099,8 +2313,14 @@ async fn process_task(
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
                     format!("WARNING: Per-task PR failed: {} -- falling back to base-branch commit (feature branch isolation bypassed)", e),
                 )));
-                let committed = git::commit_and_push(&ctx.project_dir, &ctx.config, task_id, task_desc, !validated)
-                    .unwrap_or(false);
+                let committed = git::commit_and_push(
+                    &ctx.project_dir,
+                    &ctx.config,
+                    task_id,
+                    task_desc,
+                    !validated,
+                )
+                .unwrap_or(false);
 
                 // Still pause after fallback commit in review mode
                 if committed {
@@ -2140,14 +2360,19 @@ async fn process_task(
         }
         if committed && !validated && ctx.config.create_issue_on_wip {
             let stage_ctx = prompts::format_stage_results_for_prompt(
-                &stage_results.iter().map(|r| (
-                    r.stage.clone(),
-                    r.success,
-                    r.failure_type.as_ref().map(|f| format!("{:?}", f)),
-                    r.attempted_action.clone(),
-                    r.partial_results.clone(),
-                    r.suggestions.clone(),
-                )).collect::<Vec<_>>(),
+                &stage_results
+                    .iter()
+                    .map(|r| {
+                        (
+                            r.stage.clone(),
+                            r.success,
+                            r.failure_type.as_ref().map(|f| format!("{:?}", f)),
+                            r.attempted_action.clone(),
+                            r.partial_results.clone(),
+                            r.suggestions.clone(),
+                        )
+                    })
+                    .collect::<Vec<_>>(),
             );
             match git::create_wip_issue(
                 &ctx.project_dir,
@@ -2157,25 +2382,32 @@ async fn process_task(
                 &stage_ctx,
             ) {
                 Ok(Some(issue_num)) => {
-                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
-                        format!("Issue #{} created for WIP({})", issue_num, task_id),
-                    )));
+                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                        "Issue #{} created for WIP({})",
+                        issue_num, task_id
+                    ))));
                 }
                 Ok(None) => {
-                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
-                        format!("Issue created for WIP({}) but could not parse issue number", task_id),
-                    )));
+                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                        "Issue created for WIP({}) but could not parse issue number",
+                        task_id
+                    ))));
                 }
                 Err(e) => {
-                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
-                        format!("Failed to create issue for WIP({}): {}", task_id, e),
-                    )));
+                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                        "Failed to create issue for WIP({}): {}",
+                        task_id, e
+                    ))));
                 }
             }
         }
         committed
     };
-    let commit_sha = if committed { git::get_head_sha(&ctx.project_dir) } else { None };
+    let commit_sha = if committed {
+        git::get_head_sha(&ctx.project_dir)
+    } else {
+        None
+    };
 
     // Skip pattern extraction for trivial tasks (< 3 files changed or
     // reviewer found no issues). These tasks rarely produce interesting patterns.
@@ -2255,12 +2487,10 @@ async fn run_pattern_extraction(
     let (agent_tx, _agent_rx) = mpsc::unbounded_channel();
 
     let model = &ctx.config.pattern_extraction_model;
-    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BackgroundLog(
-        format!(
-            "Background pattern extraction started (Claude {})",
-            model,
-        ),
-    )));
+    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BackgroundLog(format!(
+        "Background pattern extraction started (Claude {})",
+        model,
+    ))));
     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BackgroundLog(
         "Extracting patterns from build artifacts...".to_string(),
     )));
@@ -2283,12 +2513,10 @@ async fn run_pattern_extraction(
     .await;
 
     let success = result.as_ref().map(|r| r.success).unwrap_or(false);
-    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BackgroundLog(
-        format!(
-            "Background pattern extraction {}",
-            if success { "completed" } else { "failed" },
-        ),
-    )));
+    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BackgroundLog(format!(
+        "Background pattern extraction {}",
+        if success { "completed" } else { "failed" },
+    ))));
 
     if patterns_extracted.exists() {
         match patterns::extract_patterns_from_file(patterns_extracted) {
@@ -2334,9 +2562,8 @@ async fn run_pattern_extraction(
 
 fn should_restart_docker(task_desc: &str) -> bool {
     let lower = task_desc.to_lowercase();
-    let has_docker_word = lower.contains("docker")
-        || lower.contains("dockerfile")
-        || lower.contains("caddy");
+    let has_docker_word =
+        lower.contains("docker") || lower.contains("dockerfile") || lower.contains("caddy");
     if has_docker_word {
         return true;
     }
@@ -2407,11 +2634,8 @@ mod tests {
             "- [ ] T1.1: Test task\n- [ ] T1.2: Another task\n",
         )
         .expect("write TASKS.md");
-        std::fs::write(
-            dir.join("SPEC.md"),
-            "# Test Spec\n\nThis is the spec.\n",
-        )
-        .expect("write SPEC.md");
+        std::fs::write(dir.join("SPEC.md"), "# Test Spec\n\nThis is the spec.\n")
+            .expect("write SPEC.md");
         std::fs::write(
             dir.join("CLAUDE.md"),
             "# CLAUDE.md\n\nProject instructions.\n",
@@ -2423,7 +2647,13 @@ mod tests {
             "# Plan: T1.1\n\n## Steps\n1. Do the thing\n",
         )
         .expect("write current-plan.md");
-        let ctx = RunContext::new(&dir, Config::default(), Arc::new(AtomicBool::new(false)), Arc::new(Mutex::new(())), Arc::new(AtomicBool::new(false)));
+        let ctx = RunContext::new(
+            &dir,
+            Config::default(),
+            Arc::new(AtomicBool::new(false)),
+            Arc::new(Mutex::new(())),
+            Arc::new(AtomicBool::new(false)),
+        );
         (ctx, dir)
     }
 
@@ -2445,7 +2675,9 @@ mod tests {
         assert!(backup.files.contains_key(&ctx.plan_path));
         assert!(backup.files.contains_key(&ctx.spec_path));
         assert!(backup.files.contains_key(&ctx.current_plan));
-        assert!(backup.files.contains_key(&ctx.project_dir.join("CLAUDE.md")));
+        assert!(backup
+            .files
+            .contains_key(&ctx.project_dir.join("CLAUDE.md")));
         assert_eq!(
             backup.files.get(&ctx.plan_path).unwrap(),
             b"- [ ] T1.1: Test task\n- [ ] T1.2: Another task\n"
@@ -2580,7 +2812,9 @@ mod tests {
 
         let msgs = drain_events(&mut rx);
         assert!(msgs.len() >= 1);
-        assert!(msgs.iter().any(|m| m.contains("Warning") && m.contains("TASKS.md")));
+        assert!(msgs
+            .iter()
+            .any(|m| m.contains("Warning") && m.contains("TASKS.md")));
 
         std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o755)).unwrap();
         let _ = std::fs::remove_dir_all(&dir);
@@ -2661,7 +2895,9 @@ mod tests {
 
     #[test]
     fn test_trim_verification_section_preserves_other_sections() {
-        let mut content = String::from("## Files Changed\n- MODIFY src/app/build.rs\n\n## Verification Results\n");
+        let mut content = String::from(
+            "## Files Changed\n- MODIFY src/app/build.rs\n\n## Verification Results\n",
+        );
         for i in 0..150 {
             content.push_str(&format!("output line {}\n", i));
         }

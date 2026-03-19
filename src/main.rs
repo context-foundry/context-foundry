@@ -9,6 +9,7 @@ mod config;
 mod embeddings;
 mod extensions;
 mod git;
+mod mcp;
 mod orchestrator;
 mod patterns;
 mod prompts;
@@ -17,7 +18,6 @@ mod task;
 mod tui;
 mod update;
 mod utils;
-mod mcp;
 
 #[derive(Parser)]
 #[command(
@@ -77,8 +77,14 @@ async fn main() -> Result<()> {
 
     let project_dir = dunce::canonicalize(&project_dir).unwrap_or(project_dir);
 
-    match cli.command.unwrap_or(Commands::Run { no_tui: false, output_format: None }) {
-        Commands::Run { no_tui, output_format } => {
+    match cli.command.unwrap_or(Commands::Run {
+        no_tui: false,
+        output_format: None,
+    }) {
+        Commands::Run {
+            no_tui,
+            output_format,
+        } => {
             if no_tui {
                 app::run_headless(&project_dir, output_format).await?;
             } else {

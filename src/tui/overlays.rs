@@ -52,9 +52,7 @@ fn render_findings_list(frame: &mut Frame, area: Rect, state: &AppState) {
                 .border_style(Style::default().fg(theme.border))
                 .title(Span::styled(
                     " Review Findings ",
-                    Style::default()
-                        .fg(theme.info)
-                        .add_modifier(Modifier::BOLD),
+                    Style::default().fg(theme.info).add_modifier(Modifier::BOLD),
                 )),
         );
         frame.render_widget(empty, area);
@@ -95,9 +93,7 @@ fn render_findings_list(frame: &mut Frame, area: Rect, state: &AppState) {
     let finding_count = outcome.final_review.findings.len();
     display_lines.push(Line::from(Span::styled(
         format!("  Findings ({})", finding_count),
-        Style::default()
-            .fg(theme.text)
-            .add_modifier(Modifier::BOLD),
+        Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
     )));
     display_lines.push(Line::from(""));
 
@@ -198,9 +194,7 @@ fn render_findings_list(frame: &mut Frame, area: Rect, state: &AppState) {
             .border_style(Style::default().fg(theme.border))
             .title(Span::styled(
                 title,
-                Style::default()
-                    .fg(theme.info)
-                    .add_modifier(Modifier::BOLD),
+                Style::default().fg(theme.info).add_modifier(Modifier::BOLD),
             )),
     );
     frame.render_widget(paragraph, area);
@@ -253,15 +247,14 @@ fn render_patterns_list(frame: &mut Frame, area: Rect, state: &AppState, config:
     // Use cached patterns (populated when 'p' is pressed) to avoid
     // loading 800+ patterns from disk on every render frame (10fps).
     let fallback;
-    let (all_patterns, patterns_dir) = if let (Some(cached), Some(dir)) =
-        (&state.patterns_cache, &state.patterns_dir_cache)
-    {
-        (cached.as_slice(), dir.clone())
-    } else {
-        let dir = patterns::resolve_patterns_dir(&config.patterns_dir);
-        fallback = patterns::load_patterns(&dir);
-        (fallback.as_slice(), dir)
-    };
+    let (all_patterns, patterns_dir) =
+        if let (Some(cached), Some(dir)) = (&state.patterns_cache, &state.patterns_dir_cache) {
+            (cached.as_slice(), dir.clone())
+        } else {
+            let dir = patterns::resolve_patterns_dir(&config.patterns_dir);
+            fallback = patterns::load_patterns(&dir);
+            (fallback.as_slice(), dir)
+        };
 
     if all_patterns.is_empty() {
         let empty = Paragraph::new(vec![
@@ -286,9 +279,7 @@ fn render_patterns_list(frame: &mut Frame, area: Rect, state: &AppState, config:
                 .border_style(Style::default().fg(theme.border))
                 .title(Span::styled(
                     " Learned Patterns ",
-                    Style::default()
-                        .fg(theme.info)
-                        .add_modifier(Modifier::BOLD),
+                    Style::default().fg(theme.info).add_modifier(Modifier::BOLD),
                 )),
         );
         frame.render_widget(empty, area);
@@ -323,9 +314,7 @@ fn render_patterns_list(frame: &mut Frame, area: Rect, state: &AppState, config:
                     inner_width
                         .saturating_sub(severity.len() + freq_label.len() + auto_label.len() + 4),
                 ),
-                Style::default()
-                    .fg(theme.text)
-                    .add_modifier(Modifier::BOLD),
+                Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
             ),
             Span::styled(
                 format!("{}{}", freq_label, auto_label),
@@ -380,9 +369,7 @@ fn render_patterns_list(frame: &mut Frame, area: Rect, state: &AppState, config:
             .border_style(Style::default().fg(theme.border))
             .title(Span::styled(
                 title,
-                Style::default()
-                    .fg(theme.info)
-                    .add_modifier(Modifier::BOLD),
+                Style::default().fg(theme.info).add_modifier(Modifier::BOLD),
             )),
     );
     frame.render_widget(paragraph, area);

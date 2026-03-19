@@ -32,7 +32,10 @@ fn supports_truecolor() -> bool {
 /// Override truecolor detection from config. Call once at startup if
 /// the user has set `truecolor` in `.foundry.json`.
 pub fn set_truecolor_override(value: bool) {
-    TRUECOLOR_OVERRIDE.store(if value { 1 } else { 2 }, std::sync::atomic::Ordering::Relaxed);
+    TRUECOLOR_OVERRIDE.store(
+        if value { 1 } else { 2 },
+        std::sync::atomic::Ordering::Relaxed,
+    );
 }
 
 static TRUECOLOR_OVERRIDE: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
@@ -97,9 +100,13 @@ fn detect_truecolor() -> bool {
 /// Breakpoints are midpoints: 48, 115, 155, 195, 235.
 fn rgb_to_ansi256(r: u8, g: u8, b: u8) -> Color {
     fn channel_to_cube(v: u8) -> u8 {
-        if v < 48 { 0 }
-        else if v < 115 { 1 }
-        else { ((v as u16 - 35) / 40).min(5) as u8 }
+        if v < 48 {
+            0
+        } else if v < 115 {
+            1
+        } else {
+            ((v as u16 - 35) / 40).min(5) as u8
+        }
     }
     let idx = 16 + 36 * channel_to_cube(r) + 6 * channel_to_cube(g) + channel_to_cube(b);
     Color::Indexed(idx)
@@ -174,15 +181,15 @@ pub fn builtin_themes() -> Vec<(&'static str, TuiTheme)> {
         (
             "roundup",
             TuiTheme {
-                accent: Color::Rgb(212, 130, 26),   // Western amber
-                border: Color::Rgb(74, 50, 32),     // Leather brown
-                text: Color::Rgb(232, 220, 200),    // Parchment
-                muted: Color::Rgb(168, 148, 120),   // Dusty trail
-                success: Color::Rgb(90, 158, 69),   // Prairie green
-                warning: Color::Rgb(232, 184, 75),  // Gold nugget
-                error: Color::Rgb(192, 57, 43),     // Saloon red
-                info: Color::Rgb(212, 130, 26),      // Amber
-                surface: Color::Rgb(42, 26, 14),    // Dark saddle
+                accent: Color::Rgb(212, 130, 26),  // Western amber
+                border: Color::Rgb(74, 50, 32),    // Leather brown
+                text: Color::Rgb(232, 220, 200),   // Parchment
+                muted: Color::Rgb(168, 148, 120),  // Dusty trail
+                success: Color::Rgb(90, 158, 69),  // Prairie green
+                warning: Color::Rgb(232, 184, 75), // Gold nugget
+                error: Color::Rgb(192, 57, 43),    // Saloon red
+                info: Color::Rgb(212, 130, 26),    // Amber
+                surface: Color::Rgb(42, 26, 14),   // Dark saddle
             },
         ),
     ]
@@ -203,11 +210,11 @@ pub fn from_name(name: &str) -> TuiTheme {
 pub fn cycle_next(current: &TuiTheme) -> (TuiTheme, &'static str) {
     let themes = builtin_themes();
     // Compare against adapted themes so cycling works regardless of color mode
-    let adapted: Vec<_> = themes.iter().map(|(n, t)| (*n, adapt_theme(t.clone()))).collect();
-    let current_idx = adapted
+    let adapted: Vec<_> = themes
         .iter()
-        .position(|(_, t)| t == current)
-        .unwrap_or(0);
+        .map(|(n, t)| (*n, adapt_theme(t.clone())))
+        .collect();
+    let current_idx = adapted.iter().position(|(_, t)| t == current).unwrap_or(0);
     let next_idx = (current_idx + 1) % themes.len();
     (adapt_theme(themes[next_idx].1.clone()), themes[next_idx].0)
 }

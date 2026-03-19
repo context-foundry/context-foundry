@@ -147,7 +147,11 @@ pub fn keyword_scores(patterns: &[Pattern], task_desc: &str) -> Vec<(usize, usiz
                 score += 1;
             }
 
-            if score > 0 { Some((i, score)) } else { None }
+            if score > 0 {
+                Some((i, score))
+            } else {
+                None
+            }
         })
         .collect()
 }
@@ -412,7 +416,11 @@ mod tests {
         std::fs::write(dir.join("meta-wrapper.json"), wrapper_json).unwrap();
 
         let patterns = load_patterns(&dir);
-        assert_eq!(patterns.len(), 1, "should load pattern from metadata-style wrapper");
+        assert_eq!(
+            patterns.len(),
+            1,
+            "should load pattern from metadata-style wrapper"
+        );
         assert_eq!(patterns[0].pattern_id, "meta-1");
 
         let _ = std::fs::remove_dir_all(&dir);
@@ -538,12 +546,18 @@ mod tests {
         let result: Vec<Pattern> = serde_json::from_str(&content).unwrap();
         assert_eq!(result.len(), 3, "should have existing-1, existing-2, new-1");
 
-        let e1 = result.iter().find(|p| p.pattern_id == "existing-1").unwrap();
+        let e1 = result
+            .iter()
+            .find(|p| p.pattern_id == "existing-1")
+            .unwrap();
         assert_eq!(e1.frequency, 3, "existing-1 frequency should be 2 + 1 = 3");
         assert_eq!(e1.last_seen, "D9.1");
         assert!(e1.auto_apply, "frequency 3 should graduate to auto_apply");
 
-        let e2 = result.iter().find(|p| p.pattern_id == "existing-2").unwrap();
+        let e2 = result
+            .iter()
+            .find(|p| p.pattern_id == "existing-2")
+            .unwrap();
         assert_eq!(e2.frequency, 1, "existing-2 should be unchanged");
 
         let n1 = result.iter().find(|p| p.pattern_id == "new-1");

@@ -9,8 +9,8 @@ use ratatui::{
     Frame,
 };
 
-use crate::app::{AppState, ExtensionDisplayInfo, FileEntry, StartupState, TuiPane};
 use super::{pane_border_style, pane_border_type};
+use crate::app::{AppState, ExtensionDisplayInfo, FileEntry, StartupState, TuiPane};
 use crate::utils::truncate_str;
 
 const PLACEHOLDER_SUGGESTIONS: &[&str] = &[
@@ -71,10 +71,14 @@ pub(super) fn startup_hit_test(
 
     // Check toggle buttons first (they occupy the border row that inner hit-tests skip)
     if let Some(startup) = state.startup.as_ref() {
-        if let Some(target) = explorer_toggle_hit_test(layout.explorer, column, row, &startup.file_tree) {
+        if let Some(target) =
+            explorer_toggle_hit_test(layout.explorer, column, row, &startup.file_tree)
+        {
             return Some(target);
         }
-        if let Some(target) = preview_toggle_hit_test(layout.preview, column, row, startup.preview_wrap) {
+        if let Some(target) =
+            preview_toggle_hit_test(layout.preview, column, row, startup.preview_wrap)
+        {
             return Some(target);
         }
     }
@@ -100,7 +104,7 @@ pub(super) fn startup_layout(area: Rect, extension_count: usize) -> StartupLayou
     let vertical = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(8),  // summary
+            Constraint::Length(8), // summary
             Constraint::Min(8),    // body
             Constraint::Length(5), // input prompt (borders + 3 content lines for wrapping)
             Constraint::Length(1), // status bar
@@ -116,8 +120,8 @@ pub(super) fn startup_layout(area: Rect, extension_count: usize) -> StartupLayou
     let left_split = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Min(5),                    // file explorer (flexible)
-            Constraint::Length(ext_panel_height),   // extensions panel (fixed)
+            Constraint::Min(5),                   // file explorer (flexible)
+            Constraint::Length(ext_panel_height), // extensions panel (fixed)
         ])
         .split(columns[0]);
 
@@ -308,7 +312,11 @@ fn render_startup_summary(frame: &mut Frame, area: Rect, state: &AppState) {
             ),
             Span::raw("  "),
             Span::styled(
-                if state.show_run_view { " Dashboard " } else { " Explore " },
+                if state.show_run_view {
+                    " Dashboard "
+                } else {
+                    " Explore "
+                },
                 Style::default()
                     .fg(state.tui_theme.text)
                     .bg(state.tui_theme.surface)
@@ -318,25 +326,48 @@ fn render_startup_summary(frame: &mut Frame, area: Rect, state: &AppState) {
                 crate::app::DualSelection::Off => Span::raw(""),
                 crate::app::DualSelection::First => {
                     let (p, m) = crate::config::Config::parse_model_spec(
-                        state.builder_model_specs.first().map(|s| s.as_str()).unwrap_or(""),
+                        state
+                            .builder_model_specs
+                            .first()
+                            .map(|s| s.as_str())
+                            .unwrap_or(""),
                     );
                     Span::styled(
-                        format!("  {} ", crate::config::Config::display_provider_model(&p, &m)),
-                        Style::default().fg(Color::Black).bg(Color::Magenta).add_modifier(Modifier::BOLD),
+                        format!(
+                            "  {} ",
+                            crate::config::Config::display_provider_model(&p, &m)
+                        ),
+                        Style::default()
+                            .fg(Color::Black)
+                            .bg(Color::Magenta)
+                            .add_modifier(Modifier::BOLD),
                     )
                 }
                 crate::app::DualSelection::Second => {
                     let (p, m) = crate::config::Config::parse_model_spec(
-                        state.builder_model_specs.get(1).map(|s| s.as_str()).unwrap_or(""),
+                        state
+                            .builder_model_specs
+                            .get(1)
+                            .map(|s| s.as_str())
+                            .unwrap_or(""),
                     );
                     Span::styled(
-                        format!("  {} ", crate::config::Config::display_provider_model(&p, &m)),
-                        Style::default().fg(Color::Black).bg(Color::Magenta).add_modifier(Modifier::BOLD),
+                        format!(
+                            "  {} ",
+                            crate::config::Config::display_provider_model(&p, &m)
+                        ),
+                        Style::default()
+                            .fg(Color::Black)
+                            .bg(Color::Magenta)
+                            .add_modifier(Modifier::BOLD),
                     )
                 }
                 crate::app::DualSelection::Both => Span::styled(
                     "  Dual Pipeline ",
-                    Style::default().fg(Color::Black).bg(Color::Magenta).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(Color::Black)
+                        .bg(Color::Magenta)
+                        .add_modifier(Modifier::BOLD),
                 ),
             },
         ]),
@@ -459,9 +490,7 @@ fn render_file_explorer(frame: &mut Frame, area: Rect, state: &AppState) {
     // Compute scroll in visible-index space
     let scroll = if selected_vis_pos < startup.explorer_scroll {
         selected_vis_pos
-    } else if visible_height > 0
-        && selected_vis_pos >= startup.explorer_scroll + visible_height
-    {
+    } else if visible_height > 0 && selected_vis_pos >= startup.explorer_scroll + visible_height {
         selected_vis_pos.saturating_sub(visible_height) + 1
     } else {
         startup.explorer_scroll
@@ -486,7 +515,11 @@ fn render_file_explorer(frame: &mut Frame, area: Rect, state: &AppState) {
             let entry = &startup.file_tree[tree_idx];
             let indent = "  ".repeat(entry.depth);
             let prefix = if entry.is_dir {
-                if entry.expanded { "\u{25BC} " } else { "\u{25B6} " }
+                if entry.expanded {
+                    "\u{25BC} "
+                } else {
+                    "\u{25B6} "
+                }
             } else {
                 "  "
             };
@@ -558,21 +591,20 @@ fn render_file_explorer(frame: &mut Frame, area: Rect, state: &AppState) {
     let has_dirs = startup.file_tree.iter().any(|e| e.is_dir);
     let mut block = Block::default()
         .borders(Borders::ALL)
-        .border_style(pane_border_style(state.focused_pane, TuiPane::Explorer, theme))
+        .border_style(pane_border_style(
+            state.focused_pane,
+            TuiPane::Explorer,
+            theme,
+        ))
         .border_type(pane_border_type(state.focused_pane, TuiPane::Explorer))
         .title(Span::styled(
             " Files ",
-            Style::default()
-                .fg(theme.text)
-                .add_modifier(Modifier::BOLD),
+            Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
         ));
     if has_dirs {
         block = block.title_top(
-            Line::from(Span::styled(
-                expand_label,
-                Style::default().fg(theme.muted),
-            ))
-            .right_aligned(),
+            Line::from(Span::styled(expand_label, Style::default().fg(theme.muted)))
+                .right_aligned(),
         );
     }
     let list = List::new(items).block(block);
@@ -590,7 +622,11 @@ fn render_file_preview(frame: &mut Frame, area: Rect, state: &AppState) {
         .map(|e| e.name.clone())
         .unwrap_or_else(|| "Preview".to_string());
 
-    let wrap_label = if startup.preview_wrap { "[wrap] " } else { "[no-wrap] " };
+    let wrap_label = if startup.preview_wrap {
+        "[wrap] "
+    } else {
+        "[no-wrap] "
+    };
 
     if startup.file_preview_content.is_empty() {
         let empty = Paragraph::new(Span::styled(
@@ -600,7 +636,11 @@ fn render_file_preview(frame: &mut Frame, area: Rect, state: &AppState) {
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .border_style(pane_border_style(state.focused_pane, TuiPane::Preview, &state.tui_theme))
+                .border_style(pane_border_style(
+                    state.focused_pane,
+                    TuiPane::Preview,
+                    &state.tui_theme,
+                ))
                 .border_type(pane_border_type(state.focused_pane, TuiPane::Preview))
                 .title(Span::styled(
                     format!(" {} ", title),
@@ -641,7 +681,11 @@ fn render_file_preview(frame: &mut Frame, area: Rect, state: &AppState) {
 
     let block = Block::default()
         .borders(Borders::ALL)
-        .border_style(pane_border_style(state.focused_pane, TuiPane::Preview, &state.tui_theme))
+        .border_style(pane_border_style(
+            state.focused_pane,
+            TuiPane::Preview,
+            &state.tui_theme,
+        ))
         .border_type(pane_border_type(state.focused_pane, TuiPane::Preview))
         .title(Span::styled(
             format!(" {} ", title),
@@ -680,9 +724,7 @@ pub(super) fn render_file_explorer_from(
 
     let scroll = if selected_vis_pos < startup.explorer_scroll {
         selected_vis_pos
-    } else if visible_height > 0
-        && selected_vis_pos >= startup.explorer_scroll + visible_height
-    {
+    } else if visible_height > 0 && selected_vis_pos >= startup.explorer_scroll + visible_height {
         selected_vis_pos.saturating_sub(visible_height) + 1
     } else {
         startup.explorer_scroll
@@ -706,7 +748,11 @@ pub(super) fn render_file_explorer_from(
             let entry = &startup.file_tree[tree_idx];
             let indent = "  ".repeat(entry.depth);
             let prefix = if entry.is_dir {
-                if entry.expanded { "\u{25BC} " } else { "\u{25B6} " }
+                if entry.expanded {
+                    "\u{25BC} "
+                } else {
+                    "\u{25B6} "
+                }
             } else {
                 "  "
             };
@@ -781,17 +827,12 @@ pub(super) fn render_file_explorer_from(
         .border_type(pane_border_type(focused, TuiPane::Explorer))
         .title(Span::styled(
             " Files ",
-            Style::default()
-                .fg(theme.text)
-                .add_modifier(Modifier::BOLD),
+            Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
         ));
     if has_dirs {
         block = block.title_top(
-            Line::from(Span::styled(
-                expand_label,
-                Style::default().fg(theme.muted),
-            ))
-            .right_aligned(),
+            Line::from(Span::styled(expand_label, Style::default().fg(theme.muted)))
+                .right_aligned(),
         );
     }
     let list = List::new(items).block(block);
@@ -813,7 +854,11 @@ pub(super) fn render_file_preview_from(
 
     let border_style = pane_border_style(focused, TuiPane::Preview, theme);
     let border_type = pane_border_type(focused, TuiPane::Preview);
-    let wrap_label = if startup.preview_wrap { "[wrap] " } else { "[no-wrap] " };
+    let wrap_label = if startup.preview_wrap {
+        "[wrap] "
+    } else {
+        "[no-wrap] "
+    };
 
     if startup.file_preview_content.is_empty() {
         let empty = Paragraph::new(Span::styled(
@@ -827,16 +872,11 @@ pub(super) fn render_file_preview_from(
                 .border_type(border_type)
                 .title(Span::styled(
                     format!(" {} ", title),
-                    Style::default()
-                        .fg(theme.text)
-                        .add_modifier(Modifier::BOLD),
+                    Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
                 ))
                 .title_top(
-                    Line::from(Span::styled(
-                        wrap_label,
-                        Style::default().fg(theme.muted),
-                    ))
-                    .right_aligned(),
+                    Line::from(Span::styled(wrap_label, Style::default().fg(theme.muted)))
+                        .right_aligned(),
                 ),
         );
         frame.render_widget(empty, area);
@@ -853,10 +893,7 @@ pub(super) fn render_file_preview_from(
         .take(inner_height)
         .map(|(i, line)| {
             Line::from(vec![
-                Span::styled(
-                    format!("{:>4} ", i + 1),
-                    Style::default().fg(theme.muted),
-                ),
+                Span::styled(format!("{:>4} ", i + 1), Style::default().fg(theme.muted)),
                 Span::styled(line.as_str(), Style::default().fg(theme.text)),
             ])
         })
@@ -875,16 +912,10 @@ pub(super) fn render_file_preview_from(
         .border_type(border_type)
         .title(Span::styled(
             scroll_indicator,
-            Style::default()
-                .fg(theme.text)
-                .add_modifier(Modifier::BOLD),
+            Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
         ))
         .title_top(
-            Line::from(Span::styled(
-                wrap_label,
-                Style::default().fg(theme.muted),
-            ))
-            .right_aligned(),
+            Line::from(Span::styled(wrap_label, Style::default().fg(theme.muted))).right_aligned(),
         );
     let mut paragraph = Paragraph::new(lines).block(block);
     if startup.preview_wrap {
@@ -1012,27 +1043,50 @@ pub(super) fn render_startup_status_bar(frame: &mut Frame, area: Rect, state: &A
         use crate::app::DualSelection;
         let short = |spec: &str| -> String {
             let (p, m) = crate::config::Config::parse_model_spec(spec);
-            if m.is_empty() { p } else { format!("{p}:{m}") }
+            if m.is_empty() {
+                p
+            } else {
+                format!("{p}:{m}")
+            }
         };
         let (bg, label) = match state.dual_selection {
             DualSelection::Off => (state.tui_theme.muted, " dual".to_string()),
             DualSelection::First => {
-                let s = state.builder_model_specs.first().map(|s| short(s)).unwrap_or_default();
+                let s = state
+                    .builder_model_specs
+                    .first()
+                    .map(|s| short(s))
+                    .unwrap_or_default();
                 (Color::Magenta, format!(" {s}"))
             }
             DualSelection::Second => {
-                let s = state.builder_model_specs.get(1).map(|s| short(s)).unwrap_or_default();
+                let s = state
+                    .builder_model_specs
+                    .get(1)
+                    .map(|s| short(s))
+                    .unwrap_or_default();
                 (Color::Magenta, format!(" {s}"))
             }
             DualSelection::Both => {
-                let s0 = state.builder_model_specs.first().map(|s| short(s)).unwrap_or_default();
-                let s1 = state.builder_model_specs.get(1).map(|s| short(s)).unwrap_or_default();
+                let s0 = state
+                    .builder_model_specs
+                    .first()
+                    .map(|s| short(s))
+                    .unwrap_or_default();
+                let s1 = state
+                    .builder_model_specs
+                    .get(1)
+                    .map(|s| short(s))
+                    .unwrap_or_default();
                 (Color::Magenta, format!(" {s0}+{s1}"))
             }
         };
         spans.push(Span::styled(
             "  ^D ",
-            Style::default().fg(Color::Black).bg(bg).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(Color::Black)
+                .bg(bg)
+                .add_modifier(Modifier::BOLD),
         ));
         spans.push(Span::raw(label));
     }
@@ -1136,9 +1190,7 @@ fn render_extensions_panel(frame: &mut Frame, area: Rect, state: &AppState) {
             };
 
             let desc_style = if is_cursor {
-                Style::default()
-                    .fg(Color::Black)
-                    .bg(state.tui_theme.accent)
+                Style::default().fg(Color::Black).bg(state.tui_theme.accent)
             } else {
                 Style::default().fg(state.tui_theme.muted)
             };
@@ -1189,12 +1241,18 @@ mod tests {
         let theme = crate::tui::theme::TuiTheme::default();
         assert_eq!(style_for_line("[stderr] boom", &theme).fg, Some(Color::Red));
         assert_eq!(style_for_line("[tool] read", &theme).fg, Some(Color::Cyan));
-        assert_eq!(style_for_line("[result] ok", &theme).fg, Some(Color::DarkGray));
+        assert_eq!(
+            style_for_line("[result] ok", &theme).fg,
+            Some(Color::DarkGray)
+        );
         assert_eq!(
             style_for_line("[rate limited] wait", &theme).fg,
             Some(Color::Yellow)
         );
-        assert_eq!(style_for_line("[studio] note", &theme).fg, Some(Color::Cyan));
+        assert_eq!(
+            style_for_line("[studio] note", &theme).fg,
+            Some(Color::Cyan)
+        );
         assert_eq!(style_for_line("plain text", &theme).fg, Some(Color::White));
     }
 

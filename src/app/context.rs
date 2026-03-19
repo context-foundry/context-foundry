@@ -55,7 +55,12 @@ impl StageResult {
         }
     }
 
-    pub fn failure(stage: &str, action: &str, failure_type: FailureType, suggestions: Vec<String>) -> Self {
+    pub fn failure(
+        stage: &str,
+        action: &str,
+        failure_type: FailureType,
+        suggestions: Vec<String>,
+    ) -> Self {
         StageResult {
             stage: stage.to_string(),
             success: false,
@@ -92,7 +97,13 @@ pub(super) struct RunContext {
 }
 
 impl RunContext {
-    pub(super) fn new(project_dir: &Path, config: Config, shutdown: Arc<AtomicBool>, tasks_file_lock: Arc<Mutex<()>>, review_gate: Arc<AtomicBool>) -> Self {
+    pub(super) fn new(
+        project_dir: &Path,
+        config: Config,
+        shutdown: Arc<AtomicBool>,
+        tasks_file_lock: Arc<Mutex<()>>,
+        review_gate: Arc<AtomicBool>,
+    ) -> Self {
         let contract_paths = ContractPaths::resolve(project_dir);
         let buildloop_dir = project_dir.join(".buildloop");
         let log_dir = buildloop_dir.join("logs");

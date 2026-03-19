@@ -117,7 +117,11 @@ impl ModelProvider {
             ModelProvider::Codex => "node_modules/@anthropic-ai/codex/cli.js",
         };
         let cli_js = dir.join(module);
-        if cli_js.exists() { Some(cli_js) } else { None }
+        if cli_js.exists() {
+            Some(cli_js)
+        } else {
+            None
+        }
     }
 
     /// Builds a `CommandBuilder` for this provider (for PTY execution).
@@ -739,8 +743,7 @@ pub async fn run_agent(
                         .lock()
                         .unwrap_or_else(|poisoned| poisoned.into_inner());
 
-                    if progress_snapshot.is_truly_idle(now, Duration::from_secs(timeout_secs))
-                    {
+                    if progress_snapshot.is_truly_idle(now, Duration::from_secs(timeout_secs)) {
                         drop(progress_snapshot);
                         let _ = child.kill();
                         let _ = child.wait();
@@ -1000,10 +1003,18 @@ fn parse_claude_json(v: &Value, model_name: &str) -> ParsedClaudeLine {
     match kind {
         "assistant" => {
             if let Some(usage) = v.get("message").and_then(|m| m.get("usage")) {
-                let turn_input =
-                    usage.get("input_tokens").and_then(|t| t.as_u64()).unwrap_or(0)
-                    + usage.get("cache_creation_input_tokens").and_then(|t| t.as_u64()).unwrap_or(0)
-                    + usage.get("cache_read_input_tokens").and_then(|t| t.as_u64()).unwrap_or(0);
+                let turn_input = usage
+                    .get("input_tokens")
+                    .and_then(|t| t.as_u64())
+                    .unwrap_or(0)
+                    + usage
+                        .get("cache_creation_input_tokens")
+                        .and_then(|t| t.as_u64())
+                        .unwrap_or(0)
+                    + usage
+                        .get("cache_read_input_tokens")
+                        .and_then(|t| t.as_u64())
+                        .unwrap_or(0);
                 if turn_input > 0 {
                     LAST_TURN_INPUT_TOKENS.with(|c| c.set(turn_input));
                 }
@@ -1260,7 +1271,10 @@ fn parse_claude_result_event(v: &Value) -> Option<AgentOutputEvent> {
     // Extract usage data and emit as a separate event via the caller's channel.
     // We store it in a thread-local so the PTY reader can emit it after the Result event.
     LAST_RESULT_USAGE.with(|cell| {
-        let cost = v.get("total_cost_usd").and_then(|c| c.as_f64()).unwrap_or(0.0);
+        let cost = v
+            .get("total_cost_usd")
+            .and_then(|c| c.as_f64())
+            .unwrap_or(0.0);
         let usage = v.get("usage");
         let cumulative_input = usage
             .and_then(|u| u.get("cache_creation_input_tokens"))
@@ -1530,7 +1544,10 @@ fn parse_stream_event(line: &str) -> Option<AgentOutputEvent> {
 fn is_api_noise(line: &str) -> bool {
     let l = line.trim();
     // Fragments of base64-encoded content blocks
-    if l.len() > 60 && l.chars().all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '/' || c == '=') {
+    if l.len() > 60
+        && l.chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '/' || c == '=')
+    {
         return true;
     }
     // Raw API JSON fragments (usage, session, content_block, etc.)
@@ -1859,7 +1876,10 @@ mod tests {
         let usage = LAST_RESULT_USAGE.with(|c| c.take());
         assert!(usage.is_some(), "LAST_RESULT_USAGE should be set");
         let usage = usage.unwrap();
-        assert_eq!(usage.input_tokens, 90_000, "input_tokens should be per-turn value (90000), not cumulative");
+        assert_eq!(
+            usage.input_tokens, 90_000,
+            "input_tokens should be per-turn value (90000), not cumulative"
+        );
         assert_eq!(usage.output_tokens, 20_000);
         assert_eq!(usage.context_window, 200_000);
         assert!((usage.cost_usd - 0.5).abs() < f64::EPSILON);
@@ -1879,7 +1899,10 @@ mod tests {
         let usage = LAST_RESULT_USAGE.with(|c| c.take());
         assert!(usage.is_some(), "LAST_RESULT_USAGE should be set");
         let usage = usage.unwrap();
-        assert_eq!(usage.input_tokens, 170_000, "input_tokens should be cumulative fallback (170000)");
+        assert_eq!(
+            usage.input_tokens, 170_000,
+            "input_tokens should be cumulative fallback (170000)"
+        );
     }
 
     #[test]

@@ -41,7 +41,11 @@ pub(super) async fn run_review_loop(
                 if stat.trim().is_empty() {
                     files_changed.join("\n")
                 } else {
-                    format!("{}\n\nDiff stat:\n{}", files_changed.join("\n"), stat.trim())
+                    format!(
+                        "{}\n\nDiff stat:\n{}",
+                        files_changed.join("\n"),
+                        stat.trim()
+                    )
                 }
             }
             _ => files_changed.join("\n"),
@@ -62,12 +66,10 @@ pub(super) async fn run_review_loop(
             )));
             None
         } else if diff.len() > DIFF_SIZE_LIMIT {
-            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
-                format!(
-                    "Diff too large ({}KB) -- using file list with stat summary instead",
-                    diff.len() / 1024,
-                ),
-            )));
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                "Diff too large ({}KB) -- using file list with stat summary instead",
+                diff.len() / 1024,
+            ))));
             None
         } else {
             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
@@ -125,10 +127,7 @@ pub(super) async fn run_review_loop(
 
     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::AgentStarted(
         AgentRole::Reviewer,
-        Config::display_provider_model(
-            &ctx.config.reviewer_provider,
-            &ctx.config.reviewer_model,
-        ),
+        Config::display_provider_model(&ctx.config.reviewer_provider, &ctx.config.reviewer_model),
     )));
 
     let prompt = prompts::reviewer_prompt(
@@ -185,8 +184,8 @@ pub(super) async fn run_review_loop(
 
     // Detect whether the reviewer applied fixes by checking for new file changes.
     let post_review_files = get_changed_files(&ctx.project_dir);
-    let reviewer_made_fixes = post_review_files.len() > pre_review_files.len()
-        || post_review_files != pre_review_files;
+    let reviewer_made_fixes =
+        post_review_files.len() > pre_review_files.len() || post_review_files != pre_review_files;
     let fix_passes: usize = if reviewer_made_fixes { 1 } else { 0 };
 
     if reviewer_made_fixes {
@@ -203,7 +202,8 @@ pub(super) async fn run_review_loop(
 
     if !report_has_content {
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
-            "Fix agent succeeded but review-report.md is missing or empty — treating as failure".to_string(),
+            "Fix agent succeeded but review-report.md is missing or empty — treating as failure"
+                .to_string(),
         )));
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::TaskReviewResult {
             task_id: task_id.to_string(),
@@ -239,7 +239,8 @@ pub(super) async fn run_review_loop(
         ))));
     }
 
-    let low_conf_warnings = log_low_confidence_findings(&ctx.review_report, ctx.config.confidence_threshold);
+    let low_conf_warnings =
+        log_low_confidence_findings(&ctx.review_report, ctx.config.confidence_threshold);
     for warning in &low_conf_warnings {
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(warning.clone())));
     }
@@ -350,8 +351,7 @@ async fn run_multipass_review(
     let _ = std::fs::remove_file(&ctx.review_report);
 
     let merged_per_file = merge_findings(&all_per_file_findings);
-    let per_file_findings_json =
-        serde_json::to_string_pretty(&merged_per_file).unwrap_or_default();
+    let per_file_findings_json = serde_json::to_string_pretty(&merged_per_file).unwrap_or_default();
 
     let high_count = merged_per_file
         .get("high")
@@ -435,8 +435,8 @@ async fn run_multipass_review(
 
     // Detect if integration reviewer made fixes.
     let post_review_files = get_changed_files(&ctx.project_dir);
-    let reviewer_made_fixes = post_review_files.len() > pre_review_files.len()
-        || post_review_files != pre_review_files;
+    let reviewer_made_fixes =
+        post_review_files.len() > pre_review_files.len() || post_review_files != pre_review_files;
     let fix_passes: usize = if reviewer_made_fixes { 1 } else { 0 };
 
     // Guard: report must exist and have content.
@@ -484,7 +484,8 @@ async fn run_multipass_review(
         ))));
     }
 
-    let low_conf_warnings = log_low_confidence_findings(&ctx.review_report, ctx.config.confidence_threshold);
+    let low_conf_warnings =
+        log_low_confidence_findings(&ctx.review_report, ctx.config.confidence_threshold);
     for warning in &low_conf_warnings {
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(warning.clone())));
     }
@@ -696,8 +697,16 @@ fn count_provenance_coverage(report_path: &Path) -> (usize, usize) {
             for finding in arr {
                 total += 1;
                 if let Some(ev) = finding.get("source_evidence") {
-                    if ev.get("snippet").and_then(|s| s.as_str()).map(|s| !s.is_empty()).unwrap_or(false)
-                        && ev.get("reasoning").and_then(|s| s.as_str()).map(|s| !s.is_empty()).unwrap_or(false)
+                    if ev
+                        .get("snippet")
+                        .and_then(|s| s.as_str())
+                        .map(|s| !s.is_empty())
+                        .unwrap_or(false)
+                        && ev
+                            .get("reasoning")
+                            .and_then(|s| s.as_str())
+                            .map(|s| !s.is_empty())
+                            .unwrap_or(false)
                     {
                         with_provenance += 1;
                     }
@@ -741,10 +750,7 @@ fn log_low_confidence_findings(report_path: &Path, threshold: f64) -> Vec<String
                         .get("file")
                         .and_then(|f| f.as_str())
                         .unwrap_or("unknown");
-                    let line = finding
-                        .get("line")
-                        .and_then(|l| l.as_u64())
-                        .unwrap_or(0);
+                    let line = finding.get("line").and_then(|l| l.as_u64()).unwrap_or(0);
                     warnings.push(format!(
                         "Low-confidence finding in {}:{} -- consider manual review (confidence: {:.2})",
                         file, line, confidence
@@ -782,11 +788,7 @@ fn count_confidence_coverage(report_path: &Path) -> (usize, usize) {
         if let Some(arr) = v.get(*key).and_then(|a| a.as_array()) {
             for finding in arr {
                 total += 1;
-                if finding
-                    .get("confidence")
-                    .and_then(|c| c.as_f64())
-                    .is_some()
-                {
+                if finding.get("confidence").and_then(|c| c.as_f64()).is_some() {
                     with_confidence += 1;
                 }
             }
@@ -1044,7 +1046,10 @@ mod tests {
 "#).expect("failed to write report");
 
         let (with_prov, total) = super::count_provenance_coverage(&report);
-        assert_eq!(with_prov, 0, "empty snippet should not count as valid provenance");
+        assert_eq!(
+            with_prov, 0,
+            "empty snippet should not count as valid provenance"
+        );
         assert_eq!(total, 1);
 
         let _ = std::fs::remove_dir_all(dir);
@@ -1070,10 +1075,23 @@ mod tests {
 "#).expect("failed to write report");
 
         let warnings = super::log_low_confidence_findings(&report, 0.5);
-        assert_eq!(warnings.len(), 2, "should have 2 low-confidence findings below 0.5");
-        assert!(warnings[0].contains("b.rs:20"), "first warning should mention b.rs:20");
-        assert!(warnings[1].contains("c.rs:30"), "second warning should mention c.rs:30");
-        assert!(warnings[0].contains("consider manual review"), "warning should suggest manual review");
+        assert_eq!(
+            warnings.len(),
+            2,
+            "should have 2 low-confidence findings below 0.5"
+        );
+        assert!(
+            warnings[0].contains("b.rs:20"),
+            "first warning should mention b.rs:20"
+        );
+        assert!(
+            warnings[1].contains("c.rs:30"),
+            "second warning should mention c.rs:30"
+        );
+        assert!(
+            warnings[0].contains("consider manual review"),
+            "warning should suggest manual review"
+        );
 
         let _ = std::fs::remove_dir_all(dir);
     }
@@ -1082,7 +1100,9 @@ mod tests {
     fn log_low_confidence_findings_treats_missing_confidence_as_high() {
         let dir = temp_dir("foundry-review-confidence-missing");
         let report = dir.join("report.md");
-        std::fs::write(&report, r#"# Report
+        std::fs::write(
+            &report,
+            r#"# Report
 ```json
 {
   "high": [
@@ -1092,10 +1112,15 @@ mod tests {
   "low": []
 }
 ```
-"#).expect("failed to write report");
+"#,
+        )
+        .expect("failed to write report");
 
         let warnings = super::log_low_confidence_findings(&report, 0.5);
-        assert!(warnings.is_empty(), "findings without confidence field should default to 1.0 (high confidence)");
+        assert!(
+            warnings.is_empty(),
+            "findings without confidence field should default to 1.0 (high confidence)"
+        );
 
         let _ = std::fs::remove_dir_all(dir);
     }
