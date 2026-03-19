@@ -628,14 +628,25 @@ RULES:
     )
 }
 
-#[allow(dead_code)]
 pub fn fixer_prompt(
     task_id: &str,
     task_desc: &str,
     pass_number: usize,
     spec_file: &str,
     tasks_file: &str,
+    error_context: &str,
 ) -> String {
+    let error_section = if error_context.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "\n\n## Structured Error Context from Previous Stages\n\n{error_context}\n\n\
+             Use this context to decide what to retry vs skip. If a stage timed out, \
+             the same approach may time out again -- consider an alternative. If a gate \
+             failed, check the specific gate condition before retrying."
+        )
+    };
+
     format!(
         r#"You are the FIXER agent for an autonomous build loop.
 
@@ -643,7 +654,7 @@ YOUR TASK: Fix all issues identified in the review report.
 
 Task ID: {task_id}
 Task Description: {task_desc}
-Review Pass: {pass_number}
+Review Pass: {pass_number}{error_section}
 
 INSTRUCTIONS:
 1. Read .buildloop/review-report.md for the list of issues
@@ -659,6 +670,41 @@ IMPORTANT:
 - After fixing, verify your fixes compile/parse correctly
 - Be surgical — fix only what the review identified, don't refactor surrounding code"#
     )
+}
+
+#[allow(clippy::type_complexity)]
+pub fn format_stage_results_for_prompt(
+    results: &[(String, bool, Option<String>, String, Vec<String>, Vec<String>)],
+) -> String {
+    if results.is_empty() {
+        return String::new();
+    }
+
+    let mut out = String::from("### Pipeline Stage Results\n\n");
+    for (stage, success, failure_type, action, partials, suggestions) in results {
+        if *success {
+            out.push_str(&format!("**{}**: PASS\n", stage));
+        } else if let Some(ft) = failure_type {
+            out.push_str(&format!("**{}**: FAIL ({})\n", stage, ft));
+        } else {
+            out.push_str(&format!("**{}**: FAIL\n", stage));
+        }
+        out.push_str(&format!("- Action: {}\n", action));
+        if !partials.is_empty() {
+            out.push_str("- Partial results:\n");
+            for p in partials {
+                out.push_str(&format!("  - {}\n", p));
+            }
+        }
+        if !suggestions.is_empty() {
+            out.push_str("- Suggestions:\n");
+            for s in suggestions {
+                out.push_str(&format!("  - {}\n", s));
+            }
+        }
+        out.push('\n');
+    }
+    out
 }
 
 pub fn pattern_extraction_prompt(task_id: &str, task_desc: &str) -> String {
@@ -920,5 +966,49 @@ mod tests {
         assert!(discovery.contains("ARCHITECTURE.md"));
         assert!(discovery.contains("IMPL_PLAN.md"));
 
+    }
+
+    #[test]
+    fn test_fixer_prompt_includes_error_context() {
+        let prompt = fixer_prompt("T1", "test task", 1, "SPEC.md", "TASKS.md", "Builder timed out after 300s");
+        assert!(
+            prompt.contains("Structured Error Context"),
+            "fixer prompt must include error context section when provided"
+        );
+        assert!(
+            prompt.contains("Builder timed out"),
+            "fixer prompt must include the actual error context"
+        );
+    }
+
+    #[test]
+    fn test_fixer_prompt_omits_error_context_when_empty() {
+        let prompt = fixer_prompt("T1", "test task", 1, "SPEC.md", "TASKS.md", "");
+        assert!(
+            !prompt.contains("Structured Error Context"),
+            "fixer prompt must not include error context section when empty"
+        );
+    }
+
+    #[test]
+    fn test_format_stage_results_for_prompt_empty() {
+        let result = format_stage_results_for_prompt(&[]);
+        assert!(result.is_empty(), "empty stage results should produce empty string");
+    }
+
+    #[test]
+    fn test_format_stage_results_for_prompt_with_entries() {
+        let results = vec![
+            ("Scout".to_string(), true, None, "Investigate codebase".to_string(), vec!["scout-report.md".to_string()], vec![]),
+            ("Builder".to_string(), false, Some("Timeout".to_string()), "Implement changes".to_string(), vec![], vec!["Try simpler approach".to_string()]),
+        ];
+        let output = format_stage_results_for_prompt(&results);
+        assert!(output.contains("### Pipeline Stage Results"));
+        assert!(output.contains("**Scout**: PASS"));
+        assert!(output.contains("**Builder**: FAIL (Timeout)"));
+        assert!(output.contains("- Partial results:"));
+        assert!(output.contains("scout-report.md"));
+        assert!(output.contains("- Suggestions:"));
+        assert!(output.contains("Try simpler approach"));
     }
 }

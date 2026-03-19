@@ -17,7 +17,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use super::context::RunContext;
+use super::context::{RunContext, StageResult, FailureType};
 use super::state::DualSelection;
 use super::{review, AppEvent, LoopEvent};
 use crate::extensions;
@@ -1218,6 +1218,7 @@ async fn process_task(
 
     let task_id = &task_info.id;
     let task_desc = &task_info.description;
+    let mut stage_results: Vec<StageResult> = Vec::new();
     let patterns_extracted = ctx.buildloop_dir.join("patterns-extracted.json");
 
     // Clean up stale dual-build worktrees from previous sessions
@@ -1358,6 +1359,12 @@ async fn process_task(
             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
                 format!("Scout failed for {} — continuing without report", task_id),
             )));
+            stage_results.push(StageResult::failure(
+                "Scout",
+                &format!("Investigate codebase for {}", task_id),
+                FailureType::Crash,
+                vec!["Scout is non-blocking -- pipeline continues without report".to_string()],
+            ));
         }
 
         adaptive_sleep(
@@ -1374,6 +1381,16 @@ async fn process_task(
             ))));
             return (false, last_rate_limited);
         }
+    }
+
+    if !skip_scout
+        && stage_results.last().map(|r| r.stage.as_str()) != Some("Scout")
+    {
+        let mut result = StageResult::success("Scout", &format!("Investigate codebase for {}", task_id));
+        if ctx.buildloop_dir.join("scout-report.md").exists() {
+            result.partial_results.push("scout-report.md".to_string());
+        }
+        stage_results.push(result);
     }
 
     // Checkpoint: scout completed
@@ -1462,6 +1479,12 @@ async fn process_task(
                     let _lock = ctx.tasks_file_lock.lock().unwrap_or_else(|e| e.into_inner());
                     let _ = task::update_task_progress(&ctx.plan_path, task_id, &format!("{}P--!", scout_char));
                 }
+                stage_results.push(StageResult::failure(
+                    "Planner",
+                    &format!("Create implementation plan for {}", task_id),
+                    FailureType::Crash,
+                    vec!["Retry with a simpler task description".to_string(), "Check if SPEC.md has enough context".to_string()],
+                ));
                 let committed = commit_wip_for_mode(ctx, task_id, task_desc);
                 let message = if committed {
                     format!("PLANNER failed for {} -- committed WIP changes", task_id)
@@ -1492,6 +1515,12 @@ async fn process_task(
                     let _lock = ctx.tasks_file_lock.lock().unwrap_or_else(|e| e.into_inner());
                     let _ = task::update_task_progress(&ctx.plan_path, task_id, &format!("{}P..", scout_char));
                 }
+                stage_results.push(StageResult::failure(
+                    "Planner",
+                    &format!("Create implementation plan for {}", task_id),
+                    FailureType::StopRequested,
+                    vec![],
+                ));
                 let _ = commit_wip_for_mode(ctx, task_id, task_desc);
                 return (false, last_rate_limited);
             }
@@ -1502,6 +1531,14 @@ async fn process_task(
             let _lock = ctx.tasks_file_lock.lock().unwrap_or_else(|e| e.into_inner());
             let _ = task::update_task_progress(&ctx.plan_path, task_id, &format!("{}{}..", scout_char, planner_char));
         }
+    }
+
+    if !skip_planner {
+        let mut result = StageResult::success("Planner", &format!("Create implementation plan for {}", task_id));
+        if ctx.current_plan.exists() {
+            result.partial_results.push("current-plan.md".to_string());
+        }
+        stage_results.push(result);
     }
 
     // Checkpoint: planner completed
@@ -1523,6 +1560,12 @@ async fn process_task(
                     &format!("{}{}--!", scout_char, planner_char),
                 );
             }
+            stage_results.push(StageResult::failure(
+                "ExtensionGate",
+                "Validate extension contracts",
+                FailureType::GateFail,
+                vec!["Ensure all configured extensions have CLAUDE.md files".to_string()],
+            ));
             let _ = commit_wip_for_mode(ctx, task_id, task_desc);
             return (false, last_rate_limited);
         }
@@ -1599,6 +1642,12 @@ async fn process_task(
                     let _lock = ctx.tasks_file_lock.lock().unwrap_or_else(|e| e.into_inner());
                     let _ = task::update_task_progress(&ctx.plan_path, task_id, &format!("{}{}--!", scout_char, planner_char));
                 }
+                stage_results.push(StageResult::failure(
+                    "BuilderGate",
+                    "Validate plan structure (File Operations + Verification sections)",
+                    FailureType::GateFail,
+                    vec!["Planner failed to produce valid plan after retry".to_string(), format!("Gate reason: {}", reason2)],
+                ));
                 let _ = commit_wip_for_mode(ctx, task_id, task_desc);
                 return (false, last_rate_limited);
             }
@@ -1673,6 +1722,12 @@ async fn process_task(
             let _lock = ctx.tasks_file_lock.lock().unwrap_or_else(|e| e.into_inner());
             let _ = task::update_task_progress(&ctx.plan_path, task_id, &format!("{}{}I-!", scout_char, planner_char));
         }
+        stage_results.push(StageResult::failure(
+            "Builder",
+            &format!("Implement changes for {}", task_id),
+            FailureType::Crash,
+            vec!["Check build-claims.md for partial progress".to_string(), "Review the plan for overly ambitious scope".to_string()],
+        ));
         let _ = commit_wip_for_mode(ctx, task_id, task_desc);
         return (false, last_rate_limited);
     }
@@ -1681,6 +1736,14 @@ async fn process_task(
     {
         let _lock = ctx.tasks_file_lock.lock().unwrap_or_else(|e| e.into_inner());
         let _ = task::update_task_progress(&ctx.plan_path, task_id, &format!("{}{}I.", scout_char, planner_char));
+    }
+
+    {
+        let mut result = StageResult::success("Builder", &format!("Implement changes for {}", task_id));
+        if ctx.buildloop_dir.join("build-claims.md").exists() {
+            result.partial_results.push("build-claims.md".to_string());
+        }
+        stage_results.push(result);
     }
 
     // Checkpoint: builder completed
@@ -1711,6 +1774,12 @@ async fn process_task(
                     let _lock = ctx.tasks_file_lock.lock().unwrap_or_else(|e| e.into_inner());
                     let _ = task::update_task_progress(&ctx.plan_path, task_id, &format!("{}{}I-!", scout_char, planner_char));
                 }
+                stage_results.push(StageResult::failure(
+                    "BuildGate",
+                    &format!("Run build command: {}", build_cmd),
+                    FailureType::GateFail,
+                    vec!["Build command failed -- check compiler errors".to_string()],
+                ));
                 let _ = commit_wip_for_mode(ctx, task_id, task_desc);
                 return (false, last_rate_limited);
             }
@@ -1735,6 +1804,12 @@ async fn process_task(
             "Stop requested after BUILDER for {} — skipping review",
             task_id
         ))));
+        stage_results.push(StageResult::failure(
+            "Builder",
+            &format!("Implement changes for {}", task_id),
+            FailureType::StopRequested,
+            vec![],
+        ));
         // Progress indicator already written at [SPI.] above; commit preserves it.
         let _ = commit_wip_for_mode(ctx, task_id, task_desc);
         return (false, last_rate_limited);
@@ -1787,6 +1862,21 @@ async fn process_task(
         }
     };
 
+    if validated {
+        let mut result = StageResult::success("Reviewer", &format!("Validate changes for {}", task_id));
+        if ctx.review_report.exists() {
+            result.partial_results.push("review-report.md".to_string());
+        }
+        stage_results.push(result);
+    } else if !skip_verify && !ctx.config.backpressure_only && !skip_for_batch {
+        stage_results.push(StageResult::failure(
+            "Reviewer",
+            &format!("Validate changes for {}", task_id),
+            FailureType::ReviewFail,
+            vec!["Review found HIGH/MEDIUM issues that were not fixed".to_string(), "Check review-report.md for specific findings".to_string()],
+        ));
+    }
+
     // Persist final pipeline progress indicator and mark done BEFORE committing.
     // Both writes must happen before git add -A so the commit captures them.
     // Agents may overwrite TASKS.md during their run, stripping intermediate
@@ -1820,11 +1910,22 @@ async fn process_task(
 
                 // Create GitHub issue for WIP commits in review mode
                 if committed && !validated && ctx.config.create_issue_on_wip {
+                    let stage_ctx = prompts::format_stage_results_for_prompt(
+                        &stage_results.iter().map(|r| (
+                            r.stage.clone(),
+                            r.success,
+                            r.failure_type.as_ref().map(|f| format!("{:?}", f)),
+                            r.attempted_action.clone(),
+                            r.partial_results.clone(),
+                            r.suggestions.clone(),
+                        )).collect::<Vec<_>>(),
+                    );
                     match git::create_wip_issue(
                         &ctx.project_dir,
                         task_id,
                         task_desc,
                         &ctx.review_report,
+                        &stage_ctx,
                     ) {
                         Ok(Some(issue_num)) => {
                             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
@@ -1926,11 +2027,22 @@ async fn process_task(
             ))));
         }
         if committed && !validated && ctx.config.create_issue_on_wip {
+            let stage_ctx = prompts::format_stage_results_for_prompt(
+                &stage_results.iter().map(|r| (
+                    r.stage.clone(),
+                    r.success,
+                    r.failure_type.as_ref().map(|f| format!("{:?}", f)),
+                    r.attempted_action.clone(),
+                    r.partial_results.clone(),
+                    r.suggestions.clone(),
+                )).collect::<Vec<_>>(),
+            );
             match git::create_wip_issue(
                 &ctx.project_dir,
                 task_id,
                 task_desc,
                 &ctx.review_report,
+                &stage_ctx,
             ) {
                 Ok(Some(issue_num)) => {
                     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(

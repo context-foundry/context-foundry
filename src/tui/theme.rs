@@ -171,6 +171,20 @@ pub fn builtin_themes() -> Vec<(&'static str, TuiTheme)> {
                 surface: Color::Rgb(0, 43, 54),
             },
         ),
+        (
+            "roundup",
+            TuiTheme {
+                accent: Color::Rgb(212, 130, 26),   // Western amber
+                border: Color::Rgb(74, 50, 32),     // Leather brown
+                text: Color::Rgb(232, 220, 200),    // Parchment
+                muted: Color::Rgb(168, 148, 120),   // Dusty trail
+                success: Color::Rgb(90, 158, 69),   // Prairie green
+                warning: Color::Rgb(232, 184, 75),  // Gold nugget
+                error: Color::Rgb(192, 57, 43),     // Saloon red
+                info: Color::Rgb(212, 130, 26),      // Amber
+                surface: Color::Rgb(42, 26, 14),    // Dark saddle
+            },
+        ),
     ]
 }
 

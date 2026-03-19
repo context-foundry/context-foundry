@@ -493,6 +493,7 @@ pub fn create_wip_issue(
     task_id: &str,
     task_desc: &str,
     review_report_path: &Path,
+    stage_context: &str,
 ) -> Result<Option<u64>> {
     let mut review_body = std::fs::read_to_string(review_report_path)
         .unwrap_or_else(|_| "No review report available.".to_string());
@@ -520,11 +521,22 @@ pub fn create_wip_issue(
         truncate_str(task_desc, 60),
     );
 
+    let stage_section = if stage_context.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "## Pipeline Context\n\n\
+             {stage_context}\n\n\
+             ---\n\n"
+        )
+    };
+
     let body = format!(
         "## WIP Commit: `{task_id}`\n\n\
          **Task:** {task_desc}\n\n\
          Validation did not pass. This issue was auto-created by foundry.\n\n\
          ---\n\n\
+         {stage_section}\
          ## Review Findings\n\n\
          {review_body}\n"
     );
@@ -795,7 +807,7 @@ mod tests {
 
         // gh is not available in test, so this will fail with a Command error.
         // We just verify the function signature and that it reads the report.
-        let result = create_wip_issue(&dir, "T1.1", "Add widget", &review_path);
+        let result = create_wip_issue(&dir, "T1.1", "Add widget", &review_path, "");
         // Expected: Err because gh is not configured in test env, OR Ok(None) if gh
         // happens to be available but the repo doesn't exist on GitHub.
         // Either outcome is acceptable -- the test validates the function compiles

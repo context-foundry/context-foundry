@@ -2,9 +2,73 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
+use serde::Serialize;
+
+use crate::agent::AgentExitKind;
 use crate::config::Config;
 
 use super::contract::ContractPaths;
+
+#[derive(Debug, Clone, Serialize)]
+pub enum FailureType {
+    Timeout,
+    Crash,
+    GateFail,
+    ReviewFail,
+    RateLimited,
+    StopRequested,
+}
+
+impl FailureType {
+    pub fn from_exit_kind(kind: &AgentExitKind) -> Self {
+        match kind {
+            AgentExitKind::TimedOut => FailureType::Timeout,
+            AgentExitKind::Cancelled => FailureType::StopRequested,
+            AgentExitKind::TransportStall => FailureType::Crash,
+            AgentExitKind::Failed => FailureType::Crash,
+            AgentExitKind::Completed => FailureType::Crash,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct StageResult {
+    pub stage: String,
+    pub success: bool,
+    pub failure_type: Option<FailureType>,
+    pub attempted_action: String,
+    pub partial_results: Vec<String>,
+    pub suggestions: Vec<String>,
+}
+
+impl StageResult {
+    pub fn success(stage: &str, action: &str) -> Self {
+        StageResult {
+            stage: stage.to_string(),
+            success: true,
+            failure_type: None,
+            attempted_action: action.to_string(),
+            partial_results: Vec::new(),
+            suggestions: Vec::new(),
+        }
+    }
+
+    pub fn failure(stage: &str, action: &str, failure_type: FailureType, suggestions: Vec<String>) -> Self {
+        StageResult {
+            stage: stage.to_string(),
+            success: false,
+            failure_type: Some(failure_type),
+            attempted_action: action.to_string(),
+            partial_results: Vec::new(),
+            suggestions,
+        }
+    }
+
+    pub fn with_partial_results(mut self, results: Vec<String>) -> Self {
+        self.partial_results = results;
+        self
+    }
+}
 
 #[derive(Clone)]
 pub(super) struct RunContext {
