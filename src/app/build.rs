@@ -176,10 +176,16 @@ fn spawn_lookahead_planner(
             patterns::match_patterns(&all_patterns, &task_desc)
         };
 
+        let lookahead_complexity = complexity::classify_task(&task_desc);
+        let lookahead_pattern_count = patterns::scaled_injection_count(
+            lookahead_complexity,
+            ctx.config.max_pattern_injection,
+            ctx.config.min_pattern_injection,
+        );
         let pattern_context = patterns::format_patterns_for_prompt(
             &matched,
             "planner",
-            ctx.config.max_pattern_injection,
+            lookahead_pattern_count,
         );
 
         let prompt = prompts::planner_lookahead_prompt(
@@ -1409,6 +1415,9 @@ async fn process_task(
     let task_start = std::time::Instant::now();
 
     let scout_report = ctx.buildloop_dir.join("scout-report.md");
+    let task_complexity = complexity::classify_task(task_desc);
+    let skip_scout = skip_scout
+        || (ctx.config.skip_scout_for_simple && task_complexity == TaskComplexity::Simple);
     let build_claims = ctx.buildloop_dir.join("build-claims.md");
     if !skip_scout {
         let _ = std::fs::remove_file(&scout_report);
@@ -1440,12 +1449,18 @@ async fn process_task(
         patterns::match_patterns(cached_patterns, task_desc)
     };
 
+    let effective_pattern_count = patterns::scaled_injection_count(
+        task_complexity,
+        ctx.config.max_pattern_injection,
+        ctx.config.min_pattern_injection,
+    );
+
     let pattern_context =
-        patterns::format_patterns_for_prompt(&matched, "planner", ctx.config.max_pattern_injection);
+        patterns::format_patterns_for_prompt(&matched, "planner", effective_pattern_count);
     let reviewer_pattern_context = patterns::format_patterns_for_prompt(
         &matched,
         "reviewer",
-        ctx.config.max_pattern_injection,
+        effective_pattern_count,
     );
 
     if !matched.is_empty() {
@@ -1470,11 +1485,10 @@ async fn process_task(
         }));
     }
 
-    // Classify task complexity to decide whether to skip the planner.
+    // Decide whether to skip the planner based on complexity (already computed above).
     // Skip for simple tasks (existing behavior) AND for medium tasks with
     // detailed descriptions (80+ chars). Detailed task descriptions from the
     // upgraded describe-work agent are already comprehensive plans.
-    let task_complexity = complexity::classify_task(task_desc);
     let skip_planner = ctx.config.skip_planner_for_simple
         && (task_complexity == TaskComplexity::Simple
             || (task_complexity == TaskComplexity::Medium && task_desc.len() >= 80));
@@ -1485,9 +1499,12 @@ async fn process_task(
 
     // ─── Run Scout (skip if recent report exists and codebase hasn't changed much) ───
     if skip_scout {
-        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
-            "Reusing scout report from previous task".to_string(),
-        )));
+        let msg = if ctx.config.skip_scout_for_simple && task_complexity == TaskComplexity::Simple {
+            "Skipping scout for simple task".to_string()
+        } else {
+            "Reusing scout report from previous task".to_string()
+        };
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(msg)));
     } else {
         let scout_tools: &[&str] = &["Read", "Write", "Glob", "Grep", "Bash"];
 

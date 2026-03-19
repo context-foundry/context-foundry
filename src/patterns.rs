@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
+use crate::complexity::TaskComplexity;
 use crate::utils::atomic_write_file;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -203,6 +204,18 @@ pub fn format_patterns_for_prompt(
     }
 
     out
+}
+
+/// Return the effective pattern injection cap based on task complexity.
+///
+/// Simple tasks get `min` patterns, medium tasks get 5 (capped at `max`),
+/// and complex tasks get the full `max` value.
+pub fn scaled_injection_count(complexity: TaskComplexity, max: usize, min: usize) -> usize {
+    match complexity {
+        TaskComplexity::Simple => min,
+        TaskComplexity::Medium => 5_usize.min(max),
+        TaskComplexity::Complex => max,
+    }
 }
 
 /// Merge new patterns into the patterns directory, deduplicating by pattern_id.
@@ -564,5 +577,30 @@ mod tests {
         assert!(n1.is_some(), "new-1 should be present");
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    use crate::complexity::TaskComplexity;
+
+    #[test]
+    fn test_scaled_injection_simple_returns_min() {
+        assert_eq!(scaled_injection_count(TaskComplexity::Simple, 10, 2), 2);
+    }
+
+    #[test]
+    fn test_scaled_injection_medium_returns_5_capped() {
+        assert_eq!(scaled_injection_count(TaskComplexity::Medium, 10, 2), 5);
+        // When max < 5, medium is capped at max
+        assert_eq!(scaled_injection_count(TaskComplexity::Medium, 3, 1), 3);
+    }
+
+    #[test]
+    fn test_scaled_injection_complex_returns_max() {
+        assert_eq!(scaled_injection_count(TaskComplexity::Complex, 10, 2), 10);
+    }
+
+    #[test]
+    fn test_scaled_injection_zero_max() {
+        assert_eq!(scaled_injection_count(TaskComplexity::Complex, 0, 0), 0);
+        assert_eq!(scaled_injection_count(TaskComplexity::Simple, 0, 0), 0);
     }
 }

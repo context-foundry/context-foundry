@@ -10,8 +10,11 @@
   "create_issue_on_wip": true,
   "discovery_model": "opus",
   "discovery_provider": "claude",
-  "dual_selection": "second",
-  "extensions": [],
+  "dual_selection": "first",
+  "extensions": [
+    "extend",
+    "recon"
+  ],
   "fixer_model": "sonnet",
   "fixer_provider": "claude",
   "max_pattern_injection": 10,

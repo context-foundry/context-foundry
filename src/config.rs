@@ -90,6 +90,9 @@ pub struct Config {
     /// Max number of patterns injected into agent prompts (protects context "smart zone").
     pub max_pattern_injection: usize,
 
+    /// Minimum patterns injected even for simple tasks (floor for scaled injection).
+    pub min_pattern_injection: usize,
+
     /// Max iterations for `foundry plan` mode (0 = unlimited).
     pub planning_iterations: u64,
 
@@ -132,6 +135,10 @@ pub struct Config {
     /// Skip the planner stage for Simple-complexity tasks and pass the task
     /// description directly to the builder.
     pub skip_planner_for_simple: bool,
+
+    /// Skip the scout stage for Simple-complexity tasks. The task description
+    /// is sufficient context for the builder without a codebase investigation.
+    pub skip_scout_for_simple: bool,
 
     /// Minutes to wait before running discovery after the last H-prefixed
     /// (human-injected) task completes. Doubles (up to 30 min) when discovery
@@ -236,6 +243,7 @@ impl Default for Config {
             simple_builder_model: "sonnet".into(),
             simple_reviewer_model: String::new(),
             max_pattern_injection: 10,
+            min_pattern_injection: 2,
             planning_iterations: 0,
             adaptive_pauses: true,
             auto_push_remote: None,
@@ -251,6 +259,7 @@ impl Default for Config {
             orchestrator_accept_policy: "no-high-medium".into(),
             review_mode: "diff-only".into(),
             skip_planner_for_simple: true,
+            skip_scout_for_simple: true,
             discovery_cooldown_minutes: 5,
             planner_lookahead: true,
             pattern_extraction_model: "sonnet".into(),
