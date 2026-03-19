@@ -11,6 +11,7 @@ mod embeddings;
 mod extensions;
 mod git;
 mod mcp;
+mod observatory;
 mod orchestrator;
 mod patterns;
 mod prompts;

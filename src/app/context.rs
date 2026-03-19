@@ -81,6 +81,7 @@ impl StageResult {
 #[derive(Clone)]
 pub(super) struct RunContext {
     pub(super) project_dir: PathBuf,
+    pub(super) session_id: String,
     pub(super) config: Config,
     pub(super) spec_path: PathBuf,
     pub(super) plan_path: PathBuf,
@@ -110,6 +111,7 @@ impl RunContext {
 
         Self {
             project_dir: project_dir.to_path_buf(),
+            session_id: String::new(),
             config,
             spec_path: contract_paths.spec_path,
             plan_path: contract_paths.tasks_path,

@@ -24,6 +24,7 @@ anyhow = "1"
 futures = "0.3"
 portable-pty = "0.8"
 blake3 = "1"
+uuid = { version = "1", features = ["v4"] }
 dunce = "1"
 
 [dev-dependencies]

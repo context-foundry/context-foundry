@@ -1,10 +1,12 @@
 use std::collections::HashSet;
 use std::path::Path;
+use std::time::Instant;
 
 use tokio::sync::mpsc;
 
 use crate::agent::{self, AgentRole};
 use crate::config::Config;
+use crate::observatory::{self, AgentUsage, ObservatoryEvent};
 use crate::prompts;
 
 use super::context::RunContext;
@@ -120,15 +122,23 @@ pub(super) async fn run_review_loop(
     let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
     let fwd_tx = tx.clone();
     let fwd_handle = tokio::spawn(async move {
+        let mut usage = AgentUsage::default();
         while let Some(evt) = agent_rx.recv().await {
+            usage.accumulate(&evt);
             let _ = fwd_tx.send(AppEvent::AgentOutput(evt));
         }
+        usage
     });
 
     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::AgentStarted(
         AgentRole::Reviewer,
         Config::display_provider_model(&ctx.config.reviewer_provider, &ctx.config.reviewer_model),
     )));
+    observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::AgentStarted {
+        role: "Reviewer".to_string(),
+        provider: ctx.config.reviewer_provider.clone(),
+        model: ctx.config.reviewer_model.clone(),
+    });
 
     let prompt = prompts::reviewer_prompt(
         task_id,
@@ -150,6 +160,7 @@ pub(super) async fn run_review_loop(
             }));
         }
     }
+    let reviewer_start = Instant::now();
     let review_result = agent::run_agent(
         &AgentRole::Reviewer,
         Config::parse_provider(&ctx.config.reviewer_provider),
@@ -164,10 +175,19 @@ pub(super) async fn run_review_loop(
     )
     .await;
 
-    let _ = fwd_handle.await;
+    let agent_usage = fwd_handle.await.unwrap_or_default();
     let _ = tx.send(AppEvent::AgentDone(
         review_result.as_ref().map(|r| r.success).unwrap_or(false),
     ));
+    observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::AgentDone {
+        role: "Reviewer".to_string(),
+        success: review_result.as_ref().map(|r| r.success).unwrap_or(false),
+        duration_secs: reviewer_start.elapsed().as_secs_f64(),
+        tokens_in: agent_usage.tokens_in,
+        tokens_out: agent_usage.tokens_out,
+        cost_usd: agent_usage.cost_usd,
+        context_pct: agent_usage.context_pct,
+    });
 
     let reviewer_succeeded = review_result.as_ref().map(|r| r.success).unwrap_or(false);
     if !reviewer_succeeded {
@@ -215,6 +235,19 @@ pub(super) async fn run_review_loop(
 
     let verdict_pass = check_review_passed(&ctx.review_report);
     let (high, medium, low) = parse_audit_findings(&ctx.review_report);
+    {
+        let findings_json = std::fs::read_to_string(&ctx.review_report)
+            .ok()
+            .map(|content| extract_json_from_report(&content))
+            .unwrap_or_default();
+        observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::ReviewFindings {
+            task_id: task_id.to_string(),
+            high,
+            medium,
+            low,
+            findings_json,
+        });
+    }
 
     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
         "Review: verdict={}, {} high, {} medium findings",
@@ -311,11 +344,15 @@ async fn run_multipass_review(
         let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
         let fwd_tx = tx.clone();
         let fwd_handle = tokio::spawn(async move {
+            let mut usage = AgentUsage::default();
             while let Some(evt) = agent_rx.recv().await {
+                usage.accumulate(&evt);
                 let _ = fwd_tx.send(AppEvent::AgentOutput(evt));
             }
+            usage
         });
 
+        let per_file_start = Instant::now();
         let result = agent::run_agent(
             &AgentRole::Reviewer,
             Config::parse_provider(&ctx.config.reviewer_provider),
@@ -330,7 +367,16 @@ async fn run_multipass_review(
         )
         .await;
 
-        let _ = fwd_handle.await;
+        let agent_usage = fwd_handle.await.unwrap_or_default();
+        observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::AgentDone {
+            role: "Reviewer".to_string(),
+            success: result.as_ref().map(|r| r.success).unwrap_or(false),
+            duration_secs: per_file_start.elapsed().as_secs_f64(),
+            tokens_in: agent_usage.tokens_in,
+            tokens_out: agent_usage.tokens_out,
+            cost_usd: agent_usage.cost_usd,
+            context_pct: agent_usage.context_pct,
+        });
 
         if result.as_ref().map(|r| r.success).unwrap_or(false) {
             let findings = parse_findings_from_agent_output(&ctx.review_report);
@@ -400,11 +446,15 @@ async fn run_multipass_review(
     let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
     let fwd_tx = tx.clone();
     let fwd_handle = tokio::spawn(async move {
+        let mut usage = AgentUsage::default();
         while let Some(evt) = agent_rx.recv().await {
+            usage.accumulate(&evt);
             let _ = fwd_tx.send(AppEvent::AgentOutput(evt));
         }
+        usage
     });
 
+    let integration_start = Instant::now();
     let review_result = agent::run_agent(
         &AgentRole::Reviewer,
         Config::parse_provider(&ctx.config.reviewer_provider),
@@ -419,7 +469,16 @@ async fn run_multipass_review(
     )
     .await;
 
-    let _ = fwd_handle.await;
+    let agent_usage = fwd_handle.await.unwrap_or_default();
+    observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::AgentDone {
+        role: "Reviewer".to_string(),
+        success: review_result.as_ref().map(|r| r.success).unwrap_or(false),
+        duration_secs: integration_start.elapsed().as_secs_f64(),
+        tokens_in: agent_usage.tokens_in,
+        tokens_out: agent_usage.tokens_out,
+        cost_usd: agent_usage.cost_usd,
+        context_pct: agent_usage.context_pct,
+    });
 
     if !review_result.as_ref().map(|r| r.success).unwrap_or(false) {
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
@@ -460,6 +519,19 @@ async fn run_multipass_review(
 
     let verdict_pass = check_review_passed(&ctx.review_report);
     let (high, medium, low) = parse_audit_findings(&ctx.review_report);
+    {
+        let findings_json = std::fs::read_to_string(&ctx.review_report)
+            .ok()
+            .map(|content| extract_json_from_report(&content))
+            .unwrap_or_default();
+        observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::ReviewFindings {
+            task_id: task_id.to_string(),
+            high,
+            medium,
+            low,
+            findings_json,
+        });
+    }
 
     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
         "Integration review: verdict={}, {} high, {} medium findings",

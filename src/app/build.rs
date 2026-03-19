@@ -22,6 +22,7 @@ use super::state::DualSelection;
 use super::{review, AppEvent, LoopEvent};
 use crate::doubt_confidence;
 use crate::extensions;
+use crate::observatory::{self, AgentUsage, ObservatoryEvent};
 use crate::utils::atomic_write_file;
 
 // ─── Crash Recovery Checkpoint ───────────────────────────────
@@ -667,6 +668,52 @@ fn emit_extension_injections(
 pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEvent>) {
     ctx.ensure_runtime_dirs();
 
+    // ─── Observatory Session ─────────────────────────────────────
+    let session_id = observatory::generate_session_id();
+    let mut ctx = ctx;
+    ctx.session_id = session_id.clone();
+    let loop_start = std::time::Instant::now();
+    let mut session_tasks: usize = 0;
+    let mut session_feats: usize = 0;
+    let mut session_wips: usize = 0;
+
+    observatory::log_event(&session_id, &ctx.project_dir, ObservatoryEvent::SessionStarted {
+        config: serde_json::json!({
+            "planner_provider": ctx.config.planner_provider,
+            "planner_model": ctx.config.planner_model,
+            "builder_provider": ctx.config.builder_provider,
+            "builder_model": ctx.config.builder_model,
+            "reviewer_provider": ctx.config.reviewer_provider,
+            "reviewer_model": ctx.config.reviewer_model,
+            "scout_provider": ctx.config.scout_provider,
+            "scout_model": ctx.config.scout_model,
+            "discovery_provider": ctx.config.discovery_provider,
+            "discovery_model": ctx.config.discovery_model,
+            "run_mode": ctx.config.run_mode,
+            "pipeline_mode": ctx.config.pipeline_mode,
+            "batch_doubt": ctx.config.batch_doubt,
+            "cost_limit": ctx.config.cost_limit,
+            "agent_timeout_secs": ctx.config.agent_timeout_secs,
+        }),
+    });
+
+    // Helper: emit SessionEnded. Called before each return point.
+    macro_rules! emit_session_ended {
+        () => {
+            observatory::log_event(
+                &session_id,
+                &ctx.project_dir,
+                ObservatoryEvent::SessionEnded {
+                    total_tasks: session_tasks,
+                    feat_count: session_feats,
+                    wip_count: session_wips,
+                    total_cost_usd: ctx.session_cost_millicents.load(Ordering::Relaxed) as f64 / 100_000.0,
+                    duration_secs: loop_start.elapsed().as_secs_f64(),
+                },
+            );
+        };
+    }
+
     // ─── Extension Contract Loading ─────────────────────────────
     let discovered_extensions = extensions::discover_extensions(&ctx.project_dir);
     let extension_context =
@@ -774,15 +821,23 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
             let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
             let fwd_tx = tx.clone();
             let fwd_handle = tokio::spawn(async move {
+                let mut usage = AgentUsage::default();
                 while let Some(evt) = agent_rx.recv().await {
+                    usage.accumulate(&evt);
                     let _ = fwd_tx.send(AppEvent::AgentOutput(evt));
                 }
+                usage
             });
 
             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::AgentStarted(
                 AgentRole::Scout,
                 Config::display_provider_model(&ctx.config.scout_provider, &ctx.config.scout_model),
             )));
+            observatory::log_event(&session_id, &ctx.project_dir, ObservatoryEvent::AgentStarted {
+                role: "Scout".to_string(),
+                provider: ctx.config.scout_provider.clone(),
+                model: ctx.config.scout_model.clone(),
+            });
 
             // Read SPEC.md for user intent if it exists
             let user_intent = std::fs::read_to_string(&ctx.spec_path)
@@ -795,6 +850,7 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                 &ctx.tasks_file_name(),
             );
             // Scout is read-only investigation -- skip extension context to save tokens.
+            let scout_start = Instant::now();
             let scout_result = agent::run_agent(
                 &AgentRole::Scout,
                 Config::parse_provider(&ctx.config.scout_provider),
@@ -809,13 +865,23 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
             )
             .await;
 
-            let _ = fwd_handle.await;
+            let agent_usage = fwd_handle.await.unwrap_or_default();
             let _ = tx.send(AppEvent::AgentDone(
                 scout_result.as_ref().map(|r| r.success).unwrap_or(false),
             ));
+            observatory::log_event(&session_id, &ctx.project_dir, ObservatoryEvent::AgentDone {
+                role: "Scout".to_string(),
+                success: scout_result.as_ref().map(|r| r.success).unwrap_or(false),
+                duration_secs: scout_start.elapsed().as_secs_f64(),
+                tokens_in: agent_usage.tokens_in,
+                tokens_out: agent_usage.tokens_out,
+                cost_usd: agent_usage.cost_usd,
+                context_pct: agent_usage.context_pct,
+            });
             scout_has_run = true;
 
             if ctx.is_stop_requested() {
+                emit_session_ended!();
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Finished));
                 return;
             }
@@ -895,6 +961,13 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                 scout_has_run = true;
             }
 
+            session_tasks += 1;
+            if success {
+                session_feats += 1;
+            } else {
+                session_wips += 1;
+            }
+
             // Restore state files if the builder deleted or truncated them
             let restored = restore_state_files(&ctx, &state_backup, &tx);
             if restored > 0 {
@@ -908,6 +981,7 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
                     "Dual arena complete -- inspect the tabs or .buildloop/arena/, then press q to return to startup.".to_string(),
                 )));
+                emit_session_ended!();
                 return;
             }
 
@@ -976,6 +1050,7 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                         la.handle.abort();
                         let _ = std::fs::remove_file(lookahead_plan_path(&ctx, &la.task_id));
                     }
+                    emit_session_ended!();
                     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Finished));
                     return;
                 }
@@ -989,6 +1064,7 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                     let _ = std::fs::remove_file(lookahead_plan_path(&ctx, &la.task_id));
                 }
                 let _ = std::fs::remove_file(stop_file);
+                emit_session_ended!();
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Finished));
                 return;
             }
@@ -1009,6 +1085,7 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                     "Sprint complete -- all {} tasks done",
                     done_count
                 ))));
+                emit_session_ended!();
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Finished));
                 return;
             }
@@ -1018,6 +1095,7 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
                     "Review mode: task queue complete -- stopping".to_string(),
                 )));
+                emit_session_ended!();
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Finished));
                 return;
             }
@@ -1044,6 +1122,7 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                         if stop_file.exists() {
                             let _ = std::fs::remove_file(stop_file);
                         }
+                        emit_session_ended!();
                         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Finished));
                         return;
                     }
@@ -1062,9 +1141,12 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
             let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
             let fwd_tx = tx.clone();
             let fwd_handle = tokio::spawn(async move {
+                let mut usage = AgentUsage::default();
                 while let Some(evt) = agent_rx.recv().await {
+                    usage.accumulate(&evt);
                     let _ = fwd_tx.send(AppEvent::AgentOutput(evt));
                 }
+                usage
             });
 
             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::AgentStarted(
@@ -1074,6 +1156,11 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                     &ctx.config.discovery_model,
                 ),
             )));
+            observatory::log_event(&session_id, &ctx.project_dir, ObservatoryEvent::AgentStarted {
+                role: "Discovery".to_string(),
+                provider: ctx.config.discovery_provider.clone(),
+                model: ctx.config.discovery_model.clone(),
+            });
 
             let build_history = if session_build_claims.is_empty() {
                 None
@@ -1087,6 +1174,7 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                 build_history.as_deref(),
             );
             // Discovery finds new work -- skip extension context to save tokens.
+            let discovery_start = Instant::now();
             let result = agent::run_agent(
                 &AgentRole::Discovery,
                 Config::parse_provider(&ctx.config.discovery_provider),
@@ -1101,10 +1189,19 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
             )
             .await;
 
-            let _ = fwd_handle.await;
+            let agent_usage = fwd_handle.await.unwrap_or_default();
             let _ = tx.send(AppEvent::AgentDone(
                 result.as_ref().map(|r| r.success).unwrap_or(false),
             ));
+            observatory::log_event(&session_id, &ctx.project_dir, ObservatoryEvent::AgentDone {
+                role: "Discovery".to_string(),
+                success: result.as_ref().map(|r| r.success).unwrap_or(false),
+                duration_secs: discovery_start.elapsed().as_secs_f64(),
+                tokens_in: agent_usage.tokens_in,
+                tokens_out: agent_usage.tokens_out,
+                cost_usd: agent_usage.cost_usd,
+                context_pct: agent_usage.context_pct,
+            });
 
             // Check stop after discovery agent completion
             if ctx.is_stop_requested() {
@@ -1115,6 +1212,7 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                 if stop_file.exists() {
                     let _ = std::fs::remove_file(stop_file);
                 }
+                emit_session_ended!();
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Finished));
                 return;
             }
@@ -1146,6 +1244,7 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                     if stop_file.exists() {
                         let _ = std::fs::remove_file(stop_file);
                     }
+                    emit_session_ended!();
                     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Finished));
                     return;
                 }
@@ -1173,6 +1272,7 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                 if stop_file.exists() {
                     let _ = std::fs::remove_file(stop_file);
                 }
+                emit_session_ended!();
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Finished));
                 return;
             }
@@ -1185,6 +1285,10 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::QueueUpdated(tasks)));
             }
         }
+    }
+    #[allow(unreachable_code)]
+    {
+        emit_session_ended!();
     }
 }
 
@@ -1419,6 +1523,11 @@ async fn process_task(
 
     let scout_report = ctx.buildloop_dir.join("scout-report.md");
     let task_complexity = complexity::classify_task(task_desc);
+    observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::TaskStarted {
+        task_id: task_id.to_string(),
+        description: task_desc.to_string(),
+        complexity: format!("{:?}", task_complexity),
+    });
     let skip_scout = skip_scout
         || (ctx.config.skip_scout_for_simple && task_complexity == TaskComplexity::Simple);
     let build_claims = ctx.buildloop_dir.join("build-claims.md");
@@ -1486,7 +1595,16 @@ async fn process_task(
             titles,
             keywords_by_title,
         }));
+        let pattern_ids: Vec<String> = matched.iter().map(|p| p.pattern_id.clone()).collect();
+        observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::PatternInjected {
+            task_id: task_id.to_string(),
+            pattern_ids,
+            count: matched.len(),
+        });
     }
+
+    // Save pattern IDs for later PatternApplied event
+    let injected_pattern_ids: Vec<String> = matched.iter().map(|p| p.pattern_id.clone()).collect();
 
     // Decide whether to skip the planner based on complexity (already computed above).
     // Skip for simple tasks (existing behavior) AND for medium tasks with
@@ -1514,15 +1632,23 @@ async fn process_task(
         let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
         let fwd_tx = tx.clone();
         let fwd_handle = tokio::spawn(async move {
+            let mut usage = AgentUsage::default();
             while let Some(evt) = agent_rx.recv().await {
+                usage.accumulate(&evt);
                 let _ = fwd_tx.send(AppEvent::AgentOutput(evt));
             }
+            usage
         });
 
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::AgentStarted(
             AgentRole::Scout,
             Config::display_provider_model(&ctx.config.scout_provider, &ctx.config.scout_model),
         )));
+        observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::AgentStarted {
+            role: "Scout".to_string(),
+            provider: ctx.config.scout_provider.clone(),
+            model: ctx.config.scout_model.clone(),
+        });
 
         let scout_prompt_text = prompts::scout_prompt(
             task_id,
@@ -1531,6 +1657,7 @@ async fn process_task(
             &ctx.tasks_file_name(),
         );
         // Scout is read-only investigation -- skip extension context to save tokens.
+        let scout_start = Instant::now();
         let scout_result = agent::run_agent(
             &AgentRole::Scout,
             Config::parse_provider(&ctx.config.scout_provider),
@@ -1545,10 +1672,25 @@ async fn process_task(
         )
         .await;
 
-        let _ = fwd_handle.await;
+        let agent_usage = fwd_handle.await.unwrap_or_default();
         last_rate_limited = was_rate_limited(&scout_result);
         let scout_ok = scout_result.map(|r| r.success).unwrap_or(false);
         let _ = tx.send(AppEvent::AgentDone(scout_ok));
+        observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::AgentDone {
+            role: "Scout".to_string(),
+            success: scout_ok,
+            duration_secs: scout_start.elapsed().as_secs_f64(),
+            tokens_in: agent_usage.tokens_in,
+            tokens_out: agent_usage.tokens_out,
+            cost_usd: agent_usage.cost_usd,
+            context_pct: agent_usage.context_pct,
+        });
+        if last_rate_limited {
+            observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::RateLimited {
+                provider: ctx.config.scout_provider.clone(),
+                wait_secs: ctx.config.pause_between_agents_secs,
+            });
+        }
 
         if !scout_ok {
             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
@@ -1630,9 +1772,12 @@ async fn process_task(
             let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
             let fwd_tx = tx.clone();
             let fwd_handle = tokio::spawn(async move {
+                let mut usage = AgentUsage::default();
                 while let Some(evt) = agent_rx.recv().await {
+                    usage.accumulate(&evt);
                     let _ = fwd_tx.send(AppEvent::AgentOutput(evt));
                 }
+                usage
             });
 
             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::AgentStarted(
@@ -1642,6 +1787,11 @@ async fn process_task(
                     &ctx.config.planner_model,
                 ),
             )));
+            observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::AgentStarted {
+                role: "Planner".to_string(),
+                provider: ctx.config.planner_provider.clone(),
+                model: ctx.config.planner_model.clone(),
+            });
 
             let prompt = prompts::planner_prompt(
                 task_id,
@@ -1651,6 +1801,7 @@ async fn process_task(
                 &ctx.tasks_file_name(),
             );
             // Planner writes plans, not code -- skip extension context to save tokens.
+            let planner_start = Instant::now();
             let plan_result = agent::run_agent(
                 &AgentRole::Planner,
                 Config::parse_provider(&ctx.config.planner_provider),
@@ -1665,10 +1816,25 @@ async fn process_task(
             )
             .await;
 
-            let _ = fwd_handle.await;
+            let agent_usage = fwd_handle.await.unwrap_or_default();
             last_rate_limited = was_rate_limited(&plan_result);
             let plan_ok = plan_result.map(|r| r.success).unwrap_or(false);
             let _ = tx.send(AppEvent::AgentDone(plan_ok));
+            observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::AgentDone {
+                role: "Planner".to_string(),
+                success: plan_ok,
+                duration_secs: planner_start.elapsed().as_secs_f64(),
+                tokens_in: agent_usage.tokens_in,
+                tokens_out: agent_usage.tokens_out,
+                cost_usd: agent_usage.cost_usd,
+                context_pct: agent_usage.context_pct,
+            });
+            if last_rate_limited {
+                observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::RateLimited {
+                    provider: ctx.config.planner_provider.clone(),
+                    wait_secs: ctx.config.pause_between_agents_secs,
+                });
+            }
 
             if !plan_ok || !ctx.current_plan.exists() {
                 {
@@ -1913,15 +2079,23 @@ async fn process_task(
         let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
         let fwd_tx = tx.clone();
         let fwd_handle = tokio::spawn(async move {
+            let mut usage = AgentUsage::default();
             while let Some(evt) = agent_rx.recv().await {
+                usage.accumulate(&evt);
                 let _ = fwd_tx.send(AppEvent::AgentOutput(evt));
             }
+            usage
         });
 
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::AgentStarted(
             AgentRole::Builder,
             Config::display_provider_model(&ctx.config.builder_provider, &ctx.config.builder_model),
         )));
+        observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::AgentStarted {
+            role: "Builder".to_string(),
+            provider: ctx.config.builder_provider.clone(),
+            model: ctx.config.builder_model.clone(),
+        });
 
         let prompt = if skip_planner {
             prompts::builder_direct_prompt(
@@ -1939,6 +2113,7 @@ async fn process_task(
             )
         };
         let prompt = prompts::wrap_with_extensions(&prompt, extension_context);
+        let builder_start = Instant::now();
         let build_result = agent::run_agent(
             &AgentRole::Builder,
             Config::parse_provider(&ctx.config.builder_provider),
@@ -1953,10 +2128,25 @@ async fn process_task(
         )
         .await;
 
-        let _ = fwd_handle.await;
+        let agent_usage = fwd_handle.await.unwrap_or_default();
         let rl = was_rate_limited(&build_result);
         let ok = build_result.map(|r| r.success).unwrap_or(false);
         let _ = tx.send(AppEvent::AgentDone(ok));
+        observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::AgentDone {
+            role: "Builder".to_string(),
+            success: ok,
+            duration_secs: builder_start.elapsed().as_secs_f64(),
+            tokens_in: agent_usage.tokens_in,
+            tokens_out: agent_usage.tokens_out,
+            cost_usd: agent_usage.cost_usd,
+            context_pct: agent_usage.context_pct,
+        });
+        if rl {
+            observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::RateLimited {
+                provider: ctx.config.builder_provider.clone(),
+                wait_secs: ctx.config.pause_between_agents_secs,
+            });
+        }
         (ok, rl)
     };
     last_rate_limited = builder_rate_limited;
@@ -2475,6 +2665,14 @@ async fn process_task(
     } else {
         None
     };
+    if committed {
+        let commit_type = if validated { "feat" } else { "wip" };
+        observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::Committed {
+            task_id: task_id.to_string(),
+            sha: commit_sha.clone().unwrap_or_default(),
+            commit_type: commit_type.to_string(),
+        });
+    }
 
     // Skip pattern extraction for trivial tasks (< 3 files changed or
     // reviewer found no issues). These tasks rarely produce interesting patterns.
@@ -2536,6 +2734,14 @@ async fn process_task(
         findings_low: review_findings.2,
         duration_secs,
     }));
+
+    if validated && !injected_pattern_ids.is_empty() {
+        observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::PatternApplied {
+            task_id: task_id.to_string(),
+            pattern_ids: injected_pattern_ids.clone(),
+            count: injected_pattern_ids.len(),
+        });
+    }
 
     // Clear checkpoint — task completed successfully (committed or WIP)
     clear_checkpoint(&ctx.buildloop_dir);
