@@ -466,27 +466,32 @@ Rules and patterns are different things despite both influencing agent behavior.
 
 ## Future Direction
 
-### Adaptive pipeline intelligence
+Context Foundry has two kinds of memory. The **pattern store** remembers code-level lessons -- "use CFrame not Position," "validate UTF-8 boundaries before slicing." The next layer is **process-level memory** -- learning how the pipeline itself performs and adapting its behavior over time.
 
-The pipeline currently treats every task with the same weight. The next evolution is proportional effort -- simple tasks get a lightweight pass, complex tasks get the full treatment.
+### Adaptive pipeline
 
-**Complexity-scaled pipeline.** The complexity classifier (already shipping) will control more than just planner skipping. Simple tasks skip scout, skip planner, get 0-2 patterns, and skip the doubt loop entirely -- straight from builder to commit. Complex tasks get the full SPID pipeline with maximum pattern injection. Medium tasks land in between. The result: a rename takes 30 seconds instead of 10 minutes, while an auth system rewrite gets the thorough review it deserves.
+The pipeline currently runs every stage for every task. The next step is proportional effort based on observed signals.
 
-**Learned doubt confidence.** Instead of a blanket skip, foundry will learn which task shapes consistently pass review. Task descriptions are embedded via Ollama and clustered by semantic similarity. Clusters that accumulate 5+ consecutive clean passes earn "trusted" status and skip doubt automatically. Any failure resets the cluster to zero -- trust is earned, never assumed. Over thousands of tasks, foundry builds a map of what it's good at and what still needs a second pair of eyes.
+**What it observes:** task duration, retry counts, rate-limit frequency, review finding severity, cost per task, pattern hit rate, provider win rate in dual mode, and doubt pass/fail history per task shape (clustered by Ollama embeddings).
 
-### Foundry Observatory (analytics dashboard)
+**What it adapts:** planner depth (skip for simple tasks), whether to run doubt (skip when a task shape has 5+ consecutive clean passes, reset on any failure), whether to use dual mode, pause timing between agents, and when to escalate to human review.
 
-A lightweight self-hosted web dashboard that serves as Context Foundry's memory and report card. Every pipeline run, every pattern match, every doubt finding, every cost metric -- captured, stored, and queryable.
+**Concrete example:** a rename task skips scout, skips planner, gets 2 patterns instead of 10, skips doubt, and commits directly -- 30 seconds instead of 10 minutes. An auth system rewrite gets the full SPID pipeline with 10 patterns and mandatory doubt. The complexity classifier (already shipping) drives the coarse split; learned doubt confidence adds a fine-grained layer that improves with every run.
 
-**Historical analytics.** Browse every session: which tasks ran, which models built them, pass/fail rates, cost per task, patterns injected vs applied, doubt findings by severity. Filter by project, date range, provider, or complexity level. See trends: is the pattern store reducing doubt failures over time? Is Codex faster but less reliable than Claude on this codebase? Are simple tasks actually being classified correctly?
+### Foundry Observatory
 
-**AI-interpreted insights.** Claude and Codex collaboratively analyze the historical data. They surface observations a dashboard can't: "Your Rust projects have a 94% doubt pass rate but Python projects are at 71% -- the reviewer prompt may need Python-specific calibration." "Pattern #47 (UTF-8 boundary validation) has been injected 200 times but only applied 3 times -- consider retiring it." The AI understands that shipping bug-free software and shipping cost-effectively are both goals, and it balances recommendations accordingly.
+A self-hosted analytics dashboard that tracks every pipeline run across all projects. SQLite backend, lightweight web server, no cloud dependencies.
 
-**Conversational interface.** Chat with your build history. Ask questions like "What failed last week?" or "Which patterns are actually helping?" or "Compare Claude vs Codex cost on the health-ai project." Conversations are saved with full history -- the same principle that drives the pattern store (remember the past, improve the future) applied to the meta-level of understanding how foundry itself performs.
+**What it shows:** session history (tasks, models, pass/fail, cost, duration), pattern effectiveness (injected vs applied, patterns that never trigger), doubt finding trends by severity, provider comparison (Claude vs Codex cost, speed, reliability per project), and complexity classification accuracy.
 
-**Feedback loop to the pipeline.** From the dashboard chat, suggest new enhancements or file issues. These get written to a project's TASKS.md and picked up on the next foundry run. The dashboard becomes both the observer and the input mechanism -- you review foundry's performance, identify improvements, and those improvements flow back into the pipeline automatically. The system reflects on itself.
+**What it produces:**
+- Session retrospectives: "This run spent 40% of cost on doubt for tasks that have never failed review."
+- Config recommendations: "Increase pause_between_agents_secs -- you hit rate limits on 6 of 8 tasks."
+- Suggested TASKS.md entries: "Pattern #47 has been injected 200 times but applied 3 times -- consider a task to retire or refine it."
 
-**Stack.** Lightweight web server (likely a small Rust binary or Python FastAPI) serving a self-contained frontend. SQLite for historical data. No cloud dependencies. Runs alongside foundry on the same machine or as a Docker container in the homelab.
+**Conversational interface.** Chat with your build history. Ask "What failed last week?" or "Compare Claude vs Codex cost on health-ai." Conversations are saved -- the same principle as the pattern store applied to understanding how foundry performs. From the chat, you can suggest new tasks or file issues. These are written as **advisory proposals** -- the observatory suggests TASKS.md entries, the human reviews and approves before the next run picks them up. The observatory proposes; humans approve.
+
+**Stack:** small Rust or Python server, self-contained frontend, SQLite for history. Runs alongside foundry on the same machine or as a Docker container.
 
 ## Previous Version
 
