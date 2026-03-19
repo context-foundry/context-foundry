@@ -108,7 +108,7 @@ pub(super) async fn run_review_loop(
 
     // The reviewer has full write access and fixes issues it finds in a single pass.
     // No separate fixer agent -- the reviewer audits, fixes, re-verifies, and reports.
-    let reviewer_tools: &[&str] = &["Read", "Glob", "Grep", "Write", "Bash"];
+    let reviewer_tools: &[&str] = &["Read", "Glob", "Grep", "Edit", "Write", "Bash"];
 
     let _ = std::fs::remove_file(&ctx.review_report);
 
@@ -284,7 +284,7 @@ async fn run_multipass_review(
     ))));
 
     let mut all_per_file_findings: Vec<serde_json::Value> = Vec::new();
-    let per_file_tools: &[&str] = &["Read", "Glob", "Grep", "Write", "Bash"];
+    let per_file_tools: &[&str] = &["Read", "Glob", "Grep", "Edit", "Write", "Bash"];
 
     for (i, file) in files_changed.iter().enumerate() {
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
@@ -395,7 +395,7 @@ async fn run_multipass_review(
         }
     }
 
-    let reviewer_tools: &[&str] = &["Read", "Glob", "Grep", "Write", "Bash"];
+    let reviewer_tools: &[&str] = &["Read", "Glob", "Grep", "Edit", "Write", "Bash"];
 
     let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
     let fwd_tx = tx.clone();
