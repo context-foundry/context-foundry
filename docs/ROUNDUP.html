@@ -192,7 +192,7 @@
 
   <p>Context Foundry takes a task queue and drives each task through a four-stage pipeline: Scout reads the territory, Plan draws the route, Implement drives the herd, and Doubt inspects every steer at the gate. The system extracts patterns from solved problems and feeds them back into future plans, so it gets better at your codebase over time. It runs on your machine, calls the AI providers you choose, and commits verified code to git. No cloud service. No vendor lock-in. Just a Rust binary and a terminal.</p>
 
-  <div class="divider">--*--*--*--*--*--*--*--*--*--</div>
+  <div class="divider">~:~=~:~=~:~=~:~=~:~=~:~</div>
 
   <!-- SECTION 2: THE TRAIL DRIVE -->
   <h2>The Trail Drive</h2>
@@ -298,7 +298,7 @@
     <tr><td>Skip when</td><td><code>backpressure_only</code> is true, or <code>batch_doubt</code> defers to last task</td></tr>
   </table>
 
-  <div class="divider">--*--*--*--*--*--*--*--*--*--</div>
+  <div class="divider">*~~~*~~~*~~~*~~~*~~~*~~~*</div>
 
   <!-- SECTION 3: THE RANCH HANDS -->
   <h2>The Ranch Hands</h2>
@@ -361,7 +361,7 @@
 
   </div>
 
-  <div class="divider">--*--*--*--*--*--*--*--*--*--</div>
+  <div class="divider">-=<*>=-=<*>=-=<*>=-=<*>=</div>
 
   <!-- SECTION 4: THE PATTERN BRAND -->
   <h2>The Pattern Brand</h2>
@@ -394,7 +394,7 @@
 
   <p>Local patterns (project-level JSON files) can be promoted to the global registry using <code>merge_project_patterns()</code>, available as an MCP tool. This is how a solved problem in one project prevents the same mistake in every future project.</p>
 
-  <div class="divider">--*--*--*--*--*--*--*--*--*--</div>
+  <div class="divider">~:~=~:~=~:~=~:~=~:~=~:~</div>
 
   <!-- SECTION 5: THE ARENA -->
   <h2>The Arena</h2>
@@ -442,7 +442,7 @@
 
   <p class="muted">Note: After Both, Ctrl+D returns to First, not Off. The cycle is First -&gt; Second -&gt; Both -&gt; First.</p>
 
-  <div class="divider">--*--*--*--*--*--*--*--*--*--</div>
+  <div class="divider">*~~~*~~~*~~~*~~~*~~~*~~~*</div>
 
   <!-- SECTION 6: THE DEED -->
   <h2>The Deed</h2>
@@ -451,31 +451,75 @@
 
   <table>
     <tr><th>Field</th><th>Type</th><th>Default</th><th>Description</th></tr>
+    <tr><td colspan="4" style="background:var(--surface); color:var(--gold); font-weight:600; font-family:var(--font-heading);">Execution</td></tr>
     <tr><td><code>run_mode</code></td><td>String</td><td><code>"auto"</code></td><td>Execution mode: "auto", "sprint", or "review"</td></tr>
     <tr><td><code>pipeline_mode</code></td><td>String</td><td><code>"full"</code></td><td>Pipeline mode: "full", "fast", or "backpressure"</td></tr>
+    <tr><td><code>batch_doubt</code></td><td>bool</td><td><code>true</code></td><td>Defer Doubt to last task only</td></tr>
+    <tr><td><code>backpressure_only</code></td><td>bool</td><td><code>true</code></td><td>Skip LLM review, rely on build/test/lint only</td></tr>
+    <tr><td><code>skip_planner_for_simple</code></td><td>bool</td><td><code>true</code></td><td>Skip planner for Simple-complexity tasks</td></tr>
+    <tr><td colspan="4" style="background:var(--surface); color:var(--gold); font-weight:600; font-family:var(--font-heading);">Models &amp; Providers</td></tr>
+    <tr><td><code>scout_model</code></td><td>String</td><td><code>"sonnet"</code></td><td>Model name for Scout agent</td></tr>
+    <tr><td><code>scout_provider</code></td><td>String</td><td><code>"claude"</code></td><td>Provider for Scout: "claude" or "codex"</td></tr>
+    <tr><td><code>planner_model</code></td><td>String</td><td><code>"opus"</code></td><td>Model name for Planner agent</td></tr>
+    <tr><td><code>planner_provider</code></td><td>String</td><td><code>"claude"</code></td><td>Provider for Planner: "claude" or "codex"</td></tr>
     <tr><td><code>builder_model</code></td><td>String</td><td><code>"opus"</code></td><td>Model name for Builder agent</td></tr>
     <tr><td><code>builder_provider</code></td><td>String</td><td><code>"claude"</code></td><td>Provider for Builder: "claude" or "codex"</td></tr>
+    <tr><td><code>reviewer_model</code></td><td>String</td><td><code>"sonnet"</code></td><td>Model name for Reviewer agent</td></tr>
+    <tr><td><code>reviewer_provider</code></td><td>String</td><td><code>"claude"</code></td><td>Provider for Reviewer: "claude" or "codex"</td></tr>
+    <tr><td><code>fixer_model</code></td><td>String</td><td><code>"sonnet"</code></td><td>Model name for Fixer agent</td></tr>
+    <tr><td><code>fixer_provider</code></td><td>String</td><td><code>"claude"</code></td><td>Provider for Fixer: "claude" or "codex"</td></tr>
+    <tr><td><code>discovery_model</code></td><td>String</td><td><code>"opus"</code></td><td>Model name for Discovery agent</td></tr>
+    <tr><td><code>discovery_provider</code></td><td>String</td><td><code>"claude"</code></td><td>Provider for Discovery: "claude" or "codex"</td></tr>
+    <tr><td><code>pattern_extraction_model</code></td><td>String</td><td><code>"sonnet"</code></td><td>Model for pattern extraction (lightweight JSON output)</td></tr>
+    <tr><td colspan="4" style="background:var(--surface); color:var(--gold); font-weight:600; font-family:var(--font-heading);">Simple Task Overrides</td></tr>
+    <tr><td><code>simple_planner_model</code></td><td>String</td><td><code>"sonnet"</code></td><td>Planner model override for Simple-complexity tasks</td></tr>
+    <tr><td><code>simple_builder_model</code></td><td>String</td><td><code>"sonnet"</code></td><td>Builder model override for Simple-complexity tasks</td></tr>
+    <tr><td><code>simple_reviewer_model</code></td><td>String</td><td><code>""</code></td><td>Reviewer model for Simple tasks (empty = use backpressure_only)</td></tr>
+    <tr><td colspan="4" style="background:var(--surface); color:var(--gold); font-weight:600; font-family:var(--font-heading);">Dual-Model Arena</td></tr>
     <tr><td><code>builder_models</code></td><td>Vec&lt;String&gt;</td><td><code>[]</code></td><td>Dual-model specs, format "provider:model". Overrides builder_model when len &gt;= 2.</td></tr>
     <tr><td><code>dual_selection</code></td><td>String</td><td><code>""</code> (off)</td><td>Dual-build selection: "first", "second", "both", or "" (off)</td></tr>
-    <tr><td><code>scout_model</code></td><td>String</td><td><code>"sonnet"</code></td><td>Model name for Scout agent</td></tr>
-    <tr><td><code>planner_model</code></td><td>String</td><td><code>"opus"</code></td><td>Model name for Planner agent</td></tr>
-    <tr><td><code>reviewer_model</code></td><td>String</td><td><code>"sonnet"</code></td><td>Model name for Reviewer agent</td></tr>
-    <tr><td><code>fixer_model</code></td><td>String</td><td><code>"sonnet"</code></td><td>Model name for Fixer agent</td></tr>
+    <tr><td colspan="4" style="background:var(--surface); color:var(--gold); font-weight:600; font-family:var(--font-heading);">Review</td></tr>
+    <tr><td><code>review_mode</code></td><td>String</td><td><code>"diff-only"</code></td><td>Review input: "diff-only" passes git diff, "file-list" uses changed file list</td></tr>
+    <tr><td><code>review_multipass_threshold</code></td><td>usize</td><td><code>8</code></td><td>File count threshold for multi-pass review (0 = disable)</td></tr>
+    <tr><td><code>confidence_threshold</code></td><td>f64</td><td><code>0.5</code></td><td>Reviewer finding confidence below this is logged, not auto-fixed</td></tr>
+    <tr><td colspan="4" style="background:var(--surface); color:var(--gold); font-weight:600; font-family:var(--font-heading);">Timing &amp; Pauses</td></tr>
     <tr><td><code>agent_timeout_secs</code></td><td>u64</td><td><code>600</code></td><td>Max seconds before killing an agent (10 min)</td></tr>
-    <tr><td><code>batch_doubt</code></td><td>bool</td><td><code>false</code></td><td>Defer Doubt to last task only</td></tr>
-    <tr><td><code>backpressure_only</code></td><td>bool</td><td><code>false</code></td><td>Skip LLM review, rely on build/test/lint only</td></tr>
-    <tr><td><code>skip_planner_for_simple</code></td><td>bool</td><td><code>true</code></td><td>Skip planner for Simple-complexity tasks</td></tr>
+    <tr><td><code>adaptive_pauses</code></td><td>bool</td><td><code>true</code></td><td>Skip inter-agent sleep when last agent was not rate-limited</td></tr>
+    <tr><td><code>pause_between_tasks_secs</code></td><td>u64</td><td><code>10</code></td><td>Seconds between tasks (skipped when adaptive_pauses and no rate limit)</td></tr>
+    <tr><td><code>pause_between_agents_secs</code></td><td>u64</td><td><code>3</code></td><td>Seconds between pipeline stages</td></tr>
+    <tr><td><code>pause_between_cycles_secs</code></td><td>u64</td><td><code>30</code></td><td>Seconds between discovery cycles</td></tr>
+    <tr><td><code>planner_lookahead</code></td><td>bool</td><td><code>true</code></td><td>Pre-plan task N+1 while builder runs task N</td></tr>
+    <tr><td><code>discovery_cooldown_minutes</code></td><td>u64</td><td><code>5</code></td><td>Minutes to wait before first discovery (doubles on 0-find rounds, max 30)</td></tr>
+    <tr><td colspan="4" style="background:var(--surface); color:var(--gold); font-weight:600; font-family:var(--font-heading);">Git &amp; PRs</td></tr>
     <tr><td><code>auto_push_remote</code></td><td>Option&lt;String&gt;</td><td><code>null</code></td><td>Git remote to auto-push after commits (null = local only)</td></tr>
     <tr><td><code>pr_poll_interval_secs</code></td><td>u64</td><td><code>30</code></td><td>Seconds between PR review status checks</td></tr>
     <tr><td><code>create_issue_on_wip</code></td><td>bool</td><td><code>false</code></td><td>Create GitHub issue on WIP (failed) commits</td></tr>
-    <tr><td><code>theme</code></td><td>String</td><td><code>"dark"</code></td><td>TUI color theme: "dark", "catppuccin", or "solarized"</td></tr>
+    <tr><td colspan="4" style="background:var(--surface); color:var(--gold); font-weight:600; font-family:var(--font-heading);">Patterns &amp; Embeddings</td></tr>
     <tr><td><code>patterns_dir</code></td><td>String</td><td><code>"~/.foundry/patterns"</code></td><td>Directory for global pattern store</td></tr>
     <tr><td><code>max_pattern_injection</code></td><td>usize</td><td><code>10</code></td><td>Max patterns injected into agent prompts</td></tr>
     <tr><td><code>semantic_match_enabled</code></td><td>bool</td><td><code>true</code></td><td>Enable semantic pattern matching via Ollama embeddings</td></tr>
+    <tr><td><code>embedding_model</code></td><td>String</td><td><code>"nomic-embed-text"</code></td><td>Ollama model for semantic pattern embeddings</td></tr>
+    <tr><td><code>ollama_url</code></td><td>String</td><td><code>"http://127.0.0.1:11435"</code></td><td>Ollama API base URL for embedding requests</td></tr>
+    <tr><td><code>embedding_timeout_ms</code></td><td>u64</td><td><code>2000</code></td><td>Timeout for Ollama embedding requests in milliseconds</td></tr>
+    <tr><td colspan="4" style="background:var(--surface); color:var(--gold); font-weight:600; font-family:var(--font-heading);">Orchestrator</td></tr>
+    <tr><td><code>orchestrator_proposer_provider</code></td><td>String</td><td><code>"claude"</code></td><td>Provider for orchestrator proposer</td></tr>
+    <tr><td><code>orchestrator_proposer_model</code></td><td>String</td><td><code>"opus"</code></td><td>Model for orchestrator proposer</td></tr>
+    <tr><td><code>orchestrator_reviewer_provider</code></td><td>String</td><td><code>"claude"</code></td><td>Provider for orchestrator reviewer</td></tr>
+    <tr><td><code>orchestrator_reviewer_model</code></td><td>String</td><td><code>"opus"</code></td><td>Model for orchestrator reviewer</td></tr>
+    <tr><td><code>orchestrator_max_iterations</code></td><td>usize</td><td><code>3</code></td><td>Max proposer/reviewer iterations</td></tr>
+    <tr><td><code>orchestrator_accept_policy</code></td><td>String</td><td><code>"no-high-medium"</code></td><td>Acceptance: "no-high", "no-high-medium", or "no-findings"</td></tr>
+    <tr><td><code>planning_iterations</code></td><td>u64</td><td><code>0</code></td><td>Max iterations for foundry plan mode (0 = unlimited)</td></tr>
+    <tr><td colspan="4" style="background:var(--surface); color:var(--gold); font-weight:600; font-family:var(--font-heading);">Extensions</td></tr>
     <tr><td><code>extensions</code></td><td>Vec&lt;String&gt;</td><td><code>[]</code></td><td>Selected extension names (e.g., ["roblox", "extend"])</td></tr>
+    <tr><td colspan="4" style="background:var(--surface); color:var(--gold); font-weight:600; font-family:var(--font-heading);">Display &amp; Limits</td></tr>
+    <tr><td><code>theme</code></td><td>String</td><td><code>"dark"</code></td><td>TUI color theme: "dark", "catppuccin", or "solarized"</td></tr>
+    <tr><td><code>truecolor</code></td><td>Option&lt;bool&gt;</td><td><code>null</code></td><td>Override truecolor detection (null = auto-detect)</td></tr>
+    <tr><td><code>preview_wrap</code></td><td>bool</td><td><code>true</code></td><td>Wrap long lines in build preview panel</td></tr>
+    <tr><td><code>cost_limit</code></td><td>f64</td><td><code>0.0</code></td><td>Max session cost in USD (0.0 = no limit)</td></tr>
+    <tr><td><code>build_command</code></td><td>Option&lt;String&gt;</td><td><code>null</code></td><td>Custom build/compile command run after builder completes</td></tr>
   </table>
 
-  <div class="divider">--*--*--*--*--*--*--*--*--*--</div>
+  <div class="divider">-=<*>=-=<*>=-=<*>=-=<*>=</div>
 
   <!-- SECTION 7: THE POSSE -->
   <h2>The Posse</h2>
@@ -516,7 +560,7 @@
 
   </div>
 
-  <div class="divider">--*--*--*--*--*--*--*--*--*--</div>
+  <div class="divider">~:~=~:~=~:~=~:~=~:~=~:~</div>
 
   <!-- SECTION 8: TRAIL'S END -->
   <h2>Trail's End</h2>
