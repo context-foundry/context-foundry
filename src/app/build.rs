@@ -2112,12 +2112,14 @@ async fn process_task(
     let pending_count = task::count_pending(&task::parse_tasks(&ctx.plan_path).unwrap_or_default());
     let skip_for_batch = ctx.config.batch_doubt && pending_count > 1;
 
-    // Skip verify for simple tasks when the builder's own checks passed.
-    // The builder already ran build/test/lint -- verify adds a fresh-context
-    // audit which is most valuable for complex tasks with blind spots.
-    let skip_verify =
-        (task_complexity == TaskComplexity::Simple && build_ok && !ctx.config.backpressure_only)
-            || skip_for_batch;
+    // Skip verify for simple tasks when the builder's own checks passed
+    // and the config enables it. The builder already ran build/test/lint --
+    // verify adds a fresh-context audit which is most valuable for complex
+    // tasks with blind spots. Medium and complex tasks always run doubt.
+    let skip_doubt_simple = ctx.config.skip_doubt_for_simple
+        && task_complexity == TaskComplexity::Simple
+        && build_ok;
+    let skip_verify = skip_doubt_simple || skip_for_batch;
 
     let (validated, _fix_passes, review_findings) = if ctx.config.backpressure_only {
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
@@ -2132,7 +2134,7 @@ async fn process_task(
         (true, 0usize, (0, 0, 0))
     } else if skip_verify {
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
-            "Simple task with clean build -- skipping verify".to_string(),
+            "Simple task with passing build checks -- skipping doubt".to_string(),
         )));
         (true, 0usize, (0, 0, 0))
     } else {

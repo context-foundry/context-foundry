@@ -140,6 +140,10 @@ pub struct Config {
     /// is sufficient context for the builder without a codebase investigation.
     pub skip_scout_for_simple: bool,
 
+    /// Skip the doubt/verify stage for Simple-complexity tasks when the
+    /// builder's own verification commands passed (exit code 0).
+    pub skip_doubt_for_simple: bool,
+
     /// Minutes to wait before running discovery after the last H-prefixed
     /// (human-injected) task completes. Doubles (up to 30 min) when discovery
     /// finds 0 new tasks.
@@ -260,6 +264,7 @@ impl Default for Config {
             review_mode: "diff-only".into(),
             skip_planner_for_simple: true,
             skip_scout_for_simple: true,
+            skip_doubt_for_simple: true,
             discovery_cooldown_minutes: 5,
             planner_lookahead: true,
             pattern_extraction_model: "sonnet".into(),
@@ -691,6 +696,19 @@ mod tests {
             .expect("config should deserialize");
         assert_eq!(config.pipeline_mode, "fast");
         assert!(config.batch_doubt);
+    }
+
+    #[test]
+    fn default_config_enables_skip_doubt_for_simple() {
+        assert!(Config::default().skip_doubt_for_simple);
+    }
+
+    #[test]
+    fn config_deserializes_skip_doubt_for_simple() {
+        let config: Config =
+            serde_json::from_str(r#"{"skip_doubt_for_simple":false}"#)
+                .expect("config should deserialize");
+        assert!(!config.skip_doubt_for_simple);
     }
 
     #[test]
