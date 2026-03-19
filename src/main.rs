@@ -17,6 +17,7 @@ mod task;
 mod tui;
 mod update;
 mod utils;
+mod mcp;
 
 #[derive(Parser)]
 #[command(
@@ -58,6 +59,8 @@ enum Commands {
     },
     /// Start the interactive multi-model studio
     Studio,
+    /// Run as an MCP server (stdio transport)
+    Mcp,
     /// Update foundry to the latest version
     Update,
 }
@@ -97,6 +100,9 @@ async fn main() -> Result<()> {
         }
         Commands::Studio => {
             studio::run_tui(&project_dir).await?;
+        }
+        Commands::Mcp => {
+            mcp::run_mcp_server(&project_dir)?;
         }
         Commands::Update => {
             update::run_update()?;
