@@ -341,7 +341,7 @@ Architecture: foundry writes events -> JSONL files -> foundry-observatory reads 
 
 Tasks T16.2-T16.5 belong in the observatory repo (github.com/context-foundry/observatory) and will be executed there. Listed here for roadmap visibility only.
 
-- [ ] T16.2: (observatory repo) SQLite schema and JSONL event ingestion. `foundry-observatory ingest` reads ~/.foundry/observatory/events-*.jsonl and inserts into observatory.db. Tables: sessions, tasks, agent_runs, review_findings, pattern_usage, conversations, messages. Idempotent via last-processed timestamp tracking.
+- [ ] T16.2: (observatory repo) SQLite schema and JSONL event ingestion. `foundry-observatory ingest` reads ~/.foundry/observatory/events-*.jsonl and inserts into observatory.db. Tables: sessions, tasks, agent_runs, review_findings, pattern_usage, conversations, messages. Idempotent via last-processed timestamp tracking. [-P--!]
 
 - [ ] T16.3: (observatory repo) Web server and dashboard frontend. Python FastAPI or Rust axum serving self-contained HTML. Pages: sessions list, session detail with SPID indicators and cost per task, pattern effectiveness table (inject vs apply hit rate), provider comparison (Claude vs Codex by project and complexity), trend charts (Chart.js inline, no CDN). Dark theme. SQLite backend. No external dependencies.
 
