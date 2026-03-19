@@ -70,9 +70,17 @@ The TUI shows these indicators in the task queue with color coding, and they sur
 
 **Long-term: pattern learning.** After each validated task, a pattern extractor agent scans the build artifacts, review findings, and plan to extract reusable lessons (e.g., "CFrame not Position for moving Roblox parts" or "always validate UTF-8 boundaries before string slicing"). These get saved as structured JSON to `~/.foundry/patterns/`. On the next task — in any project — matched patterns are injected into the planner and reviewer prompts as reference data. Patterns that recur 3+ times get auto-promoted (`auto_apply`), meaning they're scored higher when they match -- but they still require at least one keyword or tech_stack overlap with the task to be included. This is how the system gets better over time: a mistake made once becomes a check applied everywhere.
 
+**Complexity-scaled pipeline.** Not every task needs the full pipeline. A task complexity classifier scores each task as Simple, Medium, or Complex based on description length, keyword signals, and file count hints. Simple tasks skip scout and planner, get fewer patterns (0-2 instead of 10), and can skip the doubt loop entirely -- straight from builder to commit. The SPID indicator reflects this: `--I-` means scout, planner, and doubt were all skipped. Complex tasks always get the full treatment.
+
+**Learned doubt confidence.** The doubt loop tracks pass/fail history per task shape using Ollama embeddings for semantic clustering. Task descriptions that consistently pass review (5+ consecutive clean passes) earn "trusted" status and skip doubt automatically. Any failure resets the cluster to zero. This compounds over time -- foundry learns which kinds of changes it reliably gets right and reserves thorough review for where it's needed.
+
+**Parallel builder.** For multi-file tasks, the builder can split into parallel sub-agents. The plan's File Operations section is parsed to build a dependency graph -- files with no cross-references run in parallel worktrees, dependent files run sequentially. The doubt loop catches any integration issues from the merge. Opt-in via `parallel_builder: true` in `.foundry.json`.
+
+**Session event logging.** Every pipeline event (task started, agent done, review findings, commits, pattern usage, rate limits) is appended as a JSON line to `~/.foundry/observatory/events.jsonl`. This is the data collection layer for the upcoming Foundry Observatory analytics dashboard (separate project). Best-effort -- never blocks the pipeline.
+
 ### CCA alignment
 
-Context Foundry's architecture aligns with the principles in Anthropic's [Claude Certified Architect -- Foundations](docs/CCA-Exam-Guide.pdf) exam guide: **42 of 55 principles implemented**, 4 partial (architectural constraints), 0 open gaps. The full cross-reference mapping each principle to specific code locations is in the [CCA Alignment Matrix](docs/CCA-ALIGNMENT.md) ([interactive version](https://context-foundry.github.io/context-foundry/cca-alignment.html)).
+Context Foundry's architecture aligns with the principles in Anthropic's [Claude Certified Architect -- Foundations](docs/CCA-Exam-Guide.pdf) exam guide: **43 of 55 principles implemented**, 3 partial (architectural constraints), 0 open gaps. The full cross-reference mapping each principle to specific code locations is in the [CCA Alignment Matrix](docs/CCA-ALIGNMENT.md) ([interactive version](https://context-foundry.github.io/context-foundry/cca-alignment.html)).
 
 ### Run modes
 
