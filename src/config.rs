@@ -272,39 +272,90 @@ impl Default for Config {
 }
 
 impl Config {
-    pub fn load(project_dir: &Path) -> Self {
-        let config_path = project_dir.join(".foundry.json");
-        if config_path.exists() {
-            let content = match std::fs::read_to_string(&config_path) {
-                Ok(c) => c,
-                Err(e) => {
-                    eprintln!(
-                        "warning: failed to read {}: {e} -- using default config",
-                        config_path.display(),
-                    );
-                    return Self::default();
-                }
-            };
-            match serde_json::from_str::<Self>(&content) {
-                Ok(mut config) => {
-                    // Normalize legacy mode values
-                    if config.run_mode == "loop" {
-                        config.run_mode = "auto".into();
-                    } else if config.run_mode == "hil" {
-                        config.run_mode = "review".into();
-                    }
-                    config
-                }
-                Err(e) => {
-                    eprintln!(
-                        "warning: failed to parse {}: {e} -- using default config",
-                        config_path.display(),
-                    );
-                    Self::default()
-                }
+    /// Read a JSON config file and return its content as a serde_json::Value.
+    /// Returns None if the file doesn't exist or can't be read/parsed.
+    fn read_json_file(path: &Path) -> Option<serde_json::Value> {
+        if !path.exists() {
+            return None;
+        }
+        let content = match std::fs::read_to_string(path) {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!(
+                    "warning: failed to read {}: {e} -- skipping",
+                    path.display(),
+                );
+                return None;
             }
+        };
+        match serde_json::from_str::<serde_json::Value>(&content) {
+            Ok(v) => Some(v),
+            Err(e) => {
+                eprintln!(
+                    "warning: failed to parse {}: {e} -- skipping",
+                    path.display(),
+                );
+                None
+            }
+        }
+    }
+
+    /// Merge two JSON objects. Project values override global values.
+    /// Non-object values are not merged (project wins entirely).
+    fn merge_json(global: serde_json::Value, project: serde_json::Value) -> serde_json::Value {
+        match (global, project) {
+            (serde_json::Value::Object(mut g), serde_json::Value::Object(p)) => {
+                for (k, v) in p {
+                    g.insert(k, v);
+                }
+                serde_json::Value::Object(g)
+            }
+            (_, project) => project,
+        }
+    }
+
+    /// Resolve the global config path: ~/.foundry/config.json
+    fn global_config_path() -> Option<std::path::PathBuf> {
+        if cfg!(target_os = "windows") {
+            std::env::var("LOCALAPPDATA")
+                .or_else(|_| std::env::var("USERPROFILE").map(|p| format!("{}\\.foundry", p)))
+                .ok()
+                .map(|p| std::path::PathBuf::from(p).join(".foundry").join("config.json"))
         } else {
-            Self::default()
+            std::env::var("HOME")
+                .ok()
+                .map(|h| std::path::PathBuf::from(h).join(".foundry").join("config.json"))
+        }
+    }
+
+    pub fn load(project_dir: &Path) -> Self {
+        let global_path = Self::global_config_path();
+        let project_path = project_dir.join(".foundry.json");
+
+        let global_val = global_path.as_deref().and_then(Self::read_json_file);
+        let project_val = Self::read_json_file(&project_path);
+
+        let merged = match (global_val, project_val) {
+            (Some(g), Some(p)) => Self::merge_json(g, p),
+            (Some(g), None) => g,
+            (None, Some(p)) => p,
+            (None, None) => return Self::default(),
+        };
+
+        match serde_json::from_value::<Self>(merged) {
+            Ok(mut config) => {
+                // Normalize legacy mode values
+                if config.run_mode == "loop" {
+                    config.run_mode = "auto".into();
+                } else if config.run_mode == "hil" {
+                    config.run_mode = "review".into();
+                }
+                config
+            }
+            Err(e) => {
+                eprintln!("warning: failed to deserialize merged config: {e} -- using defaults");
+                Self::default()
+            }
         }
     }
 
