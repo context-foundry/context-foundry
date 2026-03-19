@@ -89,16 +89,12 @@ pub(super) fn render_pipeline_map(
         ("PLAN", "current-plan"),
         ("IMPLEMENT", "build-claims"),
         ("DOUBT", "fresh context"),
-        ("SHIP", "git + pr"),
     ]
     .iter()
     .enumerate()
     .map(|(i, (label, kind))| {
-        let model_label = if *label == "SHIP" {
-            "GitHub".to_string()
-        } else {
-            truncate_str(&stage_model_label(&pipeline_configs, label), 14).to_string()
-        };
+        let model_label =
+            truncate_str(&stage_model_label(&pipeline_configs, label), 14).to_string();
 
         let (border_color, text_style) = match active_connected {
             Some(ai) if i == ai => (
@@ -133,6 +129,13 @@ pub(super) fn render_pipeline_map(
         .unwrap_or_default();
 
     let disconnected: Vec<StageInfo> = vec![
+        StageInfo {
+            label: "SHIP",
+            model_label: "GitHub".to_string(),
+            kind_label: "git + pr",
+            border_color: theme.muted,
+            text_style: Style::default().fg(theme.muted),
+        },
         StageInfo {
             label: "DISCOVER",
             model_label: truncate_str(&discovery_model, 14).to_string(),
