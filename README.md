@@ -104,6 +104,48 @@ If a reviewer requests changes, the TUI surfaces that status. Review mode requir
 
 The `create_issue_on_wip` flag works in any mode -- when a task fails verification and gets a `WIP()` commit, foundry auto-creates a GitHub issue with the review findings.
 
+### Dual-model arena
+
+Foundry can run tasks through different AI providers. Toggle with `Ctrl+D` on the startup screen or set `dual_selection` in `.foundry.json`.
+
+**Configuration:** Define two providers in `builder_models`:
+
+```json
+{
+  "builder_models": ["claude:opus", "codex:"],
+  "dual_selection": "both"
+}
+```
+
+Each entry is `provider:model` -- e.g., `claude:opus` or `codex:` (empty model uses the provider default).
+
+**Three selection modes (Ctrl+D cycles through):**
+
+| Mode | What happens |
+|------|-------------|
+| **First only** | Entire pipeline (Scout -> Plan -> Implement -> Verify) runs through `builder_models[0]` |
+| **Second only** | Entire pipeline runs through `builder_models[1]` |
+| **Both** | Two complete independent pipelines run in parallel, one per provider |
+
+**Key design principle: provider selection is full-pipeline, not per-stage.** When you select "Codex", every stage runs through Codex -- scout, planner, builder, reviewer, and discovery. Foundry automatically clears model names that belong to the wrong provider (e.g., "sonnet" is a Claude model name, so when running through Codex it becomes empty, letting Codex use its default). This prevents errors like "model 'sonnet' is not supported by Codex."
+
+**Dual mode ("both")** forks into two git worktrees before Scout and runs two completely independent pipelines:
+
+```
+Pipeline A (Claude)                    Pipeline B (Codex)
+.buildloop/arena/claude/               .buildloop/arena/codex/
+  scout-report.md                        scout-report.md
+  current-plan.md                        current-plan.md
+  build-claims.md                        build-claims.md
+  review-report.md                       review-report.md
+```
+
+Each model scouts its own codebase view, writes its own plan, implements its own solution, and verifies its own output. The human compares two finished results with independent architectural decisions -- not two implementations of the same plan.
+
+**TUI in dual mode:** Press `1` to view Pipeline A's output, `2` to view Pipeline B's. The tab bar shows event counts for each stream. The pipeline diagram shows which stage each pipeline is on. When both finish, the arena results stay in `.buildloop/arena/` for manual comparison -- foundry does not auto-select a winner.
+
+**Global config:** Settings in `~/.foundry/config.json` apply as defaults to all projects. Project-level `.foundry.json` fields override global values. This means you can set `builder_models` and `dual_selection` once globally instead of in every project.
+
 ### Pattern matching and injection
 
 At the start of each task, foundry loads all patterns from `~/.foundry/patterns/` and matches them against the task description. Matching uses keyword scoring: each pattern has `keywords` and `tech_stack` fields, and whole-word matches against the task description score points. If Ollama is running locally, semantic (embedding) matching is also used for reranking.
