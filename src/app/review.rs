@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::path::Path;
 
 use tokio::sync::mpsc;
@@ -78,8 +79,35 @@ pub(super) async fn run_review_loop(
         None
     };
 
+    // Multi-pass review: when file count exceeds threshold, run per-file
+    // analysis passes followed by a cross-file integration pass.
+    let threshold = ctx.config.review_multipass_threshold;
+    if threshold > 0 && files_changed.len() > threshold {
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::AgentStarted(
+            AgentRole::Reviewer,
+            Config::display_provider_model(
+                &ctx.config.reviewer_provider,
+                &ctx.config.reviewer_model,
+            ),
+        )));
+        let result = run_multipass_review(
+            task_id,
+            task_desc,
+            ctx,
+            pattern_context,
+            extension_context,
+            tx,
+            &files_changed,
+            &files_list,
+            diff_for_review.as_deref(),
+        )
+        .await;
+        let _ = tx.send(AppEvent::AgentDone(result.0));
+        return result;
+    }
+
     // The reviewer has full write access and fixes issues it finds in a single pass.
-    // No separate fixer agent — the reviewer audits, fixes, re-verifies, and reports.
+    // No separate fixer agent -- the reviewer audits, fixes, re-verifies, and reports.
     let reviewer_tools: &[&str] = &["Read", "Glob", "Grep", "Write", "Bash"];
 
     let _ = std::fs::remove_file(&ctx.review_report);
@@ -216,6 +244,231 @@ pub(super) async fn run_review_loop(
     (passed, fix_passes)
 }
 
+#[allow(clippy::too_many_arguments)]
+async fn run_multipass_review(
+    task_id: &str,
+    task_desc: &str,
+    ctx: &RunContext,
+    pattern_context: &str,
+    extension_context: &str,
+    tx: &mpsc::UnboundedSender<AppEvent>,
+    files_changed: &[String],
+    files_list: &str,
+    diff_for_review: Option<&str>,
+) -> (bool, usize) {
+    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+        "Multi-pass review: {} files exceed threshold ({}), running per-file analysis",
+        files_changed.len(),
+        ctx.config.review_multipass_threshold,
+    ))));
+
+    let mut all_per_file_findings: Vec<serde_json::Value> = Vec::new();
+    let per_file_tools: &[&str] = &["Read", "Glob", "Grep", "Bash"];
+
+    for (i, file) in files_changed.iter().enumerate() {
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+            "Reviewing file {}/{}: {}",
+            i + 1,
+            files_changed.len(),
+            file,
+        ))));
+
+        // Remove stale report before each per-file reviewer.
+        let _ = std::fs::remove_file(&ctx.review_report);
+
+        let file_diff = get_diff_for_file(&ctx.project_dir, file);
+        let prompt = prompts::reviewer_per_file_prompt(
+            task_id,
+            task_desc,
+            file,
+            &file_diff,
+            &ctx.spec_file_name(),
+            &ctx.tasks_file_name(),
+        );
+
+        let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
+        let fwd_tx = tx.clone();
+        let fwd_handle = tokio::spawn(async move {
+            while let Some(evt) = agent_rx.recv().await {
+                let _ = fwd_tx.send(AppEvent::AgentOutput(evt));
+            }
+        });
+
+        let result = agent::run_agent(
+            &AgentRole::Reviewer,
+            Config::parse_provider(&ctx.config.reviewer_provider),
+            &ctx.config.reviewer_model,
+            &prompt,
+            &ctx.project_dir,
+            agent_tx,
+            &ctx.log_dir,
+            Some(per_file_tools),
+            ctx.config.agent_timeout_secs,
+            Some(ctx.shutdown.clone()),
+        )
+        .await;
+
+        let _ = fwd_handle.await;
+
+        if result.as_ref().map(|r| r.success).unwrap_or(false) {
+            let findings = parse_findings_from_agent_output(&ctx.review_report);
+            all_per_file_findings.push(findings);
+        } else {
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                "Per-file review failed for {} -- continuing with remaining files",
+                file,
+            ))));
+        }
+
+        if ctx.is_stop_requested() {
+            break;
+        }
+    }
+
+    // Clean up per-file report before integration pass.
+    let _ = std::fs::remove_file(&ctx.review_report);
+
+    let merged_per_file = merge_findings(&all_per_file_findings);
+    let per_file_findings_json =
+        serde_json::to_string_pretty(&merged_per_file).unwrap_or_default();
+
+    let high_count = merged_per_file
+        .get("high")
+        .and_then(|v| v.as_array())
+        .map(|a| a.len())
+        .unwrap_or(0);
+    let medium_count = merged_per_file
+        .get("medium")
+        .and_then(|v| v.as_array())
+        .map(|a| a.len())
+        .unwrap_or(0);
+
+    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+        "Per-file analysis complete. Found {} high, {} medium findings. Running integration review...",
+        high_count, medium_count,
+    ))));
+
+    // Snapshot pre-review files for fix detection.
+    let pre_review_files = get_changed_files(&ctx.project_dir);
+
+    // Build integration prompt.
+    let prompt = prompts::reviewer_integration_prompt(
+        task_id,
+        task_desc,
+        files_list,
+        &per_file_findings_json,
+        pattern_context,
+        diff_for_review,
+        &ctx.spec_file_name(),
+        &ctx.tasks_file_name(),
+    );
+    let prompt = prompts::wrap_with_extensions(&prompt, extension_context);
+
+    if !extension_context.is_empty() {
+        for ext_name in &ctx.config.extensions {
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::ExtensionInjected {
+                name: ext_name.clone(),
+                agent_role: AgentRole::Reviewer.to_string(),
+                task_id: task_id.to_string(),
+            }));
+        }
+    }
+
+    let reviewer_tools: &[&str] = &["Read", "Glob", "Grep", "Write", "Bash"];
+
+    let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
+    let fwd_tx = tx.clone();
+    let fwd_handle = tokio::spawn(async move {
+        while let Some(evt) = agent_rx.recv().await {
+            let _ = fwd_tx.send(AppEvent::AgentOutput(evt));
+        }
+    });
+
+    let review_result = agent::run_agent(
+        &AgentRole::Reviewer,
+        Config::parse_provider(&ctx.config.reviewer_provider),
+        &ctx.config.reviewer_model,
+        &prompt,
+        &ctx.project_dir,
+        agent_tx,
+        &ctx.log_dir,
+        Some(reviewer_tools),
+        ctx.config.agent_timeout_secs,
+        Some(ctx.shutdown.clone()),
+    )
+    .await;
+
+    let _ = fwd_handle.await;
+
+    if !review_result.as_ref().map(|r| r.success).unwrap_or(false) {
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+            "Integration reviewer failed".to_string(),
+        )));
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::TaskReviewResult {
+            task_id: task_id.to_string(),
+            fix_passes: 0,
+            passed: false,
+        }));
+        return (false, 0);
+    }
+
+    // Detect if integration reviewer made fixes.
+    let post_review_files = get_changed_files(&ctx.project_dir);
+    let reviewer_made_fixes = post_review_files.len() > pre_review_files.len()
+        || post_review_files != pre_review_files;
+    let fix_passes: usize = if reviewer_made_fixes { 1 } else { 0 };
+
+    // Guard: report must exist and have content.
+    let report_has_content = ctx.review_report.exists()
+        && std::fs::metadata(&ctx.review_report)
+            .map(|m| m.len() > 0)
+            .unwrap_or(false);
+
+    if !report_has_content {
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+            "Integration reviewer succeeded but review-report.md is missing or empty -- treating as failure"
+                .to_string(),
+        )));
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::TaskReviewResult {
+            task_id: task_id.to_string(),
+            fix_passes,
+            passed: false,
+        }));
+        return (false, fix_passes);
+    }
+
+    let verdict_pass = check_review_passed(&ctx.review_report);
+    let (high, medium, _low) = parse_audit_findings(&ctx.review_report);
+
+    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+        "Integration review: verdict={}, {} high, {} medium findings",
+        if verdict_pass { "PASS" } else { "FAIL" },
+        high,
+        medium,
+    ))));
+
+    let passed = verdict_pass || (high == 0 && medium == 0);
+
+    if passed {
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+            "Multi-pass review passed".to_string(),
+        )));
+    } else {
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+            "Multi-pass review failed: {} high, {} medium unfixed issues remain",
+            high, medium,
+        ))));
+    }
+
+    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::TaskReviewResult {
+        task_id: task_id.to_string(),
+        fix_passes,
+        passed,
+    }));
+
+    (passed, fix_passes)
+}
+
 fn get_diff_for_review(project_dir: &Path) -> String {
     // Try unstaged changes first (git diff HEAD).
     let output = std::process::Command::new("git")
@@ -244,6 +497,104 @@ fn get_diff_for_review(project_dir: &Path) -> String {
     }
 
     String::new()
+}
+
+fn get_diff_for_file(project_dir: &Path, file_path: &str) -> String {
+    let output = std::process::Command::new("git")
+        .args(["diff", "HEAD", "--", file_path])
+        .current_dir(project_dir)
+        .output();
+    if let Ok(out) = &output {
+        if out.status.success() {
+            let diff = String::from_utf8_lossy(&out.stdout);
+            let trimmed = diff.trim();
+            if !trimmed.is_empty() {
+                return trimmed.to_string();
+            }
+        }
+    }
+
+    // Fall back to staged-only changes.
+    let output = std::process::Command::new("git")
+        .args(["diff", "--cached", "--", file_path])
+        .current_dir(project_dir)
+        .output();
+    if let Ok(out) = &output {
+        let diff = String::from_utf8_lossy(&out.stdout);
+        let trimmed = diff.trim();
+        if !trimmed.is_empty() {
+            return trimmed.to_string();
+        }
+    }
+
+    String::new()
+}
+
+fn parse_findings_from_agent_output(report_path: &Path) -> serde_json::Value {
+    let content = match std::fs::read_to_string(report_path) {
+        Ok(c) => c,
+        Err(_) => return serde_json::json!({"high": [], "medium": [], "low": []}),
+    };
+
+    let json_str = extract_json_from_report(&content);
+    if json_str.is_empty() {
+        return serde_json::json!({"high": [], "medium": [], "low": []});
+    }
+
+    serde_json::from_str::<serde_json::Value>(&json_str)
+        .unwrap_or_else(|_| serde_json::json!({"high": [], "medium": [], "low": []}))
+}
+
+fn merge_findings(all_findings: &[serde_json::Value]) -> serde_json::Value {
+    let mut high_all: Vec<serde_json::Value> = Vec::new();
+    let mut medium_all: Vec<serde_json::Value> = Vec::new();
+    let mut low_all: Vec<serde_json::Value> = Vec::new();
+
+    for findings in all_findings {
+        for (key, target) in [
+            ("high", &mut high_all),
+            ("medium", &mut medium_all),
+            ("low", &mut low_all),
+        ] {
+            if let Some(arr) = findings.get(key).and_then(|v| v.as_array()) {
+                for finding in arr {
+                    target.push(finding.clone());
+                }
+            }
+        }
+    }
+
+    // Deduplicate each severity level by (file, issue) pair.
+    fn dedup(findings: Vec<serde_json::Value>) -> Vec<serde_json::Value> {
+        let mut seen = HashSet::new();
+        let mut result = Vec::new();
+        for finding in findings {
+            let file = finding
+                .get("file")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let issue = finding
+                .get("issue")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            if seen.insert((file, issue)) {
+                result.push(finding);
+            }
+        }
+        result
+    }
+
+    high_all = dedup(high_all);
+    medium_all = dedup(medium_all);
+    low_all = dedup(low_all);
+
+    serde_json::json!({
+        "high": high_all,
+        "medium": medium_all,
+        "low": low_all,
+    })
 }
 
 fn get_changed_files(project_dir: &Path) -> Vec<String> {

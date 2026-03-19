@@ -187,6 +187,11 @@ pub struct Config {
     /// Maximum session cost in USD. When reached, the loop pauses.
     /// 0.0 (default) means no limit.
     pub cost_limit: f64,
+
+    /// Multi-pass review threshold: when changed file count exceeds this,
+    /// split review into per-file passes plus an integration pass.
+    /// 0 disables multi-pass (always single-pass review).
+    pub review_multipass_threshold: usize,
 }
 
 impl Default for Config {
@@ -255,6 +260,7 @@ impl Default for Config {
             truecolor: None,
             build_command: None,
             cost_limit: 0.0,
+            review_multipass_threshold: 8,
         }
     }
 }

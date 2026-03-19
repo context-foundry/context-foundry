@@ -1174,6 +1174,109 @@ fn commit_wip_for_mode(ctx: &RunContext, task_id: &str, task_desc: &str) -> bool
     }
 }
 
+// ─── Trim Verbose Build Output ──────────────────────────────
+
+/// Parse build-claims.md content, find the `## Verification Results` section,
+/// and trim it if it exceeds 100 lines. Returns the (possibly trimmed) full
+/// file content and optionally (original_lines, trimmed_lines).
+fn trim_verification_section(content: &str) -> (String, Option<(usize, usize)>) {
+    let all_lines: Vec<&str> = content.lines().collect();
+
+    // Find the start of ## Verification Results
+    let section_start = match all_lines.iter().position(|line| line.starts_with("## Verification Results")) {
+        Some(idx) => idx,
+        None => return (content.to_string(), None),
+    };
+
+    // Find the end: next ## heading or end of file
+    let section_end = all_lines[section_start + 1..]
+        .iter()
+        .position(|line| line.starts_with("## "))
+        .map(|offset| section_start + 1 + offset)
+        .unwrap_or(all_lines.len());
+
+    let section_lines = &all_lines[section_start..section_end];
+    let original_count = section_lines.len();
+
+    if original_count <= 100 {
+        return (content.to_string(), None);
+    }
+
+    // Build trimmed section
+    let head: Vec<&str> = section_lines[..20].to_vec();
+    let tail_start = original_count.saturating_sub(10);
+    let middle = &section_lines[20..tail_start];
+    let matched: Vec<&str> = middle
+        .iter()
+        .filter(|line| {
+            let lower = line.to_lowercase();
+            lower.contains("failed")
+                || lower.contains("error")
+                || lower.contains("panic")
+                || lower.contains("assert")
+        })
+        .copied()
+        .collect();
+    let tail: Vec<&str> = section_lines[tail_start..].to_vec();
+
+    let omitted = middle.len() - matched.len();
+    let mut trimmed_section: Vec<&str> = Vec::new();
+    trimmed_section.extend_from_slice(&head);
+
+    let separator = format!("... [trimmed: {} lines of output removed] ...", omitted);
+    // We need owned strings for the separator lines, so we'll build the final output directly
+    let mut result_lines: Vec<String> = Vec::new();
+    // Lines before the section
+    for line in &all_lines[..section_start] {
+        result_lines.push(line.to_string());
+    }
+    // Head
+    for line in &head {
+        result_lines.push(line.to_string());
+    }
+    // Separator
+    result_lines.push(separator);
+    // Matched error lines
+    for line in &matched {
+        result_lines.push(line.to_string());
+    }
+    // Blank separator before tail
+    result_lines.push(String::new());
+    // Tail
+    for line in &tail {
+        result_lines.push(line.to_string());
+    }
+    // Lines after the section
+    for line in &all_lines[section_end..] {
+        result_lines.push(line.to_string());
+    }
+
+    let trimmed_count = head.len() + 1 + matched.len() + 1 + tail.len();
+    let reconstructed = result_lines.join("\n");
+    // Preserve trailing newline if original had one
+    let reconstructed = if content.ends_with('\n') && !reconstructed.ends_with('\n') {
+        reconstructed + "\n"
+    } else {
+        reconstructed
+    };
+
+    (reconstructed, Some((original_count, trimmed_count)))
+}
+
+/// Read build-claims.md, trim verbose Verification Results section, write back.
+/// Returns (original, trimmed) line counts if trimming occurred.
+fn trim_build_claims(ctx: &RunContext) -> Option<(usize, usize)> {
+    let claims_path = ctx.buildloop_dir.join("build-claims.md");
+    let content = std::fs::read_to_string(&claims_path).ok()?;
+    let (new_content, stats) = trim_verification_section(&content);
+    if let Some((orig, trimmed)) = stats {
+        atomic_write_file(&claims_path, new_content.as_bytes()).ok()?;
+        Some((orig, trimmed))
+    } else {
+        None
+    }
+}
+
 /// Returns (success, rate_limited) so the caller can decide on adaptive pauses.
 async fn process_task(
     task_info: &Task,
@@ -1794,6 +1897,13 @@ async fn process_task(
                 )));
             }
         }
+    }
+
+    // ─── Trim Verbose Build Output ──────────────────────────────
+    if let Some((orig, trimmed)) = trim_build_claims(ctx) {
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+            format!("Trimmed test output from {} to {} lines", orig, trimmed),
+        )));
     }
 
     adaptive_sleep(&ctx.config, last_rate_limited, ctx.config.pause_between_agents_secs).await;
@@ -2479,5 +2589,78 @@ mod tests {
         ctx.shutdown.store(true, Ordering::Relaxed);
         assert!(ctx.is_stop_requested());
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // ─── Trim Verification Section Tests ────────────────────────
+
+    use super::trim_verification_section;
+
+    #[test]
+    fn test_trim_verification_section_no_section() {
+        let content = "# Build Claims\n\n## Files Changed\n- file.rs\n\n## Claims\n- claim 1\n";
+        let (result, stats) = trim_verification_section(content);
+        assert_eq!(result, content);
+        assert!(stats.is_none());
+    }
+
+    #[test]
+    fn test_trim_verification_section_under_threshold() {
+        let mut content = String::from("## Verification Results\n");
+        for i in 0..50 {
+            content.push_str(&format!("line {}\n", i));
+        }
+        let (result, stats) = trim_verification_section(&content);
+        assert_eq!(result, content);
+        assert!(stats.is_none());
+    }
+
+    #[test]
+    fn test_trim_verification_section_over_threshold() {
+        let mut content = String::from("## Verification Results\n");
+        for i in 0..200 {
+            if i == 50 {
+                content.push_str("test result: FAILED\n");
+            } else if i == 100 {
+                content.push_str("thread panicked at: assertion error\n");
+            } else {
+                content.push_str(&format!("ok line {}\n", i));
+            }
+        }
+        let original_content = content.clone();
+        let (result, stats) = trim_verification_section(&content);
+        assert!(stats.is_some());
+        let (orig, trimmed) = stats.unwrap();
+        // Section is 201 lines (heading + 200 content lines)
+        assert_eq!(orig, 201);
+        assert!(trimmed < orig);
+        // Should contain the heading
+        assert!(result.contains("## Verification Results"));
+        // Should contain the trimmed marker
+        assert!(result.contains("[trimmed:"));
+        // Should contain the error lines
+        assert!(result.contains("FAILED"));
+        assert!(result.contains("panic"));
+        // Should NOT be identical to the original
+        assert_ne!(result, original_content);
+    }
+
+    #[test]
+    fn test_trim_verification_section_preserves_other_sections() {
+        let mut content = String::from("## Files Changed\n- MODIFY src/app/build.rs\n\n## Verification Results\n");
+        for i in 0..150 {
+            content.push_str(&format!("output line {}\n", i));
+        }
+        content.push_str("## Claims\n- [ ] Claim 1\n- [ ] Claim 2\n");
+        let (result, stats) = trim_verification_section(&content);
+        assert!(stats.is_some());
+        // Files Changed section preserved
+        assert!(result.contains("## Files Changed"));
+        assert!(result.contains("- MODIFY src/app/build.rs"));
+        // Claims section preserved
+        assert!(result.contains("## Claims"));
+        assert!(result.contains("- [ ] Claim 1"));
+        assert!(result.contains("- [ ] Claim 2"));
+        // Trimmed marker present
+        assert!(result.contains("[trimmed:"));
     }
 }
