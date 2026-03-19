@@ -1,6 +1,6 @@
 # CCA Alignment Matrix
 
-Context Foundry's architecture maps to the principles in Anthropic's [Claude Certified Architect -- Foundations](CCA-Exam-Guide.pdf) exam guide ([source](https://www.anthropic.com/certifications)). This document cross-references each exam principle to specific code locations in the codebase.
+Context Foundry's architecture maps to the principles in Anthropic's [Claude Certified Architect -- Foundations](CCA-Exam-Guide.pdf) exam guide. This document cross-references each exam principle to specific code locations in the codebase.
 
 An interactive version with filtering is available at [`docs/cca-alignment.html`](cca-alignment.html).
 
