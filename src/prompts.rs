@@ -569,6 +569,37 @@ Example 3 (LOW -- report only, do NOT fix):
   WHY LOW: Local scope, self-evident from context, consistent with surrounding code.
   Style choices that match the existing codebase are LOW. Do not fix these.
 
+BORDERLINE CASES -- use these to sharpen your judgment:
+
+Borderline 1: Missing error check on file read -- HIGH, not MEDIUM
+  file: src/loader.rs:23
+  issue: fs::read_to_string(user_path) called with .unwrap() instead of error handling
+  category: crash
+  WRONG: MEDIUM (it is just missing error handling)
+  RIGHT: HIGH -- the path comes from user input. A nonexistent or unreadable file
+  crashes the process. Any unhandled error on external/user-controlled input is HIGH
+  because the caller controls whether it triggers.
+
+Borderline 2: Ignored return value only used in tests -- LOW, not MEDIUM
+  file: src/processor.rs:87
+  issue: validate_schema() return value is discarded; only test code checks it
+  category: logic
+  WRONG: MEDIUM (ignoring a return value is a potential bug)
+  RIGHT: LOW -- the return value has no production effect. No caller in production
+  code uses it. Test-only contracts do not affect runtime behavior. If no production
+  code path depends on the value, it is LOW.
+
+Borderline 3: unwrap() on user input vs unwrap() on hardcoded constant -- HIGH vs SKIP
+  file: src/config.rs:14
+  issue_a: config.get(user_key).unwrap() -- user_key comes from CLI args
+  issue_b: "127.0.0.1".parse::<IpAddr>().unwrap() -- hardcoded valid literal
+  category: crash
+  (a) is HIGH: the key comes from external input. If the key is missing or invalid,
+  the program crashes. External input can always be wrong.
+  (b) is SKIP: the literal "127.0.0.1" is a compile-time-known valid IP address.
+  The unwrap cannot fail. Do not report unwrap() on values that are provably valid
+  at compile time (string literals, numeric constants, hardcoded regex patterns).
+
 WHAT TO REPORT:
 - Bugs, panics, security issues, logic errors
 - Missing error handling at system boundaries (user input, API calls, file I/O)
@@ -674,6 +705,33 @@ MEDIUM (report):
 LOW (report only):
 - Style issues consistent with codebase
 - Minor naming in local scope
+
+BORDERLINE CASES -- use these to sharpen your judgment:
+
+Borderline 1: Missing error check on file read -- HIGH, not MEDIUM
+  file: src/loader.rs:23
+  issue: fs::read_to_string(user_path) called with .unwrap() instead of error handling
+  WRONG: MEDIUM (it is just missing error handling)
+  RIGHT: HIGH -- the path comes from user input. A nonexistent or unreadable file
+  crashes the process. Any unhandled error on external/user-controlled input is HIGH
+  because the caller controls whether it triggers.
+
+Borderline 2: Ignored return value only used in tests -- LOW, not MEDIUM
+  file: src/processor.rs:87
+  issue: validate_schema() return value is discarded; only test code checks it
+  WRONG: MEDIUM (ignoring a return value is a potential bug)
+  RIGHT: LOW -- the return value has no production effect. No caller in production
+  code uses it. Test-only contracts do not affect runtime behavior.
+
+Borderline 3: unwrap() on user input vs unwrap() on hardcoded constant -- HIGH vs SKIP
+  file: src/config.rs:14
+  issue_a: config.get(user_key).unwrap() -- user_key comes from CLI args
+  issue_b: "127.0.0.1".parse::<IpAddr>().unwrap() -- hardcoded valid literal
+  (a) is HIGH: the key comes from external input. If the key is missing or invalid,
+  the program crashes. External input can always be wrong.
+  (b) is SKIP: the literal "127.0.0.1" is a compile-time-known valid IP address.
+  The unwrap cannot fail. Do not report unwrap() on values that are provably valid
+  at compile time (string literals, numeric constants, hardcoded regex patterns).
 
 WHAT TO SKIP (do not report):
 - Style preferences consistent with the existing codebase
@@ -807,6 +865,37 @@ Example 3 (LOW -- report only, do NOT fix):
   issue: Variable named 'x' could be more descriptive
   category: style
   WHY LOW: Local scope, self-evident from context, consistent with surrounding code.
+
+BORDERLINE CASES -- use these to sharpen your judgment:
+
+Borderline 1: Missing error check on file read -- HIGH, not MEDIUM
+  file: src/loader.rs:23
+  issue: fs::read_to_string(user_path) called with .unwrap() instead of error handling
+  category: crash
+  WRONG: MEDIUM (it is just missing error handling)
+  RIGHT: HIGH -- the path comes from user input. A nonexistent or unreadable file
+  crashes the process. Any unhandled error on external/user-controlled input is HIGH
+  because the caller controls whether it triggers.
+
+Borderline 2: Ignored return value only used in tests -- LOW, not MEDIUM
+  file: src/processor.rs:87
+  issue: validate_schema() return value is discarded; only test code checks it
+  category: logic
+  WRONG: MEDIUM (ignoring a return value is a potential bug)
+  RIGHT: LOW -- the return value has no production effect. No caller in production
+  code uses it. Test-only contracts do not affect runtime behavior. If no production
+  code path depends on the value, it is LOW.
+
+Borderline 3: unwrap() on user input vs unwrap() on hardcoded constant -- HIGH vs SKIP
+  file: src/config.rs:14
+  issue_a: config.get(user_key).unwrap() -- user_key comes from CLI args
+  issue_b: "127.0.0.1".parse::<IpAddr>().unwrap() -- hardcoded valid literal
+  category: crash
+  (a) is HIGH: the key comes from external input. If the key is missing or invalid,
+  the program crashes. External input can always be wrong.
+  (b) is SKIP: the literal "127.0.0.1" is a compile-time-known valid IP address.
+  The unwrap cannot fail. Do not report unwrap() on values that are provably valid
+  at compile time (string literals, numeric constants, hardcoded regex patterns).
 
 WHAT TO REPORT:
 - Interface mismatches (function signature changes not propagated to callers)
@@ -1251,5 +1340,34 @@ mod tests {
         assert!(output.contains("scout-report.md"));
         assert!(output.contains("- Suggestions:"));
         assert!(output.contains("Try simpler approach"));
+    }
+
+    #[test]
+    fn test_reviewer_prompts_contain_borderline_examples() {
+        let needle_header = "BORDERLINE CASES";
+        let needle_1 = "Borderline 1: Missing error check on file read";
+        let needle_2 = "Borderline 2: Ignored return value only used in tests";
+        let needle_3 = "Borderline 3: unwrap() on user input vs unwrap() on hardcoded constant";
+
+        // Main reviewer prompt
+        let main = reviewer_prompt("T1", "test", "file.rs", 1, "", None, "SPEC.md", "TASKS.md");
+        assert!(main.contains(needle_header), "reviewer_prompt missing BORDERLINE CASES header");
+        assert!(main.contains(needle_1), "reviewer_prompt missing borderline 1");
+        assert!(main.contains(needle_2), "reviewer_prompt missing borderline 2");
+        assert!(main.contains(needle_3), "reviewer_prompt missing borderline 3");
+
+        // Per-file reviewer prompt
+        let per_file = reviewer_per_file_prompt("T1", "test", "src/foo.rs", "", "SPEC.md", "TASKS.md");
+        assert!(per_file.contains(needle_header), "reviewer_per_file_prompt missing BORDERLINE CASES header");
+        assert!(per_file.contains(needle_1), "reviewer_per_file_prompt missing borderline 1");
+        assert!(per_file.contains(needle_2), "reviewer_per_file_prompt missing borderline 2");
+        assert!(per_file.contains(needle_3), "reviewer_per_file_prompt missing borderline 3");
+
+        // Integration reviewer prompt
+        let integration = reviewer_integration_prompt("T1", "test", "file.rs", "{}", "", None, "SPEC.md", "TASKS.md");
+        assert!(integration.contains(needle_header), "reviewer_integration_prompt missing BORDERLINE CASES header");
+        assert!(integration.contains(needle_1), "reviewer_integration_prompt missing borderline 1");
+        assert!(integration.contains(needle_2), "reviewer_integration_prompt missing borderline 2");
+        assert!(integration.contains(needle_3), "reviewer_integration_prompt missing borderline 3");
     }
 }
