@@ -68,6 +68,10 @@ The TUI shows these indicators in the task queue with color coding, and they sur
 
 **Long-term: pattern learning.** After each validated task, a pattern extractor agent scans the build artifacts, review findings, and plan to extract reusable lessons (e.g., "CFrame not Position for moving Roblox parts" or "always validate UTF-8 boundaries before string slicing"). These get saved as structured JSON to `~/.foundry/patterns/`. On the next task — in any project — matched patterns are injected into the planner and reviewer prompts as reference data. Patterns that recur 3+ times get auto-promoted (`auto_apply`), meaning they're scored higher when they match -- but they still require at least one keyword or tech_stack overlap with the task to be included. This is how the system gets better over time: a mistake made once becomes a check applied everywhere.
 
+### CCA alignment
+
+Context Foundry's architecture aligns with the principles in Anthropic's [Claude Certified Architect -- Foundations](docs/CCA-Exam-Guide.pdf) exam guide ([source](https://www.anthropic.com/certifications)): **42 of 55 principles implemented**, 4 partial (architectural constraints), 0 open gaps. The full cross-reference mapping each principle to specific code locations is in the [CCA Alignment Matrix](docs/CCA-ALIGNMENT.md).
+
 ### Run modes
 
 Foundry has three run modes that control how the pipeline advances between tasks. Toggle with `Ctrl+M` on the startup screen or set `run_mode` in `.foundry.json`.
