@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Context Foundry -- CCA Alignment Matrix</title>
+<style>
+  :root {
+    --bg: #0f172a;
+    --surface: #1e293b;
+    --border: #334155;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --green: #22c55e;
+    --green-bg: #052e16;
+    --yellow: #eab308;
+    --yellow-bg: #422006;
+    --blue: #3b82f6;
+    --blue-bg: #172554;
+    --gray: #64748b;
+    --gray-bg: #1e293b;
+    --orange: #f97316;
+    --orange-bg: #431407;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+    padding: 2rem;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+  h1 { font-size: 1.5rem; font-weight: 600; margin-bottom: 0.25rem; }
+  .subtitle { color: var(--muted); font-size: 0.875rem; margin-bottom: 2rem; }
+  h2 {
+    font-size: 1.125rem;
+    font-weight: 600;
+    margin: 2.5rem 0 0.75rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border);
+  }
+  h2 .weight { color: var(--muted); font-weight: 400; font-size: 0.875rem; }
+
+  /* Summary cards */
+  .summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 0.75rem;
+    margin-bottom: 2rem;
+  }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem;
+    text-align: center;
+  }
+  .card .num { font-size: 1.75rem; font-weight: 700; }
+  .card .label { font-size: 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+  .card.green .num { color: var(--green); }
+  .card.yellow .num { color: var(--yellow); }
+  .card.blue .num { color: var(--blue); }
+  .card.gray .num { color: var(--gray); }
+  .card.orange .num { color: var(--orange); }
+
+  /* Filter tabs */
+  .filters {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+  }
+  .filter-btn {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 0.375rem 0.75rem;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.8125rem;
+    transition: all 0.15s;
+  }
+  .filter-btn:hover { border-color: var(--text); color: var(--text); }
+  .filter-btn.active { background: var(--blue-bg); border-color: var(--blue); color: var(--blue); }
+
+  /* Table */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8125rem;
+    margin-bottom: 1.5rem;
+  }
+  th {
+    text-align: left;
+    padding: 0.5rem 0.75rem;
+    background: var(--surface);
+    border-bottom: 2px solid var(--border);
+    font-weight: 600;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+  td {
+    padding: 0.625rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  tr:hover td { background: rgba(255,255,255,0.02); }
+  tr.hidden { display: none; }
+  .col-task { width: 5%; white-space: nowrap; color: var(--muted); }
+  .col-principle { width: 40%; }
+  .col-status { width: 15%; white-space: nowrap; }
+  .col-evidence { width: 40%; color: var(--muted); font-size: 0.75rem; }
+
+  /* Status badges */
+  .badge {
+    display: inline-block;
+    padding: 0.125rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 500;
+  }
+  .badge-implemented { background: var(--green-bg); color: var(--green); border: 1px solid #166534; }
+  .badge-partial { background: var(--yellow-bg); color: var(--yellow); border: 1px solid #854d0e; }
+  .badge-opportunity { background: var(--blue-bg); color: var(--blue); border: 1px solid #1d4ed8; }
+  .badge-na { background: var(--gray-bg); color: var(--gray); border: 1px solid var(--border); }
+  .badge-notused { background: var(--orange-bg); color: var(--orange); border: 1px solid #9a3412; }
+
+  /* Opportunities list */
+  .opp-list { list-style: none; }
+  .opp-list li {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--blue);
+    border-radius: 6px;
+    padding: 0.75rem 1rem;
+    margin-bottom: 0.5rem;
+  }
+  .opp-list .opp-title { font-weight: 600; }
+  .opp-list .opp-ref { color: var(--muted); font-size: 0.75rem; }
+  .opp-list .opp-desc { color: var(--muted); font-size: 0.8125rem; margin-top: 0.25rem; }
+
+  code { font-family: "SF Mono", "Fira Code", monospace; font-size: 0.75rem; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<h1>Context Foundry / CCA Alignment Matrix</h1>
+<p class="subtitle">Mapped against the Claude Certified Architect -- Foundations Exam Guide (Anthropic, 2025)</p>
+
+<div class="summary">
+  <div class="card green"><div class="num">33</div><div class="label">Implemented</div></div>
+  <div class="card yellow"><div class="num">6</div><div class="label">Partial</div></div>
+  <div class="card blue"><div class="num">7</div><div class="label">Opportunity</div></div>
+  <div class="card gray"><div class="num">7</div><div class="label">N/A</div></div>
+  <div class="card orange"><div class="num">2</div><div class="label">Not Used</div></div>
+</div>
+
+<div class="filters">
+  <button class="filter-btn active" data-filter="all">All</button>
+  <button class="filter-btn" data-filter="implemented">Implemented</button>
+  <button class="filter-btn" data-filter="partial">Partial</button>
+  <button class="filter-btn" data-filter="opportunity">Opportunity</button>
+  <button class="filter-btn" data-filter="na">N/A</button>
+</div>
+
+<!-- Domain 1 -->
+<h2>Domain 1: Agentic Architecture & Orchestration <span class="weight">27%</span></h2>
+<table>
+<thead><tr><th class="col-task">Task</th><th class="col-principle">Principle</th><th class="col-status">Status</th><th class="col-evidence">Evidence</th></tr></thead>
+<tbody>
+<tr data-status="implemented"><td class="col-task">1.1</td><td>Agentic loop lifecycle (stop_reason, tool_use vs end_turn)</td><td><span class="badge badge-implemented">Implemented</span></td><td><code>agent.rs:38</code> -- parses stream-json events, loops on tool_use</td></tr>
+<tr data-status="implemented"><td class="col-task">1.1</td><td>Model-driven decision-making vs pre-configured decision trees</td><td><span class="badge badge-implemented">Implemented</span></td><td>Agents choose their own tools; foundry provides role prompts, not tool sequences</td></tr>
+<tr data-status="implemented"><td class="col-task">1.1</td><td>Avoid anti-patterns: NL parsing for termination, arbitrary iteration caps</td><td><span class="badge badge-implemented">Implemented</span></td><td>Uses stream-json structured events. Timeout is a safety net, not a stop mechanism</td></tr>
+<tr data-status="implemented"><td class="col-task">1.2</td><td>Hub-and-spoke coordinator with isolated subagent context</td><td><span class="badge badge-implemented">Implemented</span></td><td><code>app/build.rs</code> orchestrates agents as isolated CLI invocations with no shared history</td></tr>
+<tr data-status="implemented"><td class="col-task">1.2</td><td>Coordinator handles decomposition, delegation, result aggregation</td><td><span class="badge badge-implemented">Implemented</span></td><td>TASKS.md for decomposition, stage agents for delegation, .buildloop/ for aggregation</td></tr>
+<tr data-status="implemented"><td class="col-task">1.3</td><td>Subagent context must be explicitly provided, not inherited</td><td><span class="badge badge-implemented">Implemented</span></td><td>Each agent is a fresh CLI process. Artifacts passed as file references</td></tr>
+<tr data-status="implemented"><td class="col-task">1.3</td><td>AgentDefinition with descriptions, prompts, tool restrictions</td><td><span class="badge badge-implemented">Implemented</span></td><td><code>prompts.rs</code> per-role prompts; <code>agent.rs:562</code> allowed_tools per invocation</td></tr>
+<tr data-status="na"><td class="col-task">1.3</td><td>Fork-based session management</td><td><span class="badge badge-na">N/A</span></td><td>Foundry spawns fresh processes, not Claude Code sessions</td></tr>
+<tr data-status="implemented"><td class="col-task">1.4</td><td>Programmatic enforcement (hooks, prerequisite gates)</td><td><span class="badge badge-implemented">Implemented</span></td><td><code>gate_builder</code> and <code>gate_reviewer</code> in <code>build.rs:73,96</code>. Extension gate at <code>build.rs:1513</code></td></tr>
+<tr data-status="implemented"><td class="col-task">1.4</td><td>Deterministic compliance for critical operations</td><td><span class="badge badge-implemented">Implemented</span></td><td>Gates are code, not prompts. Plan must have File Operations + Verification sections</td></tr>
+<tr data-status="implemented"><td class="col-task">1.4</td><td>Structured handoff protocols between stages</td><td><span class="badge badge-implemented">Implemented</span></td><td>Each stage writes structured .buildloop/ artifacts consumed by downstream stages</td></tr>
+<tr data-status="na"><td class="col-task">1.5</td><td>Agent SDK hooks (PostToolUse) for tool call interception</td><td><span class="badge badge-na">N/A</span></td><td>Uses Claude Code CLI, not Agent SDK</td></tr>
+<tr data-status="partial"><td class="col-task">1.5</td><td>Hooks for deterministic guarantees vs prompt-based compliance</td><td><span class="badge badge-partial">Partial</span></td><td>Gates enforce stage ordering; no tool-call-level interception within a session</td></tr>
+<tr data-status="implemented"><td class="col-task">1.6</td><td>Fixed sequential pipelines vs dynamic adaptive decomposition</td><td><span class="badge badge-implemented">Implemented</span></td><td>Fixed pipeline with adaptive elements (complexity-based skip, retry-with-feedback)</td></tr>
+<tr data-status="implemented"><td class="col-task">1.6</td><td>Prompt chaining for multi-step workflows</td><td><span class="badge badge-implemented">Implemented</span></td><td>Stages chain via file artifacts. Reviewer findings chain into fixer</td></tr>
+<tr data-status="partial"><td class="col-task">1.6</td><td>Adaptive investigation plans based on discoveries</td><td><span class="badge badge-partial">Partial</span></td><td>Discovery agent adapts task generation, but agents don't spawn sub-investigations</td></tr>
+<tr data-status="na"><td class="col-task">1.7</td><td>Named session resumption (--resume)</td><td><span class="badge badge-na">N/A</span></td><td>Agents are stateless one-shot invocations. State lives in .buildloop/ files</td></tr>
+<tr data-status="na"><td class="col-task">1.7</td><td>fork_session for parallel exploration</td><td><span class="badge badge-na">N/A</span></td><td>Not applicable -- foundry doesn't use Claude Code sessions</td></tr>
+<tr data-status="implemented"><td class="col-task">1.7</td><td>Crash recovery via structured state persistence</td><td><span class="badge badge-implemented">Implemented</span></td><td>.buildloop/ artifacts + TASKS.md SPID progress survive crashes</td></tr>
+</tbody>
+</table>
+
+<!-- Domain 2 -->
+<h2>Domain 2: Tool Design & MCP Integration <span class="weight">18%</span></h2>
+<table>
+<thead><tr><th class="col-task">Task</th><th class="col-principle">Principle</th><th class="col-status">Status</th><th class="col-evidence">Evidence</th></tr></thead>
+<tbody>
+<tr data-status="na"><td class="col-task">2.1</td><td>Clear tool descriptions with input formats and boundaries</td><td><span class="badge badge-na">N/A</span></td><td>Agents use Claude Code's built-in tools, not custom MCP tools</td></tr>
+<tr data-status="na"><td class="col-task">2.2</td><td>Structured error responses (isError, errorCategory, isRetryable)</td><td><span class="badge badge-na">N/A</span></td><td>MCP tools exist for external use, not internal agent orchestration</td></tr>
+<tr data-status="implemented"><td class="col-task">2.3</td><td>Scoped tool access per agent role</td><td><span class="badge badge-implemented">Implemented</span></td><td><code>agent.rs:562</code> allowed_tools. Skills restrict to 3-4 tools each</td></tr>
+<tr data-status="implemented"><td class="col-task">2.3</td><td>Too many tools degrades selection reliability</td><td><span class="badge badge-implemented">Implemented</span></td><td>Reviewer is read-only. Skills restrict to role-appropriate tools</td></tr>
+<tr data-status="na"><td class="col-task">2.4</td><td>MCP server scoping (project vs user level)</td><td><span class="badge badge-na">N/A</span></td><td>Foundry doesn't configure MCP servers for its agents</td></tr>
+<tr data-status="opportunity"><td class="col-task">2.4</td><td>MCP resources as content catalogs</td><td><span class="badge badge-opportunity">Opportunity</span></td><td>Could expose pattern catalog or extension index as browsable MCP resources</td></tr>
+<tr data-status="implemented"><td class="col-task">2.5</td><td>Effective use of built-in tools (Read, Write, Edit, Bash, Grep, Glob)</td><td><span class="badge badge-implemented">Implemented</span></td><td>Agent prompts guide tool selection per role</td></tr>
+</tbody>
+</table>
+
+<!-- Domain 3 -->
+<h2>Domain 3: Claude Code Configuration & Workflows <span class="weight">20%</span></h2>
+<table>
+<thead><tr><th class="col-task">Task</th><th class="col-principle">Principle</th><th class="col-status">Status</th><th class="col-evidence">Evidence</th></tr></thead>
+<tbody>
+<tr data-status="implemented"><td class="col-task">3.1</td><td>CLAUDE.md hierarchy (user > project > directory)</td><td><span class="badge badge-implemented">Implemented</span></td><td>Agents inherit CLAUDE.md via normal loading. Foundry appends orchestration override</td></tr>
+<tr data-status="implemented"><td class="col-task">3.1</td><td>.claude/rules/ for path-scoped conventions</td><td><span class="badge badge-implemented">Implemented</span></td><td>6 rule files with paths: frontmatter scoping</td></tr>
+<tr data-status="notused"><td class="col-task">3.1</td><td>@import for modular CLAUDE.md</td><td><span class="badge badge-notused">Not Used</span></td><td>Rules already split into .claude/rules/. Could be useful for extensions</td></tr>
+<tr data-status="notused"><td class="col-task">3.2</td><td>Custom slash commands in .claude/commands/</td><td><span class="badge badge-notused">Not Used</span></td><td>Skills in .claude/skills/ serve this purpose instead</td></tr>
+<tr data-status="implemented"><td class="col-task">3.2</td><td>Skills with SKILL.md, context: fork, allowed-tools</td><td><span class="badge badge-implemented">Implemented</span></td><td>3 skills (audit, scout, extract-patterns) with fork context and scoped tools</td></tr>
+<tr data-status="implemented"><td class="col-task">3.3</td><td>Path-specific rules with YAML frontmatter</td><td><span class="badge badge-implemented">Implemented</span></td><td>All 6 rule files use paths: frontmatter for conditional loading</td></tr>
+<tr data-status="implemented"><td class="col-task">3.4</td><td>Plan mode vs direct execution</td><td><span class="badge badge-implemented">Implemented</span></td><td>Planner stage IS plan mode. Complexity classifier can skip for simple tasks</td></tr>
+<tr data-status="implemented"><td class="col-task">3.5</td><td>Iterative refinement with concrete I/O examples</td><td><span class="badge badge-implemented">Implemented</span></td><td>Few-shot severity examples in reviewer. JSON template in pattern extractor</td></tr>
+<tr data-status="implemented"><td class="col-task">3.5</td><td>Test-driven iteration</td><td><span class="badge badge-implemented">Implemented</span></td><td>Builder runs tests. Reviewer re-runs independently. Fixer iterates on failures</td></tr>
+<tr data-status="partial"><td class="col-task">3.6</td><td>CI/CD integration (-p flag, --output-format json)</td><td><span class="badge badge-partial">Partial</span></td><td>--no-tui headless mode exists. Uses stream-json. No --json-schema for CI output</td></tr>
+<tr data-status="implemented"><td class="col-task">3.6</td><td>Session context isolation -- fresh reviewer</td><td><span class="badge badge-implemented">Implemented</span></td><td>Core design principle. Verify agent is a completely separate CLI invocation</td></tr>
+</tbody>
+</table>
+
+<!-- Domain 4 -->
+<h2>Domain 4: Prompt Engineering & Structured Output <span class="weight">20%</span></h2>
+<table>
+<thead><tr><th class="col-task">Task</th><th class="col-principle">Principle</th><th class="col-status">Status</th><th class="col-evidence">Evidence</th></tr></thead>
+<tbody>
+<tr data-status="implemented"><td class="col-task">4.1</td><td>Explicit criteria over vague instructions</td><td><span class="badge badge-implemented">Implemented</span></td><td>Reviewer defines severity criteria with examples. "What to report" and "what to skip" lists</td></tr>
+<tr data-status="implemented"><td class="col-task">4.1</td><td>Explicit criteria reduce false positives</td><td><span class="badge badge-implemented">Implemented</span></td><td>Categorical criteria, not confidence-based filtering</td></tr>
+<tr data-status="implemented"><td class="col-task">4.2</td><td>Few-shot examples for output consistency</td><td><span class="badge badge-implemented">Implemented</span></td><td>Reviewer severity examples. Pattern extractor JSON template. Build-claims format</td></tr>
+<tr data-status="opportunity"><td class="col-task">4.2</td><td>Few-shot for ambiguous-case handling</td><td><span class="badge badge-opportunity">Opportunity</span></td><td>Reviewer could benefit from borderline HIGH vs MEDIUM classification examples</td></tr>
+<tr data-status="na"><td class="col-task">4.3</td><td>Structured output via tool_use with JSON schemas</td><td><span class="badge badge-na">N/A</span></td><td>Uses Claude Code CLI, not the API</td></tr>
+<tr data-status="implemented"><td class="col-task">4.4</td><td>Retry-with-error-feedback</td><td><span class="badge badge-implemented">Implemented</span></td><td>Gate failure triggers planner retry with validation error appended. Agent timeout retry</td></tr>
+<tr data-status="implemented"><td class="col-task">4.4</td><td>Feedback loops -- tracking which patterns trigger findings</td><td><span class="badge badge-implemented">Implemented</span></td><td>"Applied" counter tracks patterns in agent output. Frequency 3+ auto-promotes</td></tr>
+<tr data-status="na"><td class="col-task">4.5</td><td>Batch processing (Message Batches API)</td><td><span class="badge badge-na">N/A</span></td><td>Sequential processing via CLI, not API batch endpoint</td></tr>
+<tr data-status="implemented"><td class="col-task">4.6</td><td>Multi-instance review -- independent reviewer</td><td><span class="badge badge-implemented">Implemented</span></td><td>Core architecture. Fresh CLI invocation with zero shared context from builder</td></tr>
+<tr data-status="opportunity"><td class="col-task">4.6</td><td>Multi-pass review (per-file + cross-file integration)</td><td><span class="badge badge-opportunity">Opportunity</span></td><td>Single-pass reviewer. Could split for large changesets to prevent attention dilution</td></tr>
+</tbody>
+</table>
+
+<!-- Domain 5 -->
+<h2>Domain 5: Context Management & Reliability <span class="weight">15%</span></h2>
+<table>
+<thead><tr><th class="col-task">Task</th><th class="col-principle">Principle</th><th class="col-status">Status</th><th class="col-evidence">Evidence</th></tr></thead>
+<tbody>
+<tr data-status="implemented"><td class="col-task">5.1</td><td>Lost-in-the-middle effect mitigation</td><td><span class="badge badge-implemented">Implemented</span></td><td>Scout report: Key Facts first (beginning bias), Risks last (recency bias)</td></tr>
+<tr data-status="opportunity"><td class="col-task">5.1</td><td>Trimming verbose tool output before context accumulation</td><td><span class="badge badge-opportunity">Opportunity</span></td><td>Agents receive full tool output. No post-processing to strip irrelevant fields</td></tr>
+<tr data-status="implemented"><td class="col-task">5.1</td><td>Persistent structured state outside conversation history</td><td><span class="badge badge-implemented">Implemented</span></td><td>.buildloop/ files persist scout report, plan, claims, review across context boundaries</td></tr>
+<tr data-status="implemented"><td class="col-task">5.2</td><td>Escalation patterns (human-in-the-loop)</td><td><span class="badge badge-implemented">Implemented</span></td><td>Review mode pauses for approval. WIP commits + GitHub issues escalate failures</td></tr>
+<tr data-status="implemented"><td class="col-task">5.2</td><td>Escalation on inability to progress, not just complexity</td><td><span class="badge badge-implemented">Implemented</span></td><td>Verify failure after fixer retry = WIP + issue. Discovery backs off when nothing found</td></tr>
+<tr data-status="partial"><td class="col-task">5.3</td><td>Structured error propagation across multi-agent systems</td><td><span class="badge badge-partial">Partial</span></td><td>Failures caught and logged. But only pass/fail between stages, not structured metadata</td></tr>
+<tr data-status="opportunity"><td class="col-task">5.3</td><td>Distinguish access failures from valid empty results</td><td><span class="badge badge-opportunity">Opportunity</span></td><td>Timeout vs completion vs error tracked, but downstream stages don't get structured context</td></tr>
+<tr data-status="implemented"><td class="col-task">5.4</td><td>Context degradation in extended sessions</td><td><span class="badge badge-implemented">Implemented</span></td><td>Each agent is a fresh session. Long sessions are architecturally impossible</td></tr>
+<tr data-status="implemented"><td class="col-task">5.4</td><td>Scratchpad files for persisting findings</td><td><span class="badge badge-implemented">Implemented</span></td><td>.buildloop/ artifacts are exactly this pattern</td></tr>
+<tr data-status="implemented"><td class="col-task">5.4</td><td>Crash recovery via structured state exports</td><td><span class="badge badge-implemented">Implemented</span></td><td>TASKS.md SPID progress + .buildloop/ artifacts survive crashes</td></tr>
+<tr data-status="partial"><td class="col-task">5.5</td><td>Human review workflows and confidence calibration</td><td><span class="badge badge-partial">Partial</span></td><td>Review mode creates PRs. Severity calibration exists. No per-finding confidence scores</td></tr>
+<tr data-status="opportunity"><td class="col-task">5.6</td><td>Information provenance in multi-source synthesis</td><td><span class="badge badge-opportunity">Opportunity</span></td><td>Pattern learned_from tracks origin. Reviewer findings lack source provenance</td></tr>
+<tr data-status="opportunity"><td class="col-task">5.5</td><td>Confidence scores for calibrated review routing</td><td><span class="badge badge-opportunity">Opportunity</span></td><td>Could route high-confidence findings to auto-fix, low-confidence to human review</td></tr>
+</tbody>
+</table>
+
+<!-- Opportunities -->
+<h2>Top Opportunities</h2>
+<ol class="opp-list">
+  <li><span class="opp-title">Structured error propagation</span> <span class="opp-ref">(5.3)</span><div class="opp-desc">Pass structured failure context (what failed, what was attempted, partial results) between pipeline stages instead of just pass/fail. Enables smarter retry and fixer behavior.</div></li>
+  <li><span class="opp-title">Multi-pass review for large changesets</span> <span class="opp-ref">(4.6)</span><div class="opp-desc">Split reviewer into per-file local analysis + cross-file integration pass. Prevents attention dilution when a task touches 10+ files.</div></li>
+  <li><span class="opp-title">Verbose tool output trimming</span> <span class="opp-ref">(5.1)</span><div class="opp-desc">Post-process agent tool results to strip irrelevant fields before they accumulate in context. Valuable for build output and test results with noisy warnings.</div></li>
+  <li><span class="opp-title">MCP resources for content catalogs</span> <span class="opp-ref">(2.4)</span><div class="opp-desc">Expose pattern catalog and extension index as MCP resources so agents can browse available knowledge without exploratory tool calls.</div></li>
+  <li><span class="opp-title">Few-shot borderline severity examples</span> <span class="opp-ref">(4.2)</span><div class="opp-desc">Add examples to the reviewer prompt showing borderline cases between HIGH and MEDIUM to improve classification consistency.</div></li>
+  <li><span class="opp-title">Reviewer finding provenance</span> <span class="opp-ref">(5.6)</span><div class="opp-desc">Attach source evidence (file, line, analysis step) to each finding so downstream consumers have full context.</div></li>
+  <li><span class="opp-title">Confidence scores on findings</span> <span class="opp-ref">(5.5)</span><div class="opp-desc">Add per-finding confidence to enable calibrated routing: high-confidence findings auto-fix, low-confidence route to human review.</div></li>
+</ol>
+
+<script>
+document.querySelectorAll('.filter-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const filter = btn.dataset.filter;
+    document.querySelectorAll('tbody tr').forEach(row => {
+      if (filter === 'all') {
+        row.classList.remove('hidden');
+      } else {
+        const status = row.dataset.status;
+        const match = filter === 'implemented' ? status === 'implemented'
+          : filter === 'partial' ? status === 'partial'
+          : filter === 'opportunity' ? status === 'opportunity'
+          : filter === 'na' ? (status === 'na' || status === 'notused')
+          : true;
+        row.classList.toggle('hidden', !match);
+      }
+    });
+  });
+});
+</script>
+
+</body>
+</html>
