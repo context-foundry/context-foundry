@@ -330,6 +330,8 @@ pub(super) async fn run_headless(project_dir: &Path, output_format: Option<Strin
                 | LoopEvent::ExtensionInjected { .. }
                 | LoopEvent::ExtensionKeywordsLoaded { .. }
                 | LoopEvent::PrPollChecked
+                | LoopEvent::ShipStarted
+                | LoopEvent::ShipDone
                 | LoopEvent::DualBuildStarted { .. }
                 | LoopEvent::DualBuildStreamDone(_, _) => {}
                 LoopEvent::PrApproved(pr_num) => {

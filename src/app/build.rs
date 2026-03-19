@@ -1150,6 +1150,7 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                     return;
                 }
             } else {
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::ShipStarted));
                 let _ = git::commit_and_push(
                     &ctx.project_dir,
                     &ctx.config,
@@ -1160,6 +1161,7 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                     ),
                     false,
                 );
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::ShipDone));
             }
 
             // Check stop after discovery commit
@@ -2256,6 +2258,7 @@ async fn process_task(
         }
     }
 
+    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::ShipStarted));
     let committed = if ctx.config.run_mode == "review" {
         // Review mode: branch, commit, push, create PR, return to base
         match git::commit_task_pr(
@@ -2466,6 +2469,7 @@ async fn process_task(
         }
         committed
     };
+    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::ShipDone));
     let commit_sha = if committed {
         git::get_head_sha(&ctx.project_dir)
     } else {

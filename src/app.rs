@@ -767,6 +767,7 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                 state.task_start = None;
                 state.task_stages_seen.clear();
                 state.clear_agent();
+                state.ship_active = false;
             }
             LoopEvent::TaskReport { .. } => {
                 // TaskReport is consumed by headless mode only; TUI ignores it.
@@ -943,6 +944,13 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                     "PR #{} was closed without merge -- stopping",
                     pr_num
                 ));
+            }
+            LoopEvent::ShipStarted => {
+                state.ship_active = true;
+                state.log("Ship: committing changes".to_string());
+            }
+            LoopEvent::ShipDone => {
+                state.ship_active = false;
             }
             LoopEvent::PrPollChecked => {
                 state.pr_poll_last_check = Some(std::time::Instant::now());

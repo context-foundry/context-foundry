@@ -133,8 +133,16 @@ pub(super) fn render_pipeline_map(
             label: "SHIP",
             model_label: "GitHub".to_string(),
             kind_label: "git + pr",
-            border_color: theme.muted,
-            text_style: Style::default().fg(theme.muted),
+            border_color: if state.ship_active {
+                Color::Green
+            } else {
+                theme.muted
+            },
+            text_style: if state.ship_active {
+                Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(theme.muted)
+            },
         },
         StageInfo {
             label: "DISCOVER",
