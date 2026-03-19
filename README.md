@@ -8,6 +8,8 @@ Foundry reads a `TASKS.md` task list and works through it using Claude Code agen
 
 - [Building a Second Brain with the Loop](https://youtu.be/VO_c2j0dPH0) — Foundry autonomously works through an implementation plan, building a second-brain app from a task list while the TUI streams each agent's output in real time.
 - [Enhancing the Second Brain with the Loop](https://youtu.be/wL0RLml2Tio) — A follow-up run where foundry picks up where it left off, discovering new work and iterating on the second-brain app with patterns learned from the first pass.
+- [Technical Overview](https://context-foundry.github.io/context-foundry/OVERVIEW.html) — Architecture reference covering every subsystem: pipeline, dual-model arena, git integration, TUI layout, config, extensions, and MCP tools.
+- [The Roundup](https://context-foundry.github.io/context-foundry/ROUNDUP.html) — A Texas-themed pitch page explaining Context Foundry for software architects.
 
 ## Task Flow
 
@@ -70,7 +72,7 @@ The TUI shows these indicators in the task queue with color coding, and they sur
 
 ### CCA alignment
 
-Context Foundry's architecture aligns with the principles in Anthropic's [Claude Certified Architect -- Foundations](docs/CCA-Exam-Guide.pdf) exam guide: **42 of 55 principles implemented**, 4 partial (architectural constraints), 0 open gaps. The full cross-reference mapping each principle to specific code locations is in the [CCA Alignment Matrix](docs/CCA-ALIGNMENT.md).
+Context Foundry's architecture aligns with the principles in Anthropic's [Claude Certified Architect -- Foundations](docs/CCA-Exam-Guide.pdf) exam guide: **42 of 55 principles implemented**, 4 partial (architectural constraints), 0 open gaps. The full cross-reference mapping each principle to specific code locations is in the [CCA Alignment Matrix](docs/CCA-ALIGNMENT.md) ([interactive version](https://context-foundry.github.io/context-foundry/cca-alignment.html)).
 
 ### Run modes
 
