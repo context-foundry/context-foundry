@@ -6,6 +6,7 @@ use ratatui::{
     Frame,
 };
 
+use crate::agent::ModelProvider;
 use crate::app::AppState;
 use crate::config::Config;
 
@@ -13,10 +14,23 @@ pub(super) fn render_dashboard_stats(
     frame: &mut Frame,
     area: Rect,
     state: &AppState,
-    _config: &Config,
+    config: &Config,
 ) {
     let theme = &state.tui_theme;
     let mut lines = Vec::new();
+    let selected_idx = state.dual_build.tab.min(1);
+    let provider = effective_stats_provider(config, state, selected_idx);
+    let visible_input_tokens = if state.dual_build.active {
+        state.dual_build.input_tokens[selected_idx]
+    } else {
+        state.session_input_tokens
+    };
+    let visible_context_pcts = if state.dual_build.active {
+        state.dual_build.context_pcts[selected_idx]
+    } else {
+        state.spid_context_pcts
+    };
+    let metrics_unavailable = metrics_unavailable(provider, visible_input_tokens);
 
     // Progress: [93/96] ████████████░░ 97%
     let completed = state.completed_count;
@@ -70,39 +84,21 @@ pub(super) fn render_dashboard_stats(
         _ => ("--", Color::DarkGray),
     };
 
-    fn ctx_pct_span(pct: Option<u8>) -> (String, Color) {
-        match pct {
-            Some(p) if p >= 90 => (format!("{}%", p), Color::Red),
-            Some(p) if p >= 70 => (format!("{}%", p), Color::Yellow),
-            Some(p) => (format!("{}%", p), Color::Green),
-            None => ("--".to_string(), Color::DarkGray),
-        }
-    }
-
-    let (s_str, s_col) = ctx_pct_span(state.spid_context_pcts[0]);
-    let (p_str, p_col) = ctx_pct_span(state.spid_context_pcts[1]);
-    let (i_str, i_col) = if state.dual_build.active
-        && state.dual_build.context_pcts[0].is_some()
-        && state.dual_build.context_pcts[1].is_some()
-    {
-        let (a_str, _) = ctx_pct_span(state.dual_build.context_pcts[0]);
-        let (b_str, _) = ctx_pct_span(state.dual_build.context_pcts[1]);
-        let max_pct = std::cmp::max(
-            state.dual_build.context_pcts[0].unwrap_or(0),
-            state.dual_build.context_pcts[1].unwrap_or(0),
-        );
-        let col = if max_pct >= 90 {
-            Color::Red
-        } else if max_pct >= 70 {
-            Color::Yellow
-        } else {
-            Color::Green
-        };
-        (format!("{}/{}", a_str, b_str), col)
+    let ((s_str, s_col), (p_str, p_col), (i_str, i_col), (d_str, d_col)) = if metrics_unavailable {
+        (
+            ctx_pct_span(None, true, theme.muted),
+            ctx_pct_span(None, true, theme.muted),
+            ctx_pct_span(None, true, theme.muted),
+            ctx_pct_span(None, true, theme.muted),
+        )
     } else {
-        ctx_pct_span(state.spid_context_pcts[2])
+        (
+            ctx_pct_span(visible_context_pcts[0], false, theme.muted),
+            ctx_pct_span(visible_context_pcts[1], false, theme.muted),
+            ctx_pct_span(visible_context_pcts[2], false, theme.muted),
+            ctx_pct_span(visible_context_pcts[3], false, theme.muted),
+        )
     };
-    let (d_str, d_col) = ctx_pct_span(state.spid_context_pcts[3]);
 
     let git_status_str = if state.git_initialized {
         let remote_part = state.git_remote.as_deref().unwrap_or("no remote");
@@ -172,28 +168,42 @@ pub(super) fn render_dashboard_stats(
         .map(|ts| format_duration_hms(now.signed_duration_since(ts)))
         .unwrap_or_else(|| "--:--".to_string());
 
-    // Format token counts compactly: 1234 → "1.2K", 1234567 → "1.2M"
-    let fmt_tokens = |n: u64| -> String {
-        if n >= 1_000_000 {
-            format!("{:.1}M", n as f64 / 1_000_000.0)
-        } else if n >= 1_000 {
-            format!("{:.0}K", n as f64 / 1_000.0)
-        } else {
-            format!("{}", n)
-        }
-    };
-    let cost_str = format!(
-        "${:.2} ({}in / {}out)",
-        state.session_cost_usd,
-        fmt_tokens(state.session_input_tokens),
-        fmt_tokens(state.session_output_tokens),
-    );
-    let cost_color = if state.session_cost_usd >= 10.0 {
-        Color::Red
-    } else if state.session_cost_usd >= 5.0 {
-        Color::Yellow
+    let (cost_label, cost_usd, input_tokens, output_tokens) = if state.dual_build.active {
+        (
+            format!(
+                "Cost [{}: {}]",
+                selected_idx + 1,
+                state.dual_build.models[selected_idx]
+            ),
+            state.dual_build.cost_usd[selected_idx],
+            state.dual_build.input_tokens[selected_idx],
+            state.dual_build.output_tokens[selected_idx],
+        )
     } else {
-        theme.text
+        (
+            "Cost".to_string(),
+            state.session_cost_usd,
+            state.session_input_tokens,
+            state.session_output_tokens,
+        )
+    };
+    let (cost_str, cost_color) = if metrics_unavailable {
+        (format!("N/A ({})", provider), theme.muted)
+    } else {
+        let cost_str = format!(
+            "${:.2} ({}in / {}out)",
+            cost_usd,
+            format_compact_tokens(input_tokens),
+            format_compact_tokens(output_tokens),
+        );
+        let cost_color = if cost_usd >= 10.0 {
+            Color::Red
+        } else if cost_usd >= 5.0 {
+            Color::Yellow
+        } else {
+            theme.text
+        };
+        (cost_str, cost_color)
     };
 
     let patterns_left = format!(
@@ -213,11 +223,16 @@ pub(super) fn render_dashboard_stats(
             ),
             Style::default().fg(theme.text),
         ),
-        Span::styled("Cost      ", Style::default().fg(theme.info)),
+        Span::styled(format!("{cost_label} "), Style::default().fg(theme.info)),
         Span::styled(&cost_str, Style::default().fg(cost_color)),
     ]));
 
-    let ollama_left = format!("Ollama: {}", ollama_label);
+    let dual_comparison = dual_comparison_line(state);
+    let (ollama_left, ollama_left_color) = if let Some(comparison) = dual_comparison {
+        (comparison, theme.text)
+    } else {
+        (format!("Ollama: {}", ollama_label), ollama_color)
+    };
     lines.push(Line::from(vec![
         Span::styled("  ", Style::default()),
         Span::styled(
@@ -226,7 +241,7 @@ pub(super) fn render_dashboard_stats(
                 ollama_left,
                 width = half_width.saturating_sub(2)
             ),
-            Style::default().fg(ollama_color),
+            Style::default().fg(ollama_left_color),
         ),
         Span::styled("Timing    ", Style::default().fg(theme.info)),
         Span::styled("session: ", Style::default().fg(theme.muted)),
@@ -291,6 +306,89 @@ pub(super) fn render_dashboard_stats(
         )
         .wrap(Wrap { trim: false });
     frame.render_widget(stats_block, area);
+}
+
+fn effective_stats_provider(
+    config: &Config,
+    state: &AppState,
+    selected_idx: usize,
+) -> ModelProvider {
+    if state.dual_build.active {
+        let model_label = state.dual_build.models[selected_idx].as_str();
+        let provider_label = model_label.split_whitespace().next().unwrap_or(model_label);
+        return Config::parse_provider(provider_label);
+    }
+
+    let mut display_config = config.clone();
+    display_config.builder_models = state.builder_model_specs.clone();
+    display_config.dual_selection = state.dual_selection.as_str().to_string();
+
+    display_config
+        .selected_pipeline_configs(&display_config.dual_selection)
+        .into_iter()
+        .next()
+        .map(|selected| Config::parse_provider(&selected.builder_provider))
+        .unwrap_or_else(|| Config::parse_provider(&config.builder_provider))
+}
+
+fn metrics_unavailable(provider: ModelProvider, input_tokens: u64) -> bool {
+    if provider == ModelProvider::Claude {
+        return false;
+    }
+    if input_tokens > 0 {
+        return false;
+    }
+    true
+}
+
+fn ctx_pct_span(pct: Option<u8>, unavailable: bool, muted: Color) -> (String, Color) {
+    if unavailable {
+        return ("N/A".to_string(), muted);
+    }
+
+    match pct {
+        Some(p) if p >= 90 => (format!("{}%", p), Color::Red),
+        Some(p) if p >= 70 => (format!("{}%", p), Color::Yellow),
+        Some(p) => (format!("{}%", p), Color::Green),
+        None => ("--".to_string(), Color::DarkGray),
+    }
+}
+
+fn format_compact_tokens(n: u64) -> String {
+    if n >= 1_000_000 {
+        format!("{:.1}M", n as f64 / 1_000_000.0)
+    } else if n >= 1_000 {
+        format!("{:.0}K", n as f64 / 1_000.0)
+    } else {
+        format!("{}", n)
+    }
+}
+
+fn dual_comparison_line(state: &AppState) -> Option<String> {
+    if !state.dual_build.active || state.dual_build.finished != [true, true] {
+        return None;
+    }
+
+    let segments: Vec<String> = [0, 1]
+        .into_iter()
+        .map(|idx| {
+            let model = state.dual_build.models[idx].as_str();
+            let label = model.split_whitespace().next().unwrap_or(model);
+            let provider = Config::parse_provider(label);
+            if metrics_unavailable(provider, state.dual_build.input_tokens[idx]) {
+                format!("{label}: N/A")
+            } else {
+                format!(
+                    "{label}: ${:.2} ({}in/{}out)",
+                    state.dual_build.cost_usd[idx],
+                    format_compact_tokens(state.dual_build.input_tokens[idx]),
+                    format_compact_tokens(state.dual_build.output_tokens[idx]),
+                )
+            }
+        })
+        .collect();
+
+    Some(segments.join(" | "))
 }
 
 #[allow(dead_code)]
@@ -497,5 +595,168 @@ pub(super) fn format_duration_hms(duration: chrono::Duration) -> String {
         format!("{}h {:02}m {:02}s", hours, mins, secs)
     } else {
         format!("{}m {:02}s", mins, secs)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ratatui::backend::TestBackend;
+    use ratatui::Terminal;
+    use std::path::PathBuf;
+
+    #[test]
+    fn render_dashboard_stats_uses_selected_dual_pipeline_metrics() {
+        let mut state = AppState::new(PathBuf::from(".buildloop"));
+        state.dual_build.active = true;
+        state.dual_build.models = ["Claude Opus".to_string(), "Codex".to_string()];
+        state.dual_build.tab = 1;
+        state.dual_build.cost_usd = [3.25, 1.50];
+        state.dual_build.input_tokens = [12_000, 7_000];
+        state.dual_build.output_tokens = [1_500, 500];
+        state.dual_build.context_pcts = [
+            [Some(41), Some(42), Some(43), Some(44)],
+            [Some(61), Some(62), Some(66), Some(64)],
+        ];
+        state.session_cost_usd = 9.99;
+        state.session_input_tokens = 90_000;
+        state.session_output_tokens = 10_000;
+        state.spid_context_pcts = [Some(11), Some(22), Some(88), Some(33)];
+
+        let rendered = render_stats_text(&state);
+
+        assert!(rendered.contains("Cost [2: Codex]"));
+        assert!(rendered.contains("$1.50 (7Kin / 500out)"));
+        assert!(rendered.contains("S:61%"));
+        assert!(rendered.contains("P:62%"));
+        assert!(rendered.contains("I:66%"));
+        assert!(rendered.contains("D:64%"));
+        assert!(!rendered.contains("N/A (Codex)"));
+        assert!(!rendered.contains("S:11%"));
+        assert!(!rendered.contains("P:22%"));
+        assert!(!rendered.contains("I:88%"));
+        assert!(!rendered.contains("D:33%"));
+        assert!(!rendered.contains("$9.99 (90Kin / 10Kout)"));
+    }
+
+    #[test]
+    fn render_dashboard_stats_uses_selected_claude_pipeline_context_in_dual_mode() {
+        let mut state = AppState::new(PathBuf::from(".buildloop"));
+        state.dual_build.active = true;
+        state.dual_build.models = ["Claude Opus".to_string(), "Codex".to_string()];
+        state.dual_build.tab = 0;
+        state.dual_build.input_tokens = [8_000, 0];
+        state.dual_build.context_pcts = [
+            [Some(15), Some(25), Some(35), Some(45)],
+            [Some(51), Some(61), Some(71), Some(81)],
+        ];
+        state.spid_context_pcts = [Some(91), Some(92), Some(93), Some(94)];
+
+        let rendered = render_stats_text(&state);
+
+        assert!(rendered.contains("S:15%"));
+        assert!(rendered.contains("P:25%"));
+        assert!(rendered.contains("I:35%"));
+        assert!(rendered.contains("D:45%"));
+        assert!(!rendered.contains("91%"));
+        assert!(!rendered.contains("92%"));
+        assert!(!rendered.contains("93%"));
+        assert!(!rendered.contains("94%"));
+    }
+
+    #[test]
+    fn render_dashboard_stats_shows_dual_comparison_line_when_both_pipelines_finish() {
+        let mut state = AppState::new(PathBuf::from(".buildloop"));
+        state.dual_build.active = true;
+        state.dual_build.finished = [true, true];
+        state.dual_build.models = ["Claude Opus".to_string(), "Codex".to_string()];
+        state.dual_build.cost_usd = [1.25, 2.50];
+        state.dual_build.input_tokens = [1_000, 2_000];
+        state.dual_build.output_tokens = [250, 400];
+
+        let rendered = render_stats_text(&state);
+
+        assert!(rendered.contains("Claude: $1.25 (1Kin/250out) | Codex: $2.50 (2Kin/400out)"));
+        assert!(!rendered.contains("Ollama:"));
+    }
+
+    #[test]
+    fn render_dashboard_stats_shows_na_for_selected_codex_pipeline_without_usage() {
+        let mut state = AppState::new(PathBuf::from(".buildloop"));
+        state.builder_model_specs = vec!["claude:opus".to_string(), "codex:".to_string()];
+        state.dual_selection = crate::app::DualSelection::Second;
+
+        let rendered = render_stats_text(&state);
+
+        assert!(rendered.contains("N/A (Codex)"));
+        assert!(rendered.contains("S:N/A"));
+        assert!(rendered.contains("P:N/A"));
+        assert!(rendered.contains("I:N/A"));
+        assert!(rendered.contains("D:N/A"));
+        assert!(!rendered.contains("$0.00 (0in / 0out)"));
+    }
+
+    #[test]
+    fn render_dashboard_stats_shows_na_for_selected_codex_tab_without_usage() {
+        let mut state = AppState::new(PathBuf::from(".buildloop"));
+        state.dual_build.active = true;
+        state.dual_build.tab = 1;
+        state.dual_build.models = ["Claude Opus".to_string(), "Codex".to_string()];
+        state.spid_context_pcts = [Some(11), Some(22), Some(88), Some(33)];
+
+        let rendered = render_stats_text(&state);
+
+        assert!(rendered.contains("Cost [2: Codex]"));
+        assert!(rendered.contains("N/A (Codex)"));
+        assert!(rendered.contains("S:N/A"));
+        assert!(rendered.contains("P:N/A"));
+        assert!(rendered.contains("I:N/A"));
+        assert!(rendered.contains("D:N/A"));
+        assert!(!rendered.contains("11%"));
+        assert!(!rendered.contains("22%"));
+        assert!(!rendered.contains("88%"));
+        assert!(!rendered.contains("33%"));
+    }
+
+    #[test]
+    fn render_dashboard_stats_shows_na_in_dual_comparison_line_for_codex_without_usage() {
+        let mut state = AppState::new(PathBuf::from(".buildloop"));
+        state.dual_build.active = true;
+        state.dual_build.finished = [true, true];
+        state.dual_build.models = ["Claude Opus".to_string(), "Codex".to_string()];
+        state.dual_build.cost_usd = [1.25, 0.0];
+        state.dual_build.input_tokens = [1_000, 0];
+        state.dual_build.output_tokens = [250, 0];
+
+        let rendered = render_stats_text(&state);
+
+        assert!(rendered.contains("Claude: $1.25 (1Kin/250out)"));
+        assert!(rendered.contains("Codex: N/A"));
+        assert!(!rendered.contains("Codex: $0.00 (0in/0out)"));
+    }
+
+    fn render_stats_text(state: &AppState) -> String {
+        let backend = TestBackend::new(160, 6);
+        let mut terminal = Terminal::new(backend).expect("failed to create terminal");
+        terminal
+            .draw(|frame| render_dashboard_stats(frame, frame.area(), state, &Config::default()))
+            .expect("failed to draw stats");
+
+        let buffer = terminal.backend().buffer();
+        let area = *buffer.area();
+        (0..area.height)
+            .map(|y| {
+                (0..area.width)
+                    .map(|x| {
+                        buffer
+                            .cell((x, y))
+                            .map(|cell| cell.symbol().to_string())
+                            .unwrap_or_else(|| " ".to_string())
+                    })
+                    .collect::<Vec<_>>()
+                    .join("")
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
     }
 }

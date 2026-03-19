@@ -717,7 +717,10 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                     event_counts: [0, 0],
                     models: models.clone(),
                     tab: 0,
-                    context_pcts: [None, None],
+                    cost_usd: [0.0, 0.0],
+                    input_tokens: [0, 0],
+                    output_tokens: [0, 0],
+                    context_pcts: [[None; 4]; 2],
                     finished: [false, false],
                     stages: [None, None],
                     stage_models: [String::new(), String::new()],
@@ -1612,10 +1615,26 @@ fn handle_dual_build_output(state: &mut AppState, idx: usize, output: AgentOutpu
             state.session_cost_usd += cost_usd;
             state.session_input_tokens += input_tokens;
             state.session_output_tokens += output_tokens;
+            let millicents = (cost_usd * 100_000.0) as u64;
+            state
+                .session_cost_millicents
+                .fetch_add(millicents, std::sync::atomic::Ordering::Relaxed);
+            state.dual_build.cost_usd[idx] += cost_usd;
+            state.dual_build.input_tokens[idx] += input_tokens;
+            state.dual_build.output_tokens[idx] += output_tokens;
             let total_tokens = input_tokens + output_tokens;
             if *context_window > 0 {
                 let pct = ((total_tokens as f64 / *context_window as f64) * 100.0).min(100.0) as u8;
-                state.dual_build.context_pcts[idx] = Some(pct);
+                let slot = match state.dual_build.stages[idx].as_ref() {
+                    Some(AgentRole::Scout) => Some(0),
+                    Some(AgentRole::Planner) => Some(1),
+                    Some(AgentRole::Builder) => Some(2),
+                    Some(AgentRole::Reviewer) => Some(3),
+                    _ => None,
+                };
+                if let Some(slot) = slot {
+                    state.dual_build.context_pcts[idx][slot] = Some(pct);
+                }
             }
         }
     }

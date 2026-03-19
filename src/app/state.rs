@@ -257,7 +257,10 @@ pub struct DualBuildState {
     pub event_counts: [usize; 2],
     pub models: [String; 2],
     pub tab: usize,
-    pub context_pcts: [Option<u8>; 2],
+    pub cost_usd: [f64; 2],
+    pub input_tokens: [u64; 2],
+    pub output_tokens: [u64; 2],
+    pub context_pcts: [[Option<u8>; 4]; 2], // Per-pipeline SPID context %: [pipeline][Scout, Plan, Implement, Doubt]
     pub finished: [bool; 2],
     pub stages: [Option<AgentRole>; 2], // Current SPID stage per pipeline
     pub stage_models: [String; 2],      // Model label for current stage

@@ -10,7 +10,7 @@
   "create_issue_on_wip": true,
   "discovery_model": "opus",
   "discovery_provider": "claude",
-  "dual_selection": "first",
+  "dual_selection": "second",
   "extensions": [],
   "fixer_model": "sonnet",
   "fixer_provider": "claude",

@@ -18,6 +18,7 @@ use crate::task::Task;
 use crossterm::event::{self, KeyCode, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::Ordering;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::mpsc;
 
@@ -1636,6 +1637,132 @@ fn test_agent_started_discovery_overwrites_agent_state() {
     ));
     assert!(state.agent_output.is_empty());
     assert!(state.task_stages_seen.contains(&AgentRole::Discovery));
+}
+
+#[test]
+fn test_dual_build_started_initializes_per_pipeline_stats() {
+    let mut state = AppState::new(PathBuf::from(".buildloop"));
+
+    handle_event(
+        &mut state,
+        AppEvent::LoopEvent(LoopEvent::DualBuildStarted {
+            models: ["Claude Opus".to_string(), "Codex".to_string()],
+        }),
+        &Config::default(),
+    );
+
+    assert!(state.dual_build.active);
+    assert_eq!(state.dual_build.tab, 0);
+    assert_eq!(
+        state.dual_build.models,
+        ["Claude Opus".to_string(), "Codex".to_string()]
+    );
+    assert_eq!(state.dual_build.cost_usd, [0.0, 0.0]);
+    assert_eq!(state.dual_build.input_tokens, [0, 0]);
+    assert_eq!(state.dual_build.output_tokens, [0, 0]);
+    assert_eq!(state.dual_build.context_pcts, [[None; 4]; 2]);
+}
+
+#[test]
+fn test_dual_pipeline_usage_updates_pipeline_slot_and_session_totals() {
+    let mut state = AppState::new(PathBuf::from(".buildloop"));
+
+    handle_event(
+        &mut state,
+        AppEvent::LoopEvent(LoopEvent::DualBuildStarted {
+            models: ["Claude Opus".to_string(), "Codex".to_string()],
+        }),
+        &Config::default(),
+    );
+
+    handle_event(
+        &mut state,
+        AppEvent::DualPipelineEvent(
+            1,
+            Box::new(AppEvent::LoopEvent(LoopEvent::AgentStarted(
+                AgentRole::Builder,
+                "Codex".to_string(),
+            ))),
+        ),
+        &Config::default(),
+    );
+
+    handle_event(
+        &mut state,
+        AppEvent::DualPipelineEvent(
+            1,
+            Box::new(AppEvent::AgentOutput(AgentOutputEvent::Usage {
+                cost_usd: 1.25,
+                input_tokens: 1_000,
+                output_tokens: 250,
+                context_window: 2_500,
+            })),
+        ),
+        &Config::default(),
+    );
+
+    assert!((state.session_cost_usd - 1.25).abs() < f64::EPSILON);
+    assert_eq!(state.session_input_tokens, 1_000);
+    assert_eq!(state.session_output_tokens, 250);
+    assert_eq!(
+        state.session_cost_millicents.load(Ordering::Relaxed),
+        125_000
+    );
+    assert!((state.dual_build.cost_usd[0] - 0.0).abs() < f64::EPSILON);
+    assert_eq!(state.dual_build.input_tokens[0], 0);
+    assert_eq!(state.dual_build.output_tokens[0], 0);
+    assert_eq!(state.dual_build.context_pcts[0], [None; 4]);
+    assert!((state.dual_build.cost_usd[1] - 1.25).abs() < f64::EPSILON);
+    assert_eq!(state.dual_build.input_tokens[1], 1_000);
+    assert_eq!(state.dual_build.output_tokens[1], 250);
+    assert_eq!(
+        state.dual_build.context_pcts[1],
+        [None, None, Some(50), None]
+    );
+
+    handle_event(
+        &mut state,
+        AppEvent::DualPipelineEvent(
+            0,
+            Box::new(AppEvent::LoopEvent(LoopEvent::AgentStarted(
+                AgentRole::Scout,
+                "Claude Opus".to_string(),
+            ))),
+        ),
+        &Config::default(),
+    );
+
+    handle_event(
+        &mut state,
+        AppEvent::DualPipelineEvent(
+            0,
+            Box::new(AppEvent::AgentOutput(AgentOutputEvent::Usage {
+                cost_usd: 0.75,
+                input_tokens: 400,
+                output_tokens: 100,
+                context_window: 1_000,
+            })),
+        ),
+        &Config::default(),
+    );
+
+    assert!((state.session_cost_usd - 2.0).abs() < f64::EPSILON);
+    assert_eq!(state.session_input_tokens, 1_400);
+    assert_eq!(state.session_output_tokens, 350);
+    assert!((state.dual_build.cost_usd[0] - 0.75).abs() < f64::EPSILON);
+    assert_eq!(state.dual_build.input_tokens[0], 400);
+    assert_eq!(state.dual_build.output_tokens[0], 100);
+    assert_eq!(
+        state.dual_build.context_pcts[0],
+        [Some(50), None, None, None]
+    );
+    assert!((state.dual_build.cost_usd[1] - 1.25).abs() < f64::EPSILON);
+    assert_eq!(state.dual_build.input_tokens[1], 1_000);
+    assert_eq!(state.dual_build.output_tokens[1], 250);
+    assert_eq!(
+        state.dual_build.context_pcts[1],
+        [None, None, Some(50), None]
+    );
 }
 
 // ─── Extension & Pattern Telemetry Tests ────────────────────────────
