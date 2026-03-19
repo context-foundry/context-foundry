@@ -634,16 +634,22 @@ For each claim from build-claims.md:
 ```json
 {{
   "high": [
-    {{"file": "path/to/file", "line": 42, "issue": "Description", "fixed": true, "category": "security|logic|race|crash"}}
+    {{"file": "path/to/file", "line": 42, "issue": "Description", "fixed": true, "category": "security|logic|race|crash", "source_evidence": {{"snippet": "the exact code line(s) that triggered this finding", "line_range": [40, 45], "reasoning": "One-line chain: what the code does -> why it is wrong -> what the consequence is"}}}}
   ],
   "medium": [
-    {{"file": "path/to/file", "line": 10, "issue": "Description", "fixed": true, "category": "error-handling|api-contract|resource-leak"}}
+    {{"file": "path/to/file", "line": 10, "issue": "Description", "fixed": true, "category": "error-handling|api-contract|resource-leak", "source_evidence": {{"snippet": "the exact code line(s) that triggered this finding", "line_range": [8, 13], "reasoning": "One-line chain: what the code does -> why it is wrong -> what the consequence is"}}}}
   ],
   "low": [
-    {{"file": "path/to/file", "line": 5, "issue": "Description", "category": "style|hardcoded|inconsistency"}}
+    {{"file": "path/to/file", "line": 5, "issue": "Description", "category": "style|hardcoded|inconsistency", "source_evidence": {{"snippet": "the exact code line(s) that triggered this finding", "line_range": [3, 7], "reasoning": "One-line chain: what the code does -> why it is wrong -> what the consequence is"}}}}
   ]
 }}
 ```
+
+PROVENANCE RULES (source_evidence):
+- EVERY finding MUST include source_evidence -- findings without it will be discarded
+- snippet: copy the exact source line(s) that triggered the finding (1-5 lines max, verbatim from the file)
+- line_range: [start_line, end_line] of the code region you analyzed to reach this conclusion
+- reasoning: a single sentence in the form "X does Y, which causes Z" -- no filler words
 
 VERDICT RULES:
 - PASS if: all runtime checks pass AND all high/medium issues were fixed and verified
@@ -749,16 +755,22 @@ WRITE YOUR FINDINGS to .buildloop/review-report.md in this format:
 ```json
 {{
   "high": [
-    {{"file": "{file_path}", "line": 42, "issue": "Description", "fixed": false, "category": "security|logic|crash"}}
+    {{"file": "{file_path}", "line": 42, "issue": "Description", "fixed": false, "category": "security|logic|crash", "source_evidence": {{"snippet": "the exact code line(s) that triggered this finding", "line_range": [40, 45], "reasoning": "One-line chain: what the code does -> why it is wrong -> what the consequence is"}}}}
   ],
   "medium": [
-    {{"file": "{file_path}", "line": 10, "issue": "Description", "fixed": false, "category": "error-handling|resource-leak"}}
+    {{"file": "{file_path}", "line": 10, "issue": "Description", "fixed": false, "category": "error-handling|resource-leak", "source_evidence": {{"snippet": "the exact code line(s) that triggered this finding", "line_range": [8, 13], "reasoning": "One-line chain: what the code does -> why it is wrong -> what the consequence is"}}}}
   ],
   "low": [
-    {{"file": "{file_path}", "line": 5, "issue": "Description", "fixed": false, "category": "style|inconsistency"}}
+    {{"file": "{file_path}", "line": 5, "issue": "Description", "fixed": false, "category": "style|inconsistency", "source_evidence": {{"snippet": "the exact code line(s) that triggered this finding", "line_range": [3, 7], "reasoning": "One-line chain: what the code does -> why it is wrong -> what the consequence is"}}}}
   ]
 }}
 ```
+
+PROVENANCE RULES (source_evidence):
+- EVERY finding MUST include source_evidence -- findings without it will be discarded
+- snippet: copy the exact source line(s) that triggered the finding (1-5 lines max, verbatim from the file)
+- line_range: [start_line, end_line] of the code region you analyzed to reach this conclusion
+- reasoning: a single sentence in the form "X does Y, which causes Z" -- no filler words
 
 Set "fixed" to false for all findings -- you are read-only and must NOT modify any code files.
 
@@ -933,16 +945,22 @@ For each claim from build-claims.md:
 ```json
 {{
   "high": [
-    {{"file": "path/to/file", "line": 42, "issue": "Description", "fixed": true, "category": "security|logic|race|crash"}}
+    {{"file": "path/to/file", "line": 42, "issue": "Description", "fixed": true, "category": "security|logic|race|crash", "source_evidence": {{"snippet": "the exact code line(s) that triggered this finding", "line_range": [40, 45], "reasoning": "One-line chain: what the code does -> why it is wrong -> what the consequence is"}}}}
   ],
   "medium": [
-    {{"file": "path/to/file", "line": 10, "issue": "Description", "fixed": true, "category": "error-handling|api-contract|resource-leak"}}
+    {{"file": "path/to/file", "line": 10, "issue": "Description", "fixed": true, "category": "error-handling|api-contract|resource-leak", "source_evidence": {{"snippet": "the exact code line(s) that triggered this finding", "line_range": [8, 13], "reasoning": "One-line chain: what the code does -> why it is wrong -> what the consequence is"}}}}
   ],
   "low": [
-    {{"file": "path/to/file", "line": 5, "issue": "Description", "category": "style|hardcoded|inconsistency"}}
+    {{"file": "path/to/file", "line": 5, "issue": "Description", "category": "style|hardcoded|inconsistency", "source_evidence": {{"snippet": "the exact code line(s) that triggered this finding", "line_range": [3, 7], "reasoning": "One-line chain: what the code does -> why it is wrong -> what the consequence is"}}}}
   ]
 }}
 ```
+
+PROVENANCE RULES (source_evidence):
+- EVERY finding MUST include source_evidence -- findings without it will be discarded
+- snippet: copy the exact source line(s) that triggered the finding (1-5 lines max, verbatim from the file)
+- line_range: [start_line, end_line] of the code region you analyzed to reach this conclusion
+- reasoning: a single sentence in the form "X does Y, which causes Z" -- no filler words
 
 VERDICT RULES:
 - PASS if: all runtime checks pass AND all high/medium issues were fixed and verified
@@ -989,9 +1007,14 @@ Review Pass: {pass_number}{error_section}
 INSTRUCTIONS:
 1. Read .buildloop/review-report.md for the list of issues
 2. Read CLAUDE.md for project conventions
-3. Fix every HIGH and MEDIUM severity issue in the findings JSON
-4. Fix any runtime failures noted in the Runtime Checks section
-5. Run the same checks the reviewer would run to confirm fixes work
+3. For each finding, read the source_evidence fields:
+   - snippet: the exact code the reviewer flagged
+   - line_range: the file region to focus your fix on
+   - reasoning: why the reviewer considers this a bug
+   Use these to understand exactly what to fix without re-investigating from scratch.
+4. Fix every HIGH and MEDIUM severity issue in the findings JSON
+5. Fix any runtime failures noted in the Runtime Checks section
+6. Run the same checks the reviewer would run to confirm fixes work
 
 IMPORTANT:
 - Fix EVERY high and medium issue in the report
@@ -1340,6 +1363,33 @@ mod tests {
         assert!(output.contains("scout-report.md"));
         assert!(output.contains("- Suggestions:"));
         assert!(output.contains("Try simpler approach"));
+    }
+
+    #[test]
+    fn test_fixer_prompt_references_source_evidence() {
+        let prompt = fixer_prompt("T1", "test task", 1, "SPEC.md", "TASKS.md", "");
+        assert!(
+            prompt.contains("source_evidence"),
+            "fixer prompt must instruct fixer to use source_evidence from findings"
+        );
+    }
+
+    #[test]
+    fn test_reviewer_prompts_contain_provenance_schema() {
+        let needle = "source_evidence";
+        let provenance_rule = "PROVENANCE RULES";
+
+        let main = reviewer_prompt("T1", "test", "file.rs", 1, "", None, "SPEC.md", "TASKS.md");
+        assert!(main.contains(needle), "reviewer_prompt missing source_evidence in schema");
+        assert!(main.contains(provenance_rule), "reviewer_prompt missing PROVENANCE RULES section");
+
+        let per_file = reviewer_per_file_prompt("T1", "test", "src/foo.rs", "", "SPEC.md", "TASKS.md");
+        assert!(per_file.contains(needle), "reviewer_per_file_prompt missing source_evidence in schema");
+        assert!(per_file.contains(provenance_rule), "reviewer_per_file_prompt missing PROVENANCE RULES section");
+
+        let integration = reviewer_integration_prompt("T1", "test", "file.rs", "{}", "", None, "SPEC.md", "TASKS.md");
+        assert!(integration.contains(needle), "reviewer_integration_prompt missing source_evidence in schema");
+        assert!(integration.contains(provenance_rule), "reviewer_integration_prompt missing PROVENANCE RULES section");
     }
 
     #[test]

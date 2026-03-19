@@ -223,6 +223,14 @@ pub(super) async fn run_review_loop(
         medium
     ))));
 
+    let (prov_count, prov_total) = count_provenance_coverage(&ctx.review_report);
+    if prov_total > 0 {
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+            "Provenance: {}/{} findings have source_evidence",
+            prov_count, prov_total
+        ))));
+    }
+
     let passed = verdict_pass || (high == 0 && medium == 0);
 
     if passed {
@@ -447,6 +455,14 @@ async fn run_multipass_review(
         medium,
     ))));
 
+    let (prov_count, prov_total) = count_provenance_coverage(&ctx.review_report);
+    if prov_total > 0 {
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+            "Provenance: {}/{} findings have source_evidence",
+            prov_count, prov_total
+        ))));
+    }
+
     let passed = verdict_pass || (high == 0 && medium == 0);
 
     if passed {
@@ -626,6 +642,45 @@ fn get_changed_files(project_dir: &Path) -> Vec<String> {
         }
         Err(_) => Vec::new(),
     }
+}
+
+/// Count how many findings across all severity levels have source_evidence populated.
+/// Returns (with_provenance, total_findings).
+fn count_provenance_coverage(report_path: &Path) -> (usize, usize) {
+    let content = match std::fs::read_to_string(report_path) {
+        Ok(c) => c,
+        Err(_) => return (0, 0),
+    };
+
+    let json_str = extract_json_from_report(&content);
+    if json_str.is_empty() {
+        return (0, 0);
+    }
+
+    let v: serde_json::Value = match serde_json::from_str(&json_str) {
+        Ok(v) => v,
+        Err(_) => return (0, 0),
+    };
+
+    let mut with_provenance = 0usize;
+    let mut total = 0usize;
+
+    for key in &["high", "medium", "low"] {
+        if let Some(arr) = v.get(*key).and_then(|a| a.as_array()) {
+            for finding in arr {
+                total += 1;
+                if let Some(ev) = finding.get("source_evidence") {
+                    if ev.get("snippet").and_then(|s| s.as_str()).map(|s| !s.is_empty()).unwrap_or(false)
+                        && ev.get("reasoning").and_then(|s| s.as_str()).map(|s| !s.is_empty()).unwrap_or(false)
+                    {
+                        with_provenance += 1;
+                    }
+                }
+            }
+        }
+    }
+
+    (with_provenance, total)
 }
 
 fn parse_audit_findings(report_path: &Path) -> (usize, usize, usize) {
@@ -823,5 +878,62 @@ mod tests {
     fn check_review_passed_returns_false_for_missing_file() {
         let path = PathBuf::from("/tmp/nonexistent-review-report-foundry.md");
         assert!(!check_review_passed(&path));
+    }
+
+    #[test]
+    fn count_provenance_coverage_counts_findings_with_evidence() {
+        let dir = temp_dir("foundry-review-provenance");
+        let report = dir.join("report.md");
+        std::fs::write(&report, r#"# Report
+```json
+{
+  "high": [
+    {"file": "a.rs", "line": 1, "issue": "bug", "fixed": true, "category": "logic", "source_evidence": {"snippet": "let x = 1;", "line_range": [1, 1], "reasoning": "x is wrong"}},
+    {"file": "b.rs", "line": 2, "issue": "bug2", "fixed": true, "category": "logic"}
+  ],
+  "medium": [],
+  "low": [
+    {"file": "c.rs", "line": 3, "issue": "style", "category": "style", "source_evidence": {"snippet": "fn foo()", "line_range": [3, 3], "reasoning": "naming"}}
+  ]
+}
+```
+"#).expect("failed to write report");
+
+        let (with_prov, total) = super::count_provenance_coverage(&report);
+        assert_eq!(with_prov, 2, "two findings have complete source_evidence");
+        assert_eq!(total, 3, "three total findings");
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn count_provenance_coverage_returns_zero_for_missing_file() {
+        let path = std::path::PathBuf::from("/tmp/nonexistent-provenance-test.md");
+        let (with_prov, total) = super::count_provenance_coverage(&path);
+        assert_eq!(with_prov, 0);
+        assert_eq!(total, 0);
+    }
+
+    #[test]
+    fn count_provenance_coverage_rejects_empty_snippet() {
+        let dir = temp_dir("foundry-review-provenance-empty");
+        let report = dir.join("report.md");
+        std::fs::write(&report, r#"# Report
+```json
+{
+  "high": [
+    {"file": "a.rs", "line": 1, "issue": "bug", "fixed": true, "category": "logic", "source_evidence": {"snippet": "", "line_range": [1, 1], "reasoning": "x is wrong"}}
+  ],
+  "medium": [],
+  "low": []
+}
+```
+"#).expect("failed to write report");
+
+        let (with_prov, total) = super::count_provenance_coverage(&report);
+        assert_eq!(with_prov, 0, "empty snippet should not count as valid provenance");
+        assert_eq!(total, 1);
+
+        let _ = std::fs::remove_dir_all(dir);
     }
 }
