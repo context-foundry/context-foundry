@@ -8,8 +8,8 @@ An interactive version with filtering is available at [`docs/cca-alignment.html`
 
 | | Count |
 |---|---|
-| Implemented | 42 |
-| Partial | 4 |
+| Implemented | 43 |
+| Partial | 3 |
 | N/A (architectural mismatch) | 7 |
 | Not Used (alternative chosen) | 2 |
 | Open Opportunities | 0 |
@@ -65,7 +65,7 @@ An interactive version with filtering is available at [`docs/cca-alignment.html`
 | Plan mode vs direct execution | Implemented | Planner stage IS plan mode. Complexity classifier can skip for simple tasks |
 | Iterative refinement with concrete I/O examples | Implemented | Few-shot severity examples in reviewer. JSON template in pattern extractor |
 | Test-driven iteration | Implemented | Builder runs tests. Reviewer re-runs independently. Fixer iterates on failures |
-| CI/CD integration (-p flag, --output-format json) | Partial | --no-tui headless mode exists. Uses stream-json. No --json-schema for CI output |
+| CI/CD integration (--output-format json) | Implemented | `--output-format json` on `foundry run --no-tui`. SessionReport with tasks/session/config. Schema: `docs/ci-output-schema.json` |
 | Session context isolation -- fresh reviewer | Implemented | Core design principle. Verify agent is a completely separate CLI invocation |
 
 ## Domain 4: Prompt Engineering & Structured Output (20%)
@@ -119,11 +119,10 @@ Seven gaps were identified during the initial audit and resolved in commits `55e
 
 ## Remaining Partials
 
-Four principles have partial alignment due to architectural choices, not missing implementation:
+Three principles have partial alignment due to architectural choices, not missing implementation:
 
 | Principle | Why partial |
 |---|---|
 | Hooks for deterministic guarantees (1.5) | Gates enforce stage ordering, but no tool-call-level interception within an agent session (would require Agent SDK, not CLI) |
 | Adaptive investigation plans (1.6) | Discovery adapts task generation, but individual agents don't spawn sub-investigations mid-session |
-| CI/CD integration (3.6) | Headless mode works, but no structured JSON output schema for CI pipeline consumption |
-| *(none remaining in Domains 4-5)* | |
+| *(none remaining in Domains 3-5)* | |

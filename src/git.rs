@@ -250,6 +250,20 @@ pub fn commit_and_push(
     Ok(true)
 }
 
+pub fn get_head_sha(project_dir: &Path) -> Option<String> {
+    let output = Command::new("git")
+        .args(["rev-parse", "--short", "HEAD"])
+        .current_dir(project_dir)
+        .output()
+        .ok()?;
+    if output.status.success() {
+        let sha = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if sha.is_empty() { None } else { Some(sha) }
+    } else {
+        None
+    }
+}
+
 fn maybe_push_commit(project_dir: &Path, remote: Option<&str>) -> Result<()> {
     let Some(remote) = remote.filter(|remote| !remote.trim().is_empty()) else {
         return Ok(());

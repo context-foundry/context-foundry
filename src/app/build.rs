@@ -1346,6 +1346,7 @@ async fn process_task(
     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::TaskStarted(
         task_info.clone(),
     )));
+    let task_start = std::time::Instant::now();
 
     let scout_report = ctx.buildloop_dir.join("scout-report.md");
     let build_claims = ctx.buildloop_dir.join("build-claims.md");
@@ -1940,21 +1941,21 @@ async fn process_task(
         && !ctx.config.backpressure_only)
         || skip_for_batch;
 
-    let (validated, _fix_passes) = if ctx.config.backpressure_only {
+    let (validated, _fix_passes, review_findings) = if ctx.config.backpressure_only {
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
             "Backpressure-only mode: skipping LLM review (builder verification passed)".to_string(),
         )));
-        (true, 0usize)
+        (true, 0usize, (0, 0, 0))
     } else if skip_for_batch {
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
             format!("Batch doubt: deferring review ({} tasks remaining)", pending_count),
         )));
-        (true, 0usize)
+        (true, 0usize, (0, 0, 0))
     } else if skip_verify {
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
             "Simple task with clean build -- skipping verify".to_string(),
         )));
-        (true, 0usize)
+        (true, 0usize, (0, 0, 0))
     } else {
         // ─── Gate: Reviewer Prerequisites ─────────────────────
         match gate_reviewer(ctx) {
@@ -2003,7 +2004,7 @@ async fn process_task(
         }
     }
 
-    let _committed = if ctx.config.run_mode == "review" {
+    let committed = if ctx.config.run_mode == "review" {
         // Review mode: branch, commit, push, create PR, return to base
         match git::commit_task_pr(&ctx.project_dir, &ctx.config, task_id, task_desc, &ctx.plan_path, !validated) {
             Ok((committed, pr_num)) => {
@@ -2174,6 +2175,7 @@ async fn process_task(
         }
         committed
     };
+    let commit_sha = if committed { git::get_head_sha(&ctx.project_dir) } else { None };
 
     // Skip pattern extraction for trivial tasks (< 3 files changed or
     // reviewer found no issues). These tasks rarely produce interesting patterns.
@@ -2223,6 +2225,18 @@ async fn process_task(
             .current_dir(&ctx.project_dir)
             .output();
     }
+
+    let status = if validated { "pass" } else { "wip" };
+    let duration_secs = task_start.elapsed().as_secs_f64();
+    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::TaskReport {
+        task_id: task_id.to_string(),
+        status: status.to_string(),
+        commit_sha: commit_sha.clone(),
+        findings_high: review_findings.0,
+        findings_medium: review_findings.1,
+        findings_low: review_findings.2,
+        duration_secs,
+    }));
 
     // Clear checkpoint — task completed successfully (committed or WIP)
     clear_checkpoint(&ctx.buildloop_dir);

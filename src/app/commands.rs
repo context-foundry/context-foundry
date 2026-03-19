@@ -4,6 +4,7 @@ use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use anyhow::Result;
+use serde::Serialize;
 use tokio::sync::mpsc;
 
 use crate::agent::{AgentOutputEvent, ModelProvider};
@@ -15,6 +16,48 @@ use super::build;
 use super::context::RunContext;
 use super::contract::ContractPaths;
 use super::{AppEvent, LoopEvent};
+
+#[derive(Serialize)]
+struct TaskResult {
+    id: String,
+    description: String,
+    status: String,
+    commit_sha: Option<String>,
+    findings: FindingCounts,
+    duration_secs: f64,
+}
+
+#[derive(Serialize)]
+struct FindingCounts {
+    high: usize,
+    medium: usize,
+    low: usize,
+}
+
+#[derive(Serialize)]
+struct SessionStats {
+    total_duration_secs: f64,
+    patterns_injected: usize,
+    patterns_learned: usize,
+    feat_commits: usize,
+    wip_commits: usize,
+}
+
+#[derive(Serialize)]
+struct ConfigSnapshot {
+    run_mode: String,
+    builder_provider: String,
+    builder_model: String,
+    reviewer_provider: String,
+    reviewer_model: String,
+}
+
+#[derive(Serialize)]
+struct SessionReport {
+    tasks: Vec<TaskResult>,
+    session: SessionStats,
+    config: ConfigSnapshot,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ProviderCommandMode {
@@ -119,7 +162,7 @@ fn required_providers(
     providers
 }
 
-pub(super) async fn run_headless(project_dir: &Path) -> Result<()> {
+pub(super) async fn run_headless(project_dir: &Path, output_format: Option<String>) -> Result<()> {
     let contract_paths = ContractPaths::resolve(project_dir);
     let headless_review_gate = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
     let mut config = Config::load(project_dir);
@@ -127,6 +170,13 @@ pub(super) async fn run_headless(project_dir: &Path) -> Result<()> {
         eprintln!("[foundry] review mode is not supported in headless mode -- falling back to auto");
         config.run_mode = "auto".to_string();
     }
+    let config_snapshot_data = (
+        config.run_mode.clone(),
+        config.builder_provider.clone(),
+        config.builder_model.clone(),
+        config.reviewer_provider.clone(),
+        config.reviewer_model.clone(),
+    );
     let run_context = RunContext::new(
         project_dir,
         config,
@@ -171,11 +221,22 @@ pub(super) async fn run_headless(project_dir: &Path) -> Result<()> {
     });
 
     let mut update_version: Option<String> = None;
+    let json_output = output_format.as_deref() == Some("json");
+    let session_start = std::time::Instant::now();
+    let mut task_results: Vec<TaskResult> = Vec::new();
+    let mut task_descriptions: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    let mut patterns_injected: usize = 0;
+    let mut feat_commits: usize = 0;
+    let mut wip_commits: usize = 0;
 
     while let Some(evt) = rx.recv().await {
         match evt {
             AppEvent::AgentOutput(AgentOutputEvent::Text(text)) => {
-                println!("{}", text);
+                if json_output {
+                    eprintln!("{}", text);
+                } else {
+                    println!("{}", text);
+                }
             }
             AppEvent::AgentOutput(AgentOutputEvent::ToolUse {
                 tool,
@@ -193,7 +254,11 @@ pub(super) async fn run_headless(project_dir: &Path) -> Result<()> {
                 eprintln!("[stderr] {}", line);
             }
             AppEvent::AgentOutput(AgentOutputEvent::Result(text)) => {
-                println!("{}", text);
+                if json_output {
+                    eprintln!("{}", text);
+                } else {
+                    println!("{}", text);
+                }
             }
             AppEvent::AgentOutput(AgentOutputEvent::Usage { cost_usd, .. }) => {
                 eprintln!("[cost] ${:.2}", cost_usd);
@@ -201,6 +266,7 @@ pub(super) async fn run_headless(project_dir: &Path) -> Result<()> {
             AppEvent::LoopEvent(loop_event) => match loop_event {
                 LoopEvent::TaskStarted(task) => {
                     eprintln!("\n=== TASK: {} — {} ===", task.id, task.short_desc(80));
+                    task_descriptions.insert(task.id.clone(), task.description.clone());
                 }
                 LoopEvent::AgentStarted(role, model) => {
                     eprintln!("--- {} ({}) ---", role, model);
@@ -208,6 +274,7 @@ pub(super) async fn run_headless(project_dir: &Path) -> Result<()> {
                 LoopEvent::TaskCompleted(id, ok) => {
                     let status = if ok { "DONE" } else { "WIP" };
                     eprintln!("=== {} {} ===\n", id, status);
+                    if ok { feat_commits += 1; } else { wip_commits += 1; }
                 }
                 LoopEvent::DiscoveryStarted(round) => {
                     eprintln!("\n=== DISCOVERY ROUND {} ===", round);
@@ -219,13 +286,26 @@ pub(super) async fn run_headless(project_dir: &Path) -> Result<()> {
                     eprintln!("[log] {}", message);
                 }
                 LoopEvent::Finished => break,
+                LoopEvent::PatternsUsed { titles, .. } => {
+                    patterns_injected += titles.len();
+                }
+                LoopEvent::TaskReport { task_id, status, commit_sha, findings_high, findings_medium, findings_low, duration_secs } => {
+                    let description = task_descriptions.get(&task_id).cloned().unwrap_or_default();
+                    task_results.push(TaskResult {
+                        id: task_id,
+                        description,
+                        status,
+                        commit_sha,
+                        findings: FindingCounts { high: findings_high, medium: findings_medium, low: findings_low },
+                        duration_secs,
+                    });
+                }
                 LoopEvent::CountsUpdated(_, _)
                 | LoopEvent::NextTaskUpdated(_)
                 | LoopEvent::QueueUpdated(_)
                 | LoopEvent::TaskReviewResult { .. }
                 | LoopEvent::ExtensionInjected { .. }
                 | LoopEvent::ExtensionKeywordsLoaded { .. }
-                | LoopEvent::PatternsUsed { .. }
                 | LoopEvent::PrPollChecked
                 | LoopEvent::DualBuildStarted { .. }
                 | LoopEvent::DualBuildStreamDone(_, _) => {}
@@ -254,6 +334,27 @@ pub(super) async fn run_headless(project_dir: &Path) -> Result<()> {
             | AppEvent::OllamaStatus(_)
             | AppEvent::Tick => {}
         }
+    }
+
+    if json_output {
+        let report = SessionReport {
+            tasks: task_results,
+            session: SessionStats {
+                total_duration_secs: session_start.elapsed().as_secs_f64(),
+                patterns_injected,
+                patterns_learned: 0,
+                feat_commits,
+                wip_commits,
+            },
+            config: ConfigSnapshot {
+                run_mode: config_snapshot_data.0.clone(),
+                builder_provider: config_snapshot_data.1.clone(),
+                builder_model: config_snapshot_data.2.clone(),
+                reviewer_provider: config_snapshot_data.3.clone(),
+                reviewer_model: config_snapshot_data.4.clone(),
+            },
+        };
+        println!("{}", serde_json::to_string_pretty(&report).unwrap_or_else(|e| format!("{{\"error\": \"{}\"}}", e)));
     }
 
     if let Some(version) = update_version {

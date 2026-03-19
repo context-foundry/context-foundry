@@ -41,6 +41,9 @@ enum Commands {
         /// Run without TUI (streaming log mode)
         #[arg(long)]
         no_tui: bool,
+        /// Output format for headless mode (e.g., "json")
+        #[arg(long, value_name = "FORMAT")]
+        output_format: Option<String>,
     },
     /// Show current progress
     Status,
@@ -74,10 +77,10 @@ async fn main() -> Result<()> {
 
     let project_dir = dunce::canonicalize(&project_dir).unwrap_or(project_dir);
 
-    match cli.command.unwrap_or(Commands::Run { no_tui: false }) {
-        Commands::Run { no_tui } => {
+    match cli.command.unwrap_or(Commands::Run { no_tui: false, output_format: None }) {
+        Commands::Run { no_tui, output_format } => {
             if no_tui {
-                app::run_headless(&project_dir).await?;
+                app::run_headless(&project_dir, output_format).await?;
             } else {
                 app::run_tui(&project_dir).await?;
             }

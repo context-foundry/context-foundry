@@ -1,0 +1,54 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Foundry Session Report",
+  "description": "Structured output from `foundry run --no-tui --output-format json`",
+  "type": "object",
+  "required": ["tasks", "session", "config"],
+  "properties": {
+    "tasks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "description", "status", "commit_sha", "findings", "duration_secs"],
+        "properties": {
+          "id": { "type": "string", "description": "Task ID (e.g. T1.1, H1.1, D1.1)" },
+          "description": { "type": "string", "description": "Full task description" },
+          "status": { "type": "string", "enum": ["pass", "wip", "skipped"], "description": "pass = feat commit, wip = validation failed, skipped = not attempted" },
+          "commit_sha": { "type": ["string", "null"], "description": "Short git SHA of the commit, or null if nothing was committed" },
+          "findings": {
+            "type": "object",
+            "required": ["high", "medium", "low"],
+            "properties": {
+              "high": { "type": "integer", "minimum": 0 },
+              "medium": { "type": "integer", "minimum": 0 },
+              "low": { "type": "integer", "minimum": 0 }
+            }
+          },
+          "duration_secs": { "type": "number", "description": "Wall-clock seconds for this task" }
+        }
+      }
+    },
+    "session": {
+      "type": "object",
+      "required": ["total_duration_secs", "patterns_injected", "patterns_learned", "feat_commits", "wip_commits"],
+      "properties": {
+        "total_duration_secs": { "type": "number" },
+        "patterns_injected": { "type": "integer", "minimum": 0 },
+        "patterns_learned": { "type": "integer", "minimum": 0 },
+        "feat_commits": { "type": "integer", "minimum": 0 },
+        "wip_commits": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "config": {
+      "type": "object",
+      "required": ["run_mode", "builder_provider", "builder_model", "reviewer_provider", "reviewer_model"],
+      "properties": {
+        "run_mode": { "type": "string" },
+        "builder_provider": { "type": "string" },
+        "builder_model": { "type": "string" },
+        "reviewer_provider": { "type": "string" },
+        "reviewer_model": { "type": "string" }
+      }
+    }
+  }
+}

@@ -732,6 +732,9 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                 state.task_stages_seen.clear();
                 state.clear_agent();
             }
+            LoopEvent::TaskReport { .. } => {
+                // TaskReport is consumed by headless mode only; TUI ignores it.
+            }
             LoopEvent::NextTaskUpdated(next_task) => {
                 state.next_task_hint = next_task;
             }
@@ -1786,8 +1789,8 @@ pub async fn run_plan_mode(project_dir: &Path, max_iterations: u64) -> Result<()
 
 // ─── Headless Mode ───────────────────────────────────────────
 
-pub async fn run_headless(project_dir: &Path) -> Result<()> {
-    commands::run_headless(project_dir).await
+pub async fn run_headless(project_dir: &Path, output_format: Option<String>) -> Result<()> {
+    commands::run_headless(project_dir, output_format).await
 }
 
 // ─── Status & Tasks Commands ─────────────────────────────────
