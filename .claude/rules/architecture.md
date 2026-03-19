@@ -14,6 +14,10 @@ paths:
 Load Patterns → SCOUT → PLAN → [gate] → BUILD → [gate] → DOUBT → GIT COMMIT
 ```
 
+Simple tasks (classified by complexity.rs) may skip Scout and/or Plan, going straight
+to Build with the task description as the spec. Doubt can also be skipped for simple
+tasks with learned trust (doubt-history clustering).
+
 Prerequisite gates between stages block execution if preconditions aren't met:
 - gate_builder: requires current-plan.md with `## File Operations` and `## Verification`
 - gate_reviewer: warns if build-claims.md is missing (reviewer falls back to changed files)
@@ -22,6 +26,28 @@ If a gate fails, the planner is retried once with the validation error appended
 (retry-with-error-feedback). If retry also fails, the task is blocked.
 
 When TASKS.md completes, a DISCOVERY agent scans for new work and appends tasks.
+
+## Dual-Model Arena
+
+`builder_models` in .foundry.json defines two providers (e.g. `["claude:opus", "codex:"]`).
+`dual_selection` controls routing via Ctrl+D:
+
+| Selection | Behavior |
+|-----------|----------|
+| `first` | All stages route through builder_models[0]. Incompatible model names cleared. |
+| `second` | All stages route through builder_models[1]. Incompatible model names cleared. |
+| `both` | Two complete independent pipelines fork before Scout into separate worktrees. |
+
+Key: provider selection is **full-pipeline**, not per-stage. `Config::for_pipeline()` overrides
+all 6 provider fields and clears model names that belong to the wrong provider.
+
+In dual mode, worktrees live at `.buildloop/arena/{provider}/` with independent .buildloop/ dirs.
+TUI tab switching (1/2) shows each pipeline's output. No automated winner selection.
+
+## Global Config
+
+`~/.foundry/config.json` provides defaults for all projects. Project `.foundry.json` overrides.
+`Config::load()` reads global first, then merges project fields on top.
 
 ## Module Responsibilities
 
@@ -53,9 +79,11 @@ When TASKS.md completes, a DISCOVERY agent scans for new work and appends tasks.
 
 ## Review Gate
 - PASS = audit report contains "PASS" verdict AND no HIGH/MEDIUM findings.
-- Reviewer has few-shot severity examples (HIGH=security, MEDIUM=error-handling, LOW=style).
-- Explicit criteria define what to report vs skip (not confidence-based filtering).
-- Convergence check: parse findings JSON for severity counts.
+- Reviewer has few-shot severity examples with borderline calibration (HIGH=unchecked user input, LOW=test-only return value, SKIP=unwrap on constant).
+- Multi-pass review for large changesets (8+ files): per-file analysis + cross-file integration pass.
+- Each finding includes: file, line, issue, category, source_evidence (snippet + line_range + reasoning), confidence (0.0-1.0).
+- Findings below confidence_threshold (default 0.5) are logged for manual review, not auto-fixed.
+- Explicit criteria define what to report vs skip (not confidence-based filtering for severity, but confidence-based routing for fix decisions).
 
 ## Key Files (Don't Modify Without Asking)
 - `CLAUDE.md` — project instructions
