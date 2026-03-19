@@ -406,6 +406,16 @@ A prerequisite gate validates extensions before the builder runs: if an extensio
 - **task.rs** — Parse TASKS.md task lists
 - **git.rs** — Commit and push helpers
 
+### `.claude/` directory
+
+This repo ships two types of Claude Code configuration in `.claude/`:
+
+**Rules** (`.claude/rules/*.md`) are context that Claude Code loads automatically based on which files you're editing. Each rule has a `paths:` frontmatter that scopes it -- `patterns.md` activates when you touch `src/patterns.rs`, `rust.md` activates for any `.rs` file. Rules tell Claude the project's conventions so it writes code that fits.
+
+**Skills** (`.claude/skills/`) are on-demand slash commands (`/audit`, `/scout`, `/extract-patterns`). Each runs in a forked context with restricted tool access. These are the same operations foundry's pipeline runs autonomously, exposed as manual commands for interactive use.
+
+Rules and patterns are different things despite both influencing agent behavior. Rules are static project conventions checked into the repo. Patterns are learned issue/solution pairs that foundry discovers at runtime, stored in `~/.foundry/patterns/`, and matched per-task by keyword and semantic similarity.
+
 ## Previous Version
 
 The Python MCP server + daemon that preceded this Rust rewrite is archived at:
