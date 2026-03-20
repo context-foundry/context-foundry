@@ -1249,10 +1249,6 @@ mod tests {
             style_for_line("[rate limited] wait", &theme).fg,
             Some(Color::Yellow)
         );
-        assert_eq!(
-            style_for_line("[studio] note", &theme).fg,
-            Some(Color::Cyan)
-        );
         assert_eq!(style_for_line("plain text", &theme).fg, Some(Color::White));
     }
 

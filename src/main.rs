@@ -15,7 +15,6 @@ mod observatory;
 mod orchestrator;
 mod patterns;
 mod prompts;
-mod studio;
 mod task;
 mod tui;
 mod update;
@@ -62,8 +61,6 @@ enum Commands {
         /// What you want designed or reviewed
         intent: Vec<String>,
     },
-    /// Start the interactive multi-model studio
-    Studio,
     /// Run as an MCP server (stdio transport)
     Mcp,
     /// Update foundry to the latest version
@@ -108,9 +105,6 @@ async fn main() -> Result<()> {
                 anyhow::bail!("Usage: foundry design <intent>");
             }
             orchestrator::run_design_command(&project_dir, &intent).await?;
-        }
-        Commands::Studio => {
-            studio::run_tui(&project_dir).await?;
         }
         Commands::Mcp => {
             mcp::run_mcp_server(&project_dir)?;
