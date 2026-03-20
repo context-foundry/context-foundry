@@ -1239,31 +1239,6 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
         cached_patterns.extend(ext_patterns);
     }
 
-    // ─── Crash Recovery ───────────────────────────────────────────
-    // If a previous run crashed mid-task, detect the checkpoint and
-    // log it so the user knows we're aware. The task will be re-processed
-    // from scratch (it's still pending in TASKS.md), but at least we
-    // don't lose awareness of what happened.
-    if let Some(checkpoint) = read_checkpoint(&ctx.buildloop_dir) {
-        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-            "Crash recovery: found checkpoint for {} at stage '{}' ({}). Resuming from task queue.",
-            checkpoint.task_id, checkpoint.completed_stage, checkpoint.timestamp,
-        ))));
-
-        // If the builder completed but the task wasn't marked done (crash during doubt/commit),
-        // and build-claims.md exists, we can skip straight to doubt on the next process_task run.
-        // The scout report and plan are also likely still on disk.
-        if checkpoint.completed_stage == "builder" {
-            let claims_exist = ctx.buildloop_dir.join("build-claims.md").exists();
-            if claims_exist {
-                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
-                    "Builder had completed — build-claims.md found, will attempt to resume at doubt stage".to_string(),
-                )));
-            }
-        }
-        clear_checkpoint(&ctx.buildloop_dir);
-    }
-
     // ─── Scout State ──────────────────────────────────────────────
     // Scout runs once at session start, then reuses the report for
     // subsequent tasks unless the previous commit touched structural files.
@@ -1929,6 +1904,8 @@ async fn process_task(
     if ctx.config.builder_models.len() >= 2 {
         match dual_sel {
             DualSelection::Both if selected_configs.len() == 2 => {
+                // Dual pipelines use worktrees that don't survive a crash -- clear stale checkpoint.
+                clear_checkpoint(&ctx.buildloop_dir);
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::TaskStarted(
                     task_info.clone(),
                 )));
@@ -1991,6 +1968,72 @@ async fn process_task(
         let _ = std::fs::remove_dir_all(&arena_dir);
     }
 
+    // ─── Checkpoint Resumption ───────────────────────────────────
+    // If a previous run crashed mid-task, detect the checkpoint and
+    // skip completed stages instead of re-running from scratch.
+    let resume_stage: Option<&str> = read_checkpoint(&ctx.buildloop_dir)
+        .filter(|cp| cp.task_id == task_info.id)
+        .and_then(|cp| {
+            let stage = match cp.completed_stage.as_str() {
+                "scout" => Some("planner"),
+                "planner" => Some("builder"),
+                "builder" => Some("doubt"),
+                _ => None,
+            };
+            if let Some(s) = stage {
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                    "Checkpoint recovery: {} completed '{}' stage at {} -- resuming at {}",
+                    cp.task_id, cp.completed_stage, cp.timestamp, s,
+                ))));
+            }
+            stage
+        });
+
+    // Determine which stages to skip based on checkpoint, verifying artifacts exist.
+    // resume_stage tells us the NEXT stage to run. Stages before it were completed.
+    let checkpoint_skip_scout = match resume_stage {
+        Some("planner" | "builder" | "doubt") => {
+            // Scout completed -- but verify artifact exists
+            if ctx.buildloop_dir.join("scout-report.md").exists() {
+                true
+            } else {
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+                    "Checkpoint says scout completed but scout-report.md missing -- re-running scout".to_string(),
+                )));
+                false
+            }
+        }
+        _ => false,
+    };
+    let checkpoint_skip_planner = match resume_stage {
+        Some("builder" | "doubt") => {
+            // Planner completed -- but verify artifact exists
+            if ctx.current_plan.exists() {
+                true
+            } else {
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+                    "Checkpoint says planner completed but current-plan.md missing -- re-running from planner".to_string(),
+                )));
+                false
+            }
+        }
+        _ => false,
+    };
+    let checkpoint_skip_builder = match resume_stage {
+        Some("doubt") => {
+            // Builder completed -- verify build-claims.md exists
+            if ctx.buildloop_dir.join("build-claims.md").exists() {
+                true
+            } else {
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+                    "Checkpoint says builder completed but build-claims.md missing -- re-running from builder".to_string(),
+                )));
+                false
+            }
+        }
+        _ => false,
+    };
+
     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::TaskStarted(
         task_info.clone(),
     )));
@@ -2004,13 +2047,18 @@ async fn process_task(
         complexity: format!("{:?}", task_complexity),
     });
     let skip_scout = skip_scout
+        || checkpoint_skip_scout
         || (ctx.config.skip_scout_for_simple && task_complexity == TaskComplexity::Simple);
     let build_claims = ctx.buildloop_dir.join("build-claims.md");
-    if !skip_scout {
+    if !skip_scout && !checkpoint_skip_scout {
         let _ = std::fs::remove_file(&scout_report);
     }
-    let _ = std::fs::remove_file(&build_claims);
-    let _ = std::fs::remove_file(&ctx.current_plan);
+    if !checkpoint_skip_builder {
+        let _ = std::fs::remove_file(&build_claims);
+    }
+    if !checkpoint_skip_planner {
+        let _ = std::fs::remove_file(&ctx.current_plan);
+    }
     let _ = std::fs::remove_file(&ctx.review_report);
     let _ = std::fs::remove_file(&patterns_extracted);
 
@@ -2085,9 +2133,10 @@ async fn process_task(
     // Skip for simple tasks (existing behavior) AND for medium tasks with
     // detailed descriptions (80+ chars). Detailed task descriptions from the
     // upgraded describe-work agent are already comprehensive plans.
-    let skip_planner = ctx.config.skip_planner_for_simple
-        && (task_complexity == TaskComplexity::Simple
-            || (task_complexity == TaskComplexity::Medium && task_desc.len() >= 80));
+    let skip_planner = checkpoint_skip_planner
+        || (ctx.config.skip_planner_for_simple
+            && (task_complexity == TaskComplexity::Simple
+                || (task_complexity == TaskComplexity::Medium && task_desc.len() >= 80)));
 
     // Track rate limiting across agents; starts false when planner is skipped.
     #[allow(unused_assignments)]
@@ -2095,7 +2144,9 @@ async fn process_task(
 
     // ─── Run Scout (skip if recent report exists and codebase hasn't changed much) ───
     if skip_scout {
-        let msg = if ctx.config.skip_scout_for_simple && task_complexity == TaskComplexity::Simple {
+        let msg = if checkpoint_skip_scout {
+            "Checkpoint: reusing scout report from previous session".to_string()
+        } else if ctx.config.skip_scout_for_simple && task_complexity == TaskComplexity::Simple {
             "Skipping scout for simple task".to_string()
         } else {
             "Reusing scout report from previous task".to_string()
@@ -2202,7 +2253,16 @@ async fn process_task(
         }
     }
 
-    if !skip_scout && stage_results.last().map(|r| r.stage.as_str()) != Some("Scout") {
+    if checkpoint_skip_scout {
+        let mut result = StageResult::success(
+            "Scout",
+            &format!("Investigate codebase for {} (checkpoint)", task_id),
+        );
+        if ctx.buildloop_dir.join("scout-report.md").exists() {
+            result.partial_results.push("scout-report.md".to_string());
+        }
+        stage_results.push(result);
+    } else if !skip_scout && stage_results.last().map(|r| r.stage.as_str()) != Some("Scout") {
         let mut result =
             StageResult::success("Scout", &format!("Investigate codebase for {}", task_id));
         if ctx.buildloop_dir.join("scout-report.md").exists() {
@@ -2211,15 +2271,20 @@ async fn process_task(
         stage_results.push(result);
     }
 
-    // Checkpoint: scout completed
-    write_checkpoint(&ctx.buildloop_dir, task_id, task_desc, "scout");
+    // Checkpoint: scout completed (skip write if resuming from a later stage)
+    if !checkpoint_skip_scout {
+        write_checkpoint(&ctx.buildloop_dir, task_id, task_desc, "scout");
+    }
 
     // Helper: progress indicator characters.
-    let scout_char = if skip_scout { "-" } else { "S" };
-    let planner_char = if skip_planner { "-" } else { "P" };
+    // Checkpoint-resumed stages count as "ran" for progress indicators.
+    let scout_char = if skip_scout && !checkpoint_skip_scout { "-" } else { "S" };
+    let planner_char = if skip_planner && !checkpoint_skip_planner { "-" } else { "P" };
 
     if skip_planner {
-        let reason = if task_complexity == TaskComplexity::Simple {
+        let reason = if checkpoint_skip_planner {
+            "checkpoint recovery"
+        } else if task_complexity == TaskComplexity::Simple {
             "simple task"
         } else {
             "detailed medium task (>= 80 chars)"
@@ -2400,7 +2465,16 @@ async fn process_task(
         }
     }
 
-    if !skip_planner {
+    if checkpoint_skip_planner {
+        let mut result = StageResult::success(
+            "Planner",
+            &format!("Create implementation plan for {} (checkpoint)", task_id),
+        );
+        if ctx.current_plan.exists() {
+            result.partial_results.push("current-plan.md".to_string());
+        }
+        stage_results.push(result);
+    } else if !skip_planner {
         let mut result = StageResult::success(
             "Planner",
             &format!("Create implementation plan for {}", task_id),
@@ -2411,8 +2485,10 @@ async fn process_task(
         stage_results.push(result);
     }
 
-    // Checkpoint: planner completed
-    write_checkpoint(&ctx.buildloop_dir, task_id, task_desc, "planner");
+    // Checkpoint: planner completed (skip write if resuming from a later stage)
+    if !checkpoint_skip_planner {
+        write_checkpoint(&ctx.buildloop_dir, task_id, task_desc, "planner");
+    }
 
     // ─── Gate: Extension Contracts ──────────────────────────────
     if !ctx.config.extensions.is_empty() {
@@ -2548,6 +2624,26 @@ async fn process_task(
     }
 
     // ─── Run Builder ────────────────────────────────────────
+    let build_ok: bool;
+    if checkpoint_skip_builder {
+        // Builder already completed in a previous run -- populate results and skip.
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+            "Checkpoint: skipping builder for {} -- resuming at doubt/review",
+            task_id,
+        ))));
+        {
+            let mut result = StageResult::success(
+                "Builder",
+                &format!("Implement changes for {} (checkpoint)", task_id),
+            );
+            if ctx.buildloop_dir.join("build-claims.md").exists() {
+                result.partial_results.push("build-claims.md".to_string());
+            }
+            stage_results.push(result);
+        }
+        build_ok = true;
+        // last_rate_limited stays false for the resumed session.
+    } else {
     emit_extension_injections(
         tx,
         &ctx.config.extensions,
@@ -2583,7 +2679,8 @@ async fn process_task(
         None
     };
 
-    let (build_ok, builder_rate_limited) = if let Some((ref file_ops, ref groups)) = parallel_data {
+    let builder_rate_limited;
+    (build_ok, builder_rate_limited) = if let Some((ref file_ops, ref groups)) = parallel_data {
         run_parallel_builder(task_info, ctx, tx, file_ops, groups, extension_context).await
     } else {
         // Original single-builder path
@@ -2787,6 +2884,7 @@ async fn process_task(
             orig, trimmed
         ))));
     }
+    } // end !checkpoint_skip_builder
 
     adaptive_sleep(
         &ctx.config,
