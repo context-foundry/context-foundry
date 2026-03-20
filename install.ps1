@@ -1,4 +1,8 @@
 # One-liner install: irm https://raw.githubusercontent.com/context-foundry/context-foundry/main/install.ps1 | iex
+# Clean install:     powershell -File install.ps1 -Clean
+param(
+    [switch]$Clean
+)
 $ErrorActionPreference = "Stop"
 
 # Force TLS 1.2 (older PowerShell defaults to TLS 1.0 which GitHub rejects)
@@ -7,6 +11,36 @@ $ErrorActionPreference = "Stop"
 $Repo = "context-foundry/context-foundry"
 $Target = "x86_64-pc-windows-msvc"
 $InstallDir = if ($env:FOUNDRY_INSTALL_DIR) { $env:FOUNDRY_INSTALL_DIR } else { "$env:USERPROFILE\.local\bin" }
+
+# ─── Clean: remove stale binary and app data ───────────────────────
+if ($Clean) {
+    Write-Host "Cleaning previous installation..."
+
+    # Remove old binary
+    $OldBinary = Join-Path $InstallDir "foundry.exe"
+    if (Test-Path $OldBinary) {
+        Remove-Item $OldBinary -Force
+        Write-Host "  Removed $OldBinary"
+    }
+
+    # Remove app data (patterns, embeddings cache, doubt history, config)
+    $AppDataDirs = @(
+        (Join-Path $env:LOCALAPPDATA "context-foundry"),
+        (Join-Path $env:USERPROFILE ".context-foundry"),
+        (Join-Path $env:USERPROFILE ".foundry")
+    )
+    foreach ($Dir in $AppDataDirs) {
+        if (Test-Path $Dir) {
+            Remove-Item $Dir -Recurse -Force
+            Write-Host "  Removed $Dir"
+        }
+    }
+
+    Write-Host "Clean complete. Per-project files (.buildloop, TASKS.md) are untouched."
+    Write-Host ""
+}
+
+# ─── Install ────────────────────────────────────────────────────────
 
 # Get latest version
 $Release = Invoke-RestMethod "https://api.github.com/repos/$Repo/releases/latest"

@@ -1,9 +1,41 @@
 #!/bin/sh
 # One-liner install: curl -fsSL https://raw.githubusercontent.com/context-foundry/context-foundry/main/install.sh | sh
+# Clean install:     curl -fsSL ... | sh -s -- --clean
 set -e
 
 REPO="context-foundry/context-foundry"
 INSTALL_DIR="${FOUNDRY_INSTALL_DIR:-$HOME/.local/bin}"
+CLEAN=false
+
+for arg in "$@"; do
+  case "$arg" in
+    --clean) CLEAN=true ;;
+  esac
+done
+
+# ─── Clean: remove stale binary and app data ───────────────────────
+if [ "$CLEAN" = true ]; then
+  echo "Cleaning previous installation..."
+
+  # Remove old binary
+  if [ -f "$INSTALL_DIR/foundry" ]; then
+    rm -f "$INSTALL_DIR/foundry"
+    echo "  Removed $INSTALL_DIR/foundry"
+  fi
+
+  # Remove app data (patterns, embeddings cache, doubt history, config)
+  for dir in "$HOME/.context-foundry" "$HOME/.foundry"; do
+    if [ -d "$dir" ]; then
+      rm -rf "$dir"
+      echo "  Removed $dir"
+    fi
+  done
+
+  echo "Clean complete. Per-project files (.buildloop, TASKS.md) are untouched."
+  echo ""
+fi
+
+# ─── Install ────────────────────────────────────────────────────────
 
 # Detect platform
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
