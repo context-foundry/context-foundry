@@ -187,10 +187,10 @@
     <h1>Y'all Need a Smarter Build Loop</h1>
     <p class="subtitle">Context Foundry is a self-hosted AI agent pipeline that runs your build loop,
     learns from its mistakes, and gets better every ride.</p>
-    <p class="subtitle" style="font-size: 0.8rem;">Rust CLI &middot; v0.6.1 &middot; MIT License</p>
+    <p class="subtitle" style="font-size: 0.8rem;">Rust CLI &middot; v0.7.0 &middot; MIT License</p>
   </header>
 
-  <p>Context Foundry takes a task queue and drives each task through a four-stage pipeline: Scout reads the territory, Plan draws the route, Implement drives the herd, and Doubt inspects every steer at the gate. The system extracts patterns from solved problems and feeds them back into future plans, so it gets better at your codebase over time. It runs on your machine, calls the AI providers you choose, and commits verified code to git. No cloud service. No vendor lock-in. Just a Rust binary and a terminal.</p>
+  <p>Context Foundry takes a task queue and drives each task through a four-stage pipeline: Scout reads the territory, Plan draws the route, Implement drives the herd, and Doubt inspects every steer at the gate. <strong>No agent shares a context window with any other.</strong> Each one starts clean and receives only curated artifacts from the previous stage -- a structured report, a deterministic plan, a set of build claims. No bloated conversation history, no accumulated reasoning, no inherited blind spots. Each stage gets signal, not noise. This is how the loop prevents compounding errors across a long task queue. The system extracts patterns from solved problems and feeds them back into future plans, so it gets better at your codebase over time. It runs on your machine, calls the AI providers you choose, and commits verified code to git. No cloud service. No vendor lock-in. Just a Rust binary and a terminal.</p>
 
   <div class="divider">~:~=~:~=~:~=~:~=~:~=~:~</div>
 
@@ -576,7 +576,7 @@
   </ul>
 
   <footer>
-    Context Foundry v0.6.1 &middot; Self-hosted &middot; MIT License
+    Context Foundry v0.7.0 &middot; Self-hosted &middot; MIT License
   </footer>
 
 </body>
