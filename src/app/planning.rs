@@ -76,7 +76,7 @@ pub(super) async fn run_append_tasks(
     });
 
     let prompt =
-        prompts::append_tasks_prompt(&description, &ctx.tasks_file_name(), &ctx.spec_file_name());
+        prompts::append_tasks_prompt(&description, &ctx.tasks_file_prompt_path(), &ctx.spec_file_prompt_path());
     let result = agent::run_agent(
         &AgentRole::Planner,
         agent::ModelProvider::Claude,
@@ -294,8 +294,8 @@ async fn run_gap_analysis_iteration(
         iteration,
         pattern_context,
         user_intent,
-        &ctx.spec_file_name(),
-        &ctx.tasks_file_name(),
+        &ctx.spec_file_prompt_path(),
+        &ctx.tasks_file_prompt_path(),
     );
     let result = agent::run_agent(
         &AgentRole::Planner,

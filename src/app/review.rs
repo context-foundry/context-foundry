@@ -147,8 +147,8 @@ pub(super) async fn run_review_loop(
         1,
         pattern_context,
         diff_for_review.as_deref(),
-        &ctx.spec_file_name(),
-        &ctx.tasks_file_name(),
+        &ctx.spec_file_prompt_path(),
+        &ctx.tasks_file_prompt_path(),
     );
     let prompt = prompts::wrap_with_extensions(&prompt, extension_context);
     if !extension_context.is_empty() {
@@ -337,8 +337,8 @@ async fn run_multipass_review(
             task_desc,
             file,
             &file_diff,
-            &ctx.spec_file_name(),
-            &ctx.tasks_file_name(),
+            &ctx.spec_file_prompt_path(),
+            &ctx.tasks_file_prompt_path(),
         );
 
         let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
@@ -426,8 +426,8 @@ async fn run_multipass_review(
         &per_file_findings_json,
         pattern_context,
         diff_for_review,
-        &ctx.spec_file_name(),
-        &ctx.tasks_file_name(),
+        &ctx.spec_file_prompt_path(),
+        &ctx.tasks_file_prompt_path(),
     );
     let prompt = prompts::wrap_with_extensions(&prompt, extension_context);
 

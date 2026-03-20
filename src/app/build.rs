@@ -196,8 +196,8 @@ fn spawn_lookahead_planner(
             &task_id,
             &task_desc,
             &pattern_context,
-            &ctx.spec_file_name(),
-            &ctx.tasks_file_name(),
+            &ctx.spec_file_prompt_path(),
+            &ctx.tasks_file_prompt_path(),
             &plan_file,
         );
         // Lookahead planner writes plans, not code -- skip extension context.
@@ -673,8 +673,8 @@ async fn run_parallel_builder(
             task_id,
             task_desc,
             &joined_blocks,
-            &ctx.spec_file_name(),
-            &ctx.tasks_file_name(),
+            &ctx.spec_file_prompt_path(),
+            &ctx.tasks_file_prompt_path(),
         );
         let prompt = prompts::wrap_with_extensions(&prompt, extension_context);
 
@@ -1321,8 +1321,8 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
             let prompt = prompts::bootstrap_scout_prompt(
                 user_intent.as_deref(),
                 updated_specs.as_deref(),
-                &ctx.spec_file_name(),
-                &ctx.tasks_file_name(),
+                &ctx.spec_file_prompt_path(),
+                &ctx.tasks_file_prompt_path(),
             );
             // Scout is read-only investigation -- skip extension context to save tokens.
             let scout_start = Instant::now();
@@ -1644,8 +1644,8 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
             };
             let prompt = prompts::discovery_prompt(
                 discovery_round,
-                &ctx.spec_file_name(),
-                &ctx.tasks_file_name(),
+                &ctx.spec_file_prompt_path(),
+                &ctx.tasks_file_prompt_path(),
                 build_history.as_deref(),
             );
             // Discovery finds new work -- skip extension context to save tokens.
@@ -2134,8 +2134,8 @@ async fn process_task(
             task_id,
             task_desc,
             updated_specs.as_deref(),
-            &ctx.spec_file_name(),
-            &ctx.tasks_file_name(),
+            &ctx.spec_file_prompt_path(),
+            &ctx.tasks_file_prompt_path(),
         );
         // Scout is read-only investigation -- skip extension context to save tokens.
         let scout_start = Instant::now();
@@ -2278,8 +2278,8 @@ async fn process_task(
                 task_id,
                 task_desc,
                 &pattern_context,
-                &ctx.spec_file_name(),
-                &ctx.tasks_file_name(),
+                &ctx.spec_file_prompt_path(),
+                &ctx.tasks_file_prompt_path(),
             );
             // Planner writes plans, not code -- skip extension context to save tokens.
             let planner_start = Instant::now();
@@ -2467,7 +2467,7 @@ async fn process_task(
                  --- END VALIDATION ERROR ---",
                 prompts::planner_prompt(
                     task_id, task_desc, &pattern_context,
-                    &ctx.spec_file_name(), &ctx.tasks_file_name(),
+                    &ctx.spec_file_prompt_path(), &ctx.tasks_file_prompt_path(),
                 ),
                 reason,
                 crate::utils::truncate_str(&failed_output, 500),
@@ -2612,15 +2612,15 @@ async fn process_task(
             prompts::builder_direct_prompt(
                 task_id,
                 task_desc,
-                &ctx.spec_file_name(),
-                &ctx.tasks_file_name(),
+                &ctx.spec_file_prompt_path(),
+                &ctx.tasks_file_prompt_path(),
             )
         } else {
             prompts::builder_prompt(
                 task_id,
                 task_desc,
-                &ctx.spec_file_name(),
-                &ctx.tasks_file_name(),
+                &ctx.spec_file_prompt_path(),
+                &ctx.tasks_file_prompt_path(),
             )
         };
         let prompt = prompts::wrap_with_extensions(&prompt, extension_context);

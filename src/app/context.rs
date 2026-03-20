@@ -157,4 +157,16 @@ impl RunContext {
             .to_string_lossy()
             .into_owned()
     }
+
+    /// Absolute path to spec file, for use in agent prompts.
+    /// Claude Code may resolve cwd to git root, so bare filenames
+    /// can match the wrong file in monorepo subdirectories.
+    pub(super) fn spec_file_prompt_path(&self) -> String {
+        self.spec_path.display().to_string()
+    }
+
+    /// Absolute path to tasks file, for use in agent prompts.
+    pub(super) fn tasks_file_prompt_path(&self) -> String {
+        self.plan_path.display().to_string()
+    }
 }
