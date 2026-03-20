@@ -61,6 +61,11 @@ apps/
 # Context Foundry runtime state
 .context-foundry/
 
+# Operational files (SPID pipeline state)
+TASKS.md
+TASKS-ARCHIVE.md
+UPDATED_SPECS.md
+
 # Misc
 cloud_test*.txt
 scout_debug.log

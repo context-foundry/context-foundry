@@ -1,3 +1,0 @@
-I want to add support for a second watch to connect, also a Garmin, connecting via the same kind of mechanism, but it's a separate account. I want the ability for both visitors to this site to be able to see the stats for both watches, and even a fun game where the two watches go head-to-head and have a standoff with the health stats for that day.
-
-Up till whatever current data we have, you can do a competition to see who's winning this way, it's a little bit competitive. Then you can also do the competition on previous days, so you can select yesterday, the day before, or last week and then do the head-to-head to see who wins, who had the better stats. It's kind of like a street fighter game, head-to-head versus each other, but based on stats
