@@ -24,6 +24,8 @@ impl StartupState {
         status_message: Option<String>,
     ) -> Self {
         let contract_paths = ContractPaths::resolve(project_dir);
+        // Clear stale UPDATED_SPECS.md so each startup session is fresh
+        let _ = std::fs::remove_file(&contract_paths.updated_specs_path);
         // Vestigial actions vec -- kept for struct compatibility, no longer rendered
         let actions = vec![StartupAction::ScanProject];
 

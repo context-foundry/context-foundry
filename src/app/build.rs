@@ -767,8 +767,14 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                 .ok()
                 .filter(|s| !s.trim().is_empty());
 
+            // Read UPDATED_SPECS.md for enhancement context if it exists
+            let updated_specs = std::fs::read_to_string(&ctx.updated_specs_path)
+                .ok()
+                .filter(|s| !s.trim().is_empty());
+
             let prompt = prompts::bootstrap_scout_prompt(
                 user_intent.as_deref(),
+                updated_specs.as_deref(),
                 &ctx.spec_file_name(),
                 &ctx.tasks_file_name(),
             );
@@ -1324,9 +1330,15 @@ async fn process_task(
             ),
         )));
 
+        // Read UPDATED_SPECS.md for enhancement context if it exists
+        let updated_specs = std::fs::read_to_string(&ctx.updated_specs_path)
+            .ok()
+            .filter(|s| !s.trim().is_empty());
+
         let scout_prompt_text = prompts::scout_prompt(
             task_id,
             task_desc,
+            updated_specs.as_deref(),
             &ctx.spec_file_name(),
             &ctx.tasks_file_name(),
         );

@@ -29,6 +29,7 @@ pub fn wrap_with_extensions(prompt: &str, extension_context: &str) -> String {
 /// Investigates the codebase AND creates tasks in one pass.
 pub fn bootstrap_scout_prompt(
     user_intent: Option<&str>,
+    updated_specs: Option<&str>,
     spec_file: &str,
     tasks_file: &str,
 ) -> String {
@@ -37,11 +38,16 @@ pub fn bootstrap_scout_prompt(
         .map(|intent| format!("\nUSER REQUEST: {intent}\n"))
         .unwrap_or_default();
 
+    let updated_specs_block = updated_specs
+        .filter(|s| !s.trim().is_empty())
+        .map(|specs| format!("\nUPDATED SPECS (user's latest enhancement request):\n{specs}\n"))
+        .unwrap_or_default();
+
     format!(
         r#"You are the SCOUT agent. Investigate this project and create a task queue.
-{intent_block}
+{intent_block}{updated_specs_block}
 YOUR JOB:
-1. Read {spec_file} and CLAUDE.md if they exist
+1. Read {spec_file}, UPDATED_SPECS.md, and CLAUDE.md if they exist
 2. Detect the tech stack (Cargo.toml, package.json, pyproject.toml, etc.)
 3. Read existing source code to understand what's built
 4. Run build/test commands to find current state
@@ -96,17 +102,23 @@ RULES:
 pub fn scout_prompt(
     task_id: &str,
     task_desc: &str,
+    updated_specs: Option<&str>,
     spec_file: &str,
     tasks_file: &str,
 ) -> String {
+    let updated_specs_block = updated_specs
+        .filter(|s| !s.trim().is_empty())
+        .map(|specs| format!("\nUPDATED SPECS (user's latest enhancement request):\n{specs}\n"))
+        .unwrap_or_default();
+
     format!(
         r#"You are the SCOUT agent. Investigate the codebase before planning begins.
 
 Task ID: {task_id}
 Task Description: {task_desc}
-
+{updated_specs_block}
 YOUR JOB:
-1. Read {spec_file} and CLAUDE.md for project context
+1. Read {spec_file}, UPDATED_SPECS.md, and CLAUDE.md for project context
 2. Read {tasks_file} to see completed tasks and what's been built
 3. Detect the tech stack (Cargo.toml, package.json, pyproject.toml, etc.)
 4. Find the files most relevant to this task — read them
