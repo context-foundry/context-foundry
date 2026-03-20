@@ -237,10 +237,25 @@ pub(super) fn render_header(frame: &mut Frame, area: Rect, state: &AppState) {
                 .fg(state.tui_theme.text)
                 .add_modifier(Modifier::BOLD),
         )),
-        Line::from(Span::styled(
-            agent_line,
-            Style::default().fg(state.tui_theme.muted),
-        )),
+        {
+            let mut agent_spans = vec![Span::styled(
+                &agent_line,
+                Style::default().fg(state.tui_theme.muted),
+            )];
+            if !state.status_summary.is_empty() && !agent_line.is_empty() {
+                let prefix = " | ";
+                let used = agent_line.len() + prefix.len();
+                let avail = (area.width as usize).saturating_sub(used);
+                if avail > 4 {
+                    let summary = truncate_str(&state.status_summary, avail);
+                    agent_spans.push(Span::styled(
+                        format!("{}{}", prefix, summary),
+                        Style::default().fg(state.tui_theme.muted),
+                    ));
+                }
+            }
+            Line::from(agent_spans)
+        },
     ];
 
     if let Some(label) = dual_mode_badge_label(state) {

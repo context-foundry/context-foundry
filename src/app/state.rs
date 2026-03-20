@@ -346,6 +346,7 @@ pub struct AppState {
     pub active_pattern_keywords: HashMap<String, Vec<String>>,
     pub tui_theme: TuiTheme,
     pub ship_active: bool,
+    pub status_summary: String,
     pub parallel_builder_progress: Option<(usize, usize)>, // (total, done) when parallel builder active
     pub(super) pending_transition: Option<PendingTransition>,
     pub(super) tasks_file_lock: Arc<Mutex<()>>,
@@ -433,6 +434,7 @@ impl AppState {
             active_pattern_keywords: HashMap::new(),
             tui_theme: TuiTheme::default(),
             ship_active: false,
+            status_summary: String::new(),
             parallel_builder_progress: None,
             pending_transition: None,
             tasks_file_lock: Arc::new(Mutex::new(())),
@@ -464,6 +466,7 @@ impl AppState {
         self.scroll_offset = 0;
         self.events_received = 0;
         self.agent_context_pct = None;
+        self.status_summary = String::new();
         self.current_agent = Some((role, Utc::now()));
         self.current_agent_model = Some(model.to_string());
     }

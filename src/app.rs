@@ -1501,12 +1501,15 @@ fn refresh_patterns_cache(state: &mut AppState, config: &Config) {
 fn handle_agent_output(state: &mut AppState, output: AgentOutputEvent) {
     state.events_received += 1;
     match output {
-        AgentOutputEvent::Text(text) => {
-            state.agent_output.push(text);
+        AgentOutputEvent::Text(ref text) => {
+            if text.starts_with("[rate limited]") {
+                state.status_summary = "Waiting for API retry".to_string();
+            }
+            state.agent_output.push(text.clone());
         }
         AgentOutputEvent::ToolUse {
-            tool,
-            input_preview,
+            ref tool,
+            ref input_preview,
         } => {
             let msg = if input_preview.is_empty() {
                 format!("[tool] {}", tool)
@@ -1514,6 +1517,30 @@ fn handle_agent_output(state: &mut AppState, output: AgentOutputEvent) {
                 format!("[tool] {} — {}", tool, input_preview)
             };
             state.agent_output.push(msg);
+
+            // Derive human-readable status summary from tool call
+            let basename = Path::new(input_preview.as_str())
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or(input_preview.as_str());
+            state.status_summary = match tool.as_str() {
+                "Read" => format!("Reading {}", basename),
+                "Glob" => format!("Exploring {}", truncate_str(input_preview, 40)),
+                "Grep" => format!("Searching for {}", truncate_str(input_preview, 40)),
+                "Bash" => format!("Running {}", truncate_str(input_preview, 40)),
+                "Edit" | "Write" => {
+                    if input_preview.contains("scout-report") {
+                        "Writing scout report".to_string()
+                    } else if input_preview.contains("current-plan") {
+                        "Writing plan".to_string()
+                    } else if input_preview.contains("build-claims") {
+                        "Writing build claims".to_string()
+                    } else {
+                        format!("Editing {}", basename)
+                    }
+                }
+                _ => state.status_summary.clone(),
+            };
         }
         AgentOutputEvent::ToolResult { output_preview } => {
             if !output_preview.is_empty() {
