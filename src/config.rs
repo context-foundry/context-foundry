@@ -201,6 +201,15 @@ pub struct Config {
     /// Minimum independent file operations in the plan before parallel
     /// builder activates. Below this threshold the sequential builder runs.
     pub parallel_builder_min_files: usize,
+
+    /// Agent execution backend: "pty" (default) or "tmux".
+    pub agent_backend: String,
+
+    /// Tmux session name prefix (default: "foundry").
+    pub tmux_session_prefix: String,
+
+    /// Keep tmux sessions alive after agent completion (default: false).
+    pub tmux_keep_sessions: bool,
 }
 
 impl Default for Config {
@@ -275,6 +284,9 @@ impl Default for Config {
             confidence_threshold: 0.5,
             parallel_builder: false,
             parallel_builder_min_files: 3,
+            agent_backend: "pty".into(),
+            tmux_session_prefix: "foundry".into(),
+            tmux_keep_sessions: false,
         }
     }
 }

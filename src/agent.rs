@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context as _, Result};
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use serde_json::Value;
 use std::io::BufRead;
@@ -9,6 +9,8 @@ use std::sync::{
 };
 use std::time::{Duration, Instant};
 
+use crate::config::Config;
+use crate::tmux::TmuxSession;
 use crate::utils::truncate_str;
 use tokio::sync::mpsc;
 
@@ -72,6 +74,12 @@ pub enum AgentExitKind {
     Cancelled,
     TimedOut,
     TransportStall,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AgentBackend {
+    Pty,
+    Tmux,
 }
 
 impl AgentResult {
@@ -626,6 +634,60 @@ pub async fn run_agent(
         }
     }
 
+    // Load config to determine backend
+    let config = Config::load(project_dir);
+    let backend = if config.agent_backend == "tmux" {
+        AgentBackend::Tmux
+    } else {
+        AgentBackend::Pty
+    };
+
+    match backend {
+        AgentBackend::Pty => {
+            run_agent_pty(
+                role,
+                model,
+                prompt,
+                project_dir,
+                output_tx,
+                log_dir,
+                allowed_tools,
+                timeout_secs,
+                shutdown,
+            )
+            .await
+        }
+        AgentBackend::Tmux => {
+            run_agent_tmux(
+                role,
+                model,
+                prompt,
+                project_dir,
+                output_tx,
+                log_dir,
+                allowed_tools,
+                timeout_secs,
+                shutdown,
+                config.tmux_session_prefix.clone(),
+                config.tmux_keep_sessions,
+            )
+            .await
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn run_agent_pty(
+    role: &AgentRole,
+    model: &str,
+    prompt: &str,
+    project_dir: &Path,
+    output_tx: mpsc::UnboundedSender<AgentOutputEvent>,
+    log_dir: &Path,
+    allowed_tools: Option<&[&str]>,
+    timeout_secs: u64,
+    shutdown: Option<Arc<AtomicBool>>,
+) -> Result<AgentResult> {
     let timestamp = chrono::Utc::now().format("%Y%m%d-%H%M%S");
     let log_file_path = log_dir.join(format!("{}-{}.jsonl", role, timestamp));
     std::fs::create_dir_all(log_dir)?;
@@ -643,10 +705,6 @@ pub async fn run_agent(
     cmd.arg("stream-json");
     cmd.arg("--verbose");
     // Override any CLAUDE.md instructions that conflict with foundry's orchestration.
-    // Users' CLAUDE.md files may contain workflow directives (build pipelines, sub-agent
-    // spawning, doubt loops) meant for interactive sessions. These conflict with foundry's
-    // own pipeline stages. The append-system-prompt preserves useful project conventions
-    // from CLAUDE.md while neutralizing meta-workflow instructions.
     cmd.arg("--append-system-prompt");
     cmd.arg(concat!(
         "IMPORTANT: You are running as a single stage in Context Foundry's autonomous pipeline. ",
@@ -660,27 +718,24 @@ pub async fn run_agent(
     }
     cmd.cwd(project_dir);
 
-    // Prevent nested Claude detection — set on the command, not process-wide
+    // Prevent nested Claude detection -- set on the command, not process-wide
     cmd.env("CLAUDECODE", "");
 
-    // Open a PTY — this is the key to real-time streaming.
-    // Node.js checks if stdout is a TTY (via isatty()). When it is,
-    // process.stdout.write() is synchronous and line-buffered.
+    // Open a PTY -- this is the key to real-time streaming.
     let pty_system = native_pty_system();
     let pair = pty_system.openpty(PtySize {
         rows: 24,
-        cols: 4096, // wide enough to avoid wrapping JSON lines; must fit i16 for ConPTY
+        cols: 4096,
         pixel_width: 0,
         pixel_height: 0,
     })?;
 
     let child = pair.slave.spawn_command(cmd)?;
-    drop(pair.slave); // Release slave; child has its own fd copy
+    drop(pair.slave);
 
     let reader = pair.master.try_clone_reader()?;
-    let master = pair.master; // Keep alive until child exits
+    let master = pair.master;
 
-    // Use oneshot channel to get result back from blocking thread
     let (result_tx, result_rx) = tokio::sync::oneshot::channel();
 
     let role_name = role.to_string();
@@ -689,7 +744,6 @@ pub async fn run_agent(
         let tx = output_tx;
         let mut child = child;
 
-        // Spawn reader thread — reads PTY output line by line
         let model_label = model_name.clone();
         let progress = Arc::new(Mutex::new(ProviderProgressState::new(Instant::now())));
         let read_progress = progress.clone();
@@ -697,7 +751,6 @@ pub async fn run_agent(
             read_pty_output(reader, &tx, &log_file_path, &model_label, &read_progress);
         });
 
-        // Wait for child process to exit with timeout
         let hard_timeout_secs = timeout_secs.saturating_mul(PROVIDER_HARD_TIMEOUT_MULTIPLIER);
         let hard_deadline = Instant::now() + Duration::from_secs(hard_timeout_secs);
         let mut result = AgentResult {
@@ -708,7 +761,6 @@ pub async fn run_agent(
         };
 
         loop {
-            // Check if child has exited (non-blocking poll via short sleep + try)
             match child.try_wait() {
                 Ok(Some(status)) => {
                     result.success = status.success();
@@ -725,7 +777,6 @@ pub async fn run_agent(
                     break;
                 }
                 Ok(None) => {
-                    // Check shutdown flag first -- runtime is exiting
                     if shutdown
                         .as_ref()
                         .is_some_and(|flag| flag.load(Ordering::Relaxed))
@@ -737,7 +788,6 @@ pub async fn run_agent(
                             Some(format!("Agent {} cancelled by shutdown", role_name));
                         break;
                     }
-                    // Still running — check idle timeout then hard deadline
                     let now = Instant::now();
                     let progress_snapshot = progress
                         .lock()
@@ -751,7 +801,7 @@ pub async fn run_agent(
                             "Agent {} timed out after {}s without progress",
                             role_name, timeout_secs
                         );
-                        eprintln!("[foundry] {} — killed", message);
+                        eprintln!("[foundry] {} -- killed", message);
                         result.exit_kind = AgentExitKind::TimedOut;
                         result.failure_message = Some(message);
                         break;
@@ -765,7 +815,7 @@ pub async fn run_agent(
                             "Agent {} timed out after {}s total runtime",
                             role_name, hard_timeout_secs
                         );
-                        eprintln!("[foundry] {} — killed", message);
+                        eprintln!("[foundry] {} -- killed", message);
                         result.exit_kind = AgentExitKind::TimedOut;
                         result.failure_message = Some(message);
                         break;
@@ -784,11 +834,281 @@ pub async fn run_agent(
             }
         }
 
-        // Drop master to close PTY — triggers EOF on reader
         drop(master);
-
-        // Wait for reader to drain remaining output
         let _ = read_thread.join();
+
+        let _ = result_tx.send(result);
+    });
+
+    Ok(result_rx.await.unwrap_or(AgentResult {
+        success: false,
+        exit_code: 1,
+        exit_kind: AgentExitKind::Failed,
+        failure_message: Some(format!("Agent {} result channel closed", role)),
+    }))
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn run_agent_tmux(
+    role: &AgentRole,
+    model: &str,
+    prompt: &str,
+    project_dir: &Path,
+    output_tx: mpsc::UnboundedSender<AgentOutputEvent>,
+    log_dir: &Path,
+    allowed_tools: Option<&[&str]>,
+    timeout_secs: u64,
+    shutdown: Option<Arc<AtomicBool>>,
+    tmux_prefix: String,
+    tmux_keep_sessions: bool,
+) -> Result<AgentResult> {
+    let timestamp = chrono::Utc::now().format("%Y%m%d-%H%M%S");
+    let log_file_path = log_dir.join(format!("{}-{}.jsonl", role, timestamp));
+    std::fs::create_dir_all(log_dir)?;
+
+    let role_slug = format!("{}", role).to_lowercase();
+    let abs_log_dir = dunce::canonicalize(log_dir).unwrap_or_else(|_| log_dir.to_path_buf());
+
+    let session = TmuxSession::create(&tmux_prefix, &role_slug, project_dir, &abs_log_dir)
+        .context("failed to create tmux session")?;
+
+    let cli_command =
+        TmuxSession::build_cli_command(ModelProvider::Claude.slug(), prompt, model, allowed_tools);
+
+    session
+        .send_keys(&cli_command)
+        .context("failed to send command to tmux session")?;
+
+    let _ = output_tx.send(AgentOutputEvent::Stderr(format!(
+        "[foundry] tmux session: {} (attach with: tmux attach -t {})",
+        session.name, session.name
+    )));
+
+    let (result_tx, result_rx) = tokio::sync::oneshot::channel();
+
+    let role_name = role.to_string();
+    let model_name = model.to_string();
+    tokio::task::spawn_blocking(move || {
+        let tx = output_tx;
+        let progress = Arc::new(Mutex::new(ProviderProgressState::new(Instant::now())));
+
+        let hard_timeout_secs = timeout_secs.saturating_mul(PROVIDER_HARD_TIMEOUT_MULTIPLIER);
+        let hard_deadline = Instant::now() + Duration::from_secs(hard_timeout_secs);
+        let mut result = AgentResult {
+            success: false,
+            exit_code: 1,
+            exit_kind: AgentExitKind::Failed,
+            failure_message: None,
+        };
+
+        let pipe_file = match std::fs::File::open(&session.log_file) {
+            Ok(f) => f,
+            Err(err) => {
+                result.failure_message =
+                    Some(format!("failed to open pipe log: {}", err));
+                let _ = result_tx.send(result);
+                return;
+            }
+        };
+        let mut pipe_reader = std::io::BufReader::new(pipe_file);
+        let mut log_file = std::fs::File::create(&log_file_path).ok();
+        let mut buf = String::new();
+
+        loop {
+            // Check shutdown flag
+            if shutdown
+                .as_ref()
+                .is_some_and(|flag| flag.load(Ordering::Relaxed))
+            {
+                session.kill().ok();
+                result.exit_kind = AgentExitKind::Cancelled;
+                result.failure_message =
+                    Some(format!("Agent {} cancelled by shutdown", role_name));
+                break;
+            }
+
+            // Read new lines from pipe file
+            loop {
+                buf.clear();
+                match pipe_reader.read_line(&mut buf) {
+                    Ok(0) => break,
+                    Ok(_) => {
+                        let line = buf.trim_end();
+                        if line.is_empty() {
+                            continue;
+                        }
+
+                        {
+                            let mut guard =
+                                progress.lock().unwrap_or_else(|p| p.into_inner());
+                            guard.record_raw_bytes_at(Instant::now());
+                        }
+
+                        if let Some(ref mut f) = log_file {
+                            use std::io::Write;
+                            let _ = writeln!(f, "{}", line);
+                        }
+
+                        match parse_claude_provider_line(line, &model_name) {
+                            ParsedClaudeLine::Event(event) => {
+                                note_provider_event(
+                                    ModelProvider::Claude,
+                                    &event,
+                                    &progress,
+                                );
+                                let _ = tx.send(event);
+                                LAST_RESULT_USAGE.with(|cell| {
+                                    if let Some(usage) = cell.take() {
+                                        let _ = tx.send(AgentOutputEvent::Usage {
+                                            cost_usd: usage.cost_usd,
+                                            input_tokens: usage.input_tokens,
+                                            output_tokens: usage.output_tokens,
+                                            context_window: usage.context_window,
+                                        });
+                                    }
+                                });
+                            }
+                            ParsedClaudeLine::Ignore => {
+                                LAST_RESULT_USAGE.with(|cell| {
+                                    if let Some(usage) = cell.take() {
+                                        let _ = tx.send(AgentOutputEvent::Usage {
+                                            cost_usd: usage.cost_usd,
+                                            input_tokens: usage.input_tokens,
+                                            output_tokens: usage.output_tokens,
+                                            context_window: usage.context_window,
+                                        });
+                                    }
+                                });
+                            }
+                            ParsedClaudeLine::Unparsed => {
+                                let cleaned = strip_ansi(line);
+                                if !cleaned.is_empty() && !is_api_noise(&cleaned) {
+                                    note_provider_stderr_line(
+                                        ModelProvider::Claude,
+                                        &cleaned,
+                                        &progress,
+                                    );
+                                    let _ = tx.send(AgentOutputEvent::Stderr(cleaned));
+                                }
+                            }
+                        }
+                    }
+                    Err(_) => break,
+                }
+            }
+
+            // Check if session is still alive
+            if !session.is_alive() {
+                // Final drain -- read remaining lines from pipe file
+                loop {
+                    buf.clear();
+                    match pipe_reader.read_line(&mut buf) {
+                        Ok(0) => break,
+                        Ok(_) => {
+                            let line = buf.trim_end();
+                            if line.is_empty() {
+                                continue;
+                            }
+
+                            if let Some(ref mut f) = log_file {
+                                use std::io::Write;
+                                let _ = writeln!(f, "{}", line);
+                            }
+
+                            match parse_claude_provider_line(line, &model_name) {
+                                ParsedClaudeLine::Event(event) => {
+                                    note_provider_event(
+                                        ModelProvider::Claude,
+                                        &event,
+                                        &progress,
+                                    );
+                                    let _ = tx.send(event);
+                                    LAST_RESULT_USAGE.with(|cell| {
+                                        if let Some(usage) = cell.take() {
+                                            let _ = tx.send(AgentOutputEvent::Usage {
+                                                cost_usd: usage.cost_usd,
+                                                input_tokens: usage.input_tokens,
+                                                output_tokens: usage.output_tokens,
+                                                context_window: usage.context_window,
+                                            });
+                                        }
+                                    });
+                                }
+                                ParsedClaudeLine::Ignore => {
+                                    LAST_RESULT_USAGE.with(|cell| {
+                                        if let Some(usage) = cell.take() {
+                                            let _ = tx.send(AgentOutputEvent::Usage {
+                                                cost_usd: usage.cost_usd,
+                                                input_tokens: usage.input_tokens,
+                                                output_tokens: usage.output_tokens,
+                                                context_window: usage.context_window,
+                                            });
+                                        }
+                                    });
+                                }
+                                ParsedClaudeLine::Unparsed => {
+                                    let cleaned = strip_ansi(line);
+                                    if !cleaned.is_empty() && !is_api_noise(&cleaned) {
+                                        note_provider_stderr_line(
+                                            ModelProvider::Claude,
+                                            &cleaned,
+                                            &progress,
+                                        );
+                                        let _ =
+                                            tx.send(AgentOutputEvent::Stderr(cleaned));
+                                    }
+                                }
+                            }
+                        }
+                        Err(_) => break,
+                    }
+                }
+
+                result.success = true;
+                result.exit_code = 0;
+                result.exit_kind = AgentExitKind::Completed;
+                break;
+            }
+
+            // Check idle timeout
+            let now = Instant::now();
+            let progress_snapshot =
+                progress.lock().unwrap_or_else(|p| p.into_inner());
+
+            if progress_snapshot.is_truly_idle(now, Duration::from_secs(timeout_secs)) {
+                drop(progress_snapshot);
+                session.kill().ok();
+                let message = format!(
+                    "Agent {} timed out after {}s without progress",
+                    role_name, timeout_secs
+                );
+                eprintln!("[foundry] {} -- killed", message);
+                result.exit_kind = AgentExitKind::TimedOut;
+                result.failure_message = Some(message);
+                break;
+            }
+
+            // Check hard deadline
+            if now >= hard_deadline {
+                drop(progress_snapshot);
+                session.kill().ok();
+                let message = format!(
+                    "Agent {} timed out after {}s total runtime",
+                    role_name, hard_timeout_secs
+                );
+                eprintln!("[foundry] {} -- killed", message);
+                result.exit_kind = AgentExitKind::TimedOut;
+                result.failure_message = Some(message);
+                break;
+            }
+
+            drop(progress_snapshot);
+            std::thread::sleep(PROVIDER_POLL_INTERVAL);
+        }
+
+        if !tmux_keep_sessions {
+            let _ = session.kill();
+        }
 
         let _ = result_tx.send(result);
     });
@@ -2002,5 +2322,39 @@ mod tests {
                 "should NOT fallback for exit kind: {kind:?}"
             );
         }
+    }
+
+    #[test]
+    fn test_agent_backend_pty_is_default() {
+        let config = crate::config::Config::default();
+        assert_eq!(config.agent_backend, "pty");
+    }
+
+    #[test]
+    fn test_agent_backend_tmux_from_config() {
+        let config: crate::config::Config =
+            serde_json::from_str(r#"{"agent_backend": "tmux"}"#)
+                .expect("config should deserialize");
+        assert_eq!(config.agent_backend, "tmux");
+    }
+
+    #[test]
+    #[ignore]
+    fn test_run_agent_tmux_creates_session() {
+        use crate::tmux::TmuxSession;
+
+        let tmp = std::env::temp_dir();
+        let session = TmuxSession::create("test", "builder", &std::env::current_dir().unwrap(), &tmp)
+            .expect("should create session");
+
+        session.send_keys("echo hello").expect("should send keys");
+        std::thread::sleep(Duration::from_millis(500));
+
+        assert!(session.is_alive());
+
+        session.kill().expect("should kill session");
+        std::thread::sleep(Duration::from_millis(100));
+
+        assert!(!session.is_alive());
     }
 }

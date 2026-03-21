@@ -13,6 +13,7 @@ mod git;
 mod mcp;
 mod observatory;
 mod orchestrator;
+mod tmux;
 mod patterns;
 mod prompts;
 mod task;
