@@ -352,6 +352,8 @@ pub struct AppState {
     pub(super) tasks_file_lock: Arc<Mutex<()>>,
     /// Shared cost counter (millicents) — written by TUI event handler, read by build loop.
     pub(super) session_cost_millicents: Arc<std::sync::atomic::AtomicU64>,
+    /// Active tmux session names for the current run (displayed in dashboard).
+    pub tmux_session_names: Vec<String>,
 }
 
 impl AppState {
@@ -439,6 +441,7 @@ impl AppState {
             pending_transition: None,
             tasks_file_lock: Arc::new(Mutex::new(())),
             session_cost_millicents: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            tmux_session_names: Vec::new(),
         }
     }
 
@@ -573,5 +576,7 @@ pub(super) enum LoopEvent {
         total: usize,
         done: usize,
     },
+    #[allow(dead_code)]
+    TmuxSessionStarted(String),
     Finished,
 }

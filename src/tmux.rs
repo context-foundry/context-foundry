@@ -150,6 +150,46 @@ impl TmuxSession {
     }
 }
 
+pub fn tmux_binary_available() -> bool {
+    let lookup_cmd = if cfg!(target_os = "windows") {
+        "where"
+    } else {
+        "which"
+    };
+    Command::new(lookup_cmd)
+        .arg("tmux")
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+}
+
+pub fn list_sessions(prefix: &str) -> Vec<String> {
+    let output = match Command::new("tmux")
+        .args(["list-sessions", "-F", "#{session_name}"])
+        .output()
+    {
+        Ok(o) if o.status.success() => o,
+        _ => return Vec::new(),
+    };
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let needle = format!("{}-", prefix);
+    stdout
+        .lines()
+        .filter(|line| line.starts_with(&needle))
+        .map(|s| s.to_string())
+        .collect()
+}
+
+pub fn cleanup_stale_sessions(prefix: &str) -> Vec<String> {
+    let sessions = list_sessions(prefix);
+    for name in &sessions {
+        let _ = Command::new("tmux")
+            .args(["kill-session", "-t", name])
+            .status();
+    }
+    sessions
+}
+
 fn shell_escape_single_quote(s: &str) -> String {
     let replaced = s.replace('\'', "'\\''");
     format!("'{}'", replaced)
@@ -269,5 +309,68 @@ mod tests {
         );
 
         session.kill().expect("should kill session");
+    }
+
+    #[test]
+    fn test_tmux_binary_available_returns_bool() {
+        let _result: bool = tmux_binary_available();
+    }
+
+    #[test]
+    fn test_list_sessions_returns_vec() {
+        let result = list_sessions("nonexistent-prefix-xyz");
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_cleanup_stale_sessions_noop_when_none() {
+        let result = cleanup_stale_sessions("nonexistent-prefix-xyz");
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    #[ignore]
+    fn test_list_and_cleanup_sessions() {
+        if !tmux_binary_available() {
+            eprintln!("tmux not available, skipping");
+            return;
+        }
+
+        let prefix = format!("foundry-lifecycle-test-{}", std::process::id());
+        let session = TmuxSession::create(
+            &prefix,
+            "unit",
+            &std::env::current_dir().unwrap(),
+            &std::env::temp_dir(),
+        )
+        .expect("should create session");
+
+        // list_sessions should find it
+        let found = list_sessions(&prefix);
+        assert!(
+            found.contains(&session.name),
+            "list_sessions should contain {}, got: {:?}",
+            session.name,
+            found
+        );
+
+        // cleanup should kill it
+        let killed = cleanup_stale_sessions(&prefix);
+        assert!(
+            killed.contains(&session.name),
+            "cleanup should report {}, got: {:?}",
+            session.name,
+            killed
+        );
+
+        std::thread::sleep(std::time::Duration::from_millis(100));
+
+        // Should be gone now
+        let remaining = list_sessions(&prefix);
+        assert!(
+            remaining.is_empty(),
+            "sessions should be cleaned up, got: {:?}",
+            remaining
+        );
     }
 }

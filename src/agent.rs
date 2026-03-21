@@ -636,9 +636,14 @@ pub async fn run_agent(
 
     // Load config to determine backend
     let config = Config::load(project_dir);
-    let backend = if config.agent_backend == "tmux" {
+    let backend = if config.agent_backend == "tmux" && crate::tmux::tmux_binary_available() {
         AgentBackend::Tmux
     } else {
+        if config.agent_backend == "tmux" {
+            let _ = output_tx.send(AgentOutputEvent::Stderr(
+                "[foundry] tmux binary not found; falling back to PTY backend".to_string(),
+            ));
+        }
         AgentBackend::Pty
     };
 
@@ -2356,5 +2361,77 @@ mod tests {
         std::thread::sleep(Duration::from_millis(100));
 
         assert!(!session.is_alive());
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn test_scout_via_tmux_backend_e2e() {
+        use crate::tmux;
+
+        if !tmux::tmux_binary_available() {
+            eprintln!("tmux not available, skipping e2e test");
+            return;
+        }
+
+        let unique = std::process::id();
+        let project_dir = std::env::temp_dir().join(format!("foundry-tmux-scout-e2e-{}", unique));
+        std::fs::create_dir_all(&project_dir).unwrap();
+
+        // Write minimal project files
+        std::fs::write(
+            project_dir.join("CLAUDE.md"),
+            "# Test\nA trivial test project.",
+        )
+        .unwrap();
+        std::fs::write(
+            project_dir.join(".foundry.json"),
+            r#"{"agent_backend":"tmux","tmux_session_prefix":"foundry-e2e","tmux_keep_sessions":false,"agent_timeout_secs":60}"#,
+        )
+        .unwrap();
+
+        let log_dir = project_dir.join(".buildloop").join("logs");
+        std::fs::create_dir_all(&log_dir).unwrap();
+
+        // Verify no pre-existing test sessions
+        let pre = tmux::list_sessions("foundry-e2e");
+        assert!(pre.is_empty(), "stale test sessions found: {:?}", pre);
+
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        let shutdown = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+
+        let result = run_agent(
+            &AgentRole::Scout,
+            ModelProvider::Claude,
+            "",
+            "List the files in this project. Write a one-line summary to .buildloop/scout-report.md.",
+            &project_dir,
+            tx,
+            &log_dir,
+            None,
+            60,
+            Some(shutdown),
+        )
+        .await;
+
+        // Collect events
+        let mut events = Vec::new();
+        while let Ok(event) = rx.try_recv() {
+            events.push(event);
+        }
+
+        assert!(result.is_ok(), "run_agent should not return Err");
+        let agent_result = result.unwrap();
+        assert!(
+            agent_result.success,
+            "scout should succeed, got: {:?}",
+            agent_result.failure_message
+        );
+        assert!(!events.is_empty(), "should have received output events");
+
+        // Verify sessions cleaned up (keep_sessions=false)
+        let post = tmux::list_sessions("foundry-e2e");
+        assert!(post.is_empty(), "sessions not cleaned up: {:?}", post);
+
+        let _ = std::fs::remove_dir_all(&project_dir);
     }
 }

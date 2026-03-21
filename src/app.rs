@@ -33,6 +33,7 @@ use crate::config::Config;
 use crate::git;
 use crate::orchestrator::{self, OrchestratorConfig, OrchestratorOutcome};
 use crate::task;
+use crate::tmux;
 use crate::tui;
 use crate::update;
 use crate::utils::{atomic_write_file, truncate_str};
@@ -56,6 +57,18 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
         crate::tui::theme::set_truecolor_override(tc);
     }
     state.tui_theme = crate::tui::theme::from_name(&config.theme);
+
+    // Tmux backend validation and stale session cleanup
+    if config.agent_backend == "tmux" {
+        if tmux::tmux_binary_available() {
+            let stale = tmux::cleanup_stale_sessions(&config.tmux_session_prefix);
+            for name in &stale {
+                state.log(format!("Cleaned up stale tmux session: {}", name));
+            }
+        } else {
+            state.log("Warning: tmux backend configured but tmux binary not found; falling back to PTY".to_string());
+        }
+    }
 
     // Git/GH readiness checks (advisory, non-blocking)
     for msg in git::check_git_readiness(project_dir) {
@@ -960,6 +973,9 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                 };
                 state.log(format!("Parallel builder: {}/{} slots complete", done, total));
             }
+            LoopEvent::TmuxSessionStarted(name) => {
+                state.tmux_session_names.push(name);
+            }
             LoopEvent::PrPollChecked => {
                 state.pr_poll_last_check = Some(std::time::Instant::now());
             }
@@ -1554,6 +1570,12 @@ fn handle_agent_output(state: &mut AppState, output: AgentOutputEvent) {
             }
         }
         AgentOutputEvent::Stderr(line) => {
+            // Track tmux session names from "[foundry] tmux session: ..." messages
+            if let Some(rest) = line.strip_prefix("[foundry] tmux session: ") {
+                if let Some(name) = rest.split_whitespace().next() {
+                    state.tmux_session_names.push(name.to_string());
+                }
+            }
             state.agent_output.push(format!("[stderr] {}", line));
         }
         AgentOutputEvent::Result(text) => {

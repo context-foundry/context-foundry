@@ -230,6 +230,17 @@ pub(super) fn render_dashboard_stats(
     let dual_comparison = dual_comparison_line(state);
     let (ollama_left, ollama_left_color) = if let Some(comparison) = dual_comparison {
         (comparison, theme.text)
+    } else if !state.tmux_session_names.is_empty() {
+        let count = state.tmux_session_names.len();
+        let latest = state.tmux_session_names.last().unwrap();
+        let display = if count == 1 {
+            format!("Tmux: {} | attach -t {}", count, latest)
+        } else {
+            format!("Tmux: {} sessions | attach -t {}", count, latest)
+        };
+        (display, theme.success)
+    } else if config.agent_backend == "tmux" {
+        ("Tmux: no active sessions".to_string(), theme.muted)
     } else {
         (format!("Ollama: {}", ollama_label), ollama_color)
     };
