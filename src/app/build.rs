@@ -2099,13 +2099,16 @@ async fn process_task(
     );
 
     if !matched.is_empty() {
+        let actually_injected = matched.len().min(effective_pattern_count);
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-            "Matched {} patterns for task",
-            matched.len()
+            "Matched {} patterns, injecting {} for task",
+            matched.len(),
+            actually_injected
         ))));
-        let titles: Vec<String> = matched.iter().map(|p| p.title.clone()).collect();
+        let titles: Vec<String> = matched.iter().take(effective_pattern_count).map(|p| p.title.clone()).collect();
         let keywords_by_title: HashMap<String, Vec<String>> = matched
             .iter()
+            .take(effective_pattern_count)
             .filter(|p| !p.keywords.is_empty())
             .map(|p| {
                 (
@@ -2118,11 +2121,11 @@ async fn process_task(
             titles,
             keywords_by_title,
         }));
-        let pattern_ids: Vec<String> = matched.iter().map(|p| p.pattern_id.clone()).collect();
+        let pattern_ids: Vec<String> = matched.iter().take(effective_pattern_count).map(|p| p.pattern_id.clone()).collect();
         observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::PatternInjected {
             task_id: task_id.to_string(),
             pattern_ids,
-            count: matched.len(),
+            count: actually_injected,
         });
     }
 
