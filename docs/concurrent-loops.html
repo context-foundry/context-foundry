@@ -6,15 +6,15 @@
   <title>Concurrent Workstreams -- Context Foundry</title>
   <style>
     :root {
-      --bg: #1a1008;
-      --surface: #2a1a0e;
-      --surface-hover: #362214;
-      --border: #4a3220;
-      --text: #e8dcc8;
-      --text-muted: #a89478;
+      --bg: #2c2018;
+      --surface: #3a2a1c;
+      --surface-hover: #4a3828;
+      --border: #5e4a36;
+      --text: #f0e6d8;
+      --text-muted: #bba88e;
       --accent: #d4821a;
       --accent-hover: #e09530;
-      --accent-subtle: rgba(212, 130, 26, 0.15);
+      --accent-subtle: rgba(212, 130, 26, 0.12);
       --gold: #e8b84b;
       --green: #5a9e45;
       --blue: #6ba3d6;
@@ -40,7 +40,7 @@
     }
 
     .hero {
-      background: linear-gradient(135deg, #2a1a0e 0%, #4a3220 30%, #6b4c2a 55%, #a89478 80%, #e8dcc8 100%);
+      background: linear-gradient(135deg, #3a2a1c 0%, #5e4a36 30%, #8b7258 55%, #c4ad8e 80%, #f0e6d8 100%);
       margin: -2rem -1.5rem 0 -1.5rem;
       padding: 4rem 2.5rem 3.5rem 2.5rem;
       border-bottom: 3px solid var(--gold);
@@ -59,7 +59,7 @@
 
     .hero h1 {
       font-family: var(--font-heading);
-      color: #1a1008;
+      color: #2c2018;
       font-size: 2.8rem;
       font-weight: 700;
       letter-spacing: 0.02em;
@@ -72,7 +72,7 @@
 
     .hero .tagline {
       font-family: var(--font-heading);
-      color: #2a1a0e;
+      color: #3a2a1c;
       font-size: 1.2rem;
       font-weight: 400;
       font-style: italic;
@@ -83,7 +83,7 @@
     }
 
     .hero .meta {
-      color: #4a3220;
+      color: #5e4a36;
       font-size: 0.8rem;
       margin: 0;
       position: relative;
@@ -259,7 +259,7 @@
   <svg width="720" height="340" viewBox="0 0 720 340" xmlns="http://www.w3.org/2000/svg">
     <defs>
       <marker id="arrow" markerWidth="8" markerHeight="8" refX="8" refY="4" orient="auto">
-        <path d="M0,0 L8,4 L0,8 Z" fill="#a89478"/>
+        <path d="M0,0 L8,4 L0,8 Z" fill="#bba88e"/>
       </marker>
       <marker id="arrow-green" markerWidth="8" markerHeight="8" refX="8" refY="4" orient="auto">
         <path d="M0,0 L8,4 L0,8 Z" fill="#5a9e45"/>
@@ -276,12 +276,12 @@
     </defs>
 
     <!-- Top-level: Scout -->
-    <rect x="10" y="140" width="80" height="36" fill="#2a1a0e" stroke="#4a3220" stroke-width="1" rx="4"/>
-    <text x="50" y="158" fill="#e8dcc8" font-size="11" text-anchor="middle" dominant-baseline="central">Scout</text>
-    <line x1="90" y1="158" x2="110" y2="158" stroke="#a89478" stroke-width="1.5" marker-end="url(#arrow)"/>
+    <rect x="10" y="140" width="80" height="36" fill="#3a2a1c" stroke="#5e4a36" stroke-width="1" rx="4"/>
+    <text x="50" y="158" fill="#f0e6d8" font-size="11" text-anchor="middle" dominant-baseline="central">Scout</text>
+    <line x1="90" y1="158" x2="110" y2="158" stroke="#bba88e" stroke-width="1.5" marker-end="url(#arrow)"/>
 
     <!-- Top-level: Decompose -->
-    <rect x="110" y="140" width="95" height="36" fill="#2a1a0e" stroke="#e8b84b" stroke-width="1.5" rx="4"/>
+    <rect x="110" y="140" width="95" height="36" fill="#3a2a1c" stroke="#e8b84b" stroke-width="1.5" rx="4"/>
     <text x="157" y="158" fill="#e8b84b" font-size="11" text-anchor="middle" dominant-baseline="central">Decompose</text>
 
     <!-- Fan out -->
@@ -292,31 +292,31 @@
 
     <!-- Lane: api -->
     <text x="268" y="30" fill="#5a9e45" font-size="9">api</text>
-    <rect x="250" y="37" width="65" height="36" fill="#2a1a0e" stroke="#5a9e45" stroke-width="1" rx="4"/>
+    <rect x="250" y="37" width="65" height="36" fill="#3a2a1c" stroke="#5a9e45" stroke-width="1" rx="4"/>
     <text x="282" y="55" fill="#5a9e45" font-size="10" text-anchor="middle" dominant-baseline="central">Plan</text>
     <line x1="315" y1="55" x2="330" y2="55" stroke="#5a9e45" stroke-width="1" marker-end="url(#arrow-green)"/>
-    <rect x="330" y="37" width="85" height="36" fill="#2a1a0e" stroke="#5a9e45" stroke-width="1" rx="4"/>
+    <rect x="330" y="37" width="85" height="36" fill="#3a2a1c" stroke="#5a9e45" stroke-width="1" rx="4"/>
     <text x="372" y="55" fill="#5a9e45" font-size="10" text-anchor="middle" dominant-baseline="central">Implement</text>
 
     <!-- Lane: ui -->
     <text x="268" y="103" fill="#6ba3d6" font-size="9">ui</text>
-    <rect x="250" y="110" width="65" height="36" fill="#2a1a0e" stroke="#6ba3d6" stroke-width="1" rx="4"/>
+    <rect x="250" y="110" width="65" height="36" fill="#3a2a1c" stroke="#6ba3d6" stroke-width="1" rx="4"/>
     <text x="282" y="128" fill="#6ba3d6" font-size="10" text-anchor="middle" dominant-baseline="central">Plan</text>
     <line x1="315" y1="128" x2="330" y2="128" stroke="#6ba3d6" stroke-width="1" marker-end="url(#arrow-blue)"/>
-    <rect x="330" y="110" width="85" height="36" fill="#2a1a0e" stroke="#6ba3d6" stroke-width="1" rx="4"/>
+    <rect x="330" y="110" width="85" height="36" fill="#3a2a1c" stroke="#6ba3d6" stroke-width="1" rx="4"/>
     <text x="372" y="128" fill="#6ba3d6" font-size="10" text-anchor="middle" dominant-baseline="central">Implement</text>
 
     <!-- Lane: infra -->
     <text x="268" y="178" fill="#b08cd6" font-size="9">infra</text>
-    <rect x="250" y="180" width="65" height="36" fill="#2a1a0e" stroke="#b08cd6" stroke-width="1" rx="4"/>
+    <rect x="250" y="180" width="65" height="36" fill="#3a2a1c" stroke="#b08cd6" stroke-width="1" rx="4"/>
     <text x="282" y="198" fill="#b08cd6" font-size="10" text-anchor="middle" dominant-baseline="central">Plan</text>
     <line x1="315" y1="198" x2="330" y2="198" stroke="#b08cd6" stroke-width="1" marker-end="url(#arrow-purple)"/>
-    <rect x="330" y="180" width="85" height="36" fill="#2a1a0e" stroke="#b08cd6" stroke-width="1" rx="4"/>
+    <rect x="330" y="180" width="85" height="36" fill="#3a2a1c" stroke="#b08cd6" stroke-width="1" rx="4"/>
     <text x="372" y="198" fill="#b08cd6" font-size="10" text-anchor="middle" dominant-baseline="central">Implement</text>
 
     <!-- Lane: integration -->
     <text x="253" y="253" fill="#e8b84b" font-size="9">integration</text>
-    <rect x="250" y="250" width="165" height="36" fill="#2a1a0e" stroke="#e8b84b" stroke-width="1" rx="4"/>
+    <rect x="250" y="250" width="165" height="36" fill="#3a2a1c" stroke="#e8b84b" stroke-width="1" rx="4"/>
     <text x="332" y="268" fill="#e8b84b" font-size="10" text-anchor="middle" dominant-baseline="central">Shared Kernel Owner</text>
 
     <!-- Fan in to Integrate -->
@@ -326,18 +326,18 @@
     <line x1="415" y1="268" x2="445" y2="165" stroke="#e8b84b" stroke-width="1.5" marker-end="url(#arrow)"/>
 
     <!-- Integrate -->
-    <rect x="445" y="133" width="85" height="36" fill="#2a1a0e" stroke="#e8b84b" stroke-width="1.5" rx="4"/>
+    <rect x="445" y="133" width="85" height="36" fill="#3a2a1c" stroke="#e8b84b" stroke-width="1.5" rx="4"/>
     <text x="487" y="151" fill="#e8b84b" font-size="11" text-anchor="middle" dominant-baseline="central">Integrate</text>
-    <line x1="530" y1="151" x2="550" y2="151" stroke="#a89478" stroke-width="1.5" marker-end="url(#arrow)"/>
+    <line x1="530" y1="151" x2="550" y2="151" stroke="#bba88e" stroke-width="1.5" marker-end="url(#arrow)"/>
 
     <!-- System Review -->
-    <rect x="550" y="133" width="75" height="36" fill="#2a1a0e" stroke="#4a3220" stroke-width="1" rx="4"/>
-    <text x="587" y="151" fill="#e8dcc8" font-size="11" text-anchor="middle" dominant-baseline="central">Review</text>
-    <line x1="625" y1="151" x2="650" y2="151" stroke="#a89478" stroke-width="1.5" marker-end="url(#arrow)"/>
-    <text x="660" y="151" fill="#e8dcc8" font-size="10" dominant-baseline="central">commit</text>
+    <rect x="550" y="133" width="75" height="36" fill="#3a2a1c" stroke="#5e4a36" stroke-width="1" rx="4"/>
+    <text x="587" y="151" fill="#f0e6d8" font-size="11" text-anchor="middle" dominant-baseline="central">Review</text>
+    <line x1="625" y1="151" x2="650" y2="151" stroke="#bba88e" stroke-width="1.5" marker-end="url(#arrow)"/>
+    <text x="660" y="151" fill="#f0e6d8" font-size="10" dominant-baseline="central">commit</text>
 
     <!-- Label -->
-    <text x="332" y="322" fill="#a89478" font-size="10" text-anchor="middle">bounded lanes in isolated worktrees -- not full trail drives</text>
+    <text x="332" y="322" fill="#bba88e" font-size="10" text-anchor="middle">bounded lanes in isolated worktrees -- not full trail drives</text>
   </svg>
 </div>
 
