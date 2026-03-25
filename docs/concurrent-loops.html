@@ -39,6 +39,56 @@
       padding: 2rem 1.5rem;
     }
 
+    .hero {
+      background: linear-gradient(135deg, #2a1a0e 0%, #4a3220 30%, #6b4c2a 55%, #a89478 80%, #e8dcc8 100%);
+      margin: -2rem -1.5rem 0 -1.5rem;
+      padding: 4rem 2.5rem 3.5rem 2.5rem;
+      border-bottom: 3px solid var(--gold);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero::before {
+      content: "";
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: radial-gradient(ellipse at 20% 80%, rgba(232, 184, 75, 0.12) 0%, transparent 60%),
+                  radial-gradient(ellipse at 80% 20%, rgba(212, 130, 26, 0.08) 0%, transparent 50%);
+      pointer-events: none;
+    }
+
+    .hero h1 {
+      font-family: var(--font-heading);
+      color: #1a1008;
+      font-size: 2.8rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      margin: 0 0 0.5rem 0;
+      border: none;
+      text-shadow: 0 1px 0 rgba(232, 220, 200, 0.4);
+      line-height: 1.2;
+      position: relative;
+    }
+
+    .hero .tagline {
+      font-family: var(--font-heading);
+      color: #2a1a0e;
+      font-size: 1.2rem;
+      font-weight: 400;
+      font-style: italic;
+      margin: 0 0 1rem 0;
+      line-height: 1.5;
+      max-width: 560px;
+      position: relative;
+    }
+
+    .hero .meta {
+      color: #4a3220;
+      font-size: 0.8rem;
+      margin: 0;
+      position: relative;
+    }
+
     h1 {
       font-family: var(--font-heading);
       color: var(--gold);
@@ -177,11 +227,11 @@
 </head>
 <body>
 
-<header>
-  <h1>Concurrent Workstreams</h1>
-  <p class="subtitle">Bounded parallel lanes under one orchestrator -- not N competing trail drives.</p>
-  <p class="subtitle" style="font-size: 0.8rem;">Context Foundry &middot; Design Concept &middot; March 2025</p>
-</header>
+<div class="hero">
+  <h1>Many Hands,<br>One Ranch</h1>
+  <p class="tagline">What happens when the build loop learns to split the herd? Concurrent workstreams let multiple agents ride in parallel -- each on its own trail, all converging at the same railhead.</p>
+  <p class="meta">Context Foundry &middot; Design Concept &middot; March 2025</p>
+</div>
 
 <p>Context Foundry runs one task at a time through its four-stage pipeline: Scout, Plan, Implement, Doubt. One trail, one herd, one drive. That works for features that touch 5-15 files in a single area. But real projects have natural seams -- a backend API, a frontend UI, an infrastructure layer -- where the work is largely independent but needs to converge at a single railhead. Serial execution means your API wrangler sits idle while the frontend hand works, even though they could ride at the same time. For a project with three independent workstreams, you're paying 3x the wall-clock time for work that could overlap.</p>
 
