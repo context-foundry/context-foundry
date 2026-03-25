@@ -1,0 +1,26 @@
+FROM node:22-slim
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    curl \
+    ca-certificates \
+    jq \
+    openssh-client \
+  && apt-get clean \
+  && rm -rf /var/lib/apt/lists/*
+
+RUN npm install -g @anthropic-ai/claude-code
+
+RUN groupadd --gid 1000 foundry \
+  && useradd --uid 1000 --gid foundry --create-home foundry
+
+WORKDIR /work
+RUN chown foundry:foundry /work
+
+USER foundry
+
+RUN claude --version && git --version && node --version
+
+CMD ["bash"]

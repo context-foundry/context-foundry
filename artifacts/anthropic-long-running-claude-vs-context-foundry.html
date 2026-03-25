@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Context Foundry vs Anthropic Long-running Claude</title>
+  <style>
+    :root {
+      --bg: #f4efe6;
+      --paper: #fffaf1;
+      --panel: #f8f1e7;
+      --panel-strong: #efe4d5;
+      --ink: #1f2933;
+      --muted: #5d6a75;
+      --line: #d4c3ae;
+      --accent: #b45309;
+      --accent-deep: #8c3d05;
+      --good: #166534;
+      --warn: #b45309;
+      --bad: #991b1b;
+      --chip: #f2e5d4;
+      --shadow: 0 18px 40px rgba(74, 52, 24, 0.08);
+      --radius: 18px;
+      --mono: "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+      --sans: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at top right, rgba(180, 83, 9, 0.10), transparent 28%),
+        linear-gradient(180deg, #f8f3eb 0%, var(--bg) 100%);
+      color: var(--ink);
+      font-family: var(--sans);
+      line-height: 1.58;
+    }
+
+    .wrap {
+      max-width: 1220px;
+      margin: 0 auto;
+      padding: 32px 20px 64px;
+    }
+
+    .hero {
+      background: linear-gradient(135deg, rgba(255, 250, 241, 0.98), rgba(247, 237, 223, 0.96));
+      border: 1px solid rgba(180, 83, 9, 0.16);
+      border-radius: 28px;
+      box-shadow: var(--shadow);
+      padding: 34px 34px 28px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      inset: auto -40px -40px auto;
+      width: 240px;
+      height: 240px;
+      background: radial-gradient(circle, rgba(180, 83, 9, 0.14), transparent 65%);
+      pointer-events: none;
+    }
+
+    .eyebrow {
+      display: inline-block;
+      font-family: var(--mono);
+      font-size: 0.78rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--accent-deep);
+      background: rgba(180, 83, 9, 0.08);
+      border: 1px solid rgba(180, 83, 9, 0.18);
+      border-radius: 999px;
+      padding: 6px 10px;
+      margin-bottom: 14px;
+    }
+
+    h1, h2, h3 {
+      margin: 0 0 10px;
+      line-height: 1.12;
+      font-weight: 700;
+    }
+
+    h1 {
+      font-size: clamp(2rem, 3vw, 3.2rem);
+      max-width: 920px;
+    }
+
+    h2 {
+      font-size: 1.5rem;
+      margin-top: 34px;
+    }
+
+    h3 {
+      font-size: 1.08rem;
+      margin-top: 22px;
+    }
+
+    p {
+      margin: 0 0 12px;
+      font-size: 1.02rem;
+    }
+
+    .lede {
+      max-width: 900px;
+      color: var(--muted);
+      font-size: 1.08rem;
+    }
+
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 18px;
+    }
+
+    .chip {
+      background: var(--chip);
+      border: 1px solid rgba(95, 60, 16, 0.12);
+      border-radius: 999px;
+      color: var(--accent-deep);
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      padding: 7px 11px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(12, minmax(0, 1fr));
+      gap: 18px;
+      margin-top: 20px;
+    }
+
+    .card {
+      background: var(--paper);
+      border: 1px solid rgba(31, 41, 51, 0.08);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 22px;
+    }
+
+    .span-12 { grid-column: span 12; }
+    .span-8 { grid-column: span 8; }
+    .span-6 { grid-column: span 6; }
+    .span-4 { grid-column: span 4; }
+
+    .summary-strip {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 24px;
+    }
+
+    .summary-box {
+      background: linear-gradient(180deg, rgba(255,255,255,0.88), rgba(242, 229, 212, 0.68));
+      border: 1px solid rgba(31, 41, 51, 0.08);
+      border-radius: 18px;
+      padding: 16px 18px;
+    }
+
+    .summary-box strong {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--accent-deep);
+      font-size: 0.92rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      font-family: var(--mono);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 14px;
+      font-size: 0.94rem;
+      background: white;
+      border-radius: 14px;
+      overflow: hidden;
+    }
+
+    th, td {
+      border: 1px solid rgba(31, 41, 51, 0.10);
+      padding: 12px 13px;
+      vertical-align: top;
+    }
+
+    th {
+      background: var(--panel-strong);
+      text-align: left;
+      font-size: 0.82rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      font-family: var(--mono);
+      color: var(--accent-deep);
+    }
+
+    tr:nth-child(even) td {
+      background: rgba(248, 241, 231, 0.42);
+    }
+
+    ul {
+      margin: 10px 0 0 20px;
+      padding: 0;
+    }
+
+    li { margin: 6px 0; }
+
+    .score {
+      display: inline-block;
+      min-width: 72px;
+      text-align: center;
+      border-radius: 999px;
+      font-family: var(--mono);
+      font-size: 0.78rem;
+      padding: 5px 10px;
+      border: 1px solid transparent;
+      white-space: nowrap;
+    }
+
+    .score-good {
+      color: var(--good);
+      background: rgba(22, 101, 52, 0.08);
+      border-color: rgba(22, 101, 52, 0.18);
+    }
+
+    .score-warn {
+      color: var(--warn);
+      background: rgba(180, 83, 9, 0.08);
+      border-color: rgba(180, 83, 9, 0.18);
+    }
+
+    .score-bad {
+      color: var(--bad);
+      background: rgba(153, 27, 27, 0.08);
+      border-color: rgba(153, 27, 27, 0.18);
+    }
+
+    .callout {
+      border-left: 4px solid var(--accent);
+      background: rgba(180, 83, 9, 0.06);
+      padding: 14px 16px;
+      border-radius: 0 14px 14px 0;
+      margin-top: 14px;
+    }
+
+    .small {
+      font-size: 0.92rem;
+      color: var(--muted);
+    }
+
+    code {
+      font-family: var(--mono);
+      font-size: 0.87em;
+      background: rgba(31, 41, 51, 0.06);
+      border-radius: 5px;
+      padding: 0.14em 0.34em;
+    }
+
+    a {
+      color: var(--accent-deep);
+      text-decoration: none;
+      border-bottom: 1px solid rgba(140, 61, 5, 0.28);
+    }
+
+    a:hover {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+    }
+
+    .footnotes {
+      font-size: 0.9rem;
+      color: var(--muted);
+      margin-top: 12px;
+    }
+
+    .two-col {
+      columns: 2;
+      column-gap: 24px;
+    }
+
+    @media (max-width: 980px) {
+      .span-8, .span-6, .span-4 { grid-column: span 12; }
+      .summary-strip { grid-template-columns: 1fr; }
+      .two-col { columns: 1; }
+    }
+
+    @media print {
+      body {
+        background: white;
+      }
+
+      .hero, .card {
+        box-shadow: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <div class="eyebrow">Comparative Report</div>
+      <h1>How Context Foundry Stacks Up Against Anthropic’s “Long-running Claude for scientific computing”</h1>
+      <p class="lede">
+        Bottom line: Context Foundry is the stronger software-engineering harness, but Anthropic’s March 23, 2026 workflow is the better fit for a single deeply coupled scientific objective with a tight quantitative oracle. For the exact workflow in the article, Foundry’s autonomous loop adds meaningful guardrails and governance, but also meaningful orchestration overhead.
+      </p>
+      <div class="meta">
+        <span class="chip">Assessed: March 24, 2026</span>
+        <span class="chip">Article date: March 23, 2026</span>
+        <span class="chip">Scope: autonomous Foundry loop only</span>
+        <span class="chip">Studio excluded per maintainer guidance</span>
+        <span class="chip">Repo sanity check: <code>cargo check</code> passed</span>
+      </div>
+
+      <div class="summary-strip">
+        <div class="summary-box">
+          <strong>Verdict</strong>
+          Context Foundry wins on review isolation, governance, auditability, cross-project learning, and team workflows.
+        </div>
+        <div class="summary-box">
+          <strong>Where Anthropic Wins</strong>
+          The article’s pattern is leaner and better aligned with one long-running scientific codebase driven by a single accuracy target and reference oracle.
+        </div>
+        <div class="summary-box">
+          <strong>Most Important Gap</strong>
+          Foundry lacks a first-class, always-updated progress ledger and oracle framework comparable to <code>CHANGELOG.md</code> plus explicit numerical acceptance targets.
+        </div>
+      </div>
+    </section>
+
+    <div class="grid">
+      <section class="card span-12">
+        <h2>Executive Summary</h2>
+        <p>
+          Anthropic’s article describes a mostly single-agent, multi-day workflow: the agent keeps its working doctrine in <code>CLAUDE.md</code>, maintains portable memory in <code>CHANGELOG.md</code>, continuously checks itself against a reference implementation, commits frequently, and runs inside <code>tmux</code> on a long-lived compute allocation. The key optimization is minimal orchestration around a tightly defined oracle.
+        </p>
+        <p>
+          Context Foundry is almost the opposite design. It breaks work into clean-room stages, routes tasks through <code>SCOUT -&gt; PLAN -&gt; IMPLEMENT -&gt; VERIFY</code>, persists structured handoff artifacts, logs events, learns reusable patterns, supports discovery, and can require PR review. That makes it much stronger for backlog-driven software delivery and much safer against compounding error, but heavier for the exact class of work Anthropic highlighted.
+        </p>
+        <div class="callout">
+          If the question is “which system is more ambitious and operationally complete for autonomous software engineering?”, Foundry is ahead. If the question is “which system is a cleaner fit for a single numerics-heavy research task with a scalar success metric?”, Anthropic’s pattern is cleaner and more direct.
+        </div>
+      </section>
+
+      <section class="card span-12">
+        <h2>At A Glance Scorecard</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Dimension</th>
+              <th>Anthropic Article Workflow</th>
+              <th>Context Foundry</th>
+              <th>Edge</th>
+              <th>Why</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Long-horizon autonomy</td>
+              <td>High</td>
+              <td>High</td>
+              <td><span class="score score-warn">Rough tie</span></td>
+              <td>Both are designed for long-running work; Anthropic emphasizes one persistent thread, Foundry emphasizes staged persistence and restartability.</td>
+            </tr>
+            <tr>
+              <td>Fresh-context verification</td>
+              <td>Medium</td>
+              <td>Very high</td>
+              <td><span class="score score-good">Foundry</span></td>
+              <td>Foundry’s verifier is explicitly isolated from builder context and can fix/re-run review loops.</td>
+            </tr>
+            <tr>
+              <td>Scientific oracle support</td>
+              <td>Very high</td>
+              <td>Medium</td>
+              <td><span class="score score-good">Anthropic</span></td>
+              <td>The article is built around reference implementations and explicit quantitative acceptance targets; Foundry can use tests and build gates, but does not make oracle management first-class.</td>
+            </tr>
+            <tr>
+              <td>Cross-project learning</td>
+              <td>Low</td>
+              <td>Very high</td>
+              <td><span class="score score-good">Foundry</span></td>
+              <td>Foundry extracts and merges reusable patterns into <code>~/.foundry/patterns/</code> and can semantically rerank them.</td>
+            </tr>
+            <tr>
+              <td>Team workflow / governance</td>
+              <td>Low</td>
+              <td>Very high</td>
+              <td><span class="score score-good">Foundry</span></td>
+              <td>Per-task commits, WIP handling, PR mode, issue creation, telemetry, and stage artifacts are built in.</td>
+            </tr>
+            <tr>
+              <td>Minimal orchestration overhead</td>
+              <td>Very high</td>
+              <td>Low to medium</td>
+              <td><span class="score score-good">Anthropic</span></td>
+              <td>Anthropic’s approach is essentially “one agent + memory files + oracle + git + tmux.” Foundry adds multiple agents, prompts, artifacts, review gates, and task bookkeeping.</td>
+            </tr>
+            <tr>
+              <td>Auditability</td>
+              <td>Medium</td>
+              <td>Very high</td>
+              <td><span class="score score-good">Foundry</span></td>
+              <td>Foundry has SPID task status, structured artifacts, observatory event logs, and deterministic stage boundaries.</td>
+            </tr>
+            <tr>
+              <td>Single deep-coupled task fit</td>
+              <td>Very high</td>
+              <td>Medium</td>
+              <td><span class="score score-good">Anthropic</span></td>
+              <td>The article explicitly argues for one sequential agent on deeply coupled pipelines; Foundry’s stage resets can lose some thread continuity.</td>
+            </tr>
+            <tr>
+              <td>Multi-provider comparison</td>
+              <td>Low</td>
+              <td>High</td>
+              <td><span class="score score-good">Foundry</span></td>
+              <td>Foundry supports full-pipeline provider selection and dual independent pipelines across Claude and Codex.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="card span-12">
+        <h2>Feature-By-Feature Breakdown</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Article Feature</th>
+              <th>Anthropic Pattern</th>
+              <th>Foundry Status</th>
+              <th>Assessment</th>
+              <th>Evidence</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Persistent plan file</td>
+              <td><code>CLAUDE.md</code> is the central plan/instruction artifact, and Claude can edit it as work evolves.</td>
+              <td>Partial</td>
+              <td>Foundry agents still read project <code>CLAUDE.md</code>, but Foundry’s orchestration is primarily driven by <code>TASKS.md</code>, <code>SPEC.md</code>, and staged artifacts. It also overrides orchestration-related instructions in <code>CLAUDE.md</code>.</td>
+              <td>Anthropic article lines 32-35; <a href="../README.md">README.md</a> lines 363-373; <a href="../src/agent.rs">src/agent.rs</a> lines 712-719.</td>
+            </tr>
+            <tr>
+              <td>Portable long-term memory</td>
+              <td><code>CHANGELOG.md</code> tracks progress, failed attempts, checkpoint metrics, and known limitations.</td>
+              <td>Partial</td>
+              <td>Foundry has richer structured artifacts overall, but not one first-class portable “lab notebook” that every task updates. Memory is split across <code>build-claims.md</code>, <code>review-report.md</code>, task state, git history, observatory logs, and learned patterns.</td>
+              <td>Anthropic article lines 38-39; <a href="../README.md">README.md</a> lines 42-81; <a href="../src/observatory.rs">src/observatory.rs</a> lines 29-160.</td>
+            </tr>
+            <tr>
+              <td>Reference-backed oracle</td>
+              <td>Reference implementation plus explicit numerical accuracy target; expand tests while working.</td>
+              <td>Partial</td>
+              <td>Foundry supports build commands, reviewer verification, and evidence-based review, but oracle semantics are user-authored rather than first-class runtime objects. This is a real gap for scientific computing.</td>
+              <td>Anthropic article lines 40-42, 76-80, 83-87; <a href="../src/app/build.rs">src/app/build.rs</a> lines 2819-2868, 2970-3000; <a href="../README.md">README.md</a> lines 390-394.</td>
+            </tr>
+            <tr>
+              <td>Git as coordination</td>
+              <td>Commit and push every meaningful unit; use git history as operational memory and recovery.</td>
+              <td>Match / surpass</td>
+              <td>Foundry commits every task automatically, distinguishes <code>feat</code> vs <code>WIP</code>, can open PRs, and can create issues for failed verification.</td>
+              <td>Anthropic article lines 43-48; <a href="../src/app/build.rs">src/app/build.rs</a> lines 3064-3273; <a href="../README.md">README.md</a> lines 101-115.</td>
+            </tr>
+            <tr>
+              <td><code>tmux</code> execution</td>
+              <td>Long-lived Claude sessions run in <code>tmux</code> on SLURM/HPC so work survives laptop disconnects and long compute jobs.</td>
+              <td>Match</td>
+              <td>Foundry has a native <code>tmux</code> backend for agent execution, session naming, pipe capture, and attachability. It is not HPC-specific, but the same persistence principle is implemented.</td>
+              <td>Anthropic article lines 49-69; <a href="../src/config.rs">src/config.rs</a> lines 205-212; <a href="../src/agent.rs">src/agent.rs</a> lines 637-680, 857-920; <a href="../src/tmux.rs">src/tmux.rs</a> lines 14-150.</td>
+            </tr>
+            <tr>
+              <td>Ralph loop / completion challenge</td>
+              <td>A loop pushes the agent back into context when it claims completion too early.</td>
+              <td>Missing as a first-class primitive</td>
+              <td>Foundry has review/fixer loops and discovery cycles, but not a direct “claim done, then challenge completion against declared success criterion” primitive.</td>
+              <td>Anthropic article lines 71-80; <a href="../src/app/build.rs">src/app/build.rs</a> lines 2947-3000.</td>
+            </tr>
+            <tr>
+              <td>Guardrails against self-deception</td>
+              <td>Mainly oracle pressure plus external supervision.</td>
+              <td>Stronger</td>
+              <td>Foundry’s clean-room verifier is a deeper structural guardrail than the article describes. This is one of Foundry’s biggest architectural advantages.</td>
+              <td><a href="../README.md">README.md</a> lines 42-46, 71-81; <a href="../src/app/build.rs">src/app/build.rs</a> lines 2916-3000.</td>
+            </tr>
+            <tr>
+              <td>Adaptive effort control</td>
+              <td>Mostly manual, task-specific prompting.</td>
+              <td>Stronger</td>
+              <td>Foundry classifies task complexity, scales pattern injection, can skip scout/planner/doubt for simple work, and learns when certain task shapes can safely skip doubt.</td>
+              <td><a href="../README.md">README.md</a> lines 75-79; <a href="../src/complexity.rs">src/complexity.rs</a> lines 38-71; <a href="../src/doubt_confidence.rs">src/doubt_confidence.rs</a> lines 151-239.</td>
+            </tr>
+            <tr>
+              <td>Learning from prior work</td>
+              <td>Mostly implicit through updated files and commit history.</td>
+              <td>Stronger</td>
+              <td>Foundry extracts reusable issue/solution patterns, promotes repeated ones, and can semantically match them in future tasks across projects.</td>
+              <td><a href="../README.md">README.md</a> lines 73-77, 159-218; <a href="../src/patterns.rs">src/patterns.rs</a> lines 102-224; <a href="../src/embeddings.rs">src/embeddings.rs</a> lines 18-240; <a href="../src/app/build.rs">src/app/build.rs</a> lines 2065-2133, 3289-3435.</td>
+            </tr>
+            <tr>
+              <td>Human review / team workflow</td>
+              <td>SSH in, re-prompt, inspect git, occasionally steer.</td>
+              <td>Stronger</td>
+              <td>Foundry formalizes this with review mode, PR polling, pause gates, WIP issues, and persistent task-level progress markers.</td>
+              <td>Anthropic article lines 45-48, 66-69; <a href="../README.md">README.md</a> lines 48-67, 87-115; <a href="../src/app/build.rs">src/app/build.rs</a> lines 1000-1057, 3064-3210.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="card span-6">
+        <h2>Overlapping Features</h2>
+        <ul>
+          <li>Both assume work should continue over long time horizons without constant human keystrokes.</li>
+          <li>Both treat files in the repo as durable memory, not just transient chat history.</li>
+          <li>Both use git as a progress and recovery mechanism.</li>
+          <li>Both benefit from <code>tmux</code>-style detachable execution.</li>
+          <li>Both assume the best autonomy comes from clearly stated success criteria rather than vague prompts.</li>
+          <li>Both can be supervised intermittently rather than continuously.</li>
+        </ul>
+      </section>
+
+      <section class="card span-6">
+        <h2>Where Foundry Is Uniquely Better</h2>
+        <ul>
+          <li>Fresh-context verification is structurally built in, not optional discipline.</li>
+          <li>Task queue management, SPID audit state, and discovery make it a real operating system for backlogs, not just a long-lived terminal session.</li>
+          <li>Pattern extraction turns one project’s mistakes into future safeguards across projects.</li>
+          <li>Review mode formalizes human governance with PRs and pause gates.</li>
+          <li>Observatory event logging creates a machine-readable analytics trail.</li>
+          <li>Extension contracts and MCP resources give Foundry a path to domain specialization that is more reusable than ad hoc prompt edits.</li>
+        </ul>
+      </section>
+
+      <section class="card span-6">
+        <h2>Where Anthropic’s Workflow Is Better</h2>
+        <ul>
+          <li>The article’s workflow is optimized for one deep objective, not a backlog of semi-independent tasks.</li>
+          <li><code>CHANGELOG.md</code> as lab notebook is more natural for research iteration than Foundry’s distributed artifact set.</li>
+          <li>The explicit reference-oracle framing is better for numerical accuracy chasing than generic build/test/review loops.</li>
+          <li>A mostly single sequential agent preserves reasoning continuity across subtle coupled system bugs.</li>
+          <li>The Ralph loop directly attacks premature “I’m done” claims; Foundry currently relies more on stage design than explicit completion challenge.</li>
+        </ul>
+      </section>
+
+      <section class="card span-6">
+        <h2>Unnecessary Overhead Scale</h2>
+        <p class="small">Scale: <strong>1</strong> = almost no unnecessary machinery, <strong>5</strong> = lots of coordination overhead relative to the job.</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Scenario</th>
+              <th>Anthropic Workflow</th>
+              <th>Context Foundry</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>One monolithic scientific solver with a tight oracle</td>
+              <td><span class="score score-good">1 / 5</span></td>
+              <td><span class="score score-bad">4 / 5</span></td>
+            </tr>
+            <tr>
+              <td>Backlog-driven product engineering across many tasks</td>
+              <td><span class="score score-bad">4 / 5</span></td>
+              <td><span class="score score-good">1 / 5</span></td>
+            </tr>
+            <tr>
+              <td>Team environment with review and traceability requirements</td>
+              <td><span class="score score-bad">4 / 5</span></td>
+              <td><span class="score score-good">2 / 5</span></td>
+            </tr>
+            <tr>
+              <td>Safety-sensitive refactor queue where silent regressions matter</td>
+              <td><span class="score score-warn">3 / 5</span></td>
+              <td><span class="score score-good">2 / 5</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="card span-12">
+        <h2>Detailed Analysis</h2>
+
+        <h3>1. Orchestration Model</h3>
+        <p>
+          Anthropic’s article is deliberately thin on orchestration. The central claim is that, for the right problem class, model capability has advanced enough that success comes more from a good oracle, a good progress file, and a durable shell session than from elaborate scaffolding. That is a sensible claim for a single coupled numerical system where continuity matters.
+        </p>
+        <p>
+          Context Foundry goes the other direction. It assumes long-running autonomy becomes dangerous without explicit compartmentalization, so it decomposes work into isolated stages, persists handoff artifacts, and can block forward motion when review fails. That is more expensive, but it is also more production-oriented.
+        </p>
+
+        <h3>2. Memory Model</h3>
+        <p>
+          Anthropic’s memory model is agent-centric: one evolving <code>CLAUDE.md</code>, one evolving <code>CHANGELOG.md</code>, and git history. Foundry’s memory model is system-centric: <code>TASKS.md</code> for queue state, <code>SPEC.md</code> for scope, staged artifacts for local reasoning transfer, pattern files for reusable lessons, and observatory logs for telemetry.
+        </p>
+        <p>
+          For research-style iteration, Anthropic’s model is easier to reason about. For repeated software delivery, Foundry’s model is stronger because it separates “what happened on this task” from “what should be remembered forever.”
+        </p>
+
+        <h3>3. Verification Philosophy</h3>
+        <p>
+          This is the sharpest contrast. Anthropic optimizes around a strong test oracle. Foundry optimizes around reviewer independence. These are not the same thing. In practice, the best system for scientific computing would have both. Right now, the article is stronger on oracle semantics and Foundry is stronger on structured skepticism.
+        </p>
+
+        <h3>4. Runtime Persistence</h3>
+        <p>
+          Both systems understand that long-running autonomy dies if the runtime is fragile. Anthropic uses <code>tmux</code> on SLURM/HPC nodes; Foundry supports a <code>tmux</code> backend and long-running autonomous loops with discovery and checkpoints. Foundry is more generalized; Anthropic is more obviously tailored to research compute environments.
+        </p>
+
+        <h3>5. Human Governance</h3>
+        <p>
+          Anthropic’s workflow expects a technically fluent supervisor checking commit history, editing instructions, and re-prompting. Foundry formalizes this into a product: SPID indicators, WIP commits, PR creation, pause gates, issue creation, and event logging. That is a major upgrade if more than one person needs to trust the system.
+        </p>
+      </section>
+
+      <section class="card span-12">
+        <h2>Direct Answer: How Context Foundry Stacks Up</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Question</th>
+              <th>Answer</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Is Foundry more capable overall?</td>
+              <td>For autonomous software engineering, yes. It has more architecture, more safeguards, more telemetry, more governance, and stronger long-term learning.</td>
+            </tr>
+            <tr>
+              <td>Is Foundry a cleaner match for the exact workflow Anthropic described?</td>
+              <td>No. The article’s workflow is simpler and better matched to one numerically coupled scientific objective with a hard reference oracle.</td>
+            </tr>
+            <tr>
+              <td>Would Foundry likely outperform that workflow on a real product backlog?</td>
+              <td>Yes. Foundry’s task queue, verify gate, pattern learning, and review mode are better fits for iterative product work than a single persistent-agent shell session.</td>
+            </tr>
+            <tr>
+              <td>Is Foundry overbuilt for the article’s use case?</td>
+              <td>Partly yes. The clean-stage pipeline, review artifacts, and task machinery are useful, but they impose real overhead when the core problem is “drive one solver to a quantitative target.”</td>
+            </tr>
+            <tr>
+              <td>Does Foundry have unique advantages Anthropic’s writeup does not?</td>
+              <td>Yes: fresh-context review isolation, reusable cross-project pattern learning, discovery, PR gating, observability, extension contracts, dual-provider full-pipeline execution, and structured WIP handling.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="card span-12">
+        <h2>What Foundry Would Need To Beat This Article On Its Own Turf</h2>
+        <ol>
+          <li>
+            A first-class progress ledger such as <code>.buildloop/progress.md</code> that every task updates with attempted approaches, failed branches, numerical metrics, and known limitations.
+          </li>
+          <li>
+            First-class oracle configuration: reference commands, acceptance thresholds, sweep matrices, and metric plots instead of only generic build/test hooks.
+          </li>
+          <li>
+            A completion-challenge loop analogous to Ralph that explicitly re-checks success claims against declared acceptance criteria.
+          </li>
+          <li>
+            A “single deep-work task mode” that preserves one builder thread across iterations while still invoking isolated verifier passes at checkpoints.
+          </li>
+          <li>
+            A numeric regression dashboard generated from task runs so scientific progress is visible as curves, not just commits and review findings.
+          </li>
+        </ol>
+      </section>
+
+      <section class="card span-12">
+        <h2>Sources And Evidence</h2>
+        <p>
+          External source:
+          <a href="https://www.anthropic.com/research/long-running-Claude">Anthropic, “Long-running Claude for scientific computing”</a>,
+          March 23, 2026.
+        </p>
+        <p>
+          Local repo sources reviewed:
+        </p>
+        <ul class="two-col">
+          <li><a href="../README.md">README.md</a> (architecture, run modes, memory model, extensions, governance)</li>
+          <li><a href="../src/app/build.rs">src/app/build.rs</a> (pipeline execution, review gate, discovery, commit flow, pattern extraction)</li>
+          <li><a href="../src/config.rs">src/config.rs</a> (runtime/config surface)</li>
+          <li><a href="../src/complexity.rs">src/complexity.rs</a> (complexity scaling)</li>
+          <li><a href="../src/doubt_confidence.rs">src/doubt_confidence.rs</a> (learned doubt skipping)</li>
+          <li><a href="../src/patterns.rs">src/patterns.rs</a> (pattern loading, matching, injection, merge logic)</li>
+          <li><a href="../src/embeddings.rs">src/embeddings.rs</a> (semantic matching, cache, fallback behavior)</li>
+          <li><a href="../src/agent.rs">src/agent.rs</a> (provider abstraction, PTY/tmux execution, orchestration override)</li>
+          <li><a href="../src/tmux.rs">src/tmux.rs</a> (<code>tmux</code> session backend)</li>
+          <li><a href="../src/observatory.rs">src/observatory.rs</a> (event logging)</li>
+          <li><a href="../src/mcp.rs">src/mcp.rs</a> (MCP resource exposure)</li>
+        </ul>
+        <p class="footnotes">
+          Scope note: Foundry Studio was intentionally excluded because it was marked end-of-life during this review. Build sanity check performed locally with <code>cargo check</code> on March 24, 2026.
+        </p>
+      </section>
+    </div>
+  </div>
+</body>
+</html>

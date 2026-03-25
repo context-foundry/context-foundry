@@ -248,10 +248,12 @@ pub fn archive_completed_phases(
 
     // Identify phases eligible for archiving:
     // - All tasks are [x] (no pending)
-    // - More tasks than keep_first + keep_last (otherwise nothing to archive)
+    // - For large phases (> keep_first + keep_last): archive middle, keep edges
+    // - For small phases (<= keep_first + keep_last): archive ALL tasks
     let keep_total = keep_first + keep_last;
     let mut lines_to_archive: Vec<usize> = Vec::new();
     let mut archive_annotations: Vec<(usize, usize, usize)> = Vec::new(); // (header_idx, archived_count, retained_count)
+    let mut fully_archived_headers: Vec<usize> = Vec::new(); // headers of sections archived entirely
 
     for (header_idx, task_indices) in &phases {
         if task_indices.is_empty() {
@@ -265,9 +267,17 @@ pub fn archive_completed_phases(
             continue;
         }
         if task_indices.len() <= keep_total {
+            // Small completed section: archive ALL tasks and the header
+            for &idx in task_indices {
+                lines_to_archive.push(idx);
+            }
+            fully_archived_headers.push(*header_idx);
+            let archived_count = task_indices.len();
+            let retained_count = 0;
+            archive_annotations.push((*header_idx, archived_count, retained_count));
             continue;
         }
-        // Archive the middle: skip first keep_first and last keep_last
+        // Large completed section: archive the middle, keep first N and last N
         let archive_start = keep_first;
         let archive_end = task_indices.len() - keep_last;
         for &idx in &task_indices[archive_start..archive_end] {
@@ -316,9 +326,42 @@ pub fn archive_completed_phases(
 
     // Rebuild TASKS.md without archived lines, adding annotation to headers
     let archived_set: std::collections::HashSet<usize> = lines_to_archive.into_iter().collect();
+    let fully_archived_set: std::collections::HashSet<usize> =
+        fully_archived_headers.into_iter().collect();
     let mut new_lines: Vec<String> = Vec::new();
+    // Track lines between a fully-archived header and the next header (description
+    // paragraphs, blank lines) so they are also removed.
+    let mut skipping_fully_archived_section = false;
 
     for (i, line) in lines.iter().enumerate() {
+        // If this line IS a fully-archived header, replace with a summary line
+        if fully_archived_set.contains(&i) {
+            if let Some(&(_, archived, _)) = archive_annotations
+                .iter()
+                .find(|(h, _, _)| *h == i)
+            {
+                let header_text = line.trim_start_matches("## ").to_string();
+                new_lines.push(format!(
+                    "- {} ({} tasks archived to TASKS-ARCHIVE.md)",
+                    header_text, archived
+                ));
+            }
+            skipping_fully_archived_section = true;
+            continue;
+        }
+        // Skip non-task lines (descriptions, blanks) belonging to a fully-archived section
+        if skipping_fully_archived_section {
+            if line.starts_with("## ") {
+                // New section -- stop skipping
+                skipping_fully_archived_section = false;
+            } else if archived_set.contains(&i) {
+                // Task line in the fully-archived section -- already handled
+                continue;
+            } else {
+                // Description paragraph or blank line in fully-archived section
+                continue;
+            }
+        }
         if archived_set.contains(&i) {
             // Check if this is the first archived line in its phase -- insert marker
             let is_first_in_phase = !archived_set.contains(&(i.saturating_sub(1)))
@@ -334,13 +377,17 @@ pub fn archive_completed_phases(
             }
             continue;
         }
-        // Annotate phase headers with archive counts
+        // Annotate phase headers with archive counts (large sections only)
         if let Some(&(_, archived, retained)) = archive_annotations
             .iter()
             .find(|(h, _, _)| *h == i)
         {
-            let header = line.to_string();
-            new_lines.push(format!("{} ({} archived, {} retained)", header, archived, retained));
+            if retained > 0 {
+                let header = line.to_string();
+                new_lines.push(format!("{} ({} archived, {} retained)", header, archived, retained));
+            } else {
+                new_lines.push(line.to_string());
+            }
         } else {
             new_lines.push(line.to_string());
         }
