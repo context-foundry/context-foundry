@@ -13,13 +13,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 RUN npm install -g @anthropic-ai/claude-code
 
-RUN groupadd --gid 1000 foundry \
-  && useradd --uid 1000 --gid foundry --create-home foundry
-
 WORKDIR /work
-RUN chown foundry:foundry /work
+RUN chown node:node /work
 
-USER foundry
+USER node
 
 RUN claude --version && git --version && node --version
 
