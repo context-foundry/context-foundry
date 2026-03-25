@@ -222,7 +222,7 @@
       <a href="#architecture"><span class="num">03</span> The Architecture</a>
       <a href="#kernel"><span class="num">04</span> The Platform Kernel</a>
       <a href="#modules"><span class="num">05</span> Modules as Sub-Projects</a>
-      <a href="#contracts"><span class="num">06</span> Contracts at Scale</a>
+      <a href="#contracts"><span class="num">06</span> Contracts &amp; Lifecycle</a>
       <a href="#manifest"><span class="num">07</span> The Module Manifest</a>
       <a href="#execution"><span class="num">08</span> Execution Flow</a>
       <a href="#integration"><span class="num">09</span> The Integration Authority</a>
@@ -375,7 +375,7 @@
   <div class="section-inner">
     <h2>The Platform Kernel</h2>
 
-    <p>Before any module starts building, the platform kernel ships first. This is the shared foundation every module depends on -- and it has exactly one owner.</p>
+    <p>Before any module starts building, the platform kernel ships first. This is the shared foundation every module depends on -- and it has exactly one owner: the <strong>Integration Authority</strong>. The kernel and the Integration Authority are not separate roles. The same agent that builds and owns the kernel is the same agent that publishes contracts, merges module output, and runs cross-module verification. One agent, one authority, one source of truth for the platform's shared infrastructure.</p>
 
     <table>
       <tr><th>Kernel component</th><th>What it provides</th><th>Why modules can't own it</th></tr>
@@ -460,14 +460,28 @@
 
     <p>At feature scale, a contract is a TypeScript interface file. At enterprise scale, contracts are versioned artifacts that multiple modules build and test against independently. They are the load-bearing walls of the platform.</p>
 
+    <h3>Who owns contracts?</h3>
+    <p>One authority: the <strong>Integration Authority</strong>. Modules do not publish contracts directly. They <em>propose</em> contract schemas, and the Integration Authority reviews, validates, and publishes immutable versions to <code>contracts/</code>. This prevents conflicting schemas, ensures cross-module consistency, and gives one agent the full picture of all platform boundaries.</p>
+
+    <h3>Contract lifecycle</h3>
+    <p>A contract moves through four states. This resolves the question of when consumers can start building against a contract that is not yet implemented:</p>
+    <table>
+      <tr><th>State</th><th>Meaning</th><th>Who can use it</th></tr>
+      <tr><td><code>drafted</code></td><td>Module proposed the schema; Integration Authority is reviewing</td><td>Nobody -- still under review</td></tr>
+      <tr><td><code>schema_published</code></td><td>Integration Authority has published the schema as immutable</td><td>Consumers can start building against it using generated mocks</td></tr>
+      <tr><td><code>implemented</code></td><td>The owning module has built a working implementation behind the schema</td><td>Consumers can call the real API / listen for real events</td></tr>
+      <tr><td><code>certified</code></td><td>Integration tests have verified the contract works across module boundaries</td><td>Ready for platform release</td></tr>
+    </table>
+    <p>This means a dependent module like Payroll can unblock as soon as HCM's API schema reaches <code>schema_published</code> -- it does not have to wait for HCM to finish implementing. Payroll builds against mocks generated from the published schema, and the real integration is verified later.</p>
+
     <h3>API contracts</h3>
-    <p>Each module exposes a versioned API defined in OpenAPI or similar. The contract is the schema, not the implementation. When Finance exposes <code>/api/v1/journal-entries</code>, the contract defines the request/response shapes. Supply Chain can build against that contract before Finance has implemented it -- using mocks generated from the schema.</p>
+    <p>Each module exposes a versioned API defined in OpenAPI or similar. The contract is the schema, not the implementation. When Finance proposes <code>/api/v1/journal-entries</code>, the Integration Authority validates it against the kernel types and publishes the immutable schema. Supply Chain can build against that schema before Finance has implemented it -- using mocks generated from the published spec.</p>
 
     <h3>Event contracts</h3>
-    <p>Cross-module workflows are event-driven. When Payroll completes a pay run, it publishes a <code>pay-run-completed.v1</code> event. Finance consumes that event to create journal entries. The event schema is a contract -- versioned, immutable once published, validated at both ends.</p>
+    <p>Cross-module workflows are event-driven. When Payroll completes a pay run, it publishes a <code>pay-run-completed.v1</code> event. Finance consumes that event to create journal entries. The event schema is a contract -- proposed by Payroll, published by the Integration Authority, versioned and immutable once published, validated at both ends.</p>
 
     <h3>Shared domain objects</h3>
-    <p>Some objects cross module boundaries: Employee, Organization, Cost Center, Currency. These live in the kernel. Modules reference them but cannot modify them. If Payroll needs a new field on Employee, that is a kernel change -- not a Payroll change.</p>
+    <p>Some objects cross module boundaries: Employee, Organization, Cost Center, Currency. These live in the kernel. Modules reference them but cannot modify them. If Payroll needs a new field on Employee, that is a kernel change -- not a Payroll change. The request goes to the Integration Authority, which owns the kernel.</p>
 
     <div class="callout-red">
       <strong>Contract versioning is non-negotiable.</strong> At this scale, you cannot freeze contracts forever -- modules evolve at different speeds. Instead: contracts are versioned (v1, v2). A new version can be published alongside the old. Consumers migrate on their own timeline. Breaking changes require a new major version. This is the same pattern Workday uses for its public API, and the same pattern SAP uses for BAPIs.
@@ -494,57 +508,65 @@
   "version": 2,
   "platform": "acme-erp",
   "kernel_version": "0.3.0",
-  "architect": "opus",
+  "integration_authority": {
+    "model": "opus",
+    "owns": [
+      "kernel/**", "contracts/**", "docker-compose.yaml",
+      "package.json", "Cargo.toml", "tsconfig.json"
+    ],
+    "merge_strategy": "milestone"
+  },
+  "contracts": {
+    "hcm-api.v1":               { "state": "schema_published", "proposed_by": "hcm" },
+    "finance-api.v1":            { "state": "schema_published", "proposed_by": "finance" },
+    "pay-run-completed.v1":      { "state": "drafted",          "proposed_by": "payroll" },
+    "employee-terminated.v1":    { "state": "drafted",          "proposed_by": "hcm" }
+  },
   "modules": {
     "finance": {
       "status": "implementing",
       "branch": "foundry/finance",
       "owns": ["modules/finance/**"],
-      "publishes": ["finance-api.v1", "journal-entry-created.v1"],
+      "proposes": ["finance-api.v1", "journal-entry-created.v1"],
       "consumes": ["employee.kernel", "organization.kernel"],
-      "blocks_on": ["kernel"],
+      "blocks_on_schema": [],
+      "blocks_on_impl": ["kernel"],
       "agent_model": "sonnet"
     },
     "hcm": {
       "status": "implementing",
       "branch": "foundry/hcm",
       "owns": ["modules/hcm/**"],
-      "publishes": ["hcm-api.v1", "employee-terminated.v1"],
+      "proposes": ["hcm-api.v1", "employee-terminated.v1"],
       "consumes": ["employee.kernel", "organization.kernel"],
-      "blocks_on": ["kernel"],
+      "blocks_on_schema": [],
+      "blocks_on_impl": ["kernel"],
       "agent_model": "sonnet"
     },
     "payroll": {
-      "status": "blocked",
+      "status": "implementing",
       "branch": "foundry/payroll",
       "owns": ["modules/payroll/**"],
-      "publishes": ["payroll-api.v1", "pay-run-completed.v1"],
+      "proposes": ["payroll-api.v1", "pay-run-completed.v1"],
       "consumes": ["hcm-api.v1", "employee.kernel"],
-      "blocks_on": ["kernel", "hcm"],
+      "blocks_on_schema": ["hcm-api.v1"],
+      "blocks_on_impl": ["kernel"],
       "agent_model": "sonnet"
     },
     "supply-chain": {
       "status": "implementing",
       "branch": "foundry/supply-chain",
       "owns": ["modules/supply-chain/**"],
-      "publishes": ["supply-chain-api.v1", "po-approved.v1"],
+      "proposes": ["supply-chain-api.v1", "po-approved.v1"],
       "consumes": ["finance-api.v1", "organization.kernel"],
-      "blocks_on": ["kernel"],
+      "blocks_on_schema": ["finance-api.v1"],
+      "blocks_on_impl": ["kernel"],
       "agent_model": "sonnet"
     }
-  },
-  "integration": {
-    "owner": "kernel",
-    "shared_files": [
-      "kernel/**", "contracts/**", "docker-compose.yaml",
-      "package.json", "Cargo.toml", "tsconfig.json"
-    ],
-    "merge_strategy": "milestone",
-    "integration_model": "opus"
   }
 }</code></pre>
 
-    <p>Note the dependency graph: Finance, HCM, and Supply Chain all depend on the kernel but can start in parallel. Payroll depends on HCM (it needs the employee data API) so it waits. This is a DAG, not a flat list.</p>
+    <p>Key changes from the earlier manifest: <code>publishes</code> is now <code>proposes</code> (modules propose, Integration Authority publishes). Contracts have their own section with lifecycle states. <code>blocks_on</code> is split into <code>blocks_on_schema</code> (can start building against mocks) and <code>blocks_on_impl</code> (needs working implementation). Payroll unblocks as soon as HCM's schema is published, not when HCM finishes building.</p>
   </div>
 </div>
 
@@ -559,22 +581,31 @@
   Full SPID on kernel: Scout -> Plan -> Implement -> Doubt
   Output: stable kernel + published contracts
 
+PHASE 0.5: SCHEMA PUBLISHING
+  Integration Authority publishes contract schemas proposed during Phase 0
+  Consumers can now start building against mocks
+  Dependent modules unblock as schemas reach schema_published
+
 PHASE 1: INDEPENDENT MODULES (parallel)
-  For each module where blocks_on contains only "kernel":
+  For each module where blocks_on_impl is satisfied:
     Spawn agent in module's worktree
     Full SPID: Scout (module + kernel types) -> Plan -> Implement -> Doubt
-    On completion: publish module's API contract
-    Integration lane merges at each milestone
+    On completion: propose contract schema updates if needed
+    Integration Authority validates proposed contracts incrementally
 
   Running concurrently:
-    [Finance]      Scout -> Plan -> Implement -> Doubt -> publish
-    [HCM]          Scout -> Plan -> Implement -> Doubt -> publish
-    [Supply Chain]  Scout -> Plan -> Implement -> Doubt -> publish
+    [Finance]      Scout -> Plan -> Implement -> Doubt -> propose contracts
+    [HCM]          Scout -> Plan -> Implement -> Doubt -> propose contracts
+    [Supply Chain]  Scout -> Plan -> Implement -> Doubt -> propose contracts
+    [Payroll]      starts as soon as hcm-api.v1 reaches schema_published
+                   builds against mocks until HCM's real impl is ready
 
-PHASE 2: DEPENDENT MODULES (unblocked by Phase 1)
-  Payroll was blocked on HCM
-  HCM publishes hcm-api.v1 -> Payroll unblocks
-    [Payroll]      Scout -> Plan -> Implement -> Doubt -> publish
+PHASE 2: INCREMENTAL CONTRACT VERIFICATION
+  As each module completes, Integration Authority:
+    - Verifies proposed schemas match implementation
+    - Moves contracts from schema_published -> implemented
+    - Runs per-contract integration checks (schema compliance, mock parity)
+  This happens continuously, not as a big-bang at the end
 
 PHASE 3: CROSS-MODULE INTEGRATION
   Integration agent merges all module branches
@@ -588,6 +619,10 @@ PHASE 4: PLATFORM RELEASE
   Integration tests green across module boundaries</code></pre>
 
     <p>Each module runs a <strong>full SPID pipeline</strong>, not a reduced Plan+Implement. At this scale, each module is large enough to warrant its own Scout (reading module code + kernel types), its own Plan, and its own Doubt. The system-level Review in Phase 3 catches cross-module issues that per-module Doubt cannot see.</p>
+
+    <div class="callout">
+      <strong>Incremental checks vs full integration:</strong> Contract schema compliance is verified incrementally as modules complete (Phase 2). Full cross-module workflow tests -- the kind that span Payroll, HCM, and Finance in one end-to-end flow -- run only in Phase 3 after all modules are merged. v1 does not attempt incremental workflow testing. This is an explicit tradeoff: catch schema mismatches early, catch behavioral mismatches at the end.
+    </div>
   </div>
 </div>
 
@@ -596,13 +631,17 @@ PHASE 4: PLATFORM RELEASE
   <div class="section-inner">
     <h2>The Integration Authority</h2>
 
-    <p>At feature scale, the integration lane handles file merges. At platform scale, the Integration Authority is responsible for something much harder: ensuring that independently-built modules form a coherent platform.</p>
+    <p>The Integration Authority is a single agent that wears two hats: it builds the kernel (Phase 0) and then supervises module integration (Phases 1-4). These are not separate roles. The same agent that designed auth and tenancy is the same agent reviewing contract proposals and merging module output. This continuity is intentional -- no other agent has the full platform context.</p>
+
+    <p>Its responsibilities:</p>
 
     <ul>
-      <li><strong>Owns the kernel and all shared files.</strong> Auth, tenancy, the event bus, shared types, infrastructure config. One owner, absolute authority.</li>
-      <li><strong>Merges at milestones, not just at the end.</strong> When Finance publishes its API contract, the integration agent immediately verifies it against the kernel types and runs integration tests. Failures surface in hours, not weeks.</li>
-      <li><strong>Runs cross-module workflow tests.</strong> The workflow "employee joins (HCM) -> gets added to payroll (Payroll) -> first expense submitted (Finance)" spans three modules. Only the integration agent has the context to test this end-to-end.</li>
-      <li><strong>Manages contract versioning.</strong> When HCM publishes a v2 of its API, the integration agent ensures Payroll (which consumes v1) still works. New contract versions are additive, not breaking.</li>
+      <li><strong>Builds and owns the kernel.</strong> Auth, tenancy, the event bus, shared types, infrastructure config. It built them, it owns them, it is the only one who can modify them.</li>
+      <li><strong>Publishes contracts.</strong> Modules propose schemas; the Integration Authority reviews them against kernel types and cross-module consistency, then publishes immutable versions. No module writes to <code>contracts/</code> directly.</li>
+      <li><strong>Verifies contracts incrementally.</strong> As modules complete, the Integration Authority checks that implementations match published schemas and runs per-contract integration checks. Schema mismatches surface in hours, not at the end.</li>
+      <li><strong>Runs cross-module workflow tests.</strong> The workflow "employee joins (HCM) -> gets added to payroll (Payroll) -> first expense submitted (Finance)" spans three modules. Only the Integration Authority has the context to test this end-to-end. This runs in Phase 3 after all modules are merged.</li>
+      <li><strong>Manages contract versioning.</strong> When HCM proposes a v2 of its API, the Integration Authority ensures Payroll (which consumes v1) still works before publishing. New contract versions are additive, not breaking.</li>
+      <li><strong>Handles shared-file requests.</strong> When a module needs a change to a root-level file it does not own (Cargo.toml, package.json, workspace config), it submits a formal request to the Integration Authority describing what it needs and why. The Integration Authority makes the change, or rejects the request with an alternative. Modules never edit shared files directly.</li>
       <li><strong>Uses the most capable model.</strong> This is the hardest job in the system: reasoning about cross-cutting concerns, resolving semantic conflicts, understanding how domain models interact across boundaries. It gets Opus.</li>
     </ul>
 
@@ -731,17 +770,19 @@ PHASE 4: PLATFORM RELEASE
     <p>The first implementation keeps the corral tight:</p>
 
     <ul>
-      <li>Max 4 modules (not counting kernel and integration)</li>
+      <li>Max 4 modules (not counting integration)</li>
       <li>Kernel must ship completely before any module starts</li>
       <li>No circular dependencies between modules</li>
-      <li>Contracts are versioned but immutable once published (no mid-build amendments)</li>
-      <li>One integration authority, always Opus</li>
+      <li>Contracts are versioned but immutable once published (no mid-build amendments in v1)</li>
+      <li>Integration Authority is one agent: builds the kernel, publishes contracts, merges output, runs verification. Always Opus.</li>
       <li>Each module runs full SPID in its own worktree</li>
-      <li>Cross-module integration tests run after all modules complete, not incrementally</li>
+      <li>Modules propose contracts; only Integration Authority publishes to <code>contracts/</code></li>
+      <li>Modules never write shared files directly; changes go through a request to Integration Authority</li>
+      <li>Incremental contract schema checks run as modules complete (v1); full cross-module workflow tests run only after all modules merge (v1 tradeoff -- v2 targets incremental workflow testing)</li>
       <li>No nested modules (a module cannot decompose into sub-modules)</li>
     </ul>
 
-    <p>These constraints loosen once the orchestration layer is proven. v2 could add contract negotiation, incremental cross-module builds, and nested decomposition for large modules.</p>
+    <p>These constraints loosen once the orchestration layer is proven. v2 targets: contract amendment protocol (propose-review-publish cycle for mid-build changes), incremental cross-module workflow testing, and nested decomposition for large modules.</p>
   </div>
 </div>
 
