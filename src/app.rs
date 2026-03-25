@@ -33,6 +33,7 @@ use crate::config::Config;
 use crate::git;
 use crate::orchestrator::{self, OrchestratorConfig, OrchestratorOutcome};
 use crate::task;
+use crate::sandbox::SandboxConfig;
 use crate::tmux;
 use crate::tui;
 use crate::update;
@@ -57,6 +58,37 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
         crate::tui::theme::set_truecolor_override(tc);
     }
     state.tui_theme = crate::tui::theme::from_name(&config.theme);
+
+    // Sandbox detection
+    let sandbox_cfg = SandboxConfig::detect(
+        config.sandbox,
+        &config.sandbox_image,
+        config.sandbox_extra_mounts.clone(),
+    );
+    let sandbox_status = sandbox_cfg.status();
+    state.sandbox_active = sandbox_cfg.is_active();
+    state.sandbox_status_label = format!("{}", sandbox_status);
+    match sandbox_status {
+        crate::sandbox::SandboxStatus::Active => {
+            state.log(format!(
+                "Sandbox active: image={}, mounts={}",
+                sandbox_cfg.image,
+                1 + sandbox_cfg.extra_mounts.len()
+            ));
+        }
+        crate::sandbox::SandboxStatus::DockerNotFound => {
+            state.log("Warning: sandbox enabled but Docker not found; agents will run unsandboxed".to_string());
+        }
+        crate::sandbox::SandboxStatus::ImageNotFound => {
+            state.log(format!(
+                "Warning: sandbox image '{}' not found; agents will run unsandboxed. Run: docker/build-sandbox.sh",
+                sandbox_cfg.image
+            ));
+        }
+        crate::sandbox::SandboxStatus::Disabled => {
+            state.log("Sandbox disabled by config".to_string());
+        }
+    }
 
     // Tmux backend validation and stale session cleanup
     if config.agent_backend == "tmux" {

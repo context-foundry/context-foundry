@@ -212,9 +212,7 @@ pub struct Config {
     pub tmux_keep_sessions: bool,
 
     /// Enable Docker sandbox isolation for agent subprocesses (default: true).
-    /// Consumed by sandbox::SandboxConfig::detect() in T19.3.
     #[serde(default = "default_true")]
-    #[allow(dead_code)]
     pub sandbox: bool,
 
     /// Docker image used for sandbox containers.

@@ -354,6 +354,10 @@ pub struct AppState {
     pub(super) session_cost_millicents: Arc<std::sync::atomic::AtomicU64>,
     /// Active tmux session names for the current run (displayed in dashboard).
     pub tmux_session_names: Vec<String>,
+    /// Whether Docker sandbox isolation is active for agent subprocesses.
+    pub sandbox_active: bool,
+    /// Human-readable sandbox status label for TUI display.
+    pub sandbox_status_label: String,
 }
 
 impl AppState {
@@ -442,6 +446,8 @@ impl AppState {
             tasks_file_lock: Arc::new(Mutex::new(())),
             session_cost_millicents: Arc::new(std::sync::atomic::AtomicU64::new(0)),
             tmux_session_names: Vec::new(),
+            sandbox_active: false,
+            sandbox_status_label: String::new(),
         }
     }
 

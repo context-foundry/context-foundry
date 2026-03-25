@@ -1,6 +1,3 @@
-// Items in this module are consumed by agent.rs in T19.3.
-#![allow(dead_code)]
-
 use portable_pty::CommandBuilder;
 use std::path::Path;
 

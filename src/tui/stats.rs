@@ -261,6 +261,21 @@ pub(super) fn render_dashboard_stats(
         Span::styled(&task_str, Style::default().fg(theme.text)),
     ]));
 
+    // ─── Row 2b: Sandbox status ───
+    {
+        let (sandbox_label, sandbox_color) = if state.sandbox_active {
+            (format!("Sandbox: active ({})", config.sandbox_image), theme.success)
+        } else if config.sandbox {
+            (format!("Sandbox: {} (enabled in config)", state.sandbox_status_label), theme.warning)
+        } else {
+            ("Sandbox: disabled".to_string(), theme.muted)
+        };
+        lines.push(Line::from(vec![
+            Span::styled("  ", Style::default()),
+            Span::styled(sandbox_label, Style::default().fg(sandbox_color)),
+        ]));
+    }
+
     // ─── Row 3: left empty | Agent status on right ───
     let agent_label = state
         .current_agent

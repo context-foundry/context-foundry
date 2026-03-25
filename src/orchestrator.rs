@@ -9,6 +9,7 @@ use tokio::sync::mpsc;
 use crate::agent::{self, AgentOutputEvent, AgentRole, ModelProvider};
 use crate::app::commands::{ensure_required_providers_available, ProviderCommandMode};
 use crate::config::Config;
+use crate::sandbox::SandboxConfig;
 use crate::utils::{atomic_write_file, truncate_str};
 
 // ─── Data Model ──────────────────────────────────────────────
@@ -622,6 +623,25 @@ pub async fn run_design_command(project_dir: &Path, intent: &str) -> Result<()> 
         orch_config.reviewer_model,
     );
     eprintln!("Max iterations: {}", orch_config.max_iterations);
+    let sandbox_cfg = SandboxConfig::detect(
+        config.sandbox,
+        &config.sandbox_image,
+        config.sandbox_extra_mounts.clone(),
+    );
+    match sandbox_cfg.status() {
+        crate::sandbox::SandboxStatus::Active => {
+            eprintln!("Sandbox: active ({})", sandbox_cfg.image);
+        }
+        crate::sandbox::SandboxStatus::DockerNotFound => {
+            eprintln!("Sandbox: Docker not found (unsandboxed)");
+        }
+        crate::sandbox::SandboxStatus::ImageNotFound => {
+            eprintln!("Sandbox: image '{}' not found (unsandboxed)", sandbox_cfg.image);
+        }
+        crate::sandbox::SandboxStatus::Disabled => {
+            eprintln!("Sandbox: disabled");
+        }
+    }
     eprintln!();
 
     let shutdown = Arc::new(AtomicBool::new(false));

@@ -269,6 +269,23 @@ pub(super) fn render_header(frame: &mut Frame, area: Rect, state: &AppState) {
         ));
     }
 
+    // Sandbox indicator badge
+    {
+        let (sandbox_label, sandbox_color) = if state.sandbox_active {
+            (" sandboxed ", Color::Green)
+        } else {
+            (" unsandboxed ", Color::Yellow)
+        };
+        header_text[0].spans.push(Span::raw("  "));
+        header_text[0].spans.push(Span::styled(
+            sandbox_label,
+            Style::default()
+                .fg(Color::Black)
+                .bg(sandbox_color)
+                .add_modifier(Modifier::BOLD),
+        ));
+    }
+
     if state.awaiting_review {
         if let Some(pr_num) = state.awaiting_pr {
             let ago_text = match state.pr_poll_last_check {

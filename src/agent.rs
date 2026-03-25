@@ -10,6 +10,7 @@ use std::sync::{
 use std::time::{Duration, Instant};
 
 use crate::config::Config;
+use crate::sandbox::SandboxConfig;
 use crate::tmux::TmuxSession;
 use crate::utils::truncate_str;
 use tokio::sync::mpsc;
@@ -392,6 +393,56 @@ pub async fn run_provider_session(options: ProviderRunOptions<'_>) -> Result<Age
 
     cmd.cwd(options.project_dir);
 
+    // Sandbox wrapping for provider sessions
+    let config = Config::load(options.project_dir);
+    let sandbox_cfg = SandboxConfig::detect(
+        config.sandbox,
+        &config.sandbox_image,
+        config.sandbox_extra_mounts.clone(),
+    );
+    let cmd = if sandbox_cfg.is_active() {
+        let (program, args, env_vars): (&str, Vec<String>, Vec<(&str, &str)>) = match options.provider {
+            ModelProvider::Claude => {
+                let program = "claude";
+                let mut args = vec!["-p".to_string(), options.prompt.to_string()];
+                if !options.model.trim().is_empty() {
+                    args.push("--model".to_string());
+                    args.push(options.model.to_string());
+                }
+                args.push("--dangerously-skip-permissions".to_string());
+                args.push("--output-format".to_string());
+                args.push("stream-json".to_string());
+                args.push("--verbose".to_string());
+                (program, args, vec![("CLAUDECODE", "")])
+            }
+            ModelProvider::Codex => {
+                let program = "codex";
+                let mut args = vec!["exec".to_string(), "--json".to_string()];
+                if !options.model.trim().is_empty() {
+                    args.push("--model".to_string());
+                    args.push(options.model.to_string());
+                }
+                args.push("--full-auto".to_string());
+                args.push("--output-last-message".to_string());
+                args.push(format!(
+                    "/work/{}",
+                    final_message_path
+                        .strip_prefix(options.project_dir)
+                        .unwrap_or(&final_message_path)
+                        .display()
+                ));
+                if options.skip_git_repo_check {
+                    args.push("--skip-git-repo-check".to_string());
+                }
+                args.push(options.prompt.to_string());
+                (program, args, vec![])
+            }
+        };
+        sandbox_cfg.wrap_command_builder(program, &args, options.project_dir, &env_vars)
+    } else {
+        cmd
+    };
+
     let pty_system = native_pty_system();
     let pair = pty_system.openpty(PtySize {
         rows: 24,
@@ -636,7 +687,17 @@ pub async fn run_agent(
 
     // Load config to determine backend
     let config = Config::load(project_dir);
-    let backend = if config.agent_backend == "tmux" && crate::tmux::tmux_binary_available() {
+    let sandbox_cfg = SandboxConfig::detect(
+        config.sandbox,
+        &config.sandbox_image,
+        config.sandbox_extra_mounts.clone(),
+    );
+    let backend = if sandbox_cfg.is_active() && config.agent_backend == "tmux" {
+        let _ = output_tx.send(AgentOutputEvent::Stderr(
+            "[foundry] sandbox active; forcing PTY backend (tmux incompatible with containerized agents)".to_string(),
+        ));
+        AgentBackend::Pty
+    } else if config.agent_backend == "tmux" && crate::tmux::tmux_binary_available() {
         AgentBackend::Tmux
     } else {
         if config.agent_backend == "tmux" {
@@ -722,9 +783,43 @@ async fn run_agent_pty(
         cmd.arg(tools.join(","));
     }
     cmd.cwd(project_dir);
-
     // Prevent nested Claude detection -- set on the command, not process-wide
     cmd.env("CLAUDECODE", "");
+
+    // Sandbox wrapping: replace cmd with docker run wrapper if sandbox is active
+    let config = Config::load(project_dir);
+    let sandbox_cfg = SandboxConfig::detect(
+        config.sandbox,
+        &config.sandbox_image,
+        config.sandbox_extra_mounts.clone(),
+    );
+    let cmd = if sandbox_cfg.is_active() {
+        // Build the program and args for wrap_command_builder
+        let program = "claude";
+        let mut args: Vec<String> = vec!["-p".to_string(), prompt.to_string()];
+        if !model.trim().is_empty() {
+            args.push("--model".to_string());
+            args.push(model.to_string());
+        }
+        args.push("--dangerously-skip-permissions".to_string());
+        args.push("--output-format".to_string());
+        args.push("stream-json".to_string());
+        args.push("--verbose".to_string());
+        args.push("--append-system-prompt".to_string());
+        args.push(concat!(
+            "IMPORTANT: You are running as a single stage in Context Foundry's autonomous pipeline. ",
+            "Ignore any CLAUDE.md instructions about orchestration workflows, build pipelines, ",
+            "SPID stages, doubt loops, sub-agent spawning, or multi-step implementation processes. ",
+            "Foundry handles all orchestration. Focus only on your assigned role and task.",
+        ).to_string());
+        if let Some(tools) = allowed_tools {
+            args.push("--tools".to_string());
+            args.push(tools.join(","));
+        }
+        sandbox_cfg.wrap_command_builder(program, &args, project_dir, &[("CLAUDECODE", "")])
+    } else {
+        cmd
+    };
 
     // Open a PTY -- this is the key to real-time streaming.
     let pty_system = native_pty_system();

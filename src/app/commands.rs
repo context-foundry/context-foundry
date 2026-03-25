@@ -9,6 +9,7 @@ use tokio::sync::mpsc;
 
 use crate::agent::{AgentOutputEvent, ModelProvider};
 use crate::config::Config;
+use crate::sandbox::SandboxConfig;
 use crate::task::{self, Task};
 use crate::update;
 
@@ -100,7 +101,6 @@ pub(crate) fn provider_binary_is_available(provider: ModelProvider) -> bool {
         .unwrap_or(false)
 }
 
-#[allow(dead_code)] // Consumed by sandbox::SandboxConfig::detect() in T19.3
 pub(crate) fn docker_is_available() -> bool {
     let lookup_cmd = if cfg!(target_os = "windows") {
         "where"
@@ -114,7 +114,6 @@ pub(crate) fn docker_is_available() -> bool {
         .unwrap_or(false)
 }
 
-#[allow(dead_code)] // Consumed by sandbox::SandboxConfig::detect() in T19.3
 pub(crate) fn sandbox_image_exists(image: &str) -> bool {
     std::process::Command::new("docker")
         .args(["image", "inspect", image])
@@ -234,6 +233,30 @@ pub(super) async fn run_headless(project_dir: &Path, output_format: Option<Strin
     }
 
     ensure_required_providers_available(&run_context.config, ProviderCommandMode::Run)?;
+
+    // Sandbox detection (headless)
+    let sandbox_cfg = SandboxConfig::detect(
+        run_context.config.sandbox,
+        &run_context.config.sandbox_image,
+        run_context.config.sandbox_extra_mounts.clone(),
+    );
+    match sandbox_cfg.status() {
+        crate::sandbox::SandboxStatus::Active => {
+            eprintln!("[foundry] sandbox active: image={}", sandbox_cfg.image);
+        }
+        crate::sandbox::SandboxStatus::DockerNotFound => {
+            eprintln!("[foundry] warning: sandbox enabled but Docker not found; agents unsandboxed");
+        }
+        crate::sandbox::SandboxStatus::ImageNotFound => {
+            eprintln!(
+                "[foundry] warning: sandbox image '{}' not found; agents unsandboxed",
+                sandbox_cfg.image
+            );
+        }
+        crate::sandbox::SandboxStatus::Disabled => {
+            eprintln!("[foundry] sandbox disabled");
+        }
+    }
 
     let (tx, mut rx) = mpsc::unbounded_channel::<AppEvent>();
 

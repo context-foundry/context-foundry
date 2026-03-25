@@ -1110,6 +1110,19 @@ pub(super) fn render_startup_status_bar(frame: &mut Frame, area: Rect, state: &A
         spans.push(Span::raw(" findings"));
     }
 
+    // Sandbox indicator
+    {
+        let (sandbox_text, sandbox_color) = if state.sandbox_active {
+            ("sandbox: on", state.tui_theme.success)
+        } else {
+            ("sandbox: off", state.tui_theme.warning)
+        };
+        spans.push(Span::styled(
+            format!("  [{}] ", sandbox_text),
+            Style::default().fg(sandbox_color),
+        ));
+    }
+
     // Extensions indicator (always shown)
     let ext_status = format_extensions_status(&state.available_extensions);
     spans.push(Span::styled(
