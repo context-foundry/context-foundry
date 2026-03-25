@@ -77,23 +77,30 @@
       line-height: 1.15;
     }
 
+    .hero .text-box {
+      background: rgba(30, 18, 10, 0.82);
+      border: 1px solid rgba(232, 184, 75, 0.3);
+      border-radius: 6px;
+      padding: 1rem 1.25rem;
+      max-width: 600px;
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+    }
+
     .hero .tagline {
       font-family: var(--font-heading);
       color: #e8dcc8;
       font-size: 1.1rem;
       font-weight: 400;
       font-style: italic;
-      margin: 0 0 1.25rem 0;
+      margin: 0 0 0.75rem 0;
       line-height: 1.6;
-      max-width: 580px;
-      text-shadow: 1px 1px 0 #2c1810, 0 0 10px rgba(0,0,0,0.4);
     }
 
     .hero .meta {
       color: #c8b89e;
       font-size: 0.8rem;
       margin: 0;
-      text-shadow: 1px 1px 0 #2c1810;
     }
 
     /* --- Table of Contents --- */
@@ -216,8 +223,10 @@
   <div class="hero-overlay">
     <div class="hero-inner">
       <h1>Build the Whole<br>Town at Once</h1>
-      <p class="tagline">How do you build something the size of SAP, Workday, or PeopleSoft with AI agents? Not one trail at a time. You run concurrent workstreams -- Finance, HCM, Payroll, Supply Chain -- each with its own build loop, all sharing one platform and converging at the railhead.</p>
-      <p class="meta">Context Foundry &middot; Design Concept &middot; March 2025</p>
+      <div class="text-box">
+        <p class="tagline">How do you build something the size of SAP, Workday, or PeopleSoft with AI agents? Not one trail at a time. You run concurrent workstreams -- Finance, HCM, Payroll, Supply Chain -- each with its own build loop, all sharing one platform and converging at the railhead.</p>
+        <p class="meta">Context Foundry &middot; Design Concept &middot; March 2025</p>
+      </div>
     </div>
   </div>
 </div>
