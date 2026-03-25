@@ -77,28 +77,29 @@
       line-height: 1.15;
     }
 
-    .hero .text-box {
-      background: rgba(30, 18, 10, 0.82);
-      border: 1px solid rgba(232, 184, 75, 0.3);
-      border-radius: 6px;
-      padding: 1rem 1.25rem;
-      max-width: 600px;
-      backdrop-filter: blur(4px);
-      -webkit-backdrop-filter: blur(4px);
+    .intro-strip {
+      background: linear-gradient(180deg, #3a2a1c 0%, var(--bg) 100%);
+      border-bottom: 1px solid var(--border);
+      padding: 1.75rem 1.5rem;
     }
 
-    .hero .tagline {
+    .intro-inner {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    .intro-strip .tagline {
       font-family: var(--font-heading);
-      color: #e8dcc8;
+      color: var(--text);
       font-size: 1.1rem;
       font-weight: 400;
       font-style: italic;
-      margin: 0 0 0.75rem 0;
+      margin: 0 0 0.5rem 0;
       line-height: 1.6;
     }
 
-    .hero .meta {
-      color: #c8b89e;
+    .intro-strip .meta {
+      color: var(--text-muted);
       font-size: 0.8rem;
       margin: 0;
     }
@@ -223,10 +224,6 @@
   <div class="hero-overlay">
     <div class="hero-inner">
       <h1>Build the Whole<br>Town at Once</h1>
-      <div class="text-box">
-        <p class="tagline">How do you build something the size of SAP, Workday, or PeopleSoft with AI agents? Not one trail at a time. You run concurrent workstreams -- Finance, HCM, Payroll, Supply Chain -- each with its own build loop, all sharing one platform and converging at the railhead.</p>
-        <p class="meta">Context Foundry &middot; Design Concept &middot; March 2025</p>
-      </div>
     </div>
   </div>
 </div>
@@ -504,6 +501,14 @@
   loop();
 })();
 </script>
+
+<!-- INTRO STRIP -->
+<div class="intro-strip">
+  <div class="intro-inner">
+    <p class="tagline">How do you build something the size of SAP, Workday, or PeopleSoft with AI agents? Not one trail at a time. You run concurrent workstreams -- Finance, HCM, Payroll, Supply Chain -- each with its own build loop, all sharing one platform and converging at the railhead.</p>
+    <p class="meta">Context Foundry &middot; Design Concept &middot; March 2025</p>
+  </div>
+</div>
 
 <!-- TABLE OF CONTENTS -->
 <nav class="toc">
