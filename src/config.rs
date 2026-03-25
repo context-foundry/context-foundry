@@ -210,6 +210,18 @@ pub struct Config {
 
     /// Keep tmux sessions alive after agent completion (default: false).
     pub tmux_keep_sessions: bool,
+
+    /// Enable Docker sandbox isolation for agent subprocesses (default: true).
+    /// Consumed by sandbox::SandboxConfig::detect() in T19.3.
+    #[serde(default = "default_true")]
+    #[allow(dead_code)]
+    pub sandbox: bool,
+
+    /// Docker image used for sandbox containers.
+    pub sandbox_image: String,
+
+    /// Additional bind mounts passed to docker run (e.g. ["~/.cache:/cache:ro"]).
+    pub sandbox_extra_mounts: Vec<String>,
 }
 
 impl Default for Config {
@@ -287,6 +299,9 @@ impl Default for Config {
             agent_backend: "pty".into(),
             tmux_session_prefix: "foundry".into(),
             tmux_keep_sessions: false,
+            sandbox: true,
+            sandbox_image: "foundry-sandbox:latest".into(),
+            sandbox_extra_mounts: Vec::new(),
         }
     }
 }
@@ -751,6 +766,33 @@ mod tests {
         let config: Config = serde_json::from_str(r#"{"create_issue_on_wip":true}"#)
             .expect("config should deserialize");
         assert!(config.create_issue_on_wip);
+    }
+
+    #[test]
+    fn default_config_enables_sandbox() {
+        let config = Config::default();
+        assert!(config.sandbox);
+        assert_eq!(config.sandbox_image, "foundry-sandbox:latest");
+        assert!(config.sandbox_extra_mounts.is_empty());
+    }
+
+    #[test]
+    fn config_deserializes_sandbox_fields() {
+        let config: Config = serde_json::from_str(
+            r#"{"sandbox":false,"sandbox_image":"custom:v1","sandbox_extra_mounts":["/data:/data:ro"]}"#,
+        ).expect("config should deserialize");
+        assert!(!config.sandbox);
+        assert_eq!(config.sandbox_image, "custom:v1");
+        assert_eq!(config.sandbox_extra_mounts, vec!["/data:/data:ro"]);
+    }
+
+    #[test]
+    fn config_deserializes_sandbox_defaults_when_absent() {
+        let config: Config = serde_json::from_str(r#"{"builder_model":"opus"}"#)
+            .expect("config should deserialize");
+        assert!(config.sandbox);
+        assert_eq!(config.sandbox_image, "foundry-sandbox:latest");
+        assert!(config.sandbox_extra_mounts.is_empty());
     }
 
     #[cfg(unix)]

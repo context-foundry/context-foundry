@@ -100,6 +100,31 @@ pub(crate) fn provider_binary_is_available(provider: ModelProvider) -> bool {
         .unwrap_or(false)
 }
 
+#[allow(dead_code)] // Consumed by sandbox::SandboxConfig::detect() in T19.3
+pub(crate) fn docker_is_available() -> bool {
+    let lookup_cmd = if cfg!(target_os = "windows") {
+        "where"
+    } else {
+        "which"
+    };
+    std::process::Command::new(lookup_cmd)
+        .arg("docker")
+        .output()
+        .map(|output| output.status.success())
+        .unwrap_or(false)
+}
+
+#[allow(dead_code)] // Consumed by sandbox::SandboxConfig::detect() in T19.3
+pub(crate) fn sandbox_image_exists(image: &str) -> bool {
+    std::process::Command::new("docker")
+        .args(["image", "inspect", image])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .output()
+        .map(|output| output.status.success())
+        .unwrap_or(false)
+}
+
 fn missing_provider_commands<F>(
     config: &Config,
     mode: ProviderCommandMode,
@@ -610,5 +635,16 @@ mod tests {
         let missing = missing_provider_commands(&config, ProviderCommandMode::Design, |_| true);
 
         assert!(missing.is_empty());
+    }
+
+    #[test]
+    fn docker_is_available_returns_bool() {
+        // Just verify it doesn't panic -- actual result depends on host
+        let _ = super::docker_is_available();
+    }
+
+    #[test]
+    fn sandbox_image_exists_returns_false_for_nonexistent() {
+        assert!(!super::sandbox_image_exists("foundry-nonexistent-image-abc123:latest"));
     }
 }

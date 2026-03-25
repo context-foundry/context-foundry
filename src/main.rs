@@ -14,6 +14,7 @@ mod mcp;
 mod observatory;
 mod orchestrator;
 mod tmux;
+mod sandbox;
 mod patterns;
 mod prompts;
 mod task;
