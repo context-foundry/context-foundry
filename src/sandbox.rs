@@ -80,6 +80,58 @@ impl SandboxConfig {
         self.status() == SandboxStatus::Active
     }
 
+    /// On macOS, Claude Code stores OAuth tokens in the Keychain. Docker containers
+    /// run Linux and can't access the host Keychain, so the CLI falls back to reading
+    /// `~/.claude/.credentials.json`. This method extracts the credential from the
+    /// Keychain and writes it to that file so containerized agents can authenticate.
+    pub fn ensure_credentials_for_container(&self) {
+        if !self.is_active() {
+            return;
+        }
+        if cfg!(not(target_os = "macos")) {
+            return;
+        }
+        let home = match std::env::var("HOME") {
+            Ok(h) => h,
+            Err(_) => return,
+        };
+        let creds_path = Path::new(&home).join(".claude").join(".credentials.json");
+        // Don't overwrite if it already exists
+        if creds_path.exists() {
+            return;
+        }
+        // Extract from macOS Keychain: service="Claude Code-credentials", account=$USER
+        let user = std::env::var("USER").unwrap_or_else(|_| "claude-code-user".to_string());
+        let output = std::process::Command::new("security")
+            .args(["find-generic-password", "-s", "Claude Code-credentials", "-a", &user, "-w"])
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null())
+            .output();
+        match output {
+            Ok(out) if out.status.success() => {
+                let cred_data = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                if !cred_data.is_empty() {
+                    if let Err(e) = std::fs::write(&creds_path, &cred_data) {
+                        eprintln!("Failed to write sandbox credentials file: {}", e);
+                    } else {
+                        // Restrict permissions
+                        #[cfg(unix)]
+                        {
+                            use std::os::unix::fs::PermissionsExt;
+                            let _ = std::fs::set_permissions(
+                                &creds_path,
+                                std::fs::Permissions::from_mode(0o600),
+                            );
+                        }
+                    }
+                }
+            }
+            _ => {
+                eprintln!("Could not extract Claude credentials from macOS Keychain for sandbox");
+            }
+        }
+    }
+
     pub fn wrap_command_builder(
         &self,
         program: &str,
@@ -103,14 +155,48 @@ impl SandboxConfig {
         // Set working directory inside container
         cmd.args(["-w", "/work"]);
 
+        // Mount ~/.claude into the container (read-write) so the CLI picks up
+        // subscription auth without needing ANTHROPIC_API_KEY. The CLI writes
+        // session data and debug logs, so read-only won't work.
+        if let Some(home) = std::env::var_os("HOME")
+            .or_else(|| std::env::var_os("USERPROFILE"))
+        {
+            let home_path = Path::new(&home);
+            let claude_dir = home_path.join(".claude");
+            if claude_dir.is_dir() {
+                let host_claude = claude_dir.to_string_lossy().to_string();
+                let host_claude = if cfg!(target_os = "windows") {
+                    translate_windows_path(&host_claude)
+                } else {
+                    host_claude
+                };
+                cmd.arg("-v");
+                cmd.arg(format!("{}:/home/node/.claude", host_claude));
+            }
+            // ~/.claude.json (CLI config)
+            let claude_json = home_path.join(".claude.json");
+            if claude_json.is_file() {
+                let host_json = claude_json.to_string_lossy().to_string();
+                let host_json = if cfg!(target_os = "windows") {
+                    translate_windows_path(&host_json)
+                } else {
+                    host_json
+                };
+                cmd.arg("-v");
+                cmd.arg(format!("{}:/home/node/.claude.json", host_json));
+            }
+        }
+
         // Forward env vars
         for (key, value) in env_vars {
             cmd.arg("-e");
             cmd.arg(format!("{}={}", key, value));
         }
 
-        // Forward ANTHROPIC_API_KEY from host
-        cmd.args(["-e", "ANTHROPIC_API_KEY"]);
+        // Forward ANTHROPIC_API_KEY from host if set
+        if std::env::var("ANTHROPIC_API_KEY").is_ok() {
+            cmd.args(["-e", "ANTHROPIC_API_KEY"]);
+        }
 
         // Forward extra mounts
         for mount in &self.extra_mounts {

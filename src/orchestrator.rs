@@ -630,6 +630,7 @@ pub async fn run_design_command(project_dir: &Path, intent: &str) -> Result<()> 
     );
     match sandbox_cfg.status() {
         crate::sandbox::SandboxStatus::Active => {
+            sandbox_cfg.ensure_credentials_for_container();
             eprintln!("Sandbox: active ({})", sandbox_cfg.image);
         }
         crate::sandbox::SandboxStatus::DockerNotFound => {

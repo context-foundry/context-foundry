@@ -242,6 +242,7 @@ pub(super) async fn run_headless(project_dir: &Path, output_format: Option<Strin
     );
     match sandbox_cfg.status() {
         crate::sandbox::SandboxStatus::Active => {
+            sandbox_cfg.ensure_credentials_for_container();
             eprintln!("[foundry] sandbox active: image={}", sandbox_cfg.image);
         }
         crate::sandbox::SandboxStatus::DockerNotFound => {

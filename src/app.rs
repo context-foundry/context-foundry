@@ -70,6 +70,7 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
     state.sandbox_status_label = format!("{}", sandbox_status);
     match sandbox_status {
         crate::sandbox::SandboxStatus::Active => {
+            sandbox_cfg.ensure_credentials_for_container();
             state.log(format!(
                 "Sandbox active: image={}, mounts={}",
                 sandbox_cfg.image,

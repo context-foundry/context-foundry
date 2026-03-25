@@ -156,6 +156,43 @@ Each model scouts its own codebase view, writes its own plan, implements its own
 
 **Global config:** Settings in `~/.foundry/config.json` apply as defaults to all projects. Project-level `.foundry.json` fields override global values. This means you can set `builder_models` and `dual_selection` once globally instead of in every project.
 
+### Docker sandbox isolation
+
+Foundry can run agents inside Docker containers so they only see the project directory -- no access to your home folder, credentials, or other repos. Sandbox is ON by default when Docker is detected, OFF with a warning when absent.
+
+**Setup:**
+
+1. Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) (macOS/Windows) or Docker Engine (Linux)
+2. Build the sandbox image:
+   ```bash
+   bash docker/build-sandbox.sh
+   ```
+3. Run foundry normally -- it detects the image automatically
+
+The TUI shows sandbox status in the header (`[sandboxed]` in green or `[unsandboxed]` in yellow), the stats panel, and the startup screen.
+
+**How it works:** When sandbox is active, foundry wraps each agent's CLI invocation in `docker run` with the project directory bind-mounted to `/work`. The container runs as a non-root user (UID 1000). The `ANTHROPIC_API_KEY` is forwarded automatically. PTY backend is forced (tmux is incompatible with containerized agents).
+
+**Configuration** (in `.foundry.json`):
+
+```json
+{
+  "sandbox": true,
+  "sandbox_image": "foundry-sandbox:latest",
+  "sandbox_extra_mounts": ["/data:/data:ro"]
+}
+```
+
+| Field | Default | Purpose |
+|-------|---------|---------|
+| `sandbox` | `true` | Enable/disable sandbox isolation |
+| `sandbox_image` | `"foundry-sandbox:latest"` | Docker image for sandbox containers |
+| `sandbox_extra_mounts` | `[]` | Additional bind mounts (e.g., shared caches) |
+
+**Graceful degradation:** If Docker isn't installed or the image hasn't been built, foundry falls back to running agents directly on the host with a yellow warning in the TUI. No configuration change needed.
+
+**Windows:** Paths are automatically translated for Docker Desktop's WSL2 backend (`C:\Users\...` becomes `/c/Users/...`).
+
 ### Pattern matching and injection
 
 At the start of each task, foundry loads all patterns from `~/.foundry/patterns/` and matches them against the task description. Matching uses keyword scoring: each pattern has `keywords` and `tech_stack` fields, and whole-word matches against the task description score points. If Ollama is running locally, semantic (embedding) matching is also used for reranking.
@@ -459,6 +496,8 @@ A prerequisite gate validates extensions before the builder runs: if an extensio
 - **prompts.rs** — Agent prompts (planner, builder, reviewer, fixer, discovery, pattern extractor)
 - **studio/** — Prompt-driven multi-model TUI with workspace isolation, artifact capture, and modular Studio app/state/UI code
 - **update.rs** — Self-update from GitHub Releases with checksum verification
+- **sandbox.rs** — Docker sandbox detection, config, and command wrapping
+- **tmux.rs** — Tmux session management for agent backends
 - **app.rs** — Build loop orchestration, review loop, pattern extraction
 - **tui.rs** — Ratatui terminal UI with live agent output
 - **task.rs** — Parse TASKS.md task lists
