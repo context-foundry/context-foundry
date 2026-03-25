@@ -42,51 +42,58 @@
 
     /* --- Hero --- */
     .hero {
-      background: linear-gradient(135deg, #c4ad8e 0%, #d9c9ad 35%, #e8dcc8 65%, #f5efe5 100%);
-      padding: 5rem 2.5rem 4rem 2.5rem;
-      border-bottom: 3px solid var(--gold);
       position: relative;
       overflow: hidden;
+      border-bottom: 4px solid var(--gold);
     }
 
-    .hero::before {
-      content: "";
+    .hero canvas {
+      display: block;
+      width: 100%;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+    }
+
+    .hero-overlay {
       position: absolute;
       top: 0; left: 0; right: 0; bottom: 0;
-      background: radial-gradient(ellipse at 15% 85%, rgba(212, 130, 26, 0.15) 0%, transparent 50%),
-                  radial-gradient(ellipse at 85% 15%, rgba(232, 184, 75, 0.1) 0%, transparent 50%);
-      pointer-events: none;
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      padding: 3rem 2.5rem;
     }
 
-    .hero-inner { max-width: 900px; margin: 0 auto; position: relative; }
+    .hero-inner { max-width: 900px; margin: 0 auto; position: relative; width: 100%; }
 
     .hero h1 {
       font-family: var(--font-heading);
-      color: #2c2018;
+      color: #f5efe5;
       font-size: 3rem;
       font-weight: 700;
       letter-spacing: 0.02em;
       margin: 0 0 0.75rem 0;
       border: none;
-      text-shadow: 0 1px 2px rgba(255, 255, 255, 0.3);
+      text-shadow: 2px 2px 0 #2c1810, 0 0 20px rgba(0,0,0,0.5);
       line-height: 1.15;
     }
 
     .hero .tagline {
       font-family: var(--font-heading);
-      color: #4a3220;
-      font-size: 1.15rem;
+      color: #e8dcc8;
+      font-size: 1.1rem;
       font-weight: 400;
       font-style: italic;
       margin: 0 0 1.25rem 0;
       line-height: 1.6;
-      max-width: 620px;
+      max-width: 580px;
+      text-shadow: 1px 1px 0 #2c1810, 0 0 10px rgba(0,0,0,0.4);
     }
 
     .hero .meta {
-      color: #6b5540;
+      color: #c8b89e;
       font-size: 0.8rem;
       margin: 0;
+      text-shadow: 1px 1px 0 #2c1810;
     }
 
     /* --- Table of Contents --- */
@@ -205,12 +212,289 @@
 
 <!-- HERO -->
 <div class="hero">
-  <div class="hero-inner">
-    <h1>Build the Whole<br>Town at Once</h1>
-    <p class="tagline">How do you build something the size of SAP, Workday, or PeopleSoft with AI agents? Not one trail at a time. You run concurrent workstreams -- Finance, HCM, Payroll, Supply Chain -- each with its own build loop, all sharing one platform and converging at the railhead.</p>
-    <p class="meta">Context Foundry &middot; Design Concept &middot; March 2025</p>
+  <canvas id="town" width="450" height="180"></canvas>
+  <div class="hero-overlay">
+    <div class="hero-inner">
+      <h1>Build the Whole<br>Town at Once</h1>
+      <p class="tagline">How do you build something the size of SAP, Workday, or PeopleSoft with AI agents? Not one trail at a time. You run concurrent workstreams -- Finance, HCM, Payroll, Supply Chain -- each with its own build loop, all sharing one platform and converging at the railhead.</p>
+      <p class="meta">Context Foundry &middot; Design Concept &middot; March 2025</p>
+    </div>
   </div>
 </div>
+<script>
+(function() {
+  const c = document.getElementById('town');
+  const ctx = c.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+  const W = c.width, H = c.height;
+  const GY = 140; // ground line
+
+  function px(x,y,col){ ctx.fillStyle=col; ctx.fillRect(Math.floor(x),Math.floor(y),1,1); }
+  function rect(x,y,w,h,col){ ctx.fillStyle=col; ctx.fillRect(Math.floor(x),Math.floor(y),Math.ceil(w),Math.ceil(h)); }
+  function hexRgb(h){ const n=parseInt(h.slice(1),16); return [(n>>16)&255,(n>>8)&255,n&255]; }
+  function lerp(a,b,t){ const[ar,ag,ab]=hexRgb(a);const[br,bg,bb]=hexRgb(b); return`rgb(${Math.round(ar+(br-ar)*t)},${Math.round(ag+(bg-ag)*t)},${Math.round(ab+(bb-ab)*t)})`; }
+  function rgba(h,a){ const[r,g,b]=hexRgb(h); return`rgba(${r},${g},${b},${a})`; }
+  function osc(t,p,ph){ return(Math.sin((t/p)*Math.PI*2+(ph||0))+1)/2; }
+  function srand(a){ return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;}; }
+
+  function draw(t) {
+    // Sky: warm sunset gradient
+    for(let y=0;y<GY;y+=2){
+      const p=y/GY;
+      const col=p<0.3?lerp('#1a0a2e','#d4875e',p/0.3):p<0.6?lerp('#d4875e','#e8a87c',(p-0.3)/0.3):lerp('#e8a87c','#f0c27f',(p-0.6)/0.4);
+      rect(0,y,W,2,col);
+    }
+
+    // Stars in dark upper sky
+    const sr=srand(42);
+    for(let i=0;i<15;i++){const sx=Math.floor(sr()*W);const sy=Math.floor(sr()*30);const a=0.3+osc(t,1.5+sr()*3,i*0.7)*0.5;px(sx,sy,rgba('#ffffff',a));}
+
+    // Distant mesa/hills
+    for(let x=0;x<W;x++){
+      const h1=Math.sin(x*0.008+1)*12+Math.sin(x*0.02)*5;
+      const h2=Math.sin(x*0.012+3)*8+Math.sin(x*0.03+1)*3;
+      const mh=Math.max(h1,h2);
+      rect(x,GY-35-mh,1,mh+2,'#5c3a1e');
+      if(mh>10)px(x,GY-35-mh,rgba('#8b6040',0.5));
+    }
+
+    // Ground
+    rect(0,GY,W,H-GY,'#8b6914');
+    rect(0,GY,W,2,'#a07828');
+    // Dirt road
+    rect(0,GY+8,W,20,'#6b5020');
+    rect(0,GY+7,W,1,'#7d6030');
+    rect(0,GY+28,W,1,'#7d6030');
+    // Dust on road
+    const dr=srand(99);
+    for(let i=0;i<40;i++){px(Math.floor(dr()*W),GY+9+Math.floor(dr()*18),rgba('#a08840',0.3+dr()*0.3));}
+
+    // === BUILDINGS (right side, background) ===
+
+    // Saloon (far right)
+    const sx=340;
+    rect(sx,GY-55,70,55,'#6b4226'); // main wall
+    rect(sx+2,GY-53,66,51,'#7d5030'); // face
+    // False front
+    rect(sx-2,GY-68,74,15,'#7d5030');
+    rect(sx,GY-70,70,4,'#5c3220');
+    // Sign: SALOON
+    rect(sx+12,GY-64,46,9,'#3a2010');
+    rect(sx+13,GY-63,44,7,'#4a2a14');
+    // Saloon doors
+    rect(sx+25,GY-20,8,20,'#5c3a1e');
+    rect(sx+37,GY-20,8,20,'#5c3a1e');
+    rect(sx+26,GY-19,6,1,'#8b6840');
+    rect(sx+38,GY-19,6,1,'#8b6840');
+    rect(sx+26,GY-12,6,1,'#8b6840');
+    rect(sx+38,GY-12,6,1,'#8b6840');
+    // Windows
+    rect(sx+7,GY-40,12,10,'#2a1808');
+    rect(sx+51,GY-40,12,10,'#2a1808');
+    // Window glow
+    rect(sx+8,GY-39,10,8,rgba('#e8a020',0.15+osc(t,4,0)*0.1));
+    rect(sx+52,GY-39,10,8,rgba('#e8a020',0.1+osc(t,3.5,2)*0.1));
+
+    // General store (left of saloon)
+    const gx=270;
+    rect(gx,GY-42,60,42,'#8b7050');
+    rect(gx+2,GY-40,56,38,'#9b8060');
+    rect(gx-1,GY-48,62,8,'#8b7050');
+    // Door
+    rect(gx+23,GY-18,14,18,'#4a3020');
+    rect(gx+24,GY-17,12,1,'#6b5040');
+    // Window
+    rect(gx+6,GY-34,14,10,'#2a1808');
+    rect(gx+40,GY-34,14,10,'#2a1808');
+    rect(gx+7,GY-33,12,8,rgba('#c8a040',0.08));
+
+    // Sheriff office (far left background)
+    const ox=180;
+    rect(ox,GY-38,50,38,'#7d6040');
+    rect(ox+2,GY-36,46,34,'#8d7050');
+    // Porch overhang
+    rect(ox-3,GY-15,56,2,'#5c4020');
+    // Posts
+    rect(ox,GY-15,2,15,'#5c4020');
+    rect(ox+48,GY-15,2,15,'#5c4020');
+    // Door
+    rect(ox+18,GY-16,14,16,'#4a3020');
+    // Star badge on wall
+    px(ox+25,GY-30,'#e8b84b');
+    px(ox+24,GY-29,'#e8b84b');px(ox+25,GY-29,'#e8b84b');px(ox+26,GY-29,'#e8b84b');
+    px(ox+25,GY-28,'#e8b84b');
+
+    // === FENCE (weathered, broken) ===
+    const fy=GY-2;
+    // Posts (some tilted/broken)
+    for(let i=0;i<8;i++){
+      const fx=20+i*22;
+      if(i===3){
+        // broken post - leaning
+        for(let j=0;j<10;j++){rect(fx+Math.floor(j*0.3),fy-10+j,2,1,'#6b5030');}
+      } else if(i===5){
+        // missing post - just a stump
+        rect(fx,fy-3,2,3,'#5c4020');
+      } else {
+        const lean=i===2?1:i===6?-1:0;
+        for(let j=0;j<14;j++){rect(fx+lean*(j>6?1:0),fy-14+j,2,1,j<2?'#7d6840':'#6b5030');}
+      }
+    }
+    // Rails (broken in spots)
+    rect(20,fy-10,44,1,'#6b5030'); // left section
+    rect(68,fy-9,1,1,'#5c4020'); // break hint
+    rect(90,fy-10,40,1,'#6b5030'); // gap then continues
+    rect(134,fy-10,30,1,'#6b5030');
+    // Lower rail
+    rect(20,fy-5,44,1,'#5c4020');
+    rect(90,fy-5,74,1,'#5c4020');
+
+    // === CACTUS ===
+    // Tall saguaro (left side)
+    const cx=145,cy=GY;
+    rect(cx,cy-28,3,28,'#2d5c1e');
+    rect(cx+1,cy-30,1,3,'#2d5c1e');
+    // Left arm
+    rect(cx-3,cy-20,3,1,'#2d5c1e');
+    rect(cx-3,cy-24,1,5,'#2d5c1e');
+    rect(cx-2,cy-24,1,1,'#3a7028');
+    // Right arm
+    rect(cx+3,cy-16,3,1,'#2d5c1e');
+    rect(cx+5,cy-22,1,7,'#2d5c1e');
+    rect(cx+5,cy-22,1,1,'#3a7028');
+    // Highlights
+    px(cx+1,cy-28,'#3a7028');
+    px(cx+1,cy-22,'#3a7028');
+
+    // Small barrel cactus
+    rect(50,cy-6,5,6,'#2d5c1e');
+    rect(51,cy-7,3,1,'#3a7028');
+    px(50,cy-4,'#3a7028');
+    px(54,cy-3,'#3a7028');
+
+    // === TUMBLEWEED ===
+    const twx=(t*12)%520-40;
+    const twy=GY+12+Math.sin(t*3)*2;
+    const bounce=Math.abs(Math.sin(t*5))*1.5;
+    // Round-ish cluster
+    const tr2=srand(55);
+    for(let i=0;i<20;i++){
+      const dx=Math.floor(tr2()*8-4);
+      const dy=Math.floor(tr2()*7-3.5)-bounce;
+      const rot=t*2+i;
+      const rx=dx*Math.cos(rot)-dy*Math.sin(rot);
+      const ry=dx*Math.sin(rot)+dy*Math.cos(rot);
+      px(twx+rx,twy+ry,'#a08840');
+    }
+    for(let i=0;i<8;i++){
+      const dx=Math.floor(tr2()*5-2.5);
+      const dy=Math.floor(tr2()*5-2.5)-bounce;
+      px(twx+dx,twy+dy,'#c8a850');
+    }
+
+    // === HORSE (left foreground) ===
+    const hx=60,hy=GY-1;
+    // Body
+    rect(hx,hy-14,14,8,'#5c3a20');
+    rect(hx+1,hy-15,12,1,'#5c3a20'); // back
+    rect(hx+2,hy-6,10,2,'#5c3a20'); // belly
+    // Neck
+    rect(hx+12,hy-20,3,7,'#5c3a20');
+    rect(hx+13,hy-21,2,2,'#5c3a20');
+    // Head
+    rect(hx+14,hy-23,5,4,'#5c3a20');
+    rect(hx+18,hy-22,2,2,'#5c3a20'); // muzzle
+    px(hx+17,hy-23,'#2a1808'); // eye
+    // Ears
+    px(hx+15,hy-24,'#6b4a30');
+    px(hx+17,hy-24,'#6b4a30');
+    // Legs
+    rect(hx+2,hy-6,2,6,'#4a2a18');
+    rect(hx+5,hy-6,2,6+Math.round(osc(t,2,0)*1),'#4a2a18');
+    rect(hx+9,hy-6,2,6,'#4a2a18');
+    rect(hx+12,hy-6,2,6+Math.round(osc(t,2,1.5)*1),'#4a2a18');
+    // Tail
+    const tailSway=Math.round(osc(t,2.5,0)*2-1);
+    rect(hx-1+tailSway,hy-13,2,1,'#3a2010');
+    rect(hx-2+tailSway,hy-12,2,3,'#3a2010');
+    // Mane
+    rect(hx+12,hy-19,1,4,'#3a2010');
+    rect(hx+13,hy-20,1,3,'#3a2010');
+    // Saddle
+    rect(hx+4,hy-16,8,3,'#8b2010');
+    rect(hx+5,hy-17,6,1,'#a03020');
+
+    // === FIGURES ===
+
+    // Sheriff (on porch of sheriff office)
+    const sfx=ox+10,sfy=GY-1;
+    // Hat
+    rect(sfx-2,sfy-18,8,2,'#3a2a14');
+    rect(sfx,sfy-20,4,2,'#3a2a14');
+    // Head
+    rect(sfx,sfy-16,4,3,'#d4a070');
+    // Badge
+    px(sfx+1,sfy-12,'#e8b84b');
+    // Body
+    rect(sfx,sfy-13,4,6,'#4a6080');
+    // Legs
+    rect(sfx,sfy-7,2,7,'#3a3040');
+    rect(sfx+2,sfy-7,2,7,'#3a3040');
+
+    // Gunslinger (center of road, facing right)
+    const glx=240,gly=GY+15;
+    // Hat
+    rect(glx-2,gly-18,8,2,'#2a1808');
+    rect(glx,gly-20,4,2,'#2a1808');
+    // Head
+    rect(glx,gly-16,4,3,'#c89868');
+    // Body (dark duster)
+    rect(glx-1,gly-13,6,7,'#2a2020');
+    rect(glx-2,gly-12,1,5,'#2a2020'); // coat flap
+    rect(glx+5,gly-12,1,5,'#2a2020');
+    // Gun belt
+    rect(glx-1,gly-8,6,1,'#5c3a1e');
+    px(glx+4,gly-7,'#888888'); // holster
+    // Legs
+    rect(glx,gly-6,2,6,'#3a2a20');
+    rect(glx+2,gly-6,2,6,'#3a2a20');
+
+    // Outlaw (far right, lurking near saloon)
+    const olx=420,oly=GY+14;
+    // Hat (pulled low)
+    rect(olx-2,oly-17,8,3,'#1a1010');
+    rect(olx,oly-19,4,2,'#1a1010');
+    // Head (bandana covers lower face)
+    rect(olx,oly-14,4,2,'#c09060');
+    rect(olx,oly-12,4,2,'#8b2020'); // red bandana
+    // Body
+    rect(olx,oly-10,4,6,'#3a3030');
+    // Legs
+    rect(olx,oly-4,2,4,'#2a2020');
+    rect(olx+2,oly-4,2,4,'#2a2020');
+    // Leaning against wall hint
+    rect(olx+4,oly-10,1,6,rgba('#000000',0.1));
+
+    // === DUST PARTICLES ===
+    const dp=srand(33);
+    for(let i=0;i<12;i++){
+      const dx=(dp()*W+t*8*(1+dp()*2))%W;
+      const dy=GY-5+dp()*30;
+      const da=0.1+osc(t,2+dp()*3,i)*0.15;
+      px(dx,dy,rgba('#d4b880',da));
+    }
+  }
+
+  // Animate at 15 FPS
+  let frame=0;
+  function loop(){
+    draw(frame/15);
+    frame++;
+    setTimeout(loop,1000/15);
+  }
+  loop();
+})();
+</script>
 
 <!-- TABLE OF CONTENTS -->
 <nav class="toc">
