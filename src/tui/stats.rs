@@ -635,7 +635,7 @@ mod tests {
     fn render_dashboard_stats_uses_selected_dual_pipeline_metrics() {
         let mut state = AppState::new(PathBuf::from(".buildloop"));
         state.dual_build.active = true;
-        state.dual_build.models = ["Claude Opus".to_string(), "Codex".to_string()];
+        state.dual_build.models = ["Claude".to_string(), "Codex".to_string()];
         state.dual_build.tab = 1;
         state.dual_build.cost_usd = [3.25, 1.50];
         state.dual_build.input_tokens = [12_000, 7_000];
@@ -669,7 +669,7 @@ mod tests {
     fn render_dashboard_stats_uses_selected_claude_pipeline_context_in_dual_mode() {
         let mut state = AppState::new(PathBuf::from(".buildloop"));
         state.dual_build.active = true;
-        state.dual_build.models = ["Claude Opus".to_string(), "Codex".to_string()];
+        state.dual_build.models = ["Claude".to_string(), "Codex".to_string()];
         state.dual_build.tab = 0;
         state.dual_build.input_tokens = [8_000, 0];
         state.dual_build.context_pcts = [
@@ -695,7 +695,7 @@ mod tests {
         let mut state = AppState::new(PathBuf::from(".buildloop"));
         state.dual_build.active = true;
         state.dual_build.finished = [true, true];
-        state.dual_build.models = ["Claude Opus".to_string(), "Codex".to_string()];
+        state.dual_build.models = ["Claude".to_string(), "Codex".to_string()];
         state.dual_build.cost_usd = [1.25, 2.50];
         state.dual_build.input_tokens = [1_000, 2_000];
         state.dual_build.output_tokens = [250, 400];
@@ -727,7 +727,7 @@ mod tests {
         let mut state = AppState::new(PathBuf::from(".buildloop"));
         state.dual_build.active = true;
         state.dual_build.tab = 1;
-        state.dual_build.models = ["Claude Opus".to_string(), "Codex".to_string()];
+        state.dual_build.models = ["Claude".to_string(), "Codex".to_string()];
         state.spid_context_pcts = [Some(11), Some(22), Some(88), Some(33)];
 
         let rendered = render_stats_text(&state);
@@ -749,7 +749,7 @@ mod tests {
         let mut state = AppState::new(PathBuf::from(".buildloop"));
         state.dual_build.active = true;
         state.dual_build.finished = [true, true];
-        state.dual_build.models = ["Claude Opus".to_string(), "Codex".to_string()];
+        state.dual_build.models = ["Claude".to_string(), "Codex".to_string()];
         state.dual_build.cost_usd = [1.25, 0.0];
         state.dual_build.input_tokens = [1_000, 0];
         state.dual_build.output_tokens = [250, 0];

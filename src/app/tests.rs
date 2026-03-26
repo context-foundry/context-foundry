@@ -1646,7 +1646,7 @@ fn test_dual_build_started_initializes_per_pipeline_stats() {
     handle_event(
         &mut state,
         AppEvent::LoopEvent(LoopEvent::DualBuildStarted {
-            models: ["Claude Opus".to_string(), "Codex".to_string()],
+            models: ["Claude".to_string(), "Codex".to_string()],
         }),
         &Config::default(),
     );
@@ -1655,7 +1655,7 @@ fn test_dual_build_started_initializes_per_pipeline_stats() {
     assert_eq!(state.dual_build.tab, 0);
     assert_eq!(
         state.dual_build.models,
-        ["Claude Opus".to_string(), "Codex".to_string()]
+        ["Claude".to_string(), "Codex".to_string()]
     );
     assert_eq!(state.dual_build.cost_usd, [0.0, 0.0]);
     assert_eq!(state.dual_build.input_tokens, [0, 0]);
@@ -1670,7 +1670,7 @@ fn test_dual_pipeline_usage_updates_pipeline_slot_and_session_totals() {
     handle_event(
         &mut state,
         AppEvent::LoopEvent(LoopEvent::DualBuildStarted {
-            models: ["Claude Opus".to_string(), "Codex".to_string()],
+            models: ["Claude".to_string(), "Codex".to_string()],
         }),
         &Config::default(),
     );
@@ -1726,7 +1726,7 @@ fn test_dual_pipeline_usage_updates_pipeline_slot_and_session_totals() {
             0,
             Box::new(AppEvent::LoopEvent(LoopEvent::AgentStarted(
                 AgentRole::Scout,
-                "Claude Opus".to_string(),
+                "Claude".to_string(),
             ))),
         ),
         &Config::default(),

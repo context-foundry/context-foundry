@@ -33,7 +33,6 @@ use crate::config::Config;
 use crate::git;
 use crate::orchestrator::{self, OrchestratorConfig, OrchestratorOutcome};
 use crate::task;
-use crate::sandbox::SandboxConfig;
 use crate::tmux;
 use crate::tui;
 use crate::update;
@@ -60,11 +59,7 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
     state.tui_theme = crate::tui::theme::from_name(&config.theme);
 
     // Sandbox detection
-    let sandbox_cfg = SandboxConfig::detect(
-        config.sandbox,
-        &config.sandbox_image,
-        config.sandbox_extra_mounts.clone(),
-    );
+    let sandbox_cfg = config.sandbox_config();
     let sandbox_status = sandbox_cfg.status();
     state.sandbox_active = sandbox_cfg.is_active();
     state.sandbox_status_label = format!("{}", sandbox_status);
@@ -695,6 +690,24 @@ fn handle_planning_key(state: &mut AppState, key: event::KeyEvent, config: &Conf
                 refresh_patterns_cache(state, config);
             }
         }
+        KeyCode::Char('s') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+            let new_sandbox = !state.sandbox_active;
+            let project_dir = state
+                .buildloop_dir
+                .parent()
+                .unwrap_or(std::path::Path::new("."));
+            Config::save_sandbox(project_dir, new_sandbox);
+            let cfg = Config::load(project_dir);
+            let sandbox_cfg = cfg.sandbox_config();
+            state.sandbox_active = sandbox_cfg.is_active();
+            state.sandbox_status_label = format!("{}", sandbox_cfg.status());
+            let label = if state.sandbox_active {
+                "Sandbox: ON (agents will run in Docker)"
+            } else {
+                "Sandbox: OFF (agents will run unsandboxed)"
+            };
+            state.log(label.to_string());
+        }
         KeyCode::Char('t') if key.modifiers.contains(KeyModifiers::CONTROL) => {
             let (new_theme, name) = crate::tui::theme::cycle_next(&state.tui_theme);
             state.tui_theme = new_theme;
@@ -1188,6 +1201,24 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                                 state.show_patterns = true;
                                 refresh_patterns_cache(state, config);
                             }
+                        }
+                        KeyCode::Char('s') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                            let new_sandbox = !state.sandbox_active;
+                            let project_dir = state
+                                .buildloop_dir
+                                .parent()
+                                .unwrap_or(std::path::Path::new("."));
+                            Config::save_sandbox(project_dir, new_sandbox);
+                            let cfg = Config::load(project_dir);
+                            let sandbox_cfg = cfg.sandbox_config();
+                            state.sandbox_active = sandbox_cfg.is_active();
+                            state.sandbox_status_label = format!("{}", sandbox_cfg.status());
+                            let label = if state.sandbox_active {
+                                "Sandbox: ON (agents will run in Docker)"
+                            } else {
+                                "Sandbox: OFF (agents will run unsandboxed)"
+                            };
+                            state.log(label.to_string());
                         }
                         KeyCode::Char('i') => {
                             state.inject_input = Some(String::new());

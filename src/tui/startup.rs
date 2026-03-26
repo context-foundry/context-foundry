@@ -339,7 +339,7 @@ fn render_startup_summary(frame: &mut Frame, area: Rect, state: &AppState) {
                         ),
                         Style::default()
                             .fg(Color::Black)
-                            .bg(Color::Magenta)
+                            .bg(state.tui_theme.accent)
                             .add_modifier(Modifier::BOLD),
                     )
                 }
@@ -358,7 +358,7 @@ fn render_startup_summary(frame: &mut Frame, area: Rect, state: &AppState) {
                         ),
                         Style::default()
                             .fg(Color::Black)
-                            .bg(Color::Magenta)
+                            .bg(state.tui_theme.accent)
                             .add_modifier(Modifier::BOLD),
                     )
                 }
@@ -366,7 +366,7 @@ fn render_startup_summary(frame: &mut Frame, area: Rect, state: &AppState) {
                     "  Dual Pipeline ",
                     Style::default()
                         .fg(Color::Black)
-                        .bg(Color::Magenta)
+                        .bg(state.tui_theme.accent)
                         .add_modifier(Modifier::BOLD),
                 ),
             },
@@ -1057,7 +1057,7 @@ pub(super) fn render_startup_status_bar(frame: &mut Frame, area: Rect, state: &A
                     .first()
                     .map(|s| short(s))
                     .unwrap_or_default();
-                (Color::Magenta, format!(" {s}"))
+                (state.tui_theme.accent, format!(" {s}"))
             }
             DualSelection::Second => {
                 let s = state
@@ -1065,7 +1065,7 @@ pub(super) fn render_startup_status_bar(frame: &mut Frame, area: Rect, state: &A
                     .get(1)
                     .map(|s| short(s))
                     .unwrap_or_default();
-                (Color::Magenta, format!(" {s}"))
+                (state.tui_theme.accent, format!(" {s}"))
             }
             DualSelection::Both => {
                 let s0 = state
@@ -1078,7 +1078,7 @@ pub(super) fn render_startup_status_bar(frame: &mut Frame, area: Rect, state: &A
                     .get(1)
                     .map(|s| short(s))
                     .unwrap_or_default();
-                (Color::Magenta, format!(" {s0}+{s1}"))
+                (state.tui_theme.accent, format!(" {s0}+{s1}"))
             }
         };
         spans.push(Span::styled(
@@ -1110,17 +1110,21 @@ pub(super) fn render_startup_status_bar(frame: &mut Frame, area: Rect, state: &A
         spans.push(Span::raw(" findings"));
     }
 
-    // Sandbox indicator
+    // Sandbox toggle
     {
-        let (sandbox_text, sandbox_color) = if state.sandbox_active {
-            ("sandbox: on", state.tui_theme.success)
+        let (sandbox_label, sandbox_bg) = if state.sandbox_active {
+            (" on ", state.tui_theme.success)
         } else {
-            ("sandbox: off", state.tui_theme.warning)
+            (" off ", state.tui_theme.warning)
         };
         spans.push(Span::styled(
-            format!("  [{}] ", sandbox_text),
-            Style::default().fg(sandbox_color),
+            "  ^S ",
+            Style::default()
+                .fg(Color::Black)
+                .bg(sandbox_bg)
+                .add_modifier(Modifier::BOLD),
         ));
+        spans.push(Span::raw(format!("sandbox{}", sandbox_label)));
     }
 
     // Extensions indicator (always shown)

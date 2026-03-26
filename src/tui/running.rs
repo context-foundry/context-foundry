@@ -46,7 +46,7 @@ fn dual_toggle_label(state: &AppState) -> (Color, String) {
     match state.dual_selection {
         DualSelection::Off => (state.tui_theme.muted, " dual".to_string()),
         DualSelection::First => (
-            Color::Magenta,
+            state.tui_theme.accent,
             format!(
                 " {}",
                 state
@@ -57,7 +57,7 @@ fn dual_toggle_label(state: &AppState) -> (Color, String) {
             ),
         ),
         DualSelection::Second => (
-            Color::Magenta,
+            state.tui_theme.accent,
             format!(
                 " {}",
                 state
@@ -78,7 +78,7 @@ fn dual_toggle_label(state: &AppState) -> (Color, String) {
                 .get(1)
                 .map(|spec| short_model_spec(spec))
                 .unwrap_or_default();
-            (Color::Magenta, format!(" {first}+{second}"))
+            (state.tui_theme.accent, format!(" {first}+{second}"))
         }
     }
 }
@@ -264,7 +264,7 @@ pub(super) fn render_header(frame: &mut Frame, area: Rect, state: &AppState) {
             format!(" {label} "),
             Style::default()
                 .fg(Color::Black)
-                .bg(Color::Magenta)
+                .bg(state.tui_theme.accent)
                 .add_modifier(Modifier::BOLD),
         ));
     }

@@ -386,6 +386,28 @@ pub(super) fn handle_startup_key(state: &mut AppState, key: event::KeyEvent) {
                 }
             }
         }
+        KeyCode::Char('s') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+            let new_sandbox = !state.sandbox_active;
+            let project_dir = state
+                .buildloop_dir
+                .parent()
+                .unwrap_or(std::path::Path::new("."));
+            Config::save_sandbox(project_dir, new_sandbox);
+            // Re-detect sandbox state
+            let config = Config::load(project_dir);
+            let sandbox_cfg = config.sandbox_config();
+            state.sandbox_active = sandbox_cfg.is_active();
+            state.sandbox_status_label = format!("{}", sandbox_cfg.status());
+            let label = if state.sandbox_active {
+                "Sandbox: ON (agents will run in Docker)"
+            } else {
+                "Sandbox: OFF (agents will run unsandboxed)"
+            };
+            state.log(label.to_string());
+            if let Some(ref mut s) = state.startup {
+                s.status_message = Some(label.to_string());
+            }
+        }
         KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => {
             if state.builder_model_specs.len() >= 2 {
                 use crate::app::state::DualSelection;

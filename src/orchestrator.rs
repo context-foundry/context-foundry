@@ -9,7 +9,6 @@ use tokio::sync::mpsc;
 use crate::agent::{self, AgentOutputEvent, AgentRole, ModelProvider};
 use crate::app::commands::{ensure_required_providers_available, ProviderCommandMode};
 use crate::config::Config;
-use crate::sandbox::SandboxConfig;
 use crate::utils::{atomic_write_file, truncate_str};
 
 // ─── Data Model ──────────────────────────────────────────────
@@ -623,11 +622,7 @@ pub async fn run_design_command(project_dir: &Path, intent: &str) -> Result<()> 
         orch_config.reviewer_model,
     );
     eprintln!("Max iterations: {}", orch_config.max_iterations);
-    let sandbox_cfg = SandboxConfig::detect(
-        config.sandbox,
-        &config.sandbox_image,
-        config.sandbox_extra_mounts.clone(),
-    );
+    let sandbox_cfg = config.sandbox_config();
     match sandbox_cfg.status() {
         crate::sandbox::SandboxStatus::Active => {
             sandbox_cfg.ensure_credentials_for_container();

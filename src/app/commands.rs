@@ -9,7 +9,6 @@ use tokio::sync::mpsc;
 
 use crate::agent::{AgentOutputEvent, ModelProvider};
 use crate::config::Config;
-use crate::sandbox::SandboxConfig;
 use crate::task::{self, Task};
 use crate::update;
 
@@ -235,11 +234,7 @@ pub(super) async fn run_headless(project_dir: &Path, output_format: Option<Strin
     ensure_required_providers_available(&run_context.config, ProviderCommandMode::Run)?;
 
     // Sandbox detection (headless)
-    let sandbox_cfg = SandboxConfig::detect(
-        run_context.config.sandbox,
-        &run_context.config.sandbox_image,
-        run_context.config.sandbox_extra_mounts.clone(),
-    );
+    let sandbox_cfg = run_context.config.sandbox_config();
     match sandbox_cfg.status() {
         crate::sandbox::SandboxStatus::Active => {
             sandbox_cfg.ensure_credentials_for_container();

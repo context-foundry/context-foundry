@@ -211,8 +211,9 @@ pub struct Config {
     /// Keep tmux sessions alive after agent completion (default: false).
     pub tmux_keep_sessions: bool,
 
-    /// Enable Docker sandbox isolation for agent subprocesses (default: true).
-    #[serde(default = "default_true")]
+    /// Enable Docker sandbox isolation for agent subprocesses (default: false).
+    /// Opt-in until container-native architecture is implemented.
+    #[serde(default)]
     pub sandbox: bool,
 
     /// Docker image used for sandbox containers.
@@ -220,6 +221,21 @@ pub struct Config {
 
     /// Additional bind mounts passed to docker run (e.g. ["~/.cache:/cache:ro"]).
     pub sandbox_extra_mounts: Vec<String>,
+
+    /// Host credential directories to mount into sandbox containers.
+    /// Paths are relative to $HOME (e.g. ".claude" mounts ~/.claude).
+    /// Default: [".claude"] for Claude Code OAuth.
+    /// For Copilot: [".claude", ".copilot"] or [".copilot", ".config/gh"].
+    pub sandbox_auth_dirs: Vec<String>,
+
+    /// Extra environment variables injected into sandbox containers.
+    /// Format: ["KEY=VALUE", ...]. Useful for ANTHROPIC_BASE_URL (copilot-api proxy).
+    pub sandbox_env: Vec<String>,
+
+    /// Single model override. When non-empty, all pipeline role models
+    /// (scout, planner, builder, reviewer, fixer, discovery) use this value.
+    /// Useful for OAuth subscriptions that lock you to one model.
+    pub model: String,
 }
 
 impl Default for Config {
@@ -297,9 +313,12 @@ impl Default for Config {
             agent_backend: "pty".into(),
             tmux_session_prefix: "foundry".into(),
             tmux_keep_sessions: false,
-            sandbox: true,
+            sandbox: false,
             sandbox_image: "foundry-sandbox:latest".into(),
             sandbox_extra_mounts: Vec::new(),
+            sandbox_auth_dirs: vec![".claude".into()],
+            sandbox_env: Vec::new(),
+            model: String::new(),
         }
     }
 }
@@ -389,6 +408,20 @@ impl Config {
                 } else if config.run_mode == "hil" {
                     config.run_mode = "review".into();
                 }
+                // Single model override: collapse all role models
+                if !config.model.is_empty() {
+                    let m = config.model.clone();
+                    config.scout_model = m.clone();
+                    config.planner_model = m.clone();
+                    config.builder_model = m.clone();
+                    config.reviewer_model = m.clone();
+                    config.fixer_model = m.clone();
+                    config.discovery_model = m.clone();
+                    config.simple_planner_model = m.clone();
+                    config.simple_builder_model = m.clone();
+                    config.simple_reviewer_model = m.clone();
+                    config.pattern_extraction_model = m;
+                }
                 config
             }
             Err(e) => {
@@ -396,6 +429,17 @@ impl Config {
                 Self::default()
             }
         }
+    }
+
+    /// Build a SandboxConfig from this Config's sandbox fields.
+    pub fn sandbox_config(&self) -> crate::sandbox::SandboxConfig {
+        crate::sandbox::SandboxConfig::detect(
+            self.sandbox,
+            &self.sandbox_image,
+            self.sandbox_extra_mounts.clone(),
+            self.sandbox_auth_dirs.clone(),
+            self.sandbox_env.clone(),
+        )
     }
 
     /// Parse a provider string ("claude" or "codex") into a ModelProvider.
@@ -422,19 +466,24 @@ impl Config {
 
     pub fn display_provider_model(provider: &str, model: &str) -> String {
         let provider = Self::parse_provider(provider);
-        let model = model.trim();
-        if model.is_empty() {
-            provider.to_string()
-        } else {
-            // Capitalize first letter: "sonnet" -> "Sonnet", "opus" -> "Opus"
-            let capitalized = {
-                let mut chars = model.chars();
-                match chars.next() {
-                    Some(c) => format!("{}{}", c.to_uppercase(), chars.as_str()),
-                    None => String::new(),
+        match provider {
+            ModelProvider::Claude => "Claude".to_string(),
+            ModelProvider::Codex => {
+                let model = model.trim();
+                if model.is_empty() {
+                    provider.to_string()
+                } else {
+                    // Capitalize first letter: "gpt-5.4" -> "Gpt-5.4"
+                    let capitalized = {
+                        let mut chars = model.chars();
+                        match chars.next() {
+                            Some(c) => format!("{}{}", c.to_uppercase(), chars.as_str()),
+                            None => String::new(),
+                        }
+                    };
+                    format!("{provider} {capitalized}")
                 }
-            };
-            format!("{provider} {capitalized}")
+            }
         }
     }
 
@@ -478,6 +527,16 @@ impl Config {
         if let Some(obj) = value.as_object_mut() {
             obj.remove("mode");
         }
+        let json = serde_json::to_string_pretty(&value).unwrap_or_default();
+        let _ = crate::utils::atomic_write_file(&config_path, json.as_bytes());
+    }
+
+    pub fn save_sandbox(project_dir: &Path, enabled: bool) {
+        let config_path = project_dir.join(".foundry.json");
+        let content = std::fs::read_to_string(&config_path).unwrap_or_else(|_| "{}".to_string());
+        let mut value: serde_json::Value =
+            serde_json::from_str(&content).unwrap_or(serde_json::json!({}));
+        value["sandbox"] = serde_json::json!(enabled);
         let json = serde_json::to_string_pretty(&value).unwrap_or_default();
         let _ = crate::utils::atomic_write_file(&config_path, json.as_bytes());
     }
@@ -616,7 +675,11 @@ mod tests {
     fn display_provider_model_formats_empty_and_named_models() {
         assert_eq!(
             Config::display_provider_model("claude", "opus"),
-            "Claude Opus"
+            "Claude"
+        );
+        assert_eq!(
+            Config::display_provider_model("claude", "sonnet"),
+            "Claude"
         );
         assert_eq!(Config::display_provider_model("codex", ""), "Codex");
         assert_eq!(Config::display_model_spec("codex:gpt-5.4"), "Codex Gpt-5.4");
@@ -767,11 +830,14 @@ mod tests {
     }
 
     #[test]
-    fn default_config_enables_sandbox() {
+    fn default_config_disables_sandbox() {
         let config = Config::default();
-        assert!(config.sandbox);
+        assert!(!config.sandbox);
         assert_eq!(config.sandbox_image, "foundry-sandbox:latest");
         assert!(config.sandbox_extra_mounts.is_empty());
+        assert_eq!(config.sandbox_auth_dirs, vec![".claude"]);
+        assert!(config.sandbox_env.is_empty());
+        assert!(config.model.is_empty());
     }
 
     #[test]
@@ -788,9 +854,51 @@ mod tests {
     fn config_deserializes_sandbox_defaults_when_absent() {
         let config: Config = serde_json::from_str(r#"{"builder_model":"opus"}"#)
             .expect("config should deserialize");
-        assert!(config.sandbox);
+        assert!(!config.sandbox);
         assert_eq!(config.sandbox_image, "foundry-sandbox:latest");
         assert!(config.sandbox_extra_mounts.is_empty());
+    }
+
+    #[test]
+    fn model_override_collapses_all_role_models() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join(".foundry.json"),
+            r#"{"model":"opus"}"#,
+        ).unwrap();
+        let config = Config::load(dir.path());
+        assert_eq!(config.model, "opus");
+        assert_eq!(config.scout_model, "opus");
+        assert_eq!(config.planner_model, "opus");
+        assert_eq!(config.builder_model, "opus");
+        assert_eq!(config.reviewer_model, "opus");
+        assert_eq!(config.fixer_model, "opus");
+        assert_eq!(config.discovery_model, "opus");
+        assert_eq!(config.simple_planner_model, "opus");
+        assert_eq!(config.simple_builder_model, "opus");
+        assert_eq!(config.pattern_extraction_model, "opus");
+    }
+
+    #[test]
+    fn empty_model_override_preserves_role_models() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join(".foundry.json"),
+            r#"{"scout_model":"haiku","builder_model":"opus"}"#,
+        ).unwrap();
+        let config = Config::load(dir.path());
+        assert!(config.model.is_empty());
+        assert_eq!(config.scout_model, "haiku");
+        assert_eq!(config.builder_model, "opus");
+    }
+
+    #[test]
+    fn config_deserializes_sandbox_auth_dirs_and_env() {
+        let config: Config = serde_json::from_str(
+            r#"{"sandbox_auth_dirs":[".claude",".copilot"],"sandbox_env":["ANTHROPIC_BASE_URL=http://localhost:8080"]}"#,
+        ).expect("config should deserialize");
+        assert_eq!(config.sandbox_auth_dirs, vec![".claude", ".copilot"]);
+        assert_eq!(config.sandbox_env, vec!["ANTHROPIC_BASE_URL=http://localhost:8080"]);
     }
 
     #[cfg(unix)]

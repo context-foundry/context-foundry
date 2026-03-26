@@ -10,7 +10,7 @@ use std::sync::{
 use std::time::{Duration, Instant};
 
 use crate::config::Config;
-use crate::sandbox::SandboxConfig;
+
 use crate::tmux::TmuxSession;
 use crate::utils::truncate_str;
 use tokio::sync::mpsc;
@@ -395,11 +395,7 @@ pub async fn run_provider_session(options: ProviderRunOptions<'_>) -> Result<Age
 
     // Sandbox wrapping for provider sessions
     let config = Config::load(options.project_dir);
-    let sandbox_cfg = SandboxConfig::detect(
-        config.sandbox,
-        &config.sandbox_image,
-        config.sandbox_extra_mounts.clone(),
-    );
+    let sandbox_cfg = config.sandbox_config();
     let cmd = if sandbox_cfg.is_active() {
         let (program, args, env_vars): (&str, Vec<String>, Vec<(&str, &str)>) = match options.provider {
             ModelProvider::Claude => {
@@ -687,11 +683,7 @@ pub async fn run_agent(
 
     // Load config to determine backend
     let config = Config::load(project_dir);
-    let sandbox_cfg = SandboxConfig::detect(
-        config.sandbox,
-        &config.sandbox_image,
-        config.sandbox_extra_mounts.clone(),
-    );
+    let sandbox_cfg = config.sandbox_config();
     let backend = if sandbox_cfg.is_active() && config.agent_backend == "tmux" {
         let _ = output_tx.send(AgentOutputEvent::Stderr(
             "[foundry] sandbox active; forcing PTY backend (tmux incompatible with containerized agents)".to_string(),
@@ -788,11 +780,7 @@ async fn run_agent_pty(
 
     // Sandbox wrapping: replace cmd with docker run wrapper if sandbox is active
     let config = Config::load(project_dir);
-    let sandbox_cfg = SandboxConfig::detect(
-        config.sandbox,
-        &config.sandbox_image,
-        config.sandbox_extra_mounts.clone(),
-    );
+    let sandbox_cfg = config.sandbox_config();
     let cmd = if sandbox_cfg.is_active() {
         // Build the program and args for wrap_command_builder
         let program = "claude";
