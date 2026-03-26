@@ -61,7 +61,7 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
     // Sandbox detection
     let sandbox_cfg = config.sandbox_config();
     let sandbox_status = sandbox_cfg.status();
-    state.sandbox_active = config.sandbox;
+    state.sandbox_active = sandbox_cfg.is_active();
     state.sandbox_status_label = format!("{}", sandbox_status);
     match sandbox_status {
         crate::sandbox::SandboxStatus::Active => {
@@ -691,22 +691,23 @@ fn handle_planning_key(state: &mut AppState, key: event::KeyEvent, config: &Conf
             }
         }
         KeyCode::Char('s') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-            let new_sandbox = !state.sandbox_active;
             let project_dir = state
                 .buildloop_dir
                 .parent()
                 .unwrap_or(std::path::Path::new("."));
-            Config::save_sandbox(project_dir, new_sandbox);
-            state.sandbox_active = new_sandbox;
+            let was_enabled = Config::load(project_dir).sandbox;
+            Config::save_sandbox(project_dir, !was_enabled);
             let cfg = Config::load(project_dir);
             let sandbox_cfg = cfg.sandbox_config();
+            state.sandbox_active = sandbox_cfg.is_active();
             state.sandbox_status_label = format!("{}", sandbox_cfg.status());
-            let label = if new_sandbox {
-                "Sandbox: ON"
+            if cfg.sandbox && !sandbox_cfg.is_active() {
+                state.log(format!("Sandbox: enabled but {} -- agents will run unsandboxed", sandbox_cfg.status()));
+            } else if cfg.sandbox {
+                state.log("Sandbox: ON".to_string());
             } else {
-                "Sandbox: OFF"
-            };
-            state.log(label.to_string());
+                state.log("Sandbox: OFF".to_string());
+            }
         }
         KeyCode::Char('t') if key.modifiers.contains(KeyModifiers::CONTROL) => {
             let (new_theme, name) = crate::tui::theme::cycle_next(&state.tui_theme);
@@ -1203,22 +1204,23 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                             }
                         }
                         KeyCode::Char('s') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                            let new_sandbox = !state.sandbox_active;
                             let project_dir = state
                                 .buildloop_dir
                                 .parent()
                                 .unwrap_or(std::path::Path::new("."));
-                            Config::save_sandbox(project_dir, new_sandbox);
-                            state.sandbox_active = new_sandbox;
+                            let was_enabled = Config::load(project_dir).sandbox;
+                            Config::save_sandbox(project_dir, !was_enabled);
                             let cfg = Config::load(project_dir);
                             let sandbox_cfg = cfg.sandbox_config();
+                            state.sandbox_active = sandbox_cfg.is_active();
                             state.sandbox_status_label = format!("{}", sandbox_cfg.status());
-                            let label = if new_sandbox {
-                                "Sandbox: ON"
+                            if cfg.sandbox && !sandbox_cfg.is_active() {
+                                state.log(format!("Sandbox: enabled but {} -- agents will run unsandboxed", sandbox_cfg.status()));
+                            } else if cfg.sandbox {
+                                state.log("Sandbox: ON".to_string());
                             } else {
-                                "Sandbox: OFF"
-                            };
-                            state.log(label.to_string());
+                                state.log("Sandbox: OFF".to_string());
+                            }
                         }
                         KeyCode::Char('i') => {
                             state.inject_input = Some(String::new());
