@@ -977,14 +977,6 @@ fn render_input_prompt(frame: &mut Frame, area: Rect, state: &AppState) {
 pub(super) fn render_startup_status_bar(frame: &mut Frame, area: Rect, state: &AppState) {
     let mut spans = vec![
         Span::styled(
-            " \u{2191}\u{2193} ",
-            Style::default()
-                .fg(Color::Black)
-                .bg(state.tui_theme.muted)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::raw(" navigate  "),
-        Span::styled(
             " Enter ",
             Style::default()
                 .fg(Color::Black)
@@ -992,14 +984,6 @@ pub(super) fn render_startup_status_bar(frame: &mut Frame, area: Rect, state: &A
                 .add_modifier(Modifier::BOLD),
         ),
         Span::raw(" submit  "),
-        Span::styled(
-            " Ctrl+U ",
-            Style::default()
-                .fg(Color::Black)
-                .bg(state.tui_theme.muted)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::raw(" clear  "),
         Span::styled(
             " Esc ",
             Style::default()

@@ -61,7 +61,7 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
     // Sandbox detection
     let sandbox_cfg = config.sandbox_config();
     let sandbox_status = sandbox_cfg.status();
-    state.sandbox_active = sandbox_cfg.is_active();
+    state.sandbox_active = config.sandbox;
     state.sandbox_status_label = format!("{}", sandbox_status);
     match sandbox_status {
         crate::sandbox::SandboxStatus::Active => {
@@ -697,14 +697,14 @@ fn handle_planning_key(state: &mut AppState, key: event::KeyEvent, config: &Conf
                 .parent()
                 .unwrap_or(std::path::Path::new("."));
             Config::save_sandbox(project_dir, new_sandbox);
+            state.sandbox_active = new_sandbox;
             let cfg = Config::load(project_dir);
             let sandbox_cfg = cfg.sandbox_config();
-            state.sandbox_active = sandbox_cfg.is_active();
             state.sandbox_status_label = format!("{}", sandbox_cfg.status());
-            let label = if state.sandbox_active {
-                "Sandbox: ON (agents will run in Docker)"
+            let label = if new_sandbox {
+                "Sandbox: ON"
             } else {
-                "Sandbox: OFF (agents will run unsandboxed)"
+                "Sandbox: OFF"
             };
             state.log(label.to_string());
         }
@@ -1209,14 +1209,14 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                                 .parent()
                                 .unwrap_or(std::path::Path::new("."));
                             Config::save_sandbox(project_dir, new_sandbox);
+                            state.sandbox_active = new_sandbox;
                             let cfg = Config::load(project_dir);
                             let sandbox_cfg = cfg.sandbox_config();
-                            state.sandbox_active = sandbox_cfg.is_active();
                             state.sandbox_status_label = format!("{}", sandbox_cfg.status());
-                            let label = if state.sandbox_active {
-                                "Sandbox: ON (agents will run in Docker)"
+                            let label = if new_sandbox {
+                                "Sandbox: ON"
                             } else {
-                                "Sandbox: OFF (agents will run unsandboxed)"
+                                "Sandbox: OFF"
                             };
                             state.log(label.to_string());
                         }

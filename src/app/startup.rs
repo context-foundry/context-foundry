@@ -393,15 +393,14 @@ pub(super) fn handle_startup_key(state: &mut AppState, key: event::KeyEvent) {
                 .parent()
                 .unwrap_or(std::path::Path::new("."));
             Config::save_sandbox(project_dir, new_sandbox);
-            // Re-detect sandbox state
+            state.sandbox_active = new_sandbox;
             let config = Config::load(project_dir);
             let sandbox_cfg = config.sandbox_config();
-            state.sandbox_active = sandbox_cfg.is_active();
             state.sandbox_status_label = format!("{}", sandbox_cfg.status());
-            let label = if state.sandbox_active {
-                "Sandbox: ON (agents will run in Docker)"
+            let label = if new_sandbox {
+                "Sandbox: ON"
             } else {
-                "Sandbox: OFF (agents will run unsandboxed)"
+                "Sandbox: OFF"
             };
             state.log(label.to_string());
             if let Some(ref mut s) = state.startup {
