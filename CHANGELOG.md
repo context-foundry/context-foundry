@@ -5,13 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.7.1] - 2026-03-26
+## [0.7.2] - 2026-03-26
+
+### Added
+- Sandbox badge in TUI startup header reflecting actual runtime state (Docker available + config enabled)
+- Ctrl+S hotkey to toggle sandbox mode on/off at runtime
+
+### Fixed
+- Sandbox badge shows runtime reality, not config intent alone
+- Ctrl+S sandbox toggle properly updates state and cleans up footer hints
+- Model label renamed to "Claude" in TUI header
+
+## [0.7.1] - 2026-03-25
 
 ### Added
 - Docker sandbox isolation: agents run inside `Dockerfile.sandbox` containers (node:22-slim + Claude CLI + git)
 - Sandbox config fields (`sandbox: bool`) with automatic Docker availability detection
-- Ctrl+S hotkey to toggle sandbox mode on/off at runtime
-- Sandbox badge in TUI startup header reflecting actual runtime state (not just config intent)
 - macOS Keychain credential extraction so containerized agents can authenticate
 - Core tmux backend (`src/tmux.rs`) with session lifecycle management
 - tmux-based pipeline integration and TUI support
@@ -21,12 +30,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Retired Studio in favor of the main TUI (archived for reference)
-- Model label in TUI renamed to "Claude"
 - Pattern injection now reports actually-injected count, not total matched
 
 ### Fixed
-- Sandbox badge shows runtime reality (Docker available + config enabled), not config intent alone
-- Ctrl+S sandbox toggle properly updates state and footer hints
 - Agent prompts use absolute paths for monorepo subdirectories
 - Scout reads UPDATED_SPECS.md for enhancement context
 - Smart task archiving (T15.10 was previously an empty shell)
