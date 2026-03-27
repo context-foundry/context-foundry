@@ -217,6 +217,7 @@ fn build_extension_index(project_dir: &Path) -> Result<String> {
             let pattern_count = extensions::count_extension_patterns(&ext.patterns_dir);
             let source = match ext.source {
                 extensions::ExtensionSource::Global => "global".to_string(),
+                extensions::ExtensionSource::Ancestor => "ancestor".to_string(),
                 extensions::ExtensionSource::ProjectLocal => "project-local".to_string(),
             };
             ExtensionIndexEntry {
@@ -402,10 +403,16 @@ mod tests {
 
         let index = build_extension_index(dir.path()).unwrap();
         let entries: Vec<Value> = serde_json::from_str(&index).unwrap();
-        assert_eq!(entries.len(), 1);
-        assert_eq!(entries[0]["name"], "testext");
-        assert_eq!(entries[0]["source"], "project-local");
-        assert!(entries[0]["description"]
+        // Filter to project-local only; global/ancestor extensions from the
+        // host environment may also appear.
+        let local: Vec<&Value> = entries
+            .iter()
+            .filter(|e| e["source"] == "project-local")
+            .collect();
+        assert_eq!(local.len(), 1);
+        assert_eq!(local[0]["name"], "testext");
+        assert_eq!(local[0]["source"], "project-local");
+        assert!(local[0]["description"]
             .as_str()
             .unwrap()
             .contains("test extension"));

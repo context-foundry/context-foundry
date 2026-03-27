@@ -433,7 +433,13 @@ Key design decisions in the prompt system:
 
 ## Extensions
 
-Extensions are human-authored, read-only domain knowledge packages. They teach foundry's agents how to work with technologies, APIs, or workflows that aren't in Claude's training data. Foundry discovers extensions automatically from `~/.foundry/extensions/` and project-local `extensions/` directories.
+Extensions are human-authored, read-only domain knowledge packages. They teach foundry's agents how to work with technologies, APIs, or workflows that aren't in Claude's training data. Foundry discovers extensions automatically from three sources (highest priority wins):
+
+1. **Project-local** -- `<project_dir>/extensions/`
+2. **Ancestor** -- walks up from the project directory, checking each parent for an `extensions/` subdirectory (closest ancestor wins)
+3. **Global** -- `~/.foundry/extensions/`
+
+Ancestor discovery means you can run foundry from a nested subdirectory and it will still find extensions defined higher in the tree. For example, running from `extensions/flowise/hackathon/` will discover sibling extensions like `extensions/extend/`.
 
 An extension is a folder containing a `CLAUDE.md` (domain rules) and optionally a patterns JSON (domain-specific patterns). For example, a Roblox extension might teach agents to use CFrame instead of Position for moving parts, or a Workday Extend extension might document that WIDs are tenant-specific.
 

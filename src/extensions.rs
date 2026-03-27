@@ -14,12 +14,31 @@ pub struct ExtensionInfo {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExtensionSource {
     Global,
+    /// Found in an ancestor directory's `extensions/` folder.
+    Ancestor,
     ProjectLocal,
 }
 
-/// Scan both `~/.foundry/extensions/` and `<project_dir>/extensions/` for
-/// directories containing CLAUDE.md. Project-local extensions override global
-/// ones with the same name.
+impl ExtensionSource {
+    /// Higher number = higher priority when deduplicating.
+    fn priority(self) -> u8 {
+        match self {
+            Self::Global => 0,
+            Self::Ancestor => 1,
+            Self::ProjectLocal => 2,
+        }
+    }
+}
+
+/// Discover extensions by scanning three sources (highest priority wins):
+///
+/// 1. **ProjectLocal** -- `<project_dir>/extensions/`
+/// 2. **Ancestor** -- walk up from `project_dir` checking each ancestor for
+///    an `extensions/` subdirectory (closest ancestor wins)
+/// 3. **Global** -- `~/.foundry/extensions/`
+///
+/// When the same extension name appears in multiple sources the higher-priority
+/// source wins.
 pub fn discover_extensions(project_dir: &Path) -> Vec<ExtensionInfo> {
     let mut results = Vec::new();
 
@@ -31,18 +50,37 @@ pub fn discover_extensions(project_dir: &Path) -> Vec<ExtensionInfo> {
         eprintln!("warning: HOME not set, skipping global extensions directory");
     }
 
+    // Ancestor extensions: walk up from project_dir, collect ancestor
+    // `extensions/` dirs, then scan farthest-first so closer ancestors appear
+    // later in `results` and win during dedup (via `>=`).
+    {
+        let canonical = project_dir
+            .canonicalize()
+            .unwrap_or_else(|_| project_dir.to_path_buf());
+        let mut ancestor_ext_dirs = Vec::new();
+        let mut cur = canonical.parent();
+        while let Some(dir) = cur {
+            let ext_dir = dir.join("extensions");
+            if ext_dir.is_dir() {
+                ancestor_ext_dirs.push(ext_dir);
+            }
+            cur = dir.parent();
+        }
+        // Reverse so farthest ancestor is scanned first, closest last (wins dedup).
+        for ext_dir in ancestor_ext_dirs.into_iter().rev() {
+            scan_extensions_dir(&ext_dir, ExtensionSource::Ancestor, &mut results);
+        }
+    }
+
     // Project-local extensions dir: <project_dir>/extensions/
     let local_dir = project_dir.join("extensions");
     scan_extensions_dir(&local_dir, ExtensionSource::ProjectLocal, &mut results);
 
-    // Deduplicate: project-local overrides global
+    // Deduplicate: higher-priority source wins
     let mut seen: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
     for (i, ext) in results.iter().enumerate() {
         if let Some(&prev_idx) = seen.get(&ext.name) {
-            // If this one is ProjectLocal and prev is Global, replace
-            if ext.source == ExtensionSource::ProjectLocal
-                && results[prev_idx].source == ExtensionSource::Global
-            {
+            if ext.source.priority() >= results[prev_idx].source.priority() {
                 seen.insert(ext.name.clone(), i);
             }
         } else {
@@ -255,6 +293,58 @@ pub fn extract_keywords(claude_md_path: &Path) -> Vec<String> {
     result.sort();
     result.truncate(50);
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_ancestor_discovery() {
+        // Create: /tmp/xxx/extensions/testext/CLAUDE.md
+        //         /tmp/xxx/child/grandchild/   <-- project_dir
+        // The ancestor walk from grandchild should find testext.
+        let root = tempfile::tempdir().unwrap();
+        let ext_dir = root.path().join("extensions").join("testext");
+        std::fs::create_dir_all(&ext_dir).unwrap();
+        std::fs::write(ext_dir.join("CLAUDE.md"), "# Test\n\nA test.\n").unwrap();
+
+        let project_dir = root.path().join("child").join("grandchild");
+        std::fs::create_dir_all(&project_dir).unwrap();
+
+        let discovered = discover_extensions(&project_dir);
+        let names: Vec<&str> = discovered.iter().map(|e| e.name.as_str()).collect();
+        assert!(
+            names.contains(&"testext"),
+            "ancestor walk should find testext, got: {:?}",
+            names
+        );
+        let testext = discovered.iter().find(|e| e.name == "testext").unwrap();
+        assert_eq!(testext.source, ExtensionSource::Ancestor);
+    }
+
+    #[test]
+    fn test_project_local_overrides_ancestor() {
+        // Both ancestor and project-local have "samename" extension.
+        // Project-local should win.
+        let root = tempfile::tempdir().unwrap();
+
+        // Ancestor version
+        let ancestor_ext = root.path().join("extensions").join("samename");
+        std::fs::create_dir_all(&ancestor_ext).unwrap();
+        std::fs::write(ancestor_ext.join("CLAUDE.md"), "# Ancestor\n\nOld.\n").unwrap();
+
+        // Project-local version
+        let project_dir = root.path().join("child");
+        std::fs::create_dir_all(&project_dir).unwrap();
+        let local_ext = project_dir.join("extensions").join("samename");
+        std::fs::create_dir_all(&local_ext).unwrap();
+        std::fs::write(local_ext.join("CLAUDE.md"), "# Local\n\nNew.\n").unwrap();
+
+        let discovered = discover_extensions(&project_dir);
+        let ext = discovered.iter().find(|e| e.name == "samename").unwrap();
+        assert_eq!(ext.source, ExtensionSource::ProjectLocal);
+    }
 }
 
 /// Load all pattern JSON files from selected extensions' patterns directories.
