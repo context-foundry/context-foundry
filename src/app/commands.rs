@@ -113,6 +113,85 @@ pub(crate) fn docker_is_available() -> bool {
         .unwrap_or(false)
 }
 
+pub(crate) fn semgrep_is_available() -> bool {
+    let lookup_cmd = if cfg!(target_os = "windows") {
+        "where"
+    } else {
+        "which"
+    };
+    std::process::Command::new(lookup_cmd)
+        .arg("semgrep")
+        .output()
+        .map(|output| output.status.success())
+        .unwrap_or(false)
+}
+
+/// Run semgrep against changed files and return findings as a string.
+/// Returns empty string if semgrep is not available or produces no output.
+pub(crate) fn run_semgrep(project_dir: &Path, rulesets: &[String], changed_files: &[String]) -> String {
+    if changed_files.is_empty() || !semgrep_is_available() {
+        return String::new();
+    }
+
+    let mut cmd = std::process::Command::new("semgrep");
+    cmd.arg("--json")
+        .arg("--quiet")
+        .arg("--no-git-ignore")
+        .current_dir(project_dir);
+
+    if rulesets.is_empty() {
+        cmd.arg("--config=auto");
+    } else {
+        for ruleset in rulesets {
+            cmd.args(["--config", ruleset]);
+        }
+    }
+
+    for f in changed_files {
+        cmd.arg(f);
+    }
+
+    let output = match cmd.output() {
+        Ok(o) => o,
+        Err(_) => return String::new(),
+    };
+
+    let raw = String::from_utf8_lossy(&output.stdout);
+    let json: serde_json::Value = match serde_json::from_str(&raw) {
+        Ok(v) => v,
+        Err(_) => return String::new(),
+    };
+
+    let results = match json.get("results").and_then(|r| r.as_array()) {
+        Some(arr) if !arr.is_empty() => arr,
+        _ => return String::new(),
+    };
+
+    let mut summary = String::from("SEMGREP STATIC ANALYSIS FINDINGS:\n");
+    for result in results {
+        let check_id = result.get("check_id").and_then(|v| v.as_str()).unwrap_or("unknown");
+        let message = result.get("extra")
+            .and_then(|e| e.get("message"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let severity = result.get("extra")
+            .and_then(|e| e.get("severity"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("INFO");
+        let path = result.get("path").and_then(|v| v.as_str()).unwrap_or("");
+        let start_line = result.get("start")
+            .and_then(|s| s.get("line"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+
+        summary.push_str(&format!(
+            "- [{severity}] {path}:{start_line} -- {check_id}: {message}\n"
+        ));
+    }
+    summary.push_str(&format!("\nTotal: {} finding(s)\n", results.len()));
+    summary
+}
+
 pub(crate) fn sandbox_image_exists(image: &str) -> bool {
     std::process::Command::new("docker")
         .args(["image", "inspect", image])

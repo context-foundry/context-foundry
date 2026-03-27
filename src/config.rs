@@ -236,6 +236,16 @@ pub struct Config {
     /// (scout, planner, builder, reviewer, fixer, discovery) use this value.
     /// Useful for OAuth subscriptions that lock you to one model.
     pub model: String,
+
+    /// Run semgrep static analysis before the doubt/review stage.
+    /// Findings are injected into the reviewer prompt as reference data.
+    /// Gracefully skipped when semgrep is not installed.
+    #[serde(default)]
+    pub semgrep_enabled: bool,
+
+    /// Semgrep rulesets to run (e.g. ["p/default", "p/security-audit"]).
+    /// Empty uses auto-detection based on project languages.
+    pub semgrep_rulesets: Vec<String>,
 }
 
 impl Default for Config {
@@ -319,6 +329,8 @@ impl Default for Config {
             sandbox_auth_dirs: vec![".claude".into()],
             sandbox_env: Vec::new(),
             model: String::new(),
+            semgrep_enabled: false,
+            semgrep_rulesets: Vec::new(),
         }
     }
 }

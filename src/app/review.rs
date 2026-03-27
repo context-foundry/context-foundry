@@ -9,6 +9,7 @@ use crate::config::Config;
 use crate::observatory::{self, AgentUsage, ObservatoryEvent};
 use crate::prompts;
 
+use super::commands;
 use super::context::RunContext;
 use super::{AppEvent, LoopEvent};
 
@@ -83,6 +84,28 @@ pub(super) async fn run_review_loop(
         None
     };
 
+    // Run semgrep static analysis if enabled, before the AI review.
+    let semgrep_findings = if ctx.config.semgrep_enabled {
+        let findings = commands::run_semgrep(
+            &ctx.project_dir,
+            &ctx.config.semgrep_rulesets,
+            &files_changed,
+        );
+        if findings.is_empty() {
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+                "semgrep: no findings".to_string(),
+            )));
+        } else {
+            let line_count = findings.lines().count().saturating_sub(2); // exclude header/footer
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+                format!("semgrep: {} finding(s) injected into reviewer context", line_count),
+            )));
+        }
+        findings
+    } else {
+        String::new()
+    };
+
     // Multi-pass review: when file count exceeds threshold, run per-file
     // analysis passes followed by a cross-file integration pass.
     let threshold = ctx.config.review_multipass_threshold;
@@ -104,6 +127,7 @@ pub(super) async fn run_review_loop(
             &files_changed,
             &files_list,
             diff_for_review.as_deref(),
+            &semgrep_findings,
         )
         .await;
         let _ = tx.send(AppEvent::AgentDone(result.0));
@@ -149,6 +173,7 @@ pub(super) async fn run_review_loop(
         diff_for_review.as_deref(),
         &ctx.spec_file_prompt_path(),
         &ctx.tasks_file_prompt_path(),
+        &semgrep_findings,
     );
     let prompt = prompts::wrap_with_extensions(&prompt, extension_context);
     if !extension_context.is_empty() {
@@ -310,6 +335,7 @@ async fn run_multipass_review(
     files_changed: &[String],
     files_list: &str,
     diff_for_review: Option<&str>,
+    semgrep_findings: &str,
 ) -> (bool, usize, (usize, usize, usize)) {
     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
         "Multi-pass review: {} files exceed threshold ({}), running per-file analysis",
@@ -428,6 +454,7 @@ async fn run_multipass_review(
         diff_for_review,
         &ctx.spec_file_prompt_path(),
         &ctx.tasks_file_prompt_path(),
+        semgrep_findings,
     );
     let prompt = prompts::wrap_with_extensions(&prompt, extension_context);
 
