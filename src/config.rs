@@ -211,9 +211,9 @@ pub struct Config {
     /// Keep tmux sessions alive after agent completion (default: false).
     pub tmux_keep_sessions: bool,
 
-    /// Enable Docker sandbox isolation for agent subprocesses (default: false).
-    /// Opt-in until container-native architecture is implemented.
-    #[serde(default)]
+    /// Enable Docker sandbox isolation for agent subprocesses (default: true).
+    /// Always on by default. Only implementers should override via .foundry.json.
+    #[serde(default = "default_true")]
     pub sandbox: bool,
 
     /// Docker image used for sandbox containers.
@@ -255,7 +255,7 @@ impl Default for Config {
             planner_model: "opus".into(),
             builder_model: "opus".into(),
             builder_models: Vec::new(),
-            dual_selection: String::new(),
+            dual_selection: "first".into(),
             reviewer_model: "sonnet".into(),
             fixer_model: "sonnet".into(),
             discovery_model: "opus".into(),
@@ -323,7 +323,7 @@ impl Default for Config {
             agent_backend: "pty".into(),
             tmux_session_prefix: "foundry".into(),
             tmux_keep_sessions: false,
-            sandbox: false,
+            sandbox: true,
             sandbox_image: "foundry-sandbox:latest".into(),
             sandbox_extra_mounts: Vec::new(),
             sandbox_auth_dirs: vec![".claude".into()],
@@ -539,16 +539,6 @@ impl Config {
         if let Some(obj) = value.as_object_mut() {
             obj.remove("mode");
         }
-        let json = serde_json::to_string_pretty(&value).unwrap_or_default();
-        let _ = crate::utils::atomic_write_file(&config_path, json.as_bytes());
-    }
-
-    pub fn save_sandbox(project_dir: &Path, enabled: bool) {
-        let config_path = project_dir.join(".foundry.json");
-        let content = std::fs::read_to_string(&config_path).unwrap_or_else(|_| "{}".to_string());
-        let mut value: serde_json::Value =
-            serde_json::from_str(&content).unwrap_or(serde_json::json!({}));
-        value["sandbox"] = serde_json::json!(enabled);
         let json = serde_json::to_string_pretty(&value).unwrap_or_default();
         let _ = crate::utils::atomic_write_file(&config_path, json.as_bytes());
     }
@@ -842,9 +832,9 @@ mod tests {
     }
 
     #[test]
-    fn default_config_disables_sandbox() {
+    fn default_config_enables_sandbox() {
         let config = Config::default();
-        assert!(!config.sandbox);
+        assert!(config.sandbox);
         assert_eq!(config.sandbox_image, "foundry-sandbox:latest");
         assert!(config.sandbox_extra_mounts.is_empty());
         assert_eq!(config.sandbox_auth_dirs, vec![".claude"]);
@@ -866,7 +856,7 @@ mod tests {
     fn config_deserializes_sandbox_defaults_when_absent() {
         let config: Config = serde_json::from_str(r#"{"builder_model":"opus"}"#)
             .expect("config should deserialize");
-        assert!(!config.sandbox);
+        assert!(config.sandbox);
         assert_eq!(config.sandbox_image, "foundry-sandbox:latest");
         assert!(config.sandbox_extra_mounts.is_empty());
     }

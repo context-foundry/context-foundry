@@ -265,10 +265,10 @@ pub(super) fn render_dashboard_stats(
     {
         let (sandbox_label, sandbox_color) = if state.sandbox_active {
             (format!("Sandbox: active ({})", config.sandbox_image), theme.success)
-        } else if config.sandbox {
-            (format!("Sandbox: {} (enabled in config)", state.sandbox_status_label), theme.warning)
+        } else if state.sandbox_enabled {
+            (format!("Sandbox: degraded ({})", state.sandbox_status_label), theme.warning)
         } else {
-            ("Sandbox: disabled".to_string(), theme.muted)
+            ("Sandbox: disabled (config override)".to_string(), theme.error)
         };
         lines.push(Line::from(vec![
             Span::styled("  ", Style::default()),

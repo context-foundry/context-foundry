@@ -169,7 +169,7 @@ Foundry can run agents inside Docker containers so they only see the project dir
    ```
 3. Run foundry normally -- it detects the image automatically
 
-The TUI shows sandbox status in the header (`[sandboxed]` in green or `[unsandboxed]` in yellow), the stats panel, and the startup screen.
+The TUI shows sandbox status in the header (`[sandboxed]` in green, `[sandbox degraded]` in yellow if Docker/image is missing, or `[sandbox disabled]` in red if overridden via config), the stats panel, and the startup screen.
 
 **How it works:** When sandbox is active, foundry wraps each agent's CLI invocation in `docker run` with the project directory bind-mounted to `/work`. The container runs as a non-root user (UID 1000). The `ANTHROPIC_API_KEY` is forwarded automatically. PTY backend is forced (tmux is incompatible with containerized agents).
 

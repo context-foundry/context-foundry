@@ -62,6 +62,7 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
     let sandbox_cfg = config.sandbox_config();
     let sandbox_status = sandbox_cfg.status();
     state.sandbox_active = sandbox_cfg.is_active();
+    state.sandbox_enabled = config.sandbox;
     state.sandbox_status_label = format!("{}", sandbox_status);
     match sandbox_status {
         crate::sandbox::SandboxStatus::Active => {
@@ -82,7 +83,7 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
             ));
         }
         crate::sandbox::SandboxStatus::Disabled => {
-            state.log("Sandbox disabled by config".to_string());
+            state.log("Warning: sandbox disabled by config override -- agents will run unsandboxed".to_string());
         }
     }
 
@@ -690,24 +691,9 @@ fn handle_planning_key(state: &mut AppState, key: event::KeyEvent, config: &Conf
                 refresh_patterns_cache(state, config);
             }
         }
+        // Sandbox toggle removed -- config-only override for implementers.
         KeyCode::Char('s') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-            let project_dir = state
-                .buildloop_dir
-                .parent()
-                .unwrap_or(std::path::Path::new("."));
-            let was_enabled = Config::load(project_dir).sandbox;
-            Config::save_sandbox(project_dir, !was_enabled);
-            let cfg = Config::load(project_dir);
-            let sandbox_cfg = cfg.sandbox_config();
-            state.sandbox_active = sandbox_cfg.is_active();
-            state.sandbox_status_label = format!("{}", sandbox_cfg.status());
-            if cfg.sandbox && !sandbox_cfg.is_active() {
-                state.log(format!("Sandbox: enabled but {} -- agents will run unsandboxed", sandbox_cfg.status()));
-            } else if cfg.sandbox {
-                state.log("Sandbox: ON".to_string());
-            } else {
-                state.log("Sandbox: OFF".to_string());
-            }
+            state.log("Sandbox toggle disabled -- override via .foundry.json only".to_string());
         }
         KeyCode::Char('t') if key.modifiers.contains(KeyModifiers::CONTROL) => {
             let (new_theme, name) = crate::tui::theme::cycle_next(&state.tui_theme);
@@ -1203,24 +1189,9 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                                 refresh_patterns_cache(state, config);
                             }
                         }
+                        // Sandbox toggle removed -- config-only override for implementers.
                         KeyCode::Char('s') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                            let project_dir = state
-                                .buildloop_dir
-                                .parent()
-                                .unwrap_or(std::path::Path::new("."));
-                            let was_enabled = Config::load(project_dir).sandbox;
-                            Config::save_sandbox(project_dir, !was_enabled);
-                            let cfg = Config::load(project_dir);
-                            let sandbox_cfg = cfg.sandbox_config();
-                            state.sandbox_active = sandbox_cfg.is_active();
-                            state.sandbox_status_label = format!("{}", sandbox_cfg.status());
-                            if cfg.sandbox && !sandbox_cfg.is_active() {
-                                state.log(format!("Sandbox: enabled but {} -- agents will run unsandboxed", sandbox_cfg.status()));
-                            } else if cfg.sandbox {
-                                state.log("Sandbox: ON".to_string());
-                            } else {
-                                state.log("Sandbox: OFF".to_string());
-                            }
+                            state.log("Sandbox toggle disabled -- override via .foundry.json only".to_string());
                         }
                         KeyCode::Char('i') => {
                             state.inject_input = Some(String::new());

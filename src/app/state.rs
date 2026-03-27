@@ -356,6 +356,8 @@ pub struct AppState {
     pub tmux_session_names: Vec<String>,
     /// Whether Docker sandbox isolation is active for agent subprocesses.
     pub sandbox_active: bool,
+    /// Whether sandbox is enabled in config (may not be active if Docker/image missing).
+    pub sandbox_enabled: bool,
     /// Human-readable sandbox status label for TUI display.
     pub sandbox_status_label: String,
 }
@@ -447,6 +449,7 @@ impl AppState {
             session_cost_millicents: Arc::new(std::sync::atomic::AtomicU64::new(0)),
             tmux_session_names: Vec::new(),
             sandbox_active: false,
+            sandbox_enabled: true,
             sandbox_status_label: String::new(),
         }
     }

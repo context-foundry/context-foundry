@@ -410,8 +410,10 @@ fn render_startup_summary(frame: &mut Frame, area: Rect, state: &AppState) {
     {
         let (sandbox_label, sandbox_color) = if state.sandbox_active {
             (" sandboxed ", Color::Green)
+        } else if state.sandbox_enabled {
+            (" sandbox degraded ", Color::Yellow)
         } else {
-            (" unsandboxed ", Color::Yellow)
+            (" sandbox disabled ", Color::Red)
         };
         lines[0].spans.push(Span::raw("  "));
         lines[0].spans.push(Span::styled(
@@ -1111,21 +1113,15 @@ pub(super) fn render_startup_status_bar(frame: &mut Frame, area: Rect, state: &A
         spans.push(Span::raw(" findings"));
     }
 
-    // Sandbox toggle
-    {
-        let (sandbox_label, sandbox_bg) = if state.sandbox_active {
-            (" on ", state.tui_theme.success)
-        } else {
-            (" off ", state.tui_theme.warning)
-        };
+    // Sandbox status (always on, not toggleable from UI)
+    if state.sandbox_active {
         spans.push(Span::styled(
-            "  ^S ",
+            "  sandboxed ",
             Style::default()
                 .fg(Color::Black)
-                .bg(sandbox_bg)
+                .bg(state.tui_theme.success)
                 .add_modifier(Modifier::BOLD),
         ));
-        spans.push(Span::raw(format!("sandbox{}", sandbox_label)));
     }
 
     // Extensions indicator (always shown)

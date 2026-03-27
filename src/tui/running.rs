@@ -273,8 +273,10 @@ pub(super) fn render_header(frame: &mut Frame, area: Rect, state: &AppState) {
     {
         let (sandbox_label, sandbox_color) = if state.sandbox_active {
             (" sandboxed ", Color::Green)
+        } else if state.sandbox_enabled {
+            (" sandbox degraded ", Color::Yellow)
         } else {
-            (" unsandboxed ", Color::Yellow)
+            (" sandbox disabled ", Color::Red)
         };
         header_text[0].spans.push(Span::raw("  "));
         header_text[0].spans.push(Span::styled(

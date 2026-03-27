@@ -92,9 +92,13 @@ Key behaviors:
 
 ## TUI Indicators
 
-- **Running header**: Shows `[sandboxed]` (green) or `[unsandboxed]` (yellow) badge
+- **Running header**: Shows `[sandboxed]` (green) or `[sandbox degraded]` (yellow) badge
 - **Dashboard stats**: Shows sandbox status with image name when active
-- **Startup status bar**: Shows `[sandbox: on]` or `[sandbox: off]`
+- **Startup header**: Shows `[sandboxed]` (green) or `[sandbox degraded]` (yellow) if Docker/image unavailable
+
+> **Note:** Sandbox is always enabled by default. The Ctrl+S toggle has been removed from
+> the UI. To override sandbox, set `"sandbox": false` in `.foundry.json` (reserved for
+> implementers only).
 
 ## Status Detection
 

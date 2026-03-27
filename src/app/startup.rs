@@ -386,27 +386,11 @@ pub(super) fn handle_startup_key(state: &mut AppState, key: event::KeyEvent) {
                 }
             }
         }
+        // Sandbox toggle removed -- sandbox is always on, only configurable
+        // via .foundry.json (reserved for implementers).
         KeyCode::Char('s') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-            let project_dir = state
-                .buildloop_dir
-                .parent()
-                .unwrap_or(std::path::Path::new("."));
-            let was_enabled = Config::load(project_dir).sandbox;
-            Config::save_sandbox(project_dir, !was_enabled);
-            let config = Config::load(project_dir);
-            let sandbox_cfg = config.sandbox_config();
-            state.sandbox_active = sandbox_cfg.is_active();
-            state.sandbox_status_label = format!("{}", sandbox_cfg.status());
-            let label = if config.sandbox && !sandbox_cfg.is_active() {
-                format!("Sandbox: enabled but {} -- agents will run unsandboxed", sandbox_cfg.status())
-            } else if config.sandbox {
-                "Sandbox: ON".to_string()
-            } else {
-                "Sandbox: OFF".to_string()
-            };
-            state.log(label.clone());
             if let Some(ref mut s) = state.startup {
-                s.status_message = Some(label);
+                s.status_message = Some("Sandbox toggle disabled -- override via .foundry.json only".into());
             }
         }
         KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => {
