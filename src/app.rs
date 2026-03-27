@@ -1585,9 +1585,11 @@ fn handle_agent_output(state: &mut AppState, output: AgentOutputEvent) {
     match output {
         AgentOutputEvent::Text(ref text) => {
             if text.starts_with("[rate limited]") {
+                // Show in status bar only -- don't pollute the output panel
                 state.status_summary = "Waiting for API retry".to_string();
+            } else {
+                state.agent_output.push(text.clone());
             }
-            state.agent_output.push(text.clone());
         }
         AgentOutputEvent::ToolUse {
             ref tool,
@@ -1642,7 +1644,14 @@ fn handle_agent_output(state: &mut AppState, output: AgentOutputEvent) {
                     state.tmux_session_names.push(name.to_string());
                 }
             }
-            state.agent_output.push(format!("[stderr] {}", line));
+            // Downgrade expected operational messages from [stderr] to [info]
+            if line.contains("exceeds maximum allowed tokens")
+                || line.contains("File does not exist")
+            {
+                state.agent_output.push(format!("[info] {}", line));
+            } else {
+                state.agent_output.push(format!("[stderr] {}", line));
+            }
         }
         AgentOutputEvent::Result(text) => {
             state.agent_output.push(String::new());

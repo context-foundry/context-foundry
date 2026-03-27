@@ -13,15 +13,27 @@ fn platform_preamble() -> &'static str {
     }
 }
 
+/// Guidance appended to every agent prompt for handling large files.
+/// The Read tool enforces a 10000-token limit per call; agents must use
+/// offset/limit or Grep to avoid hitting it on large source files.
+fn large_file_guidance() -> &'static str {
+    "\n\nLARGE FILE HANDLING: The Read tool has a 10,000-token limit per call. \
+     For files that may exceed this (large JS/TS bundles, generated code, data files): \
+     (1) Use Grep to find the specific functions or sections you need, then \
+     (2) Use Read with offset and limit parameters to read only those sections. \
+     NEVER attempt to read an entire large file in one call -- it will fail."
+}
+
 /// Prepend extension contract context to any agent prompt.
 /// If extension_context is empty, return prompt unchanged.
 /// On Windows, appends a platform preamble warning about path handling.
 pub fn wrap_with_extensions(prompt: &str, extension_context: &str) -> String {
     let preamble = platform_preamble();
+    let large_files = large_file_guidance();
     if extension_context.trim().is_empty() {
-        format!("{}{}", prompt, preamble)
+        format!("{}{}{}", prompt, preamble, large_files)
     } else {
-        format!("{}\n\n{}{}", extension_context, prompt, preamble)
+        format!("{}\n\n{}{}{}", extension_context, prompt, preamble, large_files)
     }
 }
 

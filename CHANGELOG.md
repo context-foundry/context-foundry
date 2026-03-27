@@ -10,6 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Sandbox badge in TUI startup header reflecting actual runtime state (Docker available + config enabled)
 - Ctrl+S hotkey to toggle sandbox mode on/off at runtime
+- Large file handling guidance in all agent prompts (use Grep + offset/limit for files over 10K tokens)
+
+### Changed
+- Rate limit messages no longer appear in the agent output panel (status bar still shows retry state)
+- File-too-large and file-not-found errors shown as `[info]` (muted) instead of `[stderr]` (red)
 
 ### Fixed
 - Sandbox badge shows runtime reality, not config intent alone

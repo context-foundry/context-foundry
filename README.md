@@ -429,6 +429,7 @@ Key design decisions in the prompt system:
 - **Safe by default**: the reviewer only runs read-only checks (no `docker compose up`, no service mutations)
 - **Pattern isolation**: learned patterns are injected as clearly delimited reference data, not as authoritative instructions
 - **Evidence-based review**: every finding must cite file, line number, and concrete evidence
+- **Large file handling**: all agents receive guidance to use Grep and `Read` with `offset`/`limit` for files exceeding the 10,000-token tool limit, preventing read failures on large source files
 
 ## Extensions
 
