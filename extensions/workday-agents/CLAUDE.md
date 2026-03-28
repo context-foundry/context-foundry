@@ -88,12 +88,31 @@ agent-name/
 - Counts (rules, states, tests) must match the implementation -- update on every commit
 - If the bridge is a stub, say so in the spec
 
-## Existing Agents
+## Agent Roster
+
+### Complete (Phase 1)
 
 | Agent | Repo | Rules | Tests | Status |
 |-------|------|-------|-------|--------|
 | ACA Edge-Case Auditor | `~/homelab/aca-auditor` | 22 finding IDs across 5 modules | 21 | Phase 1 complete |
 | Multi-State Tax Allocator | `~/homelab/multistate-tax` | 14 finding IDs across 4 modules + 31-state matrix | 23 | Phase 1 complete |
+
+### Ready to Build (SPEC + TASKS written, run `foundry` in the directory)
+
+| Priority | Agent | Repo | Regulatory Source | Key Selling Point |
+|----------|-------|------|-------------------|-------------------|
+| 1 | I-9 Re-verification | `~/homelab/i9-reverification` | 8 CFR 274a | $288-$28,619/violation, ICE running 12K+ audits/year |
+| 2 | FLSA Exemption Auditor | `~/homelab/flsa-exemption` | 29 CFR 541 | Universal market, class action exposure, Workday stores a static flag only |
+| 3 | PFML Cross-State | `~/homelab/pfml-crossstate` | 14 state statutes | Companion to multistate-tax, market growing yearly |
+| 4 | FMLA Eligibility | `~/homelab/fmla-eligibility` | 29 CFR 825 | Huge market, litigation avoidance (softer ROI story) |
+
+### Killed (researched, not viable)
+
+| Agent | Reason |
+|-------|--------|
+| Workers' Comp Classification | Rule data is proprietary (NCCI), judgment is subjective, penalty is premium adjustment |
+| COBRA Continuation | Workday + ecosystem already covers well, penalties modest |
+| Grant Effort Reconciliation | Too niche (higher ed only), Workday has dedicated Grants module |
 
 ## After Building a New Agent
 
