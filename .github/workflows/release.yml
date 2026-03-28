@@ -41,22 +41,26 @@ jobs:
       - name: Build
         run: cargo build --release --target ${{ matrix.target }}
 
-      - name: Import Apple certificate
+      - name: Import Apple certificates
         if: runner.os == 'macOS'
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_INSTALLER_CERTIFICATE: ${{ secrets.APPLE_INSTALLER_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
         run: |
-          CERTIFICATE_PATH=$RUNNER_TEMP/certificate.p12
+          APP_CERT=$RUNNER_TEMP/app-certificate.p12
+          INST_CERT=$RUNNER_TEMP/installer-certificate.p12
           KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
           KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
 
-          echo "$APPLE_CERTIFICATE" | base64 --decode > "$CERTIFICATE_PATH"
+          echo "$APPLE_CERTIFICATE" | base64 --decode > "$APP_CERT"
+          echo "$APPLE_INSTALLER_CERTIFICATE" | base64 --decode > "$INST_CERT"
 
           security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security import "$CERTIFICATE_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security import "$APP_CERT" -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security import "$INST_CERT" -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
           security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security list-keychains -d user -s "$KEYCHAIN_PATH" login.keychain
 
@@ -68,21 +72,32 @@ jobs:
             --timestamp \
             target/${{ matrix.target }}/release/${{ matrix.artifact }}
 
-      - name: Notarize macOS binary
+      - name: Build macOS .pkg installer
+        if: runner.os == 'macOS'
+        run: |
+          mkdir -p pkg-root/usr/local/bin
+          cp target/${{ matrix.target }}/release/${{ matrix.artifact }} pkg-root/usr/local/bin/
+          pkgbuild \
+            --root pkg-root \
+            --identifier com.contextfoundry.foundry \
+            --version ${{ github.ref_name }} \
+            --install-location / \
+            --sign "Developer ID Installer: FOZBE LLC (CP39A5FC6V)" \
+            foundry-${{ matrix.target }}.pkg
+
+      - name: Notarize macOS .pkg
         if: runner.os == 'macOS'
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APPLE_NOTARIZE_PASSWORD: ${{ secrets.APPLE_NOTARIZE_PASSWORD }}
         run: |
-          cd target/${{ matrix.target }}/release
-          zip foundry-notarize.zip ${{ matrix.artifact }}
-          xcrun notarytool submit foundry-notarize.zip \
+          xcrun notarytool submit foundry-${{ matrix.target }}.pkg \
             --apple-id "$APPLE_ID" \
             --team-id "$APPLE_TEAM_ID" \
             --password "$APPLE_NOTARIZE_PASSWORD" \
             --wait
-          rm foundry-notarize.zip
+          xcrun stapler staple foundry-${{ matrix.target }}.pkg
 
       - name: Azure login
         if: runner.os == 'Windows'
@@ -123,7 +138,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: foundry-${{ matrix.target }}
-          path: foundry-${{ matrix.target }}.*
+          path: |
+            foundry-${{ matrix.target }}.*
+            foundry-${{ matrix.target }}.pkg
 
   release:
     needs: build
@@ -142,6 +159,8 @@ jobs:
             foundry-x86_64-apple-darwin/foundry-x86_64-apple-darwin.tar.gz
             foundry-aarch64-apple-darwin/foundry-aarch64-apple-darwin.tar.gz
             foundry-x86_64-pc-windows-msvc/foundry-x86_64-pc-windows-msvc.zip
+            foundry-x86_64-apple-darwin/foundry-x86_64-apple-darwin.pkg
+            foundry-aarch64-apple-darwin/foundry-aarch64-apple-darwin.pkg
             install.sh
             install.ps1
           generate_release_notes: true
