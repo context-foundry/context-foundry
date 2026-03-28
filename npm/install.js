@@ -9,19 +9,40 @@ const { execSync } = require("child_process");
 const os = require("os");
 const zlib = require("zlib");
 
-const VERSION = "0.6.0";
 const REPO = "context-foundry/context-foundry";
 
 function getTarget() {
   const platform = os.platform();
   const arch = os.arch();
 
-  if (platform === "darwin" && arch === "arm64") return "aarch64-apple-darwin";
-  if (platform === "darwin" && arch === "x64") return "x86_64-apple-darwin";
-  if (platform === "linux" && arch === "x64") return "x86_64-unknown-linux-gnu";
-  if (platform === "win32" && arch === "x64") return "x86_64-pc-windows-msvc";
+  if (platform === "darwin" && arch === "arm64") return "mac-apple-silicon";
+  if (platform === "darwin" && arch === "x64") return "mac-intel";
+  if (platform === "linux" && arch === "x64") return "linux";
+  if (platform === "win32" && arch === "x64") return "windows";
 
   throw new Error(`Unsupported platform: ${platform}-${arch}`);
+}
+
+function fetchLatestVersion() {
+  return new Promise((resolve, reject) => {
+    https.get(
+      `https://api.github.com/repos/${REPO}/releases/latest`,
+      { headers: { "User-Agent": "context-foundry-npm" } },
+      (res) => {
+        const chunks = [];
+        res.on("data", (chunk) => chunks.push(chunk));
+        res.on("end", () => {
+          try {
+            const data = JSON.parse(Buffer.concat(chunks).toString());
+            resolve(data.tag_name);
+          } catch (e) {
+            reject(new Error("Failed to parse GitHub API response"));
+          }
+        });
+        res.on("error", reject);
+      }
+    ).on("error", reject);
+  });
 }
 
 function getBinaryName() {
@@ -104,8 +125,9 @@ async function main() {
   const target = getTarget();
   const binaryName = getBinaryName();
   const ext = getArchiveExt();
+  const version = await fetchLatestVersion();
   const archiveName = `foundry-${target}.${ext}`;
-  const url = `https://github.com/${REPO}/releases/download/v${VERSION}/${archiveName}`;
+  const url = `https://github.com/${REPO}/releases/download/${version}/${archiveName}`;
 
   const binDir = path.join(__dirname, "bin");
   const nativeName = os.platform() === "win32" ? "foundry-native.exe" : "foundry-native";
@@ -114,9 +136,9 @@ async function main() {
   // Skip if binary already exists and is the right version
   if (fs.existsSync(destPath)) {
     try {
-      const version = execSync(`"${destPath}" --version`, { encoding: "utf8" }).trim();
-      if (version.includes(VERSION)) {
-        console.log(`foundry v${VERSION} already installed.`);
+      const existing = execSync(`"${destPath}" --version`, { encoding: "utf8" }).trim();
+      if (existing.includes(version.replace("v", ""))) {
+        console.log(`foundry ${version} already installed.`);
         return;
       }
     } catch {
@@ -124,7 +146,7 @@ async function main() {
     }
   }
 
-  console.log(`Downloading foundry v${VERSION} for ${target}...`);
+  console.log(`Downloading foundry ${version} for ${target}...`);
 
   const buffer = await fetch(url);
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "foundry-"));
@@ -153,7 +175,7 @@ async function main() {
   // Clean up
   fs.rmSync(tmpDir, { recursive: true, force: true });
 
-  console.log(`foundry v${VERSION} installed successfully.`);
+  console.log(`foundry ${version} installed successfully.`);
 }
 
 main().catch((err) => {
