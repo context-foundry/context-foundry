@@ -24,6 +24,7 @@ extensions/<name>/
 |-----------|--------|-------------|
 | `roblox` | Roblox world gen, Lune scripting | .rbxl/.rbxm files, Roblox work |
 | `extend` | Workday Extend apps | Orchestrations, integrations, BIRT |
+| `workday-agents` | Workday Marketplace compliance agents | ACA, multi-state tax, compliance rule engines |
 | `flowise` | Flowise AI workflows | AgentFlow v2, chatflows |
 | `workday` | Workday platform | Learning patterns |
 

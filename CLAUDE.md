@@ -75,6 +75,22 @@ Context Foundry has domain-specific extensions. **When working on tasks for a sp
 - SSH to iDRAC needs `-o ConnectTimeout=5` to avoid hanging loops
 - Always label batch output with the current hostname
 
+### Workday Agents Extension
+**Location:** `extensions/workday-agents/`
+**When to read:** Building any standalone compliance rule engine targeting the Workday Marketplace (ACA auditor, multi-state tax, Davis-Bacon, or similar)
+
+**IMPORTANT - Read before building a new Workday agent:**
+- `extensions/workday-agents/CLAUDE.md` - Architecture pattern, design rules, existing agents
+- `extensions/workday-agents/patterns/workday-agents-common-issues.json` - Learned bugs from Doubt/auditor
+
+**Key learnings:**
+- Normalize dict KEYS (not just values) at the Pydantic model level
+- Inclusive date ranges need +1 for month counting
+- Specific rules must replace generic rules, not supplement them
+- Resolve exemptions/reciprocity before general rules fire
+- Threshold comparisons (> vs >=) vary by jurisdiction -- make configurable
+- SPEC.md drifts from implementation every commit -- update counts and phase status
+
 ### Other Extensions
 | Extension | Path | Domain |
 |-----------|------|--------|
