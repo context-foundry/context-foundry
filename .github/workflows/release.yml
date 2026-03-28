@@ -83,6 +83,14 @@ jobs:
             --wait
           rm foundry-notarize.zip
 
+      - name: Azure login
+        if: runner.os == 'Windows'
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: e8cb6062-08d5-4de9-a2e6-82c9ecc37fdb
+
       - name: Sign Windows binary
         if: runner.os == 'Windows'
         uses: azure/trusted-signing-action@v0.5.0

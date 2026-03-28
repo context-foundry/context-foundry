@@ -124,6 +124,13 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ""
         run: cargo tauri build
 
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: e8cb6062-08d5-4de9-a2e6-82c9ecc37fdb
+
       - name: Sign Windows installer
         uses: azure/trusted-signing-action@v0.5.0
         with:
