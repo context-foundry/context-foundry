@@ -157,6 +157,17 @@
       .install-grid { grid-template-columns: 1fr; }
       .gh-corner { position: static; text-align: right; margin-bottom: 1rem; }
     }
+    /* Hero canvas */
+    .hero { position: relative; overflow: hidden; border-bottom: 2px solid var(--accent); margin-bottom: 0; }
+    .hero canvas { display: block; width: 100%; image-rendering: pixelated; image-rendering: crisp-edges; }
+    .hero-overlay {
+      position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .hero-overlay h1 {
+      color: #e6edf3; font-size: 2rem; margin: 0; border: none;
+      text-shadow: 1px 1px 0 #0d1117, 0 0 15px rgba(0,0,0,0.7);
+    }
     svg text { font-family: var(--font-mono); }
     @media print {
       body { background: white; color: black; max-width: none; padding: 0.5in; }
@@ -175,6 +186,211 @@
     </svg>
   </a>
 </div>
+
+<div class="hero">
+  <canvas id="scene" width="480" height="160"></canvas>
+</div>
+<script>
+(function(){
+  const c=document.getElementById('scene');
+  const ctx=c.getContext('2d');
+  ctx.imageSmoothingEnabled=false;
+  const W=c.width,H=c.height;
+
+  function px(x,y,col){ctx.fillStyle=col;ctx.fillRect(Math.floor(x),Math.floor(y),1,1);}
+  function rect(x,y,w,h,col){ctx.fillStyle=col;ctx.fillRect(Math.floor(x),Math.floor(y),Math.ceil(w),Math.ceil(h));}
+  function hexRgb(h){const n=parseInt(h.slice(1),16);return[(n>>16)&255,(n>>8)&255,n&255];}
+  function rgba(h,a){const[r,g,b]=hexRgb(h);return`rgba(${r},${g},${b},${a})`;}
+  function osc(t,p,ph){return(Math.sin((t/p)*Math.PI*2+(ph||0))+1)/2;}
+  function srand(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+
+  function draw(t){
+    // Background: dark workspace
+    rect(0,0,W,H,'#0d1117');
+
+    // Grid lines (subtle)
+    for(let x=0;x<W;x+=20){rect(x,0,1,H,rgba('#30363d',0.3));}
+    for(let y=0;y<H;y+=20){rect(0,y,W,1,rgba('#30363d',0.3));}
+
+    // === DATA STREAMS (flowing particles between terminals) ===
+    const pr=srand(77);
+    for(let i=0;i<30;i++){
+      const sx=pr()*W;const speed=0.3+pr()*0.7;
+      const py=20+pr()*120;
+      const px2=(sx+t*speed*40)%W;
+      const a=0.15+pr()*0.35;
+      px(px2,py,rgba('#f0a500',a));
+      if(pr()>0.5)px(px2-1,py,rgba('#f0a500',a*0.5));
+    }
+    // Vertical data streams
+    for(let i=0;i<15;i++){
+      const sx=40+pr()*400;const speed=0.2+pr()*0.5;
+      const py2=(pr()*H+t*speed*30)%H;
+      px(sx,py2,rgba('#3fb950',0.2+pr()*0.3));
+    }
+
+    // === TERMINAL 1: SCOUT (left) ===
+    const t1x=15,t1y=20;
+    // Window frame
+    rect(t1x,t1y,90,55,'#161b22');
+    rect(t1x,t1y,90,1,'#30363d');rect(t1x,t1y+54,90,1,'#30363d');
+    rect(t1x,t1y,1,55,'#30363d');rect(t1x+89,t1y,1,55,'#30363d');
+    // Title bar
+    rect(t1x+1,t1y+1,88,7,'#21262d');
+    // Traffic lights
+    rect(t1x+3,t1y+3,3,3,'#f85149');rect(t1x+8,t1y+3,3,3,'#d29922');rect(t1x+13,t1y+3,3,3,'#3fb950');
+    // Label
+    const sl='SCOUT';
+    for(let i=0;i<sl.length;i++){px(t1x+30+i*4,t1y+4,rgba('#8b949e',0.7));}
+    // Scrolling code lines
+    for(let i=0;i<6;i++){
+      const ly=t1y+11+i*7;
+      const indent=i%3===0?4:i%3===1?8:12;
+      const lw=20+((i*17+Math.floor(t*2))%30);
+      rect(t1x+indent,ly,lw,2,rgba('#8b949e',0.3+osc(t,3,i)*0.15));
+      if(i%2===0)rect(t1x+indent,ly,8,2,rgba('#f0a500',0.4));
+    }
+    // Blinking cursor
+    if(osc(t,1,0)>0.5)rect(t1x+12,t1y+46,4,2,'#f0a500');
+
+    // === TERMINAL 2: BUILDER (center) ===
+    const t2x=130,t2y=10;
+    rect(t2x,t2y,110,70,'#161b22');
+    rect(t2x,t2y,110,1,'#30363d');rect(t2x,t2y+69,110,1,'#30363d');
+    rect(t2x,t2y,1,70,'#30363d');rect(t2x+109,t2y,1,70,'#30363d');
+    rect(t2x+1,t2y+1,108,7,'#21262d');
+    rect(t2x+3,t2y+3,3,3,'#f85149');rect(t2x+8,t2y+3,3,3,'#d29922');rect(t2x+13,t2y+3,3,3,'#3fb950');
+    // Active code being written
+    for(let i=0;i<8;i++){
+      const ly=t2y+11+i*7;
+      const indent=i<2?4:i<5?8:4;
+      const lw=15+((i*13+Math.floor(t*3))%40);
+      const written=Math.min(lw,lw*Math.min(1,(t*2-i*0.5)%4/2));
+      if(written>0){
+        rect(t2x+indent,ly,written,2,rgba('#e6edf3',0.35));
+        // Syntax highlighting
+        if(i===0)rect(t2x+indent,ly,10,2,rgba('#ff7b72',0.5));
+        if(i===2)rect(t2x+indent,ly,6,2,rgba('#79c0ff',0.5));
+        if(i===4)rect(t2x+indent,ly,12,2,rgba('#3fb950',0.5));
+      }
+    }
+    // Active cursor typing
+    const curX=t2x+8+((t*20)%50);
+    if(osc(t,0.5,0)>0.3)rect(curX,t2y+46,1,6,'#e6edf3');
+
+    // === TERMINAL 3: DOUBT (right) ===
+    const t3x=270,t3y=25;
+    rect(t3x,t3y,95,55,'#161b22');
+    rect(t3x,t3y,95,1,'#30363d');rect(t3x,t3y+54,95,1,'#30363d');
+    rect(t3x,t3y,1,55,'#30363d');rect(t3x+94,t3y,1,55,'#30363d');
+    rect(t3x+1,t3y+1,93,7,'#21262d');
+    rect(t3x+3,t3y+3,3,3,'#f85149');rect(t3x+8,t3y+3,3,3,'#d29922');rect(t3x+13,t3y+3,3,3,'#3fb950');
+    // Review findings
+    for(let i=0;i<5;i++){
+      const ly=t3y+12+i*8;
+      // Checkmarks and X marks
+      if(i<3){
+        rect(t3x+5,ly,3,2,'#3fb950'); // green check
+        rect(t3x+10,ly,25+i*8,2,rgba('#8b949e',0.3));
+      } else {
+        rect(t3x+5,ly,3,2,rgba('#f85149',0.5+osc(t,1.5,i)*0.5)); // red x (pulsing)
+        rect(t3x+10,ly,20+i*5,2,rgba('#f85149',0.25));
+      }
+    }
+
+    // === GIT COMMIT (far right) ===
+    const gx=395,gy=35;
+    // Git branch visualization
+    rect(gx,gy,1,80,'#8b949e');
+    // Commit dots
+    for(let i=0;i<4;i++){
+      const cy=gy+10+i*18;
+      const pulse=i===0?osc(t,1.5,0)*0.5:0;
+      rect(gx-2,cy-2,5,5,rgba('#f0a500',0.6+pulse));
+      rect(gx-1,cy-1,3,3,'#f0a500');
+      // Commit message lines
+      rect(gx+6,cy-1,30+i*5,2,rgba('#8b949e',0.25));
+    }
+    // Branch line
+    rect(gx+1,gy+25,8,1,'#8b949e');
+    rect(gx+8,gy+25,1,20,'#8b949e');
+    rect(gx+6,gy+33,5,5,rgba('#79c0ff',0.6));
+    rect(gx+7,gy+34,3,3,'#79c0ff');
+
+    // === ROBOT AGENTS ===
+
+    // Agent 1 (scout) - small pixel robot near terminal 1
+    const a1x=60,a1y=90;
+    rect(a1x,a1y,8,6,'#30363d'); // body
+    rect(a1x+1,a1y-2,6,3,'#30363d'); // head
+    rect(a1x+2,a1y-1,2,1,rgba('#f0a500',0.6+osc(t,2,0)*0.4)); // left eye
+    rect(a1x+5,a1y-1,2,1,rgba('#f0a500',0.6+osc(t,2,0)*0.4)); // right eye
+    rect(a1x-2,a1y+1,2,1,'#30363d'); // left arm
+    rect(a1x+8,a1y+1,2,1,'#30363d'); // right arm
+    rect(a1x+1,a1y+6,2,2,'#30363d'); // left leg
+    rect(a1x+5,a1y+6,2,2,'#30363d'); // right leg
+    // Antenna
+    rect(a1x+3,a1y-4,2,2,'#30363d');
+    px(a1x+3,a1y-5,rgba('#3fb950',0.4+osc(t,1,0)*0.6));
+
+    // Agent 2 (builder) - near terminal 2, actively working
+    const a2x=175,a2y=95;
+    rect(a2x,a2y,10,7,'#30363d');
+    rect(a2x+1,a2y-3,8,4,'#30363d');
+    rect(a2x+2,a2y-1,2,1,rgba('#79c0ff',0.6+osc(t,1.5,1)*0.4));
+    rect(a2x+6,a2y-1,2,1,rgba('#79c0ff',0.6+osc(t,1.5,1)*0.4));
+    // Arm reaching toward terminal (animated)
+    const armLen=2+Math.round(osc(t,2,0)*2);
+    rect(a2x+10,a2y+2,armLen,1,'#30363d');
+    px(a2x+10+armLen,a2y+2,'#f0a500');
+    rect(a2x+1,a2y+7,2,2,'#30363d');
+    rect(a2x+7,a2y+7,2,2,'#30363d');
+    rect(a2x+4,a2y-5,2,2,'#30363d');
+    px(a2x+4,a2y-6,rgba('#f0a500',0.4+osc(t,0.8,0)*0.6));
+
+    // Agent 3 (auditor) - near doubt terminal, magnifying glass
+    const a3x=310,a3y=95;
+    rect(a3x,a3y,8,6,'#30363d');
+    rect(a3x+1,a3y-2,6,3,'#30363d');
+    rect(a3x+2,a3y-1,2,1,rgba('#f85149',0.5+osc(t,2,2)*0.5));
+    rect(a3x+5,a3y-1,2,1,rgba('#f85149',0.5+osc(t,2,2)*0.5));
+    rect(a3x-2,a3y+1,2,1,'#30363d');
+    rect(a3x+8,a3y+1,2,1,'#30363d');
+    rect(a3x+1,a3y+6,2,2,'#30363d');
+    rect(a3x+5,a3y+6,2,2,'#30363d');
+    rect(a3x+3,a3y-4,2,2,'#30363d');
+    px(a3x+3,a3y-5,rgba('#f85149',0.4+osc(t,1.2,0)*0.6));
+    // Magnifying glass
+    const mgx=a3x+10,mgy=a3y-2;
+    rect(mgx,mgy-3,4,1,'#8b949e');rect(mgx-1,mgy-2,1,3,'#8b949e');rect(mgx+4,mgy-2,1,3,'#8b949e');rect(mgx,mgy+1,4,1,'#8b949e');
+    rect(mgx+4,mgy+1,3,1,'#8b949e'); // handle
+    rect(mgx+1,mgy-1,2,2,rgba('#f0a500',0.15+osc(t,2,0)*0.1)); // lens glow
+
+    // === PIPELINE ARROWS (animated flow between agents) ===
+    for(let i=0;i<3;i++){
+      const ax=(110+i*120+t*15)%(380);
+      const ay=100+Math.sin(ax*0.03)*5;
+      px(ax,ay,rgba('#f0a500',0.5));
+      px(ax-2,ay,rgba('#f0a500',0.3));
+      px(ax-4,ay,rgba('#f0a500',0.15));
+    }
+
+    // === FLOOR REFLECTION ===
+    rect(0,H-15,W,15,rgba('#0d1117',0.5));
+    for(let x=0;x<W;x+=3){
+      const rh=2+Math.floor(srand(x+100)()*4);
+      rect(x,H-rh,1,rh,rgba('#161b22',0.3));
+    }
+
+    // Bottom accent line
+    rect(0,H-1,W,1,'#f0a500');
+  }
+
+  let frame=0;
+  function loop(){draw(frame/15);frame++;setTimeout(loop,1000/15);}
+  loop();
+})();
+</script>
 
 <header>
   <h1>Context Foundry</h1>
