@@ -1305,11 +1305,76 @@ zones, with the middle zone split 60/40 horizontally.
 
 <p>
 Extensions provide domain-specific knowledge to agents. They are discovered from
-<code>~/.foundry/extensions/</code> (global) and <code>&lt;project&gt;/extensions/</code>
-(local). Each extension directory must contain a <code>CLAUDE.md</code> file.
-Project-local extensions override global ones with the same name. Extension context
-is prepended to agent prompts via <code>wrap_with_extensions()</code>.
+<code>~/.foundry/extensions/</code> (global), ancestor directories' <code>extensions/</code>
+folders, and <code>&lt;project&gt;/extensions/</code> (local). Each extension directory
+must contain a <code>CLAUDE.md</code> file. Project-local extensions override global
+ones with the same name. Extension context is prepended to agent prompts via
+<code>load_extension_context()</code>.
 </p>
+
+<h3>8.0 Extension Taxonomy</h3>
+<p>
+An <strong>extension</strong> (or <strong>domain pack</strong>) is a directory containing
+any combination of the following component types:
+</p>
+
+<table>
+  <tr>
+    <th>Component</th>
+    <th>Location</th>
+    <th>Purpose</th>
+    <th>Required?</th>
+  </tr>
+  <tr>
+    <td><strong>Instructions</strong></td>
+    <td><code>CLAUDE.md</code></td>
+    <td>Authored domain rules, critical constraints, session-start checklists. Always injected into agent prompts when the extension is selected.</td>
+    <td>Yes</td>
+  </tr>
+  <tr>
+    <td><strong>Patterns</strong></td>
+    <td><code>patterns/*.json</code></td>
+    <td>Learned recurring pitfalls in canonical pattern schema (<code>pattern_id</code>, <code>title</code>, <code>issue</code>, <code>solution</code>). Keyword-matched at plan time.</td>
+    <td>No</td>
+  </tr>
+  <tr>
+    <td><strong>Docs</strong></td>
+    <td><code>docs/</code></td>
+    <td>Reference guides, specs, API documentation, governance lists, asset inventories, analyzer output.</td>
+    <td>No</td>
+  </tr>
+  <tr>
+    <td><strong>Templates</strong></td>
+    <td><code>templates/</code></td>
+    <td>Starter blueprints and proven command templates for common operations.</td>
+    <td>No</td>
+  </tr>
+  <tr>
+    <td><strong>Examples</strong></td>
+    <td><code>examples/</code></td>
+    <td>Working reference implementations, sample projects, demo flows.</td>
+    <td>No</td>
+  </tr>
+</table>
+
+<p>
+<strong>The <code>patterns/</code> directory is ONLY for canonical-schema pattern JSON.</strong>
+Every file in <code>patterns/</code> must be parseable by the pattern loader
+(<code>src/patterns.rs</code>) as either a <code>Vec&lt;Pattern&gt;</code>, a
+<code>PatternWrapper</code>, or a single <code>Pattern</code>. Reference docs, asset
+catalogs, expertise metadata, and governance lists belong in <code>docs/</code>.
+</p>
+
+<pre><code>extensions/&lt;name&gt;/
+├── CLAUDE.md                          # Instructions (required)
+├── patterns/
+│   └── &lt;name&gt;-common-issues.json      # Canonical pattern JSON only
+├── docs/                              # Reference guides, specs, asset catalogs
+├── templates/                         # Starter blueprints, command templates
+├── examples/                          # Working reference projects
+├── scripts/                           # Utility scripts
+└── config/                            # Configuration files
+</code></pre>
 
 <h3>8.1 Roblox</h3>
 <p><code>extensions/roblox/</code></p>
