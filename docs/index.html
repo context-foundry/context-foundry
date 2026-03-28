@@ -24,15 +24,33 @@
       --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
     }
     * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
     body {
       background: var(--bg);
       color: var(--text);
       font-family: var(--font-mono);
       font-size: 0.9rem;
       line-height: 1.7;
-      max-width: 720px;
-      margin: 0 auto;
-      padding: 3rem 1.5rem;
+      position: relative;
+    }
+    /* Background particle canvas -- fills entire page behind content */
+    #bg-particles {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      z-index: 0; pointer-events: none;
+    }
+    .page-content {
+      position: relative; z-index: 1;
+      max-width: 720px; margin: 0 auto; padding: 0 1.5rem;
+    }
+    /* Hero -- full bleed */
+    .hero {
+      position: relative; overflow: hidden; width: 100%;
+      border-bottom: 2px solid var(--accent);
+      z-index: 1;
+    }
+    .hero canvas {
+      display: block; width: 100%;
+      image-rendering: pixelated; image-rendering: crisp-edges;
     }
     h1 {
       color: var(--accent);
@@ -68,116 +86,55 @@
       font-size: 0.85rem;
     }
     pre code { background: none; padding: 0; }
-    .hook {
-      font-size: 1.05rem;
-      color: var(--text);
-      margin-bottom: 0.25rem;
-    }
-    .subtitle {
-      color: var(--text-muted);
-      font-size: 0.85rem;
-      margin-top: 0;
-    }
+    .hook { font-size: 1.05rem; color: var(--text); margin-bottom: 0.25rem; }
+    .subtitle { color: var(--text-muted); font-size: 0.85rem; margin-top: 0; }
     .muted { color: var(--text-muted); }
-    nav ul {
-      list-style: none;
-      padding: 0;
-      margin: 0;
-    }
+    nav ul { list-style: none; padding: 0; margin: 0; }
     nav li {
-      margin: 0.5rem 0;
-      padding: 0.75rem 1rem;
-      background: var(--surface);
+      margin: 0.5rem 0; padding: 0.75rem 1rem;
+      background: rgba(22, 27, 34, 0.85);
       border: 1px solid var(--border);
       border-radius: var(--radius);
+      backdrop-filter: blur(4px);
     }
-    nav li a {
-      display: block;
-    }
-    nav li .desc {
-      color: var(--text-muted);
-      font-size: 0.8rem;
-      margin-top: 0.25rem;
-    }
+    nav li a { display: block; }
+    nav li .desc { color: var(--text-muted); font-size: 0.8rem; margin-top: 0.25rem; }
     footer {
-      margin-top: 3rem;
-      padding-top: 1rem;
-      border-top: 1px solid var(--border);
-      color: var(--text-muted);
-      font-size: 0.8rem;
+      margin-top: 3rem; padding: 1rem 0; border-top: 1px solid var(--border);
+      color: var(--text-muted); font-size: 0.8rem;
     }
-    .install-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 1rem;
-      margin: 1rem 0;
-    }
+    .install-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1rem 0; }
     .install-option {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 1rem;
+      background: rgba(22, 27, 34, 0.85);
+      border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem;
+      backdrop-filter: blur(4px);
     }
-    .install-option pre {
-      margin: 0.5rem 0 0 0;
-      font-size: 0.8rem;
-      border: none;
-      padding: 0.5rem 0.75rem;
-    }
-    .install-icon {
-      display: inline-block;
-      vertical-align: middle;
-      margin-right: 0.5rem;
-    }
-    .install-label {
-      display: inline-block;
-      vertical-align: middle;
-      font-weight: bold;
-      color: var(--accent);
-      font-size: 0.95rem;
-    }
-    .install-alt {
-      font-size: 0.75rem;
-      margin: 0.25rem 0 0 0;
-    }
-    .gh-corner {
-      position: fixed;
-      top: 1rem;
-      right: 1.5rem;
-      z-index: 10;
-    }
-    .gh-corner a {
-      color: var(--text-muted);
-      transition: color 0.15s;
-    }
-    .gh-corner a:hover {
-      color: var(--accent);
-    }
+    .install-option pre { margin: 0.5rem 0 0 0; font-size: 0.8rem; border: none; padding: 0.5rem 0.75rem; }
+    .install-icon { display: inline-block; vertical-align: middle; margin-right: 0.5rem; }
+    .install-label { display: inline-block; vertical-align: middle; font-weight: bold; color: var(--accent); font-size: 0.95rem; }
+    .install-alt { font-size: 0.75rem; margin: 0.25rem 0 0 0; }
+    .gh-corner { position: fixed; top: 1rem; right: 1.5rem; z-index: 10; }
+    .gh-corner a { color: var(--text-muted); transition: color 0.15s; }
+    .gh-corner a:hover { color: var(--accent); }
     @media (max-width: 600px) {
       .install-grid { grid-template-columns: 1fr; }
       .gh-corner { position: static; text-align: right; margin-bottom: 1rem; }
     }
-    /* Hero canvas */
-    .hero { position: relative; overflow: hidden; border-bottom: 2px solid var(--accent); margin-bottom: 0; }
-    .hero canvas { display: block; width: 100%; image-rendering: pixelated; image-rendering: crisp-edges; }
-    .hero-overlay {
-      position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-      display: flex; align-items: center; justify-content: center;
-    }
-    .hero-overlay h1 {
-      color: #e6edf3; font-size: 2rem; margin: 0; border: none;
-      text-shadow: 1px 1px 0 #0d1117, 0 0 15px rgba(0,0,0,0.7);
-    }
     svg text { font-family: var(--font-mono); }
     @media print {
-      body { background: white; color: black; max-width: none; padding: 0.5in; }
+      body { background: white; color: black; }
+      .page-content { max-width: none; padding: 0.5in; }
       pre { border: 1px solid #ccc; }
       h1, h2 { color: #333; }
       footer { color: #666; }
+      #bg-particles, .hero { display: none; }
     }
   </style>
 </head>
 <body>
+
+<!-- Ambient background particles -->
+<canvas id="bg-particles"></canvas>
 
 <div class="gh-corner">
   <a href="https://github.com/context-foundry/context-foundry" title="View on GitHub">
@@ -187,212 +144,14 @@
   </a>
 </div>
 
+<!-- HERO: Full-width foundry scene -->
 <div class="hero">
-  <canvas id="scene" width="480" height="160"></canvas>
+  <canvas id="foundry" width="960" height="220"></canvas>
 </div>
-<script>
-(function(){
-  const c=document.getElementById('scene');
-  const ctx=c.getContext('2d');
-  ctx.imageSmoothingEnabled=false;
-  const W=c.width,H=c.height;
 
-  function px(x,y,col){ctx.fillStyle=col;ctx.fillRect(Math.floor(x),Math.floor(y),1,1);}
-  function rect(x,y,w,h,col){ctx.fillStyle=col;ctx.fillRect(Math.floor(x),Math.floor(y),Math.ceil(w),Math.ceil(h));}
-  function hexRgb(h){const n=parseInt(h.slice(1),16);return[(n>>16)&255,(n>>8)&255,n&255];}
-  function rgba(h,a){const[r,g,b]=hexRgb(h);return`rgba(${r},${g},${b},${a})`;}
-  function osc(t,p,ph){return(Math.sin((t/p)*Math.PI*2+(ph||0))+1)/2;}
-  function srand(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+<div class="page-content">
 
-  function draw(t){
-    // Background: dark workspace
-    rect(0,0,W,H,'#0d1117');
-
-    // Grid lines (subtle)
-    for(let x=0;x<W;x+=20){rect(x,0,1,H,rgba('#30363d',0.3));}
-    for(let y=0;y<H;y+=20){rect(0,y,W,1,rgba('#30363d',0.3));}
-
-    // === DATA STREAMS (flowing particles between terminals) ===
-    const pr=srand(77);
-    for(let i=0;i<30;i++){
-      const sx=pr()*W;const speed=0.3+pr()*0.7;
-      const py=20+pr()*120;
-      const px2=(sx+t*speed*40)%W;
-      const a=0.15+pr()*0.35;
-      px(px2,py,rgba('#f0a500',a));
-      if(pr()>0.5)px(px2-1,py,rgba('#f0a500',a*0.5));
-    }
-    // Vertical data streams
-    for(let i=0;i<15;i++){
-      const sx=40+pr()*400;const speed=0.2+pr()*0.5;
-      const py2=(pr()*H+t*speed*30)%H;
-      px(sx,py2,rgba('#3fb950',0.2+pr()*0.3));
-    }
-
-    // === TERMINAL 1: SCOUT (left) ===
-    const t1x=15,t1y=20;
-    // Window frame
-    rect(t1x,t1y,90,55,'#161b22');
-    rect(t1x,t1y,90,1,'#30363d');rect(t1x,t1y+54,90,1,'#30363d');
-    rect(t1x,t1y,1,55,'#30363d');rect(t1x+89,t1y,1,55,'#30363d');
-    // Title bar
-    rect(t1x+1,t1y+1,88,7,'#21262d');
-    // Traffic lights
-    rect(t1x+3,t1y+3,3,3,'#f85149');rect(t1x+8,t1y+3,3,3,'#d29922');rect(t1x+13,t1y+3,3,3,'#3fb950');
-    // Label
-    const sl='SCOUT';
-    for(let i=0;i<sl.length;i++){px(t1x+30+i*4,t1y+4,rgba('#8b949e',0.7));}
-    // Scrolling code lines
-    for(let i=0;i<6;i++){
-      const ly=t1y+11+i*7;
-      const indent=i%3===0?4:i%3===1?8:12;
-      const lw=20+((i*17+Math.floor(t*2))%30);
-      rect(t1x+indent,ly,lw,2,rgba('#8b949e',0.3+osc(t,3,i)*0.15));
-      if(i%2===0)rect(t1x+indent,ly,8,2,rgba('#f0a500',0.4));
-    }
-    // Blinking cursor
-    if(osc(t,1,0)>0.5)rect(t1x+12,t1y+46,4,2,'#f0a500');
-
-    // === TERMINAL 2: BUILDER (center) ===
-    const t2x=130,t2y=10;
-    rect(t2x,t2y,110,70,'#161b22');
-    rect(t2x,t2y,110,1,'#30363d');rect(t2x,t2y+69,110,1,'#30363d');
-    rect(t2x,t2y,1,70,'#30363d');rect(t2x+109,t2y,1,70,'#30363d');
-    rect(t2x+1,t2y+1,108,7,'#21262d');
-    rect(t2x+3,t2y+3,3,3,'#f85149');rect(t2x+8,t2y+3,3,3,'#d29922');rect(t2x+13,t2y+3,3,3,'#3fb950');
-    // Active code being written
-    for(let i=0;i<8;i++){
-      const ly=t2y+11+i*7;
-      const indent=i<2?4:i<5?8:4;
-      const lw=15+((i*13+Math.floor(t*3))%40);
-      const written=Math.min(lw,lw*Math.min(1,(t*2-i*0.5)%4/2));
-      if(written>0){
-        rect(t2x+indent,ly,written,2,rgba('#e6edf3',0.35));
-        // Syntax highlighting
-        if(i===0)rect(t2x+indent,ly,10,2,rgba('#ff7b72',0.5));
-        if(i===2)rect(t2x+indent,ly,6,2,rgba('#79c0ff',0.5));
-        if(i===4)rect(t2x+indent,ly,12,2,rgba('#3fb950',0.5));
-      }
-    }
-    // Active cursor typing
-    const curX=t2x+8+((t*20)%50);
-    if(osc(t,0.5,0)>0.3)rect(curX,t2y+46,1,6,'#e6edf3');
-
-    // === TERMINAL 3: DOUBT (right) ===
-    const t3x=270,t3y=25;
-    rect(t3x,t3y,95,55,'#161b22');
-    rect(t3x,t3y,95,1,'#30363d');rect(t3x,t3y+54,95,1,'#30363d');
-    rect(t3x,t3y,1,55,'#30363d');rect(t3x+94,t3y,1,55,'#30363d');
-    rect(t3x+1,t3y+1,93,7,'#21262d');
-    rect(t3x+3,t3y+3,3,3,'#f85149');rect(t3x+8,t3y+3,3,3,'#d29922');rect(t3x+13,t3y+3,3,3,'#3fb950');
-    // Review findings
-    for(let i=0;i<5;i++){
-      const ly=t3y+12+i*8;
-      // Checkmarks and X marks
-      if(i<3){
-        rect(t3x+5,ly,3,2,'#3fb950'); // green check
-        rect(t3x+10,ly,25+i*8,2,rgba('#8b949e',0.3));
-      } else {
-        rect(t3x+5,ly,3,2,rgba('#f85149',0.5+osc(t,1.5,i)*0.5)); // red x (pulsing)
-        rect(t3x+10,ly,20+i*5,2,rgba('#f85149',0.25));
-      }
-    }
-
-    // === GIT COMMIT (far right) ===
-    const gx=395,gy=35;
-    // Git branch visualization
-    rect(gx,gy,1,80,'#8b949e');
-    // Commit dots
-    for(let i=0;i<4;i++){
-      const cy=gy+10+i*18;
-      const pulse=i===0?osc(t,1.5,0)*0.5:0;
-      rect(gx-2,cy-2,5,5,rgba('#f0a500',0.6+pulse));
-      rect(gx-1,cy-1,3,3,'#f0a500');
-      // Commit message lines
-      rect(gx+6,cy-1,30+i*5,2,rgba('#8b949e',0.25));
-    }
-    // Branch line
-    rect(gx+1,gy+25,8,1,'#8b949e');
-    rect(gx+8,gy+25,1,20,'#8b949e');
-    rect(gx+6,gy+33,5,5,rgba('#79c0ff',0.6));
-    rect(gx+7,gy+34,3,3,'#79c0ff');
-
-    // === ROBOT AGENTS ===
-
-    // Agent 1 (scout) - small pixel robot near terminal 1
-    const a1x=60,a1y=90;
-    rect(a1x,a1y,8,6,'#30363d'); // body
-    rect(a1x+1,a1y-2,6,3,'#30363d'); // head
-    rect(a1x+2,a1y-1,2,1,rgba('#f0a500',0.6+osc(t,2,0)*0.4)); // left eye
-    rect(a1x+5,a1y-1,2,1,rgba('#f0a500',0.6+osc(t,2,0)*0.4)); // right eye
-    rect(a1x-2,a1y+1,2,1,'#30363d'); // left arm
-    rect(a1x+8,a1y+1,2,1,'#30363d'); // right arm
-    rect(a1x+1,a1y+6,2,2,'#30363d'); // left leg
-    rect(a1x+5,a1y+6,2,2,'#30363d'); // right leg
-    // Antenna
-    rect(a1x+3,a1y-4,2,2,'#30363d');
-    px(a1x+3,a1y-5,rgba('#3fb950',0.4+osc(t,1,0)*0.6));
-
-    // Agent 2 (builder) - near terminal 2, actively working
-    const a2x=175,a2y=95;
-    rect(a2x,a2y,10,7,'#30363d');
-    rect(a2x+1,a2y-3,8,4,'#30363d');
-    rect(a2x+2,a2y-1,2,1,rgba('#79c0ff',0.6+osc(t,1.5,1)*0.4));
-    rect(a2x+6,a2y-1,2,1,rgba('#79c0ff',0.6+osc(t,1.5,1)*0.4));
-    // Arm reaching toward terminal (animated)
-    const armLen=2+Math.round(osc(t,2,0)*2);
-    rect(a2x+10,a2y+2,armLen,1,'#30363d');
-    px(a2x+10+armLen,a2y+2,'#f0a500');
-    rect(a2x+1,a2y+7,2,2,'#30363d');
-    rect(a2x+7,a2y+7,2,2,'#30363d');
-    rect(a2x+4,a2y-5,2,2,'#30363d');
-    px(a2x+4,a2y-6,rgba('#f0a500',0.4+osc(t,0.8,0)*0.6));
-
-    // Agent 3 (auditor) - near doubt terminal, magnifying glass
-    const a3x=310,a3y=95;
-    rect(a3x,a3y,8,6,'#30363d');
-    rect(a3x+1,a3y-2,6,3,'#30363d');
-    rect(a3x+2,a3y-1,2,1,rgba('#f85149',0.5+osc(t,2,2)*0.5));
-    rect(a3x+5,a3y-1,2,1,rgba('#f85149',0.5+osc(t,2,2)*0.5));
-    rect(a3x-2,a3y+1,2,1,'#30363d');
-    rect(a3x+8,a3y+1,2,1,'#30363d');
-    rect(a3x+1,a3y+6,2,2,'#30363d');
-    rect(a3x+5,a3y+6,2,2,'#30363d');
-    rect(a3x+3,a3y-4,2,2,'#30363d');
-    px(a3x+3,a3y-5,rgba('#f85149',0.4+osc(t,1.2,0)*0.6));
-    // Magnifying glass
-    const mgx=a3x+10,mgy=a3y-2;
-    rect(mgx,mgy-3,4,1,'#8b949e');rect(mgx-1,mgy-2,1,3,'#8b949e');rect(mgx+4,mgy-2,1,3,'#8b949e');rect(mgx,mgy+1,4,1,'#8b949e');
-    rect(mgx+4,mgy+1,3,1,'#8b949e'); // handle
-    rect(mgx+1,mgy-1,2,2,rgba('#f0a500',0.15+osc(t,2,0)*0.1)); // lens glow
-
-    // === PIPELINE ARROWS (animated flow between agents) ===
-    for(let i=0;i<3;i++){
-      const ax=(110+i*120+t*15)%(380);
-      const ay=100+Math.sin(ax*0.03)*5;
-      px(ax,ay,rgba('#f0a500',0.5));
-      px(ax-2,ay,rgba('#f0a500',0.3));
-      px(ax-4,ay,rgba('#f0a500',0.15));
-    }
-
-    // === FLOOR REFLECTION ===
-    rect(0,H-15,W,15,rgba('#0d1117',0.5));
-    for(let x=0;x<W;x+=3){
-      const rh=2+Math.floor(srand(x+100)()*4);
-      rect(x,H-rh,1,rh,rgba('#161b22',0.3));
-    }
-
-    // Bottom accent line
-    rect(0,H-1,W,1,'#f0a500');
-  }
-
-  let frame=0;
-  function loop(){draw(frame/15);frame++;setTimeout(loop,1000/15);}
-  loop();
-})();
-</script>
-
-<header>
+<header style="padding-top:2rem;">
   <h1>Context Foundry</h1>
   <p class="hook">A self-hosted build loop that runs AI agents against your codebase and improves them over time.</p>
   <p class="subtitle">Rust CLI &middot; MIT License &middot; <a href="https://github.com/context-foundry/context-foundry">GitHub</a></p>
@@ -431,11 +190,9 @@
   <div class="install-grid">
     <div class="install-option">
       <div class="install-icon">
-        <!-- Cargo/Rust crab claw icon -->
         <svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
           <circle cx="16" cy="18" r="10" fill="none" stroke="#f0a500" stroke-width="1.5"/>
-          <circle cx="12" cy="16" r="1.5" fill="#f0a500"/>
-          <circle cx="20" cy="16" r="1.5" fill="#f0a500"/>
+          <circle cx="12" cy="16" r="1.5" fill="#f0a500"/><circle cx="20" cy="16" r="1.5" fill="#f0a500"/>
           <path d="M12 21 Q16 24 20 21" fill="none" stroke="#f0a500" stroke-width="1.2" stroke-linecap="round"/>
           <path d="M8 12 L5 6 M7 7 L3 8" fill="none" stroke="#f0a500" stroke-width="1.5" stroke-linecap="round"/>
           <path d="M24 12 L27 6 M25 7 L29 8" fill="none" stroke="#f0a500" stroke-width="1.5" stroke-linecap="round"/>
@@ -446,7 +203,6 @@
     </div>
     <div class="install-option">
       <div class="install-icon">
-        <!-- npm hexagon icon -->
         <svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
           <polygon points="16,2 29,9 29,23 16,30 3,23 3,9" fill="none" stroke="#f0a500" stroke-width="1.5" stroke-linejoin="round"/>
           <text x="16" y="19" fill="#f0a500" font-size="9" font-weight="bold" text-anchor="middle" font-family="ui-monospace, monospace">npm</text>
@@ -457,19 +213,18 @@
     </div>
     <div class="install-option">
       <div class="install-icon">
-        <!-- macOS apple icon -->
         <svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
           <path d="M21 8 C21 4 17 3 17 3 C17 3 17 6 14 7 C11 8 10 6 8 6 C5 6 4 9 4 12 C4 18 9 26 12 28 C13.5 29 15 28 16 28 C17 28 18.5 29 20 28 C23 26 28 18 28 12 C28 9 26 7 24 7 C22 7 21 8 21 8 Z" fill="none" stroke="#f0a500" stroke-width="1.3"/>
           <path d="M17 3 C18 1 21 1 21 1" fill="none" stroke="#f0a500" stroke-width="1.3" stroke-linecap="round"/>
         </svg>
       </div>
       <div class="install-label">macOS</div>
-      <pre><code>brew install context-foundry</code></pre>
+      <pre><code>brew tap context-foundry/tap
+brew install context-foundry</code></pre>
       <p class="muted install-alt">or <a href="https://github.com/context-foundry/context-foundry/releases">download .dmg</a></p>
     </div>
     <div class="install-option">
       <div class="install-icon">
-        <!-- Windows icon -->
         <svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
           <path d="M4 8 L14 6.5 L14 15.5 L4 15.5 Z" fill="none" stroke="#f0a500" stroke-width="1.3" stroke-linejoin="round"/>
           <path d="M15.5 6.2 L28 4 L28 15.5 L15.5 15.5 Z" fill="none" stroke="#f0a500" stroke-width="1.3" stroke-linejoin="round"/>
@@ -514,6 +269,265 @@ foundry</code></pre>
   <a href="https://github.com/context-foundry/context-foundry">GitHub</a> &middot;
   MIT License
 </footer>
+
+</div><!-- /page-content -->
+
+<!-- ============================================================ -->
+<!-- HERO ANIMATION: The Foundry -- molten code forged into commits -->
+<!-- ============================================================ -->
+<script>
+(function(){
+  const c=document.getElementById('foundry');
+  const ctx=c.getContext('2d');
+  ctx.imageSmoothingEnabled=false;
+  const W=c.width, H=c.height;
+
+  function px(x,y,col){ctx.fillStyle=col;ctx.fillRect(Math.floor(x),Math.floor(y),1,1);}
+  function rect(x,y,w,h,col){ctx.fillStyle=col;ctx.fillRect(Math.floor(x),Math.floor(y),Math.ceil(w),Math.ceil(h));}
+  function hexRgb(h){const n=parseInt(h.slice(1),16);return[(n>>16)&255,(n>>8)&255,n&255];}
+  function rgba(h,a){const[r,g,b]=hexRgb(h);return`rgba(${r},${g},${b},${a})`;}
+  function lerp(a,b,t){const[ar,ag,ab]=hexRgb(a);const[br,bg,bb]=hexRgb(b);return`rgb(${Math.round(ar+(br-ar)*t)},${Math.round(ag+(bg-ag)*t)},${Math.round(ab+(bb-ab)*t)})`;}
+  function osc(t,p,ph){return(Math.sin((t/p)*Math.PI*2+(ph||0))+1)/2;}
+  function srand(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+
+  // Spark particles -- persistent array
+  const sparks=[];
+  for(let i=0;i<60;i++){
+    sparks.push({x:0,y:0,vx:0,vy:0,life:0,maxLife:0,hue:0});
+  }
+  function emitSpark(sx,sy){
+    for(let s of sparks){
+      if(s.life<=0){
+        s.x=sx;s.y=sy;
+        s.vx=(Math.random()-0.5)*3;
+        s.vy=-Math.random()*4-1;
+        s.maxLife=20+Math.random()*40;
+        s.life=s.maxLife;
+        s.hue=Math.random();
+        break;
+      }
+    }
+  }
+
+  function draw(t){
+    // Sky gradient -- deep dark with warm horizon glow
+    for(let y=0;y<H;y+=2){
+      const p=y/H;
+      const col=p<0.5?lerp('#08090c','#0d1117',p/0.5):lerp('#0d1117','#1a1208',(p-0.5)/0.5);
+      rect(0,y,W,2,col);
+    }
+
+    // Distant city skyline silhouette
+    const sr=srand(42);
+    for(let i=0;i<40;i++){
+      const bx=i*24+Math.floor(sr()*8)-4;
+      const bh=15+Math.floor(sr()*50);
+      const by=H-60-bh;
+      rect(bx,by,14+Math.floor(sr()*10),bh,'#0a0c10');
+      // Tiny windows
+      for(let wy=by+4;wy<by+bh-4;wy+=6){
+        for(let wx=bx+2;wx<bx+12;wx+=4){
+          if(sr()>0.6){
+            px(wx,wy,rgba('#f0a500',0.05+sr()*0.1));
+            px(wx+1,wy,rgba('#f0a500',0.03+sr()*0.06));
+          }
+        }
+      }
+    }
+
+    // Ground plane
+    rect(0,H-60,W,60,'#0a0c10');
+    // Ground line
+    rect(0,H-60,W,1,rgba('#f0a500',0.15));
+    // Ground texture
+    const gr=srand(200);
+    for(let i=0;i<80;i++){px(Math.floor(gr()*W),H-59+Math.floor(gr()*58),rgba('#161b22',0.3+gr()*0.2));}
+
+    // ==========================================
+    // THE FOUNDRY (center) -- anvil + crucible
+    // ==========================================
+    const fx=W/2, fy=H-60;
+
+    // Foundry structure -- dark arch
+    rect(fx-60,fy-80,120,80,'#10131a');
+    // Arch top
+    for(let x=-50;x<=50;x++){
+      const ah=Math.sqrt(2500-x*x)*0.6;
+      rect(fx+x,fy-80-ah,1,ah,'#10131a');
+    }
+    // Arch border
+    for(let x=-52;x<=52;x++){
+      const ah=Math.sqrt(2704-Math.min(x*x,2704))*0.6;
+      px(fx+x,fy-80-ah,rgba('#f0a500',0.2));
+    }
+
+    // Crucible (left of center) -- glowing molten container
+    const crx=fx-35, cry=fy-20;
+    rect(crx,cry,20,18,'#2a1a0a');
+    rect(crx+1,cry+1,18,16,'#1a100a');
+    // Molten surface -- animated
+    for(let x=0;x<16;x++){
+      const mh=2+Math.round(osc(t,1.5+x*0.1,x*0.5)*3);
+      const glow=osc(t,2,x*0.3);
+      rect(crx+2+x,cry+2,1,mh,rgba('#f0a500',0.4+glow*0.4));
+      if(glow>0.6)rect(crx+2+x,cry+1,1,1,rgba('#ffcc44',0.3));
+    }
+    // Glow emanating upward
+    for(let y=0;y<15;y++){
+      const gw=8-y*0.4;
+      if(gw>0)rect(crx+10-gw/2,cry-y,gw,1,rgba('#f0a500',0.06*(15-y)/15));
+    }
+
+    // Anvil (center)
+    const ax=fx-8, ay=fy-12;
+    rect(ax,ay,16,4,'#3a3a44'); // top face
+    rect(ax-2,ay,2,4,'#2a2a34'); // horn left
+    rect(ax+16,ay,4,3,'#2a2a34'); // horn right
+    rect(ax+2,ay+4,12,8,'#2a2a34'); // body
+    rect(ax+4,ay+12,8,2,'#3a3a44'); // base
+
+    // Glowing code block on anvil -- being forged
+    const glow=osc(t,3,0);
+    rect(ax+3,ay-4,10,4,rgba('#f0a500',0.3+glow*0.5));
+    rect(ax+4,ay-3,8,2,rgba('#ffcc44',0.2+glow*0.4));
+    // Code lines on the block
+    rect(ax+4,ay-3,3,1,rgba('#ff7b72',0.4+glow*0.3));
+    rect(ax+8,ay-3,3,1,rgba('#79c0ff',0.3+glow*0.3));
+    rect(ax+5,ay-2,5,1,rgba('#3fb950',0.3+glow*0.2));
+
+    // Hammer (animated -- striking)
+    const hammerPhase=t%3;
+    const hammerUp=hammerPhase<2?hammerPhase*8:16-(hammerPhase-2)*16;
+    const hx=fx+6, hy=ay-10-hammerUp;
+    rect(hx,hy,4,8,'#5a5a64'); // handle
+    rect(hx-2,hy-4,8,4,'#6a6a74'); // head
+    rect(hx-1,hy-3,6,2,'#8a8a94'); // face
+
+    // Emit sparks on hammer strike
+    if(hammerPhase>2.8&&hammerPhase<2.95){
+      for(let i=0;i<5;i++)emitSpark(ax+8,ay-4);
+    }
+
+    // Output stream (right) -- forged commits flowing out
+    for(let i=0;i<6;i++){
+      const ox=fx+50+i*25+(t*8)%25;
+      const oy=fy-15+Math.sin(ox*0.05+t)*3;
+      const fade=Math.max(0,1-(ox-(fx+50))/150);
+      if(ox<fx+200){
+        rect(ox,oy,8,3,rgba('#3fb950',0.15+fade*0.25));
+        rect(ox+1,oy+1,6,1,rgba('#3fb950',0.1+fade*0.15));
+      }
+    }
+
+    // Input stream (left) -- raw tasks flowing in
+    for(let i=0;i<6;i++){
+      const ix=fx-200+i*25+(t*6)%25;
+      const iy=fy-20+Math.sin(ix*0.04+t*0.7)*4;
+      const fade=Math.max(0,(ix-(fx-200))/150);
+      if(ix<fx-50&&ix>fx-200){
+        rect(ix,iy,10,2,rgba('#8b949e',0.1+fade*0.2));
+        rect(ix+2,iy,4,1,rgba('#f0a500',0.05+fade*0.1));
+      }
+    }
+
+    // === SPARKS ===
+    for(let s of sparks){
+      if(s.life>0){
+        s.x+=s.vx;s.y+=s.vy;
+        s.vy+=0.1; // gravity
+        s.life--;
+        const a=(s.life/s.maxLife);
+        const col=s.hue>0.5?'#f0a500':'#ffcc44';
+        px(s.x,s.y,rgba(col,a*0.8));
+        if(a>0.5)px(s.x,s.y-1,rgba(col,a*0.3));
+      }
+    }
+    // Continuous ambient sparks from crucible
+    if(Math.random()>0.7)emitSpark(crx+5+Math.random()*10,cry);
+
+    // === PIPELINE LABELS (subtle) ===
+    // Left: "TASKS.md" fading text
+    const labels=[
+      {x:fx-170,y:fy-40,c:'#8b949e',a:0.2},
+      {x:fx+120,y:fy-40,c:'#3fb950',a:0.2},
+    ];
+    // Just subtle dashes representing text
+    for(let l of labels){
+      for(let i=0;i<4;i++){
+        rect(l.x+i*6,l.y,4,1,rgba(l.c,l.a+osc(t,4,i)*0.1));
+      }
+    }
+
+    // === STARS ===
+    const str=srand(99);
+    for(let i=0;i<30;i++){
+      const sx=Math.floor(str()*W);
+      const sy=Math.floor(str()*70);
+      const a=0.15+osc(t,2+str()*4,i*1.3)*0.35;
+      px(sx,sy,rgba('#e6edf3',a));
+    }
+
+    // Bottom glow line
+    rect(0,H-1,W,1,rgba('#f0a500',0.4));
+    rect(0,H-2,W,1,rgba('#f0a500',0.1));
+  }
+
+  let frame=0;
+  function loop(){draw(frame/15);frame++;setTimeout(loop,1000/15);}
+  loop();
+})();
+</script>
+
+<!-- ============================================================ -->
+<!-- BACKGROUND PARTICLES: subtle ambient life across entire page  -->
+<!-- ============================================================ -->
+<script>
+(function(){
+  const c=document.getElementById('bg-particles');
+  const ctx=c.getContext('2d');
+  let W,H;
+  function resize(){W=c.width=window.innerWidth;H=c.height=document.documentElement.scrollHeight;}
+  resize();
+  window.addEventListener('resize',resize);
+  // Re-measure on scroll to account for dynamic page height
+  let lastH=0;
+  setInterval(function(){
+    const newH=document.documentElement.scrollHeight;
+    if(newH!==lastH){lastH=newH;resize();}
+  },2000);
+
+  const particles=[];
+  for(let i=0;i<50;i++){
+    particles.push({
+      x:Math.random()*2000,
+      y:Math.random()*5000,
+      vx:(Math.random()-0.5)*0.15,
+      vy:-Math.random()*0.2-0.05,
+      size:Math.random()>0.7?2:1,
+      alpha:0.03+Math.random()*0.06,
+      hue:Math.random(), // 0=amber, 1=green
+    });
+  }
+
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    for(let p of particles){
+      p.x+=p.vx;
+      p.y+=p.vy;
+      // Wrap
+      if(p.y<-10){p.y=H+10;p.x=Math.random()*W;}
+      if(p.x<-10)p.x=W+10;
+      if(p.x>W+10)p.x=-10;
+
+      const col=p.hue>0.6?`rgba(63,185,80,${p.alpha})`:`rgba(240,165,0,${p.alpha})`;
+      ctx.fillStyle=col;
+      ctx.fillRect(Math.floor(p.x),Math.floor(p.y),p.size,p.size);
+    }
+    requestAnimationFrame(draw);
+  }
+  draw();
+})();
+</script>
 
 </body>
 </html>
