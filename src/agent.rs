@@ -162,6 +162,51 @@ impl ModelProvider {
     }
 }
 
+/// Returns `true` when the process is running as root/sudo on Unix.
+/// `--dangerously-skip-permissions` is blocked by the Claude CLI in this case,
+/// so we fall back to `--allowedTools` with an explicit tool list.
+pub fn is_running_as_root() -> bool {
+    #[cfg(unix)]
+    {
+        // nix::unistd::getuid() would work too, but checking /proc avoids extra deps.
+        std::env::var("USER").map(|u| u == "root").unwrap_or(false)
+            || std::path::Path::new("/proc/self/status")
+                .exists()
+                && std::fs::read_to_string("/proc/self/status")
+                    .map(|s| s.contains("Uid:\t0\t"))
+                    .unwrap_or(false)
+    }
+    #[cfg(not(unix))]
+    {
+        false
+    }
+}
+
+/// The default tool allowlist used as a fallback when `--dangerously-skip-permissions`
+/// is unavailable (e.g. running as root). Covers every tool an agent might need.
+pub const ROOT_ALLOWED_TOOLS: &str = "Bash,Edit,Write,Read,Glob,Grep,NotebookEdit,WebFetch,WebSearch,TodoWrite";
+
+/// Append permission flags to a PTY `CommandBuilder`.
+/// Prefers `--dangerously-skip-permissions`; falls back to `--allowedTools` when root.
+fn append_permission_flags_pty(cmd: &mut CommandBuilder) {
+    if is_running_as_root() {
+        cmd.arg("--allowedTools");
+        cmd.arg(ROOT_ALLOWED_TOOLS);
+    } else {
+        cmd.arg("--dangerously-skip-permissions");
+    }
+}
+
+/// Append permission flags to a `Vec<String>` arg list (for sandbox wrapping).
+fn append_permission_flags_args(args: &mut Vec<String>) {
+    if is_running_as_root() {
+        args.push("--allowedTools".to_string());
+        args.push(ROOT_ALLOWED_TOOLS.to_string());
+    } else {
+        args.push("--dangerously-skip-permissions".to_string());
+    }
+}
+
 impl std::fmt::Display for ModelProvider {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -365,7 +410,7 @@ pub async fn run_provider_session(options: ProviderRunOptions<'_>) -> Result<Age
                 cmd.arg("--model");
                 cmd.arg(options.model);
             }
-            cmd.arg("--dangerously-skip-permissions");
+            append_permission_flags_pty(&mut cmd);
             cmd.arg("--output-format");
             cmd.arg("stream-json");
             cmd.arg("--verbose");
@@ -405,7 +450,7 @@ pub async fn run_provider_session(options: ProviderRunOptions<'_>) -> Result<Age
                     args.push("--model".to_string());
                     args.push(options.model.to_string());
                 }
-                args.push("--dangerously-skip-permissions".to_string());
+                append_permission_flags_args(&mut args);
                 args.push("--output-format".to_string());
                 args.push("stream-json".to_string());
                 args.push("--verbose".to_string());
@@ -758,7 +803,7 @@ async fn run_agent_pty(
         cmd.arg("--model");
         cmd.arg(model);
     }
-    cmd.arg("--dangerously-skip-permissions");
+    append_permission_flags_pty(&mut cmd);
     cmd.arg("--output-format");
     cmd.arg("stream-json");
     cmd.arg("--verbose");
@@ -784,7 +829,7 @@ async fn run_agent_pty(
             args.push("--model".to_string());
             args.push(model.to_string());
         }
-        args.push("--dangerously-skip-permissions".to_string());
+        append_permission_flags_args(&mut args);
         args.push("--output-format".to_string());
         args.push("stream-json".to_string());
         args.push("--verbose".to_string());

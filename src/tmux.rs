@@ -129,7 +129,12 @@ impl TmuxSession {
             parts.push(model.into());
         }
 
-        parts.push("--dangerously-skip-permissions".into());
+        if crate::agent::is_running_as_root() {
+            parts.push("--allowedTools".into());
+            parts.push(crate::agent::ROOT_ALLOWED_TOOLS.into());
+        } else {
+            parts.push("--dangerously-skip-permissions".into());
+        }
         parts.push("--output-format".into());
         parts.push("stream-json".into());
         parts.push("--verbose".into());
@@ -226,7 +231,11 @@ mod tests {
         assert!(result.contains("'do something'"));
         assert!(result.contains("--model"));
         assert!(result.contains("opus"));
-        assert!(result.contains("--dangerously-skip-permissions"));
+        // When running as root, falls back to --allowedTools; otherwise uses --dangerously-skip-permissions
+        assert!(
+            result.contains("--dangerously-skip-permissions") || result.contains("--allowedTools"),
+            "expected permission flag in: {result}"
+        );
         assert!(result.contains("--output-format"));
         assert!(result.contains("stream-json"));
         assert!(result.contains("--verbose"));
