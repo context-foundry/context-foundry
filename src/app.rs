@@ -2066,6 +2066,12 @@ pub fn show_tasks(project_dir: &Path) -> Result<()> {
     commands::show_tasks(project_dir)
 }
 
+// ─── Extract Patterns Command ─────────────────────────────────
+
+pub fn run_extract(project_dir: &Path) -> Result<()> {
+    commands::run_extract(project_dir)
+}
+
 // ─── Running Explorer Helpers ─────────────────────────────────
 
 fn move_running_explorer_selection(state: &mut AppState, delta: isize) {
