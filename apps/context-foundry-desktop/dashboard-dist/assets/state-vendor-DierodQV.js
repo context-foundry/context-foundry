@@ -1,0 +1,18 @@
+import{r as _,g as R,R as x}from"./react-vendor-KfUPlHYY.js";const V={},y=e=>{let t;const n=new Set,o=(s,l)=>{const c=typeof s=="function"?s(t):s;if(!Object.is(c,t)){const i=t;t=l??(typeof c!="object"||c===null)?c:Object.assign({},t,c),n.forEach(a=>a(t,i))}},r=()=>t,S={setState:o,getState:r,getInitialState:()=>m,subscribe:s=>(n.add(s),()=>n.delete(s)),destroy:()=>{(V?"production":void 0)!=="production"&&console.warn("[DEPRECATED] The `destroy` method will be unsupported in a future version. Instead use unsubscribe function returned by subscribe. Everything will be garbage-collected if store is garbage-collected."),n.clear()}},m=t=e(o,r,S);return S},O=e=>e?y(e):y;var w={exports:{}},D={},$={exports:{}},j={};/**
+ * @license React
+ * use-sync-external-store-shim.production.js
+ *
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ */var d=_;function z(e,t){return e===t&&(e!==0||1/e===1/t)||e!==e&&t!==t}var C=typeof Object.is=="function"?Object.is:z,T=d.useState,W=d.useEffect,A=d.useLayoutEffect,P=d.useDebugValue;function F(e,t){var n=t(),o=T({inst:{value:n,getSnapshot:t}}),r=o[0].inst,u=o[1];return A(function(){r.value=n,r.getSnapshot=t,p(r)&&u({inst:r})},[e,n,t]),W(function(){return p(r)&&u({inst:r}),e(function(){p(r)&&u({inst:r})})},[e]),P(n),n}function p(e){var t=e.getSnapshot;e=e.value;try{var n=t();return!C(e,n)}catch{return!0}}function M(e,t){return t()}var G=typeof window>"u"||typeof window.document>"u"||typeof window.document.createElement>"u"?M:F;j.useSyncExternalStore=d.useSyncExternalStore!==void 0?d.useSyncExternalStore:G;$.exports=j;var L=$.exports;/**
+ * @license React
+ * use-sync-external-store-shim/with-selector.production.js
+ *
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ */var b=_,U=L;function k(e,t){return e===t&&(e!==0||1/e===1/t)||e!==e&&t!==t}var B=typeof Object.is=="function"?Object.is:k,H=U.useSyncExternalStore,J=b.useRef,K=b.useEffect,N=b.useMemo,Q=b.useDebugValue;D.useSyncExternalStoreWithSelector=function(e,t,n,o,r){var u=J(null);if(u.current===null){var f={hasValue:!1,value:null};u.current=f}else f=u.current;u=N(function(){function S(i){if(!m){if(m=!0,s=i,i=o(i),r!==void 0&&f.hasValue){var a=f.value;if(r(a,i))return l=a}return l=i}if(a=l,B(s,i))return a;var E=o(i);return r!==void 0&&r(a,E)?(s=i,a):(s=i,l=E)}var m=!1,s,l,c=n===void 0?null:n;return[function(){return S(t())},c===null?void 0:function(){return S(c())}]},[t,n,o,r]);var v=H(e,u[0],u[1]);return K(function(){f.hasValue=!0,f.value=v},[v]),Q(v),v};w.exports=D;var X=w.exports;const Y=R(X),I={},{useDebugValue:Z}=x,{useSyncExternalStoreWithSelector:q}=Y;let g=!1;const ee=e=>e;function te(e,t=ee,n){(I?"production":void 0)!=="production"&&n&&!g&&(console.warn("[DEPRECATED] Use `createWithEqualityFn` instead of `create` or use `useStoreWithEqualityFn` instead of `useStore`. They can be imported from 'zustand/traditional'. https://github.com/pmndrs/zustand/discussions/1937"),g=!0);const o=q(e.subscribe,e.getState,e.getServerState||e.getInitialState,t,n);return Z(o),o}const h=e=>{(I?"production":void 0)!=="production"&&typeof e!="function"&&console.warn("[DEPRECATED] Passing a vanilla store will be unsupported in a future version. Instead use `import { useStore } from 'zustand'`.");const t=typeof e=="function"?O(e):e,n=(o,r)=>te(t,o,r);return Object.assign(n,t),n},re=e=>e?h(e):h;export{re as c};
+//# sourceMappingURL=state-vendor-DierodQV.js.map

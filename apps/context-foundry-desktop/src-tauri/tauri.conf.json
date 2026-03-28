@@ -6,8 +6,8 @@
   "build": {
     "beforeDevCommand": "",
     "devUrl": "http://localhost:5174",
-    "beforeBuildCommand": "cd ../../tools/dashboard && npm install && npm run build",
-    "frontendDist": "../../../tools/dashboard/dist"
+    "beforeBuildCommand": "",
+    "frontendDist": "../../dashboard-dist"
   },
   "app": {
     "withGlobalTauri": true,

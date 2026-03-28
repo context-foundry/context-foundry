@@ -32,15 +32,6 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Install frontend dependencies
-        working-directory: tools/dashboard
-        run: npm install
-
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2.0"
 
@@ -78,17 +69,14 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APPLE_NOTARIZE_PASSWORD: ${{ secrets.APPLE_NOTARIZE_PASSWORD }}
         run: |
-          APP_PATH=$(find apps/context-foundry-desktop/src-tauri/target/${{ matrix.target }}/release/bundle -name "*.app" -maxdepth 3 | head -1)
           DMG_PATH=$(find apps/context-foundry-desktop/src-tauri/target/${{ matrix.target }}/release/bundle -name "*.dmg" -maxdepth 3 | head -1)
 
-          # Notarize the DMG (contains the signed .app)
           xcrun notarytool submit "$DMG_PATH" \
             --apple-id "$APPLE_ID" \
             --team-id "$APPLE_TEAM_ID" \
             --password "$APPLE_NOTARIZE_PASSWORD" \
             --wait
 
-          # Staple the notarization ticket to the DMG
           xcrun stapler staple "$DMG_PATH"
 
       - name: Upload macOS artifact
@@ -107,15 +95,6 @@ jobs:
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Install frontend dependencies
-        working-directory: tools/dashboard
-        run: npm install
 
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2.0"
