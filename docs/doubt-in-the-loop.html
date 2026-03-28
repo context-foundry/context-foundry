@@ -257,6 +257,24 @@
   <p>The cycle is fully autonomous. No clipboard. No copy-paste. The human reviews the final diff.</p>
 </section>
 
+<section id="research">
+  <h2>Why the research backs this up</h2>
+  <p>Anthropic's own evaluation framework for Claude identifies multi-instance and multi-pass review as a distinct capability area. Their internal task statements describe three properties that make independent review effective:</p>
+  <blockquote>
+    <p><strong>Self-review limitations:</strong> A model retains reasoning context from generation, making it less likely to question its own decisions in the same session.</p>
+  </blockquote>
+  <p>This is exactly what the Doubt Loop exploits. The builder's context window is contaminated with its own reasoning chain -- the justifications for every decision it made. A reviewer in the same session would inherit those justifications. A fresh-context auditor does not.</p>
+  <blockquote>
+    <p><strong>Independent review instances</strong> (without prior reasoning context) are more effective at catching subtle issues than self-review instructions or extended thinking.</p>
+  </blockquote>
+  <p>You cannot prompt your way out of self-review bias. Telling an agent "now review your own work carefully" is less effective than handing the code to a second instance that never saw the builder's reasoning. The independence is structural, not instructional.</p>
+  <blockquote>
+    <p><strong>Multi-pass review:</strong> Splitting large reviews into per-file local analysis passes plus cross-file integration passes to avoid attention dilution and contradictory findings.</p>
+  </blockquote>
+  <p>Context Foundry implements this directly. The reviewer stage runs per-file analysis first (each file reviewed in isolation for local bugs), then an integration pass that looks for cross-file issues: interface mismatches, data flow bugs, missing error propagation across module boundaries. Splitting the review this way prevents a single long context window from losing focus and contradicting itself.</p>
+  <p>The practical version: a second agent with "find the gaps" catches more than a first agent with "review your work." The research explains why -- context contamination from generation makes self-review structurally weaker than independent review.</p>
+</section>
+
 <section id="limitations">
   <h2>Limitations</h2>
   <p>The Doubt Loop reduces risk. It does not eliminate it.</p>
