@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Context Foundry</title>
+  <meta name="description" content="A self-hosted build loop that runs AI agents against your codebase and improves them over time.">
+  <meta property="og:title" content="Context Foundry">
+  <meta property="og:description" content="A self-hosted build loop that runs AI agents against your codebase and improves them over time.">
+  <meta property="og:image" content="assets/og-card-1200x630.png">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://contextfoundry.dev">
+  <link rel="icon" type="image/png" href="assets/favicon-square-512.png">
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --border: #30363d;
+      --text: #e6edf3;
+      --text-muted: #8b949e;
+      --accent: #f0a500;
+      --accent-subtle: rgba(240, 165, 0, 0.15);
+      --radius: 4px;
+      --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+    }
+    * { box-sizing: border-box; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 0.9rem;
+      line-height: 1.7;
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 3rem 1.5rem;
+    }
+    h1 {
+      color: var(--accent);
+      font-size: 1.5rem;
+      border-bottom: 2px solid var(--accent);
+      padding-bottom: 0.5rem;
+      margin-bottom: 0.25rem;
+    }
+    h2 {
+      color: var(--accent);
+      font-size: 1.15rem;
+      border-left: 3px solid var(--accent);
+      padding-left: 0.75rem;
+      margin-top: 2.5rem;
+      margin-bottom: 0.75rem;
+    }
+    p { margin: 0.75rem 0; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    pre {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem 1.25rem;
+      overflow-x: auto;
+      font-size: 0.85rem;
+      line-height: 1.5;
+    }
+    code {
+      background: var(--surface);
+      padding: 0.15rem 0.4rem;
+      border-radius: var(--radius);
+      font-size: 0.85rem;
+    }
+    pre code { background: none; padding: 0; }
+    .hook {
+      font-size: 1.05rem;
+      color: var(--text);
+      margin-bottom: 0.25rem;
+    }
+    .subtitle {
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      margin-top: 0;
+    }
+    .muted { color: var(--text-muted); }
+    nav ul {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    nav li {
+      margin: 0.5rem 0;
+      padding: 0.75rem 1rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+    }
+    nav li a {
+      display: block;
+    }
+    nav li .desc {
+      color: var(--text-muted);
+      font-size: 0.8rem;
+      margin-top: 0.25rem;
+    }
+    footer {
+      margin-top: 3rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--border);
+      color: var(--text-muted);
+      font-size: 0.8rem;
+    }
+    svg text { font-family: var(--font-mono); }
+    @media print {
+      body { background: white; color: black; max-width: none; padding: 0.5in; }
+      pre { border: 1px solid #ccc; }
+      h1, h2 { color: #333; }
+      footer { color: #666; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Context Foundry</h1>
+  <p class="hook">A self-hosted build loop that runs AI agents against your codebase and improves them over time.</p>
+  <p class="subtitle">Rust CLI &middot; MIT License &middot; <a href="https://github.com/context-foundry/context-foundry">GitHub</a></p>
+</header>
+
+<section id="what">
+  <h2>What it does</h2>
+  <p>Context Foundry takes a task queue (<code>TASKS.md</code>) and processes each task through a four-stage pipeline:</p>
+  <svg width="680" height="110" viewBox="0 0 680 110" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <marker id="arrow" markerWidth="8" markerHeight="8" refX="8" refY="4" orient="auto">
+        <path d="M0,0 L8,4 L0,8 Z" fill="#8b949e"/>
+      </marker>
+    </defs>
+    <text x="10" y="45" fill="#e6edf3" font-size="12">TASKS.md</text>
+    <line x1="75" y1="45" x2="100" y2="45" stroke="#8b949e" stroke-width="1.5" marker-end="url(#arrow)"/>
+    <rect x="100" y="27" width="90" height="36" fill="#161b22" stroke="#30363d" stroke-width="1" rx="4"/>
+    <text x="145" y="45" fill="#e6edf3" font-size="12" text-anchor="middle" dominant-baseline="central">Scout</text>
+    <line x1="190" y1="45" x2="220" y2="45" stroke="#8b949e" stroke-width="1.5" marker-end="url(#arrow)"/>
+    <rect x="220" y="27" width="90" height="36" fill="#161b22" stroke="#30363d" stroke-width="1" rx="4"/>
+    <text x="265" y="45" fill="#e6edf3" font-size="12" text-anchor="middle" dominant-baseline="central">Plan</text>
+    <line x1="310" y1="45" x2="340" y2="45" stroke="#8b949e" stroke-width="1.5" marker-end="url(#arrow)"/>
+    <rect x="340" y="27" width="90" height="36" fill="#161b22" stroke="#30363d" stroke-width="1" rx="4"/>
+    <text x="385" y="45" fill="#e6edf3" font-size="12" text-anchor="middle" dominant-baseline="central">Implement</text>
+    <line x1="430" y1="45" x2="460" y2="45" stroke="#8b949e" stroke-width="1.5" marker-end="url(#arrow)"/>
+    <rect x="460" y="27" width="90" height="36" fill="#161b22" stroke="#30363d" stroke-width="1" rx="4"/>
+    <text x="505" y="45" fill="#e6edf3" font-size="12" text-anchor="middle" dominant-baseline="central">Doubt</text>
+    <line x1="550" y1="45" x2="580" y2="45" stroke="#8b949e" stroke-width="1.5" marker-end="url(#arrow)"/>
+    <text x="585" y="45" fill="#e6edf3" font-size="12">git commit</text>
+  </svg>
+  <p>After each task, the system extracts patterns -- recurring issues and their solutions -- and injects them into future plans. The more tasks it completes, the fewer mistakes the reviewer catches.</p>
+</section>
+
+<section id="install">
+  <h2>Install</h2>
+  <pre><code>cargo install context-foundry</code></pre>
+  <p>Or download a binary from <a href="https://github.com/context-foundry/context-foundry/releases">GitHub Releases</a>.</p>
+  <pre><code># Run from any project directory
+cd ~/my-project
+foundry</code></pre>
+</section>
+
+<section id="why">
+  <h2>Why it matters</h2>
+  <p><strong>Pattern learning.</strong> Most AI coding tools treat every task as if it's the first. Context Foundry accumulates institutional knowledge -- patterns from past builds feed into future plans.</p>
+  <p><strong>Dual-model arena.</strong> Run two different models against the same task. Compare outputs. Pick the winner automatically or manually.</p>
+  <p><strong>Self-hosted, CLI-native.</strong> Rust binary with a TUI. Your code stays on your machine. No cloud service, no API proxy. Swap providers per pipeline role via config.</p>
+</section>
+
+<section id="docs">
+  <h2>Documentation</h2>
+  <nav>
+    <ul>
+      <li><a href="PITCH.html">Pitch<div class="desc">One-page overview of what Context Foundry does and why</div></a></li>
+      <li><a href="OVERVIEW.html">Technical Reference<div class="desc">Architecture, configuration, pipeline stages, extension system</div></a></li>
+      <li><a href="ROUNDUP.html">The Roundup<div class="desc">Feature deep-dive with the Context Foundry story</div></a></li>
+      <li><a href="showdown.html">The Great Agent Showdown<div class="desc">Head-to-head comparison of AI coding agents</div></a></li>
+      <li><a href="concurrent-loops.html">Concurrent Workstreams<div class="desc">Design for parallel build loops and dual-model arena</div></a></li>
+      <li><a href="cca-alignment.html">CCA Alignment Matrix<div class="desc">Interactive mapping to Claude Code best practices</div></a></li>
+    </ul>
+  </nav>
+</section>
+
+<footer>
+  Context Foundry &middot;
+  <a href="https://github.com/context-foundry/context-foundry">GitHub</a> &middot;
+  MIT License
+</footer>
+
+</body>
+</html>
