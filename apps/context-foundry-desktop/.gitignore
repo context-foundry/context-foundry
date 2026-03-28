@@ -10,9 +10,6 @@ dist-ssr/
 src-tauri/target/
 src-tauri/gen/
 
-# Generated icons (too large for git)
-src-tauri/icons/*.icns
-
 # Editor directories and files
 .vscode/
 .idea/
