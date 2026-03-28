@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write
 
 jobs:
   build-macos:
@@ -123,6 +124,34 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ""
         run: cargo tauri build
 
+      - name: Sign Windows installer
+        uses: azure/trusted-signing-action@v0.5.0
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          endpoint: https://eus.codesigning.azure.net/
+          trusted-signing-account-name: floweyessigning
+          certificate-profile-name: floweyesrelease
+          files-folder: apps/context-foundry-desktop/src-tauri/target/release/bundle/nsis
+          files-folder-filter: exe
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+
+      - name: Sign Windows MSI
+        uses: azure/trusted-signing-action@v0.5.0
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          endpoint: https://eus.codesigning.azure.net/
+          trusted-signing-account-name: floweyessigning
+          certificate-profile-name: floweyesrelease
+          files-folder: apps/context-foundry-desktop/src-tauri/target/release/bundle/msi
+          files-folder-filter: msi
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
@@ -157,3 +186,4 @@ jobs:
             **Windows:** Download the `.msi` installer
 
             All macOS builds are signed and notarized by Apple.
+            All Windows builds are signed via Azure Trusted Signing.
