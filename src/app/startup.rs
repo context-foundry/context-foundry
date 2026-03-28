@@ -1103,10 +1103,14 @@ pub(super) fn enter_startup_surface_for_scenario(
 fn refresh_plan_counts(project_dir: &Path, state: &mut AppState) {
     let plan_path = ContractPaths::resolve(project_dir).tasks_path;
     match task::parse_tasks(&plan_path) {
-        Ok(tasks) => state.update_counts(&tasks),
+        Ok(tasks) => {
+            state.update_counts(&tasks);
+            state.task_queue = tasks;
+        }
         Err(_) => {
             state.total_count = 0;
             state.completed_count = 0;
+            state.task_queue.clear();
         }
     }
 }
