@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Doubt in the Loop -- Context Foundry</title>
+  <meta name="description" content="Why one AI agent is never enough. How adversarial verification catches what builders miss.">
+  <meta property="og:title" content="Doubt in the Loop -- Context Foundry">
+  <meta property="og:description" content="Why one AI agent is never enough. How adversarial verification catches what builders miss.">
+  <meta property="og:image" content="assets/og-card-1200x630.png">
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://contextfoundry.dev/doubt-in-the-loop.html">
+  <link rel="icon" type="image/png" href="assets/favicon-square-512.png">
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --border: #30363d;
+      --text: #e6edf3;
+      --text-muted: #8b949e;
+      --accent: #f0a500;
+      --accent-subtle: rgba(240, 165, 0, 0.15);
+      --radius: 4px;
+      --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+    }
+    * { box-sizing: border-box; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 0.9rem;
+      line-height: 1.7;
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 3rem 1.5rem;
+    }
+    h1 {
+      color: var(--accent);
+      font-size: 1.5rem;
+      border-bottom: 2px solid var(--accent);
+      padding-bottom: 0.5rem;
+      margin-bottom: 0.25rem;
+    }
+    h2 {
+      color: var(--accent);
+      font-size: 1.15rem;
+      border-left: 3px solid var(--accent);
+      padding-left: 0.75rem;
+      margin-top: 2.5rem;
+      margin-bottom: 0.75rem;
+    }
+    h3 {
+      color: var(--text);
+      font-size: 1rem;
+      margin-top: 1.75rem;
+      margin-bottom: 0.5rem;
+    }
+    p { margin: 0.75rem 0; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    pre {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem 1.25rem;
+      overflow-x: auto;
+      font-size: 0.85rem;
+      line-height: 1.5;
+    }
+    code {
+      background: var(--surface);
+      padding: 0.15rem 0.4rem;
+      border-radius: var(--radius);
+      font-size: 0.85rem;
+    }
+    pre code { background: none; padding: 0; }
+    blockquote {
+      border-left: 3px solid var(--accent);
+      margin: 1.25rem 0;
+      padding: 0.5rem 1rem;
+      background: var(--accent-subtle);
+      border-radius: 0 var(--radius) var(--radius) 0;
+    }
+    blockquote p { margin: 0.25rem 0; }
+    .hook {
+      font-size: 1.05rem;
+      color: var(--text);
+      margin-bottom: 0.25rem;
+    }
+    .subtitle {
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      margin-top: 0;
+    }
+    .muted { color: var(--text-muted); }
+    .step-grid {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 0.5rem 1rem;
+      margin: 1rem 0;
+    }
+    .step-num {
+      color: var(--accent);
+      font-weight: bold;
+      font-size: 1.1rem;
+    }
+    .finding-list {
+      list-style: none;
+      padding: 0;
+    }
+    .finding-list li {
+      padding: 0.4rem 0.75rem;
+      margin: 0.35rem 0;
+      background: var(--surface);
+      border-left: 3px solid #f04040;
+      border-radius: 0 var(--radius) var(--radius) 0;
+      font-size: 0.85rem;
+    }
+    .finding-list li.medium { border-left-color: var(--accent); }
+    footer {
+      margin-top: 3rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--border);
+      color: var(--text-muted);
+      font-size: 0.8rem;
+    }
+    svg text { font-family: var(--font-mono); }
+    @media print {
+      body { background: white; color: black; max-width: none; padding: 0.5in; }
+      pre { border: 1px solid #ccc; }
+      h1, h2 { color: #333; }
+      footer { color: #666; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <p class="muted"><a href="index.html">contextfoundry.dev</a></p>
+  <h1>Doubt in the Loop</h1>
+  <p class="hook">Why one AI agent is never enough.</p>
+  <p class="subtitle">Based on <a href="https://fozbe.com/engineering/the-doubt-loop.html">The Doubt Loop</a> by Fozbe Engineering</p>
+</header>
+
+<section id="problem">
+  <h2>The problem</h2>
+  <p>AI coding agents are overconfident. They build features, announce success, and move on. The code compiles. The tests pass. The agent says "Done!" with the conviction of someone who has never been wrong.</p>
+  <p>Then you ship it and discover the race condition, the null check, the auth bypass.</p>
+  <p>The issue is not that agents make mistakes. Humans make mistakes. The issue is that a single agent reviewing its own work has the same blind spots that produced the bugs in the first place. It cannot see what it cannot see.</p>
+</section>
+
+<section id="prompt">
+  <h2>The prompt that changes everything</h2>
+  <blockquote>
+    <p>"Audit and validate these claims. Find the gaps."</p>
+  </blockquote>
+  <p>Not "find <em>any</em> gaps." Not "please review." Not "check for issues."</p>
+  <p><strong>"Find the gaps."</strong></p>
+  <p>The definite article matters. "Find <em>any</em> gaps" implies they might not exist. "Find <em>the</em> gaps" presumes they do. This framing biases the model's context window toward skepticism rather than confirmation. The auditor does not ask whether problems exist -- it hunts for the ones that are already there.</p>
+</section>
+
+<section id="pattern">
+  <h2>The pattern</h2>
+  <p>The Doubt Loop is a four-step adversarial cycle between a builder agent and an auditor agent with a fresh context window:</p>
+
+  <svg width="680" height="180" viewBox="0 0 680 180" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <marker id="arrow" markerWidth="8" markerHeight="8" refX="8" refY="4" orient="auto">
+        <path d="M0,0 L8,4 L0,8 Z" fill="#8b949e"/>
+      </marker>
+      <marker id="arrow-accent" markerWidth="8" markerHeight="8" refX="8" refY="4" orient="auto">
+        <path d="M0,0 L8,4 L0,8 Z" fill="#f0a500"/>
+      </marker>
+    </defs>
+    <!-- Step 1: Builder creates -->
+    <rect x="20" y="30" width="130" height="40" fill="#161b22" stroke="#30363d" stroke-width="1" rx="4"/>
+    <text x="85" y="50" fill="#e6edf3" font-size="11" text-anchor="middle" dominant-baseline="central">1. Builder creates</text>
+    <!-- Arrow -->
+    <line x1="150" y1="50" x2="180" y2="50" stroke="#8b949e" stroke-width="1.5" marker-end="url(#arrow)"/>
+    <!-- Step 2: Claims completion -->
+    <rect x="180" y="30" width="140" height="40" fill="#161b22" stroke="#30363d" stroke-width="1" rx="4"/>
+    <text x="250" y="50" fill="#e6edf3" font-size="11" text-anchor="middle" dominant-baseline="central">2. Claims "done"</text>
+    <!-- Arrow -->
+    <line x1="320" y1="50" x2="350" y2="50" stroke="#8b949e" stroke-width="1.5" marker-end="url(#arrow)"/>
+    <!-- Step 3: Auditor doubts -->
+    <rect x="350" y="30" width="140" height="40" fill="#161b22" stroke="#f0a500" stroke-width="1.5" rx="4"/>
+    <text x="420" y="50" fill="#f0a500" font-size="11" text-anchor="middle" dominant-baseline="central">3. Auditor doubts</text>
+    <!-- Arrow -->
+    <line x1="490" y1="50" x2="520" y2="50" stroke="#8b949e" stroke-width="1.5" marker-end="url(#arrow)"/>
+    <!-- Step 4: Builder fixes -->
+    <rect x="520" y="30" width="130" height="40" fill="#161b22" stroke="#30363d" stroke-width="1" rx="4"/>
+    <text x="585" y="50" fill="#e6edf3" font-size="11" text-anchor="middle" dominant-baseline="central">4. Builder fixes</text>
+    <!-- Loop back arrow -->
+    <polyline points="585,70 585,130 250,130 250,70" fill="none" stroke="#f0a500" stroke-width="1.5" stroke-dasharray="4" marker-end="url(#arrow-accent)"/>
+    <text x="420" y="125" fill="#f0a500" font-size="10">repeat 3-5x</text>
+  </svg>
+
+  <p>The critical detail: this is not one pass. The builder often introduces new issues while fixing old ones. Three to five iterations is typical before the auditor finds nothing significant.</p>
+</section>
+
+<section id="why">
+  <h2>Why it works</h2>
+  <p><strong>Fresh context.</strong> The auditor has no sunk cost in the implementation. It did not write the code, so it has no bias toward defending decisions it made. Every line is suspect.</p>
+  <p><strong>Adversarial framing.</strong> "Find the gaps" surfaces different findings than "please review." The former is a hunt. The latter is a courtesy.</p>
+  <p><strong>Permission to criticize.</strong> Explicit instruction to doubt changes what agents report. Without it, agents default to politeness -- they note minor style issues and declare the code sound. With it, they dig.</p>
+  <p><strong>Separate sessions.</strong> Even using the same model, a separate context window approaches code differently. The builder's context is polluted with its own reasoning chain. The auditor reads the code cold.</p>
+</section>
+
+<section id="catches">
+  <h2>What the auditor catches</h2>
+  <p>These are real findings from pre-deployment audits on code the builder declared complete:</p>
+  <ul class="finding-list">
+    <li>Race conditions in queue processing that would cause data loss</li>
+    <li>Missing null checks that would crash the frontend</li>
+    <li class="medium">Authentication bypasses exposing user data</li>
+    <li>State management bugs causing stale UI</li>
+    <li>Error handling gaps leaving users with blank screens</li>
+    <li class="medium">Type mismatches that compile but produce wrong results</li>
+  </ul>
+  <p>Every one of these existed in code the builder agent had confidently marked as done.</p>
+</section>
+
+<section id="manual">
+  <h2>The manual version</h2>
+  <p>You do not need Context Foundry to use the Doubt Loop. Two terminals and a clipboard are enough:</p>
+  <pre><code># Terminal 1: Builder (Claude Code, Cursor, Copilot, etc.)
+# Work normally. When the agent says "done", copy its summary.
+
+# Terminal 2: Auditor (different session, same directory)
+# Paste the builder's claims and add:
+"Audit and validate these claims. Find the gaps."
+
+# Copy the auditor's findings back to Terminal 1.
+# The builder fixes. Repeat until the auditor finds nothing.</code></pre>
+  <p>The human stays in the loop as the router -- copy, paste, decide when to stop. This alone catches a surprising number of issues that would otherwise ship.</p>
+</section>
+
+<section id="foundry">
+  <h2>How Context Foundry automates it</h2>
+  <p>Context Foundry bakes the Doubt Loop into its pipeline as a first-class stage. After the builder finishes, it writes a structured <code>build-claims.md</code> file:</p>
+  <pre><code># Build Claims -- T23.1
+
+## Files Changed
+- [MODIFY] src/prompts.rs -- added silent execution directive
+
+## Verification Results
+- Build: PASS (cargo build --release)
+- Tests: PASS (cargo test)
+
+## Claims
+- [ ] Silent execution directive added to all 5 prompt functions
+- [ ] No existing tests broken by the change
+
+## Gaps and Assumptions
+- Did not test with Codex provider (only Claude)</code></pre>
+  <p>A fresh-context reviewer agent then reads this file and the actual code. It verifies every claim, re-runs the build and tests independently, and fixes any HIGH or MEDIUM issues it finds. The reviewer writes a structured report with severity-classified findings, provenance evidence, and confidence scores.</p>
+  <p>The cycle is fully autonomous. No clipboard. No copy-paste. The human reviews the final diff.</p>
+</section>
+
+<section id="limitations">
+  <h2>Limitations</h2>
+  <p>The Doubt Loop reduces risk. It does not eliminate it.</p>
+  <p>Two agents sharing the same model have correlated blind spots. They are better at catching implementation errors than architectural mistakes. The loop supplements -- never replaces -- traditional testing, code review, and security audits.</p>
+  <p>But it catches enough that shipping without it feels like skipping tests. Once you see what the auditor finds in code you were about to merge, you do not go back.</p>
+</section>
+
+<footer>
+  <a href="index.html">Context Foundry</a> &middot;
+  <a href="https://github.com/context-foundry/context-foundry">GitHub</a> &middot;
+  Originally published as <a href="https://fozbe.com/engineering/the-doubt-loop.html">The Doubt Loop</a> by Fozbe Engineering
+</footer>
+
+</body>
+</html>
