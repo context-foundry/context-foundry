@@ -211,7 +211,7 @@ pub fn validate_extensions(
         match extensions.iter().find(|e| e.name == *name) {
             None => {
                 errors.push(format!(
-                    "Extension '{}' is configured but not found in ~/.foundry/extensions/ or project extensions/",
+                    "Extension '{}' is configured but not found in ~/.foundry/extensions/, ancestor directories, or project extensions/",
                     name
                 ));
             }

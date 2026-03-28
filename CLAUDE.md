@@ -20,7 +20,7 @@ cd ~/some-project && foundry
 
 ## Global Patterns
 
-Patterns are stored in `~/.context-foundry/patterns/`. Read them before starting work:
+Patterns are stored in `~/.foundry/patterns/`. Read them before starting work:
 
 ```lua
 mcp__context-foundry__read_global_patterns("common-issues")

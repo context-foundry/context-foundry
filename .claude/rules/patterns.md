@@ -29,7 +29,7 @@ paths:
 
 ## Storage Locations
 - **Global**: `~/.foundry/patterns/` — shared across all projects, loaded by default
-- **Project**: `.context-foundry/patterns/` — project-specific learnings
+- **Project**: `.foundry/patterns/` — project-specific learnings
 - **Extensions**: `extensions/<name>/patterns/` — domain-specific (Roblox, Flowise, etc.)
 
 ## Matching Algorithm

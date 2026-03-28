@@ -1308,8 +1308,8 @@ Extensions provide domain-specific knowledge to agents. They are discovered from
 <code>~/.foundry/extensions/</code> (global), ancestor directories' <code>extensions/</code>
 folders, and <code>&lt;project&gt;/extensions/</code> (local). Each extension directory
 must contain a <code>CLAUDE.md</code> file. Project-local extensions override global
-ones with the same name. Extension context is prepended to agent prompts via
-<code>load_extension_context()</code>.
+ones with the same name. Extension context is built by <code>load_extension_context()</code> and
+prepended to agent prompts via <code>wrap_with_extensions()</code>.
 </p>
 
 <h3>8.0 Extension Taxonomy</h3>
