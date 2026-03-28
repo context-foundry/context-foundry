@@ -10,7 +10,7 @@ use std::sync::{
 use std::time::{Duration, Instant};
 
 use crate::config::Config;
-
+use crate::prompts::AUTONOMY_OVERRIDE;
 use crate::tmux::TmuxSession;
 use crate::utils::truncate_str;
 use tokio::sync::mpsc;
@@ -764,12 +764,7 @@ async fn run_agent_pty(
     cmd.arg("--verbose");
     // Override any CLAUDE.md instructions that conflict with foundry's orchestration.
     cmd.arg("--append-system-prompt");
-    cmd.arg(concat!(
-        "IMPORTANT: You are running as a single stage in Context Foundry's autonomous pipeline. ",
-        "Ignore any CLAUDE.md instructions about orchestration workflows, build pipelines, ",
-        "SPID stages, doubt loops, sub-agent spawning, or multi-step implementation processes. ",
-        "Foundry handles all orchestration. Focus only on your assigned role and task.",
-    ));
+    cmd.arg(AUTONOMY_OVERRIDE);
     if let Some(tools) = allowed_tools {
         cmd.arg("--tools");
         cmd.arg(tools.join(","));
@@ -794,12 +789,7 @@ async fn run_agent_pty(
         args.push("stream-json".to_string());
         args.push("--verbose".to_string());
         args.push("--append-system-prompt".to_string());
-        args.push(concat!(
-            "IMPORTANT: You are running as a single stage in Context Foundry's autonomous pipeline. ",
-            "Ignore any CLAUDE.md instructions about orchestration workflows, build pipelines, ",
-            "SPID stages, doubt loops, sub-agent spawning, or multi-step implementation processes. ",
-            "Foundry handles all orchestration. Focus only on your assigned role and task.",
-        ).to_string());
+        args.push(AUTONOMY_OVERRIDE.to_string());
         if let Some(tools) = allowed_tools {
             args.push("--tools".to_string());
             args.push(tools.join(","));
