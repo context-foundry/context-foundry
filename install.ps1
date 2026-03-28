@@ -9,7 +9,7 @@ $ErrorActionPreference = "Stop"
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
 $Repo = "context-foundry/context-foundry"
-$Target = "x86_64-pc-windows-msvc"
+$Target = "windows"
 $InstallDir = if ($env:FOUNDRY_INSTALL_DIR) { $env:FOUNDRY_INSTALL_DIR } else { "$env:USERPROFILE\.local\bin" }
 
 # ─── Clean: remove stale binary and app data ───────────────────────

@@ -44,14 +44,14 @@ ARCH=$(uname -m)
 case "$OS" in
   darwin)
     case "$ARCH" in
-      arm64|aarch64) TARGET="aarch64-apple-darwin" ;;
-      x86_64)        TARGET="x86_64-apple-darwin" ;;
+      arm64|aarch64) TARGET="mac-apple-silicon" ;;
+      x86_64)        TARGET="mac-intel" ;;
       *) echo "Unsupported architecture: $ARCH"; exit 1 ;;
     esac
     ;;
   linux)
     case "$ARCH" in
-      x86_64|amd64) TARGET="x86_64-unknown-linux-gnu" ;;
+      x86_64|amd64) TARGET="linux" ;;
       *) echo "Unsupported architecture: $ARCH"; exit 1 ;;
     esac
     ;;
