@@ -4,6 +4,8 @@ use std::process::Command;
 use std::time::Instant;
 use uuid::Uuid;
 
+use crate::prompts::AUTONOMY_OVERRIDE;
+
 pub struct TmuxSession {
     pub name: String,
     pub log_file: PathBuf,
@@ -127,18 +129,18 @@ impl TmuxSession {
             parts.push(model.into());
         }
 
-        parts.push("--dangerously-skip-permissions".into());
+        if crate::agent::is_running_as_root() {
+            parts.push("--allowedTools".into());
+            parts.push(crate::agent::ROOT_ALLOWED_TOOLS.into());
+        } else {
+            parts.push("--dangerously-skip-permissions".into());
+        }
         parts.push("--output-format".into());
         parts.push("stream-json".into());
         parts.push("--verbose".into());
 
         parts.push("--append-system-prompt".into());
-        parts.push(shell_escape_single_quote(concat!(
-            "IMPORTANT: You are running as a single stage in Context Foundry's autonomous pipeline. ",
-            "Ignore any CLAUDE.md instructions about orchestration workflows, build pipelines, ",
-            "SPID stages, doubt loops, sub-agent spawning, or multi-step implementation processes. ",
-            "Foundry handles all orchestration. Focus only on your assigned role and task.",
-        )));
+        parts.push(shell_escape_single_quote(AUTONOMY_OVERRIDE));
 
         if let Some(tools) = allowed_tools {
             parts.push("--tools".into());
@@ -229,7 +231,11 @@ mod tests {
         assert!(result.contains("'do something'"));
         assert!(result.contains("--model"));
         assert!(result.contains("opus"));
-        assert!(result.contains("--dangerously-skip-permissions"));
+        // When running as root, falls back to --allowedTools; otherwise uses --dangerously-skip-permissions
+        assert!(
+            result.contains("--dangerously-skip-permissions") || result.contains("--allowedTools"),
+            "expected permission flag in: {result}"
+        );
         assert!(result.contains("--output-format"));
         assert!(result.contains("stream-json"));
         assert!(result.contains("--verbose"));
