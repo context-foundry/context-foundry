@@ -9,6 +9,7 @@ use tokio::sync::mpsc;
 
 use crate::agent::{AgentOutputEvent, ModelProvider};
 use crate::config::Config;
+use crate::patterns;
 use crate::task::{self, Task};
 use crate::update;
 
@@ -531,6 +532,40 @@ pub(super) fn show_status(project_dir: &Path) -> Result<()> {
 pub(super) fn show_tasks(project_dir: &Path) -> Result<()> {
     let tasks = load_tasks(project_dir)?;
     print!("{}", format_tasks_output(&tasks));
+    Ok(())
+}
+
+pub(super) fn run_extract(project_dir: &Path) -> Result<()> {
+    let buildloop_dir = project_dir.join(".buildloop");
+    let filenames = ["build-claims.md", "review-report.md"];
+    let mut all_patterns = Vec::new();
+
+    for name in &filenames {
+        let path = buildloop_dir.join(name);
+        if !path.exists() {
+            continue;
+        }
+        if let Ok(mut extracted) = patterns::extract_patterns_from_file(&path) {
+            all_patterns.append(&mut extracted);
+        }
+    }
+
+    if all_patterns.is_empty() {
+        return Ok(());
+    }
+
+    let config = crate::config::Config::load(project_dir);
+    let patterns_dir = patterns::resolve_patterns_dir(&config.patterns_dir);
+    let added = patterns::merge_patterns(&patterns_dir, all_patterns)?;
+
+    if added > 0 {
+        println!(
+            "foundry extract: {} new pattern(s) merged into {}",
+            added,
+            patterns_dir.display()
+        );
+    }
+
     Ok(())
 }
 

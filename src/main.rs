@@ -67,6 +67,8 @@ enum Commands {
     Mcp,
     /// Update foundry to the latest version
     Update,
+    /// Extract patterns from build artifacts (.buildloop/)
+    Extract,
 }
 
 #[tokio::main]
@@ -113,6 +115,9 @@ async fn main() -> Result<()> {
         }
         Commands::Update => {
             update::run_update()?;
+        }
+        Commands::Extract => {
+            app::run_extract(&project_dir)?;
         }
     }
 
