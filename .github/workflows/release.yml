@@ -28,6 +28,7 @@ jobs:
             artifact: foundry.exe
 
     runs-on: ${{ matrix.os }}
+    environment: release
 
     steps:
       - uses: actions/checkout@v4
