@@ -458,7 +458,7 @@ Extensions and patterns both inject knowledge into agent prompts, but they serve
 
 Extensions can carry their own patterns (shown as `(3p)` in the TUI). These extension patterns are merged into the global pattern pool and go through the same keyword matching as regular patterns. So an extension bundles two things: mandatory domain rules (CLAUDE.md) that are always injected, and optional domain-specific patterns (JSON) that are selectively matched.
 
-### Extension contracts
+### Extension context
 
 On the startup screen, foundry shows a checkbox panel listing all discovered extensions with their pattern counts (`(3p)` = 3 patterns in that extension). Select the ones relevant to your build:
 

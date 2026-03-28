@@ -1183,7 +1183,7 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
         };
     }
 
-    // ─── Extension Contract Loading ─────────────────────────────
+    // ─── Extension Context Loading ──────────────────────────────
     let discovered_extensions = extensions::discover_extensions(&ctx.project_dir);
     let extension_context =
         extensions::load_extension_context(&discovered_extensions, &ctx.config.extensions);
@@ -2493,7 +2493,7 @@ async fn process_task(
         write_checkpoint(&ctx.buildloop_dir, task_id, task_desc, "planner");
     }
 
-    // ─── Gate: Extension Contracts ──────────────────────────────
+    // ─── Gate: Extension Context ───────────────────────────────
     if !ctx.config.extensions.is_empty() {
         let discovered = extensions::discover_extensions(&ctx.project_dir);
         if let Err(errors) = extensions::validate_extensions(&discovered, &ctx.config.extensions) {
@@ -2516,7 +2516,7 @@ async fn process_task(
             }
             stage_results.push(StageResult::failure(
                 "ExtensionGate",
-                "Validate extension contracts",
+                "Validate extension context",
                 FailureType::GateFail,
                 vec!["Ensure all configured extensions have CLAUDE.md files".to_string()],
             ));
