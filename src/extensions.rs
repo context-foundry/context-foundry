@@ -191,7 +191,7 @@ pub fn load_extension_context(extensions: &[ExtensionInfo], selected: &[String])
             continue;
         }
         context.push_str(&format!(
-            "\n--- BEGIN EXTENSION CONTRACT: {} ---\n{}\n--- END EXTENSION CONTRACT: {} ---\n",
+            "\n--- BEGIN EXTENSION CONTEXT: {} ---\n{}\n--- END EXTENSION CONTEXT: {} ---\n",
             name,
             content.trim(),
             name

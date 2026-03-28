@@ -24,7 +24,7 @@ fn large_file_guidance() -> &'static str {
      NEVER attempt to read an entire large file in one call -- it will fail."
 }
 
-/// Prepend extension contract context to any agent prompt.
+/// Prepend extension context to any agent prompt.
 /// If extension_context is empty, return prompt unchanged.
 /// On Windows, appends a platform preamble warning about path handling.
 pub fn wrap_with_extensions(prompt: &str, extension_context: &str) -> String {
