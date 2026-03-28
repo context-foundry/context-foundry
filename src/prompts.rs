@@ -1,3 +1,5 @@
+// T23.1: Headless build ran successfully — confirmed by autonomous build loop.
+
 /// Autonomy override appended via `--append-system-prompt` to every spawned agent.
 /// Prevents nested CLAUDE.md instructions from hijacking foundry's orchestration.
 /// Used by agent.rs (PTY + sandbox) and tmux.rs.
