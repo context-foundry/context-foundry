@@ -920,6 +920,8 @@ async fn run_parallel_builder(
                     all_ok = false;
                     continue;
                 }
+                // Record that this file was copied from this slot
+                copied_files.insert(file_path.clone(), *slot_idx);
             } else if dest.exists() {
                 // File was deleted in worktree -- remove from main project
                 if let Err(e) = std::fs::remove_file(&dest) {
@@ -936,9 +938,6 @@ async fn run_parallel_builder(
                     ))));
                 }
             }
-
-            // Record that this file was copied from this slot
-            copied_files.insert(file_path.clone(), *slot_idx);
         }
 
         // Collect build-claims
@@ -5868,6 +5867,175 @@ mod tests {
         assert!(a_content.contains("slot 0"), "planned_a.rs must have slot 0 content");
         let b_content = std::fs::read_to_string(main_dir.join("planned_b.rs")).unwrap();
         assert!(b_content.contains("slot 1"), "planned_b.rs must have slot 1 content");
+
+        // Cleanup
+        let _ = std::process::Command::new("git")
+            .args(["worktree", "remove", "--force"])
+            .arg(&wt_a)
+            .current_dir(&main_dir)
+            .output();
+        let _ = std::process::Command::new("git")
+            .args(["worktree", "remove", "--force"])
+            .arg(&wt_b)
+            .current_dir(&main_dir)
+            .output();
+        let _ = std::fs::remove_dir_all(&main_dir);
+        let _ = std::fs::remove_dir_all(&wt_a);
+        let _ = std::fs::remove_dir_all(&wt_b);
+    }
+
+    #[test]
+    fn test_worktree_merge_deletion_does_not_block_later_creation() {
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+
+        let main_dir = std::env::temp_dir().join(format!("foundry-wt-del-create-{}", nanos));
+        std::fs::create_dir_all(&main_dir).unwrap();
+
+        // Initialize git repo
+        let git = |args: &[&str]| {
+            std::process::Command::new("git")
+                .args(args)
+                .current_dir(&main_dir)
+                .output()
+                .expect("git command failed")
+        };
+        git(&["init"]);
+        git(&["config", "user.email", "test@test.com"]);
+        git(&["config", "user.name", "test"]);
+
+        // Create tracked file and commit
+        std::fs::write(
+            main_dir.join("target.rs"),
+            "fn target() { /* original */ }",
+        )
+        .unwrap();
+        git(&["add", "."]);
+        git(&["commit", "-m", "initial"]);
+
+        // Create two worktrees
+        let wt_a = std::env::temp_dir().join(format!("foundry-wt-del-create-a-{}", nanos));
+        let wt_b = std::env::temp_dir().join(format!("foundry-wt-del-create-b-{}", nanos + 1));
+        git(&["worktree", "add", "--detach", wt_a.to_str().unwrap(), "HEAD"]);
+        git(&["worktree", "add", "--detach", wt_b.to_str().unwrap(), "HEAD"]);
+
+        // Slot 0 (wt_a): delete target.rs
+        std::fs::remove_file(wt_a.join("target.rs")).unwrap();
+
+        // Slot 1 (wt_b): overwrite target.rs with new content
+        std::fs::write(
+            wt_b.join("target.rs"),
+            "fn target() { /* slot 1 new version */ }",
+        )
+        .unwrap();
+
+        // Discover changed files in each worktree
+        let files_a = super::discover_changed_files_in_worktree(&wt_a).unwrap();
+        let files_b = super::discover_changed_files_in_worktree(&wt_b).unwrap();
+        assert!(
+            files_a.contains(&"target.rs".to_string()),
+            "slot 0 must discover deleted target.rs"
+        );
+        assert!(
+            files_b.contains(&"target.rs".to_string()),
+            "slot 1 must discover modified target.rs"
+        );
+
+        // Neither slot planned target.rs -- worst case for the bug
+        let planned_file_owner: std::collections::HashMap<String, usize> =
+            std::collections::HashMap::new();
+        let mut copied_files: std::collections::HashMap<String, usize> =
+            std::collections::HashMap::new();
+
+        // Simulate fixed merge loop for slot 0 (wt_a)
+        for file_path in &files_a {
+            // Conflict check (won't trigger -- copied_files is empty)
+            if let Some(&prev_slot) = copied_files.get(file_path.as_str()) {
+                // Determine winner
+                let winner = if let Some(&owner) = planned_file_owner.get(file_path.as_str()) {
+                    owner
+                } else {
+                    prev_slot
+                };
+                if winner != 0 {
+                    continue;
+                }
+            }
+
+            let src = wt_a.join(file_path);
+            let dest = main_dir.join(file_path);
+            if src.exists() {
+                if let Some(parent) = dest.parent() {
+                    let _ = std::fs::create_dir_all(parent);
+                }
+                std::fs::copy(&src, &dest).unwrap();
+                // Record that this file was copied from this slot
+                copied_files.insert(file_path.clone(), 0usize);
+            } else if dest.exists() {
+                // File was deleted in worktree -- remove from main project
+                std::fs::remove_file(&dest).unwrap();
+                // NOTE: Do NOT insert into copied_files -- this is the fix
+            }
+        }
+
+        // After slot 0: target.rs must be deleted, NOT in copied_files
+        assert!(
+            !main_dir.join("target.rs").exists(),
+            "target.rs must be deleted after slot 0"
+        );
+        assert!(
+            !copied_files.contains_key("target.rs"),
+            "deleted file must NOT be in copied_files"
+        );
+
+        // Simulate fixed merge loop for slot 1 (wt_b)
+        for file_path in &files_b {
+            // Conflict check -- won't trigger since target.rs was NOT inserted by slot 0
+            if let Some(&prev_slot) = copied_files.get(file_path.as_str()) {
+                let winner = if let Some(&owner) = planned_file_owner.get(file_path.as_str()) {
+                    owner
+                } else {
+                    prev_slot
+                };
+                if winner != 1 {
+                    continue;
+                }
+            }
+
+            let src = wt_b.join(file_path);
+            let dest = main_dir.join(file_path);
+            if src.exists() {
+                if let Some(parent) = dest.parent() {
+                    let _ = std::fs::create_dir_all(parent);
+                }
+                std::fs::copy(&src, &dest).unwrap();
+                // Record that this file was copied from this slot
+                copied_files.insert(file_path.clone(), 1usize);
+            } else if dest.exists() {
+                std::fs::remove_file(&dest).unwrap();
+            }
+        }
+
+        // After slot 1: target.rs must exist with slot 1's content
+        assert!(
+            main_dir.join("target.rs").exists(),
+            "target.rs must exist after slot 1 creates it"
+        );
+        let content = std::fs::read_to_string(main_dir.join("target.rs")).unwrap();
+        assert!(
+            content.contains("slot 1 new version"),
+            "target.rs must contain slot 1's version, got: {}",
+            content
+        );
+        assert_eq!(
+            copied_files.get("target.rs"),
+            Some(&1usize),
+            "target.rs must be recorded as from slot 1"
+        );
 
         // Cleanup
         let _ = std::process::Command::new("git")
