@@ -2792,7 +2792,7 @@ async fn process_task(
 
         if !plan_text.is_empty() {
             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::AgentStarted(
-                AgentRole::Planner,
+                AgentRole::PlanReview,
                 format!("P+ review ({})", Config::display_provider_model(
                     &ctx.config.orchestrator_proposer_provider,
                     &ctx.config.orchestrator_proposer_model,
@@ -3029,6 +3029,17 @@ async fn process_task(
 
     let builder_rate_limited;
     (build_ok, builder_rate_limited) = if let Some((ref file_ops, ref groups)) = parallel_data {
+        // Budget recovery is not supported in parallel builder mode -- consume and warn
+        if let Some(_summary) = budget_summary_for_next.take() {
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+                "Parallel builder: budget summary directive discarded (unsupported in parallel mode)".to_string()
+            )));
+        }
+        if let Some((ref p, ref m)) = budget_model_override.take() {
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+                format!("Parallel builder: budget model override ({}/{}) discarded (unsupported in parallel mode)", p, m)
+            )));
+        }
         run_parallel_builder(task_info, ctx, tx, file_ops, groups, extension_context).await
     } else {
         // Original single-builder path
