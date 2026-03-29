@@ -838,6 +838,7 @@ async fn run_parallel_builder(
 
     // Track which files have already been copied and from which slot
     let mut copied_files: HashMap<String, usize> = HashMap::new();
+    let mut deleted_by_slot: HashMap<String, usize> = HashMap::new();
 
     for (slot_idx, ok, rl, slot_usage) in &results {
         if !ok {
@@ -907,6 +908,34 @@ async fn run_parallel_builder(
             }
 
             let src = wt_dir.join(file_path);
+
+            // Check for delete-vs-modify conflict: was this file deleted by a previous slot?
+            if let Some(&del_slot) = deleted_by_slot.get(file_path) {
+                if src.exists() {
+                    // Previous slot deleted, current slot modifies -- genuine conflict
+                    let owner = planned_file_owner.get(file_path);
+                    let winner = match owner {
+                        Some(&owning_slot) => owning_slot,
+                        None => *slot_idx, // Default: modification wins over deletion
+                    };
+
+                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                        "Parallel builder: DELETE-MODIFY CONFLICT on '{}' -- deleted by slot-{}, modified by slot-{}, using slot-{} ({})",
+                        file_path,
+                        del_slot,
+                        slot_idx,
+                        winner,
+                        if owner.is_some() { "planned owner" } else { "modification wins" }
+                    ))));
+
+                    if winner == del_slot {
+                        // Deletion wins; skip copying from current slot
+                        continue;
+                    }
+                    // Modification wins; fall through to copy
+                }
+            }
+
             let dest = ctx.project_dir.join(file_path);
             if src.exists() {
                 if let Some(parent) = dest.parent() {
@@ -923,6 +952,31 @@ async fn run_parallel_builder(
                 // Record that this file was copied from this slot
                 copied_files.insert(file_path.clone(), *slot_idx);
             } else if dest.exists() {
+                // File was deleted in worktree -- check for modify-vs-delete conflict
+                if let Some(&prev_slot) = copied_files.get(file_path) {
+                    // Previous slot copied (modified), current slot deletes -- genuine conflict
+                    let owner = planned_file_owner.get(file_path);
+                    let winner = match owner {
+                        Some(&owning_slot) => owning_slot,
+                        None => prev_slot, // Default: modification wins over deletion
+                    };
+
+                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                        "Parallel builder: MODIFY-DELETE CONFLICT on '{}' -- modified by slot-{}, deleted by slot-{}, using slot-{} ({})",
+                        file_path,
+                        prev_slot,
+                        slot_idx,
+                        winner,
+                        if owner.is_some() { "planned owner" } else { "modification wins" }
+                    ))));
+
+                    if winner == prev_slot {
+                        // Modification (previous slot) wins; skip deletion
+                        continue;
+                    }
+                    // Deletion (current slot) wins; fall through to delete
+                }
+
                 // File was deleted in worktree -- remove from main project
                 if let Err(e) = std::fs::remove_file(&dest) {
                     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
@@ -936,6 +990,7 @@ async fn run_parallel_builder(
                         "Parallel builder slot-{}: deleted {} (removed in worktree)",
                         slot_idx, file_path
                     ))));
+                    deleted_by_slot.insert(file_path.clone(), *slot_idx);
                 }
             }
         }
@@ -6071,6 +6126,228 @@ mod tests {
             copied_files.get("target.rs"),
             Some(&1usize),
             "target.rs must be recorded as from slot 1"
+        );
+
+        // Cleanup
+        let _ = std::process::Command::new("git")
+            .args(["worktree", "remove", "--force"])
+            .arg(&wt_a)
+            .current_dir(&main_dir)
+            .output();
+        let _ = std::process::Command::new("git")
+            .args(["worktree", "remove", "--force"])
+            .arg(&wt_b)
+            .current_dir(&main_dir)
+            .output();
+        let _ = std::fs::remove_dir_all(&main_dir);
+        let _ = std::fs::remove_dir_all(&wt_a);
+        let _ = std::fs::remove_dir_all(&wt_b);
+    }
+
+    #[test]
+    fn test_worktree_merge_detects_delete_modify_conflict() {
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+
+        let main_dir = std::env::temp_dir().join(format!("foundry-wt-del-mod-{}", nanos));
+        std::fs::create_dir_all(&main_dir).unwrap();
+
+        // Initialize git repo
+        let git = |args: &[&str]| {
+            std::process::Command::new("git")
+                .args(args)
+                .current_dir(&main_dir)
+                .output()
+                .expect("git command failed")
+        };
+        git(&["init"]);
+        git(&["config", "user.email", "test@test.com"]);
+        git(&["config", "user.name", "test"]);
+
+        // Create tracked files: shared.rs and owned.rs
+        std::fs::write(main_dir.join("shared.rs"), "fn shared() {}").unwrap();
+        std::fs::write(main_dir.join("owned.rs"), "fn owned() {}").unwrap();
+        git(&["add", "."]);
+        git(&["commit", "-m", "initial"]);
+
+        // Create two worktrees
+        let wt_a = std::env::temp_dir().join(format!("foundry-wt-del-mod-a-{}", nanos));
+        let wt_b = std::env::temp_dir().join(format!("foundry-wt-del-mod-b-{}", nanos + 1));
+        git(&["worktree", "add", "--detach", wt_a.to_str().unwrap(), "HEAD"]);
+        git(&["worktree", "add", "--detach", wt_b.to_str().unwrap(), "HEAD"]);
+
+        // Slot 0 (wt_a): delete shared.rs
+        std::fs::remove_file(wt_a.join("shared.rs")).unwrap();
+
+        // Slot 1 (wt_b): modify shared.rs
+        std::fs::write(
+            wt_b.join("shared.rs"),
+            "fn shared() { /* slot 1 modified */ }",
+        )
+        .unwrap();
+
+        // Also test planned ownership: slot 0 deletes owned.rs, slot 1 modifies owned.rs
+        // but slot 0 is the planned owner -- deletion should win
+        std::fs::remove_file(wt_a.join("owned.rs")).unwrap();
+        std::fs::write(
+            wt_b.join("owned.rs"),
+            "fn owned() { /* slot 1 modified */ }",
+        )
+        .unwrap();
+
+        // Discover changed files in each worktree
+        let files_a = super::discover_changed_files_in_worktree(&wt_a).unwrap();
+        let files_b = super::discover_changed_files_in_worktree(&wt_b).unwrap();
+        assert!(
+            files_a.contains(&"shared.rs".to_string()),
+            "slot 0 must discover deleted shared.rs"
+        );
+        assert!(
+            files_b.contains(&"shared.rs".to_string()),
+            "slot 1 must discover modified shared.rs"
+        );
+        assert!(
+            files_a.contains(&"owned.rs".to_string()),
+            "slot 0 must discover deleted owned.rs"
+        );
+        assert!(
+            files_b.contains(&"owned.rs".to_string()),
+            "slot 1 must discover modified owned.rs"
+        );
+
+        // Planned ownership: slot 0 owns owned.rs, nobody owns shared.rs
+        let mut planned_file_owner: std::collections::HashMap<String, usize> =
+            std::collections::HashMap::new();
+        planned_file_owner.insert("owned.rs".to_string(), 0);
+
+        // Simulate the merge loop with conflict detection
+        let mut copied_files: std::collections::HashMap<String, usize> =
+            std::collections::HashMap::new();
+        let mut deleted_by_slot: std::collections::HashMap<String, usize> =
+            std::collections::HashMap::new();
+        let mut conflicts: Vec<(String, &str, usize, usize, usize)> = Vec::new(); // (file, kind, prev_slot, cur_slot, winner)
+
+        let slot_worktrees: Vec<(usize, &std::path::Path, Vec<String>)> = vec![
+            (0, wt_a.as_path(), files_a),
+            (1, wt_b.as_path(), files_b),
+        ];
+
+        for (slot_idx, wt_dir, files_to_copy) in &slot_worktrees {
+            for file_path in files_to_copy {
+                // Check copy-vs-copy conflict (existing logic)
+                if let Some(&prev_slot) = copied_files.get(file_path) {
+                    let owner = planned_file_owner.get(file_path);
+                    let winner = match owner {
+                        Some(&owning_slot) => owning_slot,
+                        None => prev_slot,
+                    };
+                    conflicts.push((file_path.clone(), "copy-copy", prev_slot, *slot_idx, winner));
+                    if winner == prev_slot {
+                        continue;
+                    }
+                }
+
+                // Check delete-vs-modify conflict (new logic)
+                if let Some(&del_slot) = deleted_by_slot.get(file_path) {
+                    let src = wt_dir.join(file_path);
+                    if src.exists() {
+                        // Previous slot deleted, current slot modifies
+                        let owner = planned_file_owner.get(file_path);
+                        let winner = match owner {
+                            Some(&owning_slot) => owning_slot,
+                            None => *slot_idx, // modification wins by default
+                        };
+                        conflicts.push((file_path.clone(), "delete-modify", del_slot, *slot_idx, winner));
+                        if winner == del_slot {
+                            continue;
+                        }
+                    }
+                }
+
+                let src = wt_dir.join(file_path);
+                let dest = main_dir.join(file_path);
+                if src.exists() {
+                    if let Some(parent) = dest.parent() {
+                        let _ = std::fs::create_dir_all(parent);
+                    }
+                    std::fs::copy(&src, &dest).unwrap();
+                    copied_files.insert(file_path.clone(), *slot_idx);
+                } else if dest.exists() {
+                    // Check modify-vs-delete conflict (reverse direction)
+                    if let Some(&prev_slot) = copied_files.get(file_path) {
+                        let owner = planned_file_owner.get(file_path);
+                        let winner = match owner {
+                            Some(&owning_slot) => owning_slot,
+                            None => prev_slot, // modification wins by default
+                        };
+                        conflicts.push((file_path.clone(), "modify-delete", prev_slot, *slot_idx, winner));
+                        if winner == prev_slot {
+                            continue;
+                        }
+                    }
+                    std::fs::remove_file(&dest).unwrap();
+                    deleted_by_slot.insert(file_path.clone(), *slot_idx);
+                } else {
+                    // File deleted in worktree, already absent from main -- no-op
+                    deleted_by_slot.insert(file_path.clone(), *slot_idx);
+                }
+            }
+        }
+
+        // === Assertions for shared.rs (no planned owner) ===
+
+        // A delete-modify conflict must be detected for shared.rs
+        let shared_conflict = conflicts
+            .iter()
+            .find(|(f, kind, _, _, _)| f == "shared.rs" && *kind == "delete-modify");
+        assert!(
+            shared_conflict.is_some(),
+            "must detect delete-modify conflict on shared.rs, got conflicts: {:?}",
+            conflicts
+        );
+        let shared_conflict = shared_conflict.unwrap();
+        // Winner should be slot 1 (modification wins by default when no planned owner)
+        assert_eq!(
+            shared_conflict.4, 1,
+            "winner for unplanned shared.rs delete-modify conflict must be slot 1 (modification wins)"
+        );
+        // shared.rs must exist with slot 1's content (modification won)
+        assert!(
+            main_dir.join("shared.rs").exists(),
+            "shared.rs must exist after modification wins over deletion"
+        );
+        let shared_content = std::fs::read_to_string(main_dir.join("shared.rs")).unwrap();
+        assert!(
+            shared_content.contains("slot 1 modified"),
+            "shared.rs must contain slot 1's version, got: {}",
+            shared_content
+        );
+
+        // === Assertions for owned.rs (slot 0 is planned owner) ===
+
+        // A delete-modify conflict must be detected for owned.rs
+        let owned_conflict = conflicts
+            .iter()
+            .find(|(f, kind, _, _, _)| f == "owned.rs" && *kind == "delete-modify");
+        assert!(
+            owned_conflict.is_some(),
+            "must detect delete-modify conflict on owned.rs, got conflicts: {:?}",
+            conflicts
+        );
+        let owned_conflict = owned_conflict.unwrap();
+        // Winner should be slot 0 (planned owner)
+        assert_eq!(
+            owned_conflict.4, 0,
+            "winner for owned.rs delete-modify conflict must be slot 0 (planned owner)"
+        );
+        // owned.rs must NOT exist (deletion won because slot 0 is the planned owner)
+        assert!(
+            !main_dir.join("owned.rs").exists(),
+            "owned.rs must be deleted when planned owner (slot 0) deleted it"
         );
 
         // Cleanup
