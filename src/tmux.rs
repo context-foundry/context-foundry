@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use uuid::Uuid;
 
-use crate::prompts::AUTONOMY_OVERRIDE;
+use crate::prompts::agent_system_directives;
 
 pub struct TmuxSession {
     pub name: String,
@@ -135,7 +135,7 @@ impl TmuxSession {
         parts.push("--verbose".into());
 
         parts.push("--append-system-prompt".into());
-        parts.push(shell_escape_single_quote(AUTONOMY_OVERRIDE));
+        parts.push(shell_escape_single_quote(&agent_system_directives()));
 
         if let Some(tools) = allowed_tools {
             parts.push("--tools".into());

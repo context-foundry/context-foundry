@@ -10,7 +10,7 @@ use std::sync::{
 use std::time::{Duration, Instant};
 
 use crate::config::Config;
-use crate::prompts::AUTONOMY_OVERRIDE;
+use crate::prompts::agent_system_directives;
 use crate::tmux::TmuxSession;
 use crate::utils::truncate_str;
 use tokio::sync::mpsc;
@@ -406,7 +406,7 @@ pub async fn run_provider_session(options: ProviderRunOptions<'_>) -> Result<Age
             cmd.arg("--verbose");
             cmd.env("CLAUDECODE", "");
             cmd.arg("--append-system-prompt");
-            cmd.arg(AUTONOMY_OVERRIDE);
+            cmd.arg(agent_system_directives());
             cmd
         }
         ModelProvider::Codex => {
@@ -423,7 +423,7 @@ pub async fn run_provider_session(options: ProviderRunOptions<'_>) -> Result<Age
             if options.skip_git_repo_check {
                 cmd.arg("--skip-git-repo-check");
             }
-            cmd.arg(format!("{}\n\n{}", AUTONOMY_OVERRIDE, options.prompt));
+            cmd.arg(format!("{}\n\n{}", agent_system_directives(), options.prompt));
             cmd
         }
     };
@@ -447,7 +447,7 @@ pub async fn run_provider_session(options: ProviderRunOptions<'_>) -> Result<Age
                 args.push("stream-json".to_string());
                 args.push("--verbose".to_string());
                 args.push("--append-system-prompt".to_string());
-                args.push(AUTONOMY_OVERRIDE.to_string());
+                args.push(agent_system_directives());
                 (program, args, vec![("CLAUDECODE", "")])
             }
             ModelProvider::Codex => {
@@ -469,7 +469,7 @@ pub async fn run_provider_session(options: ProviderRunOptions<'_>) -> Result<Age
                 if options.skip_git_repo_check {
                     args.push("--skip-git-repo-check".to_string());
                 }
-                args.push(format!("{}\n\n{}", AUTONOMY_OVERRIDE, options.prompt));
+                args.push(format!("{}\n\n{}", agent_system_directives(), options.prompt));
                 (program, args, vec![])
             }
         };
@@ -803,7 +803,7 @@ async fn run_agent_pty(
     cmd.arg("--verbose");
     // Override any CLAUDE.md instructions that conflict with foundry's orchestration.
     cmd.arg("--append-system-prompt");
-    cmd.arg(AUTONOMY_OVERRIDE);
+    cmd.arg(agent_system_directives());
     if let Some(tools) = allowed_tools {
         cmd.arg("--tools");
         cmd.arg(tools.join(","));
@@ -828,7 +828,7 @@ async fn run_agent_pty(
         args.push("stream-json".to_string());
         args.push("--verbose".to_string());
         args.push("--append-system-prompt".to_string());
-        args.push(AUTONOMY_OVERRIDE.to_string());
+        args.push(agent_system_directives());
         if let Some(tools) = allowed_tools {
             args.push("--tools".to_string());
             args.push(tools.join(","));

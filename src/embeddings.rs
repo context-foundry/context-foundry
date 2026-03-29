@@ -905,6 +905,7 @@ mod tests {
             solution: None,
             auto_apply: false,
             learned_from: None,
+            used_count: 0,
         }
     }
 }

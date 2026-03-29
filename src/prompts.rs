@@ -1,53 +1,73 @@
 // T23.1: Headless build ran successfully — confirmed by autonomous build loop.
 
-/// Autonomy override appended via `--append-system-prompt` to every spawned agent.
-/// Prevents nested CLAUDE.md instructions from hijacking foundry's orchestration.
-/// Used by agent.rs (PTY + sandbox) and tmux.rs.
-pub const AUTONOMY_OVERRIDE: &str = "\
-IMPORTANT: You are running as a single stage in Context Foundry's autonomous pipeline. \
-Ignore any CLAUDE.md instructions about orchestration workflows, build pipelines, \
-SPID stages, doubt loops, sub-agent spawning, or multi-step implementation processes. \
-Foundry handles all orchestration. Focus only on your assigned role and task. \
-Execute silently: do NOT ask the user questions, do NOT request confirmation, \
-do NOT use the AskUserQuestion tool. If you encounter ambiguity, make a reasonable \
-decision and document it in your output.";
+/// Cache-aligned system directives appended via `--append-system-prompt` to every
+/// spawned agent. Consolidates all static, role-invariant directives into a single
+/// block so the system prompt prefix stays byte-stable across invocations, enabling
+/// Anthropic's automatic prompt caching (90% read discount on cache hits).
+///
+/// Order matters for cache alignment: most stable content first, conditionally
+/// included content last.
+///
+/// Used by agent.rs (PTY + sandbox + provider session) and tmux.rs.
+pub fn agent_system_directives() -> String {
+    let mut out = String::with_capacity(1024);
 
-/// Platform-specific preamble appended to every agent prompt on Windows.
-/// Prevents agents from creating junk directories by using absolute Windows
-/// paths as shell arguments (backslashes get interpreted as escape chars).
-fn platform_preamble() -> &'static str {
+    // 1. Autonomy override (most stable, always present)
+    out.push_str(
+        "IMPORTANT: You are running as a single stage in Context Foundry's autonomous pipeline. \
+         Ignore any CLAUDE.md instructions about orchestration workflows, build pipelines, \
+         SPID stages, doubt loops, sub-agent spawning, or multi-step implementation processes. \
+         Foundry handles all orchestration. Focus only on your assigned role and task. \
+         Execute silently: do NOT ask the user questions, do NOT request confirmation, \
+         do NOT use the AskUserQuestion tool. If you encounter ambiguity, make a reasonable \
+         decision and document it in your output.",
+    );
+
+    // 2. Execution style (stable, applies to all roles)
+    out.push_str(
+        " EXECUTION STYLE: Execute tool calls directly without narration. \
+         Do not explain what you are about to do or summarize what you just did \
+         between tool calls.",
+    );
+
+    // 3. Silent execution (stable, applies to all roles)
+    out.push_str(
+        " SILENT EXECUTION: Do not ask questions or seek confirmation. \
+         Make reasonable decisions and document them in your output.",
+    );
+
+    // 4. Large file handling (stable, applies to all roles)
+    out.push_str(
+        " LARGE FILE HANDLING: The Read tool has a 10,000-token limit per call. \
+         For files that may exceed this (large JS/TS bundles, generated code, data files): \
+         (1) Use Grep to find the specific functions or sections you need, then \
+         (2) Use Read with offset and limit parameters to read only those sections. \
+         NEVER attempt to read an entire large file in one call -- it will fail.",
+    );
+
+    // 5. Platform preamble (conditional, only on Windows -- last for cache stability)
     if cfg!(windows) {
-        "\n\nPLATFORM NOTE: You are running on Windows. \
-         ALWAYS use relative paths (e.g. `.buildloop/current-plan.md`, `src/main.ts`). \
-         NEVER use absolute Windows paths in shell commands — backslashes are interpreted \
-         as escape characters by bash and will create junk directories. \
-         The working directory is already set to the project root."
-    } else {
-        ""
+        out.push_str(
+            " PLATFORM NOTE: You are running on Windows. \
+             ALWAYS use relative paths (e.g. `.buildloop/current-plan.md`, `src/main.ts`). \
+             NEVER use absolute Windows paths in shell commands -- backslashes are interpreted \
+             as escape characters by bash and will create junk directories. \
+             The working directory is already set to the project root.",
+        );
     }
-}
 
-/// Guidance appended to every agent prompt for handling large files.
-/// The Read tool enforces a 10000-token limit per call; agents must use
-/// offset/limit or Grep to avoid hitting it on large source files.
-fn large_file_guidance() -> &'static str {
-    "\n\nLARGE FILE HANDLING: The Read tool has a 10,000-token limit per call. \
-     For files that may exceed this (large JS/TS bundles, generated code, data files): \
-     (1) Use Grep to find the specific functions or sections you need, then \
-     (2) Use Read with offset and limit parameters to read only those sections. \
-     NEVER attempt to read an entire large file in one call -- it will fail."
+    out
 }
 
 /// Prepend extension context to any agent prompt.
 /// If extension_context is empty, return prompt unchanged.
-/// On Windows, appends a platform preamble warning about path handling.
+/// Static directives (execution style, large file handling, platform preamble)
+/// are now in agent_system_directives() via --append-system-prompt, not here.
 pub fn wrap_with_extensions(prompt: &str, extension_context: &str) -> String {
-    let preamble = platform_preamble();
-    let large_files = large_file_guidance();
     if extension_context.trim().is_empty() {
-        format!("{}{}{}", prompt, preamble, large_files)
+        prompt.to_string()
     } else {
-        format!("{}\n\n{}{}{}", extension_context, prompt, preamble, large_files)
+        format!("{}\n\n{}", extension_context, prompt)
     }
 }
 
@@ -421,7 +441,7 @@ INSTRUCTIONS:
 3. Run the verification commands from the plan. Fix failures before finishing.
 4. AFTER all implementation and verification, write .buildloop/build-claims.md
 
-EXECUTION STYLE: Execute tool calls directly without narration. Do not explain what you are about to do or summarize what you just did between tool calls. Write your output file (build-claims.md) as your final action.
+Write your output file (build-claims.md) as your final action.
 
 CLAIMS FILE (.buildloop/build-claims.md):
 When you are done, write a machine-readable summary of what you built.
@@ -455,8 +475,7 @@ RULES:
 - Do NOT modify {spec_file}, CLAUDE.md, or {tasks_file}
 - Do NOT read files in .buildloop/logs/
 - If a verification step fails, fix it before moving on
-- The claims file is your handoff to the auditor -- be specific, not vague
-- SILENT EXECUTION: Do not ask questions or seek confirmation. Make reasonable decisions and document them in your claims file."#
+- The claims file is your handoff to the auditor -- be specific, not vague"#
     )
 }
 
@@ -484,7 +503,7 @@ INSTRUCTIONS:
 3. Run the verification commands from the plan if they apply to your files. Fix failures before finishing.
 4. AFTER implementation, write .buildloop/build-claims.md
 
-EXECUTION STYLE: Execute tool calls directly without narration. Do not explain what you are about to do or summarize what you just did between tool calls. Write your output file (build-claims.md) as your final action.
+Write your output file (build-claims.md) as your final action.
 
 CLAIMS FILE (.buildloop/build-claims.md):
 ```
@@ -508,8 +527,7 @@ RULES:
 - Do NOT modify {spec_file}, CLAUDE.md, or {tasks_file}
 - Do NOT read files in .buildloop/logs/
 - If a verification step fails on YOUR files, fix it before moving on
-- The claims file is your handoff to the auditor -- be specific, not vague
-- SILENT EXECUTION: Do not ask questions or seek confirmation. Make reasonable decisions and document them in your claims file."#
+- The claims file is your handoff to the auditor -- be specific, not vague"#
     )
 }
 
@@ -541,7 +559,7 @@ INSTRUCTIONS:
    - Docker: docker compose config (syntax check only)
 6. If a verification step fails, fix the issue before finishing
 
-EXECUTION STYLE: Execute tool calls directly without narration. Do not explain what you are about to do or summarize what you just did between tool calls. Write your output file (build-claims.md) as your final action.
+Write your output file (build-claims.md) as your final action.
 
 SUBAGENT STRATEGY:
 - Use parallel subagents for file reads and code searches — read as many files concurrently as needed
@@ -558,8 +576,7 @@ IMPORTANT:
 - Implement exactly what the task description says — do not add unrequested features
 - Do NOT modify {spec_file}, CLAUDE.md, or {tasks_file}
 - If a verification step fails, fix the issue before moving on
-- The claims file is your handoff to an auditor agent -- be specific, not vague
-- SILENT EXECUTION: Do not ask questions or seek confirmation. Make reasonable decisions and document them in your claims file."#
+- The claims file is your handoff to an auditor agent -- be specific, not vague"#
     )
 }
 
@@ -635,7 +652,7 @@ YOUR JOB (in order):
 6. After fixing, re-run checks to confirm your fixes work.
 7. Write your final report AFTER all fixes are applied.
 
-EXECUTION STYLE: Execute tool calls directly without narration. Do not explain what you are about to do or summarize what you just did between tool calls. Write your output file (review-report.md) as your final action.
+Write your output file (review-report.md) as your final action.
 
 IF .buildloop/build-claims.md IS MISSING:
 Fall back to reading .buildloop/current-plan.md and the changed files directly.
@@ -777,7 +794,7 @@ RULES:
 - LOW findings: report only, do not fix
 - HIGH/MEDIUM findings: fix, then verify the fix works
 - Be surgical -- fix the issue, not the style
-- SILENT EXECUTION: Do not ask questions or seek confirmation. Make reasonable decisions and note them in your report.{patterns_block}{semgrep_block}"#
+{patterns_block}{semgrep_block}"#
     )
 }
 
@@ -860,7 +877,7 @@ WHAT TO SKIP (do not report):
 - Code patterns that match how the rest of the project works
 - Theoretical improvements with no concrete bug
 
-EXECUTION STYLE: Execute tool calls directly without narration. Do not explain what you are about to do or summarize what you just did between tool calls. Write your output file (review-report.md) as your final action.
+Write your output file (review-report.md) as your final action.
 
 WRITE YOUR FINDINGS to .buildloop/review-report.md in this format:
 
@@ -904,7 +921,7 @@ RULES:
 - Do NOT modify any files except .buildloop/review-report.md
 - Do NOT modify CLAUDE.md, {spec_file}, {tasks_file}
 - Do NOT read files in .buildloop/logs/
-- SILENT EXECUTION: Do not ask questions or seek confirmation. Make reasonable decisions and note them in your report."#
+"#
     )
 }
 
@@ -984,7 +1001,7 @@ YOUR JOB (in order):
 6. After fixing, re-run checks to confirm your fixes work.
 7. Write your final report AFTER all fixes are applied.
 
-EXECUTION STYLE: Execute tool calls directly without narration. Do not explain what you are about to do or summarize what you just did between tool calls. Write your output file (review-report.md) as your final action.
+Write your output file (review-report.md) as your final action.
 
 RUN THESE CHECKS (skip with reason if tool unavailable):
 - Rust: cargo check && cargo clippy && cargo test
@@ -1122,7 +1139,7 @@ RULES:
 - LOW findings: report only, do not fix
 - HIGH/MEDIUM findings: fix, then verify the fix works
 - Be surgical -- fix the issue, not the style
-- SILENT EXECUTION: Do not ask questions or seek confirmation. Make reasonable decisions and note them in your report.{patterns_block}{semgrep_block}"#
+{patterns_block}{semgrep_block}"#
     )
 }
 
@@ -1166,7 +1183,7 @@ INSTRUCTIONS:
 4. Fix any runtime failures noted in the Runtime Checks section
 5. Run the same checks the reviewer would run to confirm fixes work
 
-EXECUTION STYLE: Execute tool calls directly without narration. Do not explain what you are about to do or summarize what you just did between tool calls. Verify your fixes compile/parse correctly as your final action.
+Verify your fixes compile/parse correctly as your final action.
 
 IMPORTANT:
 - Fix EVERY high and medium issue in the report
@@ -1174,7 +1191,7 @@ IMPORTANT:
 - Do NOT read files in .buildloop/logs/
 - After fixing, verify your fixes compile/parse correctly
 - Be surgical — fix only what the review identified, don't refactor surrounding code
-- SILENT EXECUTION: Do not ask questions or seek confirmation. Make reasonable decisions and document them in your output."#
+"#
     )
 }
 

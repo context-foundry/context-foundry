@@ -42,9 +42,10 @@
       position: relative; z-index: 1;
       max-width: 720px; margin: 0 auto; padding: 0 1.5rem;
     }
-    /* Hero -- full bleed */
+    /* Hero -- contained like content */
     .hero {
-      position: relative; overflow: hidden; width: 100%;
+      position: relative; overflow: hidden;
+      max-width: 720px; margin: 0 auto;
       border-bottom: 2px solid var(--accent);
       z-index: 1;
     }
@@ -146,7 +147,7 @@
 
 <!-- HERO: Full-width foundry scene -->
 <div class="hero">
-  <canvas id="foundry" width="960" height="220"></canvas>
+  <canvas id="foundry" width="480" height="260"></canvas>
 </div>
 
 <div class="page-content">
@@ -253,7 +254,9 @@ foundry</code></pre>
   <h2>Documentation</h2>
   <nav>
     <ul>
+      <li><a href="gallery.html">Living Gallery<div class="desc">Auto-generated pixel art scenes -- a new one every 2 hours, powered by the loop</div></a></li>
       <li><a href="changelog.html">Changelog<div class="desc">Release notes -- improvements, new features, and bug fixes</div></a></li>
+      <li><a href="discovery-trap.html">The Discovery Trap<div class="desc">Capability discovery is the new context switch -- and solving it might be harder than we think</div></a></li>
       <li><a href="doubt-in-the-loop.html">Doubt in the Loop<div class="desc">Why one AI agent is never enough -- adversarial verification for AI-generated code</div></a></li>
       <li><a href="PITCH.html">Pitch<div class="desc">One-page overview of what Context Foundry does and why</div></a></li>
       <li><a href="OVERVIEW.html">Technical Reference<div class="desc">Architecture, configuration, pipeline stages, extension system</div></a></li>
@@ -277,299 +280,81 @@ foundry</code></pre>
 </div><!-- /page-content -->
 
 <!-- ============================================================ -->
-<!-- HERO ANIMATION: The Foundry -- molten code forged into commits -->
+<!-- HERO ANIMATION: Manifest-driven scene loader                 -->
+<!-- Scenes live in scenes/*.js, registered in scenes/manifest.json -->
 <!-- ============================================================ -->
 <script>
-(function(){
-  const c=document.getElementById('foundry');
-  const ctx=c.getContext('2d');
-  ctx.imageSmoothingEnabled=false;
-  const W=c.width, H=c.height;
+window.CF={scenes:[],register:function(name,loc,factory){this.scenes.push({name:name,loc:loc,factory:factory});}};
 
+(function(){
+  var c=document.getElementById('foundry');
+  var ctx=c.getContext('2d');
+  ctx.imageSmoothingEnabled=false;
+  var W=c.width, H=c.height;
+
+  // Shared drawing API
   function px(x,y,col){ctx.fillStyle=col;ctx.fillRect(Math.floor(x),Math.floor(y),1,1);}
   function rect(x,y,w,h,col){ctx.fillStyle=col;ctx.fillRect(Math.floor(x),Math.floor(y),Math.ceil(w),Math.ceil(h));}
-  function hexRgb(h){const n=parseInt(h.slice(1),16);return[(n>>16)&255,(n>>8)&255,n&255];}
-  function rgba(h,a){const[r,g,b]=hexRgb(h);return`rgba(${r},${g},${b},${a})`;}
-  function lerp(a,b,t){const[ar,ag,ab]=hexRgb(a);const[br,bg,bb]=hexRgb(b);return`rgb(${Math.round(ar+(br-ar)*t)},${Math.round(ag+(bg-ag)*t)},${Math.round(ab+(bb-ab)*t)})`;}
+  function hexRgb(h){var n=parseInt(h.slice(1),16);return[(n>>16)&255,(n>>8)&255,n&255];}
+  function rgba(h,a){var rgb=hexRgb(h);return'rgba('+rgb[0]+','+rgb[1]+','+rgb[2]+','+a+')';}
+  function lerp(a,b,t){var ar=hexRgb(a),br=hexRgb(b);return'rgb('+Math.round(ar[0]+(br[0]-ar[0])*t)+','+Math.round(ar[1]+(br[1]-ar[1])*t)+','+Math.round(ar[2]+(br[2]-ar[2])*t)+')';}
   function osc(t,p,ph){return(Math.sin((t/p)*Math.PI*2+(ph||0))+1)/2;}
-  function srand(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+  function srand(a){return function(){a|=0;a=a+0x6D2B79F5|0;var t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+  function circle(cx,cy,r,col){for(var dy=-r;dy<=r;dy++)for(var dx=-r;dx<=r;dx++)if(dx*dx+dy*dy<=r*r)px(cx+dx,cy+dy,col);}
 
-  // Spark particles -- persistent array
-  const sparks=[];
-  for(let i=0;i<60;i++){
-    sparks.push({x:0,y:0,vx:0,vy:0,life:0,maxLife:0,hue:0});
-  }
-  function emitSpark(sx,sy){
-    for(let s of sparks){
-      if(s.life<=0){
-        s.x=sx;s.y=sy;
-        s.vx=(Math.random()-0.5)*3;
-        s.vy=-Math.random()*4-1;
-        s.maxLife=20+Math.random()*40;
-        s.life=s.maxLife;
-        s.hue=Math.random();
-        break;
-      }
-    }
+  var api={px:px,rect:rect,hexRgb:hexRgb,rgba:rgba,lerp:lerp,osc:osc,srand:srand,circle:circle,ctx:ctx,W:W,H:H};
+
+  function drawLabel(picked){
+    if(!picked.loc) return;
+    ctx.save();
+    ctx.globalAlpha=0.3;
+    ctx.fillStyle='#e6edf3';
+    ctx.font='bold 8px monospace';
+    ctx.textBaseline='bottom';
+    ctx.fillText(picked.name, 8, H-12);
+    ctx.globalAlpha=0.2;
+    ctx.font='7px monospace';
+    ctx.fillText(picked.loc, 8, H-3);
+    ctx.restore();
   }
 
-  function draw(t){
-    // Sky gradient -- deep dark with warm horizon glow
-    for(let y=0;y<H;y+=2){
-      const p=y/H;
-      const col=p<0.5?lerp('#08090c','#0d1117',p/0.5):lerp('#0d1117','#1a1208',(p-0.5)/0.5);
-      rect(0,y,W,2,col);
+  function startScene(){
+    var scenes=window.CF.scenes;
+    if(!scenes.length) return;
+    var picked=scenes[Math.floor(Math.random()*scenes.length)];
+    var draw;
+    try { draw=picked.factory(api); } catch(e){ console.warn('Scene init failed:',picked.name,e); return; }
+    var frame=0;
+    function loop(){
+      try { draw(frame/15); } catch(e){ console.warn('Scene draw failed:',picked.name,e); return; }
+      drawLabel(picked);
+      frame++;
+      setTimeout(loop,1000/15);
     }
-
-    // Distant city skyline silhouette
-    const sr=srand(42);
-    for(let i=0;i<40;i++){
-      const bx=i*24+Math.floor(sr()*8)-4;
-      const bh=15+Math.floor(sr()*50);
-      const by=H-60-bh;
-      rect(bx,by,14+Math.floor(sr()*10),bh,'#0a0c10');
-      // Tiny windows
-      for(let wy=by+4;wy<by+bh-4;wy+=6){
-        for(let wx=bx+2;wx<bx+12;wx+=4){
-          if(sr()>0.6){
-            px(wx,wy,rgba('#f0a500',0.05+sr()*0.1));
-            px(wx+1,wy,rgba('#f0a500',0.03+sr()*0.06));
-          }
-        }
-      }
-    }
-
-    // Ground plane
-    rect(0,H-60,W,60,'#0a0c10');
-    // Ground line
-    rect(0,H-60,W,1,rgba('#f0a500',0.15));
-    // Ground texture
-    const gr=srand(200);
-    for(let i=0;i<80;i++){px(Math.floor(gr()*W),H-59+Math.floor(gr()*58),rgba('#161b22',0.3+gr()*0.2));}
-
-    // ==========================================
-    // THE FOUNDRY (center) -- anvil + crucible
-    // ==========================================
-    const fx=W/2, fy=H-60;
-
-    // Foundry structure -- dark arch
-    rect(fx-60,fy-80,120,80,'#10131a');
-    // Arch top
-    for(let x=-50;x<=50;x++){
-      const ah=Math.sqrt(2500-x*x)*0.6;
-      rect(fx+x,fy-80-ah,1,ah,'#10131a');
-    }
-    // Arch border
-    for(let x=-52;x<=52;x++){
-      const ah=Math.sqrt(2704-Math.min(x*x,2704))*0.6;
-      px(fx+x,fy-80-ah,rgba('#f0a500',0.2));
-    }
-
-    // Crucible (left of center) -- glowing molten container
-    const crx=fx-35, cry=fy-20;
-    rect(crx,cry,20,18,'#2a1a0a');
-    rect(crx+1,cry+1,18,16,'#1a100a');
-    // Molten surface -- animated
-    for(let x=0;x<16;x++){
-      const mh=2+Math.round(osc(t,1.5+x*0.1,x*0.5)*3);
-      const glow=osc(t,2,x*0.3);
-      rect(crx+2+x,cry+2,1,mh,rgba('#f0a500',0.4+glow*0.4));
-      if(glow>0.6)rect(crx+2+x,cry+1,1,1,rgba('#ffcc44',0.3));
-    }
-    // Glow emanating upward
-    for(let y=0;y<15;y++){
-      const gw=8-y*0.4;
-      if(gw>0)rect(crx+10-gw/2,cry-y,gw,1,rgba('#f0a500',0.06*(15-y)/15));
-    }
-
-    // Anvil (center)
-    const ax=fx-8, ay=fy-12;
-    rect(ax,ay,16,4,'#3a3a44'); // top face
-    rect(ax-2,ay,2,4,'#2a2a34'); // horn left
-    rect(ax+16,ay,4,3,'#2a2a34'); // horn right
-    rect(ax+2,ay+4,12,8,'#2a2a34'); // body
-    rect(ax+4,ay+12,8,2,'#3a3a44'); // base
-
-    // Glowing code block on anvil -- being forged
-    const glow=osc(t,3,0);
-    rect(ax+3,ay-4,10,4,rgba('#f0a500',0.3+glow*0.5));
-    rect(ax+4,ay-3,8,2,rgba('#ffcc44',0.2+glow*0.4));
-    // Code lines on the block
-    rect(ax+4,ay-3,3,1,rgba('#ff7b72',0.4+glow*0.3));
-    rect(ax+8,ay-3,3,1,rgba('#79c0ff',0.3+glow*0.3));
-    rect(ax+5,ay-2,5,1,rgba('#3fb950',0.3+glow*0.2));
-
-    // Hammer (animated -- striking)
-    const hammerPhase=t%3;
-    const hammerUp=hammerPhase<2?hammerPhase*8:16-(hammerPhase-2)*16;
-    const hx=fx+6, hy=ay-10-hammerUp;
-    rect(hx,hy,4,8,'#5a5a64'); // handle
-    rect(hx-2,hy-4,8,4,'#6a6a74'); // head
-    rect(hx-1,hy-3,6,2,'#8a8a94'); // face
-
-    // Emit sparks on hammer strike
-    if(hammerPhase>2.8&&hammerPhase<2.95){
-      for(let i=0;i<5;i++)emitSpark(ax+8,ay-4);
-    }
-
-    // Output stream (right) -- forged commits flowing out
-    for(let i=0;i<6;i++){
-      const ox=fx+50+i*25+(t*8)%25;
-      const oy=fy-15+Math.sin(ox*0.05+t)*3;
-      const fade=Math.max(0,1-(ox-(fx+50))/150);
-      if(ox<fx+200){
-        rect(ox,oy,8,3,rgba('#3fb950',0.15+fade*0.25));
-        rect(ox+1,oy+1,6,1,rgba('#3fb950',0.1+fade*0.15));
-      }
-    }
-
-    // Input stream (left) -- raw tasks flowing in
-    for(let i=0;i<6;i++){
-      const ix=fx-200+i*25+(t*6)%25;
-      const iy=fy-20+Math.sin(ix*0.04+t*0.7)*4;
-      const fade=Math.max(0,(ix-(fx-200))/150);
-      if(ix<fx-50&&ix>fx-200){
-        rect(ix,iy,10,2,rgba('#8b949e',0.1+fade*0.2));
-        rect(ix+2,iy,4,1,rgba('#f0a500',0.05+fade*0.1));
-      }
-    }
-
-    // === SPARKS ===
-    for(let s of sparks){
-      if(s.life>0){
-        s.x+=s.vx;s.y+=s.vy;
-        s.vy+=0.1; // gravity
-        s.life--;
-        const a=(s.life/s.maxLife);
-        const col=s.hue>0.5?'#f0a500':'#ffcc44';
-        px(s.x,s.y,rgba(col,a*0.8));
-        if(a>0.5)px(s.x,s.y-1,rgba(col,a*0.3));
-      }
-    }
-    // Continuous ambient sparks from crucible
-    if(Math.random()>0.7)emitSpark(crx+5+Math.random()*10,cry);
-
-    // === PIPELINE LABELS (subtle) ===
-    // Left: "TASKS.md" fading text
-    const labels=[
-      {x:fx-170,y:fy-40,c:'#8b949e',a:0.2},
-      {x:fx+120,y:fy-40,c:'#3fb950',a:0.2},
-    ];
-    // Just subtle dashes representing text
-    for(let l of labels){
-      for(let i=0;i<4;i++){
-        rect(l.x+i*6,l.y,4,1,rgba(l.c,l.a+osc(t,4,i)*0.1));
-      }
-    }
-
-    // === STARS (more, denser) ===
-    const str=srand(99);
-    for(let i=0;i<60;i++){
-      const sx=Math.floor(str()*W);
-      const sy=Math.floor(str()*90);
-      const a=0.1+osc(t,2+str()*4,i*1.3)*0.4;
-      const sz=str()>0.9?2:1;
-      rect(sx,sy,sz,sz,rgba('#e6edf3',a));
-    }
-
-    // === MOON (upper right) ===
-    const mx=W-120, my=28;
-    // Moon disc
-    for(let dy=-10;dy<=10;dy++){
-      for(let dx=-10;dx<=10;dx++){
-        const d=Math.sqrt(dx*dx+dy*dy);
-        if(d<=10){
-          const a=d<8?0.7:0.7*(10-d)/2;
-          rect(mx+dx,my+dy,1,1,rgba('#e6edf3',a));
-        }
-        // Crescent shadow -- offset circle carves the crescent
-        if(d<=10){
-          const sd=Math.sqrt((dx+5)*(dx+5)+(dy-1)*(dy-1));
-          if(sd<9)rect(mx+dx,my+dy,1,1,rgba('#08090c',0.85));
-        }
-      }
-    }
-    // Moon glow halo
-    for(let dy=-16;dy<=16;dy++){
-      for(let dx=-16;dx<=16;dx++){
-        const d=Math.sqrt(dx*dx+dy*dy);
-        if(d>10&&d<16){
-          rect(mx+dx,my+dy,1,1,rgba('#e6edf3',0.02*(16-d)/6));
-        }
-      }
-    }
-
-    // === SHOOTING STAR (periodic) ===
-    const shootCycle=t%18; // fires every ~18 seconds of animation time
-    if(shootCycle<1.5){
-      const sp=shootCycle/1.5; // 0..1 progress
-      const ssx=80+sp*350;
-      const ssy=8+sp*55;
-      // Head
-      rect(ssx,ssy,2,1,rgba('#ffffff',0.8*(1-sp*0.5)));
-      // Trail
-      for(let ti=1;ti<8;ti++){
-        const ta=Math.max(0,(0.6-ti*0.08)*(1-sp*0.3));
-        px(ssx-ti*3,ssy-ti*0.8,rgba('#e6edf3',ta));
-        if(ti<4)px(ssx-ti*3-1,ssy-ti*0.8,rgba('#f0a500',ta*0.5));
-      }
-    }
-
-    // === DRONE (slow pass, blinking lights) ===
-    const droneX=(t*5)%((W+100))-50; // crawls left to right, loops
-    const droneY=22+Math.sin(t*0.3)*4;
-    // Body
-    rect(droneX,droneY,6,2,'#21262d');
-    rect(droneX+1,droneY-1,4,1,'#21262d');
-    // Rotors
-    const rotorSpin=Math.floor(t*8)%2;
-    rect(droneX-2+rotorSpin,droneY-2,3,1,rgba('#8b949e',0.4));
-    rect(droneX+5-rotorSpin,droneY-2,3,1,rgba('#8b949e',0.4));
-    // Nav lights -- red left, green right, blinking
-    if(Math.floor(t*3)%2===0){
-      px(droneX,droneY,rgba('#f85149',0.7));
-      px(droneX+5,droneY,rgba('#3fb950',0.7));
-    }
-    // White strobe (every ~2s)
-    if(Math.floor(t*2)%4===0)px(droneX+3,droneY+2,rgba('#ffffff',0.6));
-
-    // === UFO (rarer, slower, higher altitude) ===
-    const ufoPhase=t%45; // appears every ~45s of animation time
-    if(ufoPhase>35){
-      const up=(ufoPhase-35)/10; // 0..1 over 10 units
-      const ux=W-80-up*400;
-      const uy=12+Math.sin(up*8)*2;
-      // Saucer body
-      rect(ux-1,uy,8,2,'#30363d');
-      rect(ux+1,uy-1,4,1,'#3a3a44');
-      rect(ux,uy+2,6,1,'#30363d');
-      // Dome
-      rect(ux+2,uy-2,2,1,rgba('#79c0ff',0.5));
-      // Lights underneath -- cycling
-      const lightPhase=Math.floor(t*6)%3;
-      px(ux+1,uy+2,rgba('#f0a500',lightPhase===0?0.7:0.15));
-      px(ux+3,uy+2,rgba('#3fb950',lightPhase===1?0.7:0.15));
-      px(ux+5,uy+2,rgba('#79c0ff',lightPhase===2?0.7:0.15));
-      // Beam (faint, below saucer)
-      if(up>0.3&&up<0.7){
-        for(let by=1;by<8;by++){
-          const bw=1+Math.floor(by*0.4);
-          rect(ux+3-Math.floor(bw/2),uy+2+by,bw,1,rgba('#79c0ff',0.04*(8-by)/8));
-        }
-      }
-    }
-
-    // Bottom glow line
-    rect(0,H-1,W,1,rgba('#f0a500',0.4));
-    rect(0,H-2,W,1,rgba('#f0a500',0.1));
+    loop();
   }
 
-  let frame=0;
-  function loop(){draw(frame/15);frame++;setTimeout(loop,1000/15);}
-  loop();
+  // Load scenes from manifest, then start
+  fetch('scenes/manifest.json').then(function(r){return r.json();}).then(function(manifest){
+    var total=manifest.scenes.length, loaded=0;
+    manifest.scenes.forEach(function(entry){
+      var s=document.createElement('script');
+      s.src='scenes/'+entry.file;
+      s.onload=function(){loaded++;if(loaded===total)startScene();};
+      s.onerror=function(){loaded++;if(loaded===total)startScene();};
+      document.head.appendChild(s);
+    });
+  }).catch(function(){
+    // Manifest fetch failed -- try loading the 4 original scenes as fallback
+    ['foundry','exuma','atacama','challenger'].forEach(function(name){
+      var s=document.createElement('script');
+      s.src='scenes/'+name+'.js';
+      document.head.appendChild(s);
+    });
+    setTimeout(startScene,1000);
+  });
 })();
 </script>
-
 <!-- ============================================================ -->
 <!-- BACKGROUND PARTICLES: subtle ambient life across entire page  -->
 <!-- ============================================================ -->

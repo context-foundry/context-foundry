@@ -39,13 +39,21 @@ pub struct Pattern {
     pub auto_apply: bool,
     #[serde(default)]
     pub learned_from: Option<String>,
+    /// How many times agents have cited this pattern in their output artifacts.
+    /// Tracked automatically after each task to measure pattern usefulness.
+    #[serde(default)]
+    pub used_count: usize,
 }
 
 /// Wrapper object format used by extension pattern files.
 /// Example: {"pattern_type": "common-issues", "domain": "recon", "patterns": [...]}
-#[derive(Debug, Deserialize)]
+/// Preserves extra metadata fields (pattern_type, domain, version, etc.) on round-trip.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct PatternWrapper {
     patterns: Vec<Pattern>,
+    /// Capture all non-"patterns" keys so they survive a write-back.
+    #[serde(flatten)]
+    extra: HashMap<String, serde_json::Value>,
 }
 
 /// Expand `~/` prefix using $HOME environment variable.
@@ -148,6 +156,19 @@ pub fn keyword_scores(patterns: &[Pattern], task_desc: &str) -> Vec<(usize, usiz
                 score += 1;
             }
 
+            // Usefulness tracking: boost patterns agents actually cite, demote noise
+            if score > 0 {
+                if p.used_count > 0 && p.frequency > 0 {
+                    let ratio = p.used_count as f64 / p.frequency as f64;
+                    if ratio > 0.3 {
+                        score += 2; // high-utility pattern
+                    }
+                }
+                if p.used_count == 0 && p.frequency >= 5 {
+                    score = score.saturating_sub(1); // never-cited noise
+                }
+            }
+
             if score > 0 {
                 Some((i, score))
             } else {
@@ -175,9 +196,10 @@ pub fn format_patterns_for_prompt(
 
     for (i, p) in patterns.iter().enumerate().take(limit) {
         out.push_str(&format!(
-            "### {}. {} (seen {}x{})\n",
+            "### {}. {} [{}] (seen {}x{})\n",
             i + 1,
             p.title,
+            p.pattern_id,
             p.frequency,
             p.severity
                 .as_deref()
@@ -216,6 +238,109 @@ pub fn scaled_injection_count(complexity: TaskComplexity, max: usize, min: usize
         TaskComplexity::Medium => 5_usize.min(max),
         TaskComplexity::Complex => max,
     }
+}
+
+/// Scan text for references to pattern IDs or titles.
+/// Returns the pattern_ids of patterns that were cited.
+pub fn scan_citations(text: &str, patterns: &[Pattern]) -> Vec<String> {
+    if text.is_empty() || patterns.is_empty() {
+        return Vec::new();
+    }
+
+    let text_lower = text.to_lowercase();
+    let text_words: Vec<&str> = text_lower.split_whitespace().collect();
+
+    patterns
+        .iter()
+        .filter(|p| {
+            // Check exact pattern_id word match
+            let id_lower = p.pattern_id.to_lowercase();
+            let id_match = text_words.iter().any(|w| w.trim_matches(|c: char| !c.is_alphanumeric() && c != '-') == id_lower);
+            if id_match {
+                return true;
+            }
+            // Check title substring match (case-insensitive)
+            let title_lower = p.title.to_lowercase();
+            if title_lower.len() >= 8 && text_lower.contains(&title_lower) {
+                return true;
+            }
+            false
+        })
+        .map(|p| p.pattern_id.clone())
+        .collect()
+}
+
+/// Increment used_count for cited patterns across all JSON files in a directory.
+/// Mirrors load_patterns() behavior: scans every *.json file, not just common-issues.json.
+/// Returns the total number of patterns updated.
+pub fn update_used_counts(dir: &Path, cited_ids: &[String]) -> Result<usize> {
+    if cited_ids.is_empty() {
+        return Ok(0);
+    }
+
+    let entries = match std::fs::read_dir(dir) {
+        Ok(e) => e,
+        Err(_) => return Ok(0),
+    };
+
+    let mut total_updated = 0usize;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("json") {
+            continue;
+        }
+        let content = match std::fs::read_to_string(&path) {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+
+        // Detect original format and update in place to preserve file shape.
+        // Try wrapper first (has metadata like pattern_type, domain, version).
+        if let Ok(mut wrapper) = serde_json::from_str::<PatternWrapper>(&content) {
+            let mut file_updated = 0usize;
+            for p in &mut wrapper.patterns {
+                if cited_ids.contains(&p.pattern_id) {
+                    p.used_count += 1;
+                    file_updated += 1;
+                }
+            }
+            if file_updated > 0 {
+                let json = serde_json::to_string_pretty(&wrapper)?;
+                atomic_write_file(&path, json.as_bytes())?;
+                total_updated += file_updated;
+            }
+            continue;
+        }
+
+        // Plain array format
+        if let Ok(mut patterns) = serde_json::from_str::<Vec<Pattern>>(&content) {
+            let mut file_updated = 0usize;
+            for p in &mut patterns {
+                if cited_ids.contains(&p.pattern_id) {
+                    p.used_count += 1;
+                    file_updated += 1;
+                }
+            }
+            if file_updated > 0 {
+                let json = serde_json::to_string_pretty(&patterns)?;
+                atomic_write_file(&path, json.as_bytes())?;
+                total_updated += file_updated;
+            }
+            continue;
+        }
+
+        // Single pattern object
+        if let Ok(mut pattern) = serde_json::from_str::<Pattern>(&content) {
+            if cited_ids.contains(&pattern.pattern_id) {
+                pattern.used_count += 1;
+                let json = serde_json::to_string_pretty(&pattern)?;
+                atomic_write_file(&path, json.as_bytes())?;
+                total_updated += 1;
+            }
+        }
+    }
+
+    Ok(total_updated)
 }
 
 /// Merge new patterns into the patterns directory, deduplicating by pattern_id.
@@ -353,6 +478,7 @@ mod tests {
             }),
             auto_apply: false,
             learned_from: None,
+            used_count: 0,
         };
         let patterns = vec![&pattern];
 
@@ -534,6 +660,7 @@ mod tests {
                 solution: None,
                 auto_apply: false,
                 learned_from: None,
+                used_count: 0,
             },
             Pattern {
                 pattern_id: "new-1".to_string(),
@@ -548,6 +675,7 @@ mod tests {
                 solution: None,
                 auto_apply: false,
                 learned_from: None,
+                used_count: 0,
             },
         ];
 
@@ -602,5 +730,156 @@ mod tests {
     fn test_scaled_injection_zero_max() {
         assert_eq!(scaled_injection_count(TaskComplexity::Complex, 0, 0), 0);
         assert_eq!(scaled_injection_count(TaskComplexity::Simple, 0, 0), 0);
+    }
+
+    fn make_test_pattern(id: &str, title: &str, freq: usize, used: usize) -> Pattern {
+        Pattern {
+            pattern_id: id.to_string(),
+            title: title.to_string(),
+            first_seen: String::new(),
+            last_seen: String::new(),
+            frequency: freq,
+            severity: None,
+            keywords: vec!["rust".to_string()],
+            tech_stack: vec![],
+            issue: None,
+            solution: None,
+            auto_apply: false,
+            learned_from: None,
+            used_count: used,
+        }
+    }
+
+    #[test]
+    fn test_scan_citations_finds_pattern_id() {
+        let patterns = vec![
+            make_test_pattern("sql-injection-check", "SQL Injection Prevention", 3, 0),
+            make_test_pattern("missing-error-handling", "Missing Error Handling", 2, 0),
+        ];
+        let text = "The reviewer noted a sql-injection-check issue in the handler.";
+        let cited = scan_citations(text, &patterns);
+        assert_eq!(cited, vec!["sql-injection-check"]);
+    }
+
+    #[test]
+    fn test_scan_citations_finds_title() {
+        let patterns = vec![
+            make_test_pattern("sql-inject", "SQL Injection Prevention", 3, 0),
+        ];
+        let text = "This relates to SQL Injection Prevention as documented.";
+        let cited = scan_citations(text, &patterns);
+        assert_eq!(cited, vec!["sql-inject"]);
+    }
+
+    #[test]
+    fn test_scan_citations_ignores_short_titles() {
+        let patterns = vec![
+            make_test_pattern("short", "Bug Fix", 1, 0),
+        ];
+        let text = "This is a bug fix for the handler.";
+        let cited = scan_citations(text, &patterns);
+        assert!(cited.is_empty(), "short titles (<8 chars) should not match");
+    }
+
+    #[test]
+    fn test_scan_citations_empty_inputs() {
+        let patterns = vec![make_test_pattern("test", "Test Pattern Long Enough", 1, 0)];
+        assert!(scan_citations("", &patterns).is_empty());
+        assert!(scan_citations("some text", &[]).is_empty());
+    }
+
+    #[test]
+    fn test_usefulness_boost_high_ratio() {
+        let patterns = vec![
+            make_test_pattern("high-use", "High Use Pattern", 5, 3), // ratio 0.6
+            make_test_pattern("low-use", "Low Use Pattern", 5, 0),  // ratio 0.0
+        ];
+        let scores = keyword_scores(&patterns, "rust project");
+        let high_score = scores.iter().find(|(i, _)| *i == 0).map(|(_, s)| *s).unwrap_or(0);
+        let low_score = scores.iter().find(|(i, _)| *i == 1).map(|(_, s)| *s).unwrap_or(0);
+        assert!(
+            high_score > low_score,
+            "high-use pattern (score={}) should outscore never-cited pattern (score={})",
+            high_score, low_score
+        );
+    }
+
+    #[test]
+    fn test_update_used_counts_increments() {
+        let dir = std::env::temp_dir().join("foundry_test_used_counts");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let patterns = vec![
+            make_test_pattern("p1", "Pattern One Long Title", 3, 0),
+            make_test_pattern("p2", "Pattern Two Long Title", 2, 1),
+        ];
+        let json = serde_json::to_string_pretty(&patterns).unwrap();
+        std::fs::write(dir.join("common-issues.json"), &json).unwrap();
+
+        let updated = update_used_counts(&dir, &["p1".to_string()]).unwrap();
+        assert_eq!(updated, 1);
+
+        let content = std::fs::read_to_string(dir.join("common-issues.json")).unwrap();
+        let result: Vec<Pattern> = serde_json::from_str(&content).unwrap();
+        let p1 = result.iter().find(|p| p.pattern_id == "p1").unwrap();
+        assert_eq!(p1.used_count, 1, "p1 should have been incremented");
+        let p2 = result.iter().find(|p| p.pattern_id == "p2").unwrap();
+        assert_eq!(p2.used_count, 1, "p2 should be unchanged");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_update_used_counts_scans_all_json_files() {
+        let dir = std::env::temp_dir().join("foundry_test_used_counts_multi");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        // Pattern in common-issues.json (plain array format)
+        let p1 = vec![make_test_pattern("p1", "Pattern In Common", 2, 0)];
+        std::fs::write(
+            dir.join("common-issues.json"),
+            serde_json::to_string_pretty(&p1).unwrap(),
+        )
+        .unwrap();
+
+        // Pattern in security.json (wrapper format with metadata)
+        let wrapper_json = r#"{
+            "pattern_type": "security-issues",
+            "domain": "recon",
+            "version": "1.0.0",
+            "patterns": [
+                {
+                    "pattern_id": "p2",
+                    "title": "Pattern In Security",
+                    "frequency": 3,
+                    "keywords": ["security"],
+                    "used_count": 0
+                }
+            ]
+        }"#;
+        std::fs::write(dir.join("security.json"), wrapper_json).unwrap();
+
+        let updated = update_used_counts(&dir, &["p1".to_string(), "p2".to_string()]).unwrap();
+        assert_eq!(updated, 2, "should update patterns across both files");
+
+        // Verify security.json preserved wrapper format and metadata
+        let content = std::fs::read_to_string(dir.join("security.json")).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
+        assert_eq!(
+            parsed["pattern_type"], "security-issues",
+            "wrapper metadata must be preserved"
+        );
+        assert_eq!(
+            parsed["domain"], "recon",
+            "wrapper metadata must be preserved"
+        );
+        assert_eq!(
+            parsed["patterns"][0]["used_count"], 1,
+            "p2 used_count should be incremented"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

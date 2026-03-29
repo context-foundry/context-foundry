@@ -2391,8 +2391,8 @@ async fn process_task(
         });
     }
 
-    // Save pattern IDs for later PatternApplied event
-    let injected_pattern_ids: Vec<String> = matched.iter().map(|p| p.pattern_id.clone()).collect();
+    // Save pattern IDs for later PatternApplied event -- only the ones actually injected
+    let injected_pattern_ids: Vec<String> = matched.iter().take(effective_pattern_count).map(|p| p.pattern_id.clone()).collect();
 
     // Decide whether to skip the planner based on complexity (already computed above).
     // Skip for simple tasks (existing behavior) AND for medium tasks with
@@ -4208,6 +4208,52 @@ async fn process_task(
         .output()
         .map(|o| String::from_utf8_lossy(&o.stdout).lines().count())
         .unwrap_or(0);
+
+    // Scan build artifacts for pattern citations to track usefulness.
+    // Only on validated tasks -- failed/WIP tasks should not train the ranking system.
+    if validated && !injected_pattern_ids.is_empty() {
+        let mut citation_text = String::new();
+        let plan_path = ctx.buildloop_dir.join("current-plan.md");
+        let review_path = ctx.buildloop_dir.join("review-report.md");
+        if let Ok(content) = std::fs::read_to_string(&plan_path) {
+            citation_text.push_str(&content);
+        }
+        if let Ok(content) = std::fs::read_to_string(&review_path) {
+            citation_text.push_str(&content);
+        }
+        if !citation_text.is_empty() {
+            // Only scan for patterns that were actually injected into prompts
+            let injected_patterns: Vec<&patterns::Pattern> = cached_patterns
+                .iter()
+                .filter(|p| injected_pattern_ids.contains(&p.pattern_id))
+                .collect();
+            let injected_refs: Vec<patterns::Pattern> = injected_patterns.iter().map(|p| (*p).clone()).collect();
+            let cited = patterns::scan_citations(&citation_text, &injected_refs);
+            if !cited.is_empty() {
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                    "Pattern citations: {} patterns referenced by agents",
+                    cited.len()
+                ))));
+                // Update global patterns dir
+                if let Err(e) = patterns::update_used_counts(patterns_dir, &cited) {
+                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                        "Warning: failed to update pattern used_counts: {}",
+                        e
+                    ))));
+                }
+                // Update extension pattern dirs (extension patterns are loaded
+                // into the same pool but stored in separate directories)
+                let ext_infos = extensions::discover_extensions(&ctx.project_dir);
+                for ext_name in &ctx.config.extensions {
+                    if let Some(ext) = ext_infos.iter().find(|e| &e.name == ext_name) {
+                        if let Some(ref pdir) = ext.patterns_dir {
+                            let _ = patterns::update_used_counts(pdir, &cited);
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     if validated && changed_file_count >= 3 {
         // Fire-and-forget: pattern extraction runs in the background so the
