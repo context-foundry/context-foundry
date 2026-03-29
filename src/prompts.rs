@@ -73,7 +73,7 @@ pub fn bootstrap_scout_prompt(
         r#"You are the SCOUT agent. Investigate this project and create a task queue.
 {intent_block}{updated_specs_block}
 YOUR JOB:
-1. Read {spec_file}, UPDATED_SPECS.md, and CLAUDE.md if they exist
+1. Read {spec_file} and UPDATED_SPECS.md if they exist
 2. Detect the tech stack (Cargo.toml, package.json, pyproject.toml, etc.)
 3. Read existing source code to understand what's built
 4. Run build/test commands to find current state
@@ -144,7 +144,7 @@ Task ID: {task_id}
 Task Description: {task_desc}
 {updated_specs_block}
 YOUR JOB:
-1. Read {spec_file}, UPDATED_SPECS.md, and CLAUDE.md for project context
+1. Read {spec_file} and UPDATED_SPECS.md for project context
 2. Read {tasks_file} to see completed tasks and what's been built
 3. Detect the tech stack (Cargo.toml, package.json, pyproject.toml, etc.)
 4. Find the files most relevant to this task — read them
@@ -215,10 +215,9 @@ Eliminate all ambiguity — the builder should never need to make judgment calls
 INSTRUCTIONS:
 1. Read .buildloop/scout-report.md first — a scout agent already investigated the codebase for this task
 2. Read {spec_file} for the relevant sections
-3. Read CLAUDE.md for project conventions
-4. Read {tasks_file} to understand where this task fits
-5. If the scout report is missing, look at existing code yourself to understand what's built
-6. Write a structured implementation plan to .buildloop/current-plan.md
+3. Read {tasks_file} to understand where this task fits
+4. If the scout report is missing, look at existing code yourself to understand what's built
+5. Write a structured implementation plan to .buildloop/current-plan.md
 
 PLAN FORMAT — Use this exact structure in .buildloop/current-plan.md:
 
@@ -339,11 +338,10 @@ Eliminate all ambiguity -- the builder should never need to make judgment calls.
 
 INSTRUCTIONS:
 1. Read {spec_file} thoroughly for the relevant sections
-2. Read CLAUDE.md for project conventions
-3. Read {tasks_file} to understand where this task fits
-4. Look at any existing code to understand what's already built
-5. Detect the project's tech stack from repo files (Cargo.toml -> Rust, package.json -> Node, pyproject.toml/requirements.txt -> Python, etc.)
-6. Write a structured implementation plan to .buildloop/{plan_filename}
+2. Read {tasks_file} to understand where this task fits
+3. Look at any existing code to understand what's already built
+4. Detect the project's tech stack from repo files (Cargo.toml -> Rust, package.json -> Node, pyproject.toml/requirements.txt -> Python, etc.)
+5. Write a structured implementation plan to .buildloop/{plan_filename}
 
 PLAN FORMAT -- Use this exact structure in .buildloop/{plan_filename}:
 
@@ -1156,15 +1154,14 @@ Review Pass: {pass_number}{error_section}
 
 INSTRUCTIONS:
 1. Read .buildloop/review-report.md for the list of issues
-2. Read CLAUDE.md for project conventions
-3. For each finding, read the source_evidence fields:
+2. For each finding, read the source_evidence fields:
    - snippet: the exact code the reviewer flagged
    - line_range: the file region to focus your fix on
    - reasoning: why the reviewer considers this a bug
    Use these to understand exactly what to fix without re-investigating from scratch.
-4. Fix every HIGH and MEDIUM severity issue in the findings JSON
-5. Fix any runtime failures noted in the Runtime Checks section
-6. Run the same checks the reviewer would run to confirm fixes work
+3. Fix every HIGH and MEDIUM severity issue in the findings JSON
+4. Fix any runtime failures noted in the Runtime Checks section
+5. Run the same checks the reviewer would run to confirm fixes work
 
 IMPORTANT:
 - Fix EVERY high and medium issue in the report
@@ -1261,7 +1258,7 @@ relative to this work rather than surveying the entire codebase:
     format!(
         r#"Find real bugs, gaps, and missing work in this project. Append new tasks to {tasks_file}.
 {build_history_block}
-Read {spec_file}, {tasks_file}, and CLAUDE.md. Run the build and tests.
+Read {spec_file} and {tasks_file}. Run the build and tests.
 
 EFFICIENCY: Focus your investigation on what changed recently rather than scanning
 the entire source tree from scratch:
@@ -1361,7 +1358,7 @@ YOUR TASK: Study the entire project — specifications, architecture, and existi
 generate or update {tasks_file} with a prioritized list of implementation tasks.
 
 INSTRUCTIONS:
-1. Study {spec_file} and CLAUDE.md thoroughly to understand the project vision and conventions
+1. Study {spec_file} thoroughly to understand the project vision and conventions
 2. Study the existing {tasks_file} only as a mutable work ledger: what has been planned and completed so far
 3. Use parallel subagents to read source files across the codebase (src/, lib/, app/, etc.)
 4. Check recent git history: `git log --oneline -20 --name-only`
