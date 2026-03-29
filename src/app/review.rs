@@ -6,6 +6,7 @@ use tokio::sync::mpsc;
 
 use crate::agent::{self, AgentRole};
 use crate::config::Config;
+use crate::isolation;
 use crate::observatory::{self, AgentUsage, ObservatoryEvent};
 use crate::prompts;
 
@@ -105,6 +106,30 @@ pub(super) async fn run_review_loop(
     } else {
         String::new()
     };
+
+    // Phase isolation: hide plan and research artifacts from Doubt agent
+    let mut phase_guard: Option<isolation::PhaseIsolation> = None;
+    if ctx.config.phase_isolation {
+        let restricted = isolation::doubt_restricted_paths(&ctx.buildloop_dir);
+        match isolation::PhaseIsolation::activate(&restricted) {
+            Ok(guard) => {
+                let hidden_count = guard.hidden_paths().len();
+                if hidden_count > 0 {
+                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                        "Phase isolation: hid {} artifact(s) from reviewer",
+                        hidden_count,
+                    ))));
+                }
+                phase_guard = Some(guard);
+            }
+            Err(e) => {
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                    "Phase isolation: failed to activate -- {}. Continuing without isolation.",
+                    e,
+                ))));
+            }
+        }
+    }
 
     // Multi-pass review: when file count exceeds threshold, run per-file
     // analysis passes followed by a cross-file integration pass.
@@ -314,6 +339,17 @@ pub(super) async fn run_review_loop(
             "Review failed: {} high, {} medium unfixed issues remain",
             high, medium
         ))));
+    }
+
+    // Restore hidden artifacts (explicit restore for error reporting on success path;
+    // early returns rely on the Drop safety net)
+    if let Some(mut guard) = phase_guard.take() {
+        if let Err(e) = guard.restore() {
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                "Phase isolation: restore failed -- {}",
+                e,
+            ))));
+        }
     }
 
     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::TaskReviewResult {

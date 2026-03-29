@@ -211,6 +211,12 @@ pub struct Config {
     /// Keep tmux sessions alive after agent completion (default: false).
     pub tmux_keep_sessions: bool,
 
+    /// Enable per-phase file isolation for QRPID pipeline boundaries.
+    /// When true, restricted artifacts are physically moved out of the workspace
+    /// before spawning isolated agents (e.g., Doubt cannot read current-plan.md).
+    #[serde(default)]
+    pub phase_isolation: bool,
+
     /// Enable Docker sandbox isolation for agent subprocesses (default: true).
     /// Always on by default. Only implementers should override via .foundry.json.
     #[serde(default = "default_true")]
@@ -323,6 +329,7 @@ impl Default for Config {
             agent_backend: "pty".into(),
             tmux_session_prefix: "foundry".into(),
             tmux_keep_sessions: false,
+            phase_isolation: false,
             sandbox: true,
             sandbox_image: "foundry-sandbox:latest".into(),
             sandbox_extra_mounts: Vec::new(),

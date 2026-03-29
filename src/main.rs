@@ -10,6 +10,7 @@ mod doubt_confidence;
 mod embeddings;
 mod extensions;
 mod git;
+mod isolation;
 mod mcp;
 mod observatory;
 mod orchestrator;

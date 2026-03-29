@@ -408,6 +408,24 @@ Key isolation rules:
 - **D never sees the task or plan.** This prevents confirmation bias during audit.
 - **I only sees the plan.** This forces the plan to be complete and self-contained.
 
+### Isolation Enforcement Guarantee
+
+Context isolation is enforced at the **filesystem level**: the orchestrator physically moves restricted artifacts out of the project workspace before spawning the agent, and restores them after the agent completes. This is stronger than prompt-only isolation (which has a ~5% leak rate from curious agents) but weaker than process-level isolation (e.g., Docker filesystem restrictions).
+
+**Mechanism:** `PhaseIsolation::activate()` in `src/isolation.rs` renames restricted files to a temporary staging directory. The agent process has no path to the staging directory in its prompt or working directory. Files are automatically restored via a `Drop` safety net if the agent crashes.
+
+**What this guarantees:**
+- R cannot `Read`, `Grep`, or `Glob` for TASKS.md -- the file does not exist during R's execution
+- D cannot `Read` `.buildloop/current-plan.md` -- the file does not exist during D's execution
+- Standard filesystem tools (find, cat, grep) will not discover hidden files
+
+**What this does NOT guarantee:**
+- The agent could theoretically search `/tmp` for `.foundry-isolation-*` directories (extremely unlikely without explicit instruction)
+- Information that has already been embedded in other artifacts (e.g., task ID in `questions.md` header) is not redacted
+- CLAUDE.md and other auto-injected context may reference restricted concepts indirectly
+
+**Config:** `"phase_isolation": true` in `.foundry.json` enables this enforcement. Default: `false` (opt-in during QRPID development).
+
 ---
 
 ## Pattern Integration

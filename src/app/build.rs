@@ -1947,6 +1947,11 @@ async fn process_task(
 
     let task_id = &task_info.id;
     let task_desc = &task_info.description;
+    if ctx.config.phase_isolation {
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+            "Phase isolation: enabled (Doubt artifacts will be restricted)".to_string(),
+        )));
+    }
     let mut stage_results: Vec<StageResult> = Vec::new();
     let patterns_extracted = ctx.buildloop_dir.join("patterns-extracted.json");
 
