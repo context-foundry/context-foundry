@@ -883,32 +883,36 @@ async fn run_parallel_builder(
             }
         };
         for file_path in &files_to_copy {
-            // Check for conflict: was this file already copied by a previous slot?
-            if let Some(&prev_slot) = copied_files.get(file_path) {
-                // Determine which slot should win based on planned ownership
-                let owner = planned_file_owner.get(file_path);
-                let winner = match owner {
-                    Some(&owning_slot) => owning_slot,
-                    None => prev_slot, // Neither slot planned this file; keep first slot's version
-                };
-
-                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                    "Parallel builder: CONFLICT on '{}' -- modified by slot-{} and slot-{}, using slot-{} ({})",
-                    file_path,
-                    prev_slot,
-                    slot_idx,
-                    winner,
-                    if owner.is_some() { "planned owner" } else { "first slot" }
-                ))));
-
-                if winner == prev_slot {
-                    // Previous slot wins; skip copying from current slot
-                    continue;
-                }
-                // Current slot wins (it is the planned owner); fall through to copy
-            }
-
             let src = wt_dir.join(file_path);
+
+            // Check for copy-vs-copy conflict: only when current slot also intends to copy.
+            // When src does not exist, the current slot deleted the file -- that case is
+            // handled by the modify-vs-delete check inside the `else if dest.exists()` branch.
+            if src.exists() {
+                if let Some(&prev_slot) = copied_files.get(file_path) {
+                    // Determine which slot should win based on planned ownership
+                    let owner = planned_file_owner.get(file_path);
+                    let winner = match owner {
+                        Some(&owning_slot) => owning_slot,
+                        None => prev_slot, // Neither slot planned this file; keep first slot's version
+                    };
+
+                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                        "Parallel builder: COPY-COPY CONFLICT on '{}' -- modified by slot-{} and slot-{}, using slot-{} ({})",
+                        file_path,
+                        prev_slot,
+                        slot_idx,
+                        winner,
+                        if owner.is_some() { "planned owner" } else { "first slot" }
+                    ))));
+
+                    if winner == prev_slot {
+                        // Previous slot wins; skip copying from current slot
+                        continue;
+                    }
+                    // Current slot wins (it is the planned owner); fall through to copy
+                }
+            }
 
             // Check for delete-vs-modify conflict: was this file deleted by a previous slot?
             if let Some(&del_slot) = deleted_by_slot.get(file_path) {
@@ -6341,6 +6345,205 @@ mod tests {
         assert!(
             !main_dir.join("owned.rs").exists(),
             "owned.rs must be deleted when planned owner (slot 0) deleted it"
+        );
+
+        // Cleanup
+        let _ = std::process::Command::new("git")
+            .args(["worktree", "remove", "--force"])
+            .arg(&wt_a)
+            .current_dir(&main_dir)
+            .output();
+        let _ = std::process::Command::new("git")
+            .args(["worktree", "remove", "--force"])
+            .arg(&wt_b)
+            .current_dir(&main_dir)
+            .output();
+        let _ = std::fs::remove_dir_all(&main_dir);
+        let _ = std::fs::remove_dir_all(&wt_a);
+        let _ = std::fs::remove_dir_all(&wt_b);
+    }
+
+    #[test]
+    fn test_worktree_merge_copy_vs_delete_conflict_not_blocked() {
+        // Regression test for D19.1: when slot 0 copies a file and slot 1 deletes
+        // the same file, the copy-vs-copy check must NOT fire. Instead, the
+        // modify-vs-delete check (inside the `else if dest.exists()` branch)
+        // must handle it. Default winner: modification (slot 0) wins.
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+
+        let main_dir = std::env::temp_dir().join(format!("foundry-wt-copydel-{}", nanos));
+        std::fs::create_dir_all(&main_dir).unwrap();
+
+        // Initialize git repo
+        let git = |args: &[&str]| {
+            std::process::Command::new("git")
+                .args(args)
+                .current_dir(&main_dir)
+                .output()
+                .expect("git command failed")
+        };
+        git(&["init"]);
+        git(&["config", "user.email", "test@test.com"]);
+        git(&["config", "user.name", "test"]);
+
+        // Create tracked file and commit
+        std::fs::write(
+            main_dir.join("shared.rs"),
+            "fn shared() { /* original */ }",
+        )
+        .unwrap();
+        git(&["add", "."]);
+        git(&["commit", "-m", "initial"]);
+
+        // Create two worktrees
+        let wt_a = std::env::temp_dir().join(format!("foundry-wt-copydel-a-{}", nanos));
+        let wt_b = std::env::temp_dir().join(format!("foundry-wt-copydel-b-{}", nanos + 1));
+        git(&["worktree", "add", "--detach", wt_a.to_str().unwrap(), "HEAD"]);
+        git(&["worktree", "add", "--detach", wt_b.to_str().unwrap(), "HEAD"]);
+
+        // Slot 0 (wt_a): modify shared.rs (copy intent)
+        std::fs::write(
+            wt_a.join("shared.rs"),
+            "fn shared() { /* slot 0 modified */ }",
+        )
+        .unwrap();
+
+        // Slot 1 (wt_b): delete shared.rs (delete intent)
+        std::fs::remove_file(wt_b.join("shared.rs")).unwrap();
+
+        // Discover changed files in each worktree
+        let files_a = super::discover_changed_files_in_worktree(&wt_a).unwrap();
+        let files_b = super::discover_changed_files_in_worktree(&wt_b).unwrap();
+        assert!(
+            files_a.contains(&"shared.rs".to_string()),
+            "slot 0 must discover modified shared.rs"
+        );
+        assert!(
+            files_b.contains(&"shared.rs".to_string()),
+            "slot 1 must discover deleted shared.rs"
+        );
+
+        // No planned owner -- worst case for the bug
+        let planned_file_owner: std::collections::HashMap<String, usize> =
+            std::collections::HashMap::new();
+        let mut copied_files: std::collections::HashMap<String, usize> =
+            std::collections::HashMap::new();
+        let mut deleted_by_slot: std::collections::HashMap<String, usize> =
+            std::collections::HashMap::new();
+        let mut conflicts: Vec<(String, &str, usize, usize, usize)> = Vec::new();
+
+        let slot_worktrees: Vec<(usize, &std::path::Path, Vec<String>)> = vec![
+            (0, wt_a.as_path(), files_a),
+            (1, wt_b.as_path(), files_b),
+        ];
+
+        // Simulate the FIXED merge loop (matches production code after D19.1 fix)
+        for (slot_idx, wt_dir, files_to_copy) in &slot_worktrees {
+            for file_path in files_to_copy {
+                let src = wt_dir.join(file_path);
+
+                // Copy-vs-copy check: ONLY when current slot intends to copy
+                if src.exists() {
+                    if let Some(&prev_slot) = copied_files.get(file_path) {
+                        let owner = planned_file_owner.get(file_path);
+                        let winner = match owner {
+                            Some(&owning_slot) => owning_slot,
+                            None => prev_slot,
+                        };
+                        conflicts.push((file_path.clone(), "copy-copy", prev_slot, *slot_idx, winner));
+                        if winner == prev_slot {
+                            continue;
+                        }
+                    }
+                }
+
+                // Delete-vs-modify check
+                if let Some(&del_slot) = deleted_by_slot.get(file_path) {
+                    if src.exists() {
+                        let owner = planned_file_owner.get(file_path);
+                        let winner = match owner {
+                            Some(&owning_slot) => owning_slot,
+                            None => *slot_idx,
+                        };
+                        conflicts.push((file_path.clone(), "delete-modify", del_slot, *slot_idx, winner));
+                        if winner == del_slot {
+                            continue;
+                        }
+                    }
+                }
+
+                let dest = main_dir.join(file_path);
+                if src.exists() {
+                    if let Some(parent) = dest.parent() {
+                        let _ = std::fs::create_dir_all(parent);
+                    }
+                    std::fs::copy(&src, &dest).unwrap();
+                    copied_files.insert(file_path.clone(), *slot_idx);
+                } else if dest.exists() {
+                    // Modify-vs-delete check (previous slot copied, current deletes)
+                    if let Some(&prev_slot) = copied_files.get(file_path) {
+                        let owner = planned_file_owner.get(file_path);
+                        let winner = match owner {
+                            Some(&owning_slot) => owning_slot,
+                            None => prev_slot,
+                        };
+                        conflicts.push((file_path.clone(), "modify-delete", prev_slot, *slot_idx, winner));
+                        if winner == prev_slot {
+                            continue;
+                        }
+                    }
+                    std::fs::remove_file(&dest).unwrap();
+                    deleted_by_slot.insert(file_path.clone(), *slot_idx);
+                } else {
+                    deleted_by_slot.insert(file_path.clone(), *slot_idx);
+                }
+            }
+        }
+
+        // === Key assertion: NO copy-copy conflict must have been recorded ===
+        let copy_copy_conflicts: Vec<_> = conflicts
+            .iter()
+            .filter(|(_, kind, _, _, _)| *kind == "copy-copy")
+            .collect();
+        assert!(
+            copy_copy_conflicts.is_empty(),
+            "copy-vs-copy conflict must NOT fire when slot 1 deletes; got: {:?}",
+            copy_copy_conflicts
+        );
+
+        // === A modify-delete conflict MUST have been detected ===
+        let mod_del_conflict = conflicts
+            .iter()
+            .find(|(f, kind, _, _, _)| f == "shared.rs" && *kind == "modify-delete");
+        assert!(
+            mod_del_conflict.is_some(),
+            "must detect modify-delete conflict on shared.rs, got conflicts: {:?}",
+            conflicts
+        );
+        let mod_del_conflict = mod_del_conflict.unwrap();
+        // prev_slot=0 (copied), cur_slot=1 (deletes), winner=0 (modification wins by default)
+        assert_eq!(mod_del_conflict.2, 0, "prev_slot must be 0 (the copier)");
+        assert_eq!(mod_del_conflict.3, 1, "cur_slot must be 1 (the deleter)");
+        assert_eq!(
+            mod_del_conflict.4, 0,
+            "winner must be slot 0 (modification wins over deletion by default)"
+        );
+
+        // === shared.rs must still exist with slot 0's content ===
+        assert!(
+            main_dir.join("shared.rs").exists(),
+            "shared.rs must exist after modification wins over deletion"
+        );
+        let content = std::fs::read_to_string(main_dir.join("shared.rs")).unwrap();
+        assert!(
+            content.contains("slot 0 modified"),
+            "shared.rs must contain slot 0's version, got: {}",
+            content
         );
 
         // Cleanup
