@@ -15,7 +15,7 @@ use super::commands;
 use super::context::RunContext;
 use super::{AppEvent, LoopEvent};
 
-/// Returns `(passed, fix_passes, (high, medium, low))` so the caller can persist the pipeline progress indicator.
+/// Returns `(passed, fix_passes, (high, medium, low), reviewer_budget_record)` so the caller can persist the pipeline progress indicator.
 pub(super) async fn run_review_loop(
     task_id: &str,
     task_desc: &str,
@@ -23,13 +23,13 @@ pub(super) async fn run_review_loop(
     pattern_context: &str,
     extension_context: &str,
     tx: &mpsc::UnboundedSender<AppEvent>,
-) -> (bool, usize, (usize, usize, usize)) {
+) -> (bool, usize, (usize, usize, usize), Option<budget::PhaseBudgetRecord>) {
     let files_changed = get_changed_files(&ctx.project_dir);
     if files_changed.is_empty() {
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
             "No changed files to review".to_string(),
         )));
-        return (false, 0, (0, 0, 0));
+        return (false, 0, (0, 0, 0), None);
     }
 
     // When diff is too large or not used, enrich the file list with
@@ -157,7 +157,8 @@ pub(super) async fn run_review_loop(
         )
         .await;
         let _ = tx.send(AppEvent::AgentDone(result.0));
-        return result;
+        let (passed, fixes, findings) = result;
+        return (passed, fixes, findings, None);
     }
 
     // The reviewer has full write access and fixes issues it finds in a single pass.
@@ -240,6 +241,7 @@ pub(super) async fn run_review_loop(
         context_pct: agent_usage.context_pct,
     });
     // Budget telemetry: Reviewer
+    let mut reviewer_budget_record: Option<budget::PhaseBudgetRecord> = None;
     if ctx.config.budget_recovery_enabled {
         let record = budget::evaluate_phase(
             &AgentRole::Reviewer,
@@ -275,6 +277,7 @@ pub(super) async fn run_review_loop(
                 record.actual_pct, record.target_pct,
             ))));
         }
+        reviewer_budget_record = Some(record);
     }
 
     let reviewer_succeeded = review_result.as_ref().map(|r| r.success).unwrap_or(false);
@@ -287,7 +290,7 @@ pub(super) async fn run_review_loop(
             fix_passes: 0,
             passed: false,
         }));
-        return (false, 0, (0, 0, 0));
+        return (false, 0, (0, 0, 0), reviewer_budget_record);
     }
 
     // Detect whether the reviewer applied fixes by checking for new file changes.
@@ -318,7 +321,7 @@ pub(super) async fn run_review_loop(
             fix_passes,
             passed: false,
         }));
-        return (false, fix_passes, (0, 0, 0));
+        return (false, fix_passes, (0, 0, 0), reviewer_budget_record);
     }
 
     let verdict_pass = check_review_passed(&ctx.review_report);
@@ -395,7 +398,7 @@ pub(super) async fn run_review_loop(
         fix_passes,
         passed,
     }));
-    (passed, fix_passes, (high, medium, low))
+    (passed, fix_passes, (high, medium, low), reviewer_budget_record)
 }
 
 #[allow(clippy::too_many_arguments)]

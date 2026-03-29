@@ -39,6 +39,7 @@ impl BudgetTargets {
             AgentRole::Builder => Some(self.builder),
             AgentRole::Reviewer => Some(self.reviewer),
             AgentRole::Fixer => Some(self.reviewer), // shares D-phase budget
+            AgentRole::PlanReview => Some(self.plan_review),
             AgentRole::Discovery => None,
         }
     }
@@ -171,6 +172,7 @@ mod tests {
         assert_eq!(t.target_for_role(&AgentRole::Builder), Some(60));
         assert_eq!(t.target_for_role(&AgentRole::Reviewer), Some(50));
         assert_eq!(t.target_for_role(&AgentRole::Fixer), Some(50));
+        assert_eq!(t.target_for_role(&AgentRole::PlanReview), Some(35));
         assert_eq!(t.target_for_role(&AgentRole::Discovery), None);
     }
 
@@ -282,6 +284,73 @@ mod tests {
         assert!(path.exists());
         let content = std::fs::read_to_string(&path).unwrap();
         assert!(content.contains("T1.1"));
+    }
+
+    #[test]
+    fn test_evaluate_phase_plan_review() {
+        let usage = AgentUsage {
+            context_pct: 40,
+            tokens_in: 3000,
+            tokens_out: 1000,
+            cost_usd: 0.03,
+        };
+        let targets = BudgetTargets::default();
+        let record = evaluate_phase(&AgentRole::PlanReview, &usage, &targets, 5);
+        assert_eq!(record.phase, "P+");
+        assert_eq!(record.target_pct, 35);
+        assert_eq!(record.actual_pct, 40);
+        assert!(record.overrun);
+        assert_eq!(record.overrun_amount, 5);
+        assert_eq!(record.recovery_action, RecoveryAction::Continue); // within threshold
+    }
+
+    #[test]
+    fn test_telemetry_contains_all_phases() {
+        let dir = tempfile::tempdir().unwrap();
+        let targets = BudgetTargets::default();
+        let threshold = 10u8;
+        let phases: Vec<(AgentRole, u8)> = vec![
+            (AgentRole::Scout, 20),
+            (AgentRole::Planner, 45),
+            (AgentRole::PlanReview, 40),
+            (AgentRole::Builder, 65),
+            (AgentRole::Reviewer, 55),
+        ];
+        let mut telemetry = BudgetTelemetry {
+            task_id: "D35.2".to_string(),
+            timestamp: "2026-03-29T00:00:00Z".to_string(),
+            ..Default::default()
+        };
+        for (role, pct) in &phases {
+            let usage = AgentUsage {
+                context_pct: *pct,
+                tokens_in: 1000,
+                tokens_out: 500,
+                cost_usd: 0.01,
+            };
+            let record = evaluate_phase(role, &usage, &targets, threshold);
+            if record.overrun && record.recovery_action != RecoveryAction::Continue {
+                telemetry.any_overrun = true;
+                telemetry.recovery_actions_taken.push(format!(
+                    "{}: {}", record.phase, record.recovery_action
+                ));
+            }
+            telemetry.records.push(record);
+        }
+        write_telemetry(dir.path(), &telemetry);
+
+        let path = dir.path().join("budget-telemetry.json");
+        assert!(path.exists());
+        let content = std::fs::read_to_string(&path).unwrap();
+        let parsed: BudgetTelemetry = serde_json::from_str(&content).unwrap();
+        assert_eq!(parsed.records.len(), 5);
+
+        let phase_names: Vec<&str> = parsed.records.iter().map(|r| r.phase.as_str()).collect();
+        assert!(phase_names.contains(&"SCOUT"), "Missing SCOUT record");
+        assert!(phase_names.contains(&"PLAN"), "Missing PLAN record");
+        assert!(phase_names.contains(&"P+"), "Missing P+ record");
+        assert!(phase_names.contains(&"IMPLEMENT"), "Missing IMPLEMENT record");
+        assert!(phase_names.contains(&"VERIFY"), "Missing VERIFY record");
     }
 
     #[test]

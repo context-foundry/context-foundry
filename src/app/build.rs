@@ -2883,42 +2883,28 @@ async fn process_task(
 
             // Budget telemetry for P+ (use plan_review target)
             if ctx.config.budget_recovery_enabled {
-                let mut record = budget::PhaseBudgetRecord {
-                    phase: "PlanReview".to_string(),
-                    target_pct: ctx.config.budget_targets.plan_review,
-                    actual_pct: agent_usage.context_pct,
-                    overrun: false,
-                    overrun_amount: 0,
-                    tokens_in: agent_usage.tokens_in,
-                    tokens_out: agent_usage.tokens_out,
-                    cost_usd: agent_usage.cost_usd,
-                    recovery_action: budget::RecoveryAction::Continue,
-                };
-                let actual = record.actual_pct;
-                let target = record.target_pct;
-                if actual > target {
-                    record.overrun = true;
-                    record.overrun_amount = actual as i16 - target as i16;
-                    let overrun_amount = record.overrun_amount as u8;
-                    if overrun_amount > ctx.config.budget_overrun_threshold {
-                        if overrun_amount <= 20 {
-                            record.recovery_action = budget::RecoveryAction::Summarize;
+                let record = budget::evaluate_phase(
+                    &AgentRole::PlanReview,
+                    &agent_usage,
+                    &ctx.config.budget_targets,
+                    ctx.config.budget_overrun_threshold,
+                );
+                if record.overrun && record.recovery_action != budget::RecoveryAction::Continue {
+                    match record.recovery_action {
+                        budget::RecoveryAction::Summarize => {
                             budget_summary_for_next = Some(budget::summarize_directive(
-                                "PlanReview", actual, target,
+                                "PlanReview", record.actual_pct, record.target_pct,
                             ));
-                        } else if overrun_amount <= 40 {
-                            record.recovery_action = budget::RecoveryAction::Escalate;
-                            budget_model_override = Some(("claude".to_string(), "opus".to_string()));
-                        } else {
-                            record.recovery_action = budget::RecoveryAction::SplitRecommended;
                         }
-                        budget_telemetry.any_overrun = true;
-                        budget_telemetry.recovery_actions_taken.push(format!(
-                            "PlanReview: {}", record.recovery_action
-                        ));
+                        budget::RecoveryAction::Escalate => {
+                            budget_model_override = Some(("claude".to_string(), "opus".to_string()));
+                        }
+                        _ => {}
                     }
-                } else {
-                    record.overrun_amount = actual as i16 - target as i16;
+                    budget_telemetry.any_overrun = true;
+                    budget_telemetry.recovery_actions_taken.push(format!(
+                        "PlanReview: {}", record.recovery_action
+                    ));
                 }
                 budget_telemetry.records.push(record);
             }
@@ -3355,28 +3341,28 @@ async fn process_task(
     let skip_doubt_confidence = doubt_confidence.should_skip && build_ok;
     let skip_verify = skip_doubt_simple || skip_for_batch || skip_doubt_confidence;
 
-    let (validated, _fix_passes, review_findings) = if ctx.config.backpressure_only {
+    let (validated, _fix_passes, review_findings, reviewer_budget_record) = if ctx.config.backpressure_only {
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
             "Backpressure-only mode: skipping LLM review (builder verification passed)".to_string(),
         )));
-        (true, 0usize, (0, 0, 0))
+        (true, 0usize, (0, 0, 0), None)
     } else if skip_for_batch {
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
             "Batch doubt: deferring review ({} tasks remaining)",
             pending_count
         ))));
-        (true, 0usize, (0, 0, 0))
+        (true, 0usize, (0, 0, 0), None)
     } else if skip_doubt_simple {
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
             "Simple task with passing build checks -- skipping doubt".to_string(),
         )));
-        (true, 0usize, (0, 0, 0))
+        (true, 0usize, (0, 0, 0), None)
     } else if skip_doubt_confidence {
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
             "Learned confidence -- skipping doubt ({})",
             doubt_confidence.log_message
         ))));
-        (true, 0usize, (0, 0, 0))
+        (true, 0usize, (0, 0, 0), None)
     } else {
         // ─── Gate: Reviewer Prerequisites ─────────────────────
         match gate_reviewer(ctx) {
@@ -3410,6 +3396,11 @@ async fn process_task(
             }
         }
     };
+
+    // Add Reviewer budget record to telemetry
+    if let Some(record) = reviewer_budget_record {
+        budget_telemetry.records.push(record);
+    }
 
     // Record doubt result for learned confidence (only when doubt actually ran)
     if !skip_verify && !ctx.config.backpressure_only {

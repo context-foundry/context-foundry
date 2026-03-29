@@ -22,6 +22,7 @@ pub enum AgentRole {
     Builder,
     Reviewer,
     Fixer,
+    PlanReview,
     Discovery,
 }
 
@@ -33,6 +34,7 @@ impl std::fmt::Display for AgentRole {
             AgentRole::Builder => write!(f, "IMPLEMENT"),
             AgentRole::Reviewer => write!(f, "VERIFY"),
             AgentRole::Fixer => write!(f, "VERIFY"),
+            AgentRole::PlanReview => write!(f, "P+"),
             AgentRole::Discovery => write!(f, "DISCOVERY"),
         }
     }
