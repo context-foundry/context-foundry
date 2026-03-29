@@ -254,8 +254,8 @@ mod tests {
 
     #[test]
     fn test_summarize_directive_contains_phase_name() {
-        let directive = summarize_directive("Scout", 55, 15);
-        assert!(directive.contains("Scout"));
+        let directive = summarize_directive("SCOUT", 55, 15);
+        assert!(directive.contains("SCOUT"));
         assert!(directive.contains("55%"));
         assert!(directive.contains("15%"));
     }
@@ -278,7 +278,7 @@ mod tests {
                 recovery_action: RecoveryAction::Continue,
             }],
             any_overrun: true,
-            recovery_actions_taken: vec!["Scout: continue".to_string()],
+            recovery_actions_taken: vec!["SCOUT: continue".to_string()],
         };
         write_telemetry(dir.path(), &telemetry);
         let path = dir.path().join("budget-telemetry.json");
@@ -435,6 +435,51 @@ mod tests {
         };
         let record = evaluate_phase(&AgentRole::Planner, &usage, &BudgetTargets::default(), 30);
         assert_eq!(record.recovery_action, RecoveryAction::Continue);
+    }
+
+    #[test]
+    fn test_telemetry_recovery_actions_use_display_names() {
+        // D40.1(b): recovery_actions_taken entries must use AgentRole Display names
+        // (e.g., "SCOUT: summarize") not informal names (e.g., "Scout: summarize").
+        let dir = tempfile::tempdir().unwrap();
+        let threshold = 5u8;
+
+        let mut telemetry = BudgetTelemetry {
+            task_id: "D40.1".to_string(),
+            timestamp: "2026-03-29T00:00:00Z".to_string(),
+            ..Default::default()
+        };
+
+        // Scout at 32% (target 15, threshold 5): overrun=17, threshold+15=20 -> Summarize
+        let usage = AgentUsage {
+            context_pct: 32,
+            tokens_in: 3000,
+            tokens_out: 1000,
+            cost_usd: 0.03,
+        };
+        let targets = BudgetTargets::default();
+        let record = evaluate_phase(&AgentRole::Scout, &usage, &targets, threshold);
+        assert_eq!(record.recovery_action, RecoveryAction::Summarize);
+        if record.overrun && record.recovery_action != RecoveryAction::Continue {
+            telemetry.recovery_actions_taken.push(format!(
+                "{}: {}", AgentRole::Scout, record.recovery_action
+            ));
+        }
+        telemetry.records.push(record);
+
+        write_telemetry(dir.path(), &telemetry);
+        let content = std::fs::read_to_string(dir.path().join("budget-telemetry.json")).unwrap();
+        let parsed: BudgetTelemetry = serde_json::from_str(&content).unwrap();
+
+        // Verify: recovery_actions_taken uses Display name "SCOUT", not "Scout"
+        assert_eq!(parsed.recovery_actions_taken.len(), 1);
+        assert!(
+            parsed.recovery_actions_taken[0].starts_with("SCOUT:"),
+            "Expected 'SCOUT: summarize', got: {}",
+            parsed.recovery_actions_taken[0]
+        );
+        // Verify: records[].phase also uses Display name
+        assert_eq!(parsed.records[0].phase, "SCOUT");
     }
 
     #[test]

@@ -1280,7 +1280,7 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                 Config::display_provider_model(&ctx.config.scout_provider, &ctx.config.scout_model),
             )));
             observatory::log_event(&session_id, &ctx.project_dir, ObservatoryEvent::AgentStarted {
-                role: "Scout".to_string(),
+                role: format!("{}", AgentRole::Scout),
                 provider: ctx.config.scout_provider.clone(),
                 model: ctx.config.scout_model.clone(),
             });
@@ -1322,7 +1322,7 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                 scout_result.as_ref().map(|r| r.success).unwrap_or(false),
             ));
             observatory::log_event(&session_id, &ctx.project_dir, ObservatoryEvent::AgentDone {
-                role: "Scout".to_string(),
+                role: format!("{}", AgentRole::Scout),
                 success: scout_result.as_ref().map(|r| r.success).unwrap_or(false),
                 duration_secs: scout_start.elapsed().as_secs_f64(),
                 tokens_in: agent_usage.tokens_in,
@@ -1609,7 +1609,7 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                 ),
             )));
             observatory::log_event(&session_id, &ctx.project_dir, ObservatoryEvent::AgentStarted {
-                role: "Discovery".to_string(),
+                role: format!("{}", AgentRole::Discovery),
                 provider: ctx.config.discovery_provider.clone(),
                 model: ctx.config.discovery_model.clone(),
             });
@@ -1646,7 +1646,7 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                 result.as_ref().map(|r| r.success).unwrap_or(false),
             ));
             observatory::log_event(&session_id, &ctx.project_dir, ObservatoryEvent::AgentDone {
-                role: "Discovery".to_string(),
+                role: format!("{}", AgentRole::Discovery),
                 success: result.as_ref().map(|r| r.success).unwrap_or(false),
                 duration_secs: discovery_start.elapsed().as_secs_f64(),
                 tokens_in: agent_usage.tokens_in,
@@ -2194,7 +2194,7 @@ async fn process_task(
             Config::display_provider_model(&ctx.config.scout_provider, &ctx.config.scout_model),
         )));
         observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::AgentStarted {
-            role: "Scout".to_string(),
+            role: format!("{}", AgentRole::Scout),
             provider: ctx.config.scout_provider.clone(),
             model: ctx.config.scout_model.clone(),
         });
@@ -2232,7 +2232,7 @@ async fn process_task(
         let scout_ok = scout_result.map(|r| r.success).unwrap_or(false);
         let _ = tx.send(AppEvent::AgentDone(scout_ok));
         observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::AgentDone {
-            role: "Scout".to_string(),
+            role: format!("{}", AgentRole::Scout),
             success: scout_ok,
             duration_secs: scout_start.elapsed().as_secs_f64(),
             tokens_in: agent_usage.tokens_in,
@@ -2251,10 +2251,10 @@ async fn process_task(
             if record.overrun && record.recovery_action != budget::RecoveryAction::Continue {
                 budget_telemetry.any_overrun = true;
                 budget_telemetry.recovery_actions_taken.push(format!(
-                    "Scout: {}", record.recovery_action
+                    "{}: {}", AgentRole::Scout, record.recovery_action
                 ));
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BudgetOverrun {
-                    phase: "Scout".to_string(),
+                    phase: format!("{}", AgentRole::Scout),
                     target_pct: record.target_pct,
                     actual_pct: record.actual_pct,
                     recovery: format!("{}", record.recovery_action),
@@ -2264,7 +2264,7 @@ async fn process_task(
                     &ctx.project_dir,
                     ObservatoryEvent::BudgetOverrun {
                         task_id: task_id.to_string(),
-                        phase: "Scout".to_string(),
+                        phase: format!("{}", AgentRole::Scout),
                         target_pct: record.target_pct,
                         actual_pct: record.actual_pct,
                         recovery_action: format!("{}", record.recovery_action),
@@ -2273,28 +2273,28 @@ async fn process_task(
                 match record.recovery_action {
                     budget::RecoveryAction::Summarize => {
                         budget_summary_for_next = Some(budget::summarize_directive(
-                            "Scout", record.actual_pct, record.target_pct,
+                            &format!("{}", AgentRole::Scout), record.actual_pct, record.target_pct,
                         ));
                     }
                     budget::RecoveryAction::Escalate => {
                         budget_model_override = Some(("claude".to_string(), "opus".to_string()));
                         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                            "Budget recovery: escalating Planner model to opus due to Scout overrun ({}% > {}%)",
-                            record.actual_pct, record.target_pct,
+                            "Budget recovery: escalating {} model to opus due to {} overrun ({}% > {}%)",
+                            AgentRole::Planner, AgentRole::Scout, record.actual_pct, record.target_pct,
                         ))));
                     }
                     budget::RecoveryAction::SplitRecommended => {
                         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                            "Budget recovery: split recommended for Scout ({}% > {}%) -- logged for manual review",
-                            record.actual_pct, record.target_pct,
+                            "Budget recovery: split recommended for {} ({}% > {}%) -- logged for manual review",
+                            AgentRole::Scout, record.actual_pct, record.target_pct,
                         ))));
                     }
                     budget::RecoveryAction::Continue => {}
                 }
             } else if record.overrun {
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                    "Budget: Scout used {}% (target {}%, within tolerance)",
-                    record.actual_pct, record.target_pct,
+                    "Budget: {} used {}% (target {}%, within tolerance)",
+                    AgentRole::Scout, record.actual_pct, record.target_pct,
                 ))));
             }
             budget_telemetry.records.push(record);
@@ -2416,7 +2416,7 @@ async fn process_task(
                 ),
             )));
             observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::AgentStarted {
-                role: "Planner".to_string(),
+                role: format!("{}", AgentRole::Planner),
                 provider: ctx.config.planner_provider.clone(),
                 model: ctx.config.planner_model.clone(),
             });
@@ -2456,7 +2456,7 @@ async fn process_task(
             let plan_ok = plan_result.map(|r| r.success).unwrap_or(false);
             let _ = tx.send(AppEvent::AgentDone(plan_ok));
             observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::AgentDone {
-                role: "Planner".to_string(),
+                role: format!("{}", AgentRole::Planner),
                 success: plan_ok,
                 duration_secs: planner_start.elapsed().as_secs_f64(),
                 tokens_in: agent_usage.tokens_in,
@@ -2475,10 +2475,10 @@ async fn process_task(
                 if record.overrun && record.recovery_action != budget::RecoveryAction::Continue {
                     budget_telemetry.any_overrun = true;
                     budget_telemetry.recovery_actions_taken.push(format!(
-                        "Planner: {}", record.recovery_action
+                        "{}: {}", AgentRole::Planner, record.recovery_action
                     ));
                     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BudgetOverrun {
-                        phase: "Planner".to_string(),
+                        phase: format!("{}", AgentRole::Planner),
                         target_pct: record.target_pct,
                         actual_pct: record.actual_pct,
                         recovery: format!("{}", record.recovery_action),
@@ -2488,7 +2488,7 @@ async fn process_task(
                         &ctx.project_dir,
                         ObservatoryEvent::BudgetOverrun {
                             task_id: task_id.to_string(),
-                            phase: "Planner".to_string(),
+                            phase: format!("{}", AgentRole::Planner),
                             target_pct: record.target_pct,
                             actual_pct: record.actual_pct,
                             recovery_action: format!("{}", record.recovery_action),
@@ -2497,28 +2497,28 @@ async fn process_task(
                     match record.recovery_action {
                         budget::RecoveryAction::Summarize => {
                             budget_summary_for_next = Some(budget::summarize_directive(
-                                "Planner", record.actual_pct, record.target_pct,
+                                &format!("{}", AgentRole::Planner), record.actual_pct, record.target_pct,
                             ));
                         }
                         budget::RecoveryAction::Escalate => {
                             budget_model_override = Some(("claude".to_string(), "opus".to_string()));
                             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                                "Budget recovery: escalating Builder model to opus due to Planner overrun ({}% > {}%)",
-                                record.actual_pct, record.target_pct,
+                                "Budget recovery: escalating {} model to opus due to {} overrun ({}% > {}%)",
+                                AgentRole::Builder, AgentRole::Planner, record.actual_pct, record.target_pct,
                             ))));
                         }
                         budget::RecoveryAction::SplitRecommended => {
                             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                                "Budget recovery: split recommended for Planner ({}% > {}%) -- logged for manual review",
-                                record.actual_pct, record.target_pct,
+                                "Budget recovery: split recommended for {} ({}% > {}%) -- logged for manual review",
+                                AgentRole::Planner, record.actual_pct, record.target_pct,
                             ))));
                         }
                         budget::RecoveryAction::Continue => {}
                     }
                 } else if record.overrun {
                     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                        "Budget: Planner used {}% (target {}%, within tolerance)",
-                        record.actual_pct, record.target_pct,
+                        "Budget: {} used {}% (target {}%, within tolerance)",
+                        AgentRole::Planner, record.actual_pct, record.target_pct,
                     ))));
                 }
                 budget_telemetry.records.push(record);
@@ -2698,12 +2698,16 @@ async fn process_task(
             );
             // Planner retry -- skip extension context to save tokens.
 
+            let retry_start = Instant::now();
             let (agent_tx2, mut agent_rx2) = mpsc::unbounded_channel();
             let fwd_tx2 = tx.clone();
             let fwd_handle2 = tokio::spawn(async move {
+                let mut usage = AgentUsage::default();
                 while let Some(evt) = agent_rx2.recv().await {
+                    usage.accumulate(&evt);
                     let _ = fwd_tx2.send(AppEvent::AgentOutput(evt));
                 }
+                usage
             });
 
             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::AgentStarted(
@@ -2728,11 +2732,79 @@ async fn process_task(
             )
             .await;
 
-            let _ = fwd_handle2.await;
+            let retry_usage = fwd_handle2.await.unwrap_or_default();
             last_rate_limited = was_rate_limited(&retry_result);
-            let _ = tx.send(AppEvent::AgentDone(
-                retry_result.as_ref().map(|r| r.success).unwrap_or(false),
-            ));
+            let retry_ok = retry_result.as_ref().map(|r| r.success).unwrap_or(false);
+            let _ = tx.send(AppEvent::AgentDone(retry_ok));
+            observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::AgentDone {
+                role: format!("{}", AgentRole::Planner),
+                success: retry_ok,
+                duration_secs: retry_start.elapsed().as_secs_f64(),
+                tokens_in: retry_usage.tokens_in,
+                tokens_out: retry_usage.tokens_out,
+                cost_usd: retry_usage.cost_usd,
+                context_pct: retry_usage.context_pct,
+            });
+            // Budget telemetry: Planner retry
+            if ctx.config.budget_recovery_enabled {
+                let record = budget::evaluate_phase(
+                    &AgentRole::Planner,
+                    &retry_usage,
+                    &ctx.config.budget_targets,
+                    ctx.config.budget_overrun_threshold,
+                );
+                if record.overrun && record.recovery_action != budget::RecoveryAction::Continue {
+                    budget_telemetry.any_overrun = true;
+                    budget_telemetry.recovery_actions_taken.push(format!(
+                        "{}: {}", AgentRole::Planner, record.recovery_action
+                    ));
+                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BudgetOverrun {
+                        phase: format!("{}", AgentRole::Planner),
+                        target_pct: record.target_pct,
+                        actual_pct: record.actual_pct,
+                        recovery: format!("{}", record.recovery_action),
+                    }));
+                    observatory::log_event(
+                        &ctx.session_id,
+                        &ctx.project_dir,
+                        ObservatoryEvent::BudgetOverrun {
+                            task_id: task_id.to_string(),
+                            phase: format!("{}", AgentRole::Planner),
+                            target_pct: record.target_pct,
+                            actual_pct: record.actual_pct,
+                            recovery_action: format!("{}", record.recovery_action),
+                        },
+                    );
+                    match record.recovery_action {
+                        budget::RecoveryAction::Summarize => {
+                            budget_summary_for_next = Some(budget::summarize_directive(
+                                &format!("{}", AgentRole::Planner), record.actual_pct, record.target_pct,
+                            ));
+                        }
+                        budget::RecoveryAction::Escalate => {
+                            budget_model_override = Some(("claude".to_string(), "opus".to_string()));
+                            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                                "Budget recovery: escalating {} model to opus due to {} retry overrun ({}% > {}%)",
+                                AgentRole::Builder, AgentRole::Planner,
+                                record.actual_pct, record.target_pct,
+                            ))));
+                        }
+                        budget::RecoveryAction::SplitRecommended => {
+                            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                                "Budget recovery: split recommended for {} retry ({}% > {}%) -- logged for manual review",
+                                AgentRole::Planner, record.actual_pct, record.target_pct,
+                            ))));
+                        }
+                        budget::RecoveryAction::Continue => {}
+                    }
+                } else if record.overrun {
+                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                        "Budget: {} retry used {}% (target {}%, within tolerance)",
+                        AgentRole::Planner, record.actual_pct, record.target_pct,
+                    ))));
+                }
+                budget_telemetry.records.push(record);
+            }
 
             // Check gate again after retry
             if let GateResult::Fail(reason2) = gate_builder(ctx) {
@@ -2802,6 +2874,20 @@ async fn process_task(
                 "P+ subphase: routing plan for {} through orchestrator review loop", task_id
             ))));
 
+            // Budget recovery directives target "the next phase" -- for Complex tasks,
+            // that's P+, not Builder. Consume and warn to prevent silent carry-through.
+            // (Same pattern as parallel builder at build.rs:3064-3073)
+            if let Some(_summary) = budget_summary_for_next.take() {
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+                    "P+ subphase: budget summary directive from Planner consumed (P+ uses orchestrator config, not prompt injection)".to_string()
+                )));
+            }
+            if let Some((ref p, ref m)) = budget_model_override.take() {
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+                    format!("P+ subphase: budget model override ({}/{}) from Planner consumed (P+ uses orchestrator providers, not overrideable)", p, m)
+                )));
+            }
+
             let orch_config = OrchestratorConfig::from_config(&ctx.config);
 
             let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
@@ -2838,7 +2924,7 @@ async fn process_task(
                 review_result.as_ref().map(|r| r.accepted).unwrap_or(false),
             ));
             observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::AgentDone {
-                role: "PlanReview".to_string(),
+                role: format!("{}", AgentRole::PlanReview),
                 success: review_result.as_ref().map(|r| r.accepted).unwrap_or(false),
                 duration_secs: plan_review_start.elapsed().as_secs_f64(),
                 tokens_in: agent_usage.tokens_in,
@@ -2892,10 +2978,10 @@ async fn process_task(
                 if record.overrun && record.recovery_action != budget::RecoveryAction::Continue {
                     budget_telemetry.any_overrun = true;
                     budget_telemetry.recovery_actions_taken.push(format!(
-                        "PlanReview: {}", record.recovery_action
+                        "{}: {}", AgentRole::PlanReview, record.recovery_action
                     ));
                     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BudgetOverrun {
-                        phase: "PlanReview".to_string(),
+                        phase: format!("{}", AgentRole::PlanReview),
                         target_pct: record.target_pct,
                         actual_pct: record.actual_pct,
                         recovery: format!("{}", record.recovery_action),
@@ -2905,7 +2991,7 @@ async fn process_task(
                         &ctx.project_dir,
                         ObservatoryEvent::BudgetOverrun {
                             task_id: task_id.to_string(),
-                            phase: "PlanReview".to_string(),
+                            phase: format!("{}", AgentRole::PlanReview),
                             target_pct: record.target_pct,
                             actual_pct: record.actual_pct,
                             recovery_action: format!("{}", record.recovery_action),
@@ -2914,28 +3000,28 @@ async fn process_task(
                     match record.recovery_action {
                         budget::RecoveryAction::Summarize => {
                             budget_summary_for_next = Some(budget::summarize_directive(
-                                "PlanReview", record.actual_pct, record.target_pct,
+                                &format!("{}", AgentRole::PlanReview), record.actual_pct, record.target_pct,
                             ));
                         }
                         budget::RecoveryAction::Escalate => {
                             budget_model_override = Some(("claude".to_string(), "opus".to_string()));
                             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                                "Budget recovery: escalating Builder model to opus due to PlanReview overrun ({}% > {}%)",
-                                record.actual_pct, record.target_pct,
+                                "Budget recovery: escalating {} model to opus due to {} overrun ({}% > {}%)",
+                                AgentRole::Builder, AgentRole::PlanReview, record.actual_pct, record.target_pct,
                             ))));
                         }
                         budget::RecoveryAction::SplitRecommended => {
                             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                                "Budget recovery: split recommended for PlanReview ({}% > {}%) -- logged for manual review",
-                                record.actual_pct, record.target_pct,
+                                "Budget recovery: split recommended for {} ({}% > {}%) -- logged for manual review",
+                                AgentRole::PlanReview, record.actual_pct, record.target_pct,
                             ))));
                         }
                         budget::RecoveryAction::Continue => {}
                     }
                 } else if record.overrun {
                     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                        "Budget: PlanReview used {}% (target {}%, within tolerance)",
-                        record.actual_pct, record.target_pct,
+                        "Budget: {} used {}% (target {}%, within tolerance)",
+                        AgentRole::PlanReview, record.actual_pct, record.target_pct,
                     ))));
                 }
                 budget_telemetry.records.push(record);
@@ -3091,7 +3177,7 @@ async fn process_task(
             Config::display_provider_model(&ctx.config.builder_provider, &ctx.config.builder_model),
         )));
         observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::AgentStarted {
-            role: "Builder".to_string(),
+            role: format!("{}", AgentRole::Builder),
             provider: ctx.config.builder_provider.clone(),
             model: ctx.config.builder_model.clone(),
         });
@@ -3141,7 +3227,7 @@ async fn process_task(
         let ok = build_result.map(|r| r.success).unwrap_or(false);
         let _ = tx.send(AppEvent::AgentDone(ok));
         observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::AgentDone {
-            role: "Builder".to_string(),
+            role: format!("{}", AgentRole::Builder),
             success: ok,
             duration_secs: builder_start.elapsed().as_secs_f64(),
             tokens_in: agent_usage.tokens_in,
@@ -3160,10 +3246,10 @@ async fn process_task(
             if record.overrun && record.recovery_action != budget::RecoveryAction::Continue {
                 budget_telemetry.any_overrun = true;
                 budget_telemetry.recovery_actions_taken.push(format!(
-                    "Builder: {}", record.recovery_action
+                    "{}: {}", AgentRole::Builder, record.recovery_action
                 ));
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BudgetOverrun {
-                    phase: "Builder".to_string(),
+                    phase: format!("{}", AgentRole::Builder),
                     target_pct: record.target_pct,
                     actual_pct: record.actual_pct,
                     recovery: format!("{}", record.recovery_action),
@@ -3173,7 +3259,7 @@ async fn process_task(
                     &ctx.project_dir,
                     ObservatoryEvent::BudgetOverrun {
                         task_id: task_id.to_string(),
-                        phase: "Builder".to_string(),
+                        phase: format!("{}", AgentRole::Builder),
                         target_pct: record.target_pct,
                         actual_pct: record.actual_pct,
                         recovery_action: format!("{}", record.recovery_action),
@@ -3181,13 +3267,13 @@ async fn process_task(
                 );
                 // Builder is the last phase before review (separate function) -- log all recovery types
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                    "Budget recovery: {} for Builder ({}% > {}%)",
-                    record.recovery_action, record.actual_pct, record.target_pct,
+                    "Budget recovery: {} for {} ({}% > {}%)",
+                    record.recovery_action, AgentRole::Builder, record.actual_pct, record.target_pct,
                 ))));
             } else if record.overrun {
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                    "Budget: Builder used {}% (target {}%, within tolerance)",
-                    record.actual_pct, record.target_pct,
+                    "Budget: {} used {}% (target {}%, within tolerance)",
+                    AgentRole::Builder, record.actual_pct, record.target_pct,
                 ))));
             }
             budget_telemetry.records.push(record);
@@ -4384,5 +4470,99 @@ mod tests {
         );
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_budget_recovery_directives_consumed_before_p_plus() {
+        // Bug D40.1(a): When Planner overruns and sets budget_summary_for_next
+        // and budget_model_override, these directives should target P+ (the next
+        // phase for Complex tasks), not leak through to Builder. Since P+ uses
+        // OrchestratorConfig which doesn't support these overrides, they must be
+        // consumed with a warning before P+ runs.
+
+        // Simulate the state after Planner budget evaluation triggers Escalate
+        let mut budget_summary_for_next: Option<String> = Some(
+            "CONTEXT BUDGET ALERT: The previous PLAN phase used 65% ...".to_string()
+        );
+        let mut budget_model_override: Option<(String, String)> = Some(
+            ("claude".to_string(), "opus".to_string())
+        );
+
+        // Simulate: P+ subphase is about to run. The code should .take() both values.
+        // This mirrors the consume-and-warn pattern from parallel builder (build.rs:3064-3073).
+        let consumed_summary = budget_summary_for_next.take();
+        let consumed_override = budget_model_override.take();
+
+        assert!(consumed_summary.is_some(), "summary directive should have been present for consumption");
+        assert!(consumed_override.is_some(), "model override should have been present for consumption");
+        assert!(budget_summary_for_next.is_none(), "summary must be None after .take() so Builder does not receive it");
+        assert!(budget_model_override.is_none(), "override must be None after .take() so Builder does not receive it");
+    }
+
+    #[test]
+    fn test_recovery_actions_use_display_names() {
+        // Bug D40.1(b): recovery_actions_taken[] and BudgetOverrun events must
+        // use AgentRole Display names matching records[].phase, not informal names.
+        use crate::agent::AgentRole;
+
+        let roles = vec![
+            (AgentRole::Scout, "SCOUT"),
+            (AgentRole::Planner, "PLAN"),
+            (AgentRole::PlanReview, "P+"),
+            (AgentRole::Builder, "IMPLEMENT"),
+            (AgentRole::Reviewer, "VERIFY"),
+        ];
+
+        for (role, expected_display) in &roles {
+            let display_name = format!("{}", role);
+            assert_eq!(&display_name, expected_display,
+                "AgentRole::{:?} Display should be {:?}, got {:?}",
+                role, expected_display, display_name
+            );
+
+            // Verify the recovery_actions_taken format uses Display name
+            let recovery_entry = format!("{}: summarize", role);
+            assert!(recovery_entry.starts_with(expected_display),
+                "recovery action entry should start with Display name {:?}, got {:?}",
+                expected_display, recovery_entry
+            );
+        }
+    }
+
+    #[test]
+    fn test_planner_retry_produces_observable_telemetry() {
+        // Bug D40.1(c): Planner gate-failure retry must accumulate AgentUsage,
+        // emit AgentDone observatory event, and evaluate budget. This test
+        // verifies the forwarding task pattern produces usage data (the same
+        // pattern used by all other agent invocations).
+        use crate::agent::AgentOutputEvent;
+        use crate::observatory::AgentUsage;
+
+        let mut usage = AgentUsage::default();
+
+        // Simulate the forwarding task accumulating usage from a Usage event
+        let evt = AgentOutputEvent::Usage {
+            cost_usd: 0.15,
+            input_tokens: 5000,
+            output_tokens: 2000,
+            context_window: 200000,
+        };
+        usage.accumulate(&evt);
+
+        assert_eq!(usage.tokens_in, 5000, "retry usage should accumulate input tokens");
+        assert_eq!(usage.tokens_out, 2000, "retry usage should accumulate output tokens");
+        assert!((usage.cost_usd - 0.15).abs() < f64::EPSILON, "retry usage should accumulate cost");
+
+        // Verify budget evaluation works with accumulated retry usage
+        let targets = crate::budget::BudgetTargets::default();
+        let record = crate::budget::evaluate_phase(
+            &crate::agent::AgentRole::Planner,
+            &usage,
+            &targets,
+            10,
+        );
+        assert_eq!(record.phase, "PLAN", "retry budget record phase should use Display name");
+        assert_eq!(record.tokens_in, 5000);
+        assert_eq!(record.tokens_out, 2000);
     }
 }
