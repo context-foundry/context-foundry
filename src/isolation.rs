@@ -91,13 +91,13 @@ impl PhaseIsolation {
         if self.restored {
             return Ok(());
         }
-        self.restored = true;
         for (original, temp) in &self.hidden {
             if temp.exists() {
                 move_file(temp, original)
                     .with_context(|| format!("failed to restore {}", original.display()))?;
             }
         }
+        self.restored = true;
         let _ = std::fs::remove_dir_all(&self.staging_dir);
         Ok(())
     }
@@ -304,5 +304,61 @@ mod tests {
             fs::read_to_string(buildloop.join("current-plan.md")).unwrap(),
             plan_content
         );
+    }
+
+    #[test]
+    fn test_restore_partial_failure_triggers_drop_recovery() {
+        let (_dir, paths) = setup_temp_files(&["a.md", "b.md"]);
+        let mut guard = PhaseIsolation::activate(&paths).unwrap();
+        assert!(!paths[0].exists());
+        assert!(!paths[1].exists());
+
+        // Sabotage: delete original's parent directory for the second file
+        // so restore will fail mid-loop for that file. But since HashMap
+        // iteration order is non-deterministic, we sabotage both parents
+        // and then recreate one, so exactly one file's restore can succeed
+        // during Drop.
+        //
+        // Actually, a simpler approach: delete one of the temp backup files
+        // so move_file finds nothing to move for it (temp.exists() check
+        // skips it), then the loop completes and restored=true. That does
+        // NOT trigger the bug. We need move_file to FAIL (return Err).
+        //
+        // To trigger a move_file failure: remove the parent directory of
+        // one original path so the move destination is invalid.
+        let parent_1 = paths[1].parent().unwrap();
+        // paths share the same parent (tempdir), so we can't remove it.
+        // Instead, directly verify the flag behavior: after the fix,
+        // restored should be false if restore() returns Err.
+
+        // Create a scenario: make destination unwritable by removing parent
+        // We need separate parent dirs for this test.
+        let dir_a = tempfile::tempdir().unwrap();
+        let dir_b = tempfile::tempdir().unwrap();
+        let file_a = dir_a.path().join("x.md");
+        let file_b = dir_b.path().join("y.md");
+        fs::write(&file_a, "content-x").unwrap();
+        fs::write(&file_b, "content-y").unwrap();
+
+        let mut guard2 = PhaseIsolation::activate(&[file_a.clone(), file_b.clone()]).unwrap();
+        assert!(!file_a.exists());
+        assert!(!file_b.exists());
+
+        // Remove dir_b entirely so restoring file_b fails (no parent dir)
+        drop(dir_b);
+
+        // restore() should return Err because it can't restore file_b
+        let result = guard2.restore();
+        assert!(result.is_err(), "restore should fail when a destination parent is gone");
+
+        // The key assertion: after a failed restore(), Drop still runs recovery.
+        // Since restored is still false, Drop will attempt to move files back.
+        // file_a may or may not have been restored depending on iteration order,
+        // but the guard should NOT have set restored=true.
+        // Drop will fire when guard2 goes out of scope and attempt best-effort recovery.
+        drop(guard2);
+
+        // file_a should exist (either restore() got it before the error, or Drop recovered it)
+        assert!(file_a.exists(), "file_a should be recovered after partial failure");
     }
 }

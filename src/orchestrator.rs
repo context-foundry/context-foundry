@@ -119,7 +119,7 @@ PRIOR REVIEW FINDINGS (address these in your revised artifact):
 USER INTENT: {intent}
 {findings_block}
 INSTRUCTIONS:
-1. Read the project's SPEC.md, TASKS.md, and CLAUDE.md for context
+1. Read the project's SPEC.md and TASKS.md for context
 2. Read relevant source code
 3. Produce your artifact
 
@@ -175,7 +175,7 @@ RATIONALE: {rationale}
 {claims_block}
 
 INSTRUCTIONS:
-1. Read the project's source code, SPEC.md, TASKS.md, and CLAUDE.md
+1. Read the project's source code, SPEC.md, and TASKS.md
 2. Verify each claim against the actual codebase
 3. Identify gaps, risks, and incorrect assumptions
 
