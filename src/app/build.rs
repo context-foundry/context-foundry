@@ -2729,6 +2729,11 @@ async fn process_task(
                     &ctx.config.planner_model,
                 ),
             )));
+            observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::AgentStarted {
+                role: format!("{}", AgentRole::Planner),
+                provider: ctx.config.planner_provider.clone(),
+                model: ctx.config.planner_model.clone(),
+            });
 
             let retry_result = agent::run_agent(
                 &AgentRole::Planner,
@@ -2888,6 +2893,11 @@ async fn process_task(
                     &ctx.config.orchestrator_proposer_model,
                 )),
             )));
+            observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::AgentStarted {
+                role: format!("{}", AgentRole::PlanReview),
+                provider: ctx.config.orchestrator_proposer_provider.clone(),
+                model: ctx.config.orchestrator_proposer_model.clone(),
+            });
             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
                 "P+ subphase: routing plan for {} through orchestrator review loop", task_id
             ))));

@@ -465,6 +465,11 @@ async fn run_multipass_review(
             usage
         });
 
+        observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::AgentStarted {
+            role: format!("{}", AgentRole::Reviewer),
+            provider: ctx.config.reviewer_provider.clone(),
+            model: ctx.config.reviewer_model.clone(),
+        });
         let per_file_start = Instant::now();
         let result = agent::run_agent(
             &AgentRole::Reviewer,
@@ -572,6 +577,11 @@ async fn run_multipass_review(
         usage
     });
 
+    observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::AgentStarted {
+        role: format!("{}", AgentRole::Reviewer),
+        provider: ctx.config.reviewer_provider.clone(),
+        model: ctx.config.reviewer_model.clone(),
+    });
     let integration_start = Instant::now();
     let review_result = agent::run_agent(
         &AgentRole::Reviewer,
