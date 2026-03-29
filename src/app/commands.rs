@@ -231,6 +231,7 @@ fn required_providers(
         }
         ProviderCommandMode::Run => {
             let mut v = vec![
+                ("scout", Config::parse_provider(&config.scout_provider)),
                 ("planner", Config::parse_provider(&config.planner_provider)),
                 ("builder", Config::parse_provider(&config.builder_provider)),
                 (
@@ -238,6 +239,16 @@ fn required_providers(
                     Config::parse_provider(&config.discovery_provider),
                 ),
             ];
+            if config.plan_review_enabled {
+                v.push((
+                    "orchestrator-proposer",
+                    Config::parse_provider(&config.orchestrator_proposer_provider),
+                ));
+                v.push((
+                    "orchestrator-reviewer",
+                    Config::parse_provider(&config.orchestrator_reviewer_provider),
+                ));
+            }
             if config.builder_models.len() >= 2 {
                 for spec in config.builder_models.iter().take(2) {
                     let (provider_str, _model) = Config::parse_model_spec(spec);
@@ -780,5 +791,71 @@ mod tests {
     #[test]
     fn sandbox_image_exists_returns_false_for_nonexistent() {
         assert!(!super::sandbox_image_exists("foundry-nonexistent-image-abc123:latest"));
+    }
+
+    #[test]
+    fn run_mode_requires_scout_provider() {
+        let config = Config {
+            scout_provider: "codex".into(),
+            backpressure_only: true,
+            ..Config::default()
+        };
+
+        let missing = missing_provider_commands(&config, ProviderCommandMode::Run, |provider| {
+            provider == ModelProvider::Claude
+        });
+
+        assert!(missing
+            .values()
+            .flatten()
+            .any(|role| *role == "scout"));
+    }
+
+    #[test]
+    fn run_mode_requires_orchestrator_providers_when_plan_review_enabled() {
+        let config = Config {
+            plan_review_enabled: true,
+            orchestrator_proposer_provider: "codex".into(),
+            orchestrator_reviewer_provider: "codex".into(),
+            backpressure_only: true,
+            ..Config::default()
+        };
+
+        let missing = missing_provider_commands(&config, ProviderCommandMode::Run, |provider| {
+            provider == ModelProvider::Claude
+        });
+
+        assert!(missing
+            .values()
+            .flatten()
+            .any(|role| *role == "orchestrator-proposer"));
+        assert!(missing
+            .values()
+            .flatten()
+            .any(|role| *role == "orchestrator-reviewer"));
+    }
+
+    #[test]
+    fn run_mode_omits_orchestrator_providers_when_plan_review_disabled() {
+        let config = Config {
+            plan_review_enabled: false,
+            orchestrator_proposer_provider: "codex".into(),
+            orchestrator_reviewer_provider: "codex".into(),
+            backpressure_only: true,
+            ..Config::default()
+        };
+
+        let missing = missing_provider_commands(&config, ProviderCommandMode::Run, |provider| {
+            provider == ModelProvider::Claude
+        });
+
+        assert!(!missing
+            .values()
+            .flatten()
+            .any(|role| *role == "orchestrator-proposer"));
+        assert!(!missing
+            .values()
+            .flatten()
+            .any(|role| *role == "orchestrator-reviewer"));
     }
 }

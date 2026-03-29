@@ -512,7 +512,7 @@ Each phase produces a `PhaseBudgetRecord`:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `phase` | string | Phase name (Scout, Planner, PlanReview, Builder, Reviewer) |
+| `phase` | string | Phase name (SCOUT, PLAN, P+, IMPLEMENT, VERIFY) |
 | `target_pct` | u8 | Configured target percentage |
 | `actual_pct` | u8 | Actual context window usage percentage |
 | `overrun` | bool | Whether actual exceeded target |
@@ -531,9 +531,9 @@ Overrun severity is computed as `actual_pct - target_pct`. The `budget_overrun_t
 | Overrun Amount | Severity | Recovery Action |
 |---------------|----------|-----------------|
 | <= threshold | Tolerable | Continue (log only) |
-| threshold+1 to 20 | Moderate | Summarize: inject context compression directive into next phase |
-| 21 to 40 | Significant | Escalate: upgrade next phase to higher-capacity model |
-| > 40 | Severe | Split recommended: log recommendation for phase narrowing (manual) |
+| threshold+1 to threshold+15 | Moderate | Summarize: inject context compression directive into next phase |
+| threshold+16 to threshold+30 | Significant | Escalate: upgrade next phase to higher-capacity model |
+| > threshold+30 | Severe | Split recommended: log recommendation for phase narrowing (manual) |
 
 ### Recovery Actions
 
