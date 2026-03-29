@@ -550,7 +550,8 @@ async fn run_parallel_builder(
     ops: &[FileOp],
     groups: &[Vec<usize>],
     extension_context: &str,
-) -> (bool, bool) {
+    session_id: &str,
+) -> (bool, bool, AgentUsage) {
     let task_id = &task_info.id;
     let task_desc = &task_info.description;
     let total_slots = groups.len();
@@ -607,7 +608,7 @@ async fn run_parallel_builder(
                         .output();
                 }
                 let _ = std::fs::remove_dir_all(&base_dir);
-                return (false, false);
+                return (false, false, AgentUsage::default());
             }
             Err(e) => {
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
@@ -622,7 +623,7 @@ async fn run_parallel_builder(
                         .output();
                 }
                 let _ = std::fs::remove_dir_all(&base_dir);
-                return (false, false);
+                return (false, false, AgentUsage::default());
             }
         }
 
@@ -675,6 +676,8 @@ async fn run_parallel_builder(
     let done_counter = Arc::new(AtomicUsize::new(0));
     let mut futures_vec = Vec::new();
 
+    let session_id_owned = session_id.to_string();
+
     for (slot_idx, group) in groups.iter().enumerate() {
         // Collect raw blocks for this group
         let joined_blocks: String = group
@@ -703,14 +706,20 @@ async fn run_parallel_builder(
         let slot_tx = tx.clone();
         let total = total_slots;
 
+        let slot_session_id = session_id_owned.clone();
+        let slot_project_dir_obs = ctx.project_dir.clone();
+        let slot_builder_provider = ctx.config.builder_provider.clone();
+        let slot_builder_model = ctx.config.builder_model.clone();
+
         let fut = async move {
             // Create forwarding channel for this slot
             let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
             let fwd_tx = slot_tx.clone();
             let fwd_slot_idx = slot_idx;
-            tokio::spawn(async move {
+            let fwd_handle = tokio::spawn(async move {
+                let mut usage = AgentUsage::default();
                 while let Some(evt) = agent_rx.recv().await {
-                    // Forward as log messages with slot prefix
+                    usage.accumulate(&evt);
                     if let crate::agent::AgentOutputEvent::Text(ref text) = evt {
                         let _ = fwd_tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
                             "[slot-{}] {}",
@@ -718,7 +727,16 @@ async fn run_parallel_builder(
                         ))));
                     }
                 }
+                usage
             });
+
+            // Emit AgentStarted for this slot
+            observatory::log_event(&slot_session_id, &slot_project_dir_obs, ObservatoryEvent::AgentStarted {
+                role: format!("{}", AgentRole::Builder),
+                provider: slot_builder_provider.clone(),
+                model: slot_builder_model.clone(),
+            });
+            let slot_start = Instant::now();
 
             let result = agent::run_agent(
                 &AgentRole::Builder,
@@ -734,6 +752,8 @@ async fn run_parallel_builder(
             )
             .await;
 
+            let slot_usage = fwd_handle.await.unwrap_or_default();
+
             let done = counter.fetch_add(1, Ordering::Relaxed) + 1;
             let _ = slot_tx.send(AppEvent::LoopEvent(LoopEvent::ParallelBuilderProgress {
                 total,
@@ -742,7 +762,19 @@ async fn run_parallel_builder(
 
             let rl = was_rate_limited(&result);
             let ok = result.map(|r| r.success).unwrap_or(false);
-            (slot_idx, ok, rl)
+
+            // Emit AgentDone for this slot
+            observatory::log_event(&slot_session_id, &slot_project_dir_obs, ObservatoryEvent::AgentDone {
+                role: format!("{}", AgentRole::Builder),
+                success: ok,
+                duration_secs: slot_start.elapsed().as_secs_f64(),
+                tokens_in: slot_usage.tokens_in,
+                tokens_out: slot_usage.tokens_out,
+                cost_usd: slot_usage.cost_usd,
+                context_pct: slot_usage.context_pct,
+            });
+
+            (slot_idx, ok, rl, slot_usage)
         };
 
         futures_vec.push(fut);
@@ -754,13 +786,21 @@ async fn run_parallel_builder(
     let mut all_ok = true;
     let mut any_rate_limited = false;
     let mut combined_claims = String::new();
+    let mut aggregated_usage = AgentUsage::default();
 
-    for (slot_idx, ok, rl) in &results {
+    for (slot_idx, ok, rl, slot_usage) in &results {
         if !ok {
             all_ok = false;
         }
         if *rl {
             any_rate_limited = true;
+        }
+        // Accumulate usage from this slot
+        aggregated_usage.cost_usd += slot_usage.cost_usd;
+        aggregated_usage.tokens_in += slot_usage.tokens_in;
+        aggregated_usage.tokens_out += slot_usage.tokens_out;
+        if slot_usage.context_pct > aggregated_usage.context_pct {
+            aggregated_usage.context_pct = slot_usage.context_pct;
         }
 
         // Copy modified files from worktree to main project
@@ -812,7 +852,7 @@ async fn run_parallel_builder(
         done: total_slots,
     }));
 
-    (all_ok, any_rate_limited)
+    (all_ok, any_rate_limited, aggregated_usage)
 }
 
 // ─── Dual Pipeline ──────────────────────────────────────────
@@ -3215,7 +3255,52 @@ async fn process_task(
                 format!("Parallel builder: budget model override ({}/{}) discarded (unsupported in parallel mode)", p, m)
             )));
         }
-        run_parallel_builder(task_info, ctx, tx, file_ops, groups, extension_context).await
+        let (p_ok, p_rl, p_usage) = run_parallel_builder(task_info, ctx, tx, file_ops, groups, extension_context, &ctx.session_id).await;
+
+        // Budget telemetry: Parallel Builder (aggregated across all slots)
+        if ctx.config.budget_recovery_enabled {
+            let record = budget::evaluate_phase(
+                &AgentRole::Builder,
+                &p_usage,
+                &ctx.config.budget_targets,
+                ctx.config.budget_overrun_threshold,
+            );
+            if record.overrun && record.recovery_action != budget::RecoveryAction::Continue {
+                budget_telemetry.any_overrun = true;
+                budget_telemetry.recovery_actions_taken.push(format!(
+                    "{}: {}", AgentRole::Builder, record.recovery_action
+                ));
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BudgetOverrun {
+                    phase: format!("{}", AgentRole::Builder),
+                    target_pct: record.target_pct,
+                    actual_pct: record.actual_pct,
+                    recovery: format!("{}", record.recovery_action),
+                }));
+                observatory::log_event(
+                    &ctx.session_id,
+                    &ctx.project_dir,
+                    ObservatoryEvent::BudgetOverrun {
+                        task_id: task_id.to_string(),
+                        phase: format!("{}", AgentRole::Builder),
+                        target_pct: record.target_pct,
+                        actual_pct: record.actual_pct,
+                        recovery_action: format!("{}", record.recovery_action),
+                    },
+                );
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                    "Budget recovery: {} for {} ({}% > {}%)",
+                    record.recovery_action, AgentRole::Builder, record.actual_pct, record.target_pct,
+                ))));
+            } else if record.overrun {
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                    "Budget: {} used {}% (target {}%, within tolerance)",
+                    AgentRole::Builder, record.actual_pct, record.target_pct,
+                ))));
+            }
+            budget_telemetry.records.push(record);
+        }
+
+        (p_ok, p_rl)
     } else {
         // Original single-builder path
         let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
@@ -4930,6 +5015,64 @@ mod tests {
         };
         assert!(checkpoint_skip_builder_ok,
             "builder skip should be true when planner skip is true and build-claims.md exists");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_parallel_builder_budget_record_included() {
+        // D44.1: When parallel builder produces aggregated usage, the IMPLEMENT
+        // phase record must appear in budget-telemetry.json.
+        let dir = std::env::temp_dir().join(format!(
+            "foundry-parallel-budget-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+
+        // Simulate what process_task does: create a BudgetTelemetry, evaluate
+        // phase with aggregated parallel usage, push record, flush.
+        use crate::observatory::AgentUsage;
+        use crate::agent::AgentRole;
+
+        let usage = AgentUsage {
+            cost_usd: 0.05,
+            tokens_in: 5000,
+            tokens_out: 2000,
+            context_pct: 45,
+        };
+        let record = budget::evaluate_phase(
+            &AgentRole::Builder,
+            &usage,
+            &budget::BudgetTargets::default(),
+            10,
+        );
+        assert_eq!(record.phase, "IMPLEMENT");
+        assert_eq!(record.actual_pct, 45);
+        assert_eq!(record.tokens_in, 5000);
+        assert_eq!(record.tokens_out, 2000);
+
+        let telemetry = budget::BudgetTelemetry {
+            task_id: "D44.1".to_string(),
+            timestamp: "2026-03-29T00:00:00Z".to_string(),
+            records: vec![record],
+            ..Default::default()
+        };
+
+        flush_budget_telemetry(&dir, true, &telemetry);
+        let path = dir.join("budget-telemetry.json");
+        assert!(path.exists(), "budget-telemetry.json must exist");
+        let content = std::fs::read_to_string(&path).unwrap();
+        assert!(
+            content.contains("IMPLEMENT"),
+            "budget-telemetry.json must contain IMPLEMENT phase record"
+        );
+        assert!(
+            content.contains("5000"),
+            "budget-telemetry.json must contain tokens_in from aggregated usage"
+        );
 
         let _ = std::fs::remove_dir_all(&dir);
     }
