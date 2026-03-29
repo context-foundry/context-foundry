@@ -872,6 +872,10 @@ async fn run_parallel_builder(
                     "Parallel builder slot-{}: git discovery failed, falling back to plan file ops",
                     slot_idx
                 ))));
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                    "WARNING: slot-{} fallback mode -- file deletions and unplanned file changes will be lost",
+                    slot_idx
+                ))));
                 let group = &groups[*slot_idx];
                 group.iter().map(|&op_idx| ops[op_idx].file_path.clone()).collect()
             }
@@ -913,6 +917,8 @@ async fn run_parallel_builder(
                         "Parallel builder: failed to copy {} from slot-{}: {}",
                         file_path, slot_idx, e
                     ))));
+                    all_ok = false;
+                    continue;
                 }
             } else if dest.exists() {
                 // File was deleted in worktree -- remove from main project
@@ -921,6 +927,8 @@ async fn run_parallel_builder(
                         "Parallel builder: failed to delete {} from slot-{}: {}",
                         file_path, slot_idx, e
                     ))));
+                    all_ok = false;
+                    continue;
                 } else {
                     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
                         "Parallel builder slot-{}: deleted {} (removed in worktree)",
@@ -5465,6 +5473,244 @@ mod tests {
             .output();
         let _ = std::fs::remove_dir_all(&main_dir);
         let _ = std::fs::remove_dir_all(&wt_dir);
+    }
+
+    #[test]
+    fn test_worktree_merge_copy_failure_sets_all_ok_false() {
+        // This test simulates the merge loop logic: when std::fs::copy fails
+        // for a file, all_ok must be set to false and copied_files must NOT
+        // record the file.
+        //
+        // Strategy: create a dest path whose parent is a file (not a dir),
+        // so copy fails with a "Not a directory" error.
+
+        let test_dir = std::env::temp_dir().join(format!(
+            "foundry-wt-copyfail-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&test_dir).unwrap();
+
+        // Create a source file to copy
+        let src_dir = test_dir.join("worktree");
+        std::fs::create_dir_all(&src_dir).unwrap();
+        std::fs::create_dir_all(src_dir.join("subdir")).unwrap();
+        std::fs::write(src_dir.join("subdir/good.rs"), "fn good() {}").unwrap();
+        std::fs::write(src_dir.join("subdir/bad.rs"), "fn bad() {}").unwrap();
+
+        // Create a main project dir where "subdir" for the bad file is actually a file,
+        // not a directory, causing copy to fail for bad.rs
+        let main_dir = test_dir.join("main");
+        std::fs::create_dir_all(&main_dir).unwrap();
+        // good.rs goes under main/subdir/ (normal dir)
+        std::fs::create_dir_all(main_dir.join("subdir")).unwrap();
+
+        // Simulate the merge loop logic for two files
+        let files_to_copy = vec!["subdir/good.rs".to_string(), "subdir/bad.rs".to_string()];
+        let mut all_ok = true;
+        let mut copied_files: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+        let slot_idx: usize = 0;
+
+        for file_path in &files_to_copy {
+            let src = src_dir.join(file_path);
+            let dest = main_dir.join(file_path);
+
+            if src.exists() {
+                if let Some(parent) = dest.parent() {
+                    let _ = std::fs::create_dir_all(parent);
+                }
+                if let Err(_e) = std::fs::copy(&src, &dest) {
+                    all_ok = false;
+                    continue;
+                }
+            }
+            copied_files.insert(file_path.clone(), slot_idx);
+        }
+
+        // good.rs should succeed and all_ok must remain true
+        assert!(all_ok, "all_ok must remain true when all copies succeed");
+        assert!(
+            copied_files.contains_key("subdir/good.rs"),
+            "good.rs must be in copied_files"
+        );
+        assert!(
+            main_dir.join("subdir/good.rs").exists(),
+            "good.rs must exist in main project"
+        );
+
+        // Now test with a broken dest: make the dest parent a file instead of a dir
+        // to force copy failure
+        let main_dir2 = test_dir.join("main2");
+        std::fs::create_dir_all(&main_dir2).unwrap();
+        // Create "subdir" as a regular FILE, not a directory
+        std::fs::write(main_dir2.join("subdir"), "i am a file not a dir").unwrap();
+
+        let mut all_ok2 = true;
+        let mut copied_files2: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+
+        for file_path in &files_to_copy {
+            let src = src_dir.join(file_path);
+            let dest = main_dir2.join(file_path);
+
+            if src.exists() {
+                if let Some(parent) = dest.parent() {
+                    // create_dir_all will fail here because "subdir" is a file
+                    let _ = std::fs::create_dir_all(parent);
+                }
+                if let Err(_e) = std::fs::copy(&src, &dest) {
+                    all_ok2 = false;
+                    continue;
+                }
+            }
+            copied_files2.insert(file_path.clone(), slot_idx);
+        }
+
+        // Both files should fail because "subdir" is a file, not a directory
+        assert!(!all_ok2, "all_ok must be false when copy fails");
+        assert!(
+            !copied_files2.contains_key("subdir/good.rs"),
+            "good.rs must NOT be in copied_files when copy fails"
+        );
+        assert!(
+            !copied_files2.contains_key("subdir/bad.rs"),
+            "bad.rs must NOT be in copied_files when copy fails"
+        );
+
+        // Cleanup
+        let _ = std::fs::remove_dir_all(&test_dir);
+    }
+
+    #[test]
+    fn test_worktree_merge_copied_files_not_poisoned_on_failure() {
+        // When slot 0's copy fails for a file, copied_files must NOT contain
+        // that file. If slot 1 later has the same file, it should NOT see a
+        // conflict and should be able to copy its version successfully.
+
+        let test_dir = std::env::temp_dir().join(format!(
+            "foundry-wt-poison-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&test_dir).unwrap();
+
+        // Slot 0 worktree: has shared.rs
+        let wt0 = test_dir.join("slot0");
+        std::fs::create_dir_all(&wt0).unwrap();
+        std::fs::write(wt0.join("shared.rs"), "fn shared() { /* slot 0 */ }").unwrap();
+
+        // Slot 1 worktree: also has shared.rs
+        let wt1 = test_dir.join("slot1");
+        std::fs::create_dir_all(&wt1).unwrap();
+        std::fs::write(wt1.join("shared.rs"), "fn shared() { /* slot 1 */ }").unwrap();
+
+        // Main project: make shared.rs's parent dir non-writable to cause
+        // slot 0's copy to fail. Actually, easier: use a file as the dest
+        // parent to guarantee failure.
+        let main_broken = test_dir.join("main_broken");
+        std::fs::create_dir_all(&main_broken).unwrap();
+        // For slot 0: break the destination so copy fails
+        // We create a read-only file at the dest path so copy fails with permission error
+        std::fs::write(main_broken.join("shared.rs"), "original").unwrap();
+
+        // Make dest read-only on Unix to cause copy to fail
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let perms = std::fs::Permissions::from_mode(0o000);
+            std::fs::set_permissions(main_broken.join("shared.rs"), perms).unwrap();
+        }
+
+        let files_slot0 = vec!["shared.rs".to_string()];
+        let files_slot1 = vec!["shared.rs".to_string()];
+
+        let mut all_ok = true;
+        let mut copied_files: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+
+        // Process slot 0
+        let slot_idx_0: usize = 0;
+        for file_path in &files_slot0 {
+            let src = wt0.join(file_path);
+            let dest = main_broken.join(file_path);
+            if src.exists() {
+                if let Some(parent) = dest.parent() {
+                    let _ = std::fs::create_dir_all(parent);
+                }
+                if let Err(_e) = std::fs::copy(&src, &dest) {
+                    all_ok = false;
+                    continue;
+                }
+            }
+            copied_files.insert(file_path.clone(), slot_idx_0);
+        }
+
+        // Verify slot 0 failed: copied_files must NOT contain shared.rs
+        #[cfg(unix)]
+        {
+            assert!(
+                !copied_files.contains_key("shared.rs"),
+                "shared.rs must NOT be in copied_files after slot 0 copy failure"
+            );
+            assert!(!all_ok, "all_ok must be false after slot 0 copy failure");
+        }
+
+        // Now restore permissions so slot 1 can succeed
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let perms = std::fs::Permissions::from_mode(0o644);
+            std::fs::set_permissions(main_broken.join("shared.rs"), perms).unwrap();
+        }
+
+        // Process slot 1: since copied_files does NOT have shared.rs,
+        // there should be no conflict, and slot 1 copies successfully
+        let slot_idx_1: usize = 1;
+        for file_path in &files_slot1 {
+            if let Some(&_prev_slot) = copied_files.get(file_path) {
+                // Conflict path -- should NOT be reached since slot 0 failed
+                panic!("should not detect conflict for shared.rs when slot 0 failed");
+            }
+
+            let src = wt1.join(file_path);
+            let dest = main_broken.join(file_path);
+            if src.exists() {
+                if let Some(parent) = dest.parent() {
+                    let _ = std::fs::create_dir_all(parent);
+                }
+                if let Err(_e) = std::fs::copy(&src, &dest) {
+                    all_ok = false;
+                    continue;
+                }
+            }
+            copied_files.insert(file_path.clone(), slot_idx_1);
+        }
+
+        // Verify slot 1 succeeded
+        #[cfg(unix)]
+        {
+            assert!(!all_ok, "all_ok remains false because slot 0 failed");
+            assert!(
+                copied_files.contains_key("shared.rs"),
+                "shared.rs must be in copied_files from slot 1"
+            );
+            assert_eq!(
+                copied_files.get("shared.rs"),
+                Some(&1),
+                "shared.rs must be recorded as from slot 1"
+            );
+            let content = std::fs::read_to_string(main_broken.join("shared.rs")).unwrap();
+            assert!(
+                content.contains("slot 1"),
+                "shared.rs must contain slot 1's version, got: {}",
+                content
+            );
+        }
+
+        // Cleanup
+        let _ = std::fs::remove_dir_all(&test_dir);
     }
 
     #[test]
