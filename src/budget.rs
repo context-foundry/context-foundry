@@ -105,11 +105,12 @@ pub fn evaluate_phase(
     let overrun_amount = actual as i16 - target as i16;
     let overrun = overrun_amount > 0;
 
-    let recovery_action = if !overrun || overrun_amount <= overrun_threshold as i16 {
+    let threshold = overrun_threshold as i16;
+    let recovery_action = if !overrun || overrun_amount <= threshold {
         RecoveryAction::Continue
-    } else if overrun_amount <= 20 {
+    } else if overrun_amount <= threshold + 15 {
         RecoveryAction::Summarize
-    } else if overrun_amount <= 40 {
+    } else if overrun_amount <= threshold + 30 {
         RecoveryAction::Escalate
     } else {
         RecoveryAction::SplitRecommended
@@ -362,5 +363,96 @@ mod tests {
             format!("{}", RecoveryAction::SplitRecommended),
             "split-recommended"
         );
+    }
+
+    #[test]
+    fn test_summarize_reachable_with_threshold_10() {
+        let usage = AgentUsage {
+            context_pct: 62,
+            tokens_in: 1000,
+            tokens_out: 500,
+            cost_usd: 0.01,
+        };
+        let record = evaluate_phase(&AgentRole::Planner, &usage, &BudgetTargets::default(), 10);
+        assert_eq!(record.recovery_action, RecoveryAction::Summarize);
+    }
+
+    #[test]
+    fn test_summarize_reachable_with_threshold_20() {
+        let usage = AgentUsage {
+            context_pct: 72,
+            tokens_in: 1000,
+            tokens_out: 500,
+            cost_usd: 0.01,
+        };
+        let record = evaluate_phase(&AgentRole::Planner, &usage, &BudgetTargets::default(), 20);
+        assert_eq!(record.recovery_action, RecoveryAction::Summarize);
+    }
+
+    #[test]
+    fn test_summarize_reachable_with_threshold_30() {
+        let usage = AgentUsage {
+            context_pct: 82,
+            tokens_in: 1000,
+            tokens_out: 500,
+            cost_usd: 0.01,
+        };
+        let record = evaluate_phase(&AgentRole::Planner, &usage, &BudgetTargets::default(), 30);
+        assert_eq!(record.recovery_action, RecoveryAction::Summarize);
+    }
+
+    #[test]
+    fn test_escalate_reachable_with_threshold_20() {
+        let usage = AgentUsage {
+            context_pct: 82,
+            tokens_in: 1000,
+            tokens_out: 500,
+            cost_usd: 0.01,
+        };
+        let record = evaluate_phase(&AgentRole::Planner, &usage, &BudgetTargets::default(), 20);
+        assert_eq!(record.recovery_action, RecoveryAction::Escalate);
+    }
+
+    #[test]
+    fn test_split_reachable_with_threshold_20() {
+        let usage = AgentUsage {
+            context_pct: 95,
+            tokens_in: 1000,
+            tokens_out: 500,
+            cost_usd: 0.01,
+        };
+        let record = evaluate_phase(&AgentRole::Planner, &usage, &BudgetTargets::default(), 20);
+        assert_eq!(record.recovery_action, RecoveryAction::SplitRecommended);
+    }
+
+    #[test]
+    fn test_continue_absorbs_within_threshold() {
+        let usage = AgentUsage {
+            context_pct: 65,
+            tokens_in: 1000,
+            tokens_out: 500,
+            cost_usd: 0.01,
+        };
+        let record = evaluate_phase(&AgentRole::Planner, &usage, &BudgetTargets::default(), 30);
+        assert_eq!(record.recovery_action, RecoveryAction::Continue);
+    }
+
+    #[test]
+    fn test_evaluate_phase_reviewer_for_multipass() {
+        let usage = AgentUsage {
+            context_pct: 70,
+            tokens_in: 20000,
+            tokens_out: 8000,
+            cost_usd: 0.30,
+        };
+        let record = evaluate_phase(&AgentRole::Reviewer, &usage, &BudgetTargets::default(), 10);
+        assert_eq!(record.phase, "VERIFY");
+        assert_eq!(record.target_pct, 50);
+        assert_eq!(record.actual_pct, 70);
+        assert!(record.overrun);
+        assert_eq!(record.overrun_amount, 20);
+        assert_eq!(record.recovery_action, RecoveryAction::Summarize);
+        assert_eq!(record.tokens_in, 20000);
+        assert_eq!(record.tokens_out, 8000);
     }
 }

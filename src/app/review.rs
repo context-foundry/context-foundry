@@ -157,8 +157,8 @@ pub(super) async fn run_review_loop(
         )
         .await;
         let _ = tx.send(AppEvent::AgentDone(result.0));
-        let (passed, fixes, findings) = result;
-        return (passed, fixes, findings, None);
+        let (passed, fixes, findings, multipass_budget) = result;
+        return (passed, fixes, findings, multipass_budget);
     }
 
     // The reviewer has full write access and fixes issues it finds in a single pass.
@@ -413,13 +413,14 @@ async fn run_multipass_review(
     files_list: &str,
     diff_for_review: Option<&str>,
     semgrep_findings: &str,
-) -> (bool, usize, (usize, usize, usize)) {
+) -> (bool, usize, (usize, usize, usize), Option<budget::PhaseBudgetRecord>) {
     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
         "Multi-pass review: {} files exceed threshold ({}), running per-file analysis",
         files_changed.len(),
         ctx.config.review_multipass_threshold,
     ))));
 
+    let mut total_usage = crate::observatory::AgentUsage::default();
     let mut all_per_file_findings: Vec<serde_json::Value> = Vec::new();
     let per_file_tools: &[&str] = &["Read", "Glob", "Grep", "Edit", "Write", "Bash"];
 
@@ -471,6 +472,10 @@ async fn run_multipass_review(
         .await;
 
         let agent_usage = fwd_handle.await.unwrap_or_default();
+        total_usage.tokens_in += agent_usage.tokens_in;
+        total_usage.tokens_out += agent_usage.tokens_out;
+        total_usage.cost_usd += agent_usage.cost_usd;
+        total_usage.context_pct = total_usage.context_pct.max(agent_usage.context_pct);
         observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::AgentDone {
             role: "Reviewer".to_string(),
             success: result.as_ref().map(|r| r.success).unwrap_or(false),
@@ -574,6 +579,10 @@ async fn run_multipass_review(
     .await;
 
     let agent_usage = fwd_handle.await.unwrap_or_default();
+    total_usage.tokens_in += agent_usage.tokens_in;
+    total_usage.tokens_out += agent_usage.tokens_out;
+    total_usage.cost_usd += agent_usage.cost_usd;
+    total_usage.context_pct = total_usage.context_pct.max(agent_usage.context_pct);
     observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::AgentDone {
         role: "Reviewer".to_string(),
         success: review_result.as_ref().map(|r| r.success).unwrap_or(false),
@@ -593,7 +602,7 @@ async fn run_multipass_review(
             fix_passes: 0,
             passed: false,
         }));
-        return (false, 0, (0, 0, 0));
+        return (false, 0, (0, 0, 0), None);
     }
 
     // Detect if integration reviewer made fixes.
@@ -618,7 +627,7 @@ async fn run_multipass_review(
             fix_passes,
             passed: false,
         }));
-        return (false, fix_passes, (0, 0, 0));
+        return (false, fix_passes, (0, 0, 0), None);
     }
 
     let verdict_pass = check_review_passed(&ctx.review_report);
@@ -668,6 +677,47 @@ async fn run_multipass_review(
 
     let passed = verdict_pass || (high == 0 && medium == 0);
 
+    // Budget telemetry: Reviewer (multipass)
+    let reviewer_budget_record: Option<budget::PhaseBudgetRecord> = if ctx.config.budget_recovery_enabled {
+        let record = budget::evaluate_phase(
+            &AgentRole::Reviewer,
+            &total_usage,
+            &ctx.config.budget_targets,
+            ctx.config.budget_overrun_threshold,
+        );
+        if record.overrun && record.recovery_action != budget::RecoveryAction::Continue {
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BudgetOverrun {
+                phase: "Reviewer".to_string(),
+                target_pct: record.target_pct,
+                actual_pct: record.actual_pct,
+                recovery: format!("{}", record.recovery_action),
+            }));
+            observatory::log_event(
+                &ctx.session_id,
+                &ctx.project_dir,
+                ObservatoryEvent::BudgetOverrun {
+                    task_id: task_id.to_string(),
+                    phase: "Reviewer".to_string(),
+                    target_pct: record.target_pct,
+                    actual_pct: record.actual_pct,
+                    recovery_action: format!("{}", record.recovery_action),
+                },
+            );
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                "Budget overrun: Reviewer (multipass) used {}% (target {}%), recovery: {} (no subsequent phase)",
+                record.actual_pct, record.target_pct, record.recovery_action,
+            ))));
+        } else if record.overrun {
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                "Budget: Reviewer (multipass) used {}% (target {}%, within tolerance)",
+                record.actual_pct, record.target_pct,
+            ))));
+        }
+        Some(record)
+    } else {
+        None
+    };
+
     if passed {
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
             "Multi-pass review passed".to_string(),
@@ -685,7 +735,7 @@ async fn run_multipass_review(
         passed,
     }));
 
-    (passed, fix_passes, (high, medium, low))
+    (passed, fix_passes, (high, medium, low), reviewer_budget_record)
 }
 
 fn get_diff_for_review(project_dir: &Path) -> String {
