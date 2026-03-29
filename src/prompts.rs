@@ -860,6 +860,8 @@ WHAT TO SKIP (do not report):
 - Code patterns that match how the rest of the project works
 - Theoretical improvements with no concrete bug
 
+EXECUTION STYLE: Execute tool calls directly without narration. Do not explain what you are about to do or summarize what you just did between tool calls. Write your output file (review-report.md) as your final action.
+
 WRITE YOUR FINDINGS to .buildloop/review-report.md in this format:
 
 # Per-File Review -- {file_path}
@@ -901,7 +903,8 @@ Set "fixed" to false for all findings -- you are read-only and must NOT modify a
 RULES:
 - Do NOT modify any files except .buildloop/review-report.md
 - Do NOT modify CLAUDE.md, {spec_file}, {tasks_file}
-- Do NOT read files in .buildloop/logs/"#
+- Do NOT read files in .buildloop/logs/
+- SILENT EXECUTION: Do not ask questions or seek confirmation. Make reasonable decisions and note them in your report."#
     )
 }
 
