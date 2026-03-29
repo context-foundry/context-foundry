@@ -111,10 +111,24 @@ impl PhaseIsolation {
 impl Drop for PhaseIsolation {
     fn drop(&mut self) {
         if !self.restored {
+            let total = self.hidden.len();
+            let mut restored_count = 0usize;
             for (original, temp) in &self.hidden {
-                let _ = move_file(temp, original);
+                if move_file(temp, original).is_ok() {
+                    restored_count += 1;
+                }
             }
-            let _ = std::fs::remove_dir_all(&self.staging_dir);
+            if restored_count < total {
+                eprintln!(
+                    "WARNING: PhaseIsolation failed to restore {}/{} files. \
+                     Staging directory preserved at: {}",
+                    total - restored_count,
+                    total,
+                    self.staging_dir.display(),
+                );
+            } else {
+                let _ = std::fs::remove_dir_all(&self.staging_dir);
+            }
         }
     }
 }
@@ -360,5 +374,59 @@ mod tests {
 
         // file_a should exist (either restore() got it before the error, or Drop recovered it)
         assert!(file_a.exists(), "file_a should be recovered after partial failure");
+    }
+
+    #[test]
+    fn test_drop_preserves_staging_dir_on_restore_failure() {
+        // Create two files in separate directories so we can delete one parent
+        let dir_a = tempfile::tempdir().unwrap();
+        let dir_b = tempfile::tempdir().unwrap();
+        let file_a = dir_a.path().join("keep.md");
+        let file_b = dir_b.path().join("lose.md");
+        fs::write(&file_a, "content-keep").unwrap();
+        fs::write(&file_b, "content-lose").unwrap();
+
+        let guard = PhaseIsolation::activate(&[file_a.clone(), file_b.clone()]).unwrap();
+        let staging_dir = guard.staging_dir.clone();
+        assert!(!file_a.exists());
+        assert!(!file_b.exists());
+        assert!(staging_dir.exists());
+
+        // Remove dir_b so restoring file_b will fail (parent gone)
+        let dir_b_path = dir_b.path().to_path_buf();
+        drop(dir_b);
+        assert!(!dir_b_path.exists());
+
+        // Drop the guard -- it should attempt best-effort restore
+        drop(guard);
+
+        // file_a should be restored (its parent still exists)
+        assert!(file_a.exists(), "file_a should be recovered by Drop");
+        assert_eq!(fs::read_to_string(&file_a).unwrap(), "content-keep");
+
+        // Staging dir must be preserved because file_b could not be restored
+        assert!(
+            staging_dir.exists(),
+            "staging dir must be preserved when a file cannot be restored"
+        );
+
+        // The unrestorable file's content must still exist somewhere in staging
+        let mut found_content = false;
+        for entry in fs::read_dir(&staging_dir).unwrap() {
+            let entry = entry.unwrap();
+            if let Ok(content) = fs::read_to_string(entry.path()) {
+                if content == "content-lose" {
+                    found_content = true;
+                    break;
+                }
+            }
+        }
+        assert!(
+            found_content,
+            "staging dir must contain the unrestorable file's content"
+        );
+
+        // Cleanup
+        let _ = fs::remove_dir_all(&staging_dir);
     }
 }
