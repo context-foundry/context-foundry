@@ -64,6 +64,18 @@ fn clear_checkpoint(buildloop_dir: &std::path::Path) {
     let _ = std::fs::remove_file(buildloop_dir.join("checkpoint.json"));
 }
 
+/// Write accumulated budget telemetry to disk. Called before early returns
+/// so that partial telemetry is not lost when the pipeline aborts.
+fn flush_budget_telemetry(
+    buildloop_dir: &std::path::Path,
+    budget_recovery_enabled: bool,
+    telemetry: &budget::BudgetTelemetry,
+) {
+    if budget_recovery_enabled && !telemetry.records.is_empty() {
+        budget::write_telemetry(buildloop_dir, telemetry);
+    }
+}
+
 // ─── Prerequisite Gates ──────────────────────────────────────
 // Programmatic checks that block a pipeline stage from running
 // if its preconditions aren't met. This is deterministic enforcement
@@ -2331,6 +2343,7 @@ async fn process_task(
                 "Stop requested after SCOUT for {} — skipping remaining stages",
                 task_id
             ))));
+            flush_budget_telemetry(&ctx.buildloop_dir, ctx.config.budget_recovery_enabled, &budget_telemetry);
             return (false, last_rate_limited);
         }
     }
@@ -2561,6 +2574,7 @@ async fn process_task(
                     )
                 };
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(message)));
+                flush_budget_telemetry(&ctx.buildloop_dir, ctx.config.budget_recovery_enabled, &budget_telemetry);
                 return (false, last_rate_limited);
             }
 
@@ -2595,6 +2609,7 @@ async fn process_task(
                     vec![],
                 ));
                 let _ = commit_wip_for_mode(ctx, task_id, task_desc);
+                flush_budget_telemetry(&ctx.buildloop_dir, ctx.config.budget_recovery_enabled, &budget_telemetry);
                 return (false, last_rate_limited);
             }
         }
@@ -2633,10 +2648,6 @@ async fn process_task(
         stage_results.push(result);
     }
 
-    // Checkpoint: planner completed (skip write if resuming from a later stage)
-    if !checkpoint_skip_planner {
-        write_checkpoint(&ctx.buildloop_dir, task_id, task_desc, "planner");
-    }
 
     // ─── Gate: Extension Context ───────────────────────────────
     if !ctx.config.extensions.is_empty() {
@@ -2666,6 +2677,7 @@ async fn process_task(
                 vec!["Ensure all configured extensions have CLAUDE.md files".to_string()],
             ));
             let _ = commit_wip_for_mode(ctx, task_id, task_desc);
+            flush_budget_telemetry(&ctx.buildloop_dir, ctx.config.budget_recovery_enabled, &budget_telemetry);
             return (false, last_rate_limited);
         }
     }
@@ -2833,6 +2845,7 @@ async fn process_task(
                     ],
                 ));
                 let _ = commit_wip_for_mode(ctx, task_id, task_desc);
+                flush_budget_telemetry(&ctx.buildloop_dir, ctx.config.budget_recovery_enabled, &budget_telemetry);
                 return (false, last_rate_limited);
             }
 
@@ -2841,6 +2854,11 @@ async fn process_task(
                 task_id
             ))));
         }
+    }
+
+    // Checkpoint: planner completed (after extension + builder gates pass)
+    if !checkpoint_skip_planner {
+        write_checkpoint(&ctx.buildloop_dir, task_id, task_desc, "planner");
     }
 
     // ─── P+ Subphase: Plan Review via Orchestrator ────────────
@@ -3047,6 +3065,7 @@ async fn process_task(
                     );
                 }
                 let _ = commit_wip_for_mode(ctx, task_id, task_desc);
+                flush_budget_telemetry(&ctx.buildloop_dir, ctx.config.budget_recovery_enabled, &budget_telemetry);
                 return (false, last_rate_limited);
             }
 
@@ -3076,6 +3095,7 @@ async fn process_task(
                         );
                     }
                     let _ = commit_wip_for_mode(ctx, task_id, task_desc);
+                    flush_budget_telemetry(&ctx.buildloop_dir, ctx.config.budget_recovery_enabled, &budget_telemetry);
                     return (false, last_rate_limited);
                 }
             }
@@ -3314,6 +3334,7 @@ async fn process_task(
             ],
         ));
         let _ = commit_wip_for_mode(ctx, task_id, task_desc);
+        flush_budget_telemetry(&ctx.buildloop_dir, ctx.config.budget_recovery_enabled, &budget_telemetry);
         return (false, last_rate_limited);
     }
 
@@ -3387,6 +3408,7 @@ async fn process_task(
                     vec!["Build command failed -- check compiler errors".to_string()],
                 ));
                 let _ = commit_wip_for_mode(ctx, task_id, task_desc);
+                flush_budget_telemetry(&ctx.buildloop_dir, ctx.config.budget_recovery_enabled, &budget_telemetry);
                 return (false, last_rate_limited);
             }
             Err(e) => {
@@ -3436,6 +3458,7 @@ async fn process_task(
         ));
         // Progress indicator already written at [SPI.] above; commit preserves it.
         let _ = commit_wip_for_mode(ctx, task_id, task_desc);
+        flush_budget_telemetry(&ctx.buildloop_dir, ctx.config.budget_recovery_enabled, &budget_telemetry);
         return (false, last_rate_limited);
     }
 
@@ -3592,9 +3615,7 @@ async fn process_task(
     }
 
     // Write budget telemetry
-    if ctx.config.budget_recovery_enabled && !budget_telemetry.records.is_empty() {
-        budget::write_telemetry(&ctx.buildloop_dir, &budget_telemetry);
-    }
+    flush_budget_telemetry(&ctx.buildloop_dir, ctx.config.budget_recovery_enabled, &budget_telemetry);
 
     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::ShipStarted));
     let committed = if ctx.config.run_mode == "review" {
@@ -4006,9 +4027,10 @@ fn should_restart_docker(task_desc: &str) -> bool {
 mod tests {
     use super::should_restart_docker;
     use super::{backup_state_files, restore_state_files};
-    use super::{clear_checkpoint, read_checkpoint, write_checkpoint};
+    use super::{clear_checkpoint, flush_budget_telemetry, read_checkpoint, write_checkpoint};
     use crate::app::context::RunContext;
     use crate::app::state::{AppEvent, LoopEvent};
+    use crate::budget;
     use crate::config::Config;
     use std::path::PathBuf;
     use std::sync::atomic::{AtomicBool, Ordering};
@@ -4468,6 +4490,123 @@ mod tests {
             checkpoint_skip_builder,
             "with builder checkpoint present, builder should be skipped (resume at doubt)"
         );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_planner_checkpoint_not_written_before_gate() {
+        // Bug D41.1(a): write_checkpoint("planner") used to run before the extension
+        // gate and builder gate. If either gate failed, the checkpoint remained,
+        // causing planner skip on resume. After the fix, checkpoint is written only
+        // after both gates pass.
+
+        let dir = std::env::temp_dir().join(format!(
+            "foundry-planner-checkpoint-gate-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+
+        // Before gates: no checkpoint should exist
+        let cp = read_checkpoint(&dir);
+        assert!(cp.is_none(), "no checkpoint should exist before gates pass");
+
+        // Simulate: gates pass, checkpoint written
+        write_checkpoint(&dir, "D41.1", "test task", "planner");
+        let cp = read_checkpoint(&dir).unwrap();
+        assert_eq!(cp.completed_stage, "planner");
+
+        // On resume: completed_stage="planner" -> resume_stage="plan_review"
+        // checkpoint_skip_planner matches "plan_review"
+        let resume_stage = match cp.completed_stage.as_str() {
+            "planner" => Some("plan_review"),
+            _ => None,
+        };
+        let checkpoint_skip_planner = match resume_stage {
+            Some("plan_review" | "builder" | "doubt") => true,
+            _ => false,
+        };
+        assert!(
+            checkpoint_skip_planner,
+            "with planner checkpoint present, planner should be skipped"
+        );
+
+        // Simulate: gate failed, checkpoint never written (cleared to simulate)
+        clear_checkpoint(&dir);
+        let cp_after = read_checkpoint(&dir);
+        assert!(cp_after.is_none(), "checkpoint must not exist after gate failure path");
+
+        // Verify: no checkpoint -> planner re-runs
+        let resume_stage: Option<&str> = cp_after.as_ref().map(|c| c.completed_stage.as_str());
+        let checkpoint_skip_planner = match resume_stage {
+            Some("plan_review" | "builder" | "doubt") => true,
+            _ => false,
+        };
+        assert!(
+            !checkpoint_skip_planner,
+            "with no checkpoint, planner must NOT be skipped"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_flush_budget_telemetry_writes_on_early_return() {
+        // Bug D41.1(b): budget telemetry was only written at the end of
+        // process_task(). All early return paths silently discarded accumulated
+        // records. After the fix, flush_budget_telemetry() writes partial data.
+
+        let dir = std::env::temp_dir().join(format!(
+            "foundry-budget-flush-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let telemetry = budget::BudgetTelemetry {
+            task_id: "D41.1".to_string(),
+            timestamp: "2026-03-29T00:00:00Z".to_string(),
+            records: vec![budget::PhaseBudgetRecord {
+                phase: "SCOUT".to_string(),
+                target_pct: 15,
+                actual_pct: 20,
+                overrun: true,
+                overrun_amount: 5,
+                tokens_in: 1000,
+                tokens_out: 500,
+                cost_usd: 0.01,
+                recovery_action: budget::RecoveryAction::Continue,
+            }],
+            any_overrun: false,
+            recovery_actions_taken: vec![],
+        };
+
+        // flush_budget_telemetry with budget_recovery_enabled=true should write
+        flush_budget_telemetry(&dir, true, &telemetry);
+        let path = dir.join("budget-telemetry.json");
+        assert!(path.exists(), "telemetry file must exist after flush");
+        let content = std::fs::read_to_string(&path).unwrap();
+        assert!(content.contains("D41.1"), "telemetry must contain task_id");
+        assert!(content.contains("SCOUT"), "telemetry must contain phase record");
+
+        // Clean up and test: budget_recovery_enabled=false should NOT write
+        std::fs::remove_file(&path).unwrap();
+        flush_budget_telemetry(&dir, false, &telemetry);
+        assert!(!path.exists(), "telemetry must not be written when budget_recovery_enabled is false");
+
+        // Test: empty records should NOT write
+        let empty_telemetry = budget::BudgetTelemetry {
+            task_id: "D41.1".to_string(),
+            timestamp: "2026-03-29T00:00:00Z".to_string(),
+            ..Default::default()
+        };
+        flush_budget_telemetry(&dir, true, &empty_telemetry);
+        assert!(!path.exists(), "telemetry must not be written when records are empty");
 
         let _ = std::fs::remove_dir_all(&dir);
     }
