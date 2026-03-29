@@ -103,14 +103,33 @@ impl PhaseIsolation {
         if self.restored {
             return Ok(());
         }
+        let total = self.hidden.len();
+        let mut _restored_count: usize = 0;
+        let mut missing_files: Vec<&Path> = Vec::new();
         for (original, temp) in &self.hidden {
             if temp.exists() {
                 move_file(temp, original)
                     .with_context(|| format!("failed to restore {}", original.display()))?;
+                _restored_count += 1;
+            } else {
+                missing_files.push(original.as_path());
             }
         }
         self.restored = true;
-        let _ = std::fs::remove_dir_all(&self.staging_dir);
+        if !missing_files.is_empty() {
+            eprintln!(
+                "WARNING: PhaseIsolation::restore() found {}/{} temp files missing from staging. \
+                 Original files are permanently lost: {:?}. \
+                 Staging directory preserved at: {}",
+                missing_files.len(),
+                total,
+                missing_files,
+                self.staging_dir.display(),
+            );
+            // Do NOT remove staging dir -- preserve for forensics (matching Drop behavior)
+        } else {
+            let _ = std::fs::remove_dir_all(&self.staging_dir);
+        }
         Ok(())
     }
 
@@ -510,5 +529,44 @@ mod tests {
         let mut perms = fs::metadata(dir_c.path()).unwrap().permissions();
         perms.set_mode(0o755);
         fs::set_permissions(dir_c.path(), perms).unwrap();
+    }
+
+    #[test]
+    #[serial]
+    fn test_restore_warns_when_temp_files_missing() {
+        let (_dir, paths) = setup_temp_files(&["a.md", "b.md"]);
+        let mut guard = PhaseIsolation::activate(&paths).unwrap();
+        assert!(!paths[0].exists());
+        assert!(!paths[1].exists());
+        let staging_dir = guard.staging_dir.clone();
+
+        // Delete one temp file from the staging directory to simulate external deletion
+        let first_temp = fs::read_dir(&staging_dir)
+            .unwrap()
+            .next()
+            .unwrap()
+            .unwrap()
+            .path();
+        fs::remove_file(&first_temp).unwrap();
+
+        // restore() should succeed (Ok), not return Err
+        let result = guard.restore();
+        assert!(result.is_ok(), "restore() should return Ok even when temp files are missing");
+
+        // Staging dir must be preserved (not deleted) because a file was missing
+        assert!(
+            staging_dir.exists(),
+            "staging dir must be preserved when a temp file was missing"
+        );
+
+        // Exactly one file should be restored (the one whose temp still existed)
+        let restored_count = paths.iter().filter(|p| p.exists()).count();
+        assert_eq!(
+            restored_count, 1,
+            "only one file should be restored when one temp file is missing"
+        );
+
+        // Cleanup
+        let _ = fs::remove_dir_all(&staging_dir);
     }
 }
