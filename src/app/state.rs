@@ -8,7 +8,6 @@ use crossterm::event::{self, MouseEvent};
 use std::path::PathBuf;
 
 use crate::agent::{AgentOutputEvent, AgentRole};
-use crate::budget;
 use crate::git;
 use crate::orchestrator::OrchestratorOutcome;
 use crate::task::{self, Task};
@@ -361,8 +360,6 @@ pub struct AppState {
     pub sandbox_enabled: bool,
     /// Human-readable sandbox status label for TUI display.
     pub sandbox_status_label: String,
-    /// Per-phase budget telemetry for the current task. Reset on TaskStarted.
-    pub budget_telemetry: budget::BudgetTelemetry,
 }
 
 impl AppState {
@@ -454,7 +451,6 @@ impl AppState {
             sandbox_active: false,
             sandbox_enabled: true,
             sandbox_status_label: String::new(),
-            budget_telemetry: budget::BudgetTelemetry::default(),
         }
     }
 

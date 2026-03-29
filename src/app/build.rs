@@ -2048,7 +2048,7 @@ async fn process_task(
         _ => false,
     };
     let checkpoint_skip_builder = match resume_stage {
-        Some("doubt") => {
+        Some("doubt") if checkpoint_skip_planner => {
             // Builder completed -- verify build-claims.md exists
             if ctx.buildloop_dir.join("build-claims.md").exists() {
                 true
@@ -2059,12 +2059,15 @@ async fn process_task(
                 false
             }
         }
+        Some("doubt") if !checkpoint_skip_planner => {
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+                "Checkpoint says builder completed but current-plan.md missing -- re-running from planner (cascading)".to_string(),
+            )));
+            false
+        }
         _ => false,
     };
-    let checkpoint_skip_plan_review = match resume_stage {
-        Some("builder" | "doubt") => true, // P+ already completed if we're past it
-        _ => false,
-    };
+    let checkpoint_skip_plan_review = matches!(resume_stage, Some("builder" | "doubt") if checkpoint_skip_planner);
 
     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::TaskStarted(
         task_info.clone(),
@@ -2343,6 +2346,24 @@ async fn process_task(
                 "Stop requested after SCOUT for {} — skipping remaining stages",
                 task_id
             ))));
+            {
+                let _lock = ctx
+                    .tasks_file_lock
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner());
+                let _ = task::update_task_progress(
+                    &ctx.plan_path,
+                    task_id,
+                    "S..",
+                );
+            }
+            stage_results.push(StageResult::failure(
+                "Scout",
+                &format!("Investigate codebase for {}", task_id),
+                FailureType::StopRequested,
+                vec![],
+            ));
+            let _ = commit_wip_for_mode(ctx, task_id, task_desc);
             flush_budget_telemetry(&ctx.buildloop_dir, ctx.config.budget_recovery_enabled, &budget_telemetry);
             return (false, last_rate_limited);
         }
@@ -4713,5 +4734,92 @@ mod tests {
         assert_eq!(record.phase, "PLAN", "retry budget record phase should use Display name");
         assert_eq!(record.tokens_in, 5000);
         assert_eq!(record.tokens_out, 2000);
+    }
+
+    #[test]
+    fn test_checkpoint_cascade_when_plan_missing() {
+        // Bug D42.1(a): When resume_stage="builder" or "doubt" but current-plan.md
+        // is missing, checkpoint_skip_planner becomes false. checkpoint_skip_plan_review
+        // and checkpoint_skip_builder must also become false so the new plan gets
+        // reviewed and implemented, not skipped.
+
+        let dir = std::env::temp_dir().join(format!(
+            "foundry-checkpoint-cascade-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+
+        // Scenario: checkpoint says builder completed (resume_stage="doubt"),
+        // but current-plan.md is missing.
+        write_checkpoint(&dir, "D42.1", "test task", "builder");
+
+        // Read checkpoint to get resume_stage
+        let cp = read_checkpoint(&dir).unwrap();
+        let resume_stage: Option<&str> = match cp.completed_stage.as_str() {
+            "builder" => Some("doubt"),
+            _ => None,
+        };
+        assert_eq!(resume_stage, Some("doubt"));
+
+        // Simulate: current-plan.md does NOT exist (file system error during crash)
+        let current_plan = dir.join("current-plan.md");
+        assert!(!current_plan.exists());
+
+        // checkpoint_skip_planner: plan_review/builder/doubt but plan missing -> false
+        let checkpoint_skip_planner = match resume_stage {
+            Some("plan_review" | "builder" | "doubt") => {
+                current_plan.exists() // false because file is missing
+            }
+            _ => false,
+        };
+        assert!(!checkpoint_skip_planner, "planner skip must be false when current-plan.md is missing");
+
+        // checkpoint_skip_plan_review: depends on checkpoint_skip_planner (the fix)
+        let checkpoint_skip_plan_review = match resume_stage {
+            Some("builder" | "doubt") if checkpoint_skip_planner => true,
+            _ => false,
+        };
+        assert!(!checkpoint_skip_plan_review,
+            "plan_review skip must be false when checkpoint_skip_planner is false (cascading)");
+
+        // checkpoint_skip_builder: depends on checkpoint_skip_planner (the fix)
+        let checkpoint_skip_builder = match resume_stage {
+            Some("doubt") if checkpoint_skip_planner => {
+                dir.join("build-claims.md").exists()
+            }
+            _ => false,
+        };
+        assert!(!checkpoint_skip_builder,
+            "builder skip must be false when checkpoint_skip_planner is false (cascading)");
+
+        // Verify: when current-plan.md EXISTS, the old behavior is preserved
+        std::fs::write(&current_plan, "# Plan\n## File Operations\n## Verification\n").unwrap();
+        let build_claims = dir.join("build-claims.md");
+        std::fs::write(&build_claims, "# Build Claims").unwrap();
+
+        let checkpoint_skip_planner_ok = match resume_stage {
+            Some("plan_review" | "builder" | "doubt") => current_plan.exists(),
+            _ => false,
+        };
+        assert!(checkpoint_skip_planner_ok, "planner skip should be true when plan exists");
+
+        let checkpoint_skip_plan_review_ok = match resume_stage {
+            Some("builder" | "doubt") if checkpoint_skip_planner_ok => true,
+            _ => false,
+        };
+        assert!(checkpoint_skip_plan_review_ok,
+            "plan_review skip should be true when planner skip is true");
+
+        let checkpoint_skip_builder_ok = match resume_stage {
+            Some("doubt") if checkpoint_skip_planner_ok => build_claims.exists(),
+            _ => false,
+        };
+        assert!(checkpoint_skip_builder_ok,
+            "builder skip should be true when planner skip is true and build-claims.md exists");
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
