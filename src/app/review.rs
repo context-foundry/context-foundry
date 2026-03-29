@@ -621,7 +621,17 @@ async fn run_multipass_review(
             fix_passes: 0,
             passed: false,
         }));
-        return (false, 0, (0, 0, 0), None);
+        let budget_record = if ctx.config.budget_recovery_enabled {
+            Some(budget::evaluate_phase(
+                &AgentRole::Reviewer,
+                &total_usage,
+                &ctx.config.budget_targets,
+                ctx.config.budget_overrun_threshold,
+            ))
+        } else {
+            None
+        };
+        return (false, 0, (0, 0, 0), budget_record);
     }
 
     // Detect if integration reviewer made fixes.
@@ -646,7 +656,17 @@ async fn run_multipass_review(
             fix_passes,
             passed: false,
         }));
-        return (false, fix_passes, (0, 0, 0), None);
+        let budget_record = if ctx.config.budget_recovery_enabled {
+            Some(budget::evaluate_phase(
+                &AgentRole::Reviewer,
+                &total_usage,
+                &ctx.config.budget_targets,
+                ctx.config.budget_overrun_threshold,
+            ))
+        } else {
+            None
+        };
+        return (false, fix_passes, (0, 0, 0), budget_record);
     }
 
     let verdict_pass = check_review_passed(&ctx.review_report);

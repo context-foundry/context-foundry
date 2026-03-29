@@ -500,4 +500,23 @@ mod tests {
         assert_eq!(record.tokens_in, 20000);
         assert_eq!(record.tokens_out, 8000);
     }
+
+    #[test]
+    fn test_multipass_failure_path_budget_record_preserves_usage() {
+        // Simulates accumulated usage from N per-file passes + integration pass.
+        // Early-return paths must return this data, not None.
+        let usage = AgentUsage {
+            context_pct: 45,
+            tokens_in: 15000,
+            tokens_out: 5000,
+            cost_usd: 0.25,
+        };
+        let record = evaluate_phase(&AgentRole::Reviewer, &usage, &BudgetTargets::default(), 10);
+        assert_eq!(record.phase, "VERIFY");
+        assert_eq!(record.tokens_in, 15000);
+        assert_eq!(record.tokens_out, 5000);
+        assert!((record.cost_usd - 0.25).abs() < f64::EPSILON);
+        assert!(!record.overrun, "45% < 50% target, should not be overrun");
+        assert_eq!(record.recovery_action, RecoveryAction::Continue);
+    }
 }
