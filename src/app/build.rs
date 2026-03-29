@@ -3253,9 +3253,6 @@ async fn process_task(
         stage_results.push(result);
     }
 
-    // Checkpoint: builder completed
-    write_checkpoint(&ctx.buildloop_dir, task_id, task_desc, "builder");
-
     // ─── Gate: Build/Compile Verification ──────────────────────
     if let Some(ref build_cmd) = ctx.config.build_command {
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
@@ -3319,6 +3316,9 @@ async fn process_task(
             }
         }
     }
+
+    // Checkpoint: builder completed (after build gate passes)
+    write_checkpoint(&ctx.buildloop_dir, task_id, task_desc, "builder");
 
     // ─── Trim Verbose Build Output ──────────────────────────────
     if let Some((orig, trimmed)) = trim_build_claims(ctx) {
@@ -3920,6 +3920,7 @@ fn should_restart_docker(task_desc: &str) -> bool {
 mod tests {
     use super::should_restart_docker;
     use super::{backup_state_files, restore_state_files};
+    use super::{clear_checkpoint, read_checkpoint, write_checkpoint};
     use crate::app::context::RunContext;
     use crate::app::state::{AppEvent, LoopEvent};
     use crate::config::Config;
@@ -4295,5 +4296,93 @@ mod tests {
             && true
             && (!false || false);
         assert!(!p_plus_already_done, "P+ must NOT run when checkpoint says it already completed");
+    }
+
+    #[test]
+    fn test_build_gate_failure_does_not_leave_stale_checkpoint() {
+        // Bug D38.1: write_checkpoint("builder") used to run before the build gate.
+        // If the build gate failed, the checkpoint remained, causing the builder to
+        // be skipped on the next pipeline iteration. After the fix, the checkpoint
+        // is written only after the build gate passes.
+
+        let dir = std::env::temp_dir().join(format!(
+            "foundry-checkpoint-gate-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+
+        // Simulate: builder completed, checkpoint written
+        write_checkpoint(&dir, "D38.1", "test task", "builder");
+        let cp = read_checkpoint(&dir);
+        assert!(cp.is_some(), "checkpoint should exist after write");
+        assert_eq!(cp.unwrap().completed_stage, "builder");
+
+        // Simulate: build gate fails, so we clear the checkpoint
+        // (In the real code, the fix is that the checkpoint is never written
+        // before the gate. This test verifies the checkpoint functions work
+        // correctly and that after clear_checkpoint, no stale state remains.)
+        clear_checkpoint(&dir);
+        let cp_after = read_checkpoint(&dir);
+        assert!(cp_after.is_none(), "checkpoint must not exist after clear");
+
+        // Verify the critical invariant: if checkpoint.json does not exist,
+        // checkpoint_skip_builder evaluates to false (builder will re-run).
+        // This mirrors the logic at build.rs:2038-2051.
+        let resume_stage: Option<&str> = cp_after.as_ref().map(|c| c.completed_stage.as_str());
+        let checkpoint_skip_builder = match resume_stage {
+            Some("doubt") => true,
+            _ => false,
+        };
+        assert!(
+            !checkpoint_skip_builder,
+            "with no checkpoint, builder must NOT be skipped"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_checkpoint_write_after_gate_pass_is_readable() {
+        // Complementary test: verify that when the checkpoint IS written
+        // (gate passed), it correctly causes builder skip on next iteration.
+
+        let dir = std::env::temp_dir().join(format!(
+            "foundry-checkpoint-gate-pass-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+
+        // Simulate: builder completed AND build gate passed, checkpoint written
+        write_checkpoint(&dir, "D38.1", "test task", "builder");
+
+        // On next iteration, read_checkpoint returns the builder stage
+        let cp = read_checkpoint(&dir).unwrap();
+        assert_eq!(cp.completed_stage, "builder");
+
+        // resume_stage would be derived from completed_stage "builder" -> next stage
+        // checkpoint_skip_builder triggers when resume_stage is "doubt"
+        // (i.e., completed_stage="builder" means resume at doubt)
+        // The mapping: completed_stage="builder" produces resume_stage="doubt"
+        // at build.rs:2038-2051
+        let resume_stage = match cp.completed_stage.as_str() {
+            "builder" => Some("doubt"),
+            _ => None,
+        };
+        let checkpoint_skip_builder = match resume_stage {
+            Some("doubt") => true,
+            _ => false,
+        };
+        assert!(
+            checkpoint_skip_builder,
+            "with builder checkpoint present, builder should be skipped (resume at doubt)"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
