@@ -828,6 +828,17 @@ async fn run_parallel_builder(
     let mut combined_claims = String::new();
     let mut aggregated_usage = AgentUsage::default();
 
+    // Build a lookup: file_path -> owning slot index (from planned file operations)
+    let mut planned_file_owner: HashMap<String, usize> = HashMap::new();
+    for (slot_idx, group) in groups.iter().enumerate() {
+        for &op_idx in group {
+            planned_file_owner.insert(ops[op_idx].file_path.clone(), slot_idx);
+        }
+    }
+
+    // Track which files have already been copied and from which slot
+    let mut copied_files: HashMap<String, usize> = HashMap::new();
+
     for (slot_idx, ok, rl, slot_usage) in &results {
         if !ok {
             all_ok = false;
@@ -866,6 +877,31 @@ async fn run_parallel_builder(
             }
         };
         for file_path in &files_to_copy {
+            // Check for conflict: was this file already copied by a previous slot?
+            if let Some(&prev_slot) = copied_files.get(file_path) {
+                // Determine which slot should win based on planned ownership
+                let owner = planned_file_owner.get(file_path);
+                let winner = match owner {
+                    Some(&owning_slot) => owning_slot,
+                    None => prev_slot, // Neither slot planned this file; keep first slot's version
+                };
+
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                    "Parallel builder: CONFLICT on '{}' -- modified by slot-{} and slot-{}, using slot-{} ({})",
+                    file_path,
+                    prev_slot,
+                    slot_idx,
+                    winner,
+                    if owner.is_some() { "planned owner" } else { "first slot" }
+                ))));
+
+                if winner == prev_slot {
+                    // Previous slot wins; skip copying from current slot
+                    continue;
+                }
+                // Current slot wins (it is the planned owner); fall through to copy
+            }
+
             let src = wt_dir.join(file_path);
             let dest = ctx.project_dir.join(file_path);
             if src.exists() {
@@ -892,6 +928,9 @@ async fn run_parallel_builder(
                     ))));
                 }
             }
+
+            // Record that this file was copied from this slot
+            copied_files.insert(file_path.clone(), *slot_idx);
         }
 
         // Collect build-claims
@@ -5426,5 +5465,177 @@ mod tests {
             .output();
         let _ = std::fs::remove_dir_all(&main_dir);
         let _ = std::fs::remove_dir_all(&wt_dir);
+    }
+
+    #[test]
+    fn test_worktree_merge_detects_shared_file_conflict() {
+        // Set up a temp "main project" directory with a git repo
+        let main_dir = std::env::temp_dir().join(format!(
+            "foundry-wt-conflict-main-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&main_dir).unwrap();
+
+        // Initialize git repo
+        std::process::Command::new("git")
+            .args(["init"])
+            .current_dir(&main_dir)
+            .output()
+            .unwrap();
+        std::process::Command::new("git")
+            .args(["config", "user.email", "test@test.com"])
+            .current_dir(&main_dir)
+            .output()
+            .unwrap();
+        std::process::Command::new("git")
+            .args(["config", "user.name", "test"])
+            .current_dir(&main_dir)
+            .output()
+            .unwrap();
+
+        // Create tracked files: planned_a.rs, planned_b.rs, shared.rs
+        std::fs::write(main_dir.join("planned_a.rs"), "fn a() {}").unwrap();
+        std::fs::write(main_dir.join("planned_b.rs"), "fn b() {}").unwrap();
+        std::fs::write(main_dir.join("shared.rs"), "fn shared() {}").unwrap();
+        std::process::Command::new("git")
+            .args(["add", "."])
+            .current_dir(&main_dir)
+            .output()
+            .unwrap();
+        std::process::Command::new("git")
+            .args(["commit", "-m", "initial"])
+            .current_dir(&main_dir)
+            .output()
+            .unwrap();
+
+        // Create two worktrees
+        let wt_a = std::env::temp_dir().join(format!(
+            "foundry-wt-conflict-a-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let wt_b = std::env::temp_dir().join(format!(
+            "foundry-wt-conflict-b-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos() + 1
+        ));
+        std::process::Command::new("git")
+            .args(["worktree", "add", "--detach"])
+            .arg(&wt_a)
+            .arg("HEAD")
+            .current_dir(&main_dir)
+            .output()
+            .unwrap();
+        std::process::Command::new("git")
+            .args(["worktree", "add", "--detach"])
+            .arg(&wt_b)
+            .arg("HEAD")
+            .current_dir(&main_dir)
+            .output()
+            .unwrap();
+
+        // Slot 0 (wt_a): modify planned_a.rs and shared.rs (unplanned)
+        std::fs::write(wt_a.join("planned_a.rs"), "fn a() { /* slot 0 */ }").unwrap();
+        std::fs::write(wt_a.join("shared.rs"), "fn shared() { /* slot 0 version */ }").unwrap();
+
+        // Slot 1 (wt_b): modify planned_b.rs and shared.rs (unplanned)
+        std::fs::write(wt_b.join("planned_b.rs"), "fn b() { /* slot 1 */ }").unwrap();
+        std::fs::write(wt_b.join("shared.rs"), "fn shared() { /* slot 1 version */ }").unwrap();
+
+        // Discover changed files in each worktree
+        let files_a = super::discover_changed_files_in_worktree(&wt_a).unwrap();
+        let files_b = super::discover_changed_files_in_worktree(&wt_b).unwrap();
+
+        assert!(files_a.contains(&"shared.rs".to_string()), "slot 0 must discover shared.rs");
+        assert!(files_b.contains(&"shared.rs".to_string()), "slot 1 must discover shared.rs");
+
+        // Simulate planned file operations:
+        // Slot 0 owns planned_a.rs, slot 1 owns planned_b.rs.
+        // Neither slot owns shared.rs (it is unplanned).
+        let mut planned_file_owner: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+        planned_file_owner.insert("planned_a.rs".to_string(), 0);
+        planned_file_owner.insert("planned_b.rs".to_string(), 1);
+
+        // Simulate the merge loop with conflict detection
+        let mut copied_files: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+        let mut conflicts: Vec<(String, usize, usize, usize)> = Vec::new(); // (file, prev_slot, cur_slot, winner)
+
+        let slot_worktrees: Vec<(usize, &std::path::Path, Vec<String>)> = vec![
+            (0, wt_a.as_path(), files_a),
+            (1, wt_b.as_path(), files_b),
+        ];
+
+        for (slot_idx, wt_dir, files_to_copy) in &slot_worktrees {
+            for file_path in files_to_copy {
+                if let Some(&prev_slot) = copied_files.get(file_path) {
+                    let owner = planned_file_owner.get(file_path);
+                    let winner = match owner {
+                        Some(&owning_slot) => owning_slot,
+                        None => prev_slot,
+                    };
+                    conflicts.push((file_path.clone(), prev_slot, *slot_idx, winner));
+                    if winner == prev_slot {
+                        continue;
+                    }
+                }
+
+                let src = wt_dir.join(file_path);
+                let dest = main_dir.join(file_path);
+                if src.exists() {
+                    if let Some(parent) = dest.parent() {
+                        let _ = std::fs::create_dir_all(parent);
+                    }
+                    std::fs::copy(&src, &dest).unwrap();
+                }
+                copied_files.insert(file_path.clone(), *slot_idx);
+            }
+        }
+
+        // Verify: conflict was detected for shared.rs
+        assert!(
+            conflicts.iter().any(|(f, _, _, _)| f == "shared.rs"),
+            "must detect conflict on shared.rs, got conflicts: {:?}",
+            conflicts
+        );
+
+        // Verify: shared.rs conflict winner is slot 0 (first slot, since neither planned it)
+        let shared_conflict = conflicts.iter().find(|(f, _, _, _)| f == "shared.rs").unwrap();
+        assert_eq!(shared_conflict.3, 0, "winner for unplanned shared.rs must be first slot (0)");
+
+        // Verify: shared.rs content is from slot 0 (the winner)
+        let shared_content = std::fs::read_to_string(main_dir.join("shared.rs")).unwrap();
+        assert!(
+            shared_content.contains("slot 0 version"),
+            "shared.rs must contain slot 0's version, got: {}",
+            shared_content
+        );
+
+        // Verify: non-conflicting planned files are correctly copied
+        let a_content = std::fs::read_to_string(main_dir.join("planned_a.rs")).unwrap();
+        assert!(a_content.contains("slot 0"), "planned_a.rs must have slot 0 content");
+        let b_content = std::fs::read_to_string(main_dir.join("planned_b.rs")).unwrap();
+        assert!(b_content.contains("slot 1"), "planned_b.rs must have slot 1 content");
+
+        // Cleanup
+        let _ = std::process::Command::new("git")
+            .args(["worktree", "remove", "--force"])
+            .arg(&wt_a)
+            .current_dir(&main_dir)
+            .output();
+        let _ = std::process::Command::new("git")
+            .args(["worktree", "remove", "--force"])
+            .arg(&wt_b)
+            .current_dir(&main_dir)
+            .output();
+        let _ = std::fs::remove_dir_all(&main_dir);
+        let _ = std::fs::remove_dir_all(&wt_a);
+        let _ = std::fs::remove_dir_all(&wt_b);
     }
 }
