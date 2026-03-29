@@ -1166,12 +1166,15 @@ INSTRUCTIONS:
 4. Fix any runtime failures noted in the Runtime Checks section
 5. Run the same checks the reviewer would run to confirm fixes work
 
+EXECUTION STYLE: Execute tool calls directly without narration. Do not explain what you are about to do or summarize what you just did between tool calls. Verify your fixes compile/parse correctly as your final action.
+
 IMPORTANT:
 - Fix EVERY high and medium issue in the report
 - Do NOT modify {spec_file}, CLAUDE.md, {tasks_file}, or .buildloop/
 - Do NOT read files in .buildloop/logs/
 - After fixing, verify your fixes compile/parse correctly
-- Be surgical — fix only what the review identified, don't refactor surrounding code"#
+- Be surgical — fix only what the review identified, don't refactor surrounding code
+- SILENT EXECUTION: Do not ask questions or seek confirmation. Make reasonable decisions and document them in your output."#
     )
 }
 

@@ -405,6 +405,8 @@ pub async fn run_provider_session(options: ProviderRunOptions<'_>) -> Result<Age
             cmd.arg("stream-json");
             cmd.arg("--verbose");
             cmd.env("CLAUDECODE", "");
+            cmd.arg("--append-system-prompt");
+            cmd.arg(AUTONOMY_OVERRIDE);
             cmd
         }
         ModelProvider::Codex => {
@@ -421,7 +423,7 @@ pub async fn run_provider_session(options: ProviderRunOptions<'_>) -> Result<Age
             if options.skip_git_repo_check {
                 cmd.arg("--skip-git-repo-check");
             }
-            cmd.arg(options.prompt);
+            cmd.arg(format!("{}\n\n{}", AUTONOMY_OVERRIDE, options.prompt));
             cmd
         }
     };
@@ -444,6 +446,8 @@ pub async fn run_provider_session(options: ProviderRunOptions<'_>) -> Result<Age
                 args.push("--output-format".to_string());
                 args.push("stream-json".to_string());
                 args.push("--verbose".to_string());
+                args.push("--append-system-prompt".to_string());
+                args.push(AUTONOMY_OVERRIDE.to_string());
                 (program, args, vec![("CLAUDECODE", "")])
             }
             ModelProvider::Codex => {
@@ -465,7 +469,7 @@ pub async fn run_provider_session(options: ProviderRunOptions<'_>) -> Result<Age
                 if options.skip_git_repo_check {
                     args.push("--skip-git-repo-check".to_string());
                 }
-                args.push(options.prompt.to_string());
+                args.push(format!("{}\n\n{}", AUTONOMY_OVERRIDE, options.prompt));
                 (program, args, vec![])
             }
         };
