@@ -50,7 +50,7 @@ fn write_checkpoint(buildloop_dir: &std::path::Path, task_id: &str, task_desc: &
     };
     let path = buildloop_dir.join("checkpoint.json");
     if let Ok(json) = serde_json::to_string_pretty(&checkpoint) {
-        let _ = std::fs::write(&path, json);
+        let _ = atomic_write_file(&path, json.as_bytes());
     }
 }
 
@@ -2034,7 +2034,7 @@ async fn process_task(
         _ => false,
     };
     let checkpoint_skip_planner = match resume_stage {
-        Some("plan_review" | "builder" | "doubt") => {
+        Some("plan_review" | "builder" | "doubt") if checkpoint_skip_scout => {
             // Planner completed -- but verify artifact exists
             if ctx.current_plan.exists() {
                 true
@@ -2044,6 +2044,12 @@ async fn process_task(
                 )));
                 false
             }
+        }
+        Some("plan_review" | "builder" | "doubt") if !checkpoint_skip_scout => {
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+                "Checkpoint says planner completed but scout-report.md missing -- re-running from scout (cascading)".to_string(),
+            )));
+            false
         }
         _ => false,
     };
@@ -4810,6 +4816,111 @@ mod tests {
             Some("builder" | "doubt") if checkpoint_skip_planner_ok => true,
             _ => false,
         };
+        assert!(checkpoint_skip_plan_review_ok,
+            "plan_review skip should be true when planner skip is true");
+
+        let checkpoint_skip_builder_ok = match resume_stage {
+            Some("doubt") if checkpoint_skip_planner_ok => build_claims.exists(),
+            _ => false,
+        };
+        assert!(checkpoint_skip_builder_ok,
+            "builder skip should be true when planner skip is true and build-claims.md exists");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_checkpoint_cascade_when_scout_report_missing() {
+        // Bug D43.1(a): When resume_stage="doubt" but scout-report.md is missing,
+        // checkpoint_skip_scout becomes false. checkpoint_skip_planner must also
+        // become false (even if current-plan.md exists), cascading to P+ and builder
+        // via the existing D42.1 guards.
+
+        let dir = std::env::temp_dir().join(format!(
+            "foundry-checkpoint-scout-cascade-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+
+        // Scenario: checkpoint says builder completed (resume_stage="doubt"),
+        // but scout-report.md is missing.
+        write_checkpoint(&dir, "D43.1", "test task", "builder");
+
+        let cp = read_checkpoint(&dir).unwrap();
+        let resume_stage: Option<&str> = match cp.completed_stage.as_str() {
+            "builder" => Some("doubt"),
+            _ => None,
+        };
+        assert_eq!(resume_stage, Some("doubt"));
+
+        // scout-report.md does NOT exist (simulates missing scout artifact)
+        let scout_report = dir.join("scout-report.md");
+        assert!(!scout_report.exists());
+
+        // current-plan.md and build-claims.md DO exist (stale artifacts from prior run)
+        let current_plan = dir.join("current-plan.md");
+        std::fs::write(&current_plan, "# Plan\n## File Operations\n## Verification\n").unwrap();
+        let build_claims = dir.join("build-claims.md");
+        std::fs::write(&build_claims, "# Build Claims").unwrap();
+
+        // checkpoint_skip_scout: scout-report.md missing -> false
+        let checkpoint_skip_scout = match resume_stage {
+            Some("planner" | "plan_review" | "builder" | "doubt") => scout_report.exists(),
+            _ => false,
+        };
+        assert!(!checkpoint_skip_scout, "scout skip must be false when scout-report.md is missing");
+
+        // checkpoint_skip_planner: must be false because checkpoint_skip_scout is false (the fix)
+        let checkpoint_skip_planner = match resume_stage {
+            Some("plan_review" | "builder" | "doubt") if checkpoint_skip_scout => {
+                current_plan.exists()
+            }
+            _ => false,
+        };
+        assert!(!checkpoint_skip_planner,
+            "planner skip must be false when checkpoint_skip_scout is false (cascading)");
+
+        // checkpoint_skip_plan_review: depends on checkpoint_skip_planner
+        let checkpoint_skip_plan_review = matches!(
+            resume_stage,
+            Some("builder" | "doubt") if checkpoint_skip_planner
+        );
+        assert!(!checkpoint_skip_plan_review,
+            "plan_review skip must be false when checkpoint_skip_planner is false (cascading from scout)");
+
+        // checkpoint_skip_builder: depends on checkpoint_skip_planner
+        let checkpoint_skip_builder = match resume_stage {
+            Some("doubt") if checkpoint_skip_planner => build_claims.exists(),
+            _ => false,
+        };
+        assert!(!checkpoint_skip_builder,
+            "builder skip must be false when checkpoint_skip_planner is false (cascading from scout)");
+
+        // Positive case: when scout-report.md EXISTS, cascade does not trigger
+        std::fs::write(&scout_report, "# Scout Report").unwrap();
+
+        let checkpoint_skip_scout_ok = match resume_stage {
+            Some("planner" | "plan_review" | "builder" | "doubt") => scout_report.exists(),
+            _ => false,
+        };
+        assert!(checkpoint_skip_scout_ok, "scout skip should be true when scout-report.md exists");
+
+        let checkpoint_skip_planner_ok = match resume_stage {
+            Some("plan_review" | "builder" | "doubt") if checkpoint_skip_scout_ok => {
+                current_plan.exists()
+            }
+            _ => false,
+        };
+        assert!(checkpoint_skip_planner_ok,
+            "planner skip should be true when scout skip is true and plan exists");
+
+        let checkpoint_skip_plan_review_ok = matches!(
+            resume_stage,
+            Some("builder" | "doubt") if checkpoint_skip_planner_ok
+        );
         assert!(checkpoint_skip_plan_review_ok,
             "plan_review skip should be true when planner skip is true");
 
