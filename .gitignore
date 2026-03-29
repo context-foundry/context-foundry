@@ -60,6 +60,7 @@ tools/
 # Desktop app build artifacts (track source, ignore build output)
 apps/context-foundry-desktop/src-tauri/target/
 apps/context-foundry-desktop/node_modules/
+scripts/gallery/node_modules/
 apps/context-foundry-desktop/dist/
 apps/context-foundry-desktop/path/
 

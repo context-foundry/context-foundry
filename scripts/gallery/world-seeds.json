@@ -1,0 +1,1091 @@
+[
+  {
+    "id": "shipping-code-from-the-abyss",
+    "biome": "ocean",
+    "name": "Shipping Code from the Abyss",
+    "location": "Mariana Trench, Pacific Ocean",
+    "palette": ["#0a1628", "#0d2847", "#1a4a6e", "#2d7d9a", "#4fb8c4"],
+    "elements": ["hadal zone walls", "bioluminescent fish", "hydrothermal vent", "abyssal sediment"],
+    "mood": "abyssal"
+  },
+  {
+    "id": "rebase-the-reef",
+    "biome": "ocean",
+    "name": "Rebase the Reef",
+    "location": "Great Barrier Reef, Australia",
+    "palette": ["#0077b6", "#00b4d8", "#90e0ef", "#ff6b6b", "#ffd166"],
+    "elements": ["branching coral", "clownfish", "sea turtle", "sunlit shallows"],
+    "mood": "vibrant"
+  },
+  {
+    "id": "null-pointer-bay",
+    "biome": "ocean",
+    "name": "Null Pointer Bay",
+    "location": "Mosquito Bay, Vieques, Puerto Rico",
+    "palette": ["#0b0c2a", "#1a1a5e", "#00e5ff", "#00ff88", "#001f3f"],
+    "elements": ["dinoflagellate glow", "mangrove shore", "kayak silhouette", "star reflections"],
+    "mood": "ethereal"
+  },
+  {
+    "id": "fork-the-fjord",
+    "biome": "ocean",
+    "name": "Fork the Fjord",
+    "location": "Geirangerfjord, Norway",
+    "palette": ["#1b3a4b", "#3d6b7e", "#7fc8a9", "#d4edda", "#f0f7f4"],
+    "elements": ["steep cliff walls", "emerald water", "waterfall cascade", "small ferry"],
+    "mood": "majestic"
+  },
+  {
+    "id": "delta-force-merge",
+    "biome": "ocean",
+    "name": "Delta Force Merge",
+    "location": "Mekong Delta, Vietnam",
+    "palette": ["#2d6a4f", "#40916c", "#74c69d", "#b7e4c7", "#d4a373"],
+    "elements": ["branching waterways", "floating market boats", "palm trees", "rice paddies"],
+    "mood": "lush"
+  },
+  {
+    "id": "drop-tables-waterfall",
+    "biome": "ocean",
+    "name": "DROP TABLE Waterfall",
+    "location": "Iguazu Falls, Argentina-Brazil Border",
+    "palette": ["#1b4332", "#2d6a4f", "#52b788", "#ffffff", "#95d5b2"],
+    "elements": ["horseshoe falls", "mist clouds", "rainbow arc", "tropical foliage"],
+    "mood": "thunderous"
+  },
+  {
+    "id": "hot-fix-springs",
+    "biome": "ocean",
+    "name": "Hot Fix Springs",
+    "location": "Grand Prismatic Spring, Yellowstone, USA",
+    "palette": ["#ff6b35", "#f7a523", "#ffd700", "#00b4d8", "#2d6a4f"],
+    "elements": ["prismatic rings", "steam rising", "bacterial mats", "boardwalk"],
+    "mood": "surreal"
+  },
+  {
+    "id": "floating-point-lagoon",
+    "biome": "ocean",
+    "name": "Floating Point Lagoon",
+    "location": "Jokulsarlon Glacier Lagoon, Iceland",
+    "palette": ["#adb5bd", "#6c757d", "#48cae4", "#caf0f8", "#e9ecef"],
+    "elements": ["floating icebergs", "black sand shore", "glacier tongue", "diamond ice chunks"],
+    "mood": "serene"
+  },
+  {
+    "id": "open-ocean-open-source",
+    "biome": "ocean",
+    "name": "Open Ocean, Open Source",
+    "location": "Sargasso Sea, Atlantic Ocean",
+    "palette": ["#023e8a", "#0077b6", "#0096c7", "#48cae4", "#90e0ef"],
+    "elements": ["sargassum mats", "deep blue expanse", "distant clouds", "eel migration"],
+    "mood": "vast"
+  },
+  {
+    "id": "404-sand-not-found",
+    "biome": "desert",
+    "name": "404: Sand Not Found",
+    "location": "White Sands National Park, New Mexico, USA",
+    "palette": ["#f8f9fa", "#e9ecef", "#dee2e6", "#8ecae6", "#219ebc"],
+    "elements": ["white gypsum dunes", "yucca plants", "ripple patterns", "distant San Andres Mountains"],
+    "mood": "alien"
+  },
+  {
+    "id": "git-blame-the-wind",
+    "biome": "desert",
+    "name": "git blame the Wind",
+    "location": "Sahara Desert, Erg Chebbi, Morocco",
+    "palette": ["#e76f51", "#f4a261", "#e9c46a", "#264653", "#2a9d8f"],
+    "elements": ["towering sand dunes", "camel caravan", "setting sun", "wind-carved ridgelines"],
+    "mood": "ancient"
+  },
+  {
+    "id": "stack-overflow-at-death-valley",
+    "biome": "desert",
+    "name": "Stack Overflow at Death Valley",
+    "location": "Badwater Basin, Death Valley, California, USA",
+    "palette": ["#ffd166", "#ef476f", "#f78c6b", "#e5e5e5", "#073b4c"],
+    "elements": ["salt flat hexagons", "telescope peak backdrop", "heat shimmer", "cracked earth"],
+    "mood": "scorching"
+  },
+  {
+    "id": "dry-run-only",
+    "biome": "desert",
+    "name": "Dry Run Only",
+    "location": "Atacama Desert, Chile",
+    "palette": ["#c9ada7", "#9a8c98", "#4a4e69", "#22223b", "#f2e9e4"],
+    "elements": ["Mars-like terrain", "flamingos at salt lake", "observatory domes", "night sky"],
+    "mood": "desolate"
+  },
+  {
+    "id": "the-great-salt-hash",
+    "biome": "desert",
+    "name": "The Great Salt Hash",
+    "location": "Salar de Uyuni, Bolivia",
+    "palette": ["#caf0f8", "#ade8f4", "#90e0ef", "#ffffff", "#48cae4"],
+    "elements": ["mirror-flat salt", "sky reflection", "distant volcano", "hexagonal salt tiles"],
+    "mood": "infinite"
+  },
+  {
+    "id": "buffer-overflow-canyon",
+    "biome": "desert",
+    "name": "Buffer Overflow Canyon",
+    "location": "Antelope Canyon, Arizona, USA",
+    "palette": ["#e85d04", "#f48c06", "#faa307", "#9d4edd", "#240046"],
+    "elements": ["slot canyon walls", "light beams", "sandstone waves", "sand floor"],
+    "mood": "mystical"
+  },
+  {
+    "id": "oasis-dependency-injection",
+    "biome": "desert",
+    "name": "Oasis Dependency Injection",
+    "location": "Huacachina Oasis, Ica, Peru",
+    "palette": ["#606c38", "#283618", "#fefae0", "#dda15e", "#bc6c25"],
+    "elements": ["palm-ringed lagoon", "sand dunes", "adobe buildings", "paddle boats"],
+    "mood": "miraculous"
+  },
+  {
+    "id": "segfault-in-the-canopy",
+    "biome": "forest",
+    "name": "Segfault in the Canopy",
+    "location": "Amazon Rainforest, Manaus, Brazil",
+    "palette": ["#081c15", "#1b4332", "#2d6a4f", "#40916c", "#52b788"],
+    "elements": ["dense canopy layers", "macaw in flight", "river below", "epiphytes on trunk"],
+    "mood": "dense"
+  },
+  {
+    "id": "the-original-cloud-computing",
+    "biome": "forest",
+    "name": "The Original Cloud Computing",
+    "location": "Monteverde Cloud Forest, Costa Rica",
+    "palette": ["#b7e4c7", "#95d5b2", "#74c69d", "#ccd5ae", "#e9edc9"],
+    "elements": ["hanging moss", "fog between trees", "orchid cluster", "quetzal bird"],
+    "mood": "mystical"
+  },
+  {
+    "id": "bamboo-array-forest",
+    "biome": "forest",
+    "name": "Bamboo Array Forest",
+    "location": "Arashiyama Bamboo Grove, Kyoto, Japan",
+    "palette": ["#588157", "#a3b18a", "#dad7cd", "#344e41", "#3a5a40"],
+    "elements": ["bamboo columns", "stone path", "filtered light", "wooden fence"],
+    "mood": "tranquil"
+  },
+  {
+    "id": "root-access-granted",
+    "biome": "forest",
+    "name": "Root Access Granted",
+    "location": "Redwood National Park, California, USA",
+    "palette": ["#4a2c0a", "#6b3a0a", "#588157", "#a3b18a", "#2d6a4f"],
+    "elements": ["massive redwood trunks", "fern understory", "fog filtering through", "tiny human for scale"],
+    "mood": "humbling"
+  },
+  {
+    "id": "mangrove-memory-leak",
+    "biome": "forest",
+    "name": "Mangrove Memory Leak",
+    "location": "Sundarbans, Bangladesh-India Border",
+    "palette": ["#2d6a4f", "#40916c", "#6b705c", "#b7b7a4", "#a5a58d"],
+    "elements": ["tangled root systems", "tidal water", "Bengal tiger silhouette", "mudflat"],
+    "mood": "tangled"
+  },
+  {
+    "id": "autumn-deprecation-notice",
+    "biome": "forest",
+    "name": "Autumn Deprecation Notice",
+    "location": "Green Mountain National Forest, Vermont, USA",
+    "palette": ["#e63946", "#f4a261", "#e9c46a", "#2a9d8f", "#264653"],
+    "elements": ["red maple canopy", "covered bridge", "leaf-strewn path", "stone wall"],
+    "mood": "nostalgic"
+  },
+  {
+    "id": "tail-recursive-taiga",
+    "biome": "forest",
+    "name": "Tail Recursive Taiga",
+    "location": "Taiga Forest, Yakutia, Siberia, Russia",
+    "palette": ["#344e41", "#3a5a40", "#588157", "#e9ecef", "#adb5bd"],
+    "elements": ["endless spruce rows", "snow-dusted branches", "frozen stream", "lynx tracks"],
+    "mood": "relentless"
+  },
+  {
+    "id": "deadlock-in-the-dead-vlei",
+    "biome": "forest",
+    "name": "Deadlock in Dead Vlei",
+    "location": "Deadvlei, Namib-Naukluft Park, Namibia",
+    "palette": ["#e76f51", "#f4a261", "#264653", "#1d1d1d", "#fefae0"],
+    "elements": ["dead camelthorn trees", "orange dune wall", "white clay pan", "harsh shadows"],
+    "mood": "stark"
+  },
+  {
+    "id": "ctrl-z-the-ice-age",
+    "biome": "arctic",
+    "name": "Ctrl+Z the Ice Age",
+    "location": "Vatnajokull Glacier, Iceland",
+    "palette": ["#caf0f8", "#ade8f4", "#6c757d", "#343a40", "#ffffff"],
+    "elements": ["glacier crevasses", "ice wall face", "meltwater stream", "volcanic ash layers"],
+    "mood": "primordial"
+  },
+  {
+    "id": "aurora-borealis-broadcast",
+    "biome": "arctic",
+    "name": "Aurora Borealis Broadcast",
+    "location": "Tromso, Norway",
+    "palette": ["#00ff87", "#00e5ff", "#7b2ff7", "#0b0c2a", "#1a1a5e"],
+    "elements": ["aurora curtains", "snow-covered pines", "starfield", "frozen lake reflection"],
+    "mood": "electric"
+  },
+  {
+    "id": "commit-history-frozen",
+    "biome": "arctic",
+    "name": "Commit History: Frozen",
+    "location": "Ross Ice Shelf, Antarctica",
+    "palette": ["#e9ecef", "#dee2e6", "#adb5bd", "#6c757d", "#48cae4"],
+    "elements": ["ice shelf edge", "tabular iceberg", "emperor penguins", "katabatic wind streaks"],
+    "mood": "monumental"
+  },
+  {
+    "id": "sudo-rm-rf-winter",
+    "biome": "arctic",
+    "name": "sudo rm -rf /winter",
+    "location": "Lofoten Islands, Norway",
+    "palette": ["#ffc8dd", "#ffafcc", "#bde0fe", "#a2d2ff", "#cdb4db"],
+    "elements": ["red fishing cabins", "snow-peaked mountains", "still fjord water", "pastel sky"],
+    "mood": "resilient"
+  },
+  {
+    "id": "cold-storage-solutions",
+    "biome": "arctic",
+    "name": "Cold Storage Solutions",
+    "location": "Svalbard Global Seed Vault, Svalbard, Norway",
+    "palette": ["#264653", "#2a9d8f", "#e9ecef", "#6c757d", "#343a40"],
+    "elements": ["vault entrance", "snowdrift", "polar twilight", "geometric concrete"],
+    "mood": "solemn"
+  },
+  {
+    "id": "404-sunlight-not-found",
+    "biome": "arctic",
+    "name": "404: Sunlight Not Found",
+    "location": "Eisriesenwelt Ice Cave, Werfen, Austria",
+    "palette": ["#0b0c2a", "#1a3a5e", "#48cae4", "#caf0f8", "#ffffff"],
+    "elements": ["ice columns", "frozen waterfall", "cave entrance glow", "icicle formations"],
+    "mood": "otherworldly"
+  },
+  {
+    "id": "permafrost-persistence-layer",
+    "biome": "arctic",
+    "name": "Permafrost Persistence Layer",
+    "location": "Siberian Tundra, Yakutsk, Russia",
+    "palette": ["#adb5bd", "#6c757d", "#495057", "#343a40", "#e9ecef"],
+    "elements": ["flat tundra expanse", "exposed permafrost cliff", "musk ox herd", "low clouds"],
+    "mood": "bleak"
+  },
+  {
+    "id": "penguin-cluster-manager",
+    "biome": "arctic",
+    "name": "Penguin Cluster Manager",
+    "location": "South Georgia Island, South Atlantic",
+    "palette": ["#1d1d1d", "#ffffff", "#f4a261", "#6c757d", "#48cae4"],
+    "elements": ["king penguin colony", "snowy mountain", "tussock grass", "elephant seal"],
+    "mood": "bustling"
+  },
+  {
+    "id": "runtime-eruption",
+    "biome": "volcanic",
+    "name": "Runtime Eruption",
+    "location": "Kilauea, Big Island, Hawaii, USA",
+    "palette": ["#d00000", "#e85d04", "#faa307", "#1d1d1d", "#370617"],
+    "elements": ["lava flow into ocean", "steam plume", "glowing fissure", "black basalt coast"],
+    "mood": "volatile"
+  },
+  {
+    "id": "git-blame-the-tectonic-plates",
+    "biome": "volcanic",
+    "name": "git blame the Tectonic Plates",
+    "location": "Thingvellir Rift, Iceland",
+    "palette": ["#344e41", "#588157", "#6c757d", "#adb5bd", "#e9ecef"],
+    "elements": ["tectonic plate rift", "lava field moss", "Althing ruins", "clear fissure water"],
+    "mood": "primordial"
+  },
+  {
+    "id": "daemon-process-eruption",
+    "biome": "volcanic",
+    "name": "Daemon Process Eruption",
+    "location": "Mount Etna, Sicily, Italy",
+    "palette": ["#370617", "#6a040f", "#d00000", "#e85d04", "#495057"],
+    "elements": ["summit crater", "lava fountain", "ash cloud", "vineyard slopes below"],
+    "mood": "furious"
+  },
+  {
+    "id": "the-pipe-operator",
+    "biome": "volcanic",
+    "name": "The Pipe Operator",
+    "location": "Thurston Lava Tube, Hawaii Volcanoes NP, USA",
+    "palette": ["#1d1d1d", "#343a40", "#495057", "#52b788", "#74c69d"],
+    "elements": ["lava tube tunnel", "fern entrance", "dripping ceiling", "distant light exit"],
+    "mood": "claustrophobic"
+  },
+  {
+    "id": "old-faithful-cron-job",
+    "biome": "volcanic",
+    "name": "Old Faithful Cron Job",
+    "location": "Old Faithful Geyser, Yellowstone, Wyoming, USA",
+    "palette": ["#48cae4", "#ffffff", "#caf0f8", "#6b705c", "#a3b18a"],
+    "elements": ["geyser eruption column", "mineral terrace", "tourist boardwalk", "steam drift"],
+    "mood": "punctual"
+  },
+  {
+    "id": "async-caldera",
+    "biome": "volcanic",
+    "name": "Async Caldera",
+    "location": "Crater Lake, Oregon, USA",
+    "palette": ["#023e8a", "#0077b6", "#264653", "#588157", "#e9ecef"],
+    "elements": ["deep blue caldera lake", "Wizard Island", "pine-covered rim", "snow patches"],
+    "mood": "dormant"
+  },
+  {
+    "id": "fire-and-forget-island",
+    "biome": "volcanic",
+    "name": "Fire and Forget Island",
+    "location": "Surtsey, Vestmannaeyjar, Iceland",
+    "palette": ["#1d1d1d", "#495057", "#e85d04", "#48cae4", "#90e0ef"],
+    "elements": ["new volcanic island", "lava meeting sea", "steam columns", "barren rock"],
+    "mood": "nascent"
+  },
+  {
+    "id": "magma-chamber-singleton",
+    "biome": "volcanic",
+    "name": "Magma Chamber Singleton",
+    "location": "Mount Yasur, Tanna, Vanuatu",
+    "palette": ["#d00000", "#ff6b35", "#faa307", "#370617", "#0b0c2a"],
+    "elements": ["exposed magma pit", "volcanic bombs", "night sky glow", "ash-covered slope"],
+    "mood": "relentless"
+  },
+  {
+    "id": "merge-conflict-at-29032-feet",
+    "biome": "mountain",
+    "name": "Merge Conflict at 29,032 Feet",
+    "location": "Mount Everest, Nepal-China Border",
+    "palette": ["#e9ecef", "#adb5bd", "#6c757d", "#264653", "#48cae4"],
+    "elements": ["summit pyramid", "prayer flags", "jet stream clouds", "south col tents"],
+    "mood": "punishing"
+  },
+  {
+    "id": "divide-and-conquer-canyon",
+    "biome": "mountain",
+    "name": "Divide and Conquer Canyon",
+    "location": "Grand Canyon, Arizona, USA",
+    "palette": ["#e76f51", "#f4a261", "#e9c46a", "#264653", "#48cae4"],
+    "elements": ["layered canyon walls", "Colorado River below", "condor soaring", "mule trail"],
+    "mood": "overwhelming"
+  },
+  {
+    "id": "peak-performance-meadow",
+    "biome": "mountain",
+    "name": "Peak Performance Meadow",
+    "location": "Grindelwald, Bernese Alps, Switzerland",
+    "palette": ["#52b788", "#95d5b2", "#ffffff", "#264653", "#ffd166"],
+    "elements": ["alpine wildflower meadow", "snow-capped Eiger", "wooden chalet", "cowbell herd"],
+    "mood": "idyllic"
+  },
+  {
+    "id": "recursive-ridgeline",
+    "biome": "mountain",
+    "name": "Recursive Ridgeline",
+    "location": "Torres del Paine, Patagonia, Chile",
+    "palette": ["#264653", "#2a9d8f", "#e9c46a", "#adb5bd", "#e9ecef"],
+    "elements": ["granite towers", "guanaco on ridge", "glacial lake", "windswept lenga trees"],
+    "mood": "untamed"
+  },
+  {
+    "id": "edge-case-cliffside",
+    "biome": "mountain",
+    "name": "Edge Case Cliffside",
+    "location": "Cliffs of Moher, County Clare, Ireland",
+    "palette": ["#344e41", "#6c757d", "#48cae4", "#ffffff", "#495057"],
+    "elements": ["sheer cliff face", "crashing waves", "puffin colony", "O'Brien's Tower"],
+    "mood": "dramatic"
+  },
+  {
+    "id": "stack-trace-spires",
+    "biome": "mountain",
+    "name": "Stack Trace Spires",
+    "location": "Zhangjiajie National Forest, Hunan, China",
+    "palette": ["#2d6a4f", "#40916c", "#6c757d", "#adb5bd", "#caf0f8"],
+    "elements": ["sandstone pillar forest", "hanging bridges", "mist between pillars", "pine clinging to rock"],
+    "mood": "vertiginous"
+  },
+  {
+    "id": "nested-loop-switchbacks",
+    "biome": "mountain",
+    "name": "Nested Loop Switchbacks",
+    "location": "Trollstigen, More og Romsdal, Norway",
+    "palette": ["#344e41", "#588157", "#adb5bd", "#e9ecef", "#48cae4"],
+    "elements": ["hairpin road zigzags", "waterfall beside road", "sheer mountain wall", "fog rolling in"],
+    "mood": "dizzying"
+  },
+  {
+    "id": "fjord-partition-table",
+    "biome": "mountain",
+    "name": "Fjord Partition Table",
+    "location": "Milford Sound, South Island, New Zealand",
+    "palette": ["#264653", "#2a9d8f", "#e9ecef", "#6c757d", "#1b4332"],
+    "elements": ["mitre peak", "rainforest walls", "waterfall veils", "mirror-still water"],
+    "mood": "pristine"
+  },
+  {
+    "id": "crystal-clear-cache",
+    "biome": "underground",
+    "name": "Crystal Clear Cache",
+    "location": "Naica Mine Crystal Cave, Chihuahua, Mexico",
+    "palette": ["#f8f9fa", "#caf0f8", "#ade8f4", "#6c757d", "#343a40"],
+    "elements": ["selenite crystal beams", "cave explorer for scale", "mineral pool", "cave ceiling"],
+    "mood": "impossible"
+  },
+  {
+    "id": "cenote-connection-pool",
+    "biome": "underground",
+    "name": "Cenote Connection Pool",
+    "location": "Cenote Ik Kil, Yucatan, Mexico",
+    "palette": ["#0077b6", "#00b4d8", "#2d6a4f", "#40916c", "#343a40"],
+    "elements": ["circular sinkhole opening", "hanging vines", "turquoise water", "limestone walls"],
+    "mood": "sacred"
+  },
+  {
+    "id": "underground-pipeline",
+    "biome": "underground",
+    "name": "Underground Pipeline",
+    "location": "Waitomo Glowworm Caves, North Island, New Zealand",
+    "palette": ["#0b0c2a", "#1a1a5e", "#00e5ff", "#48cae4", "#343a40"],
+    "elements": ["glowworm galaxy ceiling", "underground river", "boat silhouette", "limestone formations"],
+    "mood": "dreamlike"
+  },
+  {
+    "id": "deprecated-mine-shaft",
+    "biome": "underground",
+    "name": "Deprecated Mine Shaft",
+    "location": "Wieliczka Salt Mine, Krakow, Poland",
+    "palette": ["#6c757d", "#adb5bd", "#f4a261", "#dda15e", "#343a40"],
+    "elements": ["salt-carved chapel", "chandelier", "wooden support beams", "carved statues"],
+    "mood": "ornate"
+  },
+  {
+    "id": "sql-injection-spring",
+    "biome": "underground",
+    "name": "SQL Injection Spring",
+    "location": "Son Doong Cave, Quang Binh, Vietnam",
+    "palette": ["#1b4332", "#2d6a4f", "#caf0f8", "#e9ecef", "#343a40"],
+    "elements": ["jungle inside cave", "sunbeam shaft", "underground river", "massive stalagmites"],
+    "mood": "cathedral"
+  },
+  {
+    "id": "recursive-stalactite-descent",
+    "biome": "underground",
+    "name": "Recursive Stalactite Descent",
+    "location": "Lechuguilla Cave, Carlsbad, New Mexico, USA",
+    "palette": ["#f4a261", "#e9c46a", "#ffffff", "#6c757d", "#343a40"],
+    "elements": ["chandelier ballroom", "gypsum formations", "cave pearls", "pool reflection"],
+    "mood": "alien"
+  },
+  {
+    "id": "dark-mode-activated",
+    "biome": "underground",
+    "name": "Dark Mode Activated",
+    "location": "Mammoth Cave, Kentucky, USA",
+    "palette": ["#1d1d1d", "#343a40", "#495057", "#6c757d", "#adb5bd"],
+    "elements": ["endless passage", "limestone columns", "bat colony", "river Styx crossing"],
+    "mood": "endless"
+  },
+  {
+    "id": "lava-tube-localhost",
+    "biome": "underground",
+    "name": "Lava Tube Localhost",
+    "location": "Kazumura Cave, Big Island, Hawaii, USA",
+    "palette": ["#1d1d1d", "#370617", "#6a040f", "#495057", "#6c757d"],
+    "elements": ["smooth lava tube walls", "lava shelf", "tree root intrusions", "distant light"],
+    "mood": "hollow"
+  },
+  {
+    "id": "every-commit-reaches-the-stars",
+    "biome": "space",
+    "name": "Every Commit Reaches the Stars",
+    "location": "Mauna Kea Observatory, Hawaii, USA",
+    "palette": ["#0b0c2a", "#1a1a5e", "#7b2ff7", "#ffd166", "#ffffff"],
+    "elements": ["observatory domes", "Milky Way band", "cinder cone summit", "star trails"],
+    "mood": "infinite"
+  },
+  {
+    "id": "hello-world-from-orbit",
+    "biome": "space",
+    "name": "Hello World from Orbit",
+    "location": "International Space Station, Low Earth Orbit",
+    "palette": ["#0b0c2a", "#023e8a", "#0077b6", "#48cae4", "#f8f9fa"],
+    "elements": ["ISS solar panels", "Earth's curvature", "thin atmosphere glow", "city lights below"],
+    "mood": "weightless"
+  },
+  {
+    "id": "lunar-landing-page",
+    "biome": "space",
+    "name": "Lunar Landing Page",
+    "location": "Sea of Tranquility, Moon",
+    "palette": ["#adb5bd", "#6c757d", "#495057", "#343a40", "#0b0c2a"],
+    "elements": ["crater field", "lunar module", "boot prints", "Earth in black sky"],
+    "mood": "silent"
+  },
+  {
+    "id": "ring-buffer-saturn",
+    "biome": "space",
+    "name": "Ring Buffer Saturn",
+    "location": "Saturn's Rings, Outer Solar System",
+    "palette": ["#f4a261", "#e9c46a", "#dda15e", "#caf0f8", "#0b0c2a"],
+    "elements": ["ring particle bands", "Saturn's atmosphere", "Cassini Division gap", "tiny Titan moon"],
+    "mood": "majestic"
+  },
+  {
+    "id": "nebula-noise-function",
+    "biome": "space",
+    "name": "Nebula Noise Function",
+    "location": "Pillars of Creation, Eagle Nebula, M16",
+    "palette": ["#370617", "#6a040f", "#e85d04", "#faa307", "#7b2ff7"],
+    "elements": ["gas pillars", "newborn stars", "cosmic dust lanes", "emission glow"],
+    "mood": "genesis"
+  },
+  {
+    "id": "kernel-panic-at-the-kuiper-belt",
+    "biome": "space",
+    "name": "Kernel Panic at the Kuiper Belt",
+    "location": "Kuiper Belt, Outer Solar System",
+    "palette": ["#0b0c2a", "#1d1d1d", "#343a40", "#6c757d", "#ffffff"],
+    "elements": ["scattered ice bodies", "distant sun point", "Pluto silhouette", "star field"],
+    "mood": "lonely"
+  },
+  {
+    "id": "event-horizon-listener",
+    "biome": "space",
+    "name": "Event Horizon Listener",
+    "location": "M87 Black Hole, Virgo Cluster",
+    "palette": ["#0b0c2a", "#1d1d1d", "#ff6b35", "#faa307", "#ffd166"],
+    "elements": ["accretion disk ring", "photon sphere", "relativistic jet", "warped starlight"],
+    "mood": "terrifying"
+  },
+  {
+    "id": "mars-rover-code-review",
+    "biome": "space",
+    "name": "Mars Rover Code Review",
+    "location": "Jezero Crater, Mars",
+    "palette": ["#c9ada7", "#9a8c98", "#e76f51", "#f4a261", "#264653"],
+    "elements": ["rover tracks", "ancient river delta", "dust devil", "rocky terrain"],
+    "mood": "pioneering"
+  },
+  {
+    "id": "neon-city-never-sleeps",
+    "biome": "urban",
+    "name": "Neon City Never Sleeps()",
+    "location": "Shibuya Crossing, Tokyo, Japan",
+    "palette": ["#7b2ff7", "#ff006e", "#00e5ff", "#ffd166", "#0b0c2a"],
+    "elements": ["giant LED billboards", "umbrella crowd", "crossing from above", "wet pavement reflections"],
+    "mood": "electric"
+  },
+  {
+    "id": "legacy-codebase-ruins",
+    "biome": "urban",
+    "name": "Legacy Codebase Ruins",
+    "location": "Angkor Wat, Siem Reap, Cambodia",
+    "palette": ["#6b705c", "#a5a58d", "#b7b7a4", "#2d6a4f", "#40916c"],
+    "elements": ["temple spires", "tree roots on stone", "moat reflection", "morning mist"],
+    "mood": "timeless"
+  },
+  {
+    "id": "lighthouse-load-balancer",
+    "biome": "urban",
+    "name": "Lighthouse Load Balancer",
+    "location": "Tower of Hercules, A Coruna, Spain",
+    "palette": ["#264653", "#2a9d8f", "#ffffff", "#e9c46a", "#e76f51"],
+    "elements": ["Roman lighthouse tower", "beam sweeping sea", "rocky coastline", "stormy waves"],
+    "mood": "steadfast"
+  },
+  {
+    "id": "bridge-over-troubled-bandwidth",
+    "biome": "urban",
+    "name": "Bridge Over Troubled Bandwidth",
+    "location": "Golden Gate Bridge, San Francisco, USA",
+    "palette": ["#e63946", "#f1faee", "#a8dadc", "#457b9d", "#6c757d"],
+    "elements": ["red suspension cables", "fog rolling under", "bay water", "Marin headlands"],
+    "mood": "iconic"
+  },
+  {
+    "id": "rooftop-container-garden",
+    "biome": "urban",
+    "name": "Rooftop Container Garden",
+    "location": "Singapore Skyline, Marina Bay, Singapore",
+    "palette": ["#52b788", "#95d5b2", "#0077b6", "#7b2ff7", "#ffd166"],
+    "elements": ["Supertree Grove", "Marina Bay Sands", "garden terraces", "city lights"],
+    "mood": "futuristic"
+  },
+  {
+    "id": "firewall-of-china",
+    "biome": "urban",
+    "name": "The Great Firewall",
+    "location": "Great Wall at Jinshanling, Hebei, China",
+    "palette": ["#6c757d", "#495057", "#2d6a4f", "#40916c", "#e9c46a"],
+    "elements": ["wall snaking over mountains", "watchtower", "autumn hills", "morning fog"],
+    "mood": "enduring"
+  },
+  {
+    "id": "deploy-to-production-dock",
+    "biome": "urban",
+    "name": "Deploy to Production Dock",
+    "location": "Container Port, Rotterdam, Netherlands",
+    "palette": ["#e76f51", "#0077b6", "#264653", "#e9c46a", "#6c757d"],
+    "elements": ["stacked shipping containers", "crane silhouettes", "cargo ship", "harbor water"],
+    "mood": "industrial"
+  },
+  {
+    "id": "abandoned-thread-factory",
+    "biome": "urban",
+    "name": "Abandoned Thread Factory",
+    "location": "Pripyat, Chernobyl Exclusion Zone, Ukraine",
+    "palette": ["#6c757d", "#adb5bd", "#495057", "#2d6a4f", "#343a40"],
+    "elements": ["overgrown ferris wheel", "cracked building", "nature reclaiming", "radiation sign"],
+    "mood": "haunting"
+  },
+  {
+    "id": "runtime-on-the-serengeti",
+    "biome": "savanna",
+    "name": "Runtime on the Serengeti",
+    "location": "Serengeti National Park, Tanzania",
+    "palette": ["#dda15e", "#bc6c25", "#606c38", "#283618", "#fefae0"],
+    "elements": ["acacia tree silhouette", "wildebeest herd", "savanna grass", "distant Kilimanjaro"],
+    "mood": "epic"
+  },
+  {
+    "id": "null-island-steppe",
+    "biome": "savanna",
+    "name": "Null Island Steppe",
+    "location": "Mongolian Steppe, Khentii, Mongolia",
+    "palette": ["#606c38", "#283618", "#dda15e", "#48cae4", "#fefae0"],
+    "elements": ["endless grassland", "nomadic ger tent", "wild horses", "eagle overhead"],
+    "mood": "boundless"
+  },
+  {
+    "id": "grep-the-grassland",
+    "biome": "savanna",
+    "name": "grep the Grassland",
+    "location": "Tallgrass Prairie, Flint Hills, Kansas, USA",
+    "palette": ["#606c38", "#dda15e", "#fefae0", "#bc6c25", "#48cae4"],
+    "elements": ["big bluestem grass", "bison herd", "rolling hills", "thunderhead clouds"],
+    "mood": "sweeping"
+  },
+  {
+    "id": "pampas-parallel-processing",
+    "biome": "savanna",
+    "name": "Pampas Parallel Processing",
+    "location": "Argentine Pampas, Buenos Aires Province, Argentina",
+    "palette": ["#606c38", "#a3b18a", "#dad7cd", "#dda15e", "#48cae4"],
+    "elements": ["gaucho on horseback", "flat horizon line", "windmill", "cattle herd"],
+    "mood": "vast"
+  },
+  {
+    "id": "savanna-garbage-collector",
+    "biome": "savanna",
+    "name": "Savanna Garbage Collector",
+    "location": "Masai Mara, Kenya",
+    "palette": ["#bc6c25", "#dda15e", "#606c38", "#f4a261", "#264653"],
+    "elements": ["vultures circling", "lion pride resting", "baobab tree", "dry riverbed"],
+    "mood": "cyclical"
+  },
+  {
+    "id": "cerrado-compile-time",
+    "biome": "savanna",
+    "name": "Cerrado Compile Time",
+    "location": "Cerrado Biome, Goias, Brazil",
+    "palette": ["#606c38", "#283618", "#bc6c25", "#e76f51", "#fefae0"],
+    "elements": ["twisted cerrado trees", "termite mound", "red laterite soil", "maned wolf"],
+    "mood": "resilient"
+  },
+  {
+    "id": "the-eye-of-the-storm-async",
+    "biome": "extreme",
+    "name": "await the Eye of the Storm",
+    "location": "Hurricane Alley, Caribbean Sea",
+    "palette": ["#0077b6", "#023e8a", "#caf0f8", "#adb5bd", "#343a40"],
+    "elements": ["spiral cloud wall", "calm eye center", "ocean surface chaos", "stadium effect"],
+    "mood": "apocalyptic"
+  },
+  {
+    "id": "sinkhole-stack-underflow",
+    "biome": "extreme",
+    "name": "Sinkhole Stack Underflow",
+    "location": "Great Blue Hole, Belize",
+    "palette": ["#023e8a", "#0077b6", "#0096c7", "#48cae4", "#caf0f8"],
+    "elements": ["circular sinkhole from above", "reef ring", "deep blue center", "dive boats"],
+    "mood": "abyssal"
+  },
+  {
+    "id": "bioluminescent-debug-log",
+    "biome": "extreme",
+    "name": "Bioluminescent Debug Log",
+    "location": "Toyama Bay, Toyama, Japan",
+    "palette": ["#0b0c2a", "#00e5ff", "#00ff87", "#1a1a5e", "#48cae4"],
+    "elements": ["firefly squid glow", "fishing boats", "dark ocean surface", "shore lights"],
+    "mood": "haunting"
+  },
+  {
+    "id": "where-pigs-fly-and-swim",
+    "biome": "extreme",
+    "name": "Where Pigs Fly (and Swim)",
+    "location": "Big Major Cay, Exuma, Bahamas",
+    "palette": ["#00b4d8", "#90e0ef", "#fefae0", "#dda15e", "#52b788"],
+    "elements": ["swimming pigs", "crystal-clear water", "white sand beach", "palm trees"],
+    "mood": "absurd"
+  },
+  {
+    "id": "door-to-hell-production-incident",
+    "biome": "extreme",
+    "name": "Door to Hell (Production Incident)",
+    "location": "Darvaza Gas Crater, Turkmenistan",
+    "palette": ["#d00000", "#e85d04", "#faa307", "#1d1d1d", "#370617"],
+    "elements": ["burning gas crater", "desert floor", "night glow", "campsite on rim"],
+    "mood": "infernal"
+  },
+  {
+    "id": "blood-falls-segfault",
+    "biome": "extreme",
+    "name": "Blood Falls Segfault",
+    "location": "Blood Falls, Taylor Glacier, Antarctica",
+    "palette": ["#d00000", "#6a040f", "#e9ecef", "#ffffff", "#48cae4"],
+    "elements": ["red iron oxide flow", "glacier face", "white ice wall", "frozen lake below"],
+    "mood": "ominous"
+  },
+  {
+    "id": "tidal-bore-race-condition",
+    "biome": "extreme",
+    "name": "Tidal Bore Race Condition",
+    "location": "Severn Bore, Gloucestershire, England",
+    "palette": ["#6b705c", "#a5a58d", "#0077b6", "#48cae4", "#b7b7a4"],
+    "elements": ["upstream wave wall", "surfers riding bore", "riverbank trees", "mudflat"],
+    "mood": "chaotic"
+  },
+  {
+    "id": "socotra-branch-divergence",
+    "biome": "extreme",
+    "name": "Socotra Branch Divergence",
+    "location": "Socotra Island, Yemen",
+    "palette": ["#2d6a4f", "#bc6c25", "#6c757d", "#48cae4", "#dda15e"],
+    "elements": ["dragon blood trees", "alien landscape", "limestone plateau", "turquoise coast"],
+    "mood": "alien"
+  },
+  {
+    "id": "danakil-kernel-temperature",
+    "biome": "extreme",
+    "name": "Danakil Kernel Temperature",
+    "location": "Danakil Depression, Afar Region, Ethiopia",
+    "palette": ["#ffd166", "#e85d04", "#52b788", "#ffffff", "#370617"],
+    "elements": ["sulfur springs", "salt formations", "acid pools", "volcanic crust"],
+    "mood": "toxic"
+  },
+  {
+    "id": "cherry-blossom-release-branch",
+    "biome": "forest",
+    "name": "Cherry Blossom Release Branch",
+    "location": "Meguro River, Tokyo, Japan",
+    "palette": ["#ffc8dd", "#ffafcc", "#cdb4db", "#264653", "#6c757d"],
+    "elements": ["cherry blossom canopy", "petals on water", "stone lanterns", "arched bridge"],
+    "mood": "fleeting"
+  },
+  {
+    "id": "api-gateway-to-paradise",
+    "biome": "ocean",
+    "name": "API Gateway to Paradise",
+    "location": "Maldives Overwater Bungalows, North Male Atoll",
+    "palette": ["#00b4d8", "#90e0ef", "#caf0f8", "#dda15e", "#264653"],
+    "elements": ["overwater villas", "transparent lagoon", "coral visible below", "sunset horizon"],
+    "mood": "blissful"
+  },
+  {
+    "id": "tcp-handshake-at-the-suez",
+    "biome": "urban",
+    "name": "TCP Handshake at the Suez",
+    "location": "Suez Canal, Ismailia, Egypt",
+    "palette": ["#dda15e", "#264653", "#0077b6", "#e9c46a", "#6c757d"],
+    "elements": ["container ship in canal", "desert banks", "canal bridge", "convoy queue"],
+    "mood": "bottlenecked"
+  },
+  {
+    "id": "singleton-peak",
+    "biome": "mountain",
+    "name": "Singleton Peak",
+    "location": "Mount Fuji, Shizuoka, Japan",
+    "palette": ["#ffffff", "#caf0f8", "#264653", "#e63946", "#f1faee"],
+    "elements": ["symmetrical volcanic cone", "torii gate foreground", "lake Kawaguchi reflection", "cherry blossoms"],
+    "mood": "iconic"
+  },
+  {
+    "id": "load-balancer-falls",
+    "biome": "ocean",
+    "name": "Load Balancer Falls",
+    "location": "Victoria Falls, Zambia-Zimbabwe Border",
+    "palette": ["#2d6a4f", "#48cae4", "#ffffff", "#1b4332", "#90e0ef"],
+    "elements": ["curtain of water", "mist rising", "rainbow in spray", "baobab on cliff"],
+    "mood": "thunderous"
+  },
+  {
+    "id": "distributed-table-mountain",
+    "biome": "mountain",
+    "name": "Distributed Table Mountain",
+    "location": "Table Mountain, Cape Town, South Africa",
+    "palette": ["#264653", "#2a9d8f", "#e9c46a", "#6c757d", "#ffffff"],
+    "elements": ["flat summit plateau", "tablecloth cloud spill", "cable car", "city below"],
+    "mood": "commanding"
+  },
+  {
+    "id": "dependency-tree-baobab",
+    "biome": "savanna",
+    "name": "Dependency Tree: Baobab",
+    "location": "Avenue of the Baobabs, Morondava, Madagascar",
+    "palette": ["#bc6c25", "#dda15e", "#606c38", "#e76f51", "#fefae0"],
+    "elements": ["towering baobab row", "dirt road between", "sunset glow", "zebu cart"],
+    "mood": "ancient"
+  },
+  {
+    "id": "websocket-whirlpool",
+    "biome": "ocean",
+    "name": "WebSocket Whirlpool",
+    "location": "Corryvreckan Whirlpool, Scottish Inner Hebrides",
+    "palette": ["#264653", "#2a9d8f", "#6c757d", "#e9ecef", "#48cae4"],
+    "elements": ["swirling tidal race", "standing waves", "sea cliff", "circling seabirds"],
+    "mood": "turbulent"
+  },
+  {
+    "id": "syntax-highlighting-northern-lights",
+    "biome": "arctic",
+    "name": "Syntax Highlighting: Northern Lights",
+    "location": "Abisko, Swedish Lapland, Sweden",
+    "palette": ["#00ff87", "#7b2ff7", "#ff006e", "#0b0c2a", "#caf0f8"],
+    "elements": ["aurora bands", "frozen lake mirror", "birch tree silhouettes", "Sami tent"],
+    "mood": "spectacular"
+  },
+  {
+    "id": "caching-layer-thermal-springs",
+    "biome": "volcanic",
+    "name": "Caching Layer: Thermal Springs",
+    "location": "Blue Lagoon, Grindavik, Iceland",
+    "palette": ["#48cae4", "#90e0ef", "#caf0f8", "#495057", "#264653"],
+    "elements": ["milky blue water", "lava field surround", "steam rising", "wooden walkway"],
+    "mood": "restorative"
+  },
+  {
+    "id": "garbage-collected-reef",
+    "biome": "ocean",
+    "name": "Garbage Collected Reef",
+    "location": "Raja Ampat, West Papua, Indonesia",
+    "palette": ["#0077b6", "#00b4d8", "#52b788", "#ff6b6b", "#ffd166"],
+    "elements": ["pristine coral garden", "manta ray glide", "fish school", "karst island backdrop"],
+    "mood": "thriving"
+  },
+  {
+    "id": "binary-search-tree-line",
+    "biome": "mountain",
+    "name": "Binary Search Treeline",
+    "location": "Dolomites, South Tyrol, Italy",
+    "palette": ["#588157", "#a3b18a", "#e9ecef", "#adb5bd", "#264653"],
+    "elements": ["alpine treeline boundary", "rocky peaks above", "mountain hut", "wildflower slope"],
+    "mood": "crisp"
+  },
+  {
+    "id": "print-hello-bioluminescence",
+    "biome": "extreme",
+    "name": "print('Hello, Bioluminescence')",
+    "location": "Luminous Lagoon, Falmouth, Jamaica",
+    "palette": ["#0b0c2a", "#00e5ff", "#00ff87", "#023e8a", "#48cae4"],
+    "elements": ["glowing boat wake", "dinoflagellate shimmer", "mangrove shore", "fisherman silhouette"],
+    "mood": "magical"
+  },
+  {
+    "id": "concurrency-at-the-confluence",
+    "biome": "ocean",
+    "name": "Concurrency at the Confluence",
+    "location": "Meeting of Waters, Manaus, Brazil",
+    "palette": ["#264653", "#6b705c", "#dda15e", "#2d6a4f", "#0077b6"],
+    "elements": ["dark Rio Negro", "sandy Amazon water", "side-by-side flow", "river dolphin"],
+    "mood": "mesmerizing"
+  },
+  {
+    "id": "race-condition-rapids",
+    "biome": "ocean",
+    "name": "Race Condition Rapids",
+    "location": "Zambezi River Rapids, Victoria Falls, Zambia",
+    "palette": ["#264653", "#2a9d8f", "#ffffff", "#48cae4", "#1b4332"],
+    "elements": ["Class V rapids", "kayaker", "basalt gorge walls", "spray mist"],
+    "mood": "chaotic"
+  },
+  {
+    "id": "read-only-petrified-forest",
+    "biome": "desert",
+    "name": "Read-Only Petrified Forest",
+    "location": "Petrified Forest National Park, Arizona, USA",
+    "palette": ["#9a8c98", "#c9ada7", "#e76f51", "#264653", "#f4a261"],
+    "elements": ["petrified logs", "painted desert stripes", "badlands terrain", "crystal cross-sections"],
+    "mood": "fossilized"
+  },
+  {
+    "id": "hash-map-of-rice-terraces",
+    "biome": "urban",
+    "name": "Hash Map of Rice Terraces",
+    "location": "Banaue Rice Terraces, Ifugao, Philippines",
+    "palette": ["#52b788", "#95d5b2", "#b7e4c7", "#dda15e", "#40916c"],
+    "elements": ["carved terrace steps", "flooded paddy mirrors", "mountain backdrop", "thatched huts"],
+    "mood": "harmonious"
+  },
+  {
+    "id": "blue-screen-of-death-valley",
+    "biome": "desert",
+    "name": "Blue Screen of Death Valley",
+    "location": "Racetrack Playa, Death Valley, California, USA",
+    "palette": ["#f8f9fa", "#dee2e6", "#adb5bd", "#6c757d", "#264653"],
+    "elements": ["sailing stones", "cracked playa surface", "mountain ring", "mystery trails"],
+    "mood": "inexplicable"
+  },
+  {
+    "id": "kubernetes-pod-of-dolphins",
+    "biome": "ocean",
+    "name": "Kubernetes Pod of Dolphins",
+    "location": "Kaikoura, South Island, New Zealand",
+    "palette": ["#0077b6", "#00b4d8", "#90e0ef", "#264653", "#e9ecef"],
+    "elements": ["dusky dolphin pod", "snow-capped Kaikouras", "whale breach", "fishing boat"],
+    "mood": "playful"
+  },
+  {
+    "id": "terraform-the-terraces",
+    "biome": "volcanic",
+    "name": "Terraform the Terraces",
+    "location": "Pamukkale Travertine Terraces, Denizli, Turkey",
+    "palette": ["#ffffff", "#caf0f8", "#90e0ef", "#48cae4", "#dda15e"],
+    "elements": ["white calcium terraces", "thermal pools", "ancient Hierapolis ruins", "sunset reflection"],
+    "mood": "layered"
+  },
+  {
+    "id": "epoch-timestamp-desert",
+    "biome": "desert",
+    "name": "Epoch Timestamp Desert",
+    "location": "Wadi Rum, Jordan",
+    "palette": ["#e76f51", "#f4a261", "#e9c46a", "#264653", "#7b2ff7"],
+    "elements": ["sandstone arches", "Bedouin camp", "camel train", "star-filled sky"],
+    "mood": "timeless"
+  },
+  {
+    "id": "infinite-loop-atoll",
+    "biome": "ocean",
+    "name": "Infinite Loop Atoll",
+    "location": "Bora Bora, French Polynesia",
+    "palette": ["#00b4d8", "#90e0ef", "#52b788", "#264653", "#dda15e"],
+    "elements": ["ring-shaped reef", "central lagoon", "Mount Otemanu", "overwater bungalows"],
+    "mood": "paradise"
+  },
+  {
+    "id": "monolith-architecture",
+    "biome": "desert",
+    "name": "Monolith Architecture",
+    "location": "Uluru, Northern Territory, Australia",
+    "palette": ["#d00000", "#e76f51", "#f4a261", "#264653", "#dda15e"],
+    "elements": ["sandstone monolith", "spinifex grass", "desert oak", "sunset color shift"],
+    "mood": "sacred"
+  },
+  {
+    "id": "ssh-tunnel-to-paradise",
+    "biome": "underground",
+    "name": "SSH Tunnel to Paradise",
+    "location": "Phong Nha Cave, Quang Binh, Vietnam",
+    "palette": ["#264653", "#2a9d8f", "#48cae4", "#caf0f8", "#343a40"],
+    "elements": ["boat entering cave mouth", "stalactite ceiling", "underground river", "spotlight beam"],
+    "mood": "adventurous"
+  },
+  {
+    "id": "docker-compose-up-the-volcano",
+    "biome": "volcanic",
+    "name": "docker compose up the Volcano",
+    "location": "Mount Bromo, East Java, Indonesia",
+    "palette": ["#495057", "#6c757d", "#e85d04", "#faa307", "#264653"],
+    "elements": ["smoking crater", "sea of sand caldera", "Hindu temple below", "sunrise light"],
+    "mood": "dramatic"
+  },
+  {
+    "id": "cache-miss-at-the-mirage",
+    "biome": "desert",
+    "name": "Cache Miss at the Mirage",
+    "location": "Namib Desert, Sossusvlei, Namibia",
+    "palette": ["#e76f51", "#f4a261", "#264653", "#48cae4", "#fefae0"],
+    "elements": ["star dune Big Daddy", "heat mirage shimmer", "oryx silhouette", "cracked vlei floor"],
+    "mood": "disorienting"
+  },
+  {
+    "id": "spawn-point-galapagos",
+    "biome": "extreme",
+    "name": "Spawn Point: Galapagos",
+    "location": "Galapagos Islands, Ecuador",
+    "palette": ["#264653", "#2a9d8f", "#e9c46a", "#1d1d1d", "#48cae4"],
+    "elements": ["marine iguana", "blue-footed booby", "volcanic shoreline", "giant tortoise"],
+    "mood": "primal"
+  },
+  {
+    "id": "version-control-tree-rings",
+    "biome": "forest",
+    "name": "Version Control Tree Rings",
+    "location": "Sequoia National Park, California, USA",
+    "palette": ["#6b3a0a", "#4a2c0a", "#588157", "#a3b18a", "#dad7cd"],
+    "elements": ["giant sequoia cross-section", "growth rings visible", "tunnel tree", "fern carpet"],
+    "mood": "ancient"
+  },
+  {
+    "id": "microservice-mesh-coral",
+    "biome": "ocean",
+    "name": "Microservice Mesh Coral",
+    "location": "Tubbataha Reef, Sulu Sea, Philippines",
+    "palette": ["#0077b6", "#ff6b6b", "#ffd166", "#52b788", "#00b4d8"],
+    "elements": ["table coral network", "reef shark patrol", "school of anthias", "drop-off wall"],
+    "mood": "interconnected"
+  },
+  {
+    "id": "env-variable-hot-springs",
+    "biome": "volcanic",
+    "name": ".env Variable Hot Springs",
+    "location": "Jigokudani Monkey Park, Nagano, Japan",
+    "palette": ["#e63946", "#ffffff", "#48cae4", "#6c757d", "#2d6a4f"],
+    "elements": ["snow monkeys bathing", "steam rising from pool", "snow-covered rocks", "bamboo fence"],
+    "mood": "content"
+  },
+  {
+    "id": "dead-code-elimination-forest",
+    "biome": "forest",
+    "name": "Dead Code Elimination Forest",
+    "location": "Hoia Baciu Forest, Cluj-Napoca, Romania",
+    "palette": ["#343a40", "#495057", "#6c757d", "#2d6a4f", "#1b4332"],
+    "elements": ["twisted tree trunks", "clearing circle", "fog layer", "bent canopy"],
+    "mood": "eerie"
+  },
+  {
+    "id": "promise-all-settled-sunset",
+    "biome": "savanna",
+    "name": "Promise.allSettled() Sunset",
+    "location": "Okavango Delta, Botswana",
+    "palette": ["#e76f51", "#f4a261", "#e9c46a", "#264653", "#2d6a4f"],
+    "elements": ["delta waterways from above", "elephant herd crossing", "papyrus reeds", "golden hour light"],
+    "mood": "resolving"
+  },
+  {
+    "id": "packet-loss-at-the-bermuda-triangle",
+    "biome": "ocean",
+    "name": "Packet Loss at the Bermuda Triangle",
+    "location": "Bermuda Triangle, North Atlantic Ocean",
+    "palette": ["#023e8a", "#0077b6", "#0096c7", "#6c757d", "#343a40"],
+    "elements": ["compass spinning", "abandoned ship", "stormy horizon", "deep trench below"],
+    "mood": "ominous"
+  },
+  {
+    "id": "heap-overflow-hot-pot",
+    "biome": "volcanic",
+    "name": "Heap Overflow Hot Pot",
+    "location": "Boiling Lake, Dominica",
+    "palette": ["#6c757d", "#adb5bd", "#48cae4", "#2d6a4f", "#e9ecef"],
+    "elements": ["boiling lake surface", "steam cloud", "volcanic crater rim", "jungle approach trail"],
+    "mood": "volatile"
+  }
+]

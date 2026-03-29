@@ -1,0 +1,58 @@
+name: Living Gallery -- Generate Scene
+
+on:
+  schedule:
+    - cron: '23 */2 * * *'  # Every 2 hours at :23
+  workflow_dispatch:
+    inputs:
+      seed_id:
+        description: 'Specific seed ID to use (optional)'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        working-directory: scripts/gallery
+        run: npm ci
+
+      - name: Generate scene
+        working-directory: scripts/gallery
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          if [ -n "${{ inputs.seed_id }}" ]; then
+            node generate-scene.js --seed-id "${{ inputs.seed_id }}"
+          else
+            node generate-scene.js
+          fi
+
+      - name: Commit and push
+        run: |
+          git config user.name "context-foundry[bot]"
+          git config user.email "bot@contextfoundry.dev"
+          git add docs/scenes/
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          SCENE_NAME=$(git diff --cached --name-only | grep '\.js$' | head -1 | xargs basename .js)
+          git commit -m "gallery: Generate scene ${SCENE_NAME}
+
+          Automated by Living Gallery workflow.
+          Model: claude-sonnet-4
+          "
+          git pull --rebase
+          git push

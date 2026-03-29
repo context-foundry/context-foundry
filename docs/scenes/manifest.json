@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "cron": "23 */2 * * *",
+  "scenes": [
+    {
+      "file": "foundry.js",
+      "name": "The Foundry",
+      "location": "",
+      "biome": "urban",
+      "generated": null,
+      "model": "human",
+      "lines": 248
+    },
+    {
+      "file": "exuma.js",
+      "name": "Where Pigs Fly (and Swim)",
+      "location": "Big Major Cay, Exuma, Bahamas",
+      "biome": "tropical-ocean",
+      "generated": null,
+      "model": "human",
+      "lines": 321
+    },
+    {
+      "file": "atacama.js",
+      "name": "Every Commit Reaches the Stars",
+      "location": "ALMA Observatory, Atacama Desert, Chile",
+      "biome": "desert",
+      "generated": null,
+      "model": "human",
+      "lines": 217
+    },
+    {
+      "file": "challenger.js",
+      "name": "Shipping Code from the Abyss",
+      "location": "Challenger Deep, Mariana Trench",
+      "biome": "deep-ocean",
+      "generated": null,
+      "model": "human",
+      "lines": 320
+    }
+  ]
+}

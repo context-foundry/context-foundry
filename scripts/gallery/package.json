@@ -1,0 +1,13 @@
+{
+  "name": "context-foundry-gallery",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "generate": "node generate-scene.js",
+    "validate": "node validate-scene.js"
+  },
+  "dependencies": {
+    "openai": "^4.80.0",
+    "canvas": "^3.1.0"
+  }
+}
