@@ -2033,3 +2033,47 @@ fn complex_task_triggers_plan_review_char() {
         TaskComplexity::Complex
     );
 }
+
+#[test]
+fn test_parallel_builder_usage_events_update_session_cost() {
+    // Parallel builder forwards Usage events via AppEvent::AgentOutput.
+    // The handle_event handler should update session_cost_usd and
+    // session_cost_millicents just like the single-builder path.
+    let mut state = AppState::new(PathBuf::from(".buildloop"));
+
+    // Simulate the app transitioning to Running phase so AgentOutput is handled
+    // by the running-phase handler (handle_agent_output).
+    state.phase = AppPhase::Running;
+
+    // Simulate Usage events from two parallel builder slots
+    handle_event(
+        &mut state,
+        AppEvent::AgentOutput(AgentOutputEvent::Usage {
+            cost_usd: 0.50,
+            input_tokens: 500,
+            output_tokens: 100,
+            context_window: 2_000,
+        }),
+        &Config::default(),
+    );
+
+    handle_event(
+        &mut state,
+        AppEvent::AgentOutput(AgentOutputEvent::Usage {
+            cost_usd: 0.75,
+            input_tokens: 800,
+            output_tokens: 200,
+            context_window: 2_000,
+        }),
+        &Config::default(),
+    );
+
+    // Verify session totals reflect both slots
+    assert!((state.session_cost_usd - 1.25).abs() < f64::EPSILON);
+    assert_eq!(state.session_input_tokens, 1_300);
+    assert_eq!(state.session_output_tokens, 300);
+    assert_eq!(
+        state.session_cost_millicents.load(Ordering::Relaxed),
+        125_000  // (0.50 + 0.75) * 100_000
+    );
+}

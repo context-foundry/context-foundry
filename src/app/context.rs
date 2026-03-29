@@ -285,4 +285,63 @@ mod tests {
         let _ = std::fs::remove_dir_all(parent_dir);
         let _ = std::fs::remove_dir_all(child_dir);
     }
+
+    #[test]
+    fn test_derive_sub_session_slot_pattern_shares_cost() {
+        let parent_dir = std::env::temp_dir().join(format!(
+            "foundry-ctx-slot-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&parent_dir).unwrap();
+
+        let mut parent = RunContext::new(
+            &parent_dir,
+            Config::default(),
+            Arc::new(AtomicBool::new(false)),
+            Arc::new(Mutex::new(())),
+            Arc::new(AtomicBool::new(false)),
+        );
+        parent.session_id = "sess-parallel-test".to_string();
+        parent.session_cost_millicents = Arc::new(AtomicU64::new(5_000));
+
+        // Simulate creating slot contexts like run_parallel_builder does
+        let mut slot_contexts = Vec::new();
+        for slot_idx in 0..3 {
+            let slot_dir = parent_dir.join(format!("slot-{}", slot_idx));
+            std::fs::create_dir_all(&slot_dir).unwrap();
+            let wt_ctx = parent.derive_sub_session(
+                Config::default(),
+                &slot_dir,
+                &format!("slot-{}", slot_idx),
+            );
+            slot_contexts.push((slot_dir, wt_ctx));
+        }
+
+        // Verify each slot has the correct sub-session ID
+        assert_eq!(slot_contexts[0].1.session_id, "sess-parallel-test/slot-0");
+        assert_eq!(slot_contexts[1].1.session_id, "sess-parallel-test/slot-1");
+        assert_eq!(slot_contexts[2].1.session_id, "sess-parallel-test/slot-2");
+
+        // Verify all slots share the same session_cost_millicents Arc as parent
+        for (_, wt_ctx) in &slot_contexts {
+            assert!(Arc::ptr_eq(
+                &wt_ctx.session_cost_millicents,
+                &parent.session_cost_millicents
+            ));
+        }
+
+        // Verify cost updates from any slot are visible in parent and all other slots
+        slot_contexts[0].1.session_cost_millicents.fetch_add(10_000, Ordering::Relaxed);
+        slot_contexts[1].1.session_cost_millicents.fetch_add(20_000, Ordering::Relaxed);
+        slot_contexts[2].1.session_cost_millicents.fetch_add(15_000, Ordering::Relaxed);
+        assert_eq!(
+            parent.session_cost_millicents.load(Ordering::Relaxed),
+            50_000  // 5_000 initial + 10_000 + 20_000 + 15_000
+        );
+
+        let _ = std::fs::remove_dir_all(parent_dir);
+    }
 }

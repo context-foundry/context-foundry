@@ -590,7 +590,6 @@ async fn run_parallel_builder(
     ops: &[FileOp],
     groups: &[Vec<usize>],
     extension_context: &str,
-    session_id: &str,
 ) -> (bool, bool, AgentUsage) {
     let task_id = &task_info.id;
     let task_desc = &task_info.description;
@@ -695,12 +694,10 @@ async fn run_parallel_builder(
             let _ = std::fs::copy(&claude_md_src, slot_dir.join("CLAUDE.md"));
         }
 
-        let wt_ctx = RunContext::new(
-            &slot_dir,
+        let wt_ctx = ctx.derive_sub_session(
             ctx.config.clone(),
-            ctx.shutdown.clone(),
-            ctx.tasks_file_lock.clone(),
-            ctx.review_gate.clone(),
+            &slot_dir,
+            &format!("slot-{}", slot_idx),
         );
 
         slot_contexts.push((slot_dir, wt_ctx));
@@ -715,8 +712,6 @@ async fn run_parallel_builder(
     // Build scoped prompts and spawn agents concurrently
     let done_counter = Arc::new(AtomicUsize::new(0));
     let mut futures_vec = Vec::new();
-
-    let session_id_owned = session_id.to_string();
 
     for (slot_idx, group) in groups.iter().enumerate() {
         // Collect raw blocks for this group
@@ -746,7 +741,7 @@ async fn run_parallel_builder(
         let slot_tx = tx.clone();
         let total = total_slots;
 
-        let slot_session_id = session_id_owned.clone();
+        let slot_session_id = slot_contexts[slot_idx].1.session_id.clone();
         let slot_project_dir_obs = ctx.project_dir.clone();
         let slot_builder_provider = ctx.config.builder_provider.clone();
         let slot_builder_model = ctx.config.builder_model.clone();
@@ -760,11 +755,17 @@ async fn run_parallel_builder(
                 let mut usage = AgentUsage::default();
                 while let Some(evt) = agent_rx.recv().await {
                     usage.accumulate(&evt);
-                    if let crate::agent::AgentOutputEvent::Text(ref text) = evt {
-                        let _ = fwd_tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                            "[slot-{}] {}",
-                            fwd_slot_idx, text
-                        ))));
+                    match evt {
+                        crate::agent::AgentOutputEvent::Text(ref text) => {
+                            let _ = fwd_tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                                "[slot-{}] {}",
+                                fwd_slot_idx, text
+                            ))));
+                        }
+                        crate::agent::AgentOutputEvent::Usage { .. } => {
+                            let _ = fwd_tx.send(AppEvent::AgentOutput(evt));
+                        }
+                        _ => {}
                     }
                 }
                 usage
@@ -3469,7 +3470,7 @@ async fn process_task(
                 format!("Parallel builder: budget model override ({}/{}) discarded (unsupported in parallel mode)", p, m)
             )));
         }
-        let (p_ok, p_rl, p_usage) = run_parallel_builder(task_info, ctx, tx, file_ops, groups, extension_context, &ctx.session_id).await;
+        let (p_ok, p_rl, p_usage) = run_parallel_builder(task_info, ctx, tx, file_ops, groups, extension_context).await;
 
         // Budget telemetry: Parallel Builder (aggregated across all slots)
         if ctx.config.budget_recovery_enabled {
