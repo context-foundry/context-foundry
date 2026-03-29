@@ -132,6 +132,20 @@ pub(super) async fn run_review_loop(
         }
     }
 
+    // Helper: restore phase isolation with TUI-visible error logging.
+    // Called explicitly before every return to avoid relying on Drop's eprintln!.
+    let restore_phase_guard = |phase_guard: &mut Option<isolation::PhaseIsolation>,
+                                tx: &mpsc::UnboundedSender<AppEvent>| {
+        if let Some(mut guard) = phase_guard.take() {
+            if let Err(e) = guard.restore() {
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                    "Phase isolation: restore failed -- {}",
+                    e,
+                ))));
+            }
+        }
+    };
+
     // Multi-pass review: when file count exceeds threshold, run per-file
     // analysis passes followed by a cross-file integration pass.
     let threshold = ctx.config.review_multipass_threshold;
@@ -158,6 +172,7 @@ pub(super) async fn run_review_loop(
         .await;
         let _ = tx.send(AppEvent::AgentDone(result.0));
         let (passed, fixes, findings, multipass_budget) = result;
+        restore_phase_guard(&mut phase_guard, tx);
         return (passed, fixes, findings, multipass_budget);
     }
 
@@ -290,6 +305,7 @@ pub(super) async fn run_review_loop(
             fix_passes: 0,
             passed: false,
         }));
+        restore_phase_guard(&mut phase_guard, tx);
         return (false, 0, (0, 0, 0), reviewer_budget_record);
     }
 
@@ -321,6 +337,7 @@ pub(super) async fn run_review_loop(
             fix_passes,
             passed: false,
         }));
+        restore_phase_guard(&mut phase_guard, tx);
         return (false, fix_passes, (0, 0, 0), reviewer_budget_record);
     }
 
@@ -382,16 +399,8 @@ pub(super) async fn run_review_loop(
         ))));
     }
 
-    // Restore hidden artifacts (explicit restore for error reporting on success path;
-    // early returns rely on the Drop safety net)
-    if let Some(mut guard) = phase_guard.take() {
-        if let Err(e) = guard.restore() {
-            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                "Phase isolation: restore failed -- {}",
-                e,
-            ))));
-        }
-    }
+    // Restore hidden artifacts (explicit restore for TUI-visible error reporting)
+    restore_phase_guard(&mut phase_guard, tx);
 
     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::TaskReviewResult {
         task_id: task_id.to_string(),
