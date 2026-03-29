@@ -81,10 +81,21 @@ impl PhaseIsolation {
                 }
                 Err(e) => {
                     // Roll back all files already moved in earlier iterations
+                    let mut rollback_ok = true;
                     for (original, temp) in &hidden {
-                        let _ = move_file(temp, original);
+                        if move_file(temp, original).is_err() {
+                            rollback_ok = false;
+                        }
                     }
-                    let _ = std::fs::remove_dir_all(&staging_dir);
+                    if rollback_ok {
+                        let _ = std::fs::remove_dir_all(&staging_dir);
+                    } else {
+                        eprintln!(
+                            "WARNING: PhaseIsolation::activate() rollback failed to restore \
+                             all files. Staging directory preserved at: {}",
+                            staging_dir.display(),
+                        );
+                    }
                     return Err(e);
                 }
             }
@@ -564,6 +575,68 @@ mod tests {
         assert_eq!(
             restored_count, 1,
             "only one file should be restored when one temp file is missing"
+        );
+
+        // Cleanup
+        let _ = fs::remove_dir_all(&staging_dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    #[serial]
+    fn test_activate_rollback_preserves_staging_when_move_back_fails() {
+        // This tests the invariant implemented in activate()'s Err handler:
+        // if any rollback move_file fails, staging_dir must be preserved.
+        // We recreate the rollback scenario directly because we cannot make
+        // a rollback fail through the public API (synchronous, no mid-call
+        // filesystem state change possible).
+
+        // Set up a staging dir with two files (simulating already-moved files)
+        let staging_dir = std::env::temp_dir()
+            .join(format!(".foundry-isolation-test-rollback-{}", std::process::id()));
+        fs::create_dir_all(&staging_dir).unwrap();
+        let temp_a = staging_dir.join("a.md");
+        let temp_b = staging_dir.join("b.md");
+        fs::write(&temp_a, "content-a").unwrap();
+        fs::write(&temp_b, "content-b").unwrap();
+
+        // Original paths: dir_a exists (rollback will succeed), dir_b does not (rollback will fail)
+        let dir_a = tempfile::tempdir().unwrap();
+        let original_a = dir_a.path().join("a.md");
+        // dir_b is gone -- simulates parent deleted during agent phase
+        let original_b = PathBuf::from("/tmp/nonexistent-foundry-test-dir/b.md");
+        assert!(!original_b.parent().unwrap().exists());
+
+        let mut hidden = HashMap::new();
+        hidden.insert(original_a.clone(), temp_a.clone());
+        hidden.insert(original_b.clone(), temp_b.clone());
+
+        // Execute the same rollback logic as activate()'s Err handler
+        let mut rollback_ok = true;
+        for (original, temp) in &hidden {
+            if move_file(temp, original).is_err() {
+                rollback_ok = false;
+            }
+        }
+        if rollback_ok {
+            let _ = fs::remove_dir_all(&staging_dir);
+        }
+        // (In production code, the else branch logs a warning)
+
+        // Staging dir MUST be preserved because file_b's rollback failed
+        assert!(
+            staging_dir.exists(),
+            "staging dir must be preserved when rollback move_file fails"
+        );
+
+        // file_a should have been moved back to its original location
+        assert!(original_a.exists(), "file_a should be rolled back");
+        assert_eq!(fs::read_to_string(&original_a).unwrap(), "content-a");
+
+        // file_b's content must still be in the staging dir (last surviving copy)
+        assert!(
+            temp_b.exists() || staging_dir.join("b.md").exists(),
+            "file_b content must survive in staging dir"
         );
 
         // Cleanup

@@ -317,7 +317,7 @@ impl Default for Config {
             auto_push_remote: None,
             semantic_match_enabled: true,
             embedding_model: "nomic-embed-text".into(),
-            ollama_url: "http://127.0.0.1:11435".into(),
+            ollama_url: "http://127.0.0.1:11434".into(),
             embedding_timeout_ms: 2000,
             orchestrator_proposer_provider: "claude".into(),
             orchestrator_proposer_model: "opus".into(),
