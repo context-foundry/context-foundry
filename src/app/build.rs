@@ -1138,12 +1138,10 @@ fn run_dual_pipelines<'a>(
             }
 
             // Create RunContext for this worktree
-            let wt_ctx = RunContext::new(
-                &wt_path,
+            let wt_ctx = ctx.derive_sub_session(
                 pipeline_config,
-                ctx.shutdown.clone(),
-                ctx.tasks_file_lock.clone(),
-                ctx.review_gate.clone(),
+                &wt_path,
+                &format!("pipeline-{}", idx),
             );
 
             wt_contexts.push((wt_path, wt_ctx));
@@ -2149,13 +2147,7 @@ async fn process_task(
             }
             DualSelection::First | DualSelection::Second if selected_configs.len() == 1 => {
                 let pipeline_config = selected_configs[0].clone();
-                let override_ctx = RunContext::new(
-                    &ctx.project_dir,
-                    pipeline_config,
-                    ctx.shutdown.clone(),
-                    ctx.tasks_file_lock.clone(),
-                    ctx.review_gate.clone(),
-                );
+                let override_ctx = ctx.derive(pipeline_config);
                 // Box::pin to break async recursion (override_ctx has dual_selection cleared)
                 return Box::pin(process_task(
                     task_info,

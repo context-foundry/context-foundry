@@ -169,4 +169,120 @@ impl RunContext {
     pub(super) fn tasks_file_prompt_path(&self) -> String {
         self.plan_path.display().to_string()
     }
+
+    /// Create a derived RunContext that inherits session_id and
+    /// session_cost_millicents from self, but uses a new Config.
+    /// Used by DualSelection::First/Second where only one pipeline runs.
+    pub(super) fn derive(&self, config: Config) -> Self {
+        let mut ctx = RunContext::new(
+            &self.project_dir,
+            config,
+            self.shutdown.clone(),
+            self.tasks_file_lock.clone(),
+            self.review_gate.clone(),
+        );
+        ctx.session_id = self.session_id.clone();
+        ctx.session_cost_millicents = self.session_cost_millicents.clone();
+        ctx
+    }
+
+    /// Create a derived RunContext for a worktree-based sub-pipeline
+    /// (DualSelection::Both). Uses a different project_dir and generates
+    /// a sub-session ID like "{parent_session_id}/pipeline-0" for
+    /// telemetry disambiguation.
+    pub(super) fn derive_sub_session(
+        &self,
+        config: Config,
+        project_dir: &Path,
+        sub_label: &str,
+    ) -> Self {
+        let mut ctx = RunContext::new(
+            project_dir,
+            config,
+            self.shutdown.clone(),
+            self.tasks_file_lock.clone(),
+            self.review_gate.clone(),
+        );
+        ctx.session_id = format!("{}/{}", self.session_id, sub_label);
+        ctx.session_cost_millicents = self.session_cost_millicents.clone();
+        ctx
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::RunContext;
+    use crate::config::Config;
+    use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+    use std::sync::{Arc, Mutex};
+
+    #[test]
+    fn test_derive_inherits_session_id_and_cost() {
+        let dir = std::env::temp_dir().join(format!(
+            "foundry-ctx-derive-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let mut parent = RunContext::new(
+            &dir,
+            Config::default(),
+            Arc::new(AtomicBool::new(false)),
+            Arc::new(Mutex::new(())),
+            Arc::new(AtomicBool::new(false)),
+        );
+        parent.session_id = "sess-abc-123".to_string();
+        parent.session_cost_millicents = Arc::new(AtomicU64::new(42_000));
+
+        let child = parent.derive(Config::default());
+        assert_eq!(child.session_id, "sess-abc-123");
+        // Must share the same Arc, not a copy
+        assert!(Arc::ptr_eq(&child.session_cost_millicents, &parent.session_cost_millicents));
+        // Mutating one is visible in the other
+        child.session_cost_millicents.fetch_add(1000, Ordering::Relaxed);
+        assert_eq!(parent.session_cost_millicents.load(Ordering::Relaxed), 43_000);
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn test_derive_sub_session_generates_sub_id_and_shares_cost() {
+        let parent_dir = std::env::temp_dir().join(format!(
+            "foundry-ctx-subsess-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let child_dir = std::env::temp_dir().join(format!(
+            "foundry-ctx-subsess-wt-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&parent_dir).unwrap();
+        std::fs::create_dir_all(&child_dir).unwrap();
+
+        let mut parent = RunContext::new(
+            &parent_dir,
+            Config::default(),
+            Arc::new(AtomicBool::new(false)),
+            Arc::new(Mutex::new(())),
+            Arc::new(AtomicBool::new(false)),
+        );
+        parent.session_id = "sess-xyz-789".to_string();
+        parent.session_cost_millicents = Arc::new(AtomicU64::new(10_000));
+
+        let child = parent.derive_sub_session(Config::default(), &child_dir, "pipeline-0");
+        assert_eq!(child.session_id, "sess-xyz-789/pipeline-0");
+        assert_eq!(child.project_dir, child_dir);
+        assert!(Arc::ptr_eq(&child.session_cost_millicents, &parent.session_cost_millicents));
+
+        let _ = std::fs::remove_dir_all(parent_dir);
+        let _ = std::fs::remove_dir_all(child_dir);
+    }
 }

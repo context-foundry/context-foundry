@@ -376,7 +376,7 @@ mod tests {
     #[serial]
     fn test_restore_partial_failure_triggers_drop_recovery() {
         let (_dir, paths) = setup_temp_files(&["a.md", "b.md"]);
-        let mut guard = PhaseIsolation::activate(&paths).unwrap();
+        let _guard = PhaseIsolation::activate(&paths).unwrap();
         assert!(!paths[0].exists());
         assert!(!paths[1].exists());
 
@@ -393,7 +393,7 @@ mod tests {
         //
         // To trigger a move_file failure: remove the parent directory of
         // one original path so the move destination is invalid.
-        let parent_1 = paths[1].parent().unwrap();
+        let _parent_1 = paths[1].parent().unwrap();
         // paths share the same parent (tempdir), so we can't remove it.
         // Instead, directly verify the flag behavior: after the fix,
         // restored should be false if restore() returns Err.
