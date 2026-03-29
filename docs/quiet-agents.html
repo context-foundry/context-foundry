@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Why Your AI Agents Won't Shut Up -- Context Foundry</title>
+  <meta name="description" content="How SILENT EXECUTION directives and AUTONOMY_OVERRIDE cut token waste in autonomous build loops.">
+  <meta property="og:title" content="Why Your AI Agents Won't Shut Up -- Context Foundry">
+  <meta property="og:description" content="How SILENT EXECUTION directives and AUTONOMY_OVERRIDE cut token waste in autonomous build loops.">
+  <meta property="og:image" content="assets/og-card-1200x630.png">
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://contextfoundry.dev/quiet-agents.html">
+  <link rel="icon" type="image/png" href="assets/favicon-square-512.png">
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --border: #30363d;
+      --text: #e6edf3;
+      --text-muted: #8b949e;
+      --accent: #f0a500;
+      --accent-subtle: rgba(240, 165, 0, 0.15);
+      --radius: 4px;
+      --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+    }
+    * { box-sizing: border-box; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 0.9rem;
+      line-height: 1.7;
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 3rem 1.5rem;
+    }
+    h1 {
+      color: var(--accent);
+      font-size: 1.5rem;
+      border-bottom: 2px solid var(--accent);
+      padding-bottom: 0.5rem;
+      margin-bottom: 0.25rem;
+    }
+    h2 {
+      color: var(--accent);
+      font-size: 1.15rem;
+      border-left: 3px solid var(--accent);
+      padding-left: 0.75rem;
+      margin-top: 2.5rem;
+      margin-bottom: 0.75rem;
+    }
+    h3 {
+      color: var(--text);
+      font-size: 1rem;
+      margin-top: 1.75rem;
+      margin-bottom: 0.5rem;
+    }
+    p { margin: 0.75rem 0; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    pre {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem 1.25rem;
+      overflow-x: auto;
+      font-size: 0.85rem;
+      line-height: 1.5;
+    }
+    code {
+      background: var(--surface);
+      padding: 0.15rem 0.4rem;
+      border-radius: var(--radius);
+      font-size: 0.85rem;
+    }
+    pre code { background: none; padding: 0; }
+    blockquote {
+      border-left: 3px solid var(--accent);
+      margin: 1.25rem 0;
+      padding: 0.5rem 1rem;
+      background: var(--accent-subtle);
+      border-radius: 0 var(--radius) var(--radius) 0;
+    }
+    blockquote p { margin: 0.25rem 0; }
+    .hook {
+      font-size: 1.05rem;
+      color: var(--text);
+      margin-bottom: 0.25rem;
+    }
+    .subtitle {
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      margin-top: 0;
+    }
+    .muted { color: var(--text-muted); }
+    .gh-corner { position: fixed; top: 1rem; right: 1.5rem; z-index: 10; }
+    .gh-corner a { color: var(--text-muted); transition: color 0.15s; }
+    .gh-corner a:hover { color: var(--accent); }
+    footer {
+      margin-top: 3rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--border);
+      color: var(--text-muted);
+      font-size: 0.8rem;
+    }
+    svg text { font-family: var(--font-mono); }
+    @media print {
+      body { background: white; color: black; max-width: none; padding: 0.5in; }
+      pre { border: 1px solid #ccc; }
+      h1, h2 { color: #333; }
+      footer { color: #666; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="gh-corner">
+  <a href="https://github.com/context-foundry/context-foundry" title="View on GitHub">
+    <svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
+      <path d="M14 1 C6.8 1 1 6.8 1 14 C1 19.7 4.7 24.5 9.8 26.2 C10.4 26.3 10.6 25.9 10.6 25.6 C10.6 25.3 10.6 24.4 10.6 23.3 C7.2 24.1 6.5 21.7 6.5 21.7 C5.9 20.2 5.1 19.8 5.1 19.8 C4 19 5.2 19 5.2 19 C6.4 19.1 7 20.3 7 20.3 C8.1 22.2 9.9 21.6 10.7 21.3 C10.8 20.5 11.1 19.9 11.5 19.6 C8.7 19.3 5.8 18.2 5.8 13.2 C5.8 11.8 6.3 10.7 7.1 9.8 C6.9 9.5 6.5 8.2 7.2 6.5 C7.2 6.5 8.2 6.2 10.6 7.8 C11.5 7.6 12.5 7.4 13.5 7.4 C14.5 7.4 15.5 7.6 16.4 7.8 C18.8 6.2 19.8 6.5 19.8 6.5 C20.5 8.2 20.1 9.5 19.9 9.8 C20.7 10.7 21.2 11.8 21.2 13.2 C21.2 18.2 18.3 19.3 15.5 19.6 C15.9 20 16.3 20.7 16.3 21.9 C16.3 23.5 16.3 24.8 16.3 25.5 C16.3 25.9 16.5 26.3 17.2 26.2 C22.3 24.5 26 19.7 26 14 C26 6.8 20.2 1 14 1 Z" fill="currentColor"/>
+    </svg>
+  </a>
+</div>
+
+<header>
+  <p class="muted"><a href="index.html">contextfoundry.dev</a></p>
+  <h1>Why Your AI Agents Won't Shut Up</h1>
+  <p class="hook">Cutting token waste in autonomous build loops.</p>
+  <p class="subtitle">Context Foundry v0.7.4</p>
+</header>
+
+<section id="problem">
+  <h2>The problem</h2>
+  <p>Run an AI coding agent in an autonomous loop and watch the output. You will see something like this:</p>
+  <pre><code>Now I will read the file src/main.rs to understand the current structure.
+Let me check the tests to make sure nothing is broken.
+I'll now modify the function to add the new parameter.
+Let me verify the build passes after my changes.</code></pre>
+  <p>Every action is narrated. Every tool call is preceded by an explanation of what it does and why. This is useful when a human is watching -- it builds trust and makes the agent's reasoning transparent. But in a build loop, there is no human watching. The only consumer of this output is an orchestrator that parses tool calls and routes results between pipeline stages.</p>
+  <p>Those narration tokens cost money. Worse, they consume context window space that could hold actual code. An agent that spends 300 tokens explaining what it is about to do before each tool call will burn through its context budget substantially faster than one that just executes.</p>
+</section>
+
+<section id="why">
+  <h2>Why agents narrate</h2>
+  <p>The default system prompt for most AI coding tools instructs the agent to communicate with the user. This is the right behavior for interactive sessions -- you want to know what the agent is doing and why. The agent is trained to be helpful, and narration is how it demonstrates helpfulness.</p>
+  <p>The problem is that build loops are not interactive sessions. The orchestrator does not need to be told "Now I will read the file." It issued the instruction. It knows what the agent should be doing. The narration is dead weight.</p>
+  <p>Some agents narrate even more aggressively when they encounter uncertainty. Instead of just making a tool call, they produce a paragraph of reasoning about which approach to take, then another paragraph justifying the choice, then finally the tool call. In interactive mode, this is sometimes helpful. In a build loop, it is pure waste.</p>
+</section>
+
+<section id="fix">
+  <h2>The fix: SILENT EXECUTION</h2>
+  <p>Context Foundry v0.7.4 injects two directives into every agent prompt:</p>
+  <pre><code>EXECUTION STYLE: Execute tool calls directly. Do not narrate
+your actions. Do not explain what you are about to do before
+doing it. Output only results and error messages.
+
+SILENT EXECUTION: You are running inside an automated pipeline.
+There is no human watching. Minimize text output between tool
+calls. The orchestrator only reads tool call results.</code></pre>
+  <p>These override the default chattiness. The agent still reasons internally (extended thinking is unaffected), but it stops producing paragraphs of narration between tool calls. The output becomes a clean sequence of tool calls and their results.</p>
+  <p>The directives are injected into builder, reviewer, and fixer prompts -- every agent that runs inside the pipeline. Scout and planner prompts are left verbose because their text output is the artifact (the scout report and the plan).</p>
+</section>
+
+<section id="claude-md">
+  <h2>Removing CLAUDE.md from agent context</h2>
+  <p>Before v0.7.4, every agent invocation read the project's <code>CLAUDE.md</code> file. This file typically contains coding conventions, project structure notes, and workflow instructions. It is useful for interactive sessions where the agent needs to understand the project's norms.</p>
+  <p>In a build loop, <code>CLAUDE.md</code> is the wrong place for conventions. The pipeline already has a <code>SPEC.md</code> that describes what to build and how. The scout report describes the codebase. The plan describes the implementation steps. Adding <code>CLAUDE.md</code> on top of these means the agent is reading overlapping information from multiple sources, paying tokens for each one.</p>
+  <p>The fix: replace <code>CLAUDE.md</code> reading with a lightweight <code>AUTONOMY_OVERRIDE</code> injected via <code>--append-system-prompt</code>:</p>
+  <pre><code>AUTONOMY_OVERRIDE: You are an autonomous agent in a build pipeline.
+Do not read CLAUDE.md. Your instructions come from the pipeline
+artifacts: SPEC.md, scout-report.md, and current-plan.md. Follow
+the plan exactly. Do not deviate to follow conventions from other
+sources.</code></pre>
+  <p>This is a single system prompt injection -- not a file read. It costs a fixed number of tokens regardless of how large the project's <code>CLAUDE.md</code> is.</p>
+</section>
+
+<section id="impact">
+  <h2>Token impact</h2>
+  <p>The savings come from two sources:</p>
+  <blockquote>
+    <p><strong>Reduced narration:</strong> ~500--1000 tokens saved per agent invocation. A typical pipeline runs 4--8 agent invocations per task, so this adds up to 2000--8000 tokens per task.</p>
+  </blockquote>
+  <blockquote>
+    <p><strong>No CLAUDE.md read:</strong> ~2000--4000 tokens saved per invocation, depending on file size. Over a full pipeline, this is 8000--32000 tokens.</p>
+  </blockquote>
+  <p>For a project with a 3000-token <code>CLAUDE.md</code> running 6 agent invocations per task, the combined savings are roughly 21000--38000 tokens per task. At typical API pricing, this is not negligible -- especially for projects that run dozens of tasks per session.</p>
+</section>
+
+<section id="tradeoff">
+  <h2>The trade-off</h2>
+  <p>Coding conventions that live only in <code>CLAUDE.md</code> will not be picked up by pipeline agents. If your <code>CLAUDE.md</code> says "use snake_case for function names" and your <code>SPEC.md</code> does not, the builder will not know about that convention.</p>
+  <p>This is intentional. The build loop should be self-contained. Everything the builder needs should be in <code>SPEC.md</code>, the scout report, or the plan. If a convention matters for the build, it belongs in one of those artifacts -- not in a side file that gets read on every invocation.</p>
+  <p>Interactive Claude Code sessions still read <code>CLAUDE.md</code> normally. This change only affects agents running inside the Context Foundry pipeline.</p>
+</section>
+
+<footer>
+  <a href="index.html">Context Foundry</a> &middot;
+  <a href="https://github.com/context-foundry/context-foundry">GitHub</a> &middot;
+  <a href="changelog.html">Changelog</a>
+</footer>
+
+</body>
+</html>

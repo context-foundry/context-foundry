@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>When Two Builders Edit the Same File -- Context Foundry</title>
+  <meta name="description" content="How Context Foundry detects and logs conflicts when parallel builders modify the same files in dual-model arena mode.">
+  <meta property="og:title" content="When Two Builders Edit the Same File -- Context Foundry">
+  <meta property="og:description" content="How Context Foundry detects and logs conflicts when parallel builders modify the same files in dual-model arena mode.">
+  <meta property="og:image" content="assets/og-card-1200x630.png">
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://contextfoundry.dev/parallel-conflicts.html">
+  <link rel="icon" type="image/png" href="assets/favicon-square-512.png">
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --border: #30363d;
+      --text: #e6edf3;
+      --text-muted: #8b949e;
+      --accent: #f0a500;
+      --accent-subtle: rgba(240, 165, 0, 0.15);
+      --radius: 4px;
+      --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+    }
+    * { box-sizing: border-box; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 0.9rem;
+      line-height: 1.7;
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 3rem 1.5rem;
+    }
+    h1 {
+      color: var(--accent);
+      font-size: 1.5rem;
+      border-bottom: 2px solid var(--accent);
+      padding-bottom: 0.5rem;
+      margin-bottom: 0.25rem;
+    }
+    h2 {
+      color: var(--accent);
+      font-size: 1.15rem;
+      border-left: 3px solid var(--accent);
+      padding-left: 0.75rem;
+      margin-top: 2.5rem;
+      margin-bottom: 0.75rem;
+    }
+    h3 {
+      color: var(--text);
+      font-size: 1rem;
+      margin-top: 1.75rem;
+      margin-bottom: 0.5rem;
+    }
+    p { margin: 0.75rem 0; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    pre {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem 1.25rem;
+      overflow-x: auto;
+      font-size: 0.85rem;
+      line-height: 1.5;
+    }
+    code {
+      background: var(--surface);
+      padding: 0.15rem 0.4rem;
+      border-radius: var(--radius);
+      font-size: 0.85rem;
+    }
+    pre code { background: none; padding: 0; }
+    blockquote {
+      border-left: 3px solid var(--accent);
+      margin: 1.25rem 0;
+      padding: 0.5rem 1rem;
+      background: var(--accent-subtle);
+      border-radius: 0 var(--radius) var(--radius) 0;
+    }
+    blockquote p { margin: 0.25rem 0; }
+    .hook {
+      font-size: 1.05rem;
+      color: var(--text);
+      margin-bottom: 0.25rem;
+    }
+    .subtitle {
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      margin-top: 0;
+    }
+    .muted { color: var(--text-muted); }
+    .finding-list {
+      list-style: none;
+      padding: 0;
+    }
+    .finding-list li {
+      padding: 0.4rem 0.75rem;
+      margin: 0.35rem 0;
+      background: var(--surface);
+      border-left: 3px solid #f04040;
+      border-radius: 0 var(--radius) var(--radius) 0;
+      font-size: 0.85rem;
+    }
+    .finding-list li.medium { border-left-color: var(--accent); }
+    .finding-list li.low { border-left-color: var(--border); }
+    .gh-corner { position: fixed; top: 1rem; right: 1.5rem; z-index: 10; }
+    .gh-corner a { color: var(--text-muted); transition: color 0.15s; }
+    .gh-corner a:hover { color: var(--accent); }
+    footer {
+      margin-top: 3rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--border);
+      color: var(--text-muted);
+      font-size: 0.8rem;
+    }
+    svg text { font-family: var(--font-mono); }
+    @media print {
+      body { background: white; color: black; max-width: none; padding: 0.5in; }
+      pre { border: 1px solid #ccc; }
+      h1, h2 { color: #333; }
+      footer { color: #666; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="gh-corner">
+  <a href="https://github.com/context-foundry/context-foundry" title="View on GitHub">
+    <svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
+      <path d="M14 1 C6.8 1 1 6.8 1 14 C1 19.7 4.7 24.5 9.8 26.2 C10.4 26.3 10.6 25.9 10.6 25.6 C10.6 25.3 10.6 24.4 10.6 23.3 C7.2 24.1 6.5 21.7 6.5 21.7 C5.9 20.2 5.1 19.8 5.1 19.8 C4 19 5.2 19 5.2 19 C6.4 19.1 7 20.3 7 20.3 C8.1 22.2 9.9 21.6 10.7 21.3 C10.8 20.5 11.1 19.9 11.5 19.6 C8.7 19.3 5.8 18.2 5.8 13.2 C5.8 11.8 6.3 10.7 7.1 9.8 C6.9 9.5 6.5 8.2 7.2 6.5 C7.2 6.5 8.2 6.2 10.6 7.8 C11.5 7.6 12.5 7.4 13.5 7.4 C14.5 7.4 15.5 7.6 16.4 7.8 C18.8 6.2 19.8 6.5 19.8 6.5 C20.5 8.2 20.1 9.5 19.9 9.8 C20.7 10.7 21.2 11.8 21.2 13.2 C21.2 18.2 18.3 19.3 15.5 19.6 C15.9 20 16.3 20.7 16.3 21.9 C16.3 23.5 16.3 24.8 16.3 25.5 C16.3 25.9 16.5 26.3 17.2 26.2 C22.3 24.5 26 19.7 26 14 C26 6.8 20.2 1 14 1 Z" fill="currentColor"/>
+    </svg>
+  </a>
+</div>
+
+<header>
+  <p class="muted"><a href="index.html">contextfoundry.dev</a></p>
+  <h1>When Two Builders Edit the Same File</h1>
+  <p class="hook">Conflict detection in parallel worktree builds.</p>
+  <p class="subtitle">Context Foundry v0.7.4</p>
+</header>
+
+<section id="problem">
+  <h2>The problem</h2>
+  <p>Context Foundry's dual-model arena mode runs two builders in parallel. Each builder works in its own git worktree -- an isolated copy of the project directory. They receive the same plan, but different models may implement it differently. When both finish, the orchestrator merges their worktrees back into the main working directory.</p>
+  <p>This is where things get interesting. If builder A modifies <code>src/main.rs</code> and builder B also modifies <code>src/main.rs</code>, you have a conflict. If builder A deletes <code>src/old_module.rs</code> and builder B modifies it, you have a different kind of conflict. If both delete the same file, that is fine -- the intent is the same.</p>
+  <p>Before v0.7.4, the merge loop did not detect these cases. It silently overwrote files. Whichever builder finished second won. File deletions from one builder could disappear entirely because the other builder's copy was written on top.</p>
+</section>
+
+<section id="types">
+  <h2>Conflict types</h2>
+  <p>The merge loop now classifies every file operation into one of four categories:</p>
+  <ul class="finding-list">
+    <li><strong>COPY-COPY CONFLICT</strong> -- Both builders modified the same file with different content. This is the classic merge conflict. One version must win.</li>
+    <li class="medium"><strong>DELETE-MODIFY CONFLICT</strong> -- One builder deleted a file that the other builder modified. The intent is ambiguous: should the file exist with modifications, or not exist at all?</li>
+    <li class="low"><strong>DELETE-DELETE</strong> -- Both builders deleted the same file. No conflict -- the outcome is the same either way.</li>
+    <li class="low"><strong>COPY-COPY IDENTICAL</strong> -- Both builders modified the same file to the same content. No conflict -- the outcome is the same either way.</li>
+  </ul>
+</section>
+
+<section id="before">
+  <h2>Before: silent overwrites</h2>
+  <p>The original merge loop was naive:</p>
+  <pre><code>for file in worktree_0.changed_files():
+    copy(worktree_0/file, main/file)
+
+for file in worktree_1.changed_files():
+    copy(worktree_1/file, main/file)  // overwrites worktree_0's version</code></pre>
+  <p>If both builders modified <code>src/config.rs</code>, the second copy silently replaced the first. If builder 0 deleted a file and builder 1 modified it, the deletion was lost because the copy from builder 1 recreated the file. No log message, no warning, no record that a conflict occurred.</p>
+  <p>This produced subtle bugs. The reviewer would see the merged result and have no way to know that an alternative implementation existed in the other worktree, or that a deletion was silently undone.</p>
+</section>
+
+<section id="fix">
+  <h2>The fix: detect, log, resolve</h2>
+  <p>The merge loop now tracks the full set of file operations from both builders before applying any of them. It builds a map of every file that was created, modified, or deleted in each worktree, then compares the two maps to find conflicts.</p>
+  <pre><code>// Build operation maps
+let ops_0 = collect_file_ops(worktree_0);
+let ops_1 = collect_file_ops(worktree_1);
+
+// Find conflicts
+for file in ops_0.keys().union(ops_1.keys()):
+    match (ops_0.get(file), ops_1.get(file)):
+        (Some(Copy(a)), Some(Copy(b))) if a != b =>
+            log("COPY-COPY CONFLICT: {file}")
+            apply(ops_0[file])  // pipeline-0 wins
+        (Some(Delete), Some(Copy(_))) =>
+            log("DELETE-MODIFY CONFLICT: {file}")
+            apply(ops_1[file])  // keep the modification
+        (Some(Copy(_)), Some(Delete)) =>
+            log("DELETE-MODIFY CONFLICT: {file}")
+            apply(ops_0[file])  // keep the modification
+        (Some(Delete), Some(Delete)) =>
+            apply(ops_0[file])  // both agree
+        _ =>
+            apply_non_conflicting(file)</code></pre>
+  <p>The resolution strategy is deterministic: for COPY-COPY conflicts, pipeline-0 (the first builder) wins. For DELETE-MODIFY conflicts, the modification wins over the deletion. These defaults are safe -- they preserve work rather than destroying it -- and the conflicts are logged so you can review the decisions.</p>
+</section>
+
+<section id="tui">
+  <h2>What you see</h2>
+  <p>When conflicts occur, the TUI log pane shows each one:</p>
+  <pre><code>[warn] COPY-COPY CONFLICT: src/main.rs modified by both builders, keeping pipeline-0 version
+[warn] COPY-COPY CONFLICT: src/config.rs modified by both builders, keeping pipeline-0 version
+[warn] DELETE-MODIFY CONFLICT: src/old_module.rs deleted by pipeline-0, modified by pipeline-1, keeping modification
+[info] Merge complete: 14 files applied, 3 conflicts resolved</code></pre>
+  <p>The warnings are persistent in the log -- they do not scroll away. After a parallel build, you can scroll up through the log to see every conflict that was resolved and how.</p>
+</section>
+
+<section id="algorithm">
+  <h2>The merge algorithm</h2>
+  <p>The full merge is more nuanced than the simplified pseudocode above. Files are not independent -- a change in one file might reference a type defined in another file that was also changed. The merge algorithm handles this in two phases:</p>
+  <p><strong>Phase 1: Classify operations.</strong> Walk both worktrees and collect every file operation (create, modify, delete) with content hashes. Group files that have cross-references into dependency clusters.</p>
+  <p><strong>Phase 2: Apply operations.</strong> Independent files (no cross-references) are applied directly. Files in the same dependency cluster are applied together, with conflict detection within the cluster. If a cluster has any COPY-COPY conflicts, the entire cluster is taken from pipeline-0 to maintain internal consistency.</p>
+  <p>Copy and delete failures are no longer swallowed. If a filesystem operation fails during merge (permissions, disk full, path too long), the error is logged and the merge aborts rather than producing a half-applied result.</p>
+</section>
+
+<section id="future">
+  <h2>Future: semantic merge</h2>
+  <p>The current approach is file-level. If both builders modify <code>src/main.rs</code> but touch different functions, it is still a COPY-COPY conflict because the file content differs. A smarter approach would be AST-level merge -- parse both versions, identify which syntax nodes changed, and merge non-overlapping changes automatically.</p>
+  <p>This is possible (tree-sitter provides fast incremental parsing for most languages) but not implemented. The file-level approach is safe, observable, and covers the common case. Most parallel builder conflicts are genuine disagreements about how to implement something, not independent edits to different parts of the same file.</p>
+  <p>For now, the right response to frequent COPY-COPY conflicts is to improve the plan's specificity so both builders converge on the same implementation -- not to build a smarter merge.</p>
+</section>
+
+<footer>
+  <a href="index.html">Context Foundry</a> &middot;
+  <a href="https://github.com/context-foundry/context-foundry">GitHub</a> &middot;
+  <a href="changelog.html">Changelog</a>
+</footer>
+
+</body>
+</html>
