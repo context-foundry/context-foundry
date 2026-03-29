@@ -459,7 +459,8 @@ pub(super) async fn run_headless(project_dir: &Path, output_format: Option<Strin
                 | LoopEvent::DualBuildStarted { .. }
                 | LoopEvent::DualBuildStreamDone(_, _)
                 | LoopEvent::ParallelBuilderProgress { .. }
-                | LoopEvent::TmuxSessionStarted(_) => {}
+                | LoopEvent::TmuxSessionStarted(_)
+                | LoopEvent::BudgetOverrun { .. } => {}
                 LoopEvent::PrApproved(pr_num) => {
                     eprintln!("[log] PR #{} approved -- resuming pipeline", pr_num);
                 }

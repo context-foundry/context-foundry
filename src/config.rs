@@ -2,6 +2,7 @@ use serde::Deserialize;
 use std::path::Path;
 
 use crate::agent::ModelProvider;
+use crate::budget::BudgetTargets;
 
 fn default_true() -> bool {
     true
@@ -9,6 +10,10 @@ fn default_true() -> bool {
 
 fn default_archive_keep() -> usize {
     3
+}
+
+fn default_budget_overrun_threshold() -> u8 {
+    10
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -217,6 +222,21 @@ pub struct Config {
     #[serde(default)]
     pub phase_isolation: bool,
 
+    /// Per-phase context budget targets (percentage of context window).
+    /// Defaults match QRPID spec: scout=15%, planner=40%, builder=60%, reviewer=50%.
+    #[serde(default)]
+    pub budget_targets: BudgetTargets,
+
+    /// Overrun tolerance in percentage points. Overruns within this margin
+    /// are logged but do not trigger recovery actions. Default: 10.
+    #[serde(default = "default_budget_overrun_threshold")]
+    pub budget_overrun_threshold: u8,
+
+    /// Enable budget overrun detection and recovery actions.
+    /// When false, budget is tracked in telemetry but no recovery actions execute.
+    #[serde(default)]
+    pub budget_recovery_enabled: bool,
+
     /// Enable Docker sandbox isolation for agent subprocesses (default: true).
     /// Always on by default. Only implementers should override via .foundry.json.
     #[serde(default = "default_true")]
@@ -330,6 +350,9 @@ impl Default for Config {
             tmux_session_prefix: "foundry".into(),
             tmux_keep_sessions: false,
             phase_isolation: false,
+            budget_targets: BudgetTargets::default(),
+            budget_overrun_threshold: 10,
+            budget_recovery_enabled: false,
             sandbox: true,
             sandbox_image: "foundry-sandbox:latest".into(),
             sandbox_extra_mounts: Vec::new(),

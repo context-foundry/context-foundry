@@ -29,6 +29,7 @@ pub use self::state::{
     PlanningState, StartupAction, StartupScenario, StartupState, TuiPane,
 };
 use crate::agent::{AgentOutputEvent, AgentRole};
+use crate::budget;
 use crate::config::Config;
 use crate::git;
 use crate::orchestrator::{self, OrchestratorConfig, OrchestratorOutcome};
@@ -742,6 +743,11 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
         AppEvent::LoopEvent(le) => match le {
             LoopEvent::TaskStarted(task) => {
                 state.log(format!("Task {} started", task.id));
+                state.budget_telemetry = budget::BudgetTelemetry {
+                    task_id: task.id.clone(),
+                    timestamp: chrono::Utc::now().to_rfc3339(),
+                    ..Default::default()
+                };
                 state.current_task = Some(task);
                 state.task_start = Some(chrono::Utc::now());
                 state.task_stages_seen.clear();
@@ -861,6 +867,12 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                 }
                 state.pattern_inject_count += titles.len();
                 state.active_pattern_keywords = keywords_by_title.clone();
+            }
+            LoopEvent::BudgetOverrun { phase, target_pct, actual_pct, recovery } => {
+                state.log(format!(
+                    "BUDGET OVERRUN: {} used {}% (target {}%) -- recovery: {}",
+                    phase, actual_pct, target_pct, recovery,
+                ));
             }
             LoopEvent::Log(ref msg) => {
                 // Track patterns learned from "Merged patterns: N new added" messages

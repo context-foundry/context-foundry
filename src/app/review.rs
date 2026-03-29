@@ -6,6 +6,7 @@ use tokio::sync::mpsc;
 
 use crate::agent::{self, AgentRole};
 use crate::config::Config;
+use crate::budget;
 use crate::isolation;
 use crate::observatory::{self, AgentUsage, ObservatoryEvent};
 use crate::prompts;
@@ -238,6 +239,43 @@ pub(super) async fn run_review_loop(
         cost_usd: agent_usage.cost_usd,
         context_pct: agent_usage.context_pct,
     });
+    // Budget telemetry: Reviewer
+    if ctx.config.budget_recovery_enabled {
+        let record = budget::evaluate_phase(
+            &AgentRole::Reviewer,
+            &agent_usage,
+            &ctx.config.budget_targets,
+            ctx.config.budget_overrun_threshold,
+        );
+        if record.overrun && record.recovery_action != budget::RecoveryAction::Continue {
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BudgetOverrun {
+                phase: "Reviewer".to_string(),
+                target_pct: record.target_pct,
+                actual_pct: record.actual_pct,
+                recovery: format!("{}", record.recovery_action),
+            }));
+            observatory::log_event(
+                &ctx.session_id,
+                &ctx.project_dir,
+                ObservatoryEvent::BudgetOverrun {
+                    task_id: task_id.to_string(),
+                    phase: "Reviewer".to_string(),
+                    target_pct: record.target_pct,
+                    actual_pct: record.actual_pct,
+                    recovery_action: format!("{}", record.recovery_action),
+                },
+            );
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                "Budget overrun: Reviewer used {}% (target {}%), recovery: {} (no subsequent phase)",
+                record.actual_pct, record.target_pct, record.recovery_action,
+            ))));
+        } else if record.overrun {
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                "Budget: Reviewer used {}% (target {}%, within tolerance)",
+                record.actual_pct, record.target_pct,
+            ))));
+        }
+    }
 
     let reviewer_succeeded = review_result.as_ref().map(|r| r.success).unwrap_or(false);
     if !reviewer_succeeded {

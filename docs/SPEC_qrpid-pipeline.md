@@ -428,6 +428,80 @@ Context isolation is enforced at the **filesystem level**: the orchestrator phys
 
 ---
 
+## Context Budget Telemetry
+
+Each phase has a **target context utilization** percentage. The orchestrator records actual usage after every phase and compares it to the target. When a phase exceeds its budget, a **recovery action** is selected and executed.
+
+### Budget Targets (defaults)
+
+| Phase | Target | Rationale |
+|-------|--------|-----------|
+| Q (Scout) | 15% | Lightweight question generation, no code reading |
+| R (Research) | 40% | Codebase exploration bounded by 30-file cap |
+| P (Plan) | 40% | Design + plan with minimal new file reads |
+| I (Implement) | 60% | Needs room for iteration on build/test errors |
+| D (Doubt) | 50% | Fresh-context audit with room for fixes |
+
+Targets are configurable via `.foundry.json`:
+```json
+{
+  "budget_targets": {
+    "scout": 15,
+    "planner": 40,
+    "builder": 60,
+    "reviewer": 50
+  },
+  "budget_overrun_threshold": 10,
+  "budget_recovery_enabled": false
+}
+```
+
+### Telemetry Fields
+
+Each phase produces a `PhaseBudgetRecord`:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `phase` | string | Phase name (Scout, Planner, Builder, Reviewer) |
+| `target_pct` | u8 | Configured target percentage |
+| `actual_pct` | u8 | Actual context window usage percentage |
+| `overrun` | bool | Whether actual exceeded target |
+| `overrun_amount` | i16 | actual - target (negative = under budget) |
+| `tokens_in` | u64 | Input tokens consumed |
+| `tokens_out` | u64 | Output tokens produced |
+| `cost_usd` | f64 | Phase cost in USD |
+| `recovery_action` | enum | Action taken in response to overrun |
+
+All records are written to `.buildloop/budget-telemetry.json` and logged to the observatory event stream.
+
+### Overrun Thresholds
+
+Overrun severity is computed as `actual_pct - target_pct`. The `budget_overrun_threshold` (default: 10) defines a tolerance band where overruns are logged but no recovery action fires.
+
+| Overrun Amount | Severity | Recovery Action |
+|---------------|----------|-----------------|
+| <= threshold | Tolerable | Continue (log only) |
+| threshold+1 to 20 | Moderate | Summarize: inject context compression directive into next phase |
+| 21 to 40 | Significant | Escalate: upgrade next phase to higher-capacity model |
+| > 40 | Severe | Split recommended: log recommendation for phase narrowing (manual) |
+
+### Recovery Actions
+
+1. **Continue** -- Overrun within tolerance. Logged to telemetry, no intervention.
+2. **Summarize** -- The next phase receives a prompt prefix instructing it to prioritize critical findings and be concise, compensating for the previous phase's context consumption.
+3. **Escalate** -- The next phase's model is upgraded to a higher-capacity model (e.g., sonnet to opus). This gives the next phase more effective context handling.
+4. **Split Recommended** -- The overrun is severe enough that the phase should ideally be re-run with narrower scope. Currently logged for manual review; automated splitting is a future enhancement.
+
+### Invariants
+
+- Budget evaluation runs after every phase, regardless of whether the phase succeeded or failed.
+- Recovery actions only affect the **next** phase in the pipeline. The overrunning phase itself is not re-run.
+- The reviewer (D phase) records overruns but does not trigger recovery (it has no successor phase).
+- Budget telemetry is always written to `.buildloop/budget-telemetry.json`, even when no overruns occur.
+- Observatory events are emitted only for overruns that exceed the tolerance threshold.
+
+---
+
 ## Pattern Integration
 
 ### Before Q (injection)

@@ -81,6 +81,13 @@ pub enum ObservatoryEvent {
         sha: String,
         commit_type: String,
     },
+    BudgetOverrun {
+        task_id: String,
+        phase: String,
+        target_pct: u8,
+        actual_pct: u8,
+        recovery_action: String,
+    },
     RateLimited {
         provider: String,
         wait_secs: u64,
@@ -104,6 +111,7 @@ pub fn event_type_str(event: &ObservatoryEvent) -> &'static str {
         ObservatoryEvent::PatternInjected { .. } => "pattern_injected",
         ObservatoryEvent::PatternApplied { .. } => "pattern_applied",
         ObservatoryEvent::Committed { .. } => "committed",
+        ObservatoryEvent::BudgetOverrun { .. } => "budget_overrun",
         ObservatoryEvent::RateLimited { .. } => "rate_limited",
     }
 }

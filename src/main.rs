@@ -16,6 +16,7 @@ mod observatory;
 mod orchestrator;
 mod tmux;
 mod sandbox;
+mod budget;
 mod patterns;
 mod prompts;
 mod task;

@@ -22,6 +22,7 @@ use std::sync::Arc;
 use super::context::{FailureType, RunContext, StageResult};
 use super::state::DualSelection;
 use super::{review, AppEvent, LoopEvent};
+use crate::budget;
 use crate::doubt_confidence;
 use crate::extensions;
 use crate::observatory::{self, AgentUsage, ObservatoryEvent};
@@ -1953,6 +1954,14 @@ async fn process_task(
         )));
     }
     let mut stage_results: Vec<StageResult> = Vec::new();
+    let mut budget_telemetry = budget::BudgetTelemetry {
+        task_id: task_id.to_string(),
+        timestamp: chrono::Utc::now().to_rfc3339(),
+        ..Default::default()
+    };
+    // Mutable state for budget recovery: summary directive for next phase, model override for next phase
+    let mut budget_summary_for_next: Option<String> = None;
+    let mut budget_model_override: Option<(String, String)> = None; // (provider, model)
     let patterns_extracted = ctx.buildloop_dir.join("patterns-extracted.json");
 
     // Clean up stale dual-build worktrees from previous sessions
@@ -2225,6 +2234,65 @@ async fn process_task(
             cost_usd: agent_usage.cost_usd,
             context_pct: agent_usage.context_pct,
         });
+        // Budget telemetry: Scout
+        if ctx.config.budget_recovery_enabled {
+            let record = budget::evaluate_phase(
+                &AgentRole::Scout,
+                &agent_usage,
+                &ctx.config.budget_targets,
+                ctx.config.budget_overrun_threshold,
+            );
+            if record.overrun && record.recovery_action != budget::RecoveryAction::Continue {
+                budget_telemetry.any_overrun = true;
+                budget_telemetry.recovery_actions_taken.push(format!(
+                    "Scout: {}", record.recovery_action
+                ));
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BudgetOverrun {
+                    phase: "Scout".to_string(),
+                    target_pct: record.target_pct,
+                    actual_pct: record.actual_pct,
+                    recovery: format!("{}", record.recovery_action),
+                }));
+                observatory::log_event(
+                    &ctx.session_id,
+                    &ctx.project_dir,
+                    ObservatoryEvent::BudgetOverrun {
+                        task_id: task_id.to_string(),
+                        phase: "Scout".to_string(),
+                        target_pct: record.target_pct,
+                        actual_pct: record.actual_pct,
+                        recovery_action: format!("{}", record.recovery_action),
+                    },
+                );
+                match record.recovery_action {
+                    budget::RecoveryAction::Summarize => {
+                        budget_summary_for_next = Some(budget::summarize_directive(
+                            "Scout", record.actual_pct, record.target_pct,
+                        ));
+                    }
+                    budget::RecoveryAction::Escalate => {
+                        budget_model_override = Some(("claude".to_string(), "opus".to_string()));
+                        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                            "Budget recovery: escalating Planner model to opus due to Scout overrun ({}% > {}%)",
+                            record.actual_pct, record.target_pct,
+                        ))));
+                    }
+                    budget::RecoveryAction::SplitRecommended => {
+                        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                            "Budget recovery: split recommended for Scout ({}% > {}%) -- logged for manual review",
+                            record.actual_pct, record.target_pct,
+                        ))));
+                    }
+                    budget::RecoveryAction::Continue => {}
+                }
+            } else if record.overrun {
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                    "Budget: Scout used {}% (target {}%, within tolerance)",
+                    record.actual_pct, record.target_pct,
+                ))));
+            }
+            budget_telemetry.records.push(record);
+        }
         if last_rate_limited {
             observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::RateLimited {
                 provider: ctx.config.scout_provider.clone(),
@@ -2347,19 +2415,26 @@ async fn process_task(
                 model: ctx.config.planner_model.clone(),
             });
 
-            let prompt = prompts::planner_prompt(
+            let mut prompt = prompts::planner_prompt(
                 task_id,
                 task_desc,
                 &pattern_context,
                 &ctx.spec_file_prompt_path(),
                 &ctx.tasks_file_prompt_path(),
             );
+            if let Some(summary) = budget_summary_for_next.take() {
+                prompt = format!("{}\n\n{}", summary, prompt);
+            }
             // Planner writes plans, not code -- skip extension context to save tokens.
             let planner_start = Instant::now();
+            let (eff_planner_provider, eff_planner_model) = match budget_model_override.take() {
+                Some((p, m)) => (Config::parse_provider(&p), m),
+                None => (Config::parse_provider(&ctx.config.planner_provider), ctx.config.planner_model.clone()),
+            };
             let plan_result = agent::run_agent(
                 &AgentRole::Planner,
-                Config::parse_provider(&ctx.config.planner_provider),
-                &ctx.config.planner_model,
+                eff_planner_provider,
+                &eff_planner_model,
                 &prompt,
                 &ctx.project_dir,
                 agent_tx,
@@ -2383,6 +2458,65 @@ async fn process_task(
                 cost_usd: agent_usage.cost_usd,
                 context_pct: agent_usage.context_pct,
             });
+            // Budget telemetry: Planner
+            if ctx.config.budget_recovery_enabled {
+                let record = budget::evaluate_phase(
+                    &AgentRole::Planner,
+                    &agent_usage,
+                    &ctx.config.budget_targets,
+                    ctx.config.budget_overrun_threshold,
+                );
+                if record.overrun && record.recovery_action != budget::RecoveryAction::Continue {
+                    budget_telemetry.any_overrun = true;
+                    budget_telemetry.recovery_actions_taken.push(format!(
+                        "Planner: {}", record.recovery_action
+                    ));
+                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BudgetOverrun {
+                        phase: "Planner".to_string(),
+                        target_pct: record.target_pct,
+                        actual_pct: record.actual_pct,
+                        recovery: format!("{}", record.recovery_action),
+                    }));
+                    observatory::log_event(
+                        &ctx.session_id,
+                        &ctx.project_dir,
+                        ObservatoryEvent::BudgetOverrun {
+                            task_id: task_id.to_string(),
+                            phase: "Planner".to_string(),
+                            target_pct: record.target_pct,
+                            actual_pct: record.actual_pct,
+                            recovery_action: format!("{}", record.recovery_action),
+                        },
+                    );
+                    match record.recovery_action {
+                        budget::RecoveryAction::Summarize => {
+                            budget_summary_for_next = Some(budget::summarize_directive(
+                                "Planner", record.actual_pct, record.target_pct,
+                            ));
+                        }
+                        budget::RecoveryAction::Escalate => {
+                            budget_model_override = Some(("claude".to_string(), "opus".to_string()));
+                            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                                "Budget recovery: escalating Builder model to opus due to Planner overrun ({}% > {}%)",
+                                record.actual_pct, record.target_pct,
+                            ))));
+                        }
+                        budget::RecoveryAction::SplitRecommended => {
+                            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                                "Budget recovery: split recommended for Planner ({}% > {}%) -- logged for manual review",
+                                record.actual_pct, record.target_pct,
+                            ))));
+                        }
+                        budget::RecoveryAction::Continue => {}
+                    }
+                } else if record.overrun {
+                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                        "Budget: Planner used {}% (target {}%, within tolerance)",
+                        record.actual_pct, record.target_pct,
+                    ))));
+                }
+                budget_telemetry.records.push(record);
+            }
             if last_rate_limited {
                 observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::RateLimited {
                     provider: ctx.config.planner_provider.clone(),
@@ -2729,11 +2863,20 @@ async fn process_task(
             )
         };
         let prompt = prompts::wrap_with_extensions(&prompt, extension_context);
+        let prompt = if let Some(summary) = budget_summary_for_next.take() {
+            format!("{}\n\n{}", summary, prompt)
+        } else {
+            prompt
+        };
         let builder_start = Instant::now();
+        let (eff_builder_provider, eff_builder_model) = match budget_model_override.take() {
+            Some((p, m)) => (Config::parse_provider(&p), m),
+            None => (Config::parse_provider(&ctx.config.builder_provider), ctx.config.builder_model.clone()),
+        };
         let build_result = agent::run_agent(
             &AgentRole::Builder,
-            Config::parse_provider(&ctx.config.builder_provider),
-            &ctx.config.builder_model,
+            eff_builder_provider,
+            &eff_builder_model,
             &prompt,
             &ctx.project_dir,
             agent_tx,
@@ -2757,6 +2900,49 @@ async fn process_task(
             cost_usd: agent_usage.cost_usd,
             context_pct: agent_usage.context_pct,
         });
+        // Budget telemetry: Builder
+        if ctx.config.budget_recovery_enabled {
+            let record = budget::evaluate_phase(
+                &AgentRole::Builder,
+                &agent_usage,
+                &ctx.config.budget_targets,
+                ctx.config.budget_overrun_threshold,
+            );
+            if record.overrun && record.recovery_action != budget::RecoveryAction::Continue {
+                budget_telemetry.any_overrun = true;
+                budget_telemetry.recovery_actions_taken.push(format!(
+                    "Builder: {}", record.recovery_action
+                ));
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BudgetOverrun {
+                    phase: "Builder".to_string(),
+                    target_pct: record.target_pct,
+                    actual_pct: record.actual_pct,
+                    recovery: format!("{}", record.recovery_action),
+                }));
+                observatory::log_event(
+                    &ctx.session_id,
+                    &ctx.project_dir,
+                    ObservatoryEvent::BudgetOverrun {
+                        task_id: task_id.to_string(),
+                        phase: "Builder".to_string(),
+                        target_pct: record.target_pct,
+                        actual_pct: record.actual_pct,
+                        recovery_action: format!("{}", record.recovery_action),
+                    },
+                );
+                // Builder is the last phase before review (separate function) -- log all recovery types
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                    "Budget recovery: {} for Builder ({}% > {}%)",
+                    record.recovery_action, record.actual_pct, record.target_pct,
+                ))));
+            } else if record.overrun {
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                    "Budget: Builder used {}% (target {}%, within tolerance)",
+                    record.actual_pct, record.target_pct,
+                ))));
+            }
+            budget_telemetry.records.push(record);
+        }
         if rl {
             observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::RateLimited {
                 provider: ctx.config.builder_provider.clone(),
@@ -3063,6 +3249,11 @@ async fn process_task(
         if validated {
             let _ = task::mark_done(&ctx.plan_path, task_info.line_number);
         }
+    }
+
+    // Write budget telemetry
+    if ctx.config.budget_recovery_enabled && !budget_telemetry.records.is_empty() {
+        budget::write_telemetry(&ctx.buildloop_dir, &budget_telemetry);
     }
 
     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::ShipStarted));
