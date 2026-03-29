@@ -3076,6 +3076,21 @@ async fn process_task(
             }
         };
 
+        // Budget recovery directives target "the next phase" -- for Complex tasks,
+        // that's P+, not Builder. Consume and warn to prevent silent carry-through.
+        // Must run unconditionally when P+ conditions are met, even if plan is unreadable.
+        // (Same pattern as parallel builder at build.rs:3414-3423)
+        if let Some(_summary) = budget_summary_for_next.take() {
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+                "P+ subphase: budget summary directive from Planner consumed (P+ uses orchestrator config, not prompt injection)".to_string()
+            )));
+        }
+        if let Some((ref p, ref m)) = budget_model_override.take() {
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+                format!("P+ subphase: budget model override ({}/{}) from Planner consumed (P+ uses orchestrator providers, not overrideable)", p, m)
+            )));
+        }
+
         if !plan_text.is_empty() {
             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::AgentStarted(
                 AgentRole::PlanReview,
@@ -3092,20 +3107,6 @@ async fn process_task(
             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
                 "P+ subphase: routing plan for {} through orchestrator review loop", task_id
             ))));
-
-            // Budget recovery directives target "the next phase" -- for Complex tasks,
-            // that's P+, not Builder. Consume and warn to prevent silent carry-through.
-            // (Same pattern as parallel builder at build.rs:3064-3073)
-            if let Some(_summary) = budget_summary_for_next.take() {
-                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
-                    "P+ subphase: budget summary directive from Planner consumed (P+ uses orchestrator config, not prompt injection)".to_string()
-                )));
-            }
-            if let Some((ref p, ref m)) = budget_model_override.take() {
-                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
-                    format!("P+ subphase: budget model override ({}/{}) from Planner consumed (P+ uses orchestrator providers, not overrideable)", p, m)
-                )));
-            }
 
             let orch_config = OrchestratorConfig::from_config(&ctx.config);
 
@@ -4928,6 +4929,41 @@ mod tests {
         assert!(consumed_override.is_some(), "model override should have been present for consumption");
         assert!(budget_summary_for_next.is_none(), "summary must be None after .take() so Builder does not receive it");
         assert!(budget_model_override.is_none(), "override must be None after .take() so Builder does not receive it");
+    }
+
+    #[test]
+    fn test_budget_directives_consumed_when_plan_unreadable() {
+        // Bug D50.1: When P+ conditions are met but current-plan.md is unreadable,
+        // plan_text is empty. Before the fix, budget directive consumption was inside
+        // the `if !plan_text.is_empty()` block and would be skipped, causing directives
+        // to leak through to Builder.
+
+        // Simulate: Planner overrun sets both directives
+        let mut budget_summary_for_next: Option<String> = Some(
+            "CONTEXT BUDGET ALERT: The previous PLAN phase used 65% ...".to_string()
+        );
+        let mut budget_model_override: Option<(String, String)> = Some(
+            ("claude".to_string(), "opus".to_string())
+        );
+
+        // Simulate: current-plan.md read fails, plan_text is empty
+        let plan_text = String::new();
+
+        // The fix: .take() runs unconditionally when P+ conditions are met,
+        // BEFORE the if !plan_text.is_empty() check.
+        let _consumed_summary = budget_summary_for_next.take();
+        let _consumed_override = budget_model_override.take();
+
+        // plan_text is empty, so the P+ orchestrator block is skipped
+        if !plan_text.is_empty() {
+            panic!("plan_text should be empty in this test");
+        }
+
+        // Directives must already be consumed -- they must not reach Builder
+        assert!(budget_summary_for_next.is_none(),
+            "budget summary must be consumed even when plan is unreadable");
+        assert!(budget_model_override.is_none(),
+            "budget model override must be consumed even when plan is unreadable");
     }
 
     #[test]
