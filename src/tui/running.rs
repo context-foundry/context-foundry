@@ -374,7 +374,7 @@ pub(super) fn style_for_line(line: &str, theme: &super::theme::TuiTheme) -> Styl
     } else if line.starts_with("[result]") {
         Style::default().fg(theme.muted)
     } else if line.starts_with("[info]") {
-        Style::default().fg(theme.muted)
+        Style::default().fg(theme.info)
     } else if line.starts_with("[rate limited]") {
         Style::default().fg(theme.warning)
     } else if line.starts_with("[injected]") {

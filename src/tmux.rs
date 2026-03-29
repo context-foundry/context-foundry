@@ -1,7 +1,6 @@
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::time::Instant;
 use uuid::Uuid;
 
 use crate::prompts::AUTONOMY_OVERRIDE;
@@ -9,8 +8,6 @@ use crate::prompts::AUTONOMY_OVERRIDE;
 pub struct TmuxSession {
     pub name: String,
     pub log_file: PathBuf,
-    pub project_dir: PathBuf,
-    pub created_at: Instant,
 }
 
 impl TmuxSession {
@@ -74,8 +71,6 @@ impl TmuxSession {
         Ok(TmuxSession {
             name,
             log_file,
-            project_dir: project_dir.to_path_buf(),
-            created_at: Instant::now(),
         })
     }
 
@@ -206,8 +201,6 @@ mod tests {
         let session = TmuxSession {
             name: "foundry-builder-abc123".into(),
             log_file: PathBuf::from("/tmp/foundry-builder-abc123.pipe"),
-            project_dir: PathBuf::from("/tmp"),
-            created_at: Instant::now(),
         };
         assert!(session.name.starts_with("foundry-builder"));
     }

@@ -150,18 +150,6 @@ impl ModelProvider {
         CommandBuilder::new(self.slug())
     }
 
-    /// Builds a `std::process::Command` for this provider (for non-PTY execution).
-    pub fn std_command(self) -> std::process::Command {
-        #[cfg(target_os = "windows")]
-        {
-            if let Some(cli_js) = self.resolve_node_cli() {
-                let mut cmd = std::process::Command::new("node");
-                cmd.arg(cli_js);
-                return cmd;
-            }
-        }
-        std::process::Command::new(self.slug())
-    }
 }
 
 /// Returns `true` when the process is running as root/sudo on Unix.
