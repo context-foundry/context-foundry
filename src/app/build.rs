@@ -878,6 +878,19 @@ async fn run_parallel_builder(
                         file_path, slot_idx, e
                     ))));
                 }
+            } else if dest.exists() {
+                // File was deleted in worktree -- remove from main project
+                if let Err(e) = std::fs::remove_file(&dest) {
+                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                        "Parallel builder: failed to delete {} from slot-{}: {}",
+                        file_path, slot_idx, e
+                    ))));
+                } else {
+                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                        "Parallel builder slot-{}: deleted {} (removed in worktree)",
+                        slot_idx, file_path
+                    ))));
+                }
             }
         }
 
@@ -5282,6 +5295,136 @@ mod tests {
             .current_dir(&dir)
             .output();
         let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_dir_all(&wt_dir);
+    }
+
+    #[test]
+    fn test_worktree_merge_propagates_file_deletions() {
+        // Set up a temp "main project" directory with a git repo
+        let main_dir = std::env::temp_dir().join(format!(
+            "foundry-wt-del-main-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&main_dir).unwrap();
+
+        // Initialize git repo
+        std::process::Command::new("git")
+            .args(["init"])
+            .current_dir(&main_dir)
+            .output()
+            .unwrap();
+        std::process::Command::new("git")
+            .args(["config", "user.email", "test@test.com"])
+            .current_dir(&main_dir)
+            .output()
+            .unwrap();
+        std::process::Command::new("git")
+            .args(["config", "user.name", "test"])
+            .current_dir(&main_dir)
+            .output()
+            .unwrap();
+
+        // Create two tracked files and commit
+        std::fs::write(main_dir.join("keep.rs"), "fn keep() {}").unwrap();
+        std::fs::write(main_dir.join("dead_code.rs"), "fn dead() {}").unwrap();
+        std::fs::create_dir_all(main_dir.join("src")).unwrap();
+        std::fs::write(main_dir.join("src/old_module.rs"), "fn old() {}").unwrap();
+        std::process::Command::new("git")
+            .args(["add", "."])
+            .current_dir(&main_dir)
+            .output()
+            .unwrap();
+        std::process::Command::new("git")
+            .args(["commit", "-m", "initial"])
+            .current_dir(&main_dir)
+            .output()
+            .unwrap();
+
+        // Create a worktree
+        let wt_dir = std::env::temp_dir().join(format!(
+            "foundry-wt-del-wt-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::process::Command::new("git")
+            .args(["worktree", "add", "--detach"])
+            .arg(&wt_dir)
+            .arg("HEAD")
+            .current_dir(&main_dir)
+            .output()
+            .unwrap();
+
+        // In the worktree: delete dead_code.rs and src/old_module.rs, modify keep.rs
+        std::fs::remove_file(wt_dir.join("dead_code.rs")).unwrap();
+        std::fs::remove_file(wt_dir.join("src/old_module.rs")).unwrap();
+        std::fs::write(wt_dir.join("keep.rs"), "fn keep() { /* updated */ }").unwrap();
+
+        // Verify git diff --name-only HEAD reports deleted files
+        let result = super::discover_changed_files_in_worktree(&wt_dir);
+        assert!(result.is_some(), "git discovery must succeed");
+        let files = result.unwrap();
+        assert!(
+            files.contains(&"dead_code.rs".to_string()),
+            "must discover deleted file dead_code.rs, got: {:?}",
+            files
+        );
+        assert!(
+            files.contains(&"src/old_module.rs".to_string()),
+            "must discover deleted file src/old_module.rs, got: {:?}",
+            files
+        );
+        assert!(
+            files.contains(&"keep.rs".to_string()),
+            "must discover modified file keep.rs, got: {:?}",
+            files
+        );
+
+        // Simulate the merge loop logic: iterate discovered files and apply
+        // copy-or-delete to the main project directory
+        for file_path in &files {
+            let src = wt_dir.join(file_path);
+            let dest = main_dir.join(file_path);
+            if src.exists() {
+                if let Some(parent) = dest.parent() {
+                    let _ = std::fs::create_dir_all(parent);
+                }
+                std::fs::copy(&src, &dest).unwrap();
+            } else if dest.exists() {
+                std::fs::remove_file(&dest).unwrap();
+            }
+        }
+
+        // Verify: keep.rs should be updated
+        let keep_content = std::fs::read_to_string(main_dir.join("keep.rs")).unwrap();
+        assert!(
+            keep_content.contains("updated"),
+            "keep.rs must be updated in main project"
+        );
+
+        // Verify: dead_code.rs should be gone from main project
+        assert!(
+            !main_dir.join("dead_code.rs").exists(),
+            "dead_code.rs must be deleted from main project"
+        );
+
+        // Verify: src/old_module.rs should be gone from main project
+        assert!(
+            !main_dir.join("src/old_module.rs").exists(),
+            "src/old_module.rs must be deleted from main project"
+        );
+
+        // Cleanup
+        let _ = std::process::Command::new("git")
+            .args(["worktree", "remove", "--force"])
+            .arg(&wt_dir)
+            .current_dir(&main_dir)
+            .output();
+        let _ = std::fs::remove_dir_all(&main_dir);
         let _ = std::fs::remove_dir_all(&wt_dir);
     }
 }
