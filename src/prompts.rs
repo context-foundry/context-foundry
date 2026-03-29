@@ -423,6 +423,8 @@ INSTRUCTIONS:
 3. Run the verification commands from the plan. Fix failures before finishing.
 4. AFTER all implementation and verification, write .buildloop/build-claims.md
 
+EXECUTION STYLE: Execute tool calls directly without narration. Do not explain what you are about to do or summarize what you just did between tool calls. Write your output file (build-claims.md) as your final action.
+
 CLAIMS FILE (.buildloop/build-claims.md):
 When you are done, write a machine-readable summary of what you built.
 An auditor agent with a FRESH context window will read ONLY this file
@@ -484,6 +486,8 @@ INSTRUCTIONS:
 3. Run the verification commands from the plan if they apply to your files. Fix failures before finishing.
 4. AFTER implementation, write .buildloop/build-claims.md
 
+EXECUTION STYLE: Execute tool calls directly without narration. Do not explain what you are about to do or summarize what you just did between tool calls. Write your output file (build-claims.md) as your final action.
+
 CLAIMS FILE (.buildloop/build-claims.md):
 ```
 # Build Claims -- {task_id} (parallel slot)
@@ -538,6 +542,8 @@ INSTRUCTIONS:
    - Node/TS: tsc --noEmit, npm test
    - Docker: docker compose config (syntax check only)
 6. If a verification step fails, fix the issue before finishing
+
+EXECUTION STYLE: Execute tool calls directly without narration. Do not explain what you are about to do or summarize what you just did between tool calls. Write your output file (build-claims.md) as your final action.
 
 SUBAGENT STRATEGY:
 - Use parallel subagents for file reads and code searches — read as many files concurrently as needed
@@ -630,6 +636,8 @@ YOUR JOB (in order):
 5. FIX every HIGH and MEDIUM issue you find -- you have full write access.
 6. After fixing, re-run checks to confirm your fixes work.
 7. Write your final report AFTER all fixes are applied.
+
+EXECUTION STYLE: Execute tool calls directly without narration. Do not explain what you are about to do or summarize what you just did between tool calls. Write your output file (review-report.md) as your final action.
 
 IF .buildloop/build-claims.md IS MISSING:
 Fall back to reading .buildloop/current-plan.md and the changed files directly.
@@ -974,6 +982,8 @@ YOUR JOB (in order):
 5. FIX every HIGH and MEDIUM issue you find -- you have full write access.
 6. After fixing, re-run checks to confirm your fixes work.
 7. Write your final report AFTER all fixes are applied.
+
+EXECUTION STYLE: Execute tool calls directly without narration. Do not explain what you are about to do or summarize what you just did between tool calls. Write your output file (review-report.md) as your final action.
 
 RUN THESE CHECKS (skip with reason if tool unavailable):
 - Rust: cargo check && cargo clippy && cargo test
