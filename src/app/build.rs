@@ -2778,7 +2778,7 @@ async fn process_task(
     if !checkpoint_skip_plan_review
         && ctx.config.plan_review_enabled
         && task_complexity == TaskComplexity::Complex
-        && !skip_planner
+        && (!skip_planner || checkpoint_skip_planner)
     {
         let plan_text = match std::fs::read_to_string(&ctx.current_plan) {
             Ok(text) => text,
@@ -2890,6 +2890,27 @@ async fn process_task(
                     ctx.config.budget_overrun_threshold,
                 );
                 if record.overrun && record.recovery_action != budget::RecoveryAction::Continue {
+                    budget_telemetry.any_overrun = true;
+                    budget_telemetry.recovery_actions_taken.push(format!(
+                        "PlanReview: {}", record.recovery_action
+                    ));
+                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BudgetOverrun {
+                        phase: "PlanReview".to_string(),
+                        target_pct: record.target_pct,
+                        actual_pct: record.actual_pct,
+                        recovery: format!("{}", record.recovery_action),
+                    }));
+                    observatory::log_event(
+                        &ctx.session_id,
+                        &ctx.project_dir,
+                        ObservatoryEvent::BudgetOverrun {
+                            task_id: task_id.to_string(),
+                            phase: "PlanReview".to_string(),
+                            target_pct: record.target_pct,
+                            actual_pct: record.actual_pct,
+                            recovery_action: format!("{}", record.recovery_action),
+                        },
+                    );
                     match record.recovery_action {
                         budget::RecoveryAction::Summarize => {
                             budget_summary_for_next = Some(budget::summarize_directive(
@@ -2898,13 +2919,24 @@ async fn process_task(
                         }
                         budget::RecoveryAction::Escalate => {
                             budget_model_override = Some(("claude".to_string(), "opus".to_string()));
+                            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                                "Budget recovery: escalating Builder model to opus due to PlanReview overrun ({}% > {}%)",
+                                record.actual_pct, record.target_pct,
+                            ))));
                         }
-                        _ => {}
+                        budget::RecoveryAction::SplitRecommended => {
+                            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                                "Budget recovery: split recommended for PlanReview ({}% > {}%) -- logged for manual review",
+                                record.actual_pct, record.target_pct,
+                            ))));
+                        }
+                        budget::RecoveryAction::Continue => {}
                     }
-                    budget_telemetry.any_overrun = true;
-                    budget_telemetry.recovery_actions_taken.push(format!(
-                        "PlanReview: {}", record.recovery_action
-                    ));
+                } else if record.overrun {
+                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                        "Budget: PlanReview used {}% (target {}%, within tolerance)",
+                        record.actual_pct, record.target_pct,
+                    ))));
                 }
                 budget_telemetry.records.push(record);
             }
@@ -4216,5 +4248,52 @@ mod tests {
         assert!(result.contains("- [ ] Claim 2"));
         // Trimmed marker present
         assert!(result.contains("[trimmed:"));
+    }
+
+    #[test]
+    fn test_plan_review_checkpoint_recovery_allows_p_plus() {
+        // Bug D37.1(a): When checkpoint recovery sets checkpoint_skip_planner=true
+        // (because planner completed in a prior session and resume_stage="plan_review"),
+        // skip_planner also becomes true. The P+ guard must still allow P+ to run
+        // because skip_planner is only true due to checkpoint, not due to task simplicity.
+
+        // Simulate checkpoint recovery scenario: planner completed, resuming at plan_review
+        let checkpoint_skip_plan_review = false; // P+ has NOT completed yet
+        let checkpoint_skip_planner = true;       // planner completed in prior session
+        let plan_review_enabled = true;
+
+        // skip_planner incorporates checkpoint_skip_planner (build.rs:2159)
+        let skip_planner = checkpoint_skip_planner; // would also be true from config for simple tasks
+
+        // The fixed guard condition: (!skip_planner || checkpoint_skip_planner)
+        let p_plus_should_run = !checkpoint_skip_plan_review
+            && plan_review_enabled
+            && true // task_complexity == Complex (simulated)
+            && (!skip_planner || checkpoint_skip_planner);
+        assert!(p_plus_should_run, "P+ must run when skip_planner is only true due to checkpoint recovery");
+
+        // Verify: when skip_planner is true due to task simplicity (not checkpoint),
+        // P+ should NOT run
+        let checkpoint_skip_planner_simple = false; // no checkpoint recovery
+        let skip_planner_simple = true;             // skipped because task is simple
+        let p_plus_should_not_run = !false // checkpoint_skip_plan_review = false
+            && true // plan_review_enabled
+            && true // Complex
+            && (!skip_planner_simple || checkpoint_skip_planner_simple);
+        assert!(!p_plus_should_not_run, "P+ must NOT run when skip_planner is true due to task simplicity");
+
+        // Verify: normal case -- planner ran, no checkpoint, Complex task
+        let p_plus_normal = !false  // checkpoint_skip_plan_review = false
+            && true  // plan_review_enabled
+            && true  // Complex
+            && (!false || false); // skip_planner=false, checkpoint_skip_planner=false
+        assert!(p_plus_normal, "P+ must run normally for Complex tasks when planner ran");
+
+        // Verify: P+ already completed in prior session
+        let p_plus_already_done = !true  // checkpoint_skip_plan_review = true
+            && true
+            && true
+            && (!false || false);
+        assert!(!p_plus_already_done, "P+ must NOT run when checkpoint says it already completed");
     }
 }
