@@ -92,6 +92,16 @@ pub enum ObservatoryEvent {
         provider: String,
         wait_secs: u64,
     },
+    DualPipelineStarted {
+        session_id: String,
+        models: Vec<String>,
+    },
+    DualPipelineCompleted {
+        session_id: String,
+        wall_clock_secs: f64,
+        pipeline_0_success: bool,
+        pipeline_1_success: bool,
+    },
 }
 
 /// Create a unique session identifier for this build loop invocation.
@@ -113,6 +123,8 @@ pub fn event_type_str(event: &ObservatoryEvent) -> &'static str {
         ObservatoryEvent::Committed { .. } => "committed",
         ObservatoryEvent::BudgetOverrun { .. } => "budget_overrun",
         ObservatoryEvent::RateLimited { .. } => "rate_limited",
+        ObservatoryEvent::DualPipelineStarted { .. } => "dual_pipeline_started",
+        ObservatoryEvent::DualPipelineCompleted { .. } => "dual_pipeline_completed",
     }
 }
 

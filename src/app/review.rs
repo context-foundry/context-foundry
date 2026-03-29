@@ -157,6 +157,12 @@ pub(super) async fn run_review_loop(
                 &ctx.config.reviewer_model,
             ),
         )));
+        observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::AgentStarted {
+            role: format!("{}", AgentRole::Reviewer),
+            provider: ctx.config.reviewer_provider.clone(),
+            model: ctx.config.reviewer_model.clone(),
+        });
+        let multipass_start = Instant::now();
         let result = run_multipass_review(
             task_id,
             task_desc,
@@ -171,7 +177,16 @@ pub(super) async fn run_review_loop(
         )
         .await;
         let _ = tx.send(AppEvent::AgentDone(result.0));
-        let (passed, fixes, findings, multipass_budget) = result;
+        let (passed, fixes, findings, multipass_budget, multipass_usage) = result;
+        observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::AgentDone {
+            role: format!("{}", AgentRole::Reviewer),
+            success: passed,
+            duration_secs: multipass_start.elapsed().as_secs_f64(),
+            tokens_in: multipass_usage.tokens_in,
+            tokens_out: multipass_usage.tokens_out,
+            cost_usd: multipass_usage.cost_usd,
+            context_pct: multipass_usage.context_pct,
+        });
         restore_phase_guard(&mut phase_guard, tx);
         return (passed, fixes, findings, multipass_budget);
     }
@@ -422,7 +437,7 @@ async fn run_multipass_review(
     files_list: &str,
     diff_for_review: Option<&str>,
     semgrep_findings: &str,
-) -> (bool, usize, (usize, usize, usize), Option<budget::PhaseBudgetRecord>) {
+) -> (bool, usize, (usize, usize, usize), Option<budget::PhaseBudgetRecord>, AgentUsage) {
     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
         "Multi-pass review: {} files exceed threshold ({}), running per-file analysis",
         files_changed.len(),
@@ -631,7 +646,7 @@ async fn run_multipass_review(
         } else {
             None
         };
-        return (false, 0, (0, 0, 0), budget_record);
+        return (false, 0, (0, 0, 0), budget_record, total_usage);
     }
 
     // Detect if integration reviewer made fixes.
@@ -666,7 +681,7 @@ async fn run_multipass_review(
         } else {
             None
         };
-        return (false, fix_passes, (0, 0, 0), budget_record);
+        return (false, fix_passes, (0, 0, 0), budget_record, total_usage);
     }
 
     let verdict_pass = check_review_passed(&ctx.review_report);
@@ -774,7 +789,7 @@ async fn run_multipass_review(
         passed,
     }));
 
-    (passed, fix_passes, (high, medium, low), reviewer_budget_record)
+    (passed, fix_passes, (high, medium, low), reviewer_budget_record, total_usage)
 }
 
 fn get_diff_for_review(project_dir: &Path) -> String {

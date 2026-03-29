@@ -1057,6 +1057,11 @@ fn run_dual_pipelines<'a>(
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::DualBuildStarted {
             models: labels.clone(),
         }));
+        observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::DualPipelineStarted {
+            session_id: ctx.session_id.clone(),
+            models: labels.to_vec(),
+        });
+        let dual_start = Instant::now();
 
         let arena_dir = ctx.buildloop_dir.join("arena");
         let _ = std::fs::create_dir_all(&arena_dir);
@@ -1220,6 +1225,12 @@ fn run_dual_pipelines<'a>(
             "Both pipelines complete. Results in .buildloop/arena/ -- evaluate and merge manually."
                 .to_string(),
         )));
+        observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::DualPipelineCompleted {
+            session_id: ctx.session_id.clone(),
+            wall_clock_secs: dual_start.elapsed().as_secs_f64(),
+            pipeline_0_success: result0.0,
+            pipeline_1_success: result1.0,
+        });
 
         // Do NOT clean up worktrees -- human evaluates results
 
