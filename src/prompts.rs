@@ -5,6 +5,10 @@
 /// block so the system prompt prefix stays byte-stable across invocations, enabling
 /// Anthropic's automatic prompt caching (90% read discount on cache hits).
 ///
+/// Inspired by the CacheAligner transform in chopratejas/headroom, which extracts
+/// dynamic content from system messages to create byte-stable prefixes for provider
+/// KV cache hits. https://github.com/chopratejas/headroom
+///
 /// Order matters for cache alignment: most stable content first, conditionally
 /// included content last.
 ///

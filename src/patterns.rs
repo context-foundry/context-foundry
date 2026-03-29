@@ -156,7 +156,10 @@ pub fn keyword_scores(patterns: &[Pattern], task_desc: &str) -> Vec<(usize, usiz
                 score += 1;
             }
 
-            // Usefulness tracking: boost patterns agents actually cite, demote noise
+            // Usefulness tracking: boost patterns agents actually cite, demote noise.
+            // Inspired by TOIN (Tool Output Intelligence Network) in chopratejas/headroom,
+            // which learns field importance from retrieval rates.
+            // https://github.com/chopratejas/headroom
             if score > 0 {
                 if p.used_count > 0 && p.frequency > 0 {
                     let ratio = p.used_count as f64 / p.frequency as f64;
