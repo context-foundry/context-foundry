@@ -2996,6 +2996,12 @@ async fn process_task(
     // For complex tasks, route the planner's output through the proposer/reviewer
     // loop before the builder executes. Simpler tasks skip this.
     let plan_review_char;
+    if checkpoint_skip_plan_review {
+        stage_results.push(StageResult::success(
+            "PlanReview",
+            &format!("Review plan for {} (checkpoint)", task_id),
+        ));
+    }
     if !checkpoint_skip_plan_review
         && ctx.config.plan_review_enabled
         && task_complexity == TaskComplexity::Complex
@@ -3104,6 +3110,17 @@ async fn process_task(
                             ))));
                         }
                         plan_review_char = "+";
+                        {
+                            let mut result = StageResult::success(
+                                "PlanReview",
+                                &format!("Review plan for {}", task_id),
+                            );
+                            result.partial_results.push(format!(
+                                "Accepted in {} iteration(s)",
+                                outcome.iterations,
+                            ));
+                            stage_results.push(result);
+                        }
                     } else {
                         let finding_count = outcome.unresolved_findings.len();
                         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
@@ -3111,6 +3128,22 @@ async fn process_task(
                             outcome.iterations, finding_count
                         ))));
                         plan_review_char = "!";
+                        {
+                            let mut result = StageResult::failure(
+                                "PlanReview",
+                                &format!("Review plan for {}", task_id),
+                                FailureType::ReviewFail,
+                                vec![
+                                    format!("{} unresolved findings after {} iteration(s)", finding_count, outcome.iterations),
+                                    "Using original plan without P+ improvements".to_string(),
+                                ],
+                            );
+                            result.partial_results.push(format!(
+                                "Rejected after {} iteration(s), {} unresolved findings",
+                                outcome.iterations, finding_count,
+                            ));
+                            stage_results.push(result);
+                        }
                     }
                 }
                 Err(e) => {
@@ -3118,6 +3151,15 @@ async fn process_task(
                         "P+ orchestrator error: {} -- using original plan", e
                     ))));
                     plan_review_char = "!";
+                    stage_results.push(StageResult::failure(
+                        "PlanReview",
+                        &format!("Review plan for {}", task_id),
+                        FailureType::Crash,
+                        vec![
+                            format!("Orchestrator error: {}", e),
+                            "Using original plan without P+ review".to_string(),
+                        ],
+                    ));
                 }
             }
 
@@ -3200,6 +3242,12 @@ async fn process_task(
                         &format!("{}{}{}--", scout_char, planner_char, plan_review_char),
                     );
                 }
+                stage_results.push(StageResult::failure(
+                    "PlanReview",
+                    &format!("Review plan for {}", task_id),
+                    FailureType::StopRequested,
+                    vec![],
+                ));
                 let _ = commit_wip_for_mode(ctx, task_id, task_desc);
                 flush_budget_telemetry(&ctx.buildloop_dir, ctx.config.budget_recovery_enabled, &budget_telemetry);
                 return (false, last_rate_limited);
@@ -3594,20 +3642,24 @@ async fn process_task(
             }
             Err(e) => {
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                    "Build command failed to execute: {} — skipping gate",
+                    "Build command failed to execute: {} — build gate not validated, skipping checkpoint",
                     e
                 ))));
+                // Do NOT write checkpoint -- the build was never verified.
+                // Doubt will still run, but crash recovery won't skip the builder.
             }
             Ok(_) => {
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
                     "Build gate passed".to_string(),
                 )));
+                // Only write checkpoint when build gate actually passed
+                write_checkpoint(&ctx.buildloop_dir, task_id, task_desc, "builder");
             }
         }
+    } else {
+        // No build_command configured -- write checkpoint unconditionally
+        write_checkpoint(&ctx.buildloop_dir, task_id, task_desc, "builder");
     }
-
-    // Checkpoint: builder completed (after build gate passes)
-    write_checkpoint(&ctx.buildloop_dir, task_id, task_desc, "builder");
 
     // ─── Trim Verbose Build Output ──────────────────────────────
     if let Some((orig, trimmed)) = trim_build_claims(ctx) {
