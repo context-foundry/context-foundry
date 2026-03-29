@@ -14,7 +14,8 @@ pub struct BudgetTargets {
     pub scout: u8,    // QRPID Q+R phase: 15%
     pub planner: u8,  // QRPID P phase: 40%
     pub builder: u8,  // QRPID I phase: 60%
-    pub reviewer: u8, // QRPID D phase: 50%
+    pub reviewer: u8,     // QRPID D phase: 50%
+    pub plan_review: u8,  // QRPID P+ phase: 35%
 }
 
 impl Default for BudgetTargets {
@@ -24,6 +25,7 @@ impl Default for BudgetTargets {
             planner: 40,
             builder: 60,
             reviewer: 50,
+            plan_review: 35,
         }
     }
 }

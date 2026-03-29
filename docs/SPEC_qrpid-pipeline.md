@@ -11,19 +11,21 @@
 ## Pipeline Overview
 
 ```
-Q ──→ R ──→ P ──→ I ──→ D
-              ↑         ↑
-           patterns   patterns
-           injected   extracted
+Q ──→ R ──→ P ──→ [P+] ──→ I ──→ D
+              ↑      ↑           ↑
+           patterns  complex    patterns
+           injected  tasks only  extracted
+                     (orchestrator loop)
 ```
 
-Five phases. Each phase is a **separate agent invocation** -- no phase bleeds into another. The orchestrator controls all transitions. Agents return structured artifacts; the orchestrator validates the schema before advancing.
+Six phases (P+ is conditional). Each phase is a **separate agent invocation** -- no phase bleeds into another. The orchestrator controls all transitions. Agents return structured artifacts; the orchestrator validates the schema before advancing.
 
 | Phase | Name | Purpose | Sees original task? |
 |-------|------|---------|-------------------|
 | Q | Question | Generate research queries from task | Yes |
 | R | Research | Objective codebase exploration | **No** -- only sees questions |
 | P | Plan | Design + tactical implementation plan | Yes + research report |
+| P+ | Plan Review | Proposer/reviewer loop on plan artifact | Plan only |
 | I | Implement | Execute the plan | Plan only |
 | D | Doubt | Fresh-context audit | Claims only |
 
@@ -225,7 +227,51 @@ Research: .buildloop/research-report.md
 ```
 
 ### Transition Rule
-Orchestrator validates: file exists, has at least 1 step, every step has Action + File + Changes, at least 1 checkpoint exists. Then advances to I.
+Orchestrator validates: file exists, has at least 1 step, every step has Action + File + Changes, at least 1 checkpoint exists. Then advances to P+ (if complex) or I (if simple/medium).
+
+---
+
+## Phase 3.5: Plan Review (P+)
+
+**Goal:** For Complex-classified tasks, run the planner's output through a cross-model
+proposer/reviewer loop to validate design soundness before implementation begins.
+Simple and Medium tasks skip this phase entirely.
+
+### When P+ Runs
+- Task complexity is `Complex` (from `complexity::classify_task()`)
+- `plan_review_enabled: true` in `.foundry.json`
+- The planner was not skipped (i.e., the plan was freshly generated)
+
+### Inputs
+- `.buildloop/current-plan.md` (from P)
+- Task ID and description (for context)
+- Orchestrator proposer/reviewer config from `.foundry.json`
+
+### Process
+1. Read `current-plan.md` as the plan artifact.
+2. Feed it into the orchestrator loop (same as `foundry design`):
+   - Proposer receives the plan text + task context
+   - Reviewer validates design_assertions, checks for gaps and risks
+   - Loop up to `orchestrator_max_iterations` times
+3. Apply acceptance policy (from `orchestrator_accept_policy` config).
+4. If accepted: overwrite `current-plan.md` with the reviewed plan.
+5. If not accepted: log findings, keep the original plan, proceed to I.
+6. Re-validate the builder gate after P+ (plan may have changed structure).
+
+### Outputs
+- Updated `.buildloop/current-plan.md` (if accepted)
+- Observatory telemetry event
+
+### Terminology
+- The proposer envelope uses `design_assertions` (not `claims`) to avoid
+  collision with implementation claims in `.buildloop/build-claims.md`.
+
+### Context Budget
+- **Target context utilization:** <35%
+
+### Transition Rule
+On completion (accepted or not), advance to I. P+ never blocks the pipeline --
+it improves the plan when it can, but falls back to the original plan on failure.
 
 ---
 
@@ -353,7 +399,7 @@ Verdict: PASS | FAIL
 ## Pipeline Modes
 
 ### Full Mode: `[QRPID]`
-All 5 phases run. Use for:
+All phases run. For complex tasks: `Q -> R -> P -> P+ -> I -> D`. Use for:
 - First task in a new project
 - Risky changes (migrations, auth, infra)
 - Unfamiliar codebases
@@ -364,7 +410,8 @@ Starts at Plan. Use when:
 - Task is a continuation in the same codebase area
 - SPEC.md has explicit implementation detail
 
-Becomes `[-PID]` in task markers.
+For complex tasks: `P -> P+ -> I -> D`. For simple/medium: `P -> I -> D`.
+Becomes `[-PID]` or `[-P+ID]` in task markers.
 
 ### Batched Doubt
 For sequential tasks in one session, defer D and run once at the end.
@@ -398,6 +445,7 @@ This is the core architectural difference from SPID: **the orchestrator is a sta
 | Q     | Yes  | Yes  | --        | --       | Yes      | --   | --     | No          | No          |
 | R     | **No** | No | Yes       | --       | No       | --   | --     | Yes         | No          |
 | P     | Yes  | Yes  | No        | Yes      | Yes      | --   | --     | Limited*    | No          |
+| P+    | Yes  | No   | No        | No       | No       | Yes  | --     | Yes         | No          |
 | I     | No   | No   | No        | No       | No       | Yes  | --     | Yes         | Yes         |
 | D     | **No** | No | No        | No       | No       | **No** | Yes  | Yes         | Yes (fixes) |
 
@@ -439,6 +487,7 @@ Each phase has a **target context utilization** percentage. The orchestrator rec
 | Q (Scout) | 15% | Lightweight question generation, no code reading |
 | R (Research) | 40% | Codebase exploration bounded by 30-file cap |
 | P (Plan) | 40% | Design + plan with minimal new file reads |
+| P+ (Plan Review) | 35% | Proposer/reviewer loop on plan artifact |
 | I (Implement) | 60% | Needs room for iteration on build/test errors |
 | D (Doubt) | 50% | Fresh-context audit with room for fixes |
 
@@ -448,6 +497,7 @@ Targets are configurable via `.foundry.json`:
   "budget_targets": {
     "scout": 15,
     "planner": 40,
+    "plan_review": 35,
     "builder": 60,
     "reviewer": 50
   },
@@ -462,7 +512,7 @@ Each phase produces a `PhaseBudgetRecord`:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `phase` | string | Phase name (Scout, Planner, Builder, Reviewer) |
+| `phase` | string | Phase name (Scout, Planner, PlanReview, Builder, Reviewer) |
 | `target_pct` | u8 | Configured target percentage |
 | `actual_pct` | u8 | Actual context window usage percentage |
 | `overrun` | bool | Whether actual exceeded target |
@@ -521,11 +571,13 @@ Save to `~/.foundry/patterns/` with: `pattern_id`, `title`, `severity`, `keyword
 
 All artifacts live in `.buildloop/` and are **overwritten** each pipeline run (not accumulated). They represent the current state, not history. Git history is the log.
 
+P+ does not produce a separate artifact file. When P+ accepts the reviewed plan, it overwrites `current-plan.md` in-place. The original plan is preserved only in git history.
+
 ```
 .buildloop/
 ├── questions.md          # Q output
 ├── research-report.md    # R output
-├── current-plan.md       # P output
+├── current-plan.md       # P output (may be updated by P+)
 ├── build-claims.md       # I output
 ├── review-report.md      # D output
 └── logs/                 # Raw agent outputs (debug)

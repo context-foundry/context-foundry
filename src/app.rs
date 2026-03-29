@@ -2009,7 +2009,7 @@ fn spawn_design_loop(
                         artifact_type: "analysis".to_string(),
                         artifact_text: format!("Orchestrator error: {}", e),
                         rationale: String::new(),
-                        claims: Vec::new(),
+                        design_assertions: Vec::new(),
                     },
                     final_review: orchestrator::ReviewerOutput {
                         status: "findings".to_string(),

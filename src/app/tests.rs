@@ -13,7 +13,7 @@ use super::{
 };
 use crate::agent::{AgentOutputEvent, AgentRole};
 use crate::config::Config;
-use crate::orchestrator::{Finding, OrchestratorOutcome, ProposerOutput, ReviewerOutput};
+use crate::orchestrator::{Finding, OrchestratorOutcome, PlanReviewOutcome, ProposerOutput, ReviewerOutput};
 use crate::task::Task;
 use crossterm::event::{self, KeyCode, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use std::collections::HashMap;
@@ -1090,7 +1090,7 @@ fn test_orchestrator_outcome_accepted_shows_startup() {
             artifact_type: "plan".to_string(),
             artifact_text: "Build X".to_string(),
             rationale: "Because".to_string(),
-            claims: Vec::new(),
+            design_assertions: Vec::new(),
         },
         final_review: ReviewerOutput {
             status: "clean".to_string(),
@@ -1132,7 +1132,7 @@ fn test_orchestrator_outcome_unresolved_shows_startup() {
             artifact_type: "plan".to_string(),
             artifact_text: "Build X".to_string(),
             rationale: "Because".to_string(),
-            claims: Vec::new(),
+            design_assertions: Vec::new(),
         },
         final_review: ReviewerOutput {
             status: "findings".to_string(),
@@ -1328,7 +1328,7 @@ fn test_orchestrator_outcome_with_findings_enables_findings_panel() {
             artifact_type: "plan".to_string(),
             artifact_text: "Build API".to_string(),
             rationale: "Because".to_string(),
-            claims: Vec::new(),
+            design_assertions: Vec::new(),
         },
         final_review: ReviewerOutput {
             status: "findings".to_string(),
@@ -1371,7 +1371,7 @@ fn test_orchestrator_outcome_accepted_does_not_enable_findings_panel() {
             artifact_type: "plan".to_string(),
             artifact_text: "Build API".to_string(),
             rationale: "Done".to_string(),
-            claims: Vec::new(),
+            design_assertions: Vec::new(),
         },
         final_review: ReviewerOutput {
             status: "pass".to_string(),
@@ -1992,4 +1992,44 @@ fn test_active_pattern_keywords_cleared_on_task_start() {
     );
     assert!(state.active_pattern_keywords.is_empty());
     let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn plan_review_outcome_accepted_replaces_text() {
+    let outcome = PlanReviewOutcome {
+        accepted: true,
+        final_plan_text: "## File Operations\n...\n## Verification\n...".to_string(),
+        iterations: 2,
+        unresolved_findings: vec![],
+    };
+    assert!(outcome.accepted);
+    assert!(outcome.final_plan_text.contains("## File Operations"));
+    assert!(outcome.unresolved_findings.is_empty());
+}
+
+#[test]
+fn plan_review_outcome_rejected_preserves_findings() {
+    let outcome = PlanReviewOutcome {
+        accepted: false,
+        final_plan_text: "original".to_string(),
+        iterations: 3,
+        unresolved_findings: vec![Finding {
+            severity: "high".to_string(),
+            description: "Missing error handling".to_string(),
+            location: "src/main.rs:42".to_string(),
+            suggestion: "Add Result return type".to_string(),
+        }],
+    };
+    assert!(!outcome.accepted);
+    assert_eq!(outcome.unresolved_findings.len(), 1);
+    assert_eq!(outcome.unresolved_findings[0].severity, "high");
+}
+
+#[test]
+fn complex_task_triggers_plan_review_char() {
+    use crate::complexity::{classify_task, TaskComplexity};
+    assert_eq!(
+        classify_task("refactor the authentication system to support OIDC"),
+        TaskComplexity::Complex
+    );
 }

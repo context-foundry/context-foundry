@@ -19,8 +19,8 @@ pub struct ProposerOutput {
     pub artifact_text: String,
     #[serde(default)]
     pub rationale: String,
-    #[serde(default)]
-    pub claims: Vec<String>,
+    #[serde(default, alias = "claims")]
+    pub design_assertions: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -48,6 +48,14 @@ pub struct OrchestratorOutcome {
     pub final_review: ReviewerOutput,
     pub iterations: usize,
     pub accepted: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct PlanReviewOutcome {
+    pub accepted: bool,
+    pub final_plan_text: String,
+    pub iterations: usize,
+    pub unresolved_findings: Vec<Finding>,
 }
 
 // ─── Config ──────────────────────────────────────────────────
@@ -122,25 +130,25 @@ Do not add any text before or after the JSON.
   "artifact_type": "plan" or "code_change" or "analysis",
   "artifact_text": "the full artifact content as a string",
   "rationale": "why you chose this approach",
-  "claims": ["verifiable claim 1", "verifiable claim 2"]
+  "design_assertions": ["verifiable assertion 1", "verifiable assertion 2"]
 }}
 
 RULES:
 - artifact_type must be one of: plan, code_change, analysis
 - artifact_text contains the actual deliverable (plan, diff description, analysis)
-- claims must be specific and verifiable by a reviewer with repo access
+- design_assertions must be specific and verifiable by a reviewer with repo access
 - Do not wrap the JSON in markdown fences"#
     )
 }
 
 fn reviewer_prompt(proposer_output: &ProposerOutput) -> String {
-    let claims_block = if proposer_output.claims.is_empty() {
+    let claims_block = if proposer_output.design_assertions.is_empty() {
         String::new()
     } else {
         format!(
-            "\nCLAIMS TO VERIFY:\n{}",
+            "\nDESIGN ASSERTIONS TO VERIFY:\n{}",
             proposer_output
-                .claims
+                .design_assertions
                 .iter()
                 .enumerate()
                 .map(|(i, c)| format!("{}. {}", i + 1, c))
@@ -184,7 +192,7 @@ Do not add any text before or after the JSON.
       "suggestion": "what to do instead"
     }}
   ],
-  "validated": ["claim that was verified as correct"]
+  "validated": ["assertion that was verified as correct"]
 }}
 
 RULES:
@@ -211,7 +219,7 @@ fn parse_proposer_output(response: &str) -> ProposerOutput {
         artifact_type: "analysis".to_string(),
         artifact_text: response.to_string(),
         rationale: String::new(),
-        claims: Vec::new(),
+        design_assertions: Vec::new(),
     }
 }
 
@@ -355,7 +363,7 @@ pub async fn orchestrate(
                     artifact_type: "analysis".to_string(),
                     artifact_text: "Design loop cancelled by shutdown.".to_string(),
                     rationale: String::new(),
-                    claims: Vec::new(),
+                    design_assertions: Vec::new(),
                 }),
                 final_review: last_review.unwrap_or(ReviewerOutput {
                     status: "findings".to_string(),
@@ -396,9 +404,9 @@ pub async fn orchestrate(
 
         let artifact = parse_proposer_output(&proposer_result);
         on_event(&format!(
-            "Proposer produced: {} ({} claims)",
+            "Proposer produced: {} ({} design assertions)",
             artifact.artifact_type,
-            artifact.claims.len(),
+            artifact.design_assertions.len(),
         ));
 
         // Run reviewer
@@ -482,7 +490,7 @@ pub async fn orchestrate(
                 "Orchestrator reached max iterations without producing an accepted artifact."
                     .to_string(),
             rationale: String::new(),
-            claims: Vec::new(),
+            design_assertions: Vec::new(),
         }),
         final_review: last_review.unwrap_or(ReviewerOutput {
             status: "findings".to_string(),
@@ -491,6 +499,49 @@ pub async fn orchestrate(
         }),
         iterations: config.max_iterations,
         accepted: false,
+    })
+}
+
+// ─── Plan Review (P+ Subphase) ──────────────────────────────
+
+#[allow(clippy::too_many_arguments)]
+pub async fn run_plan_review(
+    plan_text: &str,
+    task_id: &str,
+    task_desc: &str,
+    config: &OrchestratorConfig,
+    project_dir: &Path,
+    log_dir: &Path,
+    on_event: impl Fn(&str),
+    event_tx: Option<mpsc::UnboundedSender<AgentOutputEvent>>,
+    shutdown: Option<Arc<AtomicBool>>,
+) -> Result<PlanReviewOutcome> {
+    let intent = format!(
+        "Review and improve this implementation plan for task {} ({}):\n\n{}",
+        task_id, task_desc, plan_text
+    );
+
+    let outcome = orchestrate(&intent, config, project_dir, log_dir, on_event, event_tx, shutdown).await?;
+
+    let final_plan_text = if outcome.artifact.artifact_type == "plan"
+        && !outcome.artifact.artifact_text.is_empty()
+    {
+        outcome.artifact.artifact_text.clone()
+    } else {
+        plan_text.to_string()
+    };
+
+    let unresolved_findings = if !outcome.accepted {
+        outcome.final_review.findings.clone()
+    } else {
+        Vec::new()
+    };
+
+    Ok(PlanReviewOutcome {
+        accepted: outcome.accepted,
+        final_plan_text,
+        iterations: outcome.iterations,
+        unresolved_findings,
     })
 }
 
@@ -687,16 +738,16 @@ mod tests {
 
     #[test]
     fn parse_valid_proposer_json() {
-        let json = r#"{"artifact_type":"plan","artifact_text":"Build X","rationale":"Because Y","claims":["A works","B works"]}"#;
+        let json = r#"{"artifact_type":"plan","artifact_text":"Build X","rationale":"Because Y","design_assertions":["A works","B works"]}"#;
         let output = parse_proposer_output(json);
         assert_eq!(output.artifact_type, "plan");
         assert_eq!(output.artifact_text, "Build X");
-        assert_eq!(output.claims.len(), 2);
+        assert_eq!(output.design_assertions.len(), 2);
     }
 
     #[test]
     fn parse_proposer_with_surrounding_text() {
-        let text = "Sure, here's my plan:\n{\"artifact_type\":\"plan\",\"artifact_text\":\"Do the thing\",\"rationale\":\"R\",\"claims\":[]}\nHope that helps!";
+        let text = "Sure, here's my plan:\n{\"artifact_type\":\"plan\",\"artifact_text\":\"Do the thing\",\"rationale\":\"R\",\"design_assertions\":[]}\nHope that helps!";
         let output = parse_proposer_output(text);
         assert_eq!(output.artifact_type, "plan");
         assert_eq!(output.artifact_text, "Do the thing");
@@ -1021,7 +1072,7 @@ mod tests {
     #[test]
     fn extract_json_skips_braces_inside_string_values() {
         let input =
-            r#"{"artifact_type":"code","artifact_text":"x } y","rationale":"test","claims":[]}"#;
+            r#"{"artifact_type":"code","artifact_text":"x } y","rationale":"test","design_assertions":[]}"#;
         let result = extract_json::<ProposerOutput>(input);
         assert!(result.is_some());
         let parsed = result.unwrap();
@@ -1031,7 +1082,7 @@ mod tests {
 
     #[test]
     fn extract_json_skips_braces_in_multiline_code_artifact() {
-        let input = r#"{"artifact_type":"code_change","artifact_text":"fn main() {\n    println!(\"hello\");\n}\nfn helper() {","rationale":"partial","claims":[]}"#;
+        let input = r#"{"artifact_type":"code_change","artifact_text":"fn main() {\n    println!(\"hello\");\n}\nfn helper() {","rationale":"partial","design_assertions":[]}"#;
         let result = extract_json::<ProposerOutput>(input);
         assert!(result.is_some());
         let parsed = result.unwrap();
@@ -1041,7 +1092,7 @@ mod tests {
 
     #[test]
     fn extract_json_handles_escaped_quotes_in_strings() {
-        let input = r#"{"artifact_type":"test","artifact_text":"she said \"hello\" and {left}","rationale":"r","claims":[]}"#;
+        let input = r#"{"artifact_type":"test","artifact_text":"she said \"hello\" and {left}","rationale":"r","design_assertions":[]}"#;
         let result = extract_json::<ProposerOutput>(input);
         assert!(result.is_some());
         let parsed = result.unwrap();
@@ -1061,7 +1112,7 @@ mod tests {
 
     #[test]
     fn extract_json_with_only_opening_brace_in_string() {
-        let input = r#"Preamble text {"artifact_type":"analysis","artifact_text":"{ { {","rationale":"test","claims":[]}"#;
+        let input = r#"Preamble text {"artifact_type":"analysis","artifact_text":"{ { {","rationale":"test","design_assertions":[]}"#;
         let result = extract_json::<ProposerOutput>(input);
         assert!(result.is_some());
         let parsed = result.unwrap();
@@ -1102,7 +1153,7 @@ mod tests {
                 artifact_type: "plan".to_string(),
                 artifact_text: "Build the thing".to_string(),
                 rationale: "Because reasons".to_string(),
-                claims: vec!["claim1".to_string()],
+                design_assertions: vec!["claim1".to_string()],
             },
             final_review: ReviewerOutput {
                 status: "clean".to_string(),
@@ -1140,7 +1191,7 @@ mod tests {
                 artifact_type: "analysis".to_string(),
                 artifact_text: "Incomplete result".to_string(),
                 rationale: String::new(),
-                claims: Vec::new(),
+                design_assertions: Vec::new(),
             },
             final_review: ReviewerOutput {
                 status: "findings".to_string(),
@@ -1259,5 +1310,45 @@ mod tests {
                 medium_str
             );
         }
+    }
+
+    #[test]
+    fn plan_review_outcome_default_values() {
+        let outcome = PlanReviewOutcome {
+            accepted: true,
+            final_plan_text: "test plan".to_string(),
+            iterations: 1,
+            unresolved_findings: vec![],
+        };
+        assert!(outcome.accepted);
+        assert_eq!(outcome.final_plan_text, "test plan");
+        assert_eq!(outcome.iterations, 1);
+        assert!(outcome.unresolved_findings.is_empty());
+    }
+
+    #[test]
+    fn proposer_output_accepts_claims_alias() {
+        let json = r#"{"artifact_type":"plan","artifact_text":"X","rationale":"R","claims":["A"]}"#;
+        let output = parse_proposer_output(json);
+        assert_eq!(output.design_assertions.len(), 1);
+        assert_eq!(output.design_assertions[0], "A");
+    }
+
+    #[test]
+    fn proposer_output_accepts_design_assertions_field() {
+        let json = r#"{"artifact_type":"plan","artifact_text":"X","rationale":"R","design_assertions":["B"]}"#;
+        let output = parse_proposer_output(json);
+        assert_eq!(output.design_assertions.len(), 1);
+        assert_eq!(output.design_assertions[0], "B");
+    }
+
+    #[test]
+    fn complex_tasks_are_correctly_classified() {
+        use crate::complexity::{classify_task, TaskComplexity};
+        assert_eq!(
+            classify_task("redesign the pipeline architecture"),
+            TaskComplexity::Complex
+        );
+        assert_eq!(classify_task("fix typo in readme"), TaskComplexity::Simple);
     }
 }

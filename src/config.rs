@@ -102,6 +102,11 @@ pub struct Config {
     /// Orchestrator: acceptance policy ("no-high", "no-high-medium", "no-findings").
     pub orchestrator_accept_policy: String,
 
+    /// Enable P+ subphase: run the planner's output through the proposer/reviewer
+    /// orchestrator loop for Complex-classified tasks before passing to Builder.
+    #[serde(default)]
+    pub plan_review_enabled: bool,
+
     /// Review mode: "diff-only" passes git diff to reviewer, "file-list" uses changed file list.
     pub review_mode: String,
 
@@ -320,6 +325,7 @@ impl Default for Config {
             orchestrator_reviewer_model: "opus".into(),
             orchestrator_max_iterations: 3,
             orchestrator_accept_policy: "no-high-medium".into(),
+            plan_review_enabled: false,
             review_mode: "diff-only".into(),
             skip_planner_for_simple: true,
             skip_scout_for_simple: true,

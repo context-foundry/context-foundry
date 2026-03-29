@@ -26,6 +26,7 @@ use crate::budget;
 use crate::doubt_confidence;
 use crate::extensions;
 use crate::observatory::{self, AgentUsage, ObservatoryEvent};
+use crate::orchestrator::{self, OrchestratorConfig};
 use crate::utils::atomic_write_file;
 
 // ─── Crash Recovery Checkpoint ───────────────────────────────
@@ -1990,7 +1991,8 @@ async fn process_task(
         .and_then(|cp| {
             let stage = match cp.completed_stage.as_str() {
                 "scout" => Some("planner"),
-                "planner" => Some("builder"),
+                "planner" => Some("plan_review"),
+                "plan_review" => Some("builder"),
                 "builder" => Some("doubt"),
                 _ => None,
             };
@@ -2006,7 +2008,7 @@ async fn process_task(
     // Determine which stages to skip based on checkpoint, verifying artifacts exist.
     // resume_stage tells us the NEXT stage to run. Stages before it were completed.
     let checkpoint_skip_scout = match resume_stage {
-        Some("planner" | "builder" | "doubt") => {
+        Some("planner" | "plan_review" | "builder" | "doubt") => {
             // Scout completed -- but verify artifact exists
             if ctx.buildloop_dir.join("scout-report.md").exists() {
                 true
@@ -2020,7 +2022,7 @@ async fn process_task(
         _ => false,
     };
     let checkpoint_skip_planner = match resume_stage {
-        Some("builder" | "doubt") => {
+        Some("plan_review" | "builder" | "doubt") => {
             // Planner completed -- but verify artifact exists
             if ctx.current_plan.exists() {
                 true
@@ -2045,6 +2047,10 @@ async fn process_task(
                 false
             }
         }
+        _ => false,
+    };
+    let checkpoint_skip_plan_review = match resume_stage {
+        Some("builder" | "doubt") => true, // P+ already completed if we're past it
         _ => false,
     };
 
@@ -2765,6 +2771,220 @@ async fn process_task(
         }
     }
 
+    // ─── P+ Subphase: Plan Review via Orchestrator ────────────
+    // For complex tasks, route the planner's output through the proposer/reviewer
+    // loop before the builder executes. Simpler tasks skip this.
+    let plan_review_char;
+    if !checkpoint_skip_plan_review
+        && ctx.config.plan_review_enabled
+        && task_complexity == TaskComplexity::Complex
+        && !skip_planner
+    {
+        let plan_text = match std::fs::read_to_string(&ctx.current_plan) {
+            Ok(text) => text,
+            Err(e) => {
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                    "P+ skipped: failed to read current-plan.md: {}", e
+                ))));
+                String::new()
+            }
+        };
+
+        if !plan_text.is_empty() {
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::AgentStarted(
+                AgentRole::Planner,
+                format!("P+ review ({})", Config::display_provider_model(
+                    &ctx.config.orchestrator_proposer_provider,
+                    &ctx.config.orchestrator_proposer_model,
+                )),
+            )));
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                "P+ subphase: routing plan for {} through orchestrator review loop", task_id
+            ))));
+
+            let orch_config = OrchestratorConfig::from_config(&ctx.config);
+
+            let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
+            let fwd_tx = tx.clone();
+            let fwd_handle = tokio::spawn(async move {
+                let mut usage = AgentUsage::default();
+                while let Some(evt) = agent_rx.recv().await {
+                    usage.accumulate(&evt);
+                    let _ = fwd_tx.send(AppEvent::AgentOutput(evt));
+                }
+                usage
+            });
+
+            let plan_review_start = Instant::now();
+            let review_result = orchestrator::run_plan_review(
+                &plan_text,
+                task_id,
+                task_desc,
+                &orch_config,
+                &ctx.project_dir,
+                &ctx.log_dir,
+                |msg| {
+                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                        "P+: {}", msg
+                    ))));
+                },
+                Some(agent_tx),
+                Some(ctx.shutdown.clone()),
+            )
+            .await;
+
+            let agent_usage = fwd_handle.await.unwrap_or_default();
+            let _ = tx.send(AppEvent::AgentDone(
+                review_result.as_ref().map(|r| r.accepted).unwrap_or(false),
+            ));
+            observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::AgentDone {
+                role: "PlanReview".to_string(),
+                success: review_result.as_ref().map(|r| r.accepted).unwrap_or(false),
+                duration_secs: plan_review_start.elapsed().as_secs_f64(),
+                tokens_in: agent_usage.tokens_in,
+                tokens_out: agent_usage.tokens_out,
+                cost_usd: agent_usage.cost_usd,
+                context_pct: agent_usage.context_pct,
+            });
+
+            match review_result {
+                Ok(outcome) => {
+                    if outcome.accepted {
+                        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                            "P+ accepted plan in {} iteration(s) -- replacing current-plan.md",
+                            outcome.iterations
+                        ))));
+                        // Replace current-plan.md with the reviewed plan
+                        if let Err(e) = crate::utils::atomic_write_file(
+                            &ctx.current_plan,
+                            outcome.final_plan_text.as_bytes(),
+                        ) {
+                            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                                "P+ warning: failed to write reviewed plan: {}", e
+                            ))));
+                        }
+                        plan_review_char = "+";
+                    } else {
+                        let finding_count = outcome.unresolved_findings.len();
+                        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                            "P+ did not accept plan after {} iteration(s) ({} unresolved findings) -- using original plan",
+                            outcome.iterations, finding_count
+                        ))));
+                        plan_review_char = "!";
+                    }
+                }
+                Err(e) => {
+                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                        "P+ orchestrator error: {} -- using original plan", e
+                    ))));
+                    plan_review_char = "!";
+                }
+            }
+
+            // Budget telemetry for P+ (use plan_review target)
+            if ctx.config.budget_recovery_enabled {
+                let mut record = budget::PhaseBudgetRecord {
+                    phase: "PlanReview".to_string(),
+                    target_pct: ctx.config.budget_targets.plan_review,
+                    actual_pct: agent_usage.context_pct,
+                    overrun: false,
+                    overrun_amount: 0,
+                    tokens_in: agent_usage.tokens_in,
+                    tokens_out: agent_usage.tokens_out,
+                    cost_usd: agent_usage.cost_usd,
+                    recovery_action: budget::RecoveryAction::Continue,
+                };
+                let actual = record.actual_pct;
+                let target = record.target_pct;
+                if actual > target {
+                    record.overrun = true;
+                    record.overrun_amount = actual as i16 - target as i16;
+                    let overrun_amount = record.overrun_amount as u8;
+                    if overrun_amount > ctx.config.budget_overrun_threshold {
+                        if overrun_amount <= 20 {
+                            record.recovery_action = budget::RecoveryAction::Summarize;
+                            budget_summary_for_next = Some(budget::summarize_directive(
+                                "PlanReview", actual, target,
+                            ));
+                        } else if overrun_amount <= 40 {
+                            record.recovery_action = budget::RecoveryAction::Escalate;
+                            budget_model_override = Some(("claude".to_string(), "opus".to_string()));
+                        } else {
+                            record.recovery_action = budget::RecoveryAction::SplitRecommended;
+                        }
+                        budget_telemetry.any_overrun = true;
+                        budget_telemetry.recovery_actions_taken.push(format!(
+                            "PlanReview: {}", record.recovery_action
+                        ));
+                    }
+                } else {
+                    record.overrun_amount = actual as i16 - target as i16;
+                }
+                budget_telemetry.records.push(record);
+            }
+
+            adaptive_sleep(
+                &ctx.config,
+                false, // P+ uses multiple agent calls internally, assume not rate-limited
+                ctx.config.pause_between_agents_secs,
+            )
+            .await;
+
+            if ctx.is_stop_requested() {
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                    "Stop requested after P+ for {} -- skipping remaining stages", task_id
+                ))));
+                {
+                    let _lock = ctx.tasks_file_lock.lock().unwrap_or_else(|e| e.into_inner());
+                    let _ = task::update_task_progress(
+                        &ctx.plan_path,
+                        task_id,
+                        &format!("{}{}{}--", scout_char, planner_char, plan_review_char),
+                    );
+                }
+                let _ = commit_wip_for_mode(ctx, task_id, task_desc);
+                return (false, last_rate_limited);
+            }
+
+            // Re-validate the builder gate after P+ may have replaced the plan
+            if let GateResult::Fail(reason) = gate_builder(ctx) {
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                    "GATE BLOCKED builder after P+ for {}: {} -- using pre-P+ plan if available",
+                    task_id, reason
+                ))));
+                // Restore original plan from before P+
+                if let Err(e) = atomic_write_file(&ctx.current_plan, plan_text.as_bytes()) {
+                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                        "Failed to restore pre-P+ plan: {}", e
+                    ))));
+                }
+                // Re-check gate with restored plan
+                if let GateResult::Fail(reason2) = gate_builder(ctx) {
+                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                        "GATE BLOCKED builder after restoring pre-P+ plan: {}", reason2
+                    ))));
+                    {
+                        let _lock = ctx.tasks_file_lock.lock().unwrap_or_else(|e| e.into_inner());
+                        let _ = task::update_task_progress(
+                            &ctx.plan_path,
+                            task_id,
+                            &format!("{}{}{}--!", scout_char, planner_char, plan_review_char),
+                        );
+                    }
+                    let _ = commit_wip_for_mode(ctx, task_id, task_desc);
+                    return (false, last_rate_limited);
+                }
+            }
+
+            // Checkpoint: P+ completed
+            write_checkpoint(&ctx.buildloop_dir, task_id, task_desc, "plan_review");
+        } else {
+            plan_review_char = "-";
+        }
+    } else {
+        plan_review_char = "-";
+    }
+
     // ─── Run Builder ────────────────────────────────────────
     let build_ok: bool;
     if checkpoint_skip_builder {
@@ -2966,7 +3186,7 @@ async fn process_task(
             let _ = task::update_task_progress(
                 &ctx.plan_path,
                 task_id,
-                &format!("{}{}I-!", scout_char, planner_char),
+                &format!("{}{}{}I-!", scout_char, planner_char, plan_review_char),
             );
         }
         stage_results.push(StageResult::failure(
@@ -2991,7 +3211,7 @@ async fn process_task(
         let _ = task::update_task_progress(
             &ctx.plan_path,
             task_id,
-            &format!("{}{}I.", scout_char, planner_char),
+            &format!("{}{}{}I.", scout_char, planner_char, plan_review_char),
         );
     }
 
@@ -3045,7 +3265,7 @@ async fn process_task(
                     let _ = task::update_task_progress(
                         &ctx.plan_path,
                         task_id,
-                        &format!("{}{}I-!", scout_char, planner_char),
+                        &format!("{}{}{}I-!", scout_char, planner_char, plan_review_char),
                     );
                 }
                 stage_results.push(StageResult::failure(
@@ -3240,7 +3460,7 @@ async fn process_task(
             "D"
         };
         let fail_char = if !validated { "!" } else { "" };
-        let progress = format!("{}{}I{}{}", scout_char, planner_char, doubt_char, fail_char);
+        let progress = format!("{}{}{}I{}{}", scout_char, planner_char, plan_review_char, doubt_char, fail_char);
         let _lock = ctx
             .tasks_file_lock
             .lock()
