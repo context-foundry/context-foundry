@@ -73,9 +73,21 @@ impl PhaseIsolation {
                 temp_name = std::ffi::OsString::from(format!("{}_{}", name_str, counter));
             }
             let temp_path = staging_dir.join(&temp_name);
-            move_file(path, &temp_path)
-                .with_context(|| format!("failed to hide {}", path.display()))?;
-            hidden.insert(path.clone(), temp_path);
+            match move_file(path, &temp_path)
+                .with_context(|| format!("failed to hide {}", path.display()))
+            {
+                Ok(()) => {
+                    hidden.insert(path.clone(), temp_path);
+                }
+                Err(e) => {
+                    // Roll back all files already moved in earlier iterations
+                    for (original, temp) in &hidden {
+                        let _ = move_file(temp, original);
+                    }
+                    let _ = std::fs::remove_dir_all(&staging_dir);
+                    return Err(e);
+                }
+            }
         }
 
         Ok(PhaseIsolation {
@@ -151,6 +163,9 @@ fn move_file(src: &Path, dst: &Path) -> std::io::Result<()> {
 mod tests {
     use super::*;
     use std::fs;
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
+    use serial_test::serial;
 
     fn setup_temp_files(names: &[&str]) -> (tempfile::TempDir, Vec<PathBuf>) {
         let dir = tempfile::tempdir().unwrap();
@@ -167,6 +182,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_activate_hides_files() {
         let (_dir, paths) = setup_temp_files(&["a.md", "b.md"]);
         let guard = PhaseIsolation::activate(&paths).unwrap();
@@ -177,6 +193,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_restore_brings_files_back() {
         let (_dir, paths) = setup_temp_files(&["a.md", "b.md"]);
         let mut guard = PhaseIsolation::activate(&paths).unwrap();
@@ -189,6 +206,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_restore_is_idempotent() {
         let (_dir, paths) = setup_temp_files(&["a.md"]);
         let mut guard = PhaseIsolation::activate(&paths).unwrap();
@@ -198,6 +216,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_drop_restores_if_not_explicit() {
         let (_dir, paths) = setup_temp_files(&["a.md"]);
         {
@@ -210,6 +229,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_skips_nonexistent_paths() {
         let dir = tempfile::tempdir().unwrap();
         let paths = vec![
@@ -243,6 +263,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_isolation_prevents_grep_discovery() {
         let dir = tempfile::tempdir().unwrap();
         let tasks = dir.path().join("TASKS.md");
@@ -291,6 +312,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_doubt_isolation_hides_plan_content() {
         let dir = tempfile::tempdir().unwrap();
         let buildloop = dir.path().join(".buildloop");
@@ -321,6 +343,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_restore_partial_failure_triggers_drop_recovery() {
         let (_dir, paths) = setup_temp_files(&["a.md", "b.md"]);
         let mut guard = PhaseIsolation::activate(&paths).unwrap();
@@ -377,6 +400,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_drop_preserves_staging_dir_on_restore_failure() {
         // Create two files in separate directories so we can delete one parent
         let dir_a = tempfile::tempdir().unwrap();
@@ -428,5 +452,63 @@ mod tests {
 
         // Cleanup
         let _ = fs::remove_dir_all(&staging_dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    #[serial]
+    fn test_activate_partial_failure_rolls_back() {
+        let dir_ab = tempfile::tempdir().unwrap();
+        let file1 = dir_ab.path().join("file1.md");
+        let file2 = dir_ab.path().join("file2.md");
+        fs::write(&file1, "content-1").unwrap();
+        fs::write(&file2, "content-2").unwrap();
+
+        let dir_c = tempfile::tempdir().unwrap();
+        let file3 = dir_c.path().join("file3.md");
+        fs::write(&file3, "content-3").unwrap();
+
+        // Make dir_c read-only so move_file fails for file3
+        let mut perms = fs::metadata(dir_c.path()).unwrap().permissions();
+        perms.set_mode(0o555);
+        fs::set_permissions(dir_c.path(), perms).unwrap();
+
+        // Snapshot existing staging dirs before activate
+        let pid = std::process::id();
+        let tmp = std::env::temp_dir();
+        let prefix = format!(".foundry-isolation-{}-", pid);
+        let collect_staging_dirs = |tmp: &Path, prefix: &str| -> std::collections::HashSet<std::ffi::OsString> {
+            fs::read_dir(tmp)
+                .unwrap()
+                .filter_map(|e| e.ok())
+                .filter(|e| e.file_name().to_string_lossy().starts_with(prefix))
+                .map(|e| e.file_name())
+                .collect()
+        };
+        let before_dirs = collect_staging_dirs(&tmp, &prefix);
+
+        let result = PhaseIsolation::activate(&[file1.clone(), file2.clone(), file3.clone()]);
+        assert!(result.is_err(), "activate should fail when move_file fails for file3");
+
+        // All files should exist at their original locations
+        assert!(file1.exists(), "file1 should be rolled back to original location");
+        assert!(file2.exists(), "file2 should be rolled back to original location");
+        assert!(file3.exists(), "file3 should still exist (move failed before removal)");
+        assert_eq!(fs::read_to_string(&file1).unwrap(), "content-1");
+        assert_eq!(fs::read_to_string(&file2).unwrap(), "content-2");
+
+        // No new staging directories should persist
+        let after_dirs = collect_staging_dirs(&tmp, &prefix);
+        let new_dirs: std::collections::HashSet<_> = after_dirs.difference(&before_dirs).collect();
+        assert!(
+            new_dirs.is_empty(),
+            "no new staging directories should persist after partial activation failure, found: {:?}",
+            new_dirs,
+        );
+
+        // Restore dir_c permissions so tempdir cleanup succeeds
+        let mut perms = fs::metadata(dir_c.path()).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(dir_c.path(), perms).unwrap();
     }
 }
