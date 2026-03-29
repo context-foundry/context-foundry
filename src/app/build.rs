@@ -541,6 +541,46 @@ fn build_dependency_groups(ops: &[FileOp], project_dir: &std::path::Path) -> Vec
     groups.into_values().collect()
 }
 
+/// Discover ALL changed files in a worktree via git.
+/// Returns relative paths of modified tracked files and new untracked files.
+/// Returns None if git commands fail (caller should fall back to ops-based copy).
+fn discover_changed_files_in_worktree(wt_dir: &std::path::Path) -> Option<Vec<String>> {
+    // Find modified tracked files
+    let diff_output = std::process::Command::new("git")
+        .args(["diff", "--name-only", "HEAD"])
+        .current_dir(wt_dir)
+        .output()
+        .ok()?;
+    if !diff_output.status.success() {
+        return None;
+    }
+    let mut changed: Vec<String> = String::from_utf8_lossy(&diff_output.stdout)
+        .split('\n')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+
+    // Find new untracked files (best-effort -- partial discovery is fine)
+    if let Ok(ls_output) = std::process::Command::new("git")
+        .args(["ls-files", "--others", "--exclude-standard"])
+        .current_dir(wt_dir)
+        .output()
+    {
+        if ls_output.status.success() {
+            let untracked: Vec<String> = String::from_utf8_lossy(&ls_output.stdout)
+                .split('\n')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect();
+            changed.extend(untracked);
+        }
+    }
+
+    changed.sort();
+    changed.dedup();
+    Some(changed)
+}
+
 /// Orchestrate parallel builder sub-agents, each in a git worktree.
 #[allow(clippy::too_many_arguments)]
 async fn run_parallel_builder(
@@ -803,12 +843,31 @@ async fn run_parallel_builder(
             aggregated_usage.context_pct = slot_usage.context_pct;
         }
 
-        // Copy modified files from worktree to main project
-        let group = &groups[*slot_idx];
+        // Copy ALL changed files from worktree to main project
         let (ref wt_dir, _) = slot_contexts[*slot_idx];
-        for &op_idx in group {
-            let src = wt_dir.join(&ops[op_idx].file_path);
-            let dest = ctx.project_dir.join(&ops[op_idx].file_path);
+        let files_to_copy = match discover_changed_files_in_worktree(wt_dir) {
+            Some(discovered) => {
+                if !discovered.is_empty() {
+                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                        "Parallel builder slot-{}: discovered {} changed files via git",
+                        slot_idx, discovered.len()
+                    ))));
+                }
+                discovered
+            }
+            None => {
+                // Fallback: git not available in worktree, use ops-based copy
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                    "Parallel builder slot-{}: git discovery failed, falling back to plan file ops",
+                    slot_idx
+                ))));
+                let group = &groups[*slot_idx];
+                group.iter().map(|&op_idx| ops[op_idx].file_path.clone()).collect()
+            }
+        };
+        for file_path in &files_to_copy {
+            let src = wt_dir.join(file_path);
+            let dest = ctx.project_dir.join(file_path);
             if src.exists() {
                 if let Some(parent) = dest.parent() {
                     let _ = std::fs::create_dir_all(parent);
@@ -816,7 +875,7 @@ async fn run_parallel_builder(
                 if let Err(e) = std::fs::copy(&src, &dest) {
                     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
                         "Parallel builder: failed to copy {} from slot-{}: {}",
-                        ops[op_idx].file_path, slot_idx, e
+                        file_path, slot_idx, e
                     ))));
                 }
             }
@@ -5075,5 +5134,102 @@ mod tests {
         );
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_discover_changed_files_in_worktree_finds_unplanned_files() {
+        let dir = std::env::temp_dir().join(format!(
+            "foundry-wt-discover-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+
+        // Initialize a git repo
+        std::process::Command::new("git")
+            .args(["init"])
+            .current_dir(&dir)
+            .output()
+            .unwrap();
+        std::process::Command::new("git")
+            .args(["config", "user.email", "test@test.com"])
+            .current_dir(&dir)
+            .output()
+            .unwrap();
+        std::process::Command::new("git")
+            .args(["config", "user.name", "test"])
+            .current_dir(&dir)
+            .output()
+            .unwrap();
+
+        // Create an initial tracked file, commit
+        std::fs::write(dir.join("planned.rs"), "fn planned() {}").unwrap();
+        std::process::Command::new("git")
+            .args(["add", "."])
+            .current_dir(&dir)
+            .output()
+            .unwrap();
+        std::process::Command::new("git")
+            .args(["commit", "-m", "initial"])
+            .current_dir(&dir)
+            .output()
+            .unwrap();
+
+        // Create a worktree
+        let wt_dir = std::env::temp_dir().join(format!(
+            "foundry-wt-discover-wt-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::process::Command::new("git")
+            .args(["worktree", "add", "--detach"])
+            .arg(&wt_dir)
+            .arg("HEAD")
+            .current_dir(&dir)
+            .output()
+            .unwrap();
+
+        // Modify tracked file in worktree
+        std::fs::write(wt_dir.join("planned.rs"), "fn planned() { /* modified */ }").unwrap();
+
+        // Create new untracked file (simulating Cargo.lock, test file, etc.)
+        std::fs::write(wt_dir.join("unplanned.rs"), "fn surprise() {}").unwrap();
+
+        // Create a new file in a subdirectory
+        std::fs::create_dir_all(wt_dir.join("tests")).unwrap();
+        std::fs::write(wt_dir.join("tests/new_test.rs"), "fn test() {}").unwrap();
+
+        // Run discovery
+        let result = super::discover_changed_files_in_worktree(&wt_dir);
+        assert!(result.is_some(), "git discovery must succeed");
+        let files = result.unwrap();
+        assert!(
+            files.contains(&"planned.rs".to_string()),
+            "must find modified tracked file, got: {:?}",
+            files
+        );
+        assert!(
+            files.contains(&"unplanned.rs".to_string()),
+            "must find new untracked file, got: {:?}",
+            files
+        );
+        assert!(
+            files.contains(&"tests/new_test.rs".to_string()),
+            "must find new file in subdirectory, got: {:?}",
+            files
+        );
+
+        // Cleanup
+        let _ = std::process::Command::new("git")
+            .args(["worktree", "remove", "--force"])
+            .arg(&wt_dir)
+            .current_dir(&dir)
+            .output();
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_dir_all(&wt_dir);
     }
 }
