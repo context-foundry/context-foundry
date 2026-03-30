@@ -263,7 +263,7 @@ pub async fn run(
     };
 
     // Observatory: session tracking
-    let session_id = format!("pr-review-{}", pr_number);
+    let session_id = format!("pr-review-{}-{}", repo.replace('/', "-"), pr_number);
     let session_start = Instant::now();
 
     observatory::log_event(
@@ -360,6 +360,7 @@ pub async fn run(
                 duration_secs: session_start.elapsed().as_secs_f64(),
             },
         );
+        let _ = std::fs::remove_dir_all(&buildloop_dir);
         return Err(anyhow!("PR review agent failed: {}", e));
     }
 
@@ -392,6 +393,7 @@ pub async fn run(
                     duration_secs: session_start.elapsed().as_secs_f64(),
                 },
             );
+            let _ = std::fs::remove_dir_all(&buildloop_dir);
             return Err(anyhow!("Reviewer did not produce review-report.md"));
         }
     };
@@ -406,7 +408,7 @@ pub async fn run(
         &session_id,
         project_dir,
         ObservatoryEvent::ReviewFindings {
-            task_id: format!("pr-review-{}", pr_number),
+            task_id: format!("pr-review-{}-{}", repo.replace('/', "-"), pr_number),
             high,
             medium,
             low,
@@ -416,26 +418,27 @@ pub async fn run(
 
     let total_duration_secs = session_start.elapsed().as_secs_f64();
 
-    match output_mode {
+    let output_result = match output_mode {
         ReviewPrOutput::Stdout => {
             println!("{}", report_content);
+            Ok(())
         }
         ReviewPrOutput::Json => {
-            let json_output = build_json_output(
+            build_json_output(
                 pr_number,
                 metadata.changed_files.len(),
                 &findings,
                 usage.cost_usd,
                 total_duration_secs,
-            )?;
-            println!("{}", json_output);
+            )
+            .map(|s| println!("{}", s))
         }
         ReviewPrOutput::Comment => {
-            post_pr_comment(pr_number, &repo, &report_content)?;
+            post_pr_comment(pr_number, &repo, &report_content)
         }
-    }
+    };
 
-    // Observatory: session ended
+    // Observatory: session ended (always runs, even if output failed)
     observatory::log_event(
         &session_id,
         project_dir,
@@ -448,7 +451,9 @@ pub async fn run(
         },
     );
 
-    Ok(())
+    let _ = std::fs::remove_dir_all(&buildloop_dir);
+
+    output_result
 }
 
 #[cfg(test)]
@@ -495,6 +500,40 @@ mod tests {
     fn test_parse_findings_json_no_fence() {
         let content = "# Review\nNo JSON here.";
         assert!(parse_findings_json(content).is_err());
+    }
+
+    #[test]
+    fn test_session_id_includes_repo_slug() {
+        let repo = "owner/repo-name";
+        let pr_number = 42u32;
+        let session_id = format!("pr-review-{}-{}", repo.replace('/', "-"), pr_number);
+        assert_eq!(session_id, "pr-review-owner-repo-name-42");
+    }
+
+    #[test]
+    fn test_session_id_different_repos_no_collision() {
+        let pr_number = 42u32;
+        let repo_a = "alice/project";
+        let repo_b = "bob/project";
+        let id_a = format!("pr-review-{}-{}", repo_a.replace('/', "-"), pr_number);
+        let id_b = format!("pr-review-{}-{}", repo_b.replace('/', "-"), pr_number);
+        assert_ne!(id_a, id_b);
+        assert_eq!(id_a, "pr-review-alice-project-42");
+        assert_eq!(id_b, "pr-review-bob-project-42");
+    }
+
+    #[test]
+    fn test_setup_temp_buildloop_and_cleanup() {
+        let tmp = std::env::temp_dir().join("foundry-test-cleanup");
+        std::fs::create_dir_all(&tmp).unwrap();
+        let pr_dir = setup_temp_buildloop(&tmp, 99).unwrap();
+        assert!(pr_dir.exists());
+        assert!(pr_dir.join("logs").exists());
+        // Simulate cleanup
+        let _ = std::fs::remove_dir_all(&pr_dir);
+        assert!(!pr_dir.exists());
+        // Clean up test dir
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 
     #[test]
