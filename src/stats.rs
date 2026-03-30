@@ -825,7 +825,7 @@ pub fn compute_stats(
 
     // ── Trend Data (T24.3) ──
     let trend_data = if trend {
-        Some(compute_trend_data(&completed_tasks, events, days))
+        Some(compute_trend_data(&completed_tasks, events, days, &task_committed))
     } else {
         None
     };
@@ -968,6 +968,7 @@ fn compute_trend_data(
     completed_tasks: &[CompletedTask],
     events: &[EventEnvelope],
     days: u32,
+    task_committed: &HashMap<(String, String), String>,
 ) -> TrendData {
     let today = Utc::now().date_naive();
     let cutoff = today - chrono::Duration::days(days as i64);
@@ -1011,11 +1012,15 @@ fn compute_trend_data(
             daily_avg_cost,
         }
     } else {
-        // Fallback: derive from committed events
+        // Fallback: derive from committed events, deduplicated via task_committed.
+        // task_committed keeps only the last commit_type per (session, task_id).
+        // Iterate events in reverse to find the last committed event per (session, task_id)
+        // so we bucket by the date of the final commit, not an earlier retry.
         let mut daily: BTreeMap<String, (usize, usize)> = BTreeMap::new();
         let mut daily_cost: BTreeMap<String, (f64, usize)> = BTreeMap::new();
+        let mut seen_committed: HashSet<(String, String)> = HashSet::new();
 
-        for ev in events {
+        for ev in events.iter().rev() {
             if is_pr_review_session(&ev.session_id) {
                 continue;
             }
@@ -1025,11 +1030,16 @@ fn compute_trend_data(
             }
             match ev.event_type.as_str() {
                 "committed" => {
-                    let entry = daily.entry(date_str).or_insert((0, 0));
-                    entry.1 += 1;
-                    let ct = ev.payload.get("commit_type").and_then(|v| v.as_str()).unwrap_or("");
-                    if ct.to_lowercase() == "feat" {
-                        entry.0 += 1;
+                    if let Some(task_id) = ev.payload.get("task_id").and_then(|v| v.as_str()) {
+                        let key = (ev.session_id.clone(), task_id.to_string());
+                        if task_committed.contains_key(&key) && seen_committed.insert(key) {
+                            let final_ct = &task_committed[&(ev.session_id.clone(), task_id.to_string())];
+                            let entry = daily.entry(date_str).or_insert((0, 0));
+                            entry.1 += 1;
+                            if final_ct.to_lowercase() == "feat" {
+                                entry.0 += 1;
+                            }
+                        }
                     }
                 }
                 "agent_done" => {
