@@ -277,6 +277,13 @@ pub struct Config {
     /// Semgrep rulesets to run (e.g. ["p/default", "p/security-audit"]).
     /// Empty uses auto-detection based on project languages.
     pub semgrep_rulesets: Vec<String>,
+
+    /// Require human approval in the TUI before committing a validated task as feat.
+    /// When true, the TUI prompts "Commit T1.1 as feat? [y/n]" after doubt passes.
+    /// On deny, the task commits as WIP and the loop pauses instead of retrying.
+    /// In headless mode, this flag is ignored with a warning (auto-approves).
+    #[serde(default)]
+    pub require_human_approval: bool,
 }
 
 impl Default for Config {
@@ -367,6 +374,7 @@ impl Default for Config {
             model: String::new(),
             semgrep_enabled: false,
             semgrep_rulesets: Vec::new(),
+            require_human_approval: false,
         }
     }
 }
@@ -954,5 +962,17 @@ mod tests {
         );
         // Restore permissions so tempdir cleanup succeeds
         fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();
+    }
+
+    #[test]
+    fn default_config_disables_require_human_approval() {
+        assert!(!Config::default().require_human_approval);
+    }
+
+    #[test]
+    fn config_deserializes_require_human_approval() {
+        let config: Config = serde_json::from_str(r#"{"require_human_approval":true}"#)
+            .expect("config should deserialize");
+        assert!(config.require_human_approval);
     }
 }

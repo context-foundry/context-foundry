@@ -442,6 +442,11 @@ fn spawn_build_loop(
     state.awaiting_pr = None;
     state.pr_poll_last_check = None;
 
+    let commit_approval_gate = Arc::new(AtomicBool::new(false));
+    let commit_approval_result = Arc::new(AtomicBool::new(false));
+    state.commit_approval_gate = Some(commit_approval_gate.clone());
+    state.commit_approval_result = Some(commit_approval_result.clone());
+
     let mut run_context = RunContext::new(
         project_dir,
         loop_config,
@@ -450,6 +455,8 @@ fn spawn_build_loop(
         review_gate,
     );
     run_context.session_cost_millicents = state.session_cost_millicents.clone();
+    run_context.commit_approval_gate = commit_approval_gate;
+    run_context.commit_approval_result = commit_approval_result;
     let loop_tx = event_tx.clone();
     tokio::spawn(async move {
         build::build_loop(run_context, loop_tx).await;
@@ -997,6 +1004,23 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                     pr_num
                 ));
             }
+            LoopEvent::AwaitCommitApproval { ref task_id, ref proposed_commit_type } => {
+                state.awaiting_commit_approval = true;
+                state.approval_task_id = Some(task_id.clone());
+                state.approval_proposed_type = Some(proposed_commit_type.clone());
+                state.log(format!(
+                    "Commit {} as {}? Press [y] to approve or [n] to deny",
+                    task_id, proposed_commit_type
+                ));
+            }
+            LoopEvent::CommitApprovalResponse { approved } => {
+                state.awaiting_commit_approval = false;
+                state.approval_task_id = None;
+                state.approval_proposed_type = None;
+                if !approved {
+                    state.log("Commit denied -- will commit as WIP and pause".to_string());
+                }
+            }
             LoopEvent::ShipStarted => {
                 state.ship_active = true;
                 state.log("Ship: committing changes".to_string());
@@ -1067,8 +1091,27 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                     Some("Arena results preserved in .buildloop/arena/".to_string()),
                 );
             } else if state.show_running_explorer {
+                // Commit approval gate: y/n approves or denies (must be before other handlers)
+                if state.awaiting_commit_approval
+                    && matches!(key.code, KeyCode::Char('y') | KeyCode::Char('n'))
+                {
+                    let approved = matches!(key.code, KeyCode::Char('y'));
+                    state.awaiting_commit_approval = false;
+                    state.approval_task_id = None;
+                    state.approval_proposed_type = None;
+                    if let Some(ref gate) = state.commit_approval_gate {
+                        if let Some(ref result) = state.commit_approval_result {
+                            result.store(approved, Ordering::Relaxed);
+                        }
+                        gate.store(false, Ordering::Relaxed);
+                    }
+                    if approved {
+                        state.log("Approved -- committing as feat".to_string());
+                    } else {
+                        state.log("Denied -- committing as WIP".to_string());
+                    }
                 // Review gate: Enter/c clears the review pause (must be before other handlers)
-                if state.awaiting_review && matches!(key.code, KeyCode::Enter | KeyCode::Char('c'))
+                } else if state.awaiting_review && matches!(key.code, KeyCode::Enter | KeyCode::Char('c'))
                 {
                     state.awaiting_review = false;
                     if let Some(ref gate) = state.review_gate {
@@ -1141,8 +1184,27 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                     }
                 } // close review-gate else
             } else {
+                // Commit approval gate: y/n approves or denies (must be before other handlers)
+                if state.awaiting_commit_approval
+                    && matches!(key.code, KeyCode::Char('y') | KeyCode::Char('n'))
+                {
+                    let approved = matches!(key.code, KeyCode::Char('y'));
+                    state.awaiting_commit_approval = false;
+                    state.approval_task_id = None;
+                    state.approval_proposed_type = None;
+                    if let Some(ref gate) = state.commit_approval_gate {
+                        if let Some(ref result) = state.commit_approval_result {
+                            result.store(approved, Ordering::Relaxed);
+                        }
+                        gate.store(false, Ordering::Relaxed);
+                    }
+                    if approved {
+                        state.log("Approved -- committing as feat".to_string());
+                    } else {
+                        state.log("Denied -- committing as WIP".to_string());
+                    }
                 // Review gate: Enter/c clears the review pause (must be before other handlers)
-                if state.awaiting_review && matches!(key.code, KeyCode::Enter | KeyCode::Char('c'))
+                } else if state.awaiting_review && matches!(key.code, KeyCode::Enter | KeyCode::Char('c'))
                 {
                     state.awaiting_review = false;
                     if let Some(ref gate) = state.review_gate {

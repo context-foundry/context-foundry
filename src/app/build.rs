@@ -1691,6 +1691,16 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                 success,
             )));
 
+            // If human denied a commit approval, pause the loop.
+            // Re-running the same pending task would waste API spend.
+            if !success && ctx.config.require_human_approval {
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+                    "Pausing after denied commit -- press Enter to resume or fix the task manually".to_string(),
+                )));
+                let _ = std::fs::create_dir_all(&ctx.buildloop_dir);
+                let _ = std::fs::write(ctx.buildloop_dir.join("stop"), "");
+            }
+
             // Collect build claims for targeted discovery
             if success {
                 if let Ok(claims) =
@@ -3958,6 +3968,44 @@ async fn process_task(
             ],
         ));
     }
+
+    // ─── Pre-Commit Approval Gate ───────────────────────────────
+    // When require_human_approval is enabled and the task passed validation,
+    // pause and ask the human to confirm before committing as feat.
+    // If denied, downgrade to WIP and the loop will pause after commit.
+    let validated = if validated && ctx.config.require_human_approval {
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::AwaitCommitApproval {
+            task_id: task_id.to_string(),
+            proposed_commit_type: "feat".to_string(),
+        }));
+        ctx.commit_approval_gate.store(true, Ordering::Relaxed);
+
+        while ctx.commit_approval_gate.load(Ordering::Relaxed) {
+            if ctx.is_stop_requested() {
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Finished));
+                return (false, false);
+            }
+            tokio::time::sleep(Duration::from_millis(200)).await;
+        }
+
+        let approved = ctx.commit_approval_result.load(Ordering::Relaxed);
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::CommitApprovalResponse {
+            approved,
+        }));
+        if approved {
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                "Human approved: committing {} as feat", task_id
+            ))));
+            true
+        } else {
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                "Human denied: downgrading {} to WIP", task_id
+            ))));
+            false
+        }
+    } else {
+        validated
+    };
 
     // Persist final pipeline progress indicator and mark done BEFORE committing.
     // Both writes must happen before git add -A so the commit captures them.

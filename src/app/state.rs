@@ -360,6 +360,14 @@ pub struct AppState {
     pub sandbox_enabled: bool,
     /// Human-readable sandbox status label for TUI display.
     pub sandbox_status_label: String,
+    /// True when the TUI is showing a commit approval prompt.
+    pub awaiting_commit_approval: bool,
+    /// The task ID being approved (for display in the prompt).
+    pub approval_task_id: Option<String>,
+    /// The proposed commit type (for display, e.g. "feat").
+    pub approval_proposed_type: Option<String>,
+    pub(super) commit_approval_gate: Option<Arc<AtomicBool>>,
+    pub(super) commit_approval_result: Option<Arc<AtomicBool>>,
 }
 
 impl AppState {
@@ -451,6 +459,11 @@ impl AppState {
             sandbox_active: false,
             sandbox_enabled: true,
             sandbox_status_label: String::new(),
+            awaiting_commit_approval: false,
+            approval_task_id: None,
+            approval_proposed_type: None,
+            commit_approval_gate: None,
+            commit_approval_result: None,
         }
     }
 
@@ -590,6 +603,13 @@ pub(super) enum LoopEvent {
         target_pct: u8,
         actual_pct: u8,
         recovery: String,
+    },
+    AwaitCommitApproval {
+        task_id: String,
+        proposed_commit_type: String,
+    },
+    CommitApprovalResponse {
+        approved: bool,
     },
     #[allow(dead_code)]
     TmuxSessionStarted(String),

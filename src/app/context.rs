@@ -96,6 +96,10 @@ pub(super) struct RunContext {
     /// Cumulative session cost in millicents (1 USD = 100_000 millicents).
     /// Shared between build loop and output forwarding tasks.
     pub(super) session_cost_millicents: Arc<std::sync::atomic::AtomicU64>,
+    /// Gate: set to true when awaiting commit approval, cleared when user responds.
+    pub(super) commit_approval_gate: Arc<AtomicBool>,
+    /// Result: true = approved (feat), false = denied (WIP). Only valid when gate is cleared.
+    pub(super) commit_approval_result: Arc<AtomicBool>,
 }
 
 impl RunContext {
@@ -125,6 +129,8 @@ impl RunContext {
             review_gate,
             tasks_file_lock,
             session_cost_millicents: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            commit_approval_gate: Arc::new(AtomicBool::new(false)),
+            commit_approval_result: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -183,6 +189,8 @@ impl RunContext {
         );
         ctx.session_id = self.session_id.clone();
         ctx.session_cost_millicents = self.session_cost_millicents.clone();
+        ctx.commit_approval_gate = self.commit_approval_gate.clone();
+        ctx.commit_approval_result = self.commit_approval_result.clone();
         ctx
     }
 
@@ -205,6 +213,8 @@ impl RunContext {
         );
         ctx.session_id = format!("{}/{}", self.session_id, sub_label);
         ctx.session_cost_millicents = self.session_cost_millicents.clone();
+        ctx.commit_approval_gate = self.commit_approval_gate.clone();
+        ctx.commit_approval_result = self.commit_approval_result.clone();
         ctx
     }
 }

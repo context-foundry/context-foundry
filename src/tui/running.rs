@@ -179,6 +179,8 @@ pub(super) fn render_header(frame: &mut Frame, area: Rect, state: &AppState) {
                     " ARENA READY "
                 } else if state.stop_after_task {
                     " STOPPING "
+                } else if state.awaiting_commit_approval {
+                    " APPROVAL "
                 } else if state.awaiting_review {
                     if state.awaiting_pr.is_some() {
                         " POLLING PR "
@@ -195,7 +197,7 @@ pub(super) fn render_header(frame: &mut Frame, area: Rect, state: &AppState) {
                     } else if matches!(state.phase, AppPhase::Planning) || state.dual_arena_ready()
                     {
                         Color::Magenta
-                    } else if state.stop_after_task || state.awaiting_review {
+                    } else if state.stop_after_task || state.awaiting_review || state.awaiting_commit_approval {
                         Color::Yellow
                     } else {
                         Color::Green
@@ -288,7 +290,21 @@ pub(super) fn render_header(frame: &mut Frame, area: Rect, state: &AppState) {
         ));
     }
 
-    if state.awaiting_review {
+    if state.awaiting_commit_approval {
+        if let Some(ref tid) = state.approval_task_id {
+            let ptype = state.approval_proposed_type.as_deref().unwrap_or("feat");
+            header_text.push(Line::from(vec![
+                Span::styled(
+                    format!("  Commit {} as {}? ", tid, ptype),
+                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    "[y] approve  [n] deny",
+                    Style::default().fg(Color::White),
+                ),
+            ]));
+        }
+    } else if state.awaiting_review {
         if let Some(pr_num) = state.awaiting_pr {
             let ago_text = match state.pr_poll_last_check {
                 Some(last) => {
@@ -953,7 +969,22 @@ pub(super) fn render_status_bar(frame: &mut Frame, area: Rect, state: &AppState)
     ));
     spans.push(Span::raw(dual_label));
 
-    if state.awaiting_review {
+    if state.awaiting_commit_approval {
+        spans.push(Span::styled(
+            "  y ",
+            Style::default()
+                .fg(Color::Black)
+                .bg(Color::Yellow),
+        ));
+        spans.push(Span::styled(" approve  ", Style::default().fg(Color::Gray)));
+        spans.push(Span::styled(
+            "  n ",
+            Style::default()
+                .fg(Color::Black)
+                .bg(Color::Yellow),
+        ));
+        spans.push(Span::styled(" deny  ", Style::default().fg(Color::Gray)));
+    } else if state.awaiting_review {
         spans.push(Span::styled(
             "  Enter ",
             Style::default()
