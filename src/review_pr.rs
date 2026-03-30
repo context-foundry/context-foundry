@@ -2,7 +2,10 @@ use anyhow::{anyhow, Context as _, Result};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Instant;
+use std::sync::Arc;
 use tokio::sync::mpsc;
+use tokio::sync::Semaphore;
+use tokio::task::JoinSet;
 use tokio::time::{timeout, Duration};
 
 use crate::agent::{self, AgentOutputEvent, AgentResult, AgentRole};
@@ -531,104 +534,154 @@ async fn run_multipass_pr_review(
         metadata.changed_files.len()
     );
 
+    let buildloop_dir = review_report.parent().unwrap();
+    let buildloop_dir_relative = review_report_relative
+        .strip_suffix("/review-report.md")
+        .unwrap_or(review_report_relative);
+
+    let concurrency = config.pr_review_concurrency.max(1);
+    let semaphore = Arc::new(Semaphore::new(concurrency));
+    let mut join_set: JoinSet<(usize, String, Option<serde_json::Value>, AgentUsage, bool)> =
+        JoinSet::new();
+
+    let total_files = reviewable_files.len();
+
+    for (i, file) in reviewable_files.iter().enumerate() {
+        let sem = semaphore.clone();
+        let file_name = (*file).clone();
+        let file_diff = diff_map.get(file.as_str()).copied().unwrap_or("").to_string();
+        let pr_title = metadata.title.clone();
+        let pr_provider_owned = pr_provider.to_string();
+        let pr_model_owned = pr_model.to_string();
+        let session_id_owned = session_id.to_string();
+        let project_dir_owned = project_dir.to_path_buf();
+        let log_dir_owned = log_dir.to_path_buf();
+        let config_owned = config.clone();
+        let buildloop_dir_owned = buildloop_dir.to_path_buf();
+        let buildloop_dir_rel = buildloop_dir_relative.to_string();
+        let total = total_files;
+
+        join_set.spawn(async move {
+            let _permit = sem.acquire_owned().await.unwrap();
+
+            let per_file_report = buildloop_dir_owned.join(format!("review-per-file-{}.md", i));
+            let _ = std::fs::remove_file(&per_file_report);
+            let per_file_report_relative =
+                format!("{}/review-per-file-{}.md", buildloop_dir_rel, i);
+
+            eprintln!("Reviewing file {}/{}: {}", i + 1, total, &file_name);
+
+            let prompt = prompts::pr_review_per_file_prompt(
+                pr_number,
+                &pr_title,
+                &file_name,
+                &file_diff,
+                &per_file_report_relative,
+            );
+
+            let (agent_tx, mut agent_rx) = mpsc::unbounded_channel::<AgentOutputEvent>();
+            let fwd_handle = tokio::spawn(async move {
+                let mut usage = AgentUsage::default();
+                while let Some(evt) = agent_rx.recv().await {
+                    usage.accumulate(&evt);
+                    if let AgentOutputEvent::Text(ref t) = evt {
+                        eprint!("{}", t);
+                    }
+                }
+                usage
+            });
+
+            observatory::log_event(
+                &session_id_owned,
+                &project_dir_owned,
+                ObservatoryEvent::AgentStarted {
+                    role: "Reviewer (per-file)".to_string(),
+                    provider: pr_provider_owned.clone(),
+                    model: pr_model_owned.clone(),
+                },
+            );
+            let per_file_start = Instant::now();
+
+            let pr_review_tools: &[&str] = &["Read", "Glob", "Grep", "Bash"];
+            let result = agent::run_agent(
+                &AgentRole::Reviewer,
+                Config::parse_provider(&pr_provider_owned),
+                &pr_model_owned,
+                &prompt,
+                &project_dir_owned,
+                agent_tx,
+                &log_dir_owned,
+                Some(pr_review_tools),
+                config_owned.agent_timeout_secs,
+                None,
+                Some(&config_owned),
+            )
+            .await;
+
+            let agent_usage = fwd_handle.await.unwrap_or_default();
+
+            observatory::log_event(
+                &session_id_owned,
+                &project_dir_owned,
+                ObservatoryEvent::AgentDone {
+                    role: "Reviewer (per-file)".to_string(),
+                    success: result.is_ok(),
+                    duration_secs: per_file_start.elapsed().as_secs_f64(),
+                    tokens_in: agent_usage.tokens_in,
+                    tokens_out: agent_usage.tokens_out,
+                    cost_usd: agent_usage.cost_usd,
+                    context_pct: agent_usage.context_pct,
+                },
+            );
+
+            let findings = if result.is_ok() {
+                std::fs::read_to_string(&per_file_report)
+                    .ok()
+                    .and_then(|content| parse_findings_json(&content).ok())
+                    .unwrap_or_else(|| {
+                        serde_json::json!({"high": [], "medium": [], "low": []})
+                    })
+            } else {
+                serde_json::json!({"high": [], "medium": [], "low": []})
+            };
+
+            (i, file_name, Some(findings), agent_usage, result.is_ok())
+        });
+    }
+
     let mut total_usage = AgentUsage::default();
     let mut all_per_file_findings: Vec<serde_json::Value> = Vec::new();
     let mut per_file_success_count: usize = 0;
 
-    for (i, file) in reviewable_files.iter().enumerate() {
-        eprintln!(
-            "Reviewing file {}/{}: {}",
-            i + 1,
-            reviewable_files.len(),
-            file
-        );
+    while let Some(result) = join_set.join_next().await {
+        match result {
+            Ok((_, file_name, findings_opt, agent_usage, success)) => {
+                total_usage.tokens_in += agent_usage.tokens_in;
+                total_usage.tokens_out += agent_usage.tokens_out;
+                total_usage.cost_usd += agent_usage.cost_usd;
+                total_usage.context_pct = total_usage.context_pct.max(agent_usage.context_pct);
 
-        let _ = std::fs::remove_file(review_report);
-
-        let file_diff = diff_map.get(file.as_str()).copied().unwrap_or("");
-        let prompt = prompts::pr_review_per_file_prompt(
-            pr_number,
-            &metadata.title,
-            file,
-            file_diff,
-            review_report_relative,
-        );
-
-        let (agent_tx, mut agent_rx) = mpsc::unbounded_channel::<AgentOutputEvent>();
-
-        let fwd_handle = tokio::spawn(async move {
-            let mut usage = AgentUsage::default();
-            while let Some(evt) = agent_rx.recv().await {
-                usage.accumulate(&evt);
-                if let AgentOutputEvent::Text(ref t) = evt {
-                    eprint!("{}", t);
+                if success {
+                    per_file_success_count += 1;
+                    if let Some(findings) = findings_opt {
+                        all_per_file_findings.push(findings);
+                    }
+                } else {
+                    eprintln!(
+                        "Per-file review failed for {} -- continuing with remaining files",
+                        file_name
+                    );
                 }
             }
-            usage
-        });
-
-        observatory::log_event(
-            session_id,
-            project_dir,
-            ObservatoryEvent::AgentStarted {
-                role: "Reviewer (per-file)".to_string(),
-                provider: pr_provider.to_string(),
-                model: pr_model.to_string(),
-            },
-        );
-        let per_file_start = Instant::now();
-
-        let pr_review_tools: &[&str] = &["Read", "Glob", "Grep", "Bash"];
-        let result = agent::run_agent(
-            &AgentRole::Reviewer,
-            Config::parse_provider(pr_provider),
-            pr_model,
-            &prompt,
-            project_dir,
-            agent_tx,
-            log_dir,
-            Some(pr_review_tools),
-            config.agent_timeout_secs,
-            None,
-            Some(config),
-        )
-        .await;
-
-        let agent_usage = fwd_handle.await.unwrap_or_default();
-        total_usage.tokens_in += agent_usage.tokens_in;
-        total_usage.tokens_out += agent_usage.tokens_out;
-        total_usage.cost_usd += agent_usage.cost_usd;
-        total_usage.context_pct = total_usage.context_pct.max(agent_usage.context_pct);
-
-        observatory::log_event(
-            session_id,
-            project_dir,
-            ObservatoryEvent::AgentDone {
-                role: "Reviewer (per-file)".to_string(),
-                success: result.is_ok(),
-                duration_secs: per_file_start.elapsed().as_secs_f64(),
-                tokens_in: agent_usage.tokens_in,
-                tokens_out: agent_usage.tokens_out,
-                cost_usd: agent_usage.cost_usd,
-                context_pct: agent_usage.context_pct,
-            },
-        );
-
-        if result.is_ok() {
-            per_file_success_count += 1;
-            let findings = std::fs::read_to_string(review_report)
-                .ok()
-                .and_then(|content| parse_findings_json(&content).ok())
-                .unwrap_or_else(|| {
-                    serde_json::json!({"high": [], "medium": [], "low": []})
-                });
-            all_per_file_findings.push(findings);
-        } else {
-            eprintln!(
-                "Per-file review failed for {} -- continuing with remaining files",
-                file
-            );
+            Err(e) => {
+                eprintln!("Per-file review task panicked: {} -- continuing", e);
+            }
         }
+    }
+
+    // Clean up per-file temp reports
+    for i in 0..total_files {
+        let _ = std::fs::remove_file(buildloop_dir.join(format!("review-per-file-{}.md", i)));
     }
 
     if reviewable_files.is_empty() {

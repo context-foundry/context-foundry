@@ -305,6 +305,10 @@ pub struct Config {
     /// split into per-file passes plus integration pass (like build-loop reviewer).
     /// 0 (default) means use review_multipass_threshold.
     pub pr_review_multipass_threshold: usize,
+
+    /// Max concurrent per-file review agents in multipass PR review.
+    /// 1 = sequential (original behavior). Default: 4.
+    pub pr_review_concurrency: usize,
 }
 
 impl Default for Config {
@@ -400,6 +404,7 @@ impl Default for Config {
             pr_review_model: String::new(),
             pr_review_provider: String::new(),
             pr_review_multipass_threshold: 0,
+            pr_review_concurrency: 4,
         }
     }
 }
@@ -517,6 +522,19 @@ impl Config {
                     Ok(n) => self.pr_review_multipass_threshold = n,
                     Err(_) => {
                         eprintln!("warning: FOUNDRY_PR_REVIEW_MULTIPASS_THRESHOLD={val:?} is not a valid usize -- ignoring");
+                    }
+                }
+            }
+        }
+        if let Ok(val) = std::env::var("FOUNDRY_PR_REVIEW_CONCURRENCY") {
+            if !val.is_empty() {
+                match val.parse::<usize>() {
+                    Ok(n) if n >= 1 => self.pr_review_concurrency = n,
+                    Ok(_) => {
+                        eprintln!("warning: FOUNDRY_PR_REVIEW_CONCURRENCY must be >= 1 -- ignoring");
+                    }
+                    Err(_) => {
+                        eprintln!("warning: FOUNDRY_PR_REVIEW_CONCURRENCY={val:?} is not a valid usize -- ignoring");
                     }
                 }
             }
@@ -1279,5 +1297,25 @@ mod tests {
         assert_eq!(config.pr_review_model, Config::default().pr_review_model);
 
         std::env::remove_var("FOUNDRY_PR_REVIEW_MODEL");
+    }
+
+    #[test]
+    fn test_pr_review_concurrency_default() {
+        let config = Config::default();
+        assert_eq!(config.pr_review_concurrency, 4);
+    }
+
+    #[test]
+    fn test_pr_review_concurrency_from_json() {
+        let json = r#"{"pr_review_concurrency": 8}"#;
+        let config: Config = serde_json::from_str(json).unwrap();
+        assert_eq!(config.pr_review_concurrency, 8);
+    }
+
+    #[test]
+    fn test_pr_review_concurrency_sequential() {
+        let json = r#"{"pr_review_concurrency": 1}"#;
+        let config: Config = serde_json::from_str(json).unwrap();
+        assert_eq!(config.pr_review_concurrency, 1);
     }
 }
