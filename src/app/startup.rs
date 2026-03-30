@@ -1048,11 +1048,24 @@ pub(super) fn enter_startup_surface(
     status_message: Option<String>,
 ) {
     refresh_plan_counts(project_dir, state);
+    populate_task_history_from_progress(project_dir, state);
     state.project_name = resolve_project_name(project_dir);
     state.clear_agent();
+    state.reset_dual_build();
     state.current_task = None;
     state.is_discovering = false;
     state.stop_after_task = false;
+    state.awaiting_commit_approval = false;
+    state.approval_task_id = None;
+    state.approval_proposed_type = None;
+    state.approval_session_id = None;
+    state.commit_approval_gates.clear();
+    state.commit_approval_results.clear();
+    state.pending_approvals.clear();
+    state.awaiting_review = false;
+    state.review_gate = None;
+    state.awaiting_pr = None;
+    state.pr_poll_last_check = None;
     state.planning = None;
 
     let scenario = detect_startup_scenario(project_dir);

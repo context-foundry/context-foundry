@@ -977,7 +977,7 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                 state.awaiting_pr = None;
                 state.pr_poll_last_check = None;
                 if let Some(ref gate) = state.review_gate {
-                    gate.store(false, Ordering::Relaxed);
+                    gate.store(false, Ordering::Release);
                 }
                 state.log(format!("PR #{} approved -- resuming pipeline", pr_num));
             }
@@ -986,7 +986,7 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                 state.awaiting_pr = None;
                 state.pr_poll_last_check = None;
                 if let Some(ref gate) = state.review_gate {
-                    gate.store(false, Ordering::Relaxed);
+                    gate.store(false, Ordering::Release);
                 }
                 // Create stop file to halt the build loop
                 let _ = std::fs::create_dir_all(&state.buildloop_dir);
@@ -1138,7 +1138,7 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                 {
                     state.awaiting_review = false;
                     if let Some(ref gate) = state.review_gate {
-                        gate.store(false, Ordering::Relaxed);
+                        gate.store(false, Ordering::Release);
                     }
                     state.log("Continuing to next task");
                     state.awaiting_pr = None;
@@ -1247,7 +1247,7 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                 {
                     state.awaiting_review = false;
                     if let Some(ref gate) = state.review_gate {
-                        gate.store(false, Ordering::Relaxed);
+                        gate.store(false, Ordering::Release);
                     }
                     state.log("Continuing to next task");
                     state.awaiting_pr = None;

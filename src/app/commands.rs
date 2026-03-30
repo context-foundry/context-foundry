@@ -490,7 +490,7 @@ pub(super) async fn run_headless(project_dir: &Path, output_format: Option<Strin
                 LoopEvent::WaitingForReview(_) => {
                     // In headless mode there is no TUI to clear the gate; auto-clear it so
                     // the build loop continues instead of hanging forever.
-                    headless_review_gate.store(false, Ordering::Relaxed);
+                    headless_review_gate.store(false, Ordering::Release);
                 }
             },
             AppEvent::UpdateAvailable(version) => {

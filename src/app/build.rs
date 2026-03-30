@@ -1250,7 +1250,7 @@ async fn poll_pr_review(
     let mut last_decision = String::new();
     loop {
         // Check gate FIRST (before sleeping), so first poll is immediate
-        if !review_gate.load(Ordering::Relaxed) {
+        if !review_gate.load(Ordering::Acquire) {
             return;
         }
 
@@ -4109,7 +4109,7 @@ async fn process_task(
                 }
 
                 // Pause: signal TUI and wait for user to press Enter or PR approval
-                ctx.review_gate.store(true, Ordering::Relaxed);
+                ctx.review_gate.store(true, Ordering::Release);
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::WaitingForReview(pr_num)));
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
                     "Waiting for PR review -- press Enter to continue or wait for approval"
@@ -4136,7 +4136,7 @@ async fn process_task(
                     None
                 };
 
-                while ctx.review_gate.load(Ordering::Relaxed) {
+                while ctx.review_gate.load(Ordering::Acquire) {
                     if ctx.is_stop_requested() {
                         if let Some(h) = poll_handle {
                             h.abort();
@@ -4169,12 +4169,12 @@ async fn process_task(
 
                 // Still pause after fallback commit in review mode
                 if committed {
-                    ctx.review_gate.store(true, Ordering::Relaxed);
+                    ctx.review_gate.store(true, Ordering::Release);
                     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::WaitingForReview(None)));
                     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
                         "Waiting for review -- press Enter to continue to next task".to_string(),
                     )));
-                    while ctx.review_gate.load(Ordering::Relaxed) {
+                    while ctx.review_gate.load(Ordering::Acquire) {
                         if ctx.is_stop_requested() {
                             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Finished));
                             return (false, false, false);
