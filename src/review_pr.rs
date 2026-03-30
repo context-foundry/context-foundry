@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Instant;
 use tokio::sync::mpsc;
+use tokio::time::{timeout, Duration};
 
 use crate::agent::{self, AgentOutputEvent, AgentResult, AgentRole};
 use crate::config::Config;
@@ -128,11 +129,16 @@ fn detect_repo_from_git_remote(project_dir: &Path) -> Result<String> {
     Err(anyhow!("Could not parse OWNER/REPO from remote URL: {}", url))
 }
 
-fn fetch_pr_diff(pr_number: u32, repo: &str) -> Result<String> {
-    let output = Command::new("gh")
-        .args(["pr", "diff", &pr_number.to_string(), "--repo", repo])
-        .output()
-        .context("Failed to run 'gh pr diff'. Is gh CLI installed?")?;
+async fn fetch_pr_diff(pr_number: u32, repo: &str) -> Result<String> {
+    let output = timeout(
+        Duration::from_secs(60),
+        tokio::process::Command::new("gh")
+            .args(["pr", "diff", &pr_number.to_string(), "--repo", repo])
+            .output(),
+    )
+    .await
+    .map_err(|_| anyhow!("gh pr diff timed out after 60s"))?
+    .context("Failed to run 'gh pr diff'. Is gh CLI installed?")?;
 
     if !output.status.success() {
         return Err(anyhow!(
@@ -144,16 +150,21 @@ fn fetch_pr_diff(pr_number: u32, repo: &str) -> Result<String> {
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
-fn fetch_pr_metadata(pr_number: u32, repo: &str) -> Result<PrMetadata> {
-    let output = Command::new("gh")
-        .args([
-            "pr", "view",
-            &pr_number.to_string(),
-            "--repo", repo,
-            "--json", "title,body,headRefName,baseRefName,files",
-        ])
-        .output()
-        .context("Failed to run 'gh pr view'. Is gh CLI installed?")?;
+async fn fetch_pr_metadata(pr_number: u32, repo: &str) -> Result<PrMetadata> {
+    let output = timeout(
+        Duration::from_secs(60),
+        tokio::process::Command::new("gh")
+            .args([
+                "pr", "view",
+                &pr_number.to_string(),
+                "--repo", repo,
+                "--json", "title,body,headRefName,baseRefName,files",
+            ])
+            .output(),
+    )
+    .await
+    .map_err(|_| anyhow!("gh pr view timed out after 60s"))?
+    .context("Failed to run 'gh pr view'. Is gh CLI installed?")?;
 
     if !output.status.success() {
         return Err(anyhow!(
@@ -248,10 +259,10 @@ fn extract_path_from_diff_header(lines: &[&str]) -> String {
     for line in lines {
         if line.starts_with("diff --git ") {
             let path = line.rsplit(" b/").next().unwrap_or("").to_string();
-            if !path.is_empty() {
+            if !path.is_empty() && !path.contains("diff --git") {
                 return path;
             }
-            return line.to_string();
+            return String::new();
         }
     }
     String::new()
@@ -386,10 +397,12 @@ fn rewrite_verdict_line(report_content: &str, high: usize, medium: usize) -> Str
     };
 
     let mut result = String::new();
+    let mut replaced = false;
     for line in report_content.lines() {
         let trimmed = line.trim();
-        if trimmed.starts_with("## Verdict:") {
+        if !replaced && trimmed.starts_with("## Verdict:") {
             result.push_str(new_verdict);
+            replaced = true;
         } else {
             result.push_str(line);
         }
@@ -421,16 +434,21 @@ fn build_json_output(
     serde_json::to_string_pretty(&output).context("Failed to format JSON output")
 }
 
-fn post_pr_comment(pr_number: u32, repo: &str, body: &str) -> Result<()> {
-    let output = Command::new("gh")
-        .args([
-            "pr", "comment",
-            &pr_number.to_string(),
-            "--repo", repo,
-            "--body", body,
-        ])
-        .output()
-        .context("Failed to run 'gh pr comment'")?;
+async fn post_pr_comment(pr_number: u32, repo: &str, body: &str) -> Result<()> {
+    let output = timeout(
+        Duration::from_secs(30),
+        tokio::process::Command::new("gh")
+            .args([
+                "pr", "comment",
+                &pr_number.to_string(),
+                "--repo", repo,
+                "--body", body,
+            ])
+            .output(),
+    )
+    .await
+    .map_err(|_| anyhow!("gh pr comment timed out after 30s"))?
+    .context("Failed to run 'gh pr comment'")?;
 
     if !output.status.success() {
         return Err(anyhow!(
@@ -747,12 +765,12 @@ pub async fn run(
 
     eprintln!("Reviewing PR #{} in {}...", pr_number, repo);
 
-    let diff = fetch_pr_diff(pr_number, &repo)?;
+    let diff = fetch_pr_diff(pr_number, &repo).await?;
     if diff.is_empty() {
         return Err(anyhow!("PR #{} has no diff", pr_number));
     }
 
-    let metadata = fetch_pr_metadata(pr_number, &repo)?;
+    let metadata = fetch_pr_metadata(pr_number, &repo).await?;
 
     let buildloop_dir = setup_temp_buildloop(project_dir, pr_number, &repo)?;
     let log_dir = buildloop_dir.join("logs");
@@ -957,7 +975,7 @@ pub async fn run(
                     .map(|s| println!("{}", s))
                 }
                 ReviewPrOutput::Comment => {
-                    post_pr_comment(pr_number, &repo, &report_content)
+                    post_pr_comment(pr_number, &repo, &report_content).await
                 }
             };
 
@@ -1040,7 +1058,7 @@ pub async fn run(
                         .map(|s| println!("{}", s))
                     }
                     ReviewPrOutput::Comment => {
-                        post_pr_comment(pr_number, &repo, &report_content)
+                        post_pr_comment(pr_number, &repo, &report_content).await
                     }
                 };
 
@@ -1134,7 +1152,7 @@ pub async fn run(
             .map(|s| println!("{}", s))
         }
         ReviewPrOutput::Comment => {
-            post_pr_comment(pr_number, &repo, &report_content)
+            post_pr_comment(pr_number, &repo, &report_content).await
         }
     };
 
@@ -1589,5 +1607,37 @@ mod tests {
         let guard = neutralize_project_rules(&tmp);
         assert!(guard.renamed.is_empty());
         let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn test_extract_path_from_diff_header_normal() {
+        let lines = vec!["diff --git a/src/main.rs b/src/main.rs", "index abc..def 100644"];
+        let result = extract_path_from_diff_header(&lines);
+        assert_eq!(result, "src/main.rs");
+    }
+
+    #[test]
+    fn test_extract_path_from_diff_header_no_b_prefix() {
+        // Binary file or non-standard header without " b/"
+        let lines = vec!["diff --git a/somefile somefile"];
+        let result = extract_path_from_diff_header(&lines);
+        assert_eq!(result, "");
+    }
+
+    #[test]
+    fn test_extract_path_from_diff_header_empty_lines() {
+        let lines: Vec<&str> = vec![];
+        let result = extract_path_from_diff_header(&lines);
+        assert_eq!(result, "");
+    }
+
+    #[test]
+    fn test_rewrite_verdict_only_first_occurrence() {
+        let report = "# PR Review\n\n## Verdict: PASS\n\n## Summary\nThe per-file review had ## Verdict: PASS but we found issues.\n";
+        let result = rewrite_verdict_line(report, 1, 0);
+        // First verdict line should be rewritten
+        assert!(result.contains("## Verdict: CONCERNS"));
+        // Second occurrence (in prose) should be preserved as-is
+        assert!(result.contains("The per-file review had ## Verdict: PASS but we found issues."));
     }
 }
