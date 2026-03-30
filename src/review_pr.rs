@@ -1,11 +1,12 @@
 use anyhow::{anyhow, Context as _, Result};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::time::Instant;
 use tokio::sync::mpsc;
 
 use crate::agent::{self, AgentRole, AgentOutputEvent};
 use crate::config::Config;
-use crate::observatory::AgentUsage;
+use crate::observatory::{self, AgentUsage, ObservatoryEvent};
 use crate::prompts;
 
 // ─── Types ───────────────────────────────────────────────────────
@@ -141,7 +142,7 @@ fn setup_temp_buildloop(project_dir: &Path) -> Result<PathBuf> {
     Ok(buildloop_dir)
 }
 
-fn format_as_json(report_content: &str) -> Result<String> {
+fn parse_findings_json(report_content: &str) -> Result<serde_json::Value> {
     let mut in_json_block = false;
     let mut json_lines = Vec::new();
 
@@ -151,12 +152,10 @@ fn format_as_json(report_content: &str) -> Result<String> {
             continue;
         }
         if in_json_block && line.trim().starts_with("```") {
-            // Try to parse what we collected
             let json_str = json_lines.join("\n");
             let value: serde_json::Value = serde_json::from_str(&json_str)
                 .context("Failed to parse JSON findings block")?;
-            return serde_json::to_string_pretty(&value)
-                .context("Failed to format JSON findings");
+            return Ok(value);
         }
         if in_json_block {
             json_lines.push(line);
@@ -164,6 +163,36 @@ fn format_as_json(report_content: &str) -> Result<String> {
     }
 
     Err(anyhow!("No valid JSON findings block found in review report"))
+}
+
+fn count_findings(findings: &serde_json::Value) -> (usize, usize, usize) {
+    let high = findings.get("high").and_then(|v| v.as_array()).map(|a| a.len()).unwrap_or(0);
+    let medium = findings.get("medium").and_then(|v| v.as_array()).map(|a| a.len()).unwrap_or(0);
+    let low = findings.get("low").and_then(|v| v.as_array()).map(|a| a.len()).unwrap_or(0);
+    (high, medium, low)
+}
+
+fn build_json_output(
+    pr_number: u32,
+    files_reviewed: usize,
+    findings: &serde_json::Value,
+    cost_usd: f64,
+    duration_secs: f64,
+) -> Result<String> {
+    let (high, medium, low) = count_findings(findings);
+    let output = serde_json::json!({
+        "findings": findings,
+        "summary": {
+            "pr_number": pr_number,
+            "files_reviewed": files_reviewed,
+            "findings_high": high,
+            "findings_medium": medium,
+            "findings_low": low,
+            "cost_usd": cost_usd,
+            "duration_secs": duration_secs,
+        }
+    });
+    serde_json::to_string_pretty(&output).context("Failed to format JSON output")
 }
 
 fn post_pr_comment(pr_number: u32, repo: &str, body: &str) -> Result<()> {
@@ -221,6 +250,36 @@ pub async fn run(
 
     let config = Config::load(project_dir);
 
+    // Resolve PR review model/provider with fallback to reviewer defaults
+    let pr_provider = if config.pr_review_provider.is_empty() {
+        config.reviewer_provider.clone()
+    } else {
+        config.pr_review_provider.clone()
+    };
+    let pr_model = if config.pr_review_model.is_empty() {
+        config.reviewer_model.clone()
+    } else {
+        config.pr_review_model.clone()
+    };
+
+    // Observatory: session tracking
+    let session_id = format!("pr-review-{}", pr_number);
+    let session_start = Instant::now();
+
+    observatory::log_event(
+        &session_id,
+        project_dir,
+        ObservatoryEvent::SessionStarted {
+            config: serde_json::json!({
+                "pr_number": pr_number,
+                "repo": repo,
+                "pr_review_provider": pr_provider,
+                "pr_review_model": pr_model,
+                "output_mode": output,
+            }),
+        },
+    );
+
     let changed_files_str = metadata.changed_files.join("\n");
     let prompt = prompts::pr_review_prompt(
         pr_number,
@@ -245,10 +304,22 @@ pub async fn run(
         usage
     });
 
-    agent::run_agent(
+    // Observatory: agent started
+    observatory::log_event(
+        &session_id,
+        project_dir,
+        ObservatoryEvent::AgentStarted {
+            role: "Reviewer".to_string(),
+            provider: pr_provider.clone(),
+            model: pr_model.clone(),
+        },
+    );
+    let agent_start = Instant::now();
+
+    let agent_result = agent::run_agent(
         &AgentRole::Reviewer,
-        Config::parse_provider(&config.reviewer_provider),
-        &config.reviewer_model,
+        Config::parse_provider(&pr_provider),
+        &pr_model,
         &prompt,
         project_dir,
         agent_tx,
@@ -257,25 +328,189 @@ pub async fn run(
         config.agent_timeout_secs,
         None,
     )
-    .await?;
+    .await;
 
-    let _usage = fwd_handle.await.unwrap_or_default();
+    let usage = fwd_handle.await.unwrap_or_default();
 
-    let report_content = std::fs::read_to_string(&review_report)
-        .context("Reviewer did not produce review-report.md")?;
+    if let Err(ref e) = agent_result {
+        observatory::log_event(
+            &session_id,
+            project_dir,
+            ObservatoryEvent::AgentDone {
+                role: "Reviewer".to_string(),
+                success: false,
+                duration_secs: agent_start.elapsed().as_secs_f64(),
+                tokens_in: usage.tokens_in,
+                tokens_out: usage.tokens_out,
+                cost_usd: usage.cost_usd,
+                context_pct: usage.context_pct,
+            },
+        );
+        observatory::log_event(
+            &session_id,
+            project_dir,
+            ObservatoryEvent::SessionEnded {
+                total_tasks: 0,
+                feat_count: 0,
+                wip_count: 0,
+                total_cost_usd: usage.cost_usd,
+                duration_secs: session_start.elapsed().as_secs_f64(),
+            },
+        );
+        return Err(anyhow!("PR review agent failed: {}", e));
+    }
+
+    // Observatory: agent done (success)
+    observatory::log_event(
+        &session_id,
+        project_dir,
+        ObservatoryEvent::AgentDone {
+            role: "Reviewer".to_string(),
+            success: true,
+            duration_secs: agent_start.elapsed().as_secs_f64(),
+            tokens_in: usage.tokens_in,
+            tokens_out: usage.tokens_out,
+            cost_usd: usage.cost_usd,
+            context_pct: usage.context_pct,
+        },
+    );
+
+    let report_content = match std::fs::read_to_string(&review_report) {
+        Ok(content) => content,
+        Err(_) => {
+            observatory::log_event(
+                &session_id,
+                project_dir,
+                ObservatoryEvent::SessionEnded {
+                    total_tasks: 0,
+                    feat_count: 0,
+                    wip_count: 0,
+                    total_cost_usd: usage.cost_usd,
+                    duration_secs: session_start.elapsed().as_secs_f64(),
+                },
+            );
+            return Err(anyhow!("Reviewer did not produce review-report.md"));
+        }
+    };
+
+    // Parse findings for observatory and JSON output
+    let findings = parse_findings_json(&report_content).unwrap_or_else(|_| {
+        serde_json::json!({"high": [], "medium": [], "low": []})
+    });
+    let (high, medium, low) = count_findings(&findings);
+
+    observatory::log_event(
+        &session_id,
+        project_dir,
+        ObservatoryEvent::ReviewFindings {
+            task_id: format!("pr-review-{}", pr_number),
+            high,
+            medium,
+            low,
+            findings_json: serde_json::to_string(&findings).unwrap_or_default(),
+        },
+    );
+
+    let total_duration_secs = session_start.elapsed().as_secs_f64();
 
     match output_mode {
         ReviewPrOutput::Stdout => {
             println!("{}", report_content);
         }
         ReviewPrOutput::Json => {
-            let json = format_as_json(&report_content)?;
-            println!("{}", json);
+            let json_output = build_json_output(
+                pr_number,
+                metadata.changed_files.len(),
+                &findings,
+                usage.cost_usd,
+                total_duration_secs,
+            )?;
+            println!("{}", json_output);
         }
         ReviewPrOutput::Comment => {
             post_pr_comment(pr_number, &repo, &report_content)?;
         }
     }
 
+    // Observatory: session ended
+    observatory::log_event(
+        &session_id,
+        project_dir,
+        ObservatoryEvent::SessionEnded {
+            total_tasks: 1,
+            feat_count: if high == 0 && medium == 0 { 1 } else { 0 },
+            wip_count: if high > 0 || medium > 0 { 1 } else { 0 },
+            total_cost_usd: usage.cost_usd,
+            duration_secs: total_duration_secs,
+        },
+    );
+
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_output_mode_valid() {
+        assert!(matches!(parse_output_mode("stdout").unwrap(), ReviewPrOutput::Stdout));
+        assert!(matches!(parse_output_mode("json").unwrap(), ReviewPrOutput::Json));
+        assert!(matches!(parse_output_mode("comment").unwrap(), ReviewPrOutput::Comment));
+        assert!(matches!(parse_output_mode("JSON").unwrap(), ReviewPrOutput::Json));
+    }
+
+    #[test]
+    fn test_parse_output_mode_invalid() {
+        assert!(parse_output_mode("xml").is_err());
+    }
+
+    #[test]
+    fn test_count_findings() {
+        let findings = serde_json::json!({
+            "high": [{"file": "a.rs", "issue": "bad"}],
+            "medium": [{"file": "b.rs", "issue": "meh"}, {"file": "c.rs", "issue": "hmm"}],
+            "low": []
+        });
+        assert_eq!(count_findings(&findings), (1, 2, 0));
+    }
+
+    #[test]
+    fn test_count_findings_empty() {
+        let findings = serde_json::json!({});
+        assert_eq!(count_findings(&findings), (0, 0, 0));
+    }
+
+    #[test]
+    fn test_parse_findings_json_extracts_json_fence() {
+        let content = "# Review\n\n```json\n{\"high\":[],\"medium\":[],\"low\":[]}\n```\n";
+        let result = parse_findings_json(content).unwrap();
+        assert_eq!(result, serde_json::json!({"high": [], "medium": [], "low": []}));
+    }
+
+    #[test]
+    fn test_parse_findings_json_no_fence() {
+        let content = "# Review\nNo JSON here.";
+        assert!(parse_findings_json(content).is_err());
+    }
+
+    #[test]
+    fn test_build_json_output_structure() {
+        let findings = serde_json::json!({
+            "high": [{"file": "a.rs", "issue": "bad"}],
+            "medium": [],
+            "low": [{"file": "b.rs", "issue": "meh"}]
+        });
+        let output = build_json_output(42, 5, &findings, 0.15, 30.5).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&output).unwrap();
+
+        assert_eq!(parsed["summary"]["pr_number"], 42);
+        assert_eq!(parsed["summary"]["files_reviewed"], 5);
+        assert_eq!(parsed["summary"]["findings_high"], 1);
+        assert_eq!(parsed["summary"]["findings_medium"], 0);
+        assert_eq!(parsed["summary"]["findings_low"], 1);
+        assert_eq!(parsed["summary"]["cost_usd"], 0.15);
+        assert_eq!(parsed["summary"]["duration_secs"], 30.5);
+        assert!(parsed["findings"]["high"].is_array());
+    }
 }

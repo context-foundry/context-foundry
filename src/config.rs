@@ -292,6 +292,14 @@ pub struct Config {
     /// Codex provider does not support this; a warning is logged when enabled with Codex.
     #[serde(default)]
     pub enforce_phase_rbac: bool,
+
+    /// Model for PR review via `foundry review-pr`. Defaults to reviewer_model.
+    /// Allows using a higher-quality model (e.g., opus) for PR reviews while
+    /// keeping the build-loop reviewer on a cheaper model (e.g., sonnet).
+    pub pr_review_model: String,
+
+    /// Provider for PR review via `foundry review-pr`. Defaults to reviewer_provider.
+    pub pr_review_provider: String,
 }
 
 impl Default for Config {
@@ -384,6 +392,8 @@ impl Default for Config {
             semgrep_rulesets: Vec::new(),
             require_human_approval: false,
             enforce_phase_rbac: false,
+            pr_review_model: String::new(),
+            pr_review_provider: String::new(),
         }
     }
 }
@@ -983,5 +993,22 @@ mod tests {
         let config: Config = serde_json::from_str(r#"{"require_human_approval":true}"#)
             .expect("config should deserialize");
         assert!(config.require_human_approval);
+    }
+
+    #[test]
+    fn pr_review_config_defaults_to_empty() {
+        let config = Config::default();
+        assert_eq!(config.pr_review_model, "");
+        assert_eq!(config.pr_review_provider, "");
+    }
+
+    #[test]
+    fn pr_review_config_deserializes_overrides() {
+        let config: Config = serde_json::from_str(
+            r#"{"pr_review_model":"opus","pr_review_provider":"claude"}"#,
+        )
+        .expect("config should deserialize");
+        assert_eq!(config.pr_review_model, "opus");
+        assert_eq!(config.pr_review_provider, "claude");
     }
 }
