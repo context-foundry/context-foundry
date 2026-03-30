@@ -1054,17 +1054,17 @@ Brief summary of what this PR does and overall assessment.
 ## Findings
 
 ```json
-{{{{
+{{
   "high": [
-    {{{{"file": "path/to/file", "line": 42, "issue": "Description", "fixed": false, "category": "security|logic|race|crash", "source_evidence": {{{{"snippet": "the exact code line(s)", "line_range": [40, 45], "reasoning": "One-line chain: what the code does -> why it is wrong -> what the consequence is"}}}}, "confidence": 0.85}}}}
+    {{"file": "path/to/file", "line": 42, "issue": "Description", "fixed": false, "category": "security|logic|race|crash", "source_evidence": {{"snippet": "the exact code line(s)", "line_range": [40, 45], "reasoning": "One-line chain: what the code does -> why it is wrong -> what the consequence is"}}, "confidence": 0.85}}
   ],
   "medium": [
-    {{{{"file": "path/to/file", "line": 10, "issue": "Description", "fixed": false, "category": "error-handling|api-contract|resource-leak", "source_evidence": {{{{"snippet": "the exact code line(s)", "line_range": [8, 13], "reasoning": "One-line chain: what the code does -> why it is wrong -> what the consequence is"}}}}, "confidence": 0.85}}}}
+    {{"file": "path/to/file", "line": 10, "issue": "Description", "fixed": false, "category": "error-handling|api-contract|resource-leak", "source_evidence": {{"snippet": "the exact code line(s)", "line_range": [8, 13], "reasoning": "One-line chain: what the code does -> why it is wrong -> what the consequence is"}}, "confidence": 0.85}}
   ],
   "low": [
-    {{{{"file": "path/to/file", "line": 5, "issue": "Description", "fixed": false, "category": "style|hardcoded|inconsistency", "source_evidence": {{{{"snippet": "the exact code line(s)", "line_range": [3, 7], "reasoning": "One-line chain: what the code does -> why it is wrong -> what the consequence is"}}}}, "confidence": 0.85}}}}
+    {{"file": "path/to/file", "line": 5, "issue": "Description", "fixed": false, "category": "style|hardcoded|inconsistency", "source_evidence": {{"snippet": "the exact code line(s)", "line_range": [3, 7], "reasoning": "One-line chain: what the code does -> why it is wrong -> what the consequence is"}}, "confidence": 0.85}}
   ]
-}}}}
+}}
 ```
 
 VERDICT RULES:
@@ -1894,5 +1894,53 @@ mod tests {
             integration.contains(scoring_section),
             "reviewer_integration_prompt missing CONFIDENCE SCORING section"
         );
+    }
+
+    #[test]
+    fn test_pr_review_prompt_contains_valid_json_template() {
+        let rendered = pr_review_prompt(
+            123,
+            "Test PR title",
+            "Test PR body",
+            "feature-branch",
+            "main",
+            "diff content here",
+            "src/foo.rs\nsrc/bar.rs",
+            "/tmp/review-report.md",
+        );
+
+        // Extract JSON between ```json and ``` fences
+        let mut in_json_block = false;
+        let mut json_lines: Vec<&str> = Vec::new();
+        for line in rendered.lines() {
+            if line.trim().starts_with("```json") {
+                in_json_block = true;
+                continue;
+            }
+            if in_json_block && line.trim().starts_with("```") {
+                break;
+            }
+            if in_json_block {
+                json_lines.push(line);
+            }
+        }
+
+        let json_str = json_lines.join("\n");
+        assert!(
+            !json_str.is_empty(),
+            "pr_review_prompt must contain a JSON block between ```json fences"
+        );
+
+        let parsed: Result<serde_json::Value, _> = serde_json::from_str(&json_str);
+        assert!(
+            parsed.is_ok(),
+            "pr_review_prompt JSON template must be valid JSON, but got parse error: {}",
+            parsed.unwrap_err()
+        );
+
+        let value = parsed.unwrap();
+        assert!(value.get("high").is_some(), "JSON must contain 'high' key");
+        assert!(value.get("medium").is_some(), "JSON must contain 'medium' key");
+        assert!(value.get("low").is_some(), "JSON must contain 'low' key");
     }
 }
