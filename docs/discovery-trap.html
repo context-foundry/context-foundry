@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>The Discovery Trap -- Context Foundry</title>
+  <meta name="description" content="Capability discovery is the new context switch. Building with AI agents keeps turning into testing AI agents.">
+  <meta property="og:title" content="The Discovery Trap -- Context Foundry">
+  <meta property="og:description" content="Capability discovery is the new context switch. Building with AI agents keeps turning into testing AI agents.">
+  <meta property="og:image" content="assets/og-card-1200x630.png">
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://contextfoundry.dev/discovery-trap.html">
+  <link rel="icon" type="image/png" href="assets/favicon-square-512.png">
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --border: #30363d;
+      --text: #e6edf3;
+      --text-muted: #8b949e;
+      --accent: #f0a500;
+      --accent-subtle: rgba(240, 165, 0, 0.15);
+      --radius: 4px;
+      --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+    }
+    * { box-sizing: border-box; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 0.9rem;
+      line-height: 1.7;
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 3rem 1.5rem;
+    }
+    h1 {
+      color: var(--accent);
+      font-size: 1.5rem;
+      border-bottom: 2px solid var(--accent);
+      padding-bottom: 0.5rem;
+      margin-bottom: 0.25rem;
+    }
+    h2 {
+      color: var(--accent);
+      font-size: 1.15rem;
+      border-left: 3px solid var(--accent);
+      padding-left: 0.75rem;
+      margin-top: 2.5rem;
+      margin-bottom: 0.75rem;
+    }
+    h3 {
+      color: var(--text);
+      font-size: 1rem;
+      margin-top: 1.75rem;
+      margin-bottom: 0.5rem;
+    }
+    p { margin: 0.75rem 0; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    pre {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem 1.25rem;
+      overflow-x: auto;
+      font-size: 0.85rem;
+      line-height: 1.5;
+    }
+    code {
+      background: var(--surface);
+      padding: 0.15rem 0.4rem;
+      border-radius: var(--radius);
+      font-size: 0.85rem;
+    }
+    pre code { background: none; padding: 0; }
+    blockquote {
+      border-left: 3px solid var(--accent);
+      margin: 1.25rem 0;
+      padding: 0.5rem 1rem;
+      background: var(--accent-subtle);
+      border-radius: 0 var(--radius) var(--radius) 0;
+    }
+    blockquote p { margin: 0.25rem 0; }
+    .hook {
+      font-size: 1.05rem;
+      color: var(--text);
+      margin-bottom: 0.25rem;
+    }
+    .subtitle {
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      margin-top: 0;
+    }
+    .muted { color: var(--text-muted); }
+    .era-grid {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 0.5rem 1rem;
+      margin: 1rem 0;
+    }
+    .era-label {
+      color: var(--accent);
+      font-weight: bold;
+      font-size: 0.85rem;
+      white-space: nowrap;
+    }
+    .era-desc {
+      font-size: 0.85rem;
+    }
+    footer {
+      margin-top: 3rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--border);
+      color: var(--text-muted);
+      font-size: 0.8rem;
+    }
+    @media print {
+      body { background: white; color: black; max-width: none; padding: 0.5in; }
+      pre { border: 1px solid #ccc; }
+      h1, h2 { color: #333; }
+      footer { color: #666; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <p class="muted"><a href="index.html">contextfoundry.dev</a></p>
+  <h1>The Discovery Trap</h1>
+  <p class="hook">Capability discovery is the new context switch.</p>
+  <p class="subtitle">Context Foundry · March 2025</p>
+</header>
+
+<section id="old-interrupt">
+  <h2>The interrupt you already know</h2>
+  <p>If you've written code for any amount of time, you know the feeling. You're in the zone. The problem is clear, the solution is forming, your hands are just keeping up with your brain. Then something breaks you out. A Slack message. A meeting. A build failure on a branch you forgot about.</p>
+  <p>It takes twenty minutes to get back. Sometimes longer. Sometimes you never fully get back, and the rest of the day is a wash. We all know this. There's research on it. We've built entire tools and workflows around protecting focus time.</p>
+  <p>That problem never went away. It just put on a new outfit.</p>
+</section>
+
+<section id="new-interrupt">
+  <h2>The interrupt you don't notice</h2>
+  <p>I'm building a feature. Maybe it's new, maybe it's an expansion of something that exists. I ask the agent to implement it. And then the agent asks me a question I didn't expect. Maybe it proposes a vector database when I was thinking SQLite. Maybe it suggests a different auth pattern.</p>
+  <p>It's a reasonable question. So we start evaluating databases. We compare options. We weigh trade-offs. That's productive, right?</p>
+  <p>But then something happens. The agent takes that same evaluation lens and starts applying it to everything else. The API methods. The security model. The encryption. We start running every feature through this filter, and now I'm not building anymore. I'm re-evaluating the entire implementation. I'm doubting the plan I started with.</p>
+  <p>And the thing is, I don't notice the switch. It still feels like building. Code is being discussed. Architecture is being shaped. Decisions are being made. But I sat down to ship a feature, and forty-five minutes later I'm redesigning something that was already working.</p>
+</section>
+
+<section id="the-spread">
+  <h2>How it spreads</h2>
+  <p>This is the part that gets you. It starts with one suggestion. One "have you considered..." from the agent. That's fine. That's useful, even. But the evaluation pattern spreads. Once you start questioning one decision, the agent applies the same scrutiny to the next thing, and the next thing.</p>
+  <p>I don't think agents will ever look at your plan and say "this is perfect, let's ship it." They're designed to have opinions. They're built to surface alternatives. That's a feature, not a bug, but it means even a tight implementation plan won't stop the agent from chiming in. There's always a suggestion. There's always another way to do it.</p>
+  <p>And you're the one who has to decide not to chase it. That's harder than it sounds when the suggestion is genuinely interesting.</p>
+</section>
+
+<section id="three-eras">
+  <h2>Three eras</h2>
+  <p>If I look back at how this has evolved, I see three phases.</p>
+  <div class="era-grid">
+    <span class="era-label">Era 1</span>
+    <span class="era-desc">"Can you do this?" The agent kind of can, but there are bugs. You spend your time fixing the agent's output. The limitation is capability.</span>
+    <span class="era-label">Era 2</span>
+    <span class="era-desc">"Can you do this?" The agent definitely can, and then some. It does what you asked and shows you what else is possible. You start exploring. The limitation shifts from capability to focus.</span>
+    <span class="era-label">Era 3</span>
+    <span class="era-desc">You're building and discovering at the same time. You don't realize you've left the zone because the zone now includes the agent's suggestions. You look up and realize you haven't built what you set out to build.</span>
+  </div>
+  <p>We solved the capability problem. We haven't solved the focus problem. And the focus problem is harder because it disguises itself as progress.</p>
+</section>
+
+<section id="structural-answer">
+  <h2>A structural answer</h2>
+  <p>The approach I landed on was simple: separate discovery from execution. Don't let them happen at the same time.</p>
+  <p>There's a stage where the agent investigates the codebase, reads the spec, and surfaces everything interesting. That's where discovery belongs. It's bounded. It's read-only. It happens before anyone writes a line of code.</p>
+  <p>Then there's a plan that locks in scope. Then implementation follows the plan. Not a conversation. A plan.</p>
+  <p>When it works, the experience is completely different. I'm not even in the loop. It's almost like the project doesn't exist for a while. I go to sleep, I wake up, the thing has been built, and I start to see my requirements alive in front of me. There's this sense of anticipation. I wonder what the UI will look like. I wonder how it interpreted what I asked for. And then I see it.</p>
+  <p>That feeling is so different from sitting in front of a model for hours going on tangents. It's the difference between spending your time and spending your attention. When the pipeline is running, I spend neither.</p>
+</section>
+
+<section id="keeping-honest">
+  <h2>The part that keeps me honest</h2>
+  <p>Here's where I could tell you I figured it out. The pipeline works. Token costs went down. Output went up. I made some improvements and started producing two, three times the output for the same cost. I ran four loops in parallel this past weekend and they found forty or fifty issues on their own. Identified them, fixed them, moved on. No human intervention. Just intent that I communicated at the start.</p>
+  <p>But that's exactly what makes me wonder.</p>
+  <p>If the model can take a few sentences of direction and produce all of that, how much of my architecture is actually doing the work? Maybe the model is powerful enough to route around my design mistakes and I'd never notice. Maybe my pipeline adds overhead that the model compensates for silently. Maybe I'm constraining it in ways that cost more than they save, and the results are good anyway because the engine is just that strong.</p>
+  <p>I can't tell the difference between "my architecture is good" and "the model is good enough to make my architecture look good." When the engine can overcompensate for your mistakes without making them visible, success is not proof that your approach is right. It's just proof that something in the stack is working. You don't know which part.</p>
+</section>
+
+<section id="what-i-know">
+  <h2>What I know and what I don't</h2>
+  <p>I know tasks complete. Code ships. Tests pass. I know my token costs went down while my output went up. I know the loop finds issues I never would have thought to look for, and it resolves them without me asking.</p>
+  <p>I don't know if the pipeline is the reason, or if it's just not in the way. I don't know if a different structure would work better. I don't know if the model would perform just as well with a loose prompt and no constraints at all.</p>
+  <p>I think separating discovery from execution is sound. I think giving agents a task queue instead of a conversation reduces drift. I think structured pipelines protect human focus time in a way that ad-hoc prompting doesn't. But I hold all of that loosely, because I've been wrong before about why things work.</p>
+  <p>What I'm not going to do is claim I've found the answer. I'm building with the best understanding I have. I'm paying attention to what's working and staying open to the possibility that it's working for reasons I haven't identified yet.</p>
+  <p>That's the honest version. The discovery trap is real. Structured pipelines help. And the model might be doing more of the heavy lifting than any of us want to admit.</p>
+</section>
+
+<footer>
+  <p><a href="index.html">Context Foundry</a> · <a href="https://github.com/context-foundry/context-foundry">GitHub</a></p>
+</footer>
+
+</body>
+</html>
