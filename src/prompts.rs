@@ -892,13 +892,13 @@ WRITE YOUR FINDINGS to .buildloop/review-report.md in this format:
 ```json
 {{
   "high": [
-    {{"file": "{file_path}", "line": 42, "issue": "Description", "fixed": false, "category": "security|logic|crash", "source_evidence": {{"snippet": "the exact code line(s) that triggered this finding", "line_range": [40, 45], "reasoning": "One-line chain: what the code does -> why it is wrong -> what the consequence is"}}, "confidence": 0.85}}
+    {{"file": "{file_path}", "line": 42, "issue": "Description", "fixed": false, "category": "security|logic|race|crash", "source_evidence": {{"snippet": "the exact code line(s) that triggered this finding", "line_range": [40, 45], "reasoning": "One-line chain: what the code does -> why it is wrong -> what the consequence is"}}, "confidence": 0.85}}
   ],
   "medium": [
-    {{"file": "{file_path}", "line": 10, "issue": "Description", "fixed": false, "category": "error-handling|resource-leak", "source_evidence": {{"snippet": "the exact code line(s) that triggered this finding", "line_range": [8, 13], "reasoning": "One-line chain: what the code does -> why it is wrong -> what the consequence is"}}, "confidence": 0.85}}
+    {{"file": "{file_path}", "line": 10, "issue": "Description", "fixed": false, "category": "error-handling|api-contract|resource-leak", "source_evidence": {{"snippet": "the exact code line(s) that triggered this finding", "line_range": [8, 13], "reasoning": "One-line chain: what the code does -> why it is wrong -> what the consequence is"}}, "confidence": 0.85}}
   ],
   "low": [
-    {{"file": "{file_path}", "line": 5, "issue": "Description", "fixed": false, "category": "style|inconsistency", "source_evidence": {{"snippet": "the exact code line(s) that triggered this finding", "line_range": [3, 7], "reasoning": "One-line chain: what the code does -> why it is wrong -> what the consequence is"}}, "confidence": 0.85}}
+    {{"file": "{file_path}", "line": 5, "issue": "Description", "fixed": false, "category": "style|hardcoded|inconsistency", "source_evidence": {{"snippet": "the exact code line(s) that triggered this finding", "line_range": [3, 7], "reasoning": "One-line chain: what the code does -> why it is wrong -> what the consequence is"}}, "confidence": 0.85}}
   ]
 }}
 ```
@@ -2289,5 +2289,58 @@ mod tests {
         assert!(value.get("high").is_some(), "JSON must contain 'high' key");
         assert!(value.get("medium").is_some(), "JSON must contain 'medium' key");
         assert!(value.get("low").is_some(), "JSON must contain 'low' key");
+    }
+
+    #[test]
+    fn test_all_reviewer_prompts_have_matching_severity_categories() {
+        let high_categories = "security|logic|race|crash";
+        let medium_categories = "error-handling|api-contract|resource-leak";
+        let low_categories = "style|hardcoded|inconsistency";
+
+        let prompts: Vec<(&str, String)> = vec![
+            (
+                "reviewer_prompt",
+                reviewer_prompt("T1", "test", "file.rs", 1, "", None, "SPEC.md", "TASKS.md", ""),
+            ),
+            (
+                "reviewer_per_file_prompt",
+                reviewer_per_file_prompt("T1", "test", "src/foo.rs", "", "SPEC.md", "TASKS.md"),
+            ),
+            (
+                "reviewer_integration_prompt",
+                reviewer_integration_prompt(
+                    "T1", "test", "file.rs", "{}", "", None, "SPEC.md", "TASKS.md", "",
+                ),
+            ),
+            (
+                "pr_review_prompt",
+                pr_review_prompt(1, "test", "body", "feat", "main", "diff", "file.rs", "/tmp/report.md"),
+            ),
+            (
+                "pr_review_per_file_prompt",
+                pr_review_per_file_prompt(1, "test", "src/foo.rs", "diff", "/tmp/report.md"),
+            ),
+            (
+                "pr_review_integration_prompt",
+                pr_review_integration_prompt(
+                    1, "test", "body", "feat", "main", "file.rs", "{}", "/tmp/report.md",
+                ),
+            ),
+        ];
+
+        for (name, prompt) in &prompts {
+            assert!(
+                prompt.contains(&format!("\"category\": \"{}\"", high_categories)),
+                "{name} missing correct HIGH categories: expected \"{high_categories}\""
+            );
+            assert!(
+                prompt.contains(&format!("\"category\": \"{}\"", medium_categories)),
+                "{name} missing correct MEDIUM categories: expected \"{medium_categories}\""
+            );
+            assert!(
+                prompt.contains(&format!("\"category\": \"{}\"", low_categories)),
+                "{name} missing correct LOW categories: expected \"{low_categories}\""
+            );
+        }
     }
 }

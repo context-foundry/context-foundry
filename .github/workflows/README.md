@@ -24,15 +24,34 @@ Runs on `pull_request` events: `opened` and `synchronize` (new pushes to an open
 
 `GITHUB_TOKEN` is provided automatically by GitHub Actions and does not need manual configuration. The workflow uses it to post PR comments via `gh pr comment`.
 
+### Configuration
+
+The following environment variables can be set as **GitHub repository variables** (Settings > Secrets and variables > Actions > Variables tab) to customize review behavior:
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `FOUNDRY_PR_REVIEW_MODEL` | Model for PR review (e.g., `"opus"`, `"sonnet"`) | Foundry default |
+| `FOUNDRY_PR_REVIEW_PROVIDER` | Provider for PR review (`"claude"` or `"codex"`) | Foundry default |
+| `FOUNDRY_AGENT_TIMEOUT_SECS` | Agent timeout in seconds (e.g., `"900"`) | Foundry default |
+| `FOUNDRY_PR_REVIEW_MULTIPASS_THRESHOLD` | File count threshold for multi-pass review | Foundry default |
+
+These are repository **variables** (not secrets) because they contain no sensitive data.
+
 ### Behavior
 
 1. Checks out the PR at the head commit.
 2. Downloads and installs the latest `foundry` binary from GitHub Releases.
-3. Runs `foundry review-pr <PR_NUMBER> --repo <OWNER/REPO> --output comment`, which:
+3. Runs `foundry review-pr <PR_NUMBER> --repo <OWNER/REPO> --output comment --ignore-project-config`, which:
    - Fetches the PR diff and metadata via `gh`
    - Runs a Claude-powered reviewer agent against the changes
    - Posts the review findings as a PR comment
+   - Uses `--ignore-project-config` to prevent the PR checkout's config files from influencing review behavior (security measure against untrusted CLAUDE.md / .claude/rules/ in PRs)
 4. If `foundry review-pr` fails (non-zero exit), a fallback comment is posted indicating the review could not complete. The workflow itself does not fail -- the PR is not blocked.
+5. If the PR changes more files than the `FOUNDRY_PR_REVIEW_MULTIPASS_THRESHOLD`, the reviewer automatically uses a multi-pass strategy: per-file analysis followed by an integration review that catches cross-file issues.
+
+### Concurrency
+
+The workflow uses a concurrency group keyed on the PR number with `cancel-in-progress: true`. When multiple commits are pushed to the same PR in quick succession, only the most recent push triggers a review -- earlier in-progress runs are cancelled. This prevents duplicate review comments and reduces API costs.
 
 ### Disabling for Specific PRs
 
