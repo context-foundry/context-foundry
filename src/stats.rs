@@ -315,8 +315,6 @@ pub fn compute_stats(
 
     let mut sessions = HashSet::new();
     let mut tasks = HashSet::new();
-    let mut feat_count = 0usize;
-    let mut wip_count = 0usize;
     let mut total_cost = 0.0f64;
 
     // Phase cost accumulators: (invocations, cost, tokens_in, tokens_out)
@@ -426,12 +424,6 @@ pub fn compute_stats(
                         (ev.session_id.clone(), task_id.to_string()),
                         commit_type.to_string(),
                     );
-                    let ct_lower = commit_type.to_lowercase();
-                    if ct_lower == "feat" {
-                        feat_count += 1;
-                    } else if ct_lower == "wip" {
-                        wip_count += 1;
-                    }
                 }
             }
             "review_findings" => {
@@ -512,6 +504,20 @@ pub fn compute_stats(
                 completed_tasks.push(tc);
             }
             _ => {}
+        }
+    }
+
+    // ── Derive deduplicated feat/wip counts from task_committed HashMap ──
+    // A retried task may have WIP then feat commits in one session;
+    // task_committed keeps only the last commit_type per (session, task_id).
+    let mut feat_count = 0usize;
+    let mut wip_count = 0usize;
+    for commit_type in task_committed.values() {
+        let ct_lower = commit_type.to_lowercase();
+        if ct_lower == "feat" {
+            feat_count += 1;
+        } else if ct_lower == "wip" {
+            wip_count += 1;
         }
     }
 
@@ -2125,5 +2131,49 @@ mod tests {
         let pr = report.pr_reviews.as_ref().expect("pr_reviews should be Some");
         assert_eq!(pr.total_reviews, 1);
         assert!((pr.total_cost_usd - 0.05).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_retried_task_dedup_feat_wip_count() {
+        // Same task committed twice in one session: first WIP, then feat (retry succeeded).
+        // feat_count should be 1, wip_count should be 0 (last commit wins).
+        let p = "/test/project";
+        let s = "sess-1";
+        let events = vec![
+            make_event(
+                "2025-01-15T10:00:00Z", s, p, "session_started",
+                serde_json::json!({"type": "SessionStarted", "config": {}}),
+            ),
+            make_event(
+                "2025-01-15T10:01:00Z", s, p, "task_started",
+                serde_json::json!({"type": "TaskStarted", "task_id": "T1", "description": "Build X", "complexity": "medium"}),
+            ),
+            // First attempt: committed as WIP
+            make_event(
+                "2025-01-15T10:05:00Z", s, p, "committed",
+                serde_json::json!({"type": "Committed", "task_id": "T1", "sha": "aaa111", "commit_type": "WIP"}),
+            ),
+            // Retry: same task committed as feat
+            make_event(
+                "2025-01-15T10:10:00Z", s, p, "committed",
+                serde_json::json!({"type": "Committed", "task_id": "T1", "sha": "bbb222", "commit_type": "feat"}),
+            ),
+            make_event(
+                "2025-01-15T10:15:00Z", s, p, "session_ended",
+                serde_json::json!({"type": "SessionEnded", "total_tasks": 1, "feat_count": 1, "wip_count": 0, "total_cost_usd": 0.10, "duration_secs": 900.0}),
+            ),
+        ];
+        let report = compute_stats(&events, 0, 7, None, false);
+        assert_eq!(report.summary.feat_count, 1, "feat_count should be 1 (last commit wins)");
+        assert_eq!(report.summary.wip_count, 0, "wip_count should be 0 (WIP overwritten by feat)");
+        assert!(report.summary.feat_wip_ratio.is_none(), "no WIP means ratio is None");
+
+        // Verify the fallback trust dashboard also uses deduplicated counts
+        if let Some(ref trust) = report.trust {
+            // acceptance_rate = feat_count / total_committed = 1/1 = 1.0
+            assert_eq!(trust.acceptance_rate, Some(1.0));
+            assert_eq!(trust.completed_tasks, 1);
+            assert_eq!(trust.feat_tasks, 1);
+        }
     }
 }

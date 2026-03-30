@@ -294,6 +294,28 @@ fn replace_findings_in_report(report_content: &str, merged_findings: &serde_json
     result
 }
 
+/// Rewrites the "## Verdict: PASS" or "## Verdict: CONCERNS" line to match the actual
+/// merged finding counts. Called after replace_findings_in_report to ensure consistency.
+fn rewrite_verdict_line(report_content: &str, high: usize, medium: usize) -> String {
+    let new_verdict = if high + medium > 0 {
+        "## Verdict: CONCERNS"
+    } else {
+        "## Verdict: PASS"
+    };
+
+    let mut result = String::new();
+    for line in report_content.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("## Verdict:") {
+            result.push_str(new_verdict);
+        } else {
+            result.push_str(line);
+        }
+        result.push('\n');
+    }
+    result
+}
+
 fn build_json_output(
     pr_number: u32,
     files_reviewed: usize,
@@ -792,7 +814,11 @@ pub async fn run(
     // For multipass, replace the JSON findings block in the report with merged findings
     // so stdout and comment outputs include per-file findings, not just integration-only
     let report_content = if is_multipass {
-        replace_findings_in_report(&report_content, &findings)
+        let merged_report = replace_findings_in_report(&report_content, &findings);
+        // Rewrite verdict line to match merged finding counts (D60.1)
+        // The integration agent's verdict was based only on its own cross-file findings;
+        // after merging per-file findings the verdict may need to change.
+        rewrite_verdict_line(&merged_report, high, medium)
     } else {
         report_content
     };
@@ -1070,5 +1096,70 @@ mod tests {
         let merged = merge_pr_findings(&[per_file, integration]);
         let (h, _m, _l) = count_findings(&merged);
         assert_eq!(h, 1); // deduplicated: same (file, issue) pair
+    }
+
+    #[test]
+    fn test_rewrite_verdict_pass_to_concerns() {
+        let report = "# PR Review\n\n## Verdict: PASS\n\n## Summary\nLooks good.\n\n```json\n{\"high\":[],\"medium\":[],\"low\":[]}\n```\n";
+        let result = rewrite_verdict_line(report, 1, 0);
+        assert!(result.contains("## Verdict: CONCERNS"));
+        assert!(!result.contains("## Verdict: PASS"));
+        // Other content preserved
+        assert!(result.contains("# PR Review"));
+        assert!(result.contains("Looks good."));
+    }
+
+    #[test]
+    fn test_rewrite_verdict_concerns_stays_concerns() {
+        let report = "# PR Review\n\n## Verdict: CONCERNS\n\n## Summary\nIssues found.\n";
+        let result = rewrite_verdict_line(report, 2, 1);
+        assert!(result.contains("## Verdict: CONCERNS"));
+    }
+
+    #[test]
+    fn test_rewrite_verdict_concerns_to_pass() {
+        let report = "# PR Review\n\n## Verdict: CONCERNS\n\n## Summary\nFalse alarm.\n";
+        let result = rewrite_verdict_line(report, 0, 0);
+        assert!(result.contains("## Verdict: PASS"));
+        assert!(!result.contains("## Verdict: CONCERNS"));
+    }
+
+    #[test]
+    fn test_rewrite_verdict_no_verdict_line() {
+        let report = "# PR Review\n\nNo verdict here.\n";
+        let result = rewrite_verdict_line(report, 1, 0);
+        // No verdict line to rewrite -- content unchanged (except trailing newline normalization)
+        assert!(result.contains("No verdict here."));
+        assert!(!result.contains("## Verdict:"));
+    }
+
+    #[test]
+    fn test_replace_findings_and_rewrite_verdict_combined() {
+        // End-to-end: integration agent wrote PASS with empty findings,
+        // but per-file review found a HIGH issue. After merge + verdict rewrite,
+        // both JSON and verdict should reflect the HIGH finding.
+        let integration_report = "# PR Review -- #42: Test PR\n\n## Verdict: PASS\n\n## Summary\nNo cross-file issues.\n\n## Findings\n\n```json\n{\"high\":[],\"medium\":[],\"low\":[]}\n```\n";
+        let per_file = serde_json::json!({
+            "high": [{"file": "auth.rs", "issue": "sql injection", "line": 10}],
+            "medium": [],
+            "low": []
+        });
+        let integration = serde_json::json!({
+            "high": [],
+            "medium": [],
+            "low": []
+        });
+        let merged = merge_pr_findings(&[per_file, integration]);
+        let (high, medium, _low) = count_findings(&merged);
+
+        let after_replace = replace_findings_in_report(integration_report, &merged);
+        let final_report = rewrite_verdict_line(&after_replace, high, medium);
+
+        // Verdict should now be CONCERNS
+        assert!(final_report.contains("## Verdict: CONCERNS"), "verdict should be CONCERNS after merging per-file HIGH finding");
+        assert!(!final_report.contains("## Verdict: PASS"));
+        // JSON block should contain the per-file finding
+        let parsed = parse_findings_json(&final_report).unwrap();
+        assert_eq!(parsed["high"].as_array().unwrap().len(), 1);
     }
 }
