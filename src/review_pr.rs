@@ -254,6 +254,46 @@ fn count_findings(findings: &serde_json::Value) -> (usize, usize, usize) {
     (high, medium, low)
 }
 
+fn replace_findings_in_report(report_content: &str, merged_findings: &serde_json::Value) -> String {
+    let merged_json = match serde_json::to_string_pretty(merged_findings) {
+        Ok(j) => j,
+        Err(_) => return report_content.to_string(),
+    };
+
+    let mut result = String::new();
+    let mut in_json_block = false;
+    let mut replaced = false;
+
+    for line in report_content.lines() {
+        if line.trim().starts_with("```json") && !replaced {
+            in_json_block = true;
+            result.push_str("```json\n");
+            result.push_str(&merged_json);
+            result.push('\n');
+            continue;
+        }
+        if in_json_block && line.trim().starts_with("```") {
+            result.push_str("```\n");
+            in_json_block = false;
+            replaced = true;
+            continue;
+        }
+        if in_json_block {
+            continue;
+        }
+        result.push_str(line);
+        result.push('\n');
+    }
+
+    if !replaced {
+        result.push_str("\n## All Findings\n\n```json\n");
+        result.push_str(&merged_json);
+        result.push_str("\n```\n");
+    }
+
+    result
+}
+
 fn build_json_output(
     pr_number: u32,
     files_reviewed: usize,
@@ -314,7 +354,7 @@ async fn run_multipass_pr_review(
     log_dir: &Path,
     review_report: &Path,
     review_report_relative: &str,
-) -> (Result<AgentResult>, AgentUsage) {
+) -> (Result<AgentResult>, AgentUsage, serde_json::Value) {
     eprintln!(
         "Multi-pass PR review: {} files exceed threshold, running per-file analysis",
         metadata.changed_files.len()
@@ -507,10 +547,11 @@ async fn run_multipass_pr_review(
     );
 
     match integration_result {
-        Ok(agent_res) => (Ok(agent_res), total_usage),
+        Ok(agent_res) => (Ok(agent_res), total_usage, merged_findings),
         Err(e) => (
             Err(anyhow!("PR review integration agent failed: {}", e)),
             total_usage,
+            merged_findings,
         ),
     }
 }
@@ -598,8 +639,8 @@ pub async fn run(
 
     let use_multipass = multipass_threshold > 0 && metadata.changed_files.len() > multipass_threshold;
 
-    let (agent_result, usage) = if use_multipass {
-        run_multipass_pr_review(
+    let (agent_result, usage, per_file_findings) = if use_multipass {
+        let (res, usg, pf) = run_multipass_pr_review(
             pr_number,
             &metadata,
             &diff,
@@ -612,7 +653,8 @@ pub async fn run(
             &review_report,
             &review_report_relative,
         )
-        .await
+        .await;
+        (res, usg, Some(pf))
     } else {
         // Single-pass review (existing flow)
         let prompt = prompts::pr_review_prompt(
@@ -681,7 +723,7 @@ pub async fn run(
             },
         );
 
-        (result, usage)
+        (result, usage, None)
     };
 
     if let Err(ref e) = agent_result {
@@ -720,9 +762,17 @@ pub async fn run(
     };
 
     // Parse findings for observatory and JSON output
-    let findings = parse_findings_json(&report_content).unwrap_or_else(|_| {
+    let integration_findings = parse_findings_json(&report_content).unwrap_or_else(|_| {
         serde_json::json!({"high": [], "medium": [], "low": []})
     });
+
+    // Merge per-file and integration findings (multipass only)
+    let is_multipass = per_file_findings.is_some();
+    let findings = if let Some(pf) = per_file_findings {
+        merge_pr_findings(&[pf, integration_findings])
+    } else {
+        integration_findings
+    };
     let (high, medium, low) = count_findings(&findings);
 
     observatory::log_event(
@@ -738,6 +788,14 @@ pub async fn run(
     );
 
     let total_duration_secs = session_start.elapsed().as_secs_f64();
+
+    // For multipass, replace the JSON findings block in the report with merged findings
+    // so stdout and comment outputs include per-file findings, not just integration-only
+    let report_content = if is_multipass {
+        replace_findings_in_report(&report_content, &findings)
+    } else {
+        report_content
+    };
 
     let output_result = match output_mode {
         ReviewPrOutput::Stdout => {
@@ -938,5 +996,79 @@ mod tests {
         assert_eq!(merged["high"].as_array().unwrap().len(), 0);
         assert_eq!(merged["medium"].as_array().unwrap().len(), 0);
         assert_eq!(merged["low"].as_array().unwrap().len(), 0);
+    }
+
+    #[test]
+    fn test_replace_findings_in_report_replaces_json_block() {
+        let report = "# Review\n\n## Verdict: PASS\n\n## Findings\n\n```json\n{\"high\":[],\"medium\":[],\"low\":[]}\n```\n\n## Summary\nLooks good.\n";
+        let merged = serde_json::json!({
+            "high": [{"file": "a.rs", "issue": "bug", "line": 10}],
+            "medium": [],
+            "low": []
+        });
+        let result = replace_findings_in_report(report, &merged);
+        // Should contain the merged finding
+        assert!(result.contains("\"a.rs\""));
+        assert!(result.contains("\"bug\""));
+        // Should still contain other prose
+        assert!(result.contains("## Verdict: PASS"));
+        assert!(result.contains("Looks good."));
+        // Should NOT contain the original empty findings
+        // (the merged JSON replaces the original block)
+        let parsed = parse_findings_json(&result).unwrap();
+        assert_eq!(parsed["high"].as_array().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn test_replace_findings_in_report_no_json_block() {
+        let report = "# Review\n\nNo findings block here.\n";
+        let merged = serde_json::json!({
+            "high": [{"file": "a.rs", "issue": "bug"}],
+            "medium": [],
+            "low": []
+        });
+        let result = replace_findings_in_report(report, &merged);
+        // Should append a findings section
+        assert!(result.contains("## All Findings"));
+        assert!(result.contains("\"a.rs\""));
+    }
+
+    #[test]
+    fn test_multipass_merge_preserves_per_file_and_integration() {
+        // Simulates the merge logic from run()
+        let per_file = serde_json::json!({
+            "high": [{"file": "auth.rs", "issue": "sql injection"}],
+            "medium": [{"file": "api.rs", "issue": "unwrap on input"}],
+            "low": []
+        });
+        let integration = serde_json::json!({
+            "high": [],
+            "medium": [{"file": "api.rs", "issue": "type mismatch across modules"}],
+            "low": [{"file": "lib.rs", "issue": "unused import"}]
+        });
+        let merged = merge_pr_findings(&[per_file, integration]);
+        let (h, m, l) = count_findings(&merged);
+        assert_eq!(h, 1); // auth.rs sql injection from per-file
+        assert_eq!(m, 2); // unwrap from per-file + type mismatch from integration
+        assert_eq!(l, 1); // unused import from integration
+    }
+
+    #[test]
+    fn test_multipass_merge_deduplicates_shared_findings() {
+        // If integration agent re-reports a per-file finding despite instructions,
+        // merge_pr_findings deduplicates by (file, issue)
+        let per_file = serde_json::json!({
+            "high": [{"file": "auth.rs", "issue": "sql injection"}],
+            "medium": [],
+            "low": []
+        });
+        let integration = serde_json::json!({
+            "high": [{"file": "auth.rs", "issue": "sql injection"}],
+            "medium": [],
+            "low": []
+        });
+        let merged = merge_pr_findings(&[per_file, integration]);
+        let (h, _m, _l) = count_findings(&merged);
+        assert_eq!(h, 1); // deduplicated: same (file, issue) pair
     }
 }
