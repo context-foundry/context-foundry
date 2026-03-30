@@ -930,6 +930,71 @@ pub async fn run(
     let report_content = match std::fs::read_to_string(&review_report) {
         Ok(content) => content,
         Err(_) => {
+            // In multipass mode, per-file findings may be salvageable even if the
+            // integration agent succeeded but failed to write review-report.md.
+            if let Some(pf_findings) = per_file_findings.filter(|v| v.is_object()) {
+                eprintln!("review-report.md missing after agent success. Using per-file findings.");
+
+                let (high, medium, low) = count_findings(&pf_findings);
+
+                observatory::log_event(
+                    &session_id,
+                    project_dir,
+                    ObservatoryEvent::ReviewFindings {
+                        task_id: format!("pr-review-{}-{}", repo.replace('/', "--"), pr_number),
+                        high,
+                        medium,
+                        low,
+                        findings_json: serde_json::to_string(&pf_findings).unwrap_or_default(),
+                    },
+                );
+
+                let total_duration_secs = session_start.elapsed().as_secs_f64();
+
+                let report_content = build_per_file_fallback_report(
+                    pr_number,
+                    reviewable_file_count,
+                    &pf_findings,
+                );
+
+                let output_result = match output_mode {
+                    ReviewPrOutput::Stdout => {
+                        println!("{}", report_content);
+                        Ok(())
+                    }
+                    ReviewPrOutput::Json => {
+                        build_json_output(
+                            pr_number,
+                            reviewable_file_count,
+                            &pf_findings,
+                            usage.cost_usd,
+                            total_duration_secs,
+                        )
+                        .map(|s| println!("{}", s))
+                    }
+                    ReviewPrOutput::Comment => {
+                        post_pr_comment(pr_number, &repo, &report_content)
+                    }
+                };
+
+                observatory::log_event(
+                    &session_id,
+                    project_dir,
+                    ObservatoryEvent::SessionEnded {
+                        total_tasks: 1,
+                        feat_count: if high == 0 && medium == 0 { 1 } else { 0 },
+                        wip_count: if high > 0 || medium > 0 { 1 } else { 0 },
+                        total_cost_usd: usage.cost_usd,
+                        duration_secs: total_duration_secs,
+                    },
+                );
+
+                let _ = std::fs::remove_dir_all(&buildloop_dir);
+
+                return output_result;
+            }
+
+            // No per-file findings available (single-pass, or multipass with no valid findings)
             observatory::log_event(
                 &session_id,
                 project_dir,

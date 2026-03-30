@@ -502,18 +502,22 @@ impl Config {
             }
         }
         if let Ok(val) = std::env::var("FOUNDRY_AGENT_TIMEOUT_SECS") {
-            match val.parse::<u64>() {
-                Ok(n) => self.agent_timeout_secs = n,
-                Err(_) => {
-                    eprintln!("warning: FOUNDRY_AGENT_TIMEOUT_SECS={val:?} is not a valid u64 -- ignoring");
+            if !val.is_empty() {
+                match val.parse::<u64>() {
+                    Ok(n) => self.agent_timeout_secs = n,
+                    Err(_) => {
+                        eprintln!("warning: FOUNDRY_AGENT_TIMEOUT_SECS={val:?} is not a valid u64 -- ignoring");
+                    }
                 }
             }
         }
         if let Ok(val) = std::env::var("FOUNDRY_PR_REVIEW_MULTIPASS_THRESHOLD") {
-            match val.parse::<usize>() {
-                Ok(n) => self.pr_review_multipass_threshold = n,
-                Err(_) => {
-                    eprintln!("warning: FOUNDRY_PR_REVIEW_MULTIPASS_THRESHOLD={val:?} is not a valid usize -- ignoring");
+            if !val.is_empty() {
+                match val.parse::<usize>() {
+                    Ok(n) => self.pr_review_multipass_threshold = n,
+                    Err(_) => {
+                        eprintln!("warning: FOUNDRY_PR_REVIEW_MULTIPASS_THRESHOLD={val:?} is not a valid usize -- ignoring");
+                    }
                 }
             }
         }
