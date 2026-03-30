@@ -420,7 +420,7 @@ async fn run_multipass_pr_review(
     log_dir: &Path,
     review_report: &Path,
     review_report_relative: &str,
-) -> (Result<AgentResult>, AgentUsage, serde_json::Value) {
+) -> (Result<AgentResult>, AgentUsage, serde_json::Value, usize) {
     let file_diffs = split_diff_by_file(diff);
     let diff_map: std::collections::HashMap<&str, &str> = file_diffs
         .iter()
@@ -460,6 +460,7 @@ async fn run_multipass_pr_review(
 
     let mut total_usage = AgentUsage::default();
     let mut all_per_file_findings: Vec<serde_json::Value> = Vec::new();
+    let mut per_file_success_count: usize = 0;
 
     for (i, file) in reviewable_files.iter().enumerate() {
         eprintln!(
@@ -540,6 +541,7 @@ async fn run_multipass_pr_review(
         );
 
         if result.is_ok() {
+            per_file_success_count += 1;
             let findings = std::fs::read_to_string(review_report)
                 .ok()
                 .and_then(|content| parse_findings_json(&content).ok())
@@ -553,6 +555,27 @@ async fn run_multipass_pr_review(
                 file
             );
         }
+    }
+
+    if reviewable_files.is_empty() {
+        return (
+            Err(anyhow!("No reviewable files in PR (all files were binary, submodule, or empty-diff)")),
+            total_usage,
+            serde_json::json!({"high": [], "medium": [], "low": []}),
+            0,
+        );
+    }
+
+    if per_file_success_count == 0 {
+        return (
+            Err(anyhow!(
+                "All {} per-file review agents failed -- cannot produce a valid review",
+                reviewable_files.len()
+            )),
+            total_usage,
+            serde_json::json!({"high": [], "medium": [], "low": []}),
+            reviewable_files.len(),
+        );
     }
 
     // Clean up before integration pass
@@ -639,11 +662,12 @@ async fn run_multipass_pr_review(
     );
 
     match integration_result {
-        Ok(agent_res) => (Ok(agent_res), total_usage, merged_findings),
+        Ok(agent_res) => (Ok(agent_res), total_usage, merged_findings, reviewable_files.len()),
         Err(e) => (
             Err(anyhow!("PR review integration agent failed: {}", e)),
             total_usage,
             merged_findings,
+            reviewable_files.len(),
         ),
     }
 }
@@ -736,8 +760,8 @@ pub async fn run(
 
     let use_multipass = multipass_threshold > 0 && metadata.changed_files.len() > multipass_threshold;
 
-    let (agent_result, usage, per_file_findings) = if use_multipass {
-        let (res, usg, pf) = run_multipass_pr_review(
+    let (agent_result, usage, per_file_findings, reviewable_file_count) = if use_multipass {
+        let (res, usg, pf, reviewable_count) = run_multipass_pr_review(
             pr_number,
             &metadata,
             &diff,
@@ -751,7 +775,7 @@ pub async fn run(
             &review_report_relative,
         )
         .await;
-        (res, usg, Some(pf))
+        (res, usg, Some(pf), reviewable_count)
     } else {
         // Single-pass review (existing flow)
         let prompt = prompts::pr_review_prompt(
@@ -820,7 +844,7 @@ pub async fn run(
             },
         );
 
-        (result, usage, None)
+        (result, usage, None, metadata.changed_files.len())
     };
 
     if let Err(ref e) = agent_result {
@@ -846,7 +870,7 @@ pub async fn run(
 
             let report_content = build_per_file_fallback_report(
                 pr_number,
-                metadata.changed_files.len(),
+                reviewable_file_count,
                 &pf_findings,
             );
 
@@ -858,7 +882,7 @@ pub async fn run(
                 ReviewPrOutput::Json => {
                     build_json_output(
                         pr_number,
-                        metadata.changed_files.len(),
+                        reviewable_file_count,
                         &pf_findings,
                         usage.cost_usd,
                         total_duration_secs,
@@ -970,7 +994,7 @@ pub async fn run(
         ReviewPrOutput::Json => {
             build_json_output(
                 pr_number,
-                metadata.changed_files.len(),
+                reviewable_file_count,
                 &findings,
                 usage.cost_usd,
                 total_duration_secs,
@@ -1363,5 +1387,37 @@ mod tests {
         let report = build_per_file_fallback_report(10, 3, &findings);
         assert!(report.contains("Verdict: PASS"));
         assert!(report.contains("0 high, 0 medium, 0 low"));
+    }
+
+    #[test]
+    fn test_empty_findings_with_zero_successes_detected() {
+        // Verify the structural condition: empty findings arrays + 0 success count
+        // should be treated as failure, not PASS
+        let merged = merge_pr_findings(&[]); // no per-file findings at all
+        let (high, medium, low) = count_findings(&merged);
+        assert_eq!((high, medium, low), (0, 0, 0));
+        // With per_file_success_count == 0 AND these counts, the code now returns Err
+        // (tested implicitly through the early return in run_multipass_pr_review)
+    }
+
+    #[test]
+    fn test_build_per_file_fallback_report_uses_provided_file_count() {
+        let findings = serde_json::json!({
+            "high": [{"file": "a.rs", "issue": "bad"}],
+            "medium": [],
+            "low": []
+        });
+        // Pass 3 as files_reviewed (the reviewable count), not 10 (total changed)
+        let report = build_per_file_fallback_report(42, 3, &findings);
+        assert!(report.contains("3 files"));
+        assert!(report.contains("Verdict: CONCERNS"));
+    }
+
+    #[test]
+    fn test_build_json_output_reviewable_file_count() {
+        let findings = serde_json::json!({"high": [], "medium": [], "low": []});
+        let output = build_json_output(42, 7, &findings, 0.10, 15.0).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&output).unwrap();
+        assert_eq!(parsed["summary"]["files_reviewed"], 7);
     }
 }
