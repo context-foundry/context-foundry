@@ -520,6 +520,7 @@ async fn run_multipass_pr_review(
             Some(pr_review_tools),
             config.agent_timeout_secs,
             None,
+            Some(config),
         )
         .await;
 
@@ -641,6 +642,7 @@ async fn run_multipass_pr_review(
         Some(pr_review_tools),
         config.agent_timeout_secs,
         None,
+        Some(config),
     )
     .await;
 
@@ -828,6 +830,7 @@ pub async fn run(
             Some(pr_review_tools),
             config.agent_timeout_secs,
             None,
+            Some(&config),
         )
         .await;
 

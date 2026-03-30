@@ -228,6 +228,7 @@ fn spawn_lookahead_planner(
             None,
             ctx.config.agent_timeout_secs,
             Some(ctx.shutdown.clone()),
+            Some(&ctx.config),
         )
         .await;
 
@@ -745,6 +746,7 @@ async fn run_parallel_builder(
         let slot_project_dir_obs = ctx.project_dir.clone();
         let slot_builder_provider = ctx.config.builder_provider.clone();
         let slot_builder_model = ctx.config.builder_model.clone();
+        let slot_config = ctx.config.clone();
 
         let fut = async move {
             // Create forwarding channel for this slot
@@ -790,6 +792,7 @@ async fn run_parallel_builder(
                 None,
                 timeout,
                 Some(shutdown),
+                Some(&slot_config),
             )
             .await;
 
@@ -1553,6 +1556,7 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                 None,
                 ctx.config.agent_timeout_secs,
                 Some(ctx.shutdown.clone()),
+                Some(&ctx.config),
             )
             .await;
 
@@ -1887,6 +1891,7 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                 None,
                 ctx.config.agent_timeout_secs,
                 Some(ctx.shutdown.clone()),
+                Some(&ctx.config),
             )
             .await;
 
@@ -2478,6 +2483,7 @@ async fn process_task(
             None,
             ctx.config.agent_timeout_secs,
             Some(ctx.shutdown.clone()),
+            Some(&ctx.config),
         )
         .await;
 
@@ -2721,6 +2727,7 @@ async fn process_task(
                 None,
                 ctx.config.agent_timeout_secs,
                 Some(ctx.shutdown.clone()),
+                Some(&ctx.config),
             )
             .await;
 
@@ -3006,6 +3013,7 @@ async fn process_task(
                 None,
                 ctx.config.agent_timeout_secs,
                 Some(ctx.shutdown.clone()),
+                Some(&ctx.config),
             )
             .await;
 
@@ -3611,6 +3619,7 @@ async fn process_task(
             None,
             ctx.config.agent_timeout_secs,
             Some(ctx.shutdown.clone()),
+            Some(&ctx.config),
         )
         .await;
 
@@ -4462,6 +4471,7 @@ async fn run_pattern_extraction(
         None,
         ctx.config.agent_timeout_secs,
         Some(ctx.shutdown.clone()),
+        Some(&ctx.config),
     )
     .await;
 

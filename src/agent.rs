@@ -231,6 +231,7 @@ pub struct ProviderRunOptions<'a> {
     pub timeout_secs: u64,
     pub skip_git_repo_check: bool,
     pub cancel_flag: Option<Arc<AtomicBool>>,
+    pub config_override: Option<&'a Config>,
 }
 
 const PROVIDER_POLL_INTERVAL: Duration = Duration::from_millis(500);
@@ -446,7 +447,10 @@ pub async fn run_provider_session(options: ProviderRunOptions<'_>) -> Result<Age
     cmd.cwd(options.project_dir);
 
     // Sandbox wrapping for provider sessions
-    let config = Config::load(options.project_dir);
+    let config = match options.config_override {
+        Some(c) => c.clone(),
+        None => Config::load(options.project_dir),
+    };
     let sandbox_cfg = config.sandbox_config();
     let cmd = if sandbox_cfg.is_active() {
         let (program, args, env_vars): (&str, Vec<String>, Vec<(&str, &str)>) = match options.provider {
@@ -675,15 +679,20 @@ pub async fn run_agent(
     allowed_tools: Option<&[&str]>,
     timeout_secs: u64,
     shutdown: Option<Arc<AtomicBool>>,
+    config_override: Option<&Config>,
 ) -> Result<AgentResult> {
     let role_tools = allowed_tools_for_role(role);
     let effective_tools: &[&str] = allowed_tools.unwrap_or(role_tools);
+
+    let config = match config_override {
+        Some(c) => c.clone(),
+        None => Config::load(project_dir),
+    };
 
     // For Codex, delegate to run_provider_session which has full
     // Codex support (JSON output parsing, stall detection), plus
     // a single automatic retry on transport stalls in the build loop.
     if provider == ModelProvider::Codex {
-        let config = Config::load(project_dir);
         if config.enforce_phase_rbac {
             let _ = output_tx.send(AgentOutputEvent::Stderr(
                 "[foundry] enforce_phase_rbac: Codex provider does not support tool allowlists; enforcement not applied".to_string(),
@@ -702,6 +711,7 @@ pub async fn run_agent(
                 timeout_secs,
                 skip_git_repo_check: false,
                 cancel_flag: shutdown.clone(),
+                config_override: Some(&config),
             })
             .await?;
 
@@ -736,6 +746,7 @@ pub async fn run_agent(
                     Some(effective_tools),
                     timeout_secs,
                     shutdown,
+                    Some(&config),
                 ))
                 .await;
             }
@@ -744,8 +755,6 @@ pub async fn run_agent(
         }
     }
 
-    // Load config to determine backend
-    let config = Config::load(project_dir);
     let sandbox_cfg = config.sandbox_config();
     let backend = if sandbox_cfg.is_active() && config.agent_backend == "tmux" {
         let _ = output_tx.send(AgentOutputEvent::Stderr(
@@ -775,6 +784,7 @@ pub async fn run_agent(
                 effective_tools,
                 timeout_secs,
                 shutdown,
+                &config,
             )
             .await
         }
@@ -791,6 +801,7 @@ pub async fn run_agent(
                 shutdown,
                 config.tmux_session_prefix.clone(),
                 config.tmux_keep_sessions,
+                &config,
             )
             .await
         }
@@ -808,12 +819,11 @@ async fn run_agent_pty(
     effective_tools: &[&str],
     timeout_secs: u64,
     shutdown: Option<Arc<AtomicBool>>,
+    config: &Config,
 ) -> Result<AgentResult> {
     let timestamp = chrono::Utc::now().format("%Y%m%d-%H%M%S");
     let log_file_path = log_dir.join(format!("{}-{}.jsonl", role, timestamp));
     std::fs::create_dir_all(log_dir)?;
-
-    let config = Config::load(project_dir);
 
     // Build command for PTY execution
     let mut cmd = ModelProvider::Claude.command_builder();
@@ -1009,12 +1019,11 @@ async fn run_agent_tmux(
     shutdown: Option<Arc<AtomicBool>>,
     tmux_prefix: String,
     tmux_keep_sessions: bool,
+    config: &Config,
 ) -> Result<AgentResult> {
     let timestamp = chrono::Utc::now().format("%Y%m%d-%H%M%S");
     let log_file_path = log_dir.join(format!("{}-{}.jsonl", role, timestamp));
     std::fs::create_dir_all(log_dir)?;
-
-    let config = Config::load(project_dir);
 
     let role_slug = format!("{}", role).to_lowercase();
     let abs_log_dir = dunce::canonicalize(log_dir).unwrap_or_else(|_| log_dir.to_path_buf());
@@ -2555,6 +2564,7 @@ mod tests {
             None,
             60,
             Some(shutdown),
+            None,
         )
         .await;
 

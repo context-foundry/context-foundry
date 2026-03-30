@@ -253,6 +253,7 @@ pub(super) async fn run_review_loop(
         None,
         ctx.config.agent_timeout_secs,
         Some(ctx.shutdown.clone()),
+        Some(&ctx.config),
     )
     .await;
 
@@ -495,6 +496,7 @@ async fn run_multipass_review(
             None,
             ctx.config.agent_timeout_secs,
             Some(ctx.shutdown.clone()),
+            Some(&ctx.config),
         )
         .await;
 
@@ -605,6 +607,7 @@ async fn run_multipass_review(
         None,
         ctx.config.agent_timeout_secs,
         Some(ctx.shutdown.clone()),
+        Some(&ctx.config),
     )
     .await;
 

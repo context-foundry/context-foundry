@@ -596,6 +596,7 @@ async fn run_agent_and_capture(
         None,
         timeout_secs,
         shutdown,
+        None,
     )
     .await
     .context("agent execution failed")?;
