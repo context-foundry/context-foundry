@@ -222,10 +222,12 @@ fn merge_pr_findings(all_findings: &[serde_json::Value]) -> serde_json::Value {
         }
     }
 
-    // Deduplicate by (file, issue) pair
-    fn dedup(items: &mut Vec<serde_json::Value>) {
-        let mut seen = HashSet::new();
-        items.retain(|item| {
+    // Deduplicate by (file, issue) pair across all severities.
+    // A single shared set ensures a finding reported at HIGH is not
+    // also kept if re-reported at MEDIUM or LOW.
+    {
+        let mut seen: HashSet<(String, String)> = HashSet::new();
+        let extract_key = |item: &serde_json::Value| -> (String, String) {
             let file = item
                 .get("file")
                 .and_then(|v| v.as_str())
@@ -236,13 +238,14 @@ fn merge_pr_findings(all_findings: &[serde_json::Value]) -> serde_json::Value {
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_string();
-            seen.insert((file, issue))
-        });
+            (file, issue)
+        };
+        // Process high first (highest priority), then medium, then low.
+        // First occurrence wins; duplicates at lower severities are removed.
+        high_all.retain(|item| seen.insert(extract_key(item)));
+        medium_all.retain(|item| seen.insert(extract_key(item)));
+        low_all.retain(|item| seen.insert(extract_key(item)));
     }
-
-    dedup(&mut high_all);
-    dedup(&mut medium_all);
-    dedup(&mut low_all);
 
     serde_json::json!({
         "high": high_all,

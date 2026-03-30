@@ -834,7 +834,7 @@ pub fn compute_stats(
 
     let pr_reviews = if !pr_review_sessions.is_empty() {
         let total_reviews = pr_review_findings.len();
-        let failed_reviews = pr_review_sessions.len() - pr_review_findings.len();
+        let failed_reviews = pr_review_sessions.len().saturating_sub(pr_review_findings.len());
         let total_pr_cost: f64 = pr_review_costs.values().sum();
         let total_high: usize = pr_review_findings.iter().map(|r| r.high).sum();
         let total_medium: usize = pr_review_findings.iter().map(|r| r.medium).sum();
