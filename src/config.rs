@@ -490,6 +490,35 @@ impl Config {
         }
     }
 
+    fn apply_env_overrides(&mut self) {
+        if let Ok(val) = std::env::var("FOUNDRY_PR_REVIEW_MODEL") {
+            if !val.is_empty() {
+                self.pr_review_model = val;
+            }
+        }
+        if let Ok(val) = std::env::var("FOUNDRY_PR_REVIEW_PROVIDER") {
+            if !val.is_empty() {
+                self.pr_review_provider = val;
+            }
+        }
+        if let Ok(val) = std::env::var("FOUNDRY_AGENT_TIMEOUT_SECS") {
+            match val.parse::<u64>() {
+                Ok(n) => self.agent_timeout_secs = n,
+                Err(_) => {
+                    eprintln!("warning: FOUNDRY_AGENT_TIMEOUT_SECS={val:?} is not a valid u64 -- ignoring");
+                }
+            }
+        }
+        if let Ok(val) = std::env::var("FOUNDRY_PR_REVIEW_MULTIPASS_THRESHOLD") {
+            match val.parse::<usize>() {
+                Ok(n) => self.pr_review_multipass_threshold = n,
+                Err(_) => {
+                    eprintln!("warning: FOUNDRY_PR_REVIEW_MULTIPASS_THRESHOLD={val:?} is not a valid usize -- ignoring");
+                }
+            }
+        }
+    }
+
     pub fn load(project_dir: &Path) -> Self {
         let global_path = Self::global_config_path();
         let project_path = project_dir.join(".foundry.json");
@@ -501,17 +530,24 @@ impl Config {
             (Some(g), Some(p)) => Self::merge_json(g, p),
             (Some(g), None) => g,
             (None, Some(p)) => p,
-            (None, None) => return Self::default(),
+            (None, None) => {
+                let mut config = Self::default();
+                config.apply_env_overrides();
+                return config;
+            }
         };
 
         match serde_json::from_value::<Self>(merged) {
             Ok(mut config) => {
                 config.normalize();
+                config.apply_env_overrides();
                 config
             }
             Err(e) => {
                 eprintln!("warning: failed to deserialize merged config: {e} -- using defaults");
-                Self::default()
+                let mut config = Self::default();
+                config.apply_env_overrides();
+                config
             }
         }
     }
@@ -527,14 +563,21 @@ impl Config {
             Some(val) => match serde_json::from_value::<Self>(val) {
                 Ok(mut config) => {
                     config.normalize();
+                    config.apply_env_overrides();
                     config
                 }
                 Err(e) => {
                     eprintln!("warning: failed to deserialize global config: {e} -- using defaults");
-                    Self::default()
+                    let mut config = Self::default();
+                    config.apply_env_overrides();
+                    config
                 }
             },
-            None => Self::default(),
+            None => {
+                let mut config = Self::default();
+                config.apply_env_overrides();
+                config
+            }
         }
     }
 
@@ -746,6 +789,7 @@ impl Config {
 mod tests {
     use super::Config;
     use crate::agent::ModelProvider;
+    use serial_test::serial;
     use std::fs;
 
     #[test]
@@ -1042,5 +1086,174 @@ mod tests {
         .expect("config should deserialize");
         assert_eq!(config.pr_review_model, "opus");
         assert_eq!(config.pr_review_provider, "claude");
+    }
+
+    #[test]
+    #[serial]
+    fn load_global_only_returns_defaults_when_no_global_config() {
+        // Point HOME to a temp dir with no .foundry/config.json
+        let dir = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", dir.path());
+        // Clear any env overrides that might interfere
+        std::env::remove_var("FOUNDRY_PR_REVIEW_MODEL");
+        std::env::remove_var("FOUNDRY_PR_REVIEW_PROVIDER");
+        std::env::remove_var("FOUNDRY_AGENT_TIMEOUT_SECS");
+        std::env::remove_var("FOUNDRY_PR_REVIEW_MULTIPASS_THRESHOLD");
+
+        let config = Config::load_global_only();
+        let defaults = Config::default();
+        assert_eq!(config.agent_timeout_secs, defaults.agent_timeout_secs);
+        assert_eq!(config.pr_review_model, defaults.pr_review_model);
+        assert_eq!(config.pr_review_provider, defaults.pr_review_provider);
+        assert_eq!(config.reviewer_model, defaults.reviewer_model);
+        assert_eq!(config.run_mode, defaults.run_mode);
+    }
+
+    #[test]
+    #[serial]
+    fn load_global_only_deserializes_global_config() {
+        let dir = tempfile::tempdir().unwrap();
+        let foundry_dir = dir.path().join(".foundry");
+        fs::create_dir_all(&foundry_dir).unwrap();
+        fs::write(
+            foundry_dir.join("config.json"),
+            r#"{"agent_timeout_secs":120,"pr_review_model":"opus","reviewer_model":"haiku"}"#,
+        ).unwrap();
+        std::env::set_var("HOME", dir.path());
+        // Clear env overrides
+        std::env::remove_var("FOUNDRY_PR_REVIEW_MODEL");
+        std::env::remove_var("FOUNDRY_AGENT_TIMEOUT_SECS");
+
+        let config = Config::load_global_only();
+        assert_eq!(config.agent_timeout_secs, 120);
+        assert_eq!(config.pr_review_model, "opus");
+        assert_eq!(config.reviewer_model, "haiku");
+    }
+
+    #[test]
+    #[serial]
+    fn load_global_only_applies_normalize() {
+        let dir = tempfile::tempdir().unwrap();
+        let foundry_dir = dir.path().join(".foundry");
+        fs::create_dir_all(&foundry_dir).unwrap();
+        // Legacy "mode":"loop" should be normalized to "auto"
+        // "model" override should collapse all role models
+        fs::write(
+            foundry_dir.join("config.json"),
+            r#"{"mode":"loop","model":"haiku"}"#,
+        ).unwrap();
+        std::env::set_var("HOME", dir.path());
+        // Clear env overrides
+        std::env::remove_var("FOUNDRY_PR_REVIEW_MODEL");
+        std::env::remove_var("FOUNDRY_AGENT_TIMEOUT_SECS");
+
+        let config = Config::load_global_only();
+        assert_eq!(config.run_mode, "auto");
+        assert_eq!(config.scout_model, "haiku");
+        assert_eq!(config.planner_model, "haiku");
+        assert_eq!(config.builder_model, "haiku");
+        assert_eq!(config.reviewer_model, "haiku");
+    }
+
+    #[test]
+    #[serial]
+    fn load_global_only_applies_env_overrides() {
+        let dir = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", dir.path());
+        // No global config file -- starts from defaults
+        std::env::set_var("FOUNDRY_PR_REVIEW_MODEL", "opus");
+        std::env::set_var("FOUNDRY_PR_REVIEW_PROVIDER", "claude");
+        std::env::set_var("FOUNDRY_AGENT_TIMEOUT_SECS", "300");
+        std::env::set_var("FOUNDRY_PR_REVIEW_MULTIPASS_THRESHOLD", "12");
+
+        let config = Config::load_global_only();
+        assert_eq!(config.pr_review_model, "opus");
+        assert_eq!(config.pr_review_provider, "claude");
+        assert_eq!(config.agent_timeout_secs, 300);
+        assert_eq!(config.pr_review_multipass_threshold, 12);
+
+        // Clean up
+        std::env::remove_var("FOUNDRY_PR_REVIEW_MODEL");
+        std::env::remove_var("FOUNDRY_PR_REVIEW_PROVIDER");
+        std::env::remove_var("FOUNDRY_AGENT_TIMEOUT_SECS");
+        std::env::remove_var("FOUNDRY_PR_REVIEW_MULTIPASS_THRESHOLD");
+    }
+
+    #[test]
+    #[serial]
+    fn env_overrides_take_precedence_over_config_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let foundry_dir = dir.path().join(".foundry");
+        fs::create_dir_all(&foundry_dir).unwrap();
+        fs::write(
+            foundry_dir.join("config.json"),
+            r#"{"pr_review_model":"sonnet","agent_timeout_secs":600}"#,
+        ).unwrap();
+        std::env::set_var("HOME", dir.path());
+        std::env::set_var("FOUNDRY_PR_REVIEW_MODEL", "opus");
+        std::env::set_var("FOUNDRY_AGENT_TIMEOUT_SECS", "120");
+
+        let config = Config::load_global_only();
+        // Env vars win over config file
+        assert_eq!(config.pr_review_model, "opus");
+        assert_eq!(config.agent_timeout_secs, 120);
+
+        // Clean up
+        std::env::remove_var("FOUNDRY_PR_REVIEW_MODEL");
+        std::env::remove_var("FOUNDRY_AGENT_TIMEOUT_SECS");
+    }
+
+    #[test]
+    #[serial]
+    fn env_overrides_apply_to_load() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join(".foundry.json"),
+            r#"{"pr_review_model":"sonnet"}"#,
+        ).unwrap();
+        std::env::set_var("FOUNDRY_PR_REVIEW_MODEL", "opus");
+        std::env::set_var("FOUNDRY_AGENT_TIMEOUT_SECS", "180");
+
+        let config = Config::load(dir.path());
+        assert_eq!(config.pr_review_model, "opus");
+        assert_eq!(config.agent_timeout_secs, 180);
+
+        // Clean up
+        std::env::remove_var("FOUNDRY_PR_REVIEW_MODEL");
+        std::env::remove_var("FOUNDRY_AGENT_TIMEOUT_SECS");
+    }
+
+    #[test]
+    #[serial]
+    fn env_override_invalid_timeout_is_ignored() {
+        let dir = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", dir.path());
+        std::env::set_var("FOUNDRY_AGENT_TIMEOUT_SECS", "not_a_number");
+        std::env::remove_var("FOUNDRY_PR_REVIEW_MODEL");
+        std::env::remove_var("FOUNDRY_PR_REVIEW_PROVIDER");
+        std::env::remove_var("FOUNDRY_PR_REVIEW_MULTIPASS_THRESHOLD");
+
+        let config = Config::load_global_only();
+        // Should keep the default value
+        assert_eq!(config.agent_timeout_secs, Config::default().agent_timeout_secs);
+
+        std::env::remove_var("FOUNDRY_AGENT_TIMEOUT_SECS");
+    }
+
+    #[test]
+    #[serial]
+    fn env_override_empty_string_is_ignored() {
+        let dir = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", dir.path());
+        std::env::set_var("FOUNDRY_PR_REVIEW_MODEL", "");
+        std::env::remove_var("FOUNDRY_PR_REVIEW_PROVIDER");
+        std::env::remove_var("FOUNDRY_AGENT_TIMEOUT_SECS");
+        std::env::remove_var("FOUNDRY_PR_REVIEW_MULTIPASS_THRESHOLD");
+
+        let config = Config::load_global_only();
+        // Empty env var should NOT override the default (empty string is treated as unset)
+        assert_eq!(config.pr_review_model, Config::default().pr_review_model);
+
+        std::env::remove_var("FOUNDRY_PR_REVIEW_MODEL");
     }
 }

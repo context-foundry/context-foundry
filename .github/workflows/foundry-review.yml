@@ -41,6 +41,15 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
+          # Config overrides for CI PR review (set via GitHub repository variables):
+          # FOUNDRY_PR_REVIEW_MODEL - model for PR review (e.g. "opus", "sonnet")
+          # FOUNDRY_PR_REVIEW_PROVIDER - provider for PR review ("claude" or "codex")
+          # FOUNDRY_AGENT_TIMEOUT_SECS - agent timeout in seconds (e.g. "900")
+          # FOUNDRY_PR_REVIEW_MULTIPASS_THRESHOLD - file count threshold for multi-pass review
+          FOUNDRY_PR_REVIEW_MODEL: ${{ vars.FOUNDRY_PR_REVIEW_MODEL }}
+          FOUNDRY_PR_REVIEW_PROVIDER: ${{ vars.FOUNDRY_PR_REVIEW_PROVIDER }}
+          FOUNDRY_AGENT_TIMEOUT_SECS: ${{ vars.FOUNDRY_AGENT_TIMEOUT_SECS }}
+          FOUNDRY_PR_REVIEW_MULTIPASS_THRESHOLD: ${{ vars.FOUNDRY_PR_REVIEW_MULTIPASS_THRESHOLD }}
         run: |
           foundry review-pr "$PR_NUMBER" \
             --repo "$REPO" \
