@@ -1019,7 +1019,10 @@ fn compute_trend_data(
         let mut daily: BTreeMap<String, (usize, usize)> = BTreeMap::new();
         let mut daily_cost: BTreeMap<String, (f64, usize)> = BTreeMap::new();
         let mut seen_committed: HashSet<(String, String)> = HashSet::new();
+        let mut session_committed_date: HashMap<String, String> = HashMap::new();
 
+        // Phase 1: Process committed events to build daily pass/fail counts
+        // and record the committed date for each session.
         for ev in events.iter().rev() {
             if is_pr_review_session(&ev.session_id) {
                 continue;
@@ -1028,27 +1031,36 @@ fn compute_trend_data(
             if date_str.is_empty() {
                 continue;
             }
-            match ev.event_type.as_str() {
-                "committed" => {
-                    if let Some(task_id) = ev.payload.get("task_id").and_then(|v| v.as_str()) {
-                        let key = (ev.session_id.clone(), task_id.to_string());
-                        if task_committed.contains_key(&key) && seen_committed.insert(key) {
-                            let final_ct = &task_committed[&(ev.session_id.clone(), task_id.to_string())];
-                            let entry = daily.entry(date_str).or_insert((0, 0));
-                            entry.1 += 1;
-                            if final_ct.to_lowercase() == "feat" {
-                                entry.0 += 1;
-                            }
+            if ev.event_type == "committed" {
+                if let Some(task_id) = ev.payload.get("task_id").and_then(|v| v.as_str()) {
+                    let key = (ev.session_id.clone(), task_id.to_string());
+                    if task_committed.contains_key(&key) && seen_committed.insert(key) {
+                        let final_ct = &task_committed[&(ev.session_id.clone(), task_id.to_string())];
+                        let entry = daily.entry(date_str.clone()).or_insert((0, 0));
+                        entry.1 += 1;
+                        if final_ct.to_lowercase() == "feat" {
+                            entry.0 += 1;
                         }
+                        session_committed_date.entry(ev.session_id.clone()).or_insert(date_str);
                     }
                 }
-                "agent_done" => {
-                    let cost = ev.payload.get("cost_usd").and_then(|v| v.as_f64()).unwrap_or(0.0);
-                    let entry = daily_cost.entry(date_str).or_insert((0.0, 0));
-                    entry.0 += cost;
-                    entry.1 += 1;
-                }
-                _ => {}
+            }
+        }
+
+        // Phase 2: Attribute agent_done costs to the committed date of their session.
+        // Costs from sessions with no committed task are excluded.
+        for ev in events.iter() {
+            if is_pr_review_session(&ev.session_id) {
+                continue;
+            }
+            if ev.event_type != "agent_done" {
+                continue;
+            }
+            if let Some(committed_date) = session_committed_date.get(&ev.session_id) {
+                let cost = ev.payload.get("cost_usd").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                let entry = daily_cost.entry(committed_date.clone()).or_insert((0.0, 0));
+                entry.0 += cost;
+                entry.1 += 1;
             }
         }
 
