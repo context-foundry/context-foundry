@@ -150,32 +150,59 @@ fn split_diff_by_file(diff: &str) -> Vec<(String, String)> {
 
     for line in diff.lines() {
         if line.starts_with("diff --git ") {
+            // Flush previous file chunk
             if let Some(file) = current_file.take() {
                 result.push((file, current_lines.join("\n")));
                 current_lines.clear();
+            } else if !current_lines.is_empty() {
+                // Previous diff --git had no +++ line (binary file)
+                let fallback = extract_path_from_diff_header(&current_lines);
+                result.push((fallback, current_lines.join("\n")));
+                current_lines.clear();
             }
-            let file_path = line
-                .rsplit(" b/")
-                .next()
-                .unwrap_or("")
-                .to_string();
-            let file_path = if file_path.is_empty() {
-                line.to_string()
-            } else {
-                file_path
-            };
-            current_file = Some(file_path);
+            // Do NOT extract path here -- wait for +++ b/ line
+            current_file = None;
+        } else if current_file.is_none() {
+            if let Some(path) = line.strip_prefix("+++ b/") {
+                current_file = Some(path.to_string());
+            } else if line.starts_with("+++ /dev/null") {
+                // Deleted file -- fall back to diff --git header
+                let fallback = extract_path_from_diff_header(&current_lines);
+                current_file = Some(fallback);
+            }
         }
         current_lines.push(line);
     }
 
+    // Flush final chunk
     if let Some(file) = current_file {
         if !current_lines.is_empty() {
             result.push((file, current_lines.join("\n")));
         }
+    } else if !current_lines.is_empty() {
+        // Final chunk had no +++ line (binary file)
+        let fallback = extract_path_from_diff_header(&current_lines);
+        result.push((fallback, current_lines.join("\n")));
     }
 
     result
+}
+
+/// Extract file path from a diff --git header line as a fallback.
+/// Searches the given lines for the first "diff --git" header and uses
+/// rsplit(" b/") to extract the path. Only used for binary/deleted files
+/// where no "+++ b/" line exists.
+fn extract_path_from_diff_header(lines: &[&str]) -> String {
+    for line in lines {
+        if line.starts_with("diff --git ") {
+            let path = line.rsplit(" b/").next().unwrap_or("").to_string();
+            if !path.is_empty() {
+                return path;
+            }
+            return line.to_string();
+        }
+    }
+    String::new()
 }
 
 fn merge_pr_findings(all_findings: &[serde_json::Value]) -> serde_json::Value {
@@ -1037,6 +1064,32 @@ mod tests {
         assert_eq!(result[0].0, "image.png");
         assert!(result[0].1.contains("Binary files"));
         assert_eq!(result[1].0, "src/main.rs");
+    }
+
+    #[test]
+    fn test_split_diff_by_file_path_with_b_segment() {
+        let diff = "diff --git a/lib/sub b/file.rs b/lib/sub b/file.rs\nindex abc..def 100644\n--- a/lib/sub b/file.rs\n+++ b/lib/sub b/file.rs\n@@ -1,2 +1,3 @@\n+new line";
+        let result = split_diff_by_file(diff);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].0, "lib/sub b/file.rs");
+    }
+
+    #[test]
+    fn test_split_diff_by_file_deleted_file() {
+        let diff = "diff --git a/old.rs b/old.rs\nindex abc..def 100644\n--- a/old.rs\n+++ /dev/null\n@@ -1,3 +0,0 @@\n-deleted line";
+        let result = split_diff_by_file(diff);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].0, "old.rs");
+        assert!(result[0].1.contains("-deleted line"));
+    }
+
+    #[test]
+    fn test_split_diff_by_file_mixed_binary_and_text() {
+        let diff = "diff --git a/icon.png b/icon.png\nBinary files /dev/null and b/icon.png differ\ndiff --git a/src/lib.rs b/src/lib.rs\nindex abc..def 100644\n--- a/src/lib.rs\n+++ b/src/lib.rs\n@@ -1,2 +1,3 @@\n+line";
+        let result = split_diff_by_file(diff);
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].0, "icon.png");
+        assert_eq!(result[1].0, "src/lib.rs");
     }
 
     #[test]

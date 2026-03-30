@@ -1165,10 +1165,14 @@ WRITE YOUR FINDINGS to {report_path} using the Bash tool (the Write and Edit too
 ```json
 {{
   "high": [
-    {{"file": "{file_path}", "line": 42, "issue": "Description", "fixed": false, "category": "security|logic|crash", "source_evidence": {{"snippet": "...", "line_range": [40, 45], "reasoning": "..."}}, "confidence": 0.85}}
+    {{"file": "{file_path}", "line": 42, "issue": "Description", "fixed": false, "category": "security|logic|race|crash", "source_evidence": {{"snippet": "the exact code line(s)", "line_range": [40, 45], "reasoning": "One-line chain: what the code does -> why it is wrong -> what the consequence is"}}, "confidence": 0.85}}
   ],
-  "medium": [...],
-  "low": [...]
+  "medium": [
+    {{"file": "{file_path}", "line": 10, "issue": "Description", "fixed": false, "category": "error-handling|api-contract|resource-leak", "source_evidence": {{"snippet": "the exact code line(s)", "line_range": [8, 13], "reasoning": "One-line chain: what the code does -> why it is wrong -> what the consequence is"}}, "confidence": 0.85}}
+  ],
+  "low": [
+    {{"file": "{file_path}", "line": 5, "issue": "Description", "fixed": false, "category": "style|hardcoded|inconsistency", "source_evidence": {{"snippet": "the exact code line(s)", "line_range": [3, 7], "reasoning": "One-line chain: what the code does -> why it is wrong -> what the consequence is"}}, "confidence": 0.85}}
+  ]
 }}
 ```
 
