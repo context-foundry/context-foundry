@@ -10,5 +10,17 @@
     "cost_usd": 0.0018,
     "retries": 0,
     "validation": "pass"
+  },
+  {
+    "ts": "2026-03-30T15:43:44.128Z",
+    "scene": "runtime-eruption.js",
+    "seed_id": "runtime-eruption",
+    "biome": "volcanic",
+    "model": "gpt-4o-mini",
+    "input_tokens": 7414,
+    "output_tokens": 845,
+    "cost_usd": 0.0016,
+    "retries": 0,
+    "validation": "pass"
   }
 ]
