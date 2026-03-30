@@ -83,6 +83,10 @@ enum Commands {
         /// Output format: stdout, json, or comment (default: stdout)
         #[arg(long, default_value = "stdout")]
         output: String,
+        /// Ignore project .foundry.json (use global config only).
+        /// Use in CI to prevent untrusted PR branches from influencing review config.
+        #[arg(long)]
+        ignore_project_config: bool,
     },
     /// Show observatory analytics
     Stats {
@@ -153,8 +157,9 @@ async fn main() -> Result<()> {
             pr_number,
             repo,
             output,
+            ignore_project_config,
         } => {
-            review_pr::run(&project_dir, pr_number, repo, &output).await?;
+            review_pr::run(&project_dir, pr_number, repo, &output, ignore_project_config).await?;
         }
         Commands::Stats {
             days,

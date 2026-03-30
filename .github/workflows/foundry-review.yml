@@ -44,7 +44,8 @@ jobs:
         run: |
           foundry review-pr "$PR_NUMBER" \
             --repo "$REPO" \
-            --output comment
+            --output comment \
+            --ignore-project-config
 
       - name: Post failure comment
         if: steps.review.outcome == 'failure'

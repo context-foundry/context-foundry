@@ -585,6 +585,7 @@ pub async fn run(
     pr_number: u32,
     repo: Option<String>,
     output: &str,
+    ignore_project_config: bool,
 ) -> Result<()> {
     let output_mode = parse_output_mode(output)?;
 
@@ -609,7 +610,11 @@ pub async fn run(
     // Remove any existing review-report.md
     let _ = std::fs::remove_file(&review_report);
 
-    let config = Config::load(project_dir);
+    let config = if ignore_project_config {
+        Config::load_global_only()
+    } else {
+        Config::load(project_dir)
+    };
 
     // Resolve PR review model/provider with fallback to reviewer defaults
     let pr_provider = if config.pr_review_provider.is_empty() {

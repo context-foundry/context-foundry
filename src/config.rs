@@ -467,6 +467,29 @@ impl Config {
         }
     }
 
+    fn normalize(&mut self) {
+        // Normalize legacy mode values
+        if self.run_mode == "loop" {
+            self.run_mode = "auto".into();
+        } else if self.run_mode == "hil" {
+            self.run_mode = "review".into();
+        }
+        // Single model override: collapse all role models
+        if !self.model.is_empty() {
+            let m = self.model.clone();
+            self.scout_model = m.clone();
+            self.planner_model = m.clone();
+            self.builder_model = m.clone();
+            self.reviewer_model = m.clone();
+            self.fixer_model = m.clone();
+            self.discovery_model = m.clone();
+            self.simple_planner_model = m.clone();
+            self.simple_builder_model = m.clone();
+            self.simple_reviewer_model = m.clone();
+            self.pattern_extraction_model = m;
+        }
+    }
+
     pub fn load(project_dir: &Path) -> Self {
         let global_path = Self::global_config_path();
         let project_path = project_dir.join(".foundry.json");
@@ -483,32 +506,35 @@ impl Config {
 
         match serde_json::from_value::<Self>(merged) {
             Ok(mut config) => {
-                // Normalize legacy mode values
-                if config.run_mode == "loop" {
-                    config.run_mode = "auto".into();
-                } else if config.run_mode == "hil" {
-                    config.run_mode = "review".into();
-                }
-                // Single model override: collapse all role models
-                if !config.model.is_empty() {
-                    let m = config.model.clone();
-                    config.scout_model = m.clone();
-                    config.planner_model = m.clone();
-                    config.builder_model = m.clone();
-                    config.reviewer_model = m.clone();
-                    config.fixer_model = m.clone();
-                    config.discovery_model = m.clone();
-                    config.simple_planner_model = m.clone();
-                    config.simple_builder_model = m.clone();
-                    config.simple_reviewer_model = m.clone();
-                    config.pattern_extraction_model = m;
-                }
+                config.normalize();
                 config
             }
             Err(e) => {
                 eprintln!("warning: failed to deserialize merged config: {e} -- using defaults");
                 Self::default()
             }
+        }
+    }
+
+    /// Load config from global `~/.foundry/config.json` only, ignoring any
+    /// project-level `.foundry.json`. Used by CI workflows to prevent untrusted
+    /// PR branches from influencing review config.
+    pub fn load_global_only() -> Self {
+        let global_path = Self::global_config_path();
+        let global_val = global_path.as_deref().and_then(Self::read_json_file);
+
+        match global_val {
+            Some(val) => match serde_json::from_value::<Self>(val) {
+                Ok(mut config) => {
+                    config.normalize();
+                    config
+                }
+                Err(e) => {
+                    eprintln!("warning: failed to deserialize global config: {e} -- using defaults");
+                    Self::default()
+                }
+            },
+            None => Self::default(),
         }
     }
 
