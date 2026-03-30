@@ -300,6 +300,11 @@ pub struct Config {
 
     /// Provider for PR review via `foundry review-pr`. Defaults to reviewer_provider.
     pub pr_review_provider: String,
+
+    /// Multi-pass threshold for PR review. When changed file count exceeds this,
+    /// split into per-file passes plus integration pass (like build-loop reviewer).
+    /// 0 (default) means use review_multipass_threshold.
+    pub pr_review_multipass_threshold: usize,
 }
 
 impl Default for Config {
@@ -394,6 +399,7 @@ impl Default for Config {
             enforce_phase_rbac: false,
             pr_review_model: String::new(),
             pr_review_provider: String::new(),
+            pr_review_multipass_threshold: 0,
         }
     }
 }

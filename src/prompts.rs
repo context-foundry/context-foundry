@@ -1081,6 +1081,224 @@ RULES:
     )
 }
 
+pub fn pr_review_per_file_prompt(
+    pr_number: u32,
+    pr_title: &str,
+    file_path: &str,
+    file_diff: &str,
+    report_path: &str,
+) -> String {
+    let changes_block = if file_diff.is_empty() {
+        format!("Read the file {} to review its contents.", file_path)
+    } else {
+        format!(
+            "CHANGES (git diff for this file):\n```diff\n{}\n```",
+            file_diff
+        )
+    };
+
+    format!(
+        r#"You are reviewing a single file from GitHub Pull Request #{pr_number}: {pr_title}. This is a read-only code review.
+
+You are reviewing ONLY the file: {file_path}
+
+{changes_block}
+
+Focus ONLY on bugs, logic errors, and issues within this single file.
+Do NOT report cross-file issues (import mismatches, interface contracts, data flow between modules). Those will be caught by a separate integration review.
+
+SEVERITY CLASSIFICATION -- use these examples to calibrate:
+
+Example 1 (HIGH -- always report):
+  file: src/auth.rs:45
+  issue: SQL query uses string format! instead of parameterized query
+  category: security
+  WHY HIGH: Direct user input in SQL enables injection attacks. Any unvalidated
+  external input flowing into a query/command/template is HIGH.
+
+Example 2 (MEDIUM -- report):
+  file: src/api.rs:112
+  issue: unwrap() on user-provided input in request handler
+  category: error-handling
+  WHY MEDIUM: Panics at system boundary crash the server. Missing error handling
+  where external data crosses a trust boundary is MEDIUM.
+
+Example 3 (LOW -- report only):
+  file: src/utils.rs:8
+  issue: Variable named 'x' could be more descriptive
+  category: style
+  WHY LOW: Local scope, self-evident from context, consistent with surrounding code.
+  Style choices that match the existing codebase are LOW.
+
+WHAT TO REPORT:
+- Bugs, panics, security issues, logic errors
+- Missing error handling at system boundaries (user input, API calls, file I/O)
+- Race conditions, resource leaks, crash paths
+
+WHAT TO SKIP (do not report at all):
+- Style preferences consistent with the existing codebase
+- Minor naming in local scope
+- Missing comments or documentation
+- Code patterns that match how the rest of the project works
+- Theoretical improvements with no concrete bug
+
+PROVENANCE RULES (source_evidence):
+- EVERY finding MUST include source_evidence -- findings without it will be discarded
+- snippet: copy the exact source line(s) that triggered the finding (1-5 lines max, verbatim from the file)
+- line_range: [start_line, end_line] of the code region you analyzed to reach this conclusion
+- reasoning: a single sentence in the form "X does Y, which causes Z" -- no filler words
+
+CONFIDENCE SCORING:
+- EVERY finding MUST include a "confidence" field: a float from 0.0 to 1.0
+- 1.0 = certain this is a real bug with the described impact
+- 0.8+ = high confidence, strong evidence in the code
+- 0.5-0.8 = moderate confidence, likely an issue but could be intentional
+- <0.5 = low confidence, might be a false positive or context-dependent
+- When in doubt, assign lower confidence -- it is better to flag for human review than to fix a false positive
+
+WRITE YOUR FINDINGS to {report_path} using the Bash tool (the Write and Edit tools are not available to you):
+
+# Per-File PR Review -- {file_path}
+
+## Findings
+
+```json
+{{
+  "high": [
+    {{"file": "{file_path}", "line": 42, "issue": "Description", "fixed": false, "category": "security|logic|crash", "source_evidence": {{"snippet": "...", "line_range": [40, 45], "reasoning": "..."}}, "confidence": 0.85}}
+  ],
+  "medium": [...],
+  "low": [...]
+}}
+```
+
+Set "fixed" to false for ALL findings -- this is a read-only review.
+
+RULES:
+- Do NOT modify any source files -- this is a read-only review
+"#
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn pr_review_integration_prompt(
+    pr_number: u32,
+    pr_title: &str,
+    pr_body: &str,
+    head_branch: &str,
+    base_branch: &str,
+    changed_files: &str,
+    per_file_findings_json: &str,
+    report_path: &str,
+) -> String {
+    format!(
+        r#"You are the INTEGRATION reviewer for GitHub Pull Request #{pr_number}: {pr_title}. Per-file reviews have already been completed. Your job is to find CROSS-FILE issues that individual file reviews cannot catch. This is a read-only code review.
+
+Branch: {head_branch} -> {base_branch}
+
+PR Description:
+{pr_body}
+
+Changed files:
+{changed_files}
+
+## Per-File Review Findings (already identified)
+
+The following issues were found during per-file analysis:
+
+{per_file_findings_json}
+
+Do NOT re-report these issues. Focus on what they MISSED.
+
+YOUR JOB (in order):
+1. Read the changed files list above.
+2. For each changed file, read the full file to understand the surrounding context.
+3. Focus on CROSS-FILE issues:
+   - Interface mismatches between modules
+   - Data flow bugs across function boundaries
+   - Import/dependency issues
+   - Type contract violations between callers and callees
+   - Missing or incompatible error propagation across module boundaries
+4. Do NOT fix anything -- this is a read-only review of a pull request.
+5. Set "fixed" to false for ALL findings.
+6. Write your final report as your last action.
+
+SEVERITY CLASSIFICATION -- use these examples to calibrate:
+
+Example 1 (HIGH -- always report):
+  file: src/auth.rs:45
+  issue: SQL query uses string format! instead of parameterized query
+  category: security
+  WHY HIGH: Direct user input in SQL enables injection attacks. Any unvalidated
+  external input flowing into a query/command/template is HIGH.
+
+Example 2 (MEDIUM -- report):
+  file: src/api.rs:112
+  issue: unwrap() on user-provided input in request handler
+  category: error-handling
+  WHY MEDIUM: Panics at system boundary crash the server. Missing error handling
+  where external data crosses a trust boundary is MEDIUM.
+
+Example 3 (LOW -- report only):
+  file: src/utils.rs:8
+  issue: Variable named 'x' could be more descriptive
+  category: style
+  WHY LOW: Local scope, self-evident from context, consistent with surrounding code.
+  Style choices that match the existing codebase are LOW.
+
+PROVENANCE RULES (source_evidence):
+- EVERY finding MUST include source_evidence -- findings without it will be discarded
+- snippet: copy the exact source line(s) that triggered the finding (1-5 lines max, verbatim from the file)
+- line_range: [start_line, end_line] of the code region you analyzed to reach this conclusion
+- reasoning: a single sentence in the form "X does Y, which causes Z" -- no filler words
+
+CONFIDENCE SCORING:
+- EVERY finding MUST include a "confidence" field: a float from 0.0 to 1.0
+- 1.0 = certain this is a real bug with the described impact
+- 0.8+ = high confidence, strong evidence in the code
+- 0.5-0.8 = moderate confidence, likely an issue but could be intentional
+- <0.5 = low confidence, might be a false positive or context-dependent
+- When in doubt, assign lower confidence -- it is better to flag for human review than to fix a false positive
+
+WRITE YOUR FINAL REPORT to {report_path} using the Bash tool (the Write and Edit tools are not available to you):
+
+# PR Review -- #{pr_number}: {pr_title}
+
+## Verdict: PASS or CONCERNS
+
+## Summary
+Brief summary of what this PR does and overall assessment.
+
+## Findings
+
+```json
+{{
+  "high": [
+    {{"file": "path/to/file", "line": 42, "issue": "Description", "fixed": false, "category": "security|logic|race|crash", "source_evidence": {{"snippet": "the exact code line(s)", "line_range": [40, 45], "reasoning": "One-line chain: what the code does -> why it is wrong -> what the consequence is"}}, "confidence": 0.85}}
+  ],
+  "medium": [
+    {{"file": "path/to/file", "line": 10, "issue": "Description", "fixed": false, "category": "error-handling|api-contract|resource-leak", "source_evidence": {{"snippet": "the exact code line(s)", "line_range": [8, 13], "reasoning": "One-line chain: what the code does -> why it is wrong -> what the consequence is"}}, "confidence": 0.85}}
+  ],
+  "low": [
+    {{"file": "path/to/file", "line": 5, "issue": "Description", "fixed": false, "category": "style|hardcoded|inconsistency", "source_evidence": {{"snippet": "the exact code line(s)", "line_range": [3, 7], "reasoning": "One-line chain: what the code does -> why it is wrong -> what the consequence is"}}, "confidence": 0.85}}
+  ]
+}}
+```
+
+VERDICT RULES:
+- PASS if: no high or medium findings (including per-file findings)
+- CONCERNS if: any high or medium findings exist
+
+RULES:
+- Do NOT modify any source files -- this is a read-only review
+- Do NOT modify CLAUDE.md or TASKS.md
+- Do NOT read files in .buildloop/logs/
+- Every finding MUST cite file, line number, and concrete evidence
+- Set "fixed" to false for ALL findings
+"#
+    )
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn reviewer_integration_prompt(
     task_id: &str,

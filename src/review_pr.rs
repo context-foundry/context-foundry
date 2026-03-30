@@ -4,10 +4,11 @@ use std::process::Command;
 use std::time::Instant;
 use tokio::sync::mpsc;
 
-use crate::agent::{self, AgentRole, AgentOutputEvent};
+use crate::agent::{self, AgentOutputEvent, AgentResult, AgentRole};
 use crate::config::Config;
 use crate::observatory::{self, AgentUsage, ObservatoryEvent};
 use crate::prompts;
+use std::collections::HashSet;
 
 // ─── Types ───────────────────────────────────────────────────────
 
@@ -142,6 +143,87 @@ fn setup_temp_buildloop(project_dir: &Path, pr_number: u32, repo: &str) -> Resul
     Ok(pr_review_dir)
 }
 
+fn split_diff_by_file(diff: &str) -> Vec<(String, String)> {
+    let mut result: Vec<(String, String)> = Vec::new();
+    let mut current_file: Option<String> = None;
+    let mut current_lines: Vec<&str> = Vec::new();
+
+    for line in diff.lines() {
+        if line.starts_with("diff --git ") {
+            if let Some(file) = current_file.take() {
+                result.push((file, current_lines.join("\n")));
+                current_lines.clear();
+            }
+            let file_path = line
+                .rsplit(" b/")
+                .next()
+                .unwrap_or("")
+                .to_string();
+            let file_path = if file_path.is_empty() {
+                line.to_string()
+            } else {
+                file_path
+            };
+            current_file = Some(file_path);
+        }
+        current_lines.push(line);
+    }
+
+    if let Some(file) = current_file {
+        if !current_lines.is_empty() {
+            result.push((file, current_lines.join("\n")));
+        }
+    }
+
+    result
+}
+
+fn merge_pr_findings(all_findings: &[serde_json::Value]) -> serde_json::Value {
+    let mut high_all: Vec<serde_json::Value> = Vec::new();
+    let mut medium_all: Vec<serde_json::Value> = Vec::new();
+    let mut low_all: Vec<serde_json::Value> = Vec::new();
+
+    for findings in all_findings {
+        for (key, acc) in [
+            ("high", &mut high_all),
+            ("medium", &mut medium_all),
+            ("low", &mut low_all),
+        ] {
+            if let Some(arr) = findings.get(key).and_then(|v| v.as_array()) {
+                acc.extend(arr.iter().cloned());
+            }
+        }
+    }
+
+    // Deduplicate by (file, issue) pair
+    fn dedup(items: &mut Vec<serde_json::Value>) {
+        let mut seen = HashSet::new();
+        items.retain(|item| {
+            let file = item
+                .get("file")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let issue = item
+                .get("issue")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            seen.insert((file, issue))
+        });
+    }
+
+    dedup(&mut high_all);
+    dedup(&mut medium_all);
+    dedup(&mut low_all);
+
+    serde_json::json!({
+        "high": high_all,
+        "medium": medium_all,
+        "low": low_all,
+    })
+}
+
 fn parse_findings_json(report_content: &str) -> Result<serde_json::Value> {
     let mut in_json_block = false;
     let mut json_lines = Vec::new();
@@ -217,6 +299,222 @@ fn post_pr_comment(pr_number: u32, repo: &str, body: &str) -> Result<()> {
     Ok(())
 }
 
+// ─── Multi-pass PR Review ───────────────────────────────────────
+
+#[allow(clippy::too_many_arguments)]
+async fn run_multipass_pr_review(
+    pr_number: u32,
+    metadata: &PrMetadata,
+    diff: &str,
+    config: &Config,
+    pr_provider: &str,
+    pr_model: &str,
+    session_id: &str,
+    project_dir: &Path,
+    log_dir: &Path,
+    review_report: &Path,
+    review_report_relative: &str,
+) -> (Result<AgentResult>, AgentUsage) {
+    eprintln!(
+        "Multi-pass PR review: {} files exceed threshold, running per-file analysis",
+        metadata.changed_files.len()
+    );
+
+    let file_diffs = split_diff_by_file(diff);
+    let diff_map: std::collections::HashMap<&str, &str> = file_diffs
+        .iter()
+        .map(|(f, d)| (f.as_str(), d.as_str()))
+        .collect();
+
+    let mut total_usage = AgentUsage::default();
+    let mut all_per_file_findings: Vec<serde_json::Value> = Vec::new();
+
+    for (i, file) in metadata.changed_files.iter().enumerate() {
+        eprintln!(
+            "Reviewing file {}/{}: {}",
+            i + 1,
+            metadata.changed_files.len(),
+            file
+        );
+
+        let _ = std::fs::remove_file(review_report);
+
+        let file_diff = diff_map.get(file.as_str()).copied().unwrap_or("");
+        let prompt = prompts::pr_review_per_file_prompt(
+            pr_number,
+            &metadata.title,
+            file,
+            file_diff,
+            review_report_relative,
+        );
+
+        let (agent_tx, mut agent_rx) = mpsc::unbounded_channel::<AgentOutputEvent>();
+
+        let fwd_handle = tokio::spawn(async move {
+            let mut usage = AgentUsage::default();
+            while let Some(evt) = agent_rx.recv().await {
+                usage.accumulate(&evt);
+                if let AgentOutputEvent::Text(ref t) = evt {
+                    eprint!("{}", t);
+                }
+            }
+            usage
+        });
+
+        observatory::log_event(
+            session_id,
+            project_dir,
+            ObservatoryEvent::AgentStarted {
+                role: "Reviewer".to_string(),
+                provider: pr_provider.to_string(),
+                model: pr_model.to_string(),
+            },
+        );
+        let per_file_start = Instant::now();
+
+        let pr_review_tools: &[&str] = &["Read", "Glob", "Grep", "Bash"];
+        let result = agent::run_agent(
+            &AgentRole::Reviewer,
+            Config::parse_provider(pr_provider),
+            pr_model,
+            &prompt,
+            project_dir,
+            agent_tx,
+            log_dir,
+            Some(pr_review_tools),
+            config.agent_timeout_secs,
+            None,
+        )
+        .await;
+
+        let agent_usage = fwd_handle.await.unwrap_or_default();
+        total_usage.tokens_in += agent_usage.tokens_in;
+        total_usage.tokens_out += agent_usage.tokens_out;
+        total_usage.cost_usd += agent_usage.cost_usd;
+        total_usage.context_pct = total_usage.context_pct.max(agent_usage.context_pct);
+
+        observatory::log_event(
+            session_id,
+            project_dir,
+            ObservatoryEvent::AgentDone {
+                role: "Reviewer".to_string(),
+                success: result.is_ok(),
+                duration_secs: per_file_start.elapsed().as_secs_f64(),
+                tokens_in: agent_usage.tokens_in,
+                tokens_out: agent_usage.tokens_out,
+                cost_usd: agent_usage.cost_usd,
+                context_pct: agent_usage.context_pct,
+            },
+        );
+
+        if result.is_ok() {
+            let findings = std::fs::read_to_string(review_report)
+                .ok()
+                .and_then(|content| parse_findings_json(&content).ok())
+                .unwrap_or_else(|| {
+                    serde_json::json!({"high": [], "medium": [], "low": []})
+                });
+            all_per_file_findings.push(findings);
+        } else {
+            eprintln!(
+                "Per-file review failed for {} -- continuing with remaining files",
+                file
+            );
+        }
+    }
+
+    // Clean up before integration pass
+    let _ = std::fs::remove_file(review_report);
+
+    let merged_findings = merge_pr_findings(&all_per_file_findings);
+    let per_file_findings_json =
+        serde_json::to_string_pretty(&merged_findings).unwrap_or_default();
+    let (pf_high, pf_medium, _pf_low) = count_findings(&merged_findings);
+    eprintln!(
+        "Per-file analysis complete. Found {} high, {} medium findings. Running integration review...",
+        pf_high, pf_medium
+    );
+
+    // Integration pass
+    let prompt = prompts::pr_review_integration_prompt(
+        pr_number,
+        &metadata.title,
+        &metadata.body,
+        &metadata.head_branch,
+        &metadata.base_branch,
+        &metadata.changed_files.join("\n"),
+        &per_file_findings_json,
+        review_report_relative,
+    );
+
+    let (agent_tx, mut agent_rx) = mpsc::unbounded_channel::<AgentOutputEvent>();
+
+    let fwd_handle = tokio::spawn(async move {
+        let mut usage = AgentUsage::default();
+        while let Some(evt) = agent_rx.recv().await {
+            usage.accumulate(&evt);
+            if let AgentOutputEvent::Text(ref t) = evt {
+                eprint!("{}", t);
+            }
+        }
+        usage
+    });
+
+    observatory::log_event(
+        session_id,
+        project_dir,
+        ObservatoryEvent::AgentStarted {
+            role: "Reviewer".to_string(),
+            provider: pr_provider.to_string(),
+            model: pr_model.to_string(),
+        },
+    );
+    let integration_start = Instant::now();
+
+    let pr_review_tools: &[&str] = &["Read", "Glob", "Grep", "Bash"];
+    let integration_result = agent::run_agent(
+        &AgentRole::Reviewer,
+        Config::parse_provider(pr_provider),
+        pr_model,
+        &prompt,
+        project_dir,
+        agent_tx,
+        log_dir,
+        Some(pr_review_tools),
+        config.agent_timeout_secs,
+        None,
+    )
+    .await;
+
+    let agent_usage = fwd_handle.await.unwrap_or_default();
+    total_usage.tokens_in += agent_usage.tokens_in;
+    total_usage.tokens_out += agent_usage.tokens_out;
+    total_usage.cost_usd += agent_usage.cost_usd;
+    total_usage.context_pct = total_usage.context_pct.max(agent_usage.context_pct);
+
+    observatory::log_event(
+        session_id,
+        project_dir,
+        ObservatoryEvent::AgentDone {
+            role: "Reviewer".to_string(),
+            success: integration_result.is_ok(),
+            duration_secs: integration_start.elapsed().as_secs_f64(),
+            tokens_in: agent_usage.tokens_in,
+            tokens_out: agent_usage.tokens_out,
+            cost_usd: agent_usage.cost_usd,
+            context_pct: agent_usage.context_pct,
+        },
+    );
+
+    match integration_result {
+        Ok(agent_res) => (Ok(agent_res), total_usage),
+        Err(e) => (
+            Err(anyhow!("PR review integration agent failed: {}", e)),
+            total_usage,
+        ),
+    }
+}
+
 // ─── Main Entry Point ────────────────────────────────────────────
 
 pub async fn run(
@@ -276,72 +574,105 @@ pub async fn run(
                 "pr_review_provider": pr_provider,
                 "pr_review_model": pr_model,
                 "output_mode": output,
+                "diff_line_count": diff.lines().count(),
+                "changed_file_count": metadata.changed_files.len(),
             }),
         },
     );
 
+    let multipass_threshold = if config.pr_review_multipass_threshold > 0 {
+        config.pr_review_multipass_threshold
+    } else {
+        config.review_multipass_threshold
+    };
+
+    eprintln!(
+        "PR diff: {} lines, {} changed files (multipass threshold: {})",
+        diff.lines().count(),
+        metadata.changed_files.len(),
+        multipass_threshold,
+    );
+
     let changed_files_str = metadata.changed_files.join("\n");
     let review_report_relative = format!(".buildloop/pr-review-{}-{}/review-report.md", repo.replace('/', "--"), pr_number);
-    let prompt = prompts::pr_review_prompt(
-        pr_number,
-        &metadata.title,
-        &metadata.body,
-        &metadata.head_branch,
-        &metadata.base_branch,
-        &diff,
-        &changed_files_str,
-        &review_report_relative,
-    );
 
-    let (agent_tx, mut agent_rx) = mpsc::unbounded_channel::<AgentOutputEvent>();
+    let use_multipass = multipass_threshold > 0 && metadata.changed_files.len() > multipass_threshold;
 
-    let fwd_handle = tokio::spawn(async move {
-        let mut usage = AgentUsage::default();
-        while let Some(evt) = agent_rx.recv().await {
-            usage.accumulate(&evt);
-            if let AgentOutputEvent::Text(ref t) = evt {
-                eprint!("{}", t);
+    let (agent_result, usage) = if use_multipass {
+        run_multipass_pr_review(
+            pr_number,
+            &metadata,
+            &diff,
+            &config,
+            &pr_provider,
+            &pr_model,
+            &session_id,
+            project_dir,
+            &log_dir,
+            &review_report,
+            &review_report_relative,
+        )
+        .await
+    } else {
+        // Single-pass review (existing flow)
+        let prompt = prompts::pr_review_prompt(
+            pr_number,
+            &metadata.title,
+            &metadata.body,
+            &metadata.head_branch,
+            &metadata.base_branch,
+            &diff,
+            &changed_files_str,
+            &review_report_relative,
+        );
+
+        let (agent_tx, mut agent_rx) = mpsc::unbounded_channel::<AgentOutputEvent>();
+
+        let fwd_handle = tokio::spawn(async move {
+            let mut usage = AgentUsage::default();
+            while let Some(evt) = agent_rx.recv().await {
+                usage.accumulate(&evt);
+                if let AgentOutputEvent::Text(ref t) = evt {
+                    eprint!("{}", t);
+                }
             }
-        }
-        usage
-    });
+            usage
+        });
 
-    // Observatory: agent started
-    observatory::log_event(
-        &session_id,
-        project_dir,
-        ObservatoryEvent::AgentStarted {
-            role: "Reviewer".to_string(),
-            provider: pr_provider.clone(),
-            model: pr_model.clone(),
-        },
-    );
-    let agent_start = Instant::now();
+        observatory::log_event(
+            &session_id,
+            project_dir,
+            ObservatoryEvent::AgentStarted {
+                role: "Reviewer".to_string(),
+                provider: pr_provider.clone(),
+                model: pr_model.clone(),
+            },
+        );
+        let agent_start = Instant::now();
 
-    let pr_review_tools: &[&str] = &["Read", "Glob", "Grep", "Bash"];
-    let agent_result = agent::run_agent(
-        &AgentRole::Reviewer,
-        Config::parse_provider(&pr_provider),
-        &pr_model,
-        &prompt,
-        project_dir,
-        agent_tx,
-        &log_dir,
-        Some(pr_review_tools),
-        config.agent_timeout_secs,
-        None,
-    )
-    .await;
+        let pr_review_tools: &[&str] = &["Read", "Glob", "Grep", "Bash"];
+        let result = agent::run_agent(
+            &AgentRole::Reviewer,
+            Config::parse_provider(&pr_provider),
+            &pr_model,
+            &prompt,
+            project_dir,
+            agent_tx,
+            &log_dir,
+            Some(pr_review_tools),
+            config.agent_timeout_secs,
+            None,
+        )
+        .await;
 
-    let usage = fwd_handle.await.unwrap_or_default();
+        let usage = fwd_handle.await.unwrap_or_default();
 
-    if let Err(ref e) = agent_result {
         observatory::log_event(
             &session_id,
             project_dir,
             ObservatoryEvent::AgentDone {
                 role: "Reviewer".to_string(),
-                success: false,
+                success: result.is_ok(),
                 duration_secs: agent_start.elapsed().as_secs_f64(),
                 tokens_in: usage.tokens_in,
                 tokens_out: usage.tokens_out,
@@ -349,6 +680,11 @@ pub async fn run(
                 context_pct: usage.context_pct,
             },
         );
+
+        (result, usage)
+    };
+
+    if let Err(ref e) = agent_result {
         observatory::log_event(
             &session_id,
             project_dir,
@@ -363,21 +699,6 @@ pub async fn run(
         let _ = std::fs::remove_dir_all(&buildloop_dir);
         return Err(anyhow!("PR review agent failed: {}", e));
     }
-
-    // Observatory: agent done (success)
-    observatory::log_event(
-        &session_id,
-        project_dir,
-        ObservatoryEvent::AgentDone {
-            role: "Reviewer".to_string(),
-            success: true,
-            duration_secs: agent_start.elapsed().as_secs_f64(),
-            tokens_in: usage.tokens_in,
-            tokens_out: usage.tokens_out,
-            cost_usd: usage.cost_usd,
-            context_pct: usage.context_pct,
-        },
-    );
 
     let report_content = match std::fs::read_to_string(&review_report) {
         Ok(content) => content,
@@ -566,5 +887,56 @@ mod tests {
         assert_eq!(parsed["summary"]["cost_usd"], 0.15);
         assert_eq!(parsed["summary"]["duration_secs"], 30.5);
         assert!(parsed["findings"]["high"].is_array());
+    }
+
+    #[test]
+    fn test_split_diff_by_file_basic() {
+        let diff = "diff --git a/src/foo.rs b/src/foo.rs\nindex abc..def 100644\n--- a/src/foo.rs\n+++ b/src/foo.rs\n@@ -1,3 +1,4 @@\n+added line\n existing\ndiff --git a/src/bar.rs b/src/bar.rs\nindex abc..def 100644\n--- a/src/bar.rs\n+++ b/src/bar.rs\n@@ -1,2 +1,3 @@\n+another";
+        let result = split_diff_by_file(diff);
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].0, "src/foo.rs");
+        assert_eq!(result[1].0, "src/bar.rs");
+        assert!(result[0].1.contains("+added line"));
+        assert!(result[1].1.contains("+another"));
+    }
+
+    #[test]
+    fn test_split_diff_by_file_empty() {
+        let result = split_diff_by_file("");
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_split_diff_by_file_single_file() {
+        let diff = "diff --git a/src/only.rs b/src/only.rs\nindex abc..def 100644\n--- a/src/only.rs\n+++ b/src/only.rs\n@@ -1,2 +1,3 @@\n+new line";
+        let result = split_diff_by_file(diff);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].0, "src/only.rs");
+    }
+
+    #[test]
+    fn test_merge_pr_findings_deduplicates() {
+        let findings_a = serde_json::json!({
+            "high": [{"file": "a.rs", "issue": "bug1"}],
+            "medium": [{"file": "b.rs", "issue": "warn1"}],
+            "low": []
+        });
+        let findings_b = serde_json::json!({
+            "high": [{"file": "a.rs", "issue": "bug1"}, {"file": "c.rs", "issue": "bug2"}],
+            "medium": [],
+            "low": [{"file": "d.rs", "issue": "style1"}]
+        });
+        let merged = merge_pr_findings(&[findings_a, findings_b]);
+        assert_eq!(merged["high"].as_array().unwrap().len(), 2); // bug1 deduplicated
+        assert_eq!(merged["medium"].as_array().unwrap().len(), 1);
+        assert_eq!(merged["low"].as_array().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn test_merge_pr_findings_empty() {
+        let merged = merge_pr_findings(&[]);
+        assert_eq!(merged["high"].as_array().unwrap().len(), 0);
+        assert_eq!(merged["medium"].as_array().unwrap().len(), 0);
+        assert_eq!(merged["low"].as_array().unwrap().len(), 0);
     }
 }
