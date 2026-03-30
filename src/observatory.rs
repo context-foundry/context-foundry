@@ -2,7 +2,7 @@ use std::io::Write;
 use std::path::Path;
 
 use chrono::Utc;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::agent::AgentOutputEvent;
 
@@ -17,13 +17,14 @@ pub struct AgentUsage {
 }
 
 /// Envelope written as a single JSON line to the events file.
-#[derive(Debug, Serialize)]
-struct EventEnvelope {
-    timestamp: String,
-    session_id: String,
-    project_dir: String,
-    event_type: String,
-    payload: serde_json::Value,
+/// Public + Deserialize so that `stats.rs` can read events back.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EventEnvelope {
+    pub timestamp: String,
+    pub session_id: String,
+    pub project_dir: String,
+    pub event_type: String,
+    pub payload: serde_json::Value,
 }
 
 /// All observatory event variants. Each serializes to a JSON payload.

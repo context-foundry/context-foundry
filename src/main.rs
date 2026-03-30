@@ -16,6 +16,7 @@ mod observatory;
 mod orchestrator;
 mod tmux;
 mod sandbox;
+mod stats;
 mod budget;
 mod patterns;
 mod prompts;
@@ -71,6 +72,18 @@ enum Commands {
     Update,
     /// Extract patterns from build artifacts (.buildloop/)
     Extract,
+    /// Show observatory analytics
+    Stats {
+        /// Number of days to look back (default: 7)
+        #[arg(long, default_value = "7")]
+        days: u32,
+        /// Project directory to filter by (default: current directory)
+        #[arg(long)]
+        project: Option<PathBuf>,
+        /// Output format: table or json (default: table)
+        #[arg(long, default_value = "table")]
+        output: String,
+    },
 }
 
 #[tokio::main]
@@ -120,6 +133,14 @@ async fn main() -> Result<()> {
         }
         Commands::Extract => {
             app::run_extract(&project_dir)?;
+        }
+        Commands::Stats {
+            days,
+            project,
+            output,
+        } => {
+            let stats_project = project.unwrap_or_else(|| project_dir.clone());
+            stats::run_stats(days, &stats_project, &output)?;
         }
     }
 
