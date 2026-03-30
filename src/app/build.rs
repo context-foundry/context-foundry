@@ -1638,7 +1638,7 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
             let skip_scout = scout_has_run && !last_commit_touched_structural(&ctx.project_dir);
             let dual_arena_mode = ctx.config.builder_models.len() >= 2
                 && DualSelection::from_str(&ctx.config.dual_selection) == DualSelection::Both;
-            let (success, task_rate_limited) = process_task(
+            let (success, task_rate_limited, human_denied) = process_task(
                 &task_info,
                 &ctx,
                 &tx,
@@ -1693,9 +1693,9 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
 
             // If human denied a commit approval, pause the loop.
             // Re-running the same pending task would waste API spend.
-            if !success && ctx.config.require_human_approval {
+            if human_denied {
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
-                    "Pausing after denied commit -- press Enter to resume or fix the task manually".to_string(),
+                    "Pausing after denied commit -- loop will stop after this task".to_string(),
                 )));
                 let _ = std::fs::create_dir_all(&ctx.buildloop_dir);
                 let _ = std::fs::write(ctx.buildloop_dir.join("stop"), "");
@@ -2145,7 +2145,7 @@ async fn process_task(
     cached_patterns: &[patterns::Pattern],
     patterns_dir: &std::path::Path,
     extension_context: &str,
-) -> (bool, bool) {
+) -> (bool, bool, bool) {
     // Handle dual selection: Both forks two full pipelines, First/Second
     // resolve an effective single-pipeline config before any stage starts.
     let dual_sel = DualSelection::from_str(&ctx.config.dual_selection);
@@ -2160,7 +2160,7 @@ async fn process_task(
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::TaskStarted(
                     task_info.clone(),
                 )));
-                return run_dual_pipelines(
+                let (v, r) = run_dual_pipelines(
                     task_info,
                     ctx,
                     tx,
@@ -2170,6 +2170,7 @@ async fn process_task(
                     [selected_configs[0].clone(), selected_configs[1].clone()],
                 )
                 .await;
+                return (v, r, false);
             }
             DualSelection::First | DualSelection::Second if selected_configs.len() == 1 => {
                 let pipeline_config = selected_configs[0].clone();
@@ -2603,7 +2604,7 @@ async fn process_task(
             ));
             let _ = commit_wip_for_mode(ctx, task_id, task_desc);
             flush_budget_telemetry(&ctx.buildloop_dir, ctx.config.budget_recovery_enabled, &budget_telemetry);
-            return (false, last_rate_limited);
+            return (false, last_rate_limited, false);
         }
     }
 
@@ -2834,7 +2835,7 @@ async fn process_task(
                 };
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(message)));
                 flush_budget_telemetry(&ctx.buildloop_dir, ctx.config.budget_recovery_enabled, &budget_telemetry);
-                return (false, last_rate_limited);
+                return (false, last_rate_limited, false);
             }
 
             adaptive_sleep(
@@ -2869,7 +2870,7 @@ async fn process_task(
                 ));
                 let _ = commit_wip_for_mode(ctx, task_id, task_desc);
                 flush_budget_telemetry(&ctx.buildloop_dir, ctx.config.budget_recovery_enabled, &budget_telemetry);
-                return (false, last_rate_limited);
+                return (false, last_rate_limited, false);
             }
         }
 
@@ -2937,7 +2938,7 @@ async fn process_task(
             ));
             let _ = commit_wip_for_mode(ctx, task_id, task_desc);
             flush_budget_telemetry(&ctx.buildloop_dir, ctx.config.budget_recovery_enabled, &budget_telemetry);
-            return (false, last_rate_limited);
+            return (false, last_rate_limited, false);
         }
     }
 
@@ -3110,7 +3111,7 @@ async fn process_task(
                 ));
                 let _ = commit_wip_for_mode(ctx, task_id, task_desc);
                 flush_budget_telemetry(&ctx.buildloop_dir, ctx.config.budget_recovery_enabled, &budget_telemetry);
-                return (false, last_rate_limited);
+                return (false, last_rate_limited, false);
             }
 
             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
@@ -3384,7 +3385,7 @@ async fn process_task(
                 ));
                 let _ = commit_wip_for_mode(ctx, task_id, task_desc);
                 flush_budget_telemetry(&ctx.buildloop_dir, ctx.config.budget_recovery_enabled, &budget_telemetry);
-                return (false, last_rate_limited);
+                return (false, last_rate_limited, false);
             }
 
             // Re-validate the builder gate after P+ may have replaced the plan
@@ -3414,7 +3415,7 @@ async fn process_task(
                     }
                     let _ = commit_wip_for_mode(ctx, task_id, task_desc);
                     flush_budget_telemetry(&ctx.buildloop_dir, ctx.config.budget_recovery_enabled, &budget_telemetry);
-                    return (false, last_rate_limited);
+                    return (false, last_rate_limited, false);
                 }
             }
 
@@ -3706,7 +3707,7 @@ async fn process_task(
         ));
         let _ = commit_wip_for_mode(ctx, task_id, task_desc);
         flush_budget_telemetry(&ctx.buildloop_dir, ctx.config.budget_recovery_enabled, &budget_telemetry);
-        return (false, last_rate_limited);
+        return (false, last_rate_limited, false);
     }
 
     // Builder completed -- persist progress indicator.
@@ -3780,7 +3781,7 @@ async fn process_task(
                 ));
                 let _ = commit_wip_for_mode(ctx, task_id, task_desc);
                 flush_budget_telemetry(&ctx.buildloop_dir, ctx.config.budget_recovery_enabled, &budget_telemetry);
-                return (false, last_rate_limited);
+                return (false, last_rate_limited, false);
             }
             Err(e) => {
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
@@ -3834,7 +3835,7 @@ async fn process_task(
         // Progress indicator already written at [SPI.] above; commit preserves it.
         let _ = commit_wip_for_mode(ctx, task_id, task_desc);
         flush_budget_telemetry(&ctx.buildloop_dir, ctx.config.budget_recovery_enabled, &budget_telemetry);
-        return (false, last_rate_limited);
+        return (false, last_rate_limited, false);
     }
 
     // Learned doubt confidence: check if this task shape has enough
@@ -3971,6 +3972,7 @@ async fn process_task(
     // When require_human_approval is enabled and the task passed validation,
     // pause and ask the human to confirm before committing as feat.
     // If denied, downgrade to WIP and the loop will pause after commit.
+    let mut human_denied_approval = false;
     let validated = if validated && ctx.config.require_human_approval {
         // Arm gate BEFORE sending event to avoid race where TUI responds before gate is set
         ctx.commit_approval_gate.store(true, Ordering::Release);
@@ -3985,7 +3987,7 @@ async fn process_task(
         while ctx.commit_approval_gate.load(Ordering::Acquire) {
             if ctx.is_stop_requested() {
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Finished));
-                return (false, false);
+                return (false, false, false);
             }
             tokio::time::sleep(Duration::from_millis(200)).await;
         }
@@ -4003,6 +4005,7 @@ async fn process_task(
             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
                 "Human denied: downgrading {} to WIP", task_id
             ))));
+            human_denied_approval = true;
             false
         }
     } else {
@@ -4139,7 +4142,7 @@ async fn process_task(
                             h.abort();
                         }
                         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Finished));
-                        return (false, false);
+                        return (false, false, false);
                     }
                     tokio::time::sleep(Duration::from_millis(200)).await;
                 }
@@ -4174,7 +4177,7 @@ async fn process_task(
                     while ctx.review_gate.load(Ordering::Relaxed) {
                         if ctx.is_stop_requested() {
                             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Finished));
-                            return (false, false);
+                            return (false, false, false);
                         }
                         tokio::time::sleep(Duration::from_millis(200)).await;
                     }
@@ -4422,7 +4425,7 @@ async fn process_task(
     // Clear checkpoint — task completed successfully (committed or WIP)
     clear_checkpoint(&ctx.buildloop_dir);
 
-    (validated, last_rate_limited)
+    (validated, last_rate_limited, human_denied_approval)
 }
 
 async fn run_pattern_extraction(
