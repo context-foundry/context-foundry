@@ -77,6 +77,12 @@ pub enum ObservatoryEvent {
         pattern_ids: Vec<String>,
         count: usize,
     },
+    PatternCited {
+        task_id: String,
+        role: String,
+        artifact: String,
+        pattern_id: String,
+    },
     Committed {
         task_id: String,
         sha: String,
@@ -121,6 +127,7 @@ pub fn event_type_str(event: &ObservatoryEvent) -> &'static str {
         ObservatoryEvent::ReviewFindings { .. } => "review_findings",
         ObservatoryEvent::PatternInjected { .. } => "pattern_injected",
         ObservatoryEvent::PatternApplied { .. } => "pattern_applied",
+        ObservatoryEvent::PatternCited { .. } => "pattern_cited",
         ObservatoryEvent::Committed { .. } => "committed",
         ObservatoryEvent::BudgetOverrun { .. } => "budget_overrun",
         ObservatoryEvent::RateLimited { .. } => "rate_limited",

@@ -79,12 +79,23 @@ pub struct PatternsInfo {
     pub total_injections: usize,
     pub unique_patterns: usize,
     pub top_patterns: Vec<PatternCount>,
+    pub effectiveness: Vec<PatternEffectiveness>,
 }
 
 #[derive(Debug, Serialize)]
 pub struct PatternCount {
     pub pattern_id: String,
     pub count: usize,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PatternEffectiveness {
+    pub pattern_id: String,
+    pub injection_count: usize,
+    pub citation_count: usize,
+    pub citation_rate: f64,
+    pub cited_task_ids: Vec<String>,
+    pub low_signal: bool,
 }
 
 // ─── Entry Point ─────────────────────────────────────────────
@@ -230,6 +241,10 @@ pub fn compute_stats(
     let mut pattern_counts: HashMap<String, usize> = HashMap::new();
     let mut total_injections = 0usize;
 
+    // Pattern citation tracking (T24.2)
+    let mut pattern_citation_counts: HashMap<String, usize> = HashMap::new();
+    let mut pattern_cited_tasks: HashMap<String, HashSet<String>> = HashMap::new();
+
     for (idx, ev) in events.iter().enumerate() {
         session_events
             .entry(ev.session_id.clone())
@@ -326,6 +341,18 @@ pub fn compute_stats(
                             *pattern_counts.entry(s.to_string()).or_insert(0) += 1;
                         }
                     }
+                }
+            }
+            "pattern_cited" => {
+                if let (Some(pattern_id), Some(task_id)) = (
+                    ev.payload.get("pattern_id").and_then(|v| v.as_str()),
+                    ev.payload.get("task_id").and_then(|v| v.as_str()),
+                ) {
+                    *pattern_citation_counts.entry(pattern_id.to_string()).or_insert(0) += 1;
+                    pattern_cited_tasks
+                        .entry(pattern_id.to_string())
+                        .or_default()
+                        .insert(task_id.to_string());
                 }
             }
             _ => {}
@@ -444,14 +471,42 @@ pub fn compute_stats(
 
     let unique_patterns = pattern_counts.len();
     let mut top_patterns: Vec<PatternCount> = pattern_counts
-        .into_iter()
-        .map(|(id, count)| PatternCount {
-            pattern_id: id,
+        .iter()
+        .map(|(id, &count)| PatternCount {
+            pattern_id: id.clone(),
             count,
         })
         .collect();
     top_patterns.sort_by(|a, b| b.count.cmp(&a.count));
     top_patterns.truncate(10);
+
+    // ── Pattern effectiveness (T24.2) ──
+    // Show patterns injected 3+ times with citation stats
+    let mut effectiveness: Vec<PatternEffectiveness> = pattern_counts
+        .iter()
+        .filter(|(_, &count)| count >= 3)
+        .map(|(pid, &injection_count)| {
+            let citation_count = pattern_citation_counts.get(pid).copied().unwrap_or(0);
+            let mut cited_task_ids: Vec<String> = pattern_cited_tasks
+                .get(pid)
+                .map(|s| s.iter().cloned().collect())
+                .unwrap_or_default();
+            cited_task_ids.sort();
+            PatternEffectiveness {
+                pattern_id: pid.clone(),
+                injection_count,
+                citation_count,
+                citation_rate: if injection_count > 0 {
+                    citation_count as f64 / injection_count as f64
+                } else {
+                    0.0
+                },
+                cited_task_ids,
+                low_signal: injection_count >= 5 && citation_count == 0,
+            }
+        })
+        .collect();
+    effectiveness.sort_by(|a, b| b.injection_count.cmp(&a.injection_count));
 
     // ── Assemble report ──
 
@@ -499,6 +554,7 @@ pub fn compute_stats(
             total_injections,
             unique_patterns,
             top_patterns,
+            effectiveness,
         },
     }
 }
@@ -619,6 +675,28 @@ fn print_table(report: &StatsReport) {
         println!("  {:<40} {:>6}", "Pattern", "Count");
         for p in &report.patterns.top_patterns {
             println!("  {:<40} {:>6}", p.pattern_id, p.count);
+        }
+    }
+
+    // Pattern Effectiveness (T24.2)
+    if !report.patterns.effectiveness.is_empty() {
+        println!();
+        println!("Pattern Effectiveness");
+        println!("---------------------");
+        println!(
+            "  {:<40} {:>8} {:>8} {:>8} {:>10}",
+            "Pattern", "Injected", "Cited", "Rate", "Signal"
+        );
+        for pe in &report.patterns.effectiveness {
+            let signal = if pe.low_signal { "LOW" } else { "ok" };
+            println!(
+                "  {:<40} {:>8} {:>8} {:>7.1}% {:>10}",
+                pe.pattern_id, pe.injection_count, pe.citation_count,
+                pe.citation_rate * 100.0, signal
+            );
+            if !pe.cited_task_ids.is_empty() {
+                println!("    cited in: {}", pe.cited_task_ids.join(", "));
+            }
         }
     }
 }
@@ -942,5 +1020,141 @@ mod tests {
         assert!(report.summary.feat_wip_ratio.is_none());
         assert_eq!(report.summary.feat_count, 1);
         assert_eq!(report.summary.wip_count, 0);
+    }
+
+    #[test]
+    fn test_pattern_cited_tracking() {
+        let p = "/test/project";
+        let s = "sess-1";
+        let events = vec![
+            make_event(
+                "2025-01-15T10:00:00Z", s, p, "pattern_injected",
+                serde_json::json!({"type": "PatternInjected", "task_id": "T1", "pattern_ids": ["pat-a", "pat-b", "pat-c"], "count": 3}),
+            ),
+            make_event(
+                "2025-01-15T10:01:00Z", s, p, "pattern_injected",
+                serde_json::json!({"type": "PatternInjected", "task_id": "T2", "pattern_ids": ["pat-a", "pat-b"], "count": 2}),
+            ),
+            make_event(
+                "2025-01-15T10:02:00Z", s, p, "pattern_injected",
+                serde_json::json!({"type": "PatternInjected", "task_id": "T3", "pattern_ids": ["pat-a"], "count": 1}),
+            ),
+            // pat-a cited in T1 and T2
+            make_event(
+                "2025-01-15T10:03:00Z", s, p, "pattern_cited",
+                serde_json::json!({"type": "PatternCited", "task_id": "T1", "role": "Planner", "artifact": "current-plan.md", "pattern_id": "pat-a"}),
+            ),
+            make_event(
+                "2025-01-15T10:04:00Z", s, p, "pattern_cited",
+                serde_json::json!({"type": "PatternCited", "task_id": "T2", "role": "Reviewer", "artifact": "review-report.md", "pattern_id": "pat-a"}),
+            ),
+            // pat-b cited in T1 only
+            make_event(
+                "2025-01-15T10:05:00Z", s, p, "pattern_cited",
+                serde_json::json!({"type": "PatternCited", "task_id": "T1", "role": "Planner", "artifact": "current-plan.md", "pattern_id": "pat-b"}),
+            ),
+        ];
+        let report = compute_stats(&events, 0, 7, None);
+
+        // pat-a: injected 3 times, cited 2 times
+        let pat_a = report.patterns.effectiveness.iter().find(|e| e.pattern_id == "pat-a").unwrap();
+        assert_eq!(pat_a.injection_count, 3);
+        assert_eq!(pat_a.citation_count, 2);
+        assert!((pat_a.citation_rate - 2.0 / 3.0).abs() < 0.001);
+        assert!(!pat_a.low_signal);
+        assert!(pat_a.cited_task_ids.contains(&"T1".to_string()));
+        assert!(pat_a.cited_task_ids.contains(&"T2".to_string()));
+
+        // pat-b: injected 2 times (below threshold of 3) -- should NOT appear in effectiveness
+        assert!(report.patterns.effectiveness.iter().find(|e| e.pattern_id == "pat-b").is_none());
+
+        // pat-c: injected 1 time -- should NOT appear in effectiveness
+        assert!(report.patterns.effectiveness.iter().find(|e| e.pattern_id == "pat-c").is_none());
+    }
+
+    #[test]
+    fn test_pattern_low_signal_flag() {
+        let p = "/test/project";
+        let s = "sess-1";
+        // Inject pat-x 5 times across 5 tasks, never cite it
+        let mut events = Vec::new();
+        for i in 1..=5 {
+            events.push(make_event(
+                &format!("2025-01-15T10:{:02}:00Z", i), s, p, "pattern_injected",
+                serde_json::json!({"type": "PatternInjected", "task_id": format!("T{}", i), "pattern_ids": ["pat-x"], "count": 1}),
+            ));
+        }
+        let report = compute_stats(&events, 0, 7, None);
+
+        let pat_x = report.patterns.effectiveness.iter().find(|e| e.pattern_id == "pat-x").unwrap();
+        assert_eq!(pat_x.injection_count, 5);
+        assert_eq!(pat_x.citation_count, 0);
+        assert!(pat_x.low_signal, "pattern injected 5+ times with 0 citations should be low_signal=true");
+        assert!(pat_x.cited_task_ids.is_empty());
+        assert!((pat_x.citation_rate).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_uncited_patterns_not_in_cited_stats() {
+        let p = "/test/project";
+        let s = "sess-1";
+        let events = vec![
+            // Inject pat-a and pat-b into 3 tasks each
+            make_event(
+                "2025-01-15T10:00:00Z", s, p, "pattern_injected",
+                serde_json::json!({"type": "PatternInjected", "task_id": "T1", "pattern_ids": ["pat-a", "pat-b"], "count": 2}),
+            ),
+            make_event(
+                "2025-01-15T10:01:00Z", s, p, "pattern_injected",
+                serde_json::json!({"type": "PatternInjected", "task_id": "T2", "pattern_ids": ["pat-a", "pat-b"], "count": 2}),
+            ),
+            make_event(
+                "2025-01-15T10:02:00Z", s, p, "pattern_injected",
+                serde_json::json!({"type": "PatternInjected", "task_id": "T3", "pattern_ids": ["pat-a", "pat-b"], "count": 2}),
+            ),
+            // Only pat-a is cited; pat-b is never cited
+            make_event(
+                "2025-01-15T10:03:00Z", s, p, "pattern_cited",
+                serde_json::json!({"type": "PatternCited", "task_id": "T1", "role": "Planner", "artifact": "current-plan.md", "pattern_id": "pat-a"}),
+            ),
+            // PatternApplied only contains cited subset (pat-a only)
+            make_event(
+                "2025-01-15T10:04:00Z", s, p, "pattern_applied",
+                serde_json::json!({"type": "PatternApplied", "task_id": "T1", "pattern_ids": ["pat-a"], "count": 1}),
+            ),
+        ];
+        let report = compute_stats(&events, 0, 7, None);
+
+        // pat-a: injected 3, cited 1
+        let pat_a = report.patterns.effectiveness.iter().find(|e| e.pattern_id == "pat-a").unwrap();
+        assert_eq!(pat_a.citation_count, 1);
+        assert!(!pat_a.low_signal);
+
+        // pat-b: injected 3, cited 0 -- effectiveness shows it with low_signal=false (needs 5+ for low_signal)
+        let pat_b = report.patterns.effectiveness.iter().find(|e| e.pattern_id == "pat-b").unwrap();
+        assert_eq!(pat_b.injection_count, 3);
+        assert_eq!(pat_b.citation_count, 0);
+        assert!(!pat_b.low_signal, "low_signal only triggers at injection_count >= 5");
+        assert!(pat_b.cited_task_ids.is_empty());
+    }
+
+    #[test]
+    fn test_pattern_effectiveness_empty_below_threshold() {
+        let p = "/test/project";
+        let s = "sess-1";
+        let events = vec![
+            make_event(
+                "2025-01-15T10:00:00Z", s, p, "pattern_injected",
+                serde_json::json!({"type": "PatternInjected", "task_id": "T1", "pattern_ids": ["pat-a"], "count": 1}),
+            ),
+            make_event(
+                "2025-01-15T10:01:00Z", s, p, "pattern_injected",
+                serde_json::json!({"type": "PatternInjected", "task_id": "T2", "pattern_ids": ["pat-a"], "count": 1}),
+            ),
+        ];
+        let report = compute_stats(&events, 0, 7, None);
+
+        // pat-a only injected 2 times, below threshold of 3
+        assert!(report.patterns.effectiveness.is_empty());
     }
 }

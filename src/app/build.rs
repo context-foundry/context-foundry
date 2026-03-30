@@ -4211,44 +4211,58 @@ async fn process_task(
 
     // Scan build artifacts for pattern citations to track usefulness.
     // Only on validated tasks -- failed/WIP tasks should not train the ranking system.
+    let mut all_cited: Vec<String> = Vec::new();
     if validated && !injected_pattern_ids.is_empty() {
-        let mut citation_text = String::new();
-        let plan_path = ctx.buildloop_dir.join("current-plan.md");
-        let review_path = ctx.buildloop_dir.join("review-report.md");
-        if let Ok(content) = std::fs::read_to_string(&plan_path) {
-            citation_text.push_str(&content);
-        }
-        if let Ok(content) = std::fs::read_to_string(&review_path) {
-            citation_text.push_str(&content);
-        }
-        if !citation_text.is_empty() {
-            // Only scan for patterns that were actually injected into prompts
-            let injected_patterns: Vec<&patterns::Pattern> = cached_patterns
-                .iter()
-                .filter(|p| injected_pattern_ids.contains(&p.pattern_id))
-                .collect();
-            let injected_refs: Vec<patterns::Pattern> = injected_patterns.iter().map(|p| (*p).clone()).collect();
-            let cited = patterns::scan_citations(&citation_text, &injected_refs);
-            if !cited.is_empty() {
-                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                    "Pattern citations: {} patterns referenced by agents",
-                    cited.len()
-                ))));
-                // Update global patterns dir
-                if let Err(e) = patterns::update_used_counts(patterns_dir, &cited) {
-                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                        "Warning: failed to update pattern used_counts: {}",
-                        e
-                    ))));
+        let injected_refs: Vec<patterns::Pattern> = cached_patterns
+            .iter()
+            .filter(|p| injected_pattern_ids.contains(&p.pattern_id))
+            .cloned()
+            .collect();
+
+        let artifacts_to_scan: Vec<(std::path::PathBuf, &str)> = vec![
+            (ctx.buildloop_dir.join("current-plan.md"), "Planner"),
+            (ctx.buildloop_dir.join("review-report.md"), "Reviewer"),
+        ];
+
+        for (artifact_path, role) in &artifacts_to_scan {
+            if let Ok(content) = std::fs::read_to_string(artifact_path) {
+                if !content.is_empty() {
+                    let cited_in_artifact = patterns::scan_citations(&content, &injected_refs);
+                    for pid in &cited_in_artifact {
+                        observatory::log_event(
+                            &ctx.session_id,
+                            &ctx.project_dir,
+                            ObservatoryEvent::PatternCited {
+                                task_id: task_id.to_string(),
+                                role: role.to_string(),
+                                artifact: artifact_path.file_name().unwrap_or_default().to_string_lossy().to_string(),
+                                pattern_id: pid.clone(),
+                            },
+                        );
+                    }
+                    all_cited.extend(cited_in_artifact);
                 }
-                // Update extension pattern dirs (extension patterns are loaded
-                // into the same pool but stored in separate directories)
-                let ext_infos = extensions::discover_extensions(&ctx.project_dir);
-                for ext_name in &ctx.config.extensions {
-                    if let Some(ext) = ext_infos.iter().find(|e| &e.name == ext_name) {
-                        if let Some(ref pdir) = ext.patterns_dir {
-                            let _ = patterns::update_used_counts(pdir, &cited);
-                        }
+            }
+        }
+        all_cited.sort();
+        all_cited.dedup();
+
+        if !all_cited.is_empty() {
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                "Pattern citations: {} patterns referenced by agents",
+                all_cited.len()
+            ))));
+            if let Err(e) = patterns::update_used_counts(patterns_dir, &all_cited) {
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                    "Warning: failed to update pattern used_counts: {}",
+                    e
+                ))));
+            }
+            let ext_infos = extensions::discover_extensions(&ctx.project_dir);
+            for ext_name in &ctx.config.extensions {
+                if let Some(ext) = ext_infos.iter().find(|e| &e.name == ext_name) {
+                    if let Some(ref pdir) = ext.patterns_dir {
+                        let _ = patterns::update_used_counts(pdir, &all_cited);
                     }
                 }
             }
@@ -4306,11 +4320,11 @@ async fn process_task(
         duration_secs,
     }));
 
-    if validated && !injected_pattern_ids.is_empty() {
+    if validated && !all_cited.is_empty() {
         observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::PatternApplied {
             task_id: task_id.to_string(),
-            pattern_ids: injected_pattern_ids.clone(),
-            count: injected_pattern_ids.len(),
+            pattern_ids: all_cited.clone(),
+            count: all_cited.len(),
         });
     }
 
