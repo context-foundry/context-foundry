@@ -132,7 +132,6 @@ pub(super) async fn run_plan_mode(project_dir: &Path, max_iterations: u64) -> Re
         crate::config::Config::load(project_dir),
         std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
         std::sync::Arc::new(std::sync::Mutex::new(())),
-        std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
     );
 
     let shutdown_signal = ctx.shutdown.clone();
@@ -371,7 +370,6 @@ mod tests {
             config,
             std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             std::sync::Arc::new(std::sync::Mutex::new(())),
-            std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
         );
 
         assert_eq!(load_gap_analysis_pattern_context(&ctx), "");
@@ -407,7 +405,6 @@ mod tests {
             config,
             std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             std::sync::Arc::new(std::sync::Mutex::new(())),
-            std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
         );
         let context = load_gap_analysis_pattern_context(&ctx);
 

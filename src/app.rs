@@ -436,8 +436,9 @@ fn spawn_build_loop(
     loop_config.dual_selection = state.dual_selection.as_str().to_string();
     loop_config.builder_models = state.builder_model_specs.clone();
 
-    let review_gate = Arc::new(AtomicBool::new(false));
-    state.review_gate = Some(review_gate.clone());
+    state.review_gates.clear();
+    state.review_session_id = None;
+    state.pending_reviews.clear();
     state.awaiting_review = false;
     state.awaiting_pr = None;
     state.pr_poll_last_check = None;
@@ -447,7 +448,6 @@ fn spawn_build_loop(
         loop_config,
         shutdown.clone(),
         state.tasks_file_lock.clone(),
-        review_gate,
     );
     run_context.session_cost_millicents = state.session_cost_millicents.clone();
     let loop_tx = event_tx.clone();
@@ -493,7 +493,6 @@ fn spawn_inline_planning(
         config.clone(),
         shutdown.clone(),
         state.tasks_file_lock.clone(),
-        Arc::new(AtomicBool::new(false)),
     );
     let event_tx = event_tx.clone();
     tokio::spawn(async move {
@@ -539,7 +538,6 @@ fn spawn_append_tasks(
         config.clone(),
         shutdown.clone(),
         state.tasks_file_lock.clone(),
-        Arc::new(AtomicBool::new(false)),
     );
     let event_tx = event_tx.clone();
     tokio::spawn(async move {
@@ -959,34 +957,78 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                 history.passed_review = passed;
                 state.cap_task_history();
             }
-            LoopEvent::WaitingForReview(pr_num) => {
-                state.awaiting_review = true;
-                state.awaiting_pr = pr_num;
-                state.pr_poll_last_check = None;
-                if let Some(num) = pr_num {
-                    state.log(format!(
-                        "Awaiting PR #{} review -- press Enter to skip or wait for approval",
-                        num
-                    ));
+            LoopEvent::WaitingForReview { pr_num, ref session_id, ref gate } => {
+                state.review_gates.insert(session_id.clone(), gate.clone());
+                if !state.awaiting_review {
+                    state.awaiting_review = true;
+                    state.review_session_id = Some(session_id.clone());
+                    state.awaiting_pr = pr_num;
+                    state.pr_poll_last_check = None;
+                    if let Some(num) = pr_num {
+                        state.log(format!(
+                            "Awaiting PR #{} review -- press Enter to skip or wait for approval",
+                            num
+                        ));
+                    } else {
+                        state.log("Awaiting review -- press Enter or 'c' to continue");
+                    }
                 } else {
-                    state.log("Awaiting review -- press Enter or 'c' to continue");
+                    state.pending_reviews.push_back((session_id.clone(), pr_num));
+                    state.log(format!(
+                        "Review queued for session {} (another review in progress)",
+                        session_id
+                    ));
                 }
             }
-            LoopEvent::PrApproved(pr_num) => {
-                state.awaiting_review = false;
-                state.awaiting_pr = None;
-                state.pr_poll_last_check = None;
-                if let Some(ref gate) = state.review_gate {
+            LoopEvent::PrApproved { pr_num, ref session_id } => {
+                // Clear the gate for the specific session that was approved
+                if let Some(gate) = state.review_gates.remove(session_id) {
                     gate.store(false, Ordering::Release);
                 }
-                state.log(format!("PR #{} approved -- resuming pipeline", pr_num));
+                if state.review_session_id.as_deref() == Some(session_id.as_str()) {
+                    // Active review was approved -- advance display state
+                    state.review_session_id = None;
+                    state.awaiting_pr = None;
+                    state.pr_poll_last_check = None;
+                    if let Some((next_sid, next_pr)) = state.pending_reviews.pop_front() {
+                        state.review_session_id = Some(next_sid.clone());
+                        state.awaiting_pr = next_pr;
+                        state.pr_poll_last_check = None;
+                        if let Some(num) = next_pr {
+                            state.log(format!("PR #{} approved -- now reviewing PR #{}", pr_num, num));
+                        } else {
+                            state.log(format!("PR #{} approved -- next review ready, press Enter or 'c' to continue", pr_num));
+                        }
+                    } else {
+                        state.awaiting_review = false;
+                        state.log(format!("PR #{} approved -- resuming pipeline", pr_num));
+                    }
+                } else {
+                    // Approved session was queued -- remove it from pending
+                    state.pending_reviews.retain(|(sid, _)| sid != session_id);
+                    state.log(format!("PR #{} approved (session {})", pr_num, session_id));
+                }
             }
-            LoopEvent::PrClosed(pr_num) => {
-                state.awaiting_review = false;
-                state.awaiting_pr = None;
-                state.pr_poll_last_check = None;
-                if let Some(ref gate) = state.review_gate {
+            LoopEvent::PrClosed { pr_num, ref session_id } => {
+                // Clear the gate for the specific session whose PR was closed
+                if let Some(gate) = state.review_gates.remove(session_id) {
                     gate.store(false, Ordering::Release);
+                }
+                if state.review_session_id.as_deref() == Some(session_id.as_str()) {
+                    // Active review was closed -- advance display state
+                    state.review_session_id = None;
+                    state.awaiting_pr = None;
+                    state.pr_poll_last_check = None;
+                    if let Some((next_sid, next_pr)) = state.pending_reviews.pop_front() {
+                        state.review_session_id = Some(next_sid);
+                        state.awaiting_pr = next_pr;
+                        state.pr_poll_last_check = None;
+                    } else {
+                        state.awaiting_review = false;
+                    }
+                } else {
+                    // Closed session was queued -- remove it from pending
+                    state.pending_reviews.retain(|(sid, _)| sid != session_id);
                 }
                 // Create stop file to halt the build loop
                 let _ = std::fs::create_dir_all(&state.buildloop_dir);
@@ -1136,13 +1178,23 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                 // Review gate: Enter/c clears the review pause (must be before other handlers)
                 } else if state.awaiting_review && matches!(key.code, KeyCode::Enter | KeyCode::Char('c'))
                 {
-                    state.awaiting_review = false;
-                    if let Some(ref gate) = state.review_gate {
-                        gate.store(false, Ordering::Release);
+                    if let Some(ref sid) = state.review_session_id.take() {
+                        if let Some(gate) = state.review_gates.remove(sid) {
+                            gate.store(false, Ordering::Release);
+                        }
                     }
-                    state.log("Continuing to next task");
                     state.awaiting_pr = None;
                     state.pr_poll_last_check = None;
+                    // Advance to next queued review if one exists
+                    if let Some((next_sid, next_pr)) = state.pending_reviews.pop_front() {
+                        state.review_session_id = Some(next_sid);
+                        state.awaiting_pr = next_pr;
+                        state.pr_poll_last_check = None;
+                        state.log("Continuing -- next review ready");
+                    } else {
+                        state.awaiting_review = false;
+                        state.log("Continuing to next task");
+                    }
                 } else {
                     match key.code {
                         KeyCode::Char('q') => {
@@ -1245,13 +1297,23 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                 // Review gate: Enter/c clears the review pause (must be before other handlers)
                 } else if state.awaiting_review && matches!(key.code, KeyCode::Enter | KeyCode::Char('c'))
                 {
-                    state.awaiting_review = false;
-                    if let Some(ref gate) = state.review_gate {
-                        gate.store(false, Ordering::Release);
+                    if let Some(ref sid) = state.review_session_id.take() {
+                        if let Some(gate) = state.review_gates.remove(sid) {
+                            gate.store(false, Ordering::Release);
+                        }
                     }
-                    state.log("Continuing to next task");
                     state.awaiting_pr = None;
                     state.pr_poll_last_check = None;
+                    // Advance to next queued review if one exists
+                    if let Some((next_sid, next_pr)) = state.pending_reviews.pop_front() {
+                        state.review_session_id = Some(next_sid);
+                        state.awaiting_pr = next_pr;
+                        state.pr_poll_last_check = None;
+                        state.log("Continuing -- next review ready");
+                    } else {
+                        state.awaiting_review = false;
+                        state.log("Continuing to next task");
+                    }
                 } else {
                     match key.code {
                         KeyCode::Char('q') => {

@@ -1245,6 +1245,7 @@ fn run_dual_pipelines<'a>(
 /// events when the PR is approved, merged, or closed.
 async fn poll_pr_review(
     pr_number: u64,
+    session_id: String,
     project_dir: PathBuf,
     poll_interval_secs: u64,
     tx: mpsc::UnboundedSender<AppEvent>,
@@ -1279,11 +1280,17 @@ async fn poll_pr_review(
                     let state = json["state"].as_str().unwrap_or("");
 
                     if review_decision == "APPROVED" || state == "MERGED" {
-                        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::PrApproved(pr_number)));
+                        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::PrApproved {
+                            pr_num: pr_number,
+                            session_id: session_id.clone(),
+                        }));
                         return;
                     }
                     if state == "CLOSED" {
-                        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::PrClosed(pr_number)));
+                        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::PrClosed {
+                            pr_num: pr_number,
+                            session_id: session_id.clone(),
+                        }));
                         return;
                     }
                     if review_decision == "CHANGES_REQUESTED" && review_decision != last_decision {
@@ -4119,7 +4126,11 @@ async fn process_task(
 
                 // Pause: signal TUI and wait for user to press Enter or PR approval
                 ctx.review_gate.store(true, Ordering::Release);
-                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::WaitingForReview(pr_num)));
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::WaitingForReview {
+                    pr_num,
+                    session_id: ctx.session_id.clone(),
+                    gate: ctx.review_gate.clone(),
+                }));
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
                     "Waiting for PR review -- press Enter to continue or wait for approval"
                         .to_string(),
@@ -4131,9 +4142,11 @@ async fn process_task(
                     let project_dir = ctx.project_dir.clone();
                     let poll_interval = ctx.config.pr_poll_interval_secs;
                     let review_gate_clone = ctx.review_gate.clone();
+                    let session_id_poll = ctx.session_id.clone();
                     Some(tokio::spawn(async move {
                         poll_pr_review(
                             pr_number,
+                            session_id_poll,
                             project_dir,
                             poll_interval,
                             tx_poll,
@@ -4179,7 +4192,11 @@ async fn process_task(
                 // Still pause after fallback commit in review mode
                 if committed {
                     ctx.review_gate.store(true, Ordering::Release);
-                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::WaitingForReview(None)));
+                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::WaitingForReview {
+                        pr_num: None,
+                        session_id: ctx.session_id.clone(),
+                        gate: ctx.review_gate.clone(),
+                    }));
                     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
                         "Waiting for review -- press Enter to continue to next task".to_string(),
                     )));
@@ -4617,7 +4634,6 @@ mod tests {
             Config::default(),
             Arc::new(AtomicBool::new(false)),
             Arc::new(Mutex::new(())),
-            Arc::new(AtomicBool::new(false)),
         );
         (ctx, dir)
     }

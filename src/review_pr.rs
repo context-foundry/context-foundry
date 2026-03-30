@@ -48,6 +48,8 @@ fn neutralize_project_rules(project_dir: &Path) -> ProjectRulesGuard {
         project_dir.join("CLAUDE.md"),
         project_dir.join(".claude").join("CLAUDE.md"),
         project_dir.join(".claude").join("rules"),
+        project_dir.join(".claude").join("settings.json"),
+        project_dir.join(".claude").join("settings.local.json"),
     ];
 
     let mut renamed: Vec<(PathBuf, PathBuf)> = Vec::new();

@@ -904,7 +904,9 @@ pub(super) fn enter_home_surface(
     state.commit_approval_results.clear();
     state.pending_approvals.clear();
     state.awaiting_review = false;
-    state.review_gate = None;
+    state.review_gates.clear();
+    state.review_session_id = None;
+    state.pending_reviews.clear();
     state.awaiting_pr = None;
     state.pr_poll_last_check = None;
     state.planning = None;
@@ -1063,7 +1065,9 @@ pub(super) fn enter_startup_surface(
     state.commit_approval_results.clear();
     state.pending_approvals.clear();
     state.awaiting_review = false;
-    state.review_gate = None;
+    state.review_gates.clear();
+    state.review_session_id = None;
+    state.pending_reviews.clear();
     state.awaiting_pr = None;
     state.pr_poll_last_check = None;
     state.planning = None;

@@ -108,7 +108,6 @@ impl RunContext {
         config: Config,
         shutdown: Arc<AtomicBool>,
         tasks_file_lock: Arc<Mutex<()>>,
-        review_gate: Arc<AtomicBool>,
     ) -> Self {
         let contract_paths = ContractPaths::resolve(project_dir);
         let buildloop_dir = project_dir.join(".buildloop");
@@ -126,7 +125,7 @@ impl RunContext {
             current_plan: buildloop_dir.join("current-plan.md"),
             review_report: buildloop_dir.join("review-report.md"),
             shutdown,
-            review_gate,
+            review_gate: Arc::new(AtomicBool::new(false)),
             tasks_file_lock,
             session_cost_millicents: Arc::new(std::sync::atomic::AtomicU64::new(0)),
             commit_approval_gate: Arc::new(AtomicBool::new(false)),
@@ -185,7 +184,6 @@ impl RunContext {
             config,
             self.shutdown.clone(),
             self.tasks_file_lock.clone(),
-            self.review_gate.clone(),
         );
         ctx.session_id = self.session_id.clone();
         ctx.session_cost_millicents = self.session_cost_millicents.clone();
@@ -207,7 +205,6 @@ impl RunContext {
             config,
             self.shutdown.clone(),
             self.tasks_file_lock.clone(),
-            self.review_gate.clone(),
         );
         ctx.session_id = format!("{}/{}", self.session_id, sub_label);
         ctx.session_cost_millicents = self.session_cost_millicents.clone();
@@ -238,7 +235,6 @@ mod tests {
             Config::default(),
             Arc::new(AtomicBool::new(false)),
             Arc::new(Mutex::new(())),
-            Arc::new(AtomicBool::new(false)),
         );
         parent.session_id = "sess-abc-123".to_string();
         parent.session_cost_millicents = Arc::new(AtomicU64::new(42_000));
@@ -278,7 +274,6 @@ mod tests {
             Config::default(),
             Arc::new(AtomicBool::new(false)),
             Arc::new(Mutex::new(())),
-            Arc::new(AtomicBool::new(false)),
         );
         parent.session_id = "sess-xyz-789".to_string();
         parent.session_cost_millicents = Arc::new(AtomicU64::new(10_000));
@@ -308,7 +303,6 @@ mod tests {
             Config::default(),
             Arc::new(AtomicBool::new(false)),
             Arc::new(Mutex::new(())),
-            Arc::new(AtomicBool::new(false)),
         );
 
         let child = parent.derive(Config::default());
@@ -336,7 +330,6 @@ mod tests {
             Config::default(),
             Arc::new(AtomicBool::new(false)),
             Arc::new(Mutex::new(())),
-            Arc::new(AtomicBool::new(false)),
         );
         parent.session_id = "sess-parallel-test".to_string();
         parent.session_cost_millicents = Arc::new(AtomicU64::new(5_000));
@@ -399,7 +392,6 @@ mod tests {
             Config::default(),
             Arc::new(AtomicBool::new(false)),
             Arc::new(Mutex::new(())),
-            Arc::new(AtomicBool::new(false)),
         );
 
         let child0 = parent.derive_sub_session(Config::default(), &child_dir_0, "pipeline-0");
@@ -415,6 +407,43 @@ mod tests {
         child0.commit_approval_gate.store(true, Ordering::Relaxed);
         assert!(!child1.commit_approval_gate.load(Ordering::Relaxed));
         assert!(!parent.commit_approval_gate.load(Ordering::Relaxed));
+
+        let _ = std::fs::remove_dir_all(parent_dir);
+    }
+
+    #[test]
+    fn test_derive_sub_session_independent_review_gates() {
+        let parent_dir = std::env::temp_dir().join(format!(
+            "foundry-ctx-rgate-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let child_dir_0 = parent_dir.join("wt-0");
+        let child_dir_1 = parent_dir.join("wt-1");
+        std::fs::create_dir_all(&parent_dir).unwrap();
+        std::fs::create_dir_all(&child_dir_0).unwrap();
+        std::fs::create_dir_all(&child_dir_1).unwrap();
+
+        let parent = RunContext::new(
+            &parent_dir,
+            Config::default(),
+            Arc::new(AtomicBool::new(false)),
+            Arc::new(Mutex::new(())),
+        );
+
+        let child0 = parent.derive_sub_session(Config::default(), &child_dir_0, "pipeline-0");
+        let child1 = parent.derive_sub_session(Config::default(), &child_dir_1, "pipeline-1");
+
+        // review_gate must NOT be shared between sub-sessions
+        assert!(!Arc::ptr_eq(&child0.review_gate, &child1.review_gate));
+        assert!(!Arc::ptr_eq(&child0.review_gate, &parent.review_gate));
+
+        // Setting one pipeline's review_gate should not affect the other
+        child0.review_gate.store(true, Ordering::Release);
+        assert!(!child1.review_gate.load(Ordering::Acquire));
+        assert!(!parent.review_gate.load(Ordering::Acquire));
 
         let _ = std::fs::remove_dir_all(parent_dir);
     }
