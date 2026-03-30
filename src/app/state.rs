@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
@@ -366,8 +366,12 @@ pub struct AppState {
     pub approval_task_id: Option<String>,
     /// The proposed commit type (for display, e.g. "feat").
     pub approval_proposed_type: Option<String>,
-    pub(super) commit_approval_gate: Option<Arc<AtomicBool>>,
-    pub(super) commit_approval_result: Option<Arc<AtomicBool>>,
+    pub(super) commit_approval_gates: HashMap<String, Arc<AtomicBool>>,
+    pub(super) commit_approval_results: HashMap<String, Arc<AtomicBool>>,
+    pub(super) approval_session_id: Option<String>,
+    /// Queue of (session_id, task_id, proposed_commit_type) for approvals that
+    /// arrived while another approval was already being shown to the user.
+    pub(super) pending_approvals: VecDeque<(String, String, String)>,
 }
 
 impl AppState {
@@ -462,8 +466,10 @@ impl AppState {
             awaiting_commit_approval: false,
             approval_task_id: None,
             approval_proposed_type: None,
-            commit_approval_gate: None,
-            commit_approval_result: None,
+            commit_approval_gates: HashMap::new(),
+            commit_approval_results: HashMap::new(),
+            approval_session_id: None,
+            pending_approvals: VecDeque::new(),
         }
     }
 
@@ -607,6 +613,9 @@ pub(super) enum LoopEvent {
     AwaitCommitApproval {
         task_id: String,
         proposed_commit_type: String,
+        session_id: String,
+        gate: Arc<AtomicBool>,
+        result: Arc<AtomicBool>,
     },
     CommitApprovalResponse {
         approved: bool,

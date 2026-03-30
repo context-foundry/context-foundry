@@ -189,8 +189,6 @@ impl RunContext {
         );
         ctx.session_id = self.session_id.clone();
         ctx.session_cost_millicents = self.session_cost_millicents.clone();
-        ctx.commit_approval_gate = self.commit_approval_gate.clone();
-        ctx.commit_approval_result = self.commit_approval_result.clone();
         ctx
     }
 
@@ -213,8 +211,6 @@ impl RunContext {
         );
         ctx.session_id = format!("{}/{}", self.session_id, sub_label);
         ctx.session_cost_millicents = self.session_cost_millicents.clone();
-        ctx.commit_approval_gate = self.commit_approval_gate.clone();
-        ctx.commit_approval_result = self.commit_approval_result.clone();
         ctx
     }
 }
@@ -297,6 +293,34 @@ mod tests {
     }
 
     #[test]
+    fn test_derive_independent_approval_gates() {
+        let dir = std::env::temp_dir().join(format!(
+            "foundry-ctx-derive-gate-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let parent = RunContext::new(
+            &dir,
+            Config::default(),
+            Arc::new(AtomicBool::new(false)),
+            Arc::new(Mutex::new(())),
+            Arc::new(AtomicBool::new(false)),
+        );
+
+        let child = parent.derive(Config::default());
+
+        // Gate/result must NOT be shared with parent
+        assert!(!Arc::ptr_eq(&child.commit_approval_gate, &parent.commit_approval_gate));
+        assert!(!Arc::ptr_eq(&child.commit_approval_result, &parent.commit_approval_result));
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn test_derive_sub_session_slot_pattern_shares_cost() {
         let parent_dir = std::env::temp_dir().join(format!(
             "foundry-ctx-slot-{}",
@@ -351,6 +375,46 @@ mod tests {
             parent.session_cost_millicents.load(Ordering::Relaxed),
             50_000  // 5_000 initial + 10_000 + 20_000 + 15_000
         );
+
+        let _ = std::fs::remove_dir_all(parent_dir);
+    }
+
+    #[test]
+    fn test_derive_sub_session_independent_approval_gates() {
+        let parent_dir = std::env::temp_dir().join(format!(
+            "foundry-ctx-gate-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let child_dir_0 = parent_dir.join("wt-0");
+        let child_dir_1 = parent_dir.join("wt-1");
+        std::fs::create_dir_all(&parent_dir).unwrap();
+        std::fs::create_dir_all(&child_dir_0).unwrap();
+        std::fs::create_dir_all(&child_dir_1).unwrap();
+
+        let parent = RunContext::new(
+            &parent_dir,
+            Config::default(),
+            Arc::new(AtomicBool::new(false)),
+            Arc::new(Mutex::new(())),
+            Arc::new(AtomicBool::new(false)),
+        );
+
+        let child0 = parent.derive_sub_session(Config::default(), &child_dir_0, "pipeline-0");
+        let child1 = parent.derive_sub_session(Config::default(), &child_dir_1, "pipeline-1");
+
+        // Gate/result must NOT be shared between sub-sessions
+        assert!(!Arc::ptr_eq(&child0.commit_approval_gate, &child1.commit_approval_gate));
+        assert!(!Arc::ptr_eq(&child0.commit_approval_result, &child1.commit_approval_result));
+        assert!(!Arc::ptr_eq(&child0.commit_approval_gate, &parent.commit_approval_gate));
+        assert!(!Arc::ptr_eq(&child0.commit_approval_result, &parent.commit_approval_result));
+
+        // Setting one pipeline's gate should not affect the other
+        child0.commit_approval_gate.store(true, Ordering::Relaxed);
+        assert!(!child1.commit_approval_gate.load(Ordering::Relaxed));
+        assert!(!parent.commit_approval_gate.load(Ordering::Relaxed));
 
         let _ = std::fs::remove_dir_all(parent_dir);
     }

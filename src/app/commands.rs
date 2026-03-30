@@ -283,8 +283,6 @@ fn required_providers(
 pub(super) async fn run_headless(project_dir: &Path, output_format: Option<String>) -> Result<()> {
     let contract_paths = ContractPaths::resolve(project_dir);
     let headless_review_gate = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-    let headless_commit_approval_gate = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-    let headless_commit_approval_result = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
     let mut config = Config::load(project_dir);
     if config.run_mode == "review" {
         eprintln!(
@@ -299,16 +297,13 @@ pub(super) async fn run_headless(project_dir: &Path, output_format: Option<Strin
         config.reviewer_provider.clone(),
         config.reviewer_model.clone(),
     );
-    let mut run_context = RunContext::new(
+    let run_context = RunContext::new(
         project_dir,
         config,
         std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
         std::sync::Arc::new(std::sync::Mutex::new(())),
         headless_review_gate.clone(),
     );
-    run_context.commit_approval_gate = headless_commit_approval_gate.clone();
-    run_context.commit_approval_result = headless_commit_approval_result.clone();
-
     let shutdown_signal = run_context.shutdown.clone();
     tokio::spawn(async move {
         let _ = tokio::signal::ctrl_c().await;
@@ -482,14 +477,14 @@ pub(super) async fn run_headless(project_dir: &Path, output_format: Option<Strin
                 LoopEvent::PrClosed(pr_num) => {
                     eprintln!("[log] PR #{} was closed without merge -- stopping", pr_num);
                 }
-                LoopEvent::AwaitCommitApproval { ref task_id, .. } => {
+                LoopEvent::AwaitCommitApproval { ref task_id, ref gate, ref result, .. } => {
                     eprintln!(
                         "[foundry] WARNING: require_human_approval is TUI-only -- auto-approving {} in headless mode",
                         task_id
                     );
-                    // Auto-approve: set result to true, then clear the gate
-                    headless_commit_approval_result.store(true, Ordering::Relaxed);
-                    headless_commit_approval_gate.store(false, Ordering::Relaxed);
+                    // Auto-approve: set result to true, then clear the gate with Release
+                    result.store(true, Ordering::Relaxed);
+                    gate.store(false, Ordering::Release);
                 }
                 LoopEvent::CommitApprovalResponse { .. } => {}
                 LoopEvent::WaitingForReview(_) => {

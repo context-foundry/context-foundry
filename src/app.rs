@@ -442,11 +442,6 @@ fn spawn_build_loop(
     state.awaiting_pr = None;
     state.pr_poll_last_check = None;
 
-    let commit_approval_gate = Arc::new(AtomicBool::new(false));
-    let commit_approval_result = Arc::new(AtomicBool::new(false));
-    state.commit_approval_gate = Some(commit_approval_gate.clone());
-    state.commit_approval_result = Some(commit_approval_result.clone());
-
     let mut run_context = RunContext::new(
         project_dir,
         loop_config,
@@ -455,8 +450,6 @@ fn spawn_build_loop(
         review_gate,
     );
     run_context.session_cost_millicents = state.session_cost_millicents.clone();
-    run_context.commit_approval_gate = commit_approval_gate;
-    run_context.commit_approval_result = commit_approval_result;
     let loop_tx = event_tx.clone();
     tokio::spawn(async move {
         build::build_loop(run_context, loop_tx).await;
@@ -1004,19 +997,33 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                     pr_num
                 ));
             }
-            LoopEvent::AwaitCommitApproval { ref task_id, ref proposed_commit_type } => {
-                state.awaiting_commit_approval = true;
-                state.approval_task_id = Some(task_id.clone());
-                state.approval_proposed_type = Some(proposed_commit_type.clone());
+            LoopEvent::AwaitCommitApproval { ref task_id, ref proposed_commit_type, ref session_id, ref gate, ref result } => {
+                state.commit_approval_gates.insert(session_id.clone(), gate.clone());
+                state.commit_approval_results.insert(session_id.clone(), result.clone());
+                if !state.awaiting_commit_approval {
+                    // No prompt currently showing -- display this one immediately.
+                    state.awaiting_commit_approval = true;
+                    state.approval_session_id = Some(session_id.clone());
+                    state.approval_task_id = Some(task_id.clone());
+                    state.approval_proposed_type = Some(proposed_commit_type.clone());
+                } else {
+                    // Another prompt is already showing -- queue this one so it
+                    // is not lost when the current approval is handled.
+                    state.pending_approvals.push_back((
+                        session_id.clone(),
+                        task_id.clone(),
+                        proposed_commit_type.clone(),
+                    ));
+                }
                 state.log(format!(
                     "Commit {} as {}? Press [y] to approve or [n] to deny",
                     task_id, proposed_commit_type
                 ));
             }
             LoopEvent::CommitApprovalResponse { approved } => {
-                state.awaiting_commit_approval = false;
-                state.approval_task_id = None;
-                state.approval_proposed_type = None;
+                // The y/n handler already manages awaiting_commit_approval and display
+                // fields (advancing to the next queued approval if any). Do not reset
+                // them here or a queued approval waiting for display would be cleared.
                 if !approved {
                     state.log("Commit denied -- will commit as WIP and pause".to_string());
                 }
@@ -1096,14 +1103,30 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                     && matches!(key.code, KeyCode::Char('y') | KeyCode::Char('n'))
                 {
                     let approved = matches!(key.code, KeyCode::Char('y'));
-                    state.awaiting_commit_approval = false;
+                    let session_id = state.approval_session_id.take();
                     state.approval_task_id = None;
                     state.approval_proposed_type = None;
-                    if let Some(ref gate) = state.commit_approval_gate {
-                        if let Some(ref result) = state.commit_approval_result {
-                            result.store(approved, Ordering::Relaxed);
+                    if let Some(sid) = session_id {
+                        if let Some(result_arc) = state.commit_approval_results.get(&sid) {
+                            result_arc.store(approved, Ordering::Relaxed);
                         }
-                        gate.store(false, Ordering::Relaxed);
+                        if let Some(gate_arc) = state.commit_approval_gates.get(&sid) {
+                            gate_arc.store(false, Ordering::Release);
+                        }
+                        state.commit_approval_gates.remove(&sid);
+                        state.commit_approval_results.remove(&sid);
+                    }
+                    // Advance to next queued approval if one arrived while this was pending.
+                    if let Some((next_sid, next_tid, next_ptype)) = state.pending_approvals.pop_front() {
+                        state.approval_session_id = Some(next_sid);
+                        state.approval_task_id = Some(next_tid.clone());
+                        state.approval_proposed_type = Some(next_ptype.clone());
+                        state.log(format!(
+                            "Commit {} as {}? Press [y] to approve or [n] to deny",
+                            next_tid, next_ptype
+                        ));
+                    } else {
+                        state.awaiting_commit_approval = false;
                     }
                     if approved {
                         state.log("Approved -- committing as feat".to_string());
@@ -1189,14 +1212,30 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                     && matches!(key.code, KeyCode::Char('y') | KeyCode::Char('n'))
                 {
                     let approved = matches!(key.code, KeyCode::Char('y'));
-                    state.awaiting_commit_approval = false;
+                    let session_id = state.approval_session_id.take();
                     state.approval_task_id = None;
                     state.approval_proposed_type = None;
-                    if let Some(ref gate) = state.commit_approval_gate {
-                        if let Some(ref result) = state.commit_approval_result {
-                            result.store(approved, Ordering::Relaxed);
+                    if let Some(sid) = session_id {
+                        if let Some(result_arc) = state.commit_approval_results.get(&sid) {
+                            result_arc.store(approved, Ordering::Relaxed);
                         }
-                        gate.store(false, Ordering::Relaxed);
+                        if let Some(gate_arc) = state.commit_approval_gates.get(&sid) {
+                            gate_arc.store(false, Ordering::Release);
+                        }
+                        state.commit_approval_gates.remove(&sid);
+                        state.commit_approval_results.remove(&sid);
+                    }
+                    // Advance to next queued approval if one arrived while this was pending.
+                    if let Some((next_sid, next_tid, next_ptype)) = state.pending_approvals.pop_front() {
+                        state.approval_session_id = Some(next_sid);
+                        state.approval_task_id = Some(next_tid.clone());
+                        state.approval_proposed_type = Some(next_ptype.clone());
+                        state.log(format!(
+                            "Commit {} as {}? Press [y] to approve or [n] to deny",
+                            next_tid, next_ptype
+                        ));
+                    } else {
+                        state.awaiting_commit_approval = false;
                     }
                     if approved {
                         state.log("Approved -- committing as feat".to_string());

@@ -3972,13 +3972,17 @@ async fn process_task(
     // pause and ask the human to confirm before committing as feat.
     // If denied, downgrade to WIP and the loop will pause after commit.
     let validated = if validated && ctx.config.require_human_approval {
+        // Arm gate BEFORE sending event to avoid race where TUI responds before gate is set
+        ctx.commit_approval_gate.store(true, Ordering::Release);
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::AwaitCommitApproval {
             task_id: task_id.to_string(),
             proposed_commit_type: "feat".to_string(),
+            session_id: ctx.session_id.clone(),
+            gate: ctx.commit_approval_gate.clone(),
+            result: ctx.commit_approval_result.clone(),
         }));
-        ctx.commit_approval_gate.store(true, Ordering::Relaxed);
 
-        while ctx.commit_approval_gate.load(Ordering::Relaxed) {
+        while ctx.commit_approval_gate.load(Ordering::Acquire) {
             if ctx.is_stop_requested() {
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Finished));
                 return (false, false);
@@ -3986,7 +3990,7 @@ async fn process_task(
             tokio::time::sleep(Duration::from_millis(200)).await;
         }
 
-        let approved = ctx.commit_approval_result.load(Ordering::Relaxed);
+        let approved = ctx.commit_approval_result.load(Ordering::Acquire);
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::CommitApprovalResponse {
             approved,
         }));
