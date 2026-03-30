@@ -135,11 +135,11 @@ fn fetch_pr_metadata(pr_number: u32, repo: &str) -> Result<PrMetadata> {
     })
 }
 
-fn setup_temp_buildloop(project_dir: &Path) -> Result<PathBuf> {
-    let buildloop_dir = project_dir.join(".buildloop");
-    let log_dir = buildloop_dir.join("logs");
-    std::fs::create_dir_all(&log_dir).context("Failed to create .buildloop/logs/")?;
-    Ok(buildloop_dir)
+fn setup_temp_buildloop(project_dir: &Path, pr_number: u32) -> Result<PathBuf> {
+    let pr_review_dir = project_dir.join(format!(".buildloop/pr-review-{}", pr_number));
+    let log_dir = pr_review_dir.join("logs");
+    std::fs::create_dir_all(&log_dir).context("Failed to create PR review buildloop directory")?;
+    Ok(pr_review_dir)
 }
 
 fn parse_findings_json(report_content: &str) -> Result<serde_json::Value> {
@@ -241,7 +241,7 @@ pub async fn run(
 
     let metadata = fetch_pr_metadata(pr_number, &repo)?;
 
-    let buildloop_dir = setup_temp_buildloop(project_dir)?;
+    let buildloop_dir = setup_temp_buildloop(project_dir, pr_number)?;
     let log_dir = buildloop_dir.join("logs");
     let review_report = buildloop_dir.join("review-report.md");
 
@@ -281,6 +281,7 @@ pub async fn run(
     );
 
     let changed_files_str = metadata.changed_files.join("\n");
+    let review_report_relative = format!(".buildloop/pr-review-{}/review-report.md", pr_number);
     let prompt = prompts::pr_review_prompt(
         pr_number,
         &metadata.title,
@@ -289,6 +290,7 @@ pub async fn run(
         &metadata.base_branch,
         &diff,
         &changed_files_str,
+        &review_report_relative,
     );
 
     let (agent_tx, mut agent_rx) = mpsc::unbounded_channel::<AgentOutputEvent>();
@@ -316,6 +318,7 @@ pub async fn run(
     );
     let agent_start = Instant::now();
 
+    let pr_review_tools: &[&str] = &["Read", "Glob", "Grep", "Bash"];
     let agent_result = agent::run_agent(
         &AgentRole::Reviewer,
         Config::parse_provider(&pr_provider),
@@ -324,7 +327,7 @@ pub async fn run(
         project_dir,
         agent_tx,
         &log_dir,
-        None,
+        Some(pr_review_tools),
         config.agent_timeout_secs,
         None,
     )

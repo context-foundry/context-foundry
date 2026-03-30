@@ -938,6 +938,7 @@ pub fn pr_review_prompt(
     base_branch: &str,
     diff: &str,
     changed_files: &str,
+    report_path: &str,
 ) -> String {
     format!(
         r#"You are reviewing a GitHub Pull Request. This is a read-only code review -- you do NOT fix anything.
@@ -1041,7 +1042,7 @@ CONFIDENCE SCORING:
 - Base your confidence on: how clear the evidence is, whether you can trace the bug to a concrete failure, and whether the surrounding code suggests intentional behavior
 - When in doubt, assign lower confidence -- it is better to flag for human review than to fix a false positive
 
-WRITE YOUR FINAL REPORT to .buildloop/review-report.md:
+WRITE YOUR FINAL REPORT to {report_path} using the Bash tool (the Write and Edit tools are not available to you):
 
 # PR Review -- #{pr_number}: {pr_title}
 
