@@ -1304,6 +1304,18 @@ Borderline 3: unwrap() on user input vs unwrap() on hardcoded constant -- HIGH v
   The unwrap cannot fail. Do not report unwrap() on values that are provably valid
   at compile time (string literals, numeric constants, hardcoded regex patterns).
 
+WHAT TO REPORT:
+- Bugs, panics, security issues, logic errors
+- Missing error handling at system boundaries (user input, API calls, file I/O)
+- Race conditions, resource leaks, crash paths
+
+WHAT TO SKIP (do not report at all):
+- Style preferences consistent with the existing codebase
+- Minor naming in local scope
+- Missing comments or documentation
+- Code patterns that match how the rest of the project works
+- Theoretical improvements with no concrete bug
+
 PROVENANCE RULES (source_evidence):
 - EVERY finding MUST include source_evidence -- findings without it will be discarded
 - snippet: copy the exact source line(s) that triggered the finding (1-5 lines max, verbatim from the file)
@@ -2342,5 +2354,47 @@ mod tests {
                 "{name} missing correct LOW categories: expected \"{low_categories}\""
             );
         }
+    }
+
+    #[test]
+    fn test_pr_review_prompts_contain_filtering_sections() {
+        let report_needle = "WHAT TO REPORT:";
+        let skip_needle = "WHAT TO SKIP (do not report at all):";
+
+        let main = pr_review_prompt(
+            1, "test", "body", "feat", "main", "diff", "file.rs", "/tmp/report.md",
+        );
+        assert!(
+            main.contains(report_needle),
+            "pr_review_prompt missing WHAT TO REPORT section"
+        );
+        assert!(
+            main.contains(skip_needle),
+            "pr_review_prompt missing WHAT TO SKIP section"
+        );
+
+        let per_file = pr_review_per_file_prompt(
+            1, "test", "src/foo.rs", "diff", "/tmp/report.md",
+        );
+        assert!(
+            per_file.contains(report_needle),
+            "pr_review_per_file_prompt missing WHAT TO REPORT section"
+        );
+        assert!(
+            per_file.contains(skip_needle),
+            "pr_review_per_file_prompt missing WHAT TO SKIP section"
+        );
+
+        let integration = pr_review_integration_prompt(
+            1, "test", "body", "feat", "main", "file.rs", "{}", "/tmp/report.md",
+        );
+        assert!(
+            integration.contains(report_needle),
+            "pr_review_integration_prompt missing WHAT TO REPORT section"
+        );
+        assert!(
+            integration.contains(skip_needle),
+            "pr_review_integration_prompt missing WHAT TO SKIP section"
+        );
     }
 }
