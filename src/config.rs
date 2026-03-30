@@ -493,6 +493,8 @@ impl Config {
             self.simple_reviewer_model = m.clone();
             self.pattern_extraction_model = m;
         }
+        // Clamp concurrency to at least 1 (JSON config can bypass env var >= 1 check)
+        self.pr_review_concurrency = self.pr_review_concurrency.max(1);
     }
 
     fn apply_env_overrides(&mut self) {
@@ -935,6 +937,7 @@ mod tests {
         std::env::remove_var("FOUNDRY_PR_REVIEW_PROVIDER");
         std::env::remove_var("FOUNDRY_AGENT_TIMEOUT_SECS");
         std::env::remove_var("FOUNDRY_PR_REVIEW_MULTIPASS_THRESHOLD");
+        std::env::remove_var("FOUNDRY_PR_REVIEW_CONCURRENCY");
 
         fs::write(dir.path().join(".foundry.json"), "{ not valid json").unwrap();
         let config = Config::load(dir.path());
@@ -1088,6 +1091,7 @@ mod tests {
         std::env::remove_var("FOUNDRY_PR_REVIEW_PROVIDER");
         std::env::remove_var("FOUNDRY_AGENT_TIMEOUT_SECS");
         std::env::remove_var("FOUNDRY_PR_REVIEW_MULTIPASS_THRESHOLD");
+        std::env::remove_var("FOUNDRY_PR_REVIEW_CONCURRENCY");
 
         let path = dir.path().join(".foundry.json");
         fs::write(&path, "{}").unwrap();
@@ -1141,6 +1145,7 @@ mod tests {
         std::env::remove_var("FOUNDRY_PR_REVIEW_PROVIDER");
         std::env::remove_var("FOUNDRY_AGENT_TIMEOUT_SECS");
         std::env::remove_var("FOUNDRY_PR_REVIEW_MULTIPASS_THRESHOLD");
+        std::env::remove_var("FOUNDRY_PR_REVIEW_CONCURRENCY");
 
         let config = Config::load_global_only();
         let defaults = Config::default();
@@ -1165,6 +1170,7 @@ mod tests {
         // Clear env overrides
         std::env::remove_var("FOUNDRY_PR_REVIEW_MODEL");
         std::env::remove_var("FOUNDRY_AGENT_TIMEOUT_SECS");
+        std::env::remove_var("FOUNDRY_PR_REVIEW_CONCURRENCY");
 
         let config = Config::load_global_only();
         assert_eq!(config.agent_timeout_secs, 120);
@@ -1188,6 +1194,7 @@ mod tests {
         // Clear env overrides
         std::env::remove_var("FOUNDRY_PR_REVIEW_MODEL");
         std::env::remove_var("FOUNDRY_AGENT_TIMEOUT_SECS");
+        std::env::remove_var("FOUNDRY_PR_REVIEW_CONCURRENCY");
 
         let config = Config::load_global_only();
         assert_eq!(config.run_mode, "auto");
@@ -1274,6 +1281,7 @@ mod tests {
         std::env::remove_var("FOUNDRY_PR_REVIEW_MODEL");
         std::env::remove_var("FOUNDRY_PR_REVIEW_PROVIDER");
         std::env::remove_var("FOUNDRY_PR_REVIEW_MULTIPASS_THRESHOLD");
+        std::env::remove_var("FOUNDRY_PR_REVIEW_CONCURRENCY");
 
         let config = Config::load_global_only();
         // Should keep the default value
@@ -1291,6 +1299,7 @@ mod tests {
         std::env::remove_var("FOUNDRY_PR_REVIEW_PROVIDER");
         std::env::remove_var("FOUNDRY_AGENT_TIMEOUT_SECS");
         std::env::remove_var("FOUNDRY_PR_REVIEW_MULTIPASS_THRESHOLD");
+        std::env::remove_var("FOUNDRY_PR_REVIEW_CONCURRENCY");
 
         let config = Config::load_global_only();
         // Empty env var should NOT override the default (empty string is treated as unset)
@@ -1316,6 +1325,14 @@ mod tests {
     fn test_pr_review_concurrency_sequential() {
         let json = r#"{"pr_review_concurrency": 1}"#;
         let config: Config = serde_json::from_str(json).unwrap();
+        assert_eq!(config.pr_review_concurrency, 1);
+    }
+
+    #[test]
+    fn test_pr_review_concurrency_zero_normalized_to_one() {
+        let json = r#"{"pr_review_concurrency": 0}"#;
+        let mut config: Config = serde_json::from_str(json).unwrap();
+        config.normalize();
         assert_eq!(config.pr_review_concurrency, 1);
     }
 }

@@ -15,6 +15,7 @@ concurrency:
 jobs:
   review:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     # Skip if PR has the skip-foundry-review label
     if: "!contains(github.event.pull_request.labels.*.name, 'skip-foundry-review')"
@@ -50,10 +51,12 @@ jobs:
           # FOUNDRY_PR_REVIEW_PROVIDER - provider for PR review ("claude" or "codex")
           # FOUNDRY_AGENT_TIMEOUT_SECS - agent timeout in seconds (e.g. "900")
           # FOUNDRY_PR_REVIEW_MULTIPASS_THRESHOLD - file count threshold for multi-pass review
+          # FOUNDRY_PR_REVIEW_CONCURRENCY - max parallel per-file review agents (default: 4)
           FOUNDRY_PR_REVIEW_MODEL: ${{ vars.FOUNDRY_PR_REVIEW_MODEL }}
           FOUNDRY_PR_REVIEW_PROVIDER: ${{ vars.FOUNDRY_PR_REVIEW_PROVIDER }}
           FOUNDRY_AGENT_TIMEOUT_SECS: ${{ vars.FOUNDRY_AGENT_TIMEOUT_SECS }}
           FOUNDRY_PR_REVIEW_MULTIPASS_THRESHOLD: ${{ vars.FOUNDRY_PR_REVIEW_MULTIPASS_THRESHOLD }}
+          FOUNDRY_PR_REVIEW_CONCURRENCY: ${{ vars.FOUNDRY_PR_REVIEW_CONCURRENCY }}
         run: |
           # --ignore-project-config: prevents the PR checkout's .foundry.json from
           # influencing review config, AND neutralizes CLAUDE.md / .claude/rules/
