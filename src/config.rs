@@ -902,8 +902,18 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn load_warns_on_invalid_json() {
+        // Isolate HOME so Config::load() cannot pick up a global config
+        // written by another serial test's temp dir
         let dir = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", dir.path());
+        // Clear all FOUNDRY_* env overrides
+        std::env::remove_var("FOUNDRY_PR_REVIEW_MODEL");
+        std::env::remove_var("FOUNDRY_PR_REVIEW_PROVIDER");
+        std::env::remove_var("FOUNDRY_AGENT_TIMEOUT_SECS");
+        std::env::remove_var("FOUNDRY_PR_REVIEW_MULTIPASS_THRESHOLD");
+
         fs::write(dir.path().join(".foundry.json"), "{ not valid json").unwrap();
         let config = Config::load(dir.path());
         assert_eq!(
@@ -1044,9 +1054,19 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    #[serial]
     fn load_warns_on_unreadable_file() {
         use std::os::unix::fs::PermissionsExt;
+        // Isolate HOME so Config::load() cannot pick up a global config
+        // written by another serial test's temp dir
         let dir = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", dir.path());
+        // Clear all FOUNDRY_* env overrides
+        std::env::remove_var("FOUNDRY_PR_REVIEW_MODEL");
+        std::env::remove_var("FOUNDRY_PR_REVIEW_PROVIDER");
+        std::env::remove_var("FOUNDRY_AGENT_TIMEOUT_SECS");
+        std::env::remove_var("FOUNDRY_PR_REVIEW_MULTIPASS_THRESHOLD");
+
         let path = dir.path().join(".foundry.json");
         fs::write(&path, "{}").unwrap();
         fs::set_permissions(&path, fs::Permissions::from_mode(0o000)).unwrap();
