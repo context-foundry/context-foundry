@@ -4270,7 +4270,8 @@ async fn process_task(
         let task_duration_secs = task_start.elapsed().as_secs_f64();
         let verdict = if validated { "feat" } else { "wip" };
         let doubt_char_tc = if skip_verify || ctx.config.backpressure_only { "-" } else { "D" };
-        let phases_run_str = format!("{}{}{}I{}", scout_char, planner_char, plan_review_char, doubt_char_tc);
+        let fail_char_tc = if !validated { "!" } else { "" };
+        let phases_run_str = format!("{}{}{}I{}{}", scout_char, planner_char, plan_review_char, doubt_char_tc, fail_char_tc);
         observatory::log_event(
             &ctx.session_id,
             &ctx.project_dir,

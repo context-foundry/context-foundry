@@ -135,8 +135,8 @@ fn fetch_pr_metadata(pr_number: u32, repo: &str) -> Result<PrMetadata> {
     })
 }
 
-fn setup_temp_buildloop(project_dir: &Path, pr_number: u32) -> Result<PathBuf> {
-    let pr_review_dir = project_dir.join(format!(".buildloop/pr-review-{}", pr_number));
+fn setup_temp_buildloop(project_dir: &Path, pr_number: u32, repo: &str) -> Result<PathBuf> {
+    let pr_review_dir = project_dir.join(format!(".buildloop/pr-review-{}-{}", repo.replace('/', "-"), pr_number));
     let log_dir = pr_review_dir.join("logs");
     std::fs::create_dir_all(&log_dir).context("Failed to create PR review buildloop directory")?;
     Ok(pr_review_dir)
@@ -241,7 +241,7 @@ pub async fn run(
 
     let metadata = fetch_pr_metadata(pr_number, &repo)?;
 
-    let buildloop_dir = setup_temp_buildloop(project_dir, pr_number)?;
+    let buildloop_dir = setup_temp_buildloop(project_dir, pr_number, &repo)?;
     let log_dir = buildloop_dir.join("logs");
     let review_report = buildloop_dir.join("review-report.md");
 
@@ -281,7 +281,7 @@ pub async fn run(
     );
 
     let changed_files_str = metadata.changed_files.join("\n");
-    let review_report_relative = format!(".buildloop/pr-review-{}/review-report.md", pr_number);
+    let review_report_relative = format!(".buildloop/pr-review-{}-{}/review-report.md", repo.replace('/', "-"), pr_number);
     let prompt = prompts::pr_review_prompt(
         pr_number,
         &metadata.title,
@@ -526,7 +526,7 @@ mod tests {
     fn test_setup_temp_buildloop_and_cleanup() {
         let tmp = std::env::temp_dir().join("foundry-test-cleanup");
         std::fs::create_dir_all(&tmp).unwrap();
-        let pr_dir = setup_temp_buildloop(&tmp, 99).unwrap();
+        let pr_dir = setup_temp_buildloop(&tmp, 99, "owner/repo").unwrap();
         assert!(pr_dir.exists());
         assert!(pr_dir.join("logs").exists());
         // Simulate cleanup
