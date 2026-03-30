@@ -284,6 +284,14 @@ pub struct Config {
     /// In headless mode, this flag is ignored with a warning (auto-approves).
     #[serde(default)]
     pub require_human_approval: bool,
+
+    /// Enforce role-based tool allowlists at the CLI level.
+    /// When true, uses --allowedTools instead of --dangerously-skip-permissions
+    /// for Claude backend agents. This is tool-surface reduction, not a hard
+    /// filesystem security boundary -- any role with Bash access is still trusted code.
+    /// Codex provider does not support this; a warning is logged when enabled with Codex.
+    #[serde(default)]
+    pub enforce_phase_rbac: bool,
 }
 
 impl Default for Config {
@@ -375,6 +383,7 @@ impl Default for Config {
             semgrep_enabled: false,
             semgrep_rulesets: Vec::new(),
             require_human_approval: false,
+            enforce_phase_rbac: false,
         }
     }
 }

@@ -85,7 +85,7 @@ pub(super) async fn run_append_tasks(
         &ctx.project_dir,
         agent_tx,
         &ctx.log_dir,
-        Some(&["Read", "Edit", "Write"]),
+        None,
         ctx.config.agent_timeout_secs,
         Some(ctx.shutdown.clone()),
     )

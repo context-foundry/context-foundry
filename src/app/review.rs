@@ -193,7 +193,6 @@ pub(super) async fn run_review_loop(
 
     // The reviewer has full write access and fixes issues it finds in a single pass.
     // No separate fixer agent -- the reviewer audits, fixes, re-verifies, and reports.
-    let reviewer_tools: &[&str] = &["Read", "Glob", "Grep", "Edit", "Write", "Bash"];
 
     let _ = std::fs::remove_file(&ctx.review_report);
 
@@ -251,7 +250,7 @@ pub(super) async fn run_review_loop(
         &ctx.project_dir,
         agent_tx,
         &ctx.log_dir,
-        Some(reviewer_tools),
+        None,
         ctx.config.agent_timeout_secs,
         Some(ctx.shutdown.clone()),
     )
@@ -446,7 +445,6 @@ async fn run_multipass_review(
 
     let mut total_usage = crate::observatory::AgentUsage::default();
     let mut all_per_file_findings: Vec<serde_json::Value> = Vec::new();
-    let per_file_tools: &[&str] = &["Read", "Glob", "Grep", "Edit", "Write", "Bash"];
 
     for (i, file) in files_changed.iter().enumerate() {
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
@@ -494,7 +492,7 @@ async fn run_multipass_review(
             &ctx.project_dir,
             agent_tx,
             &ctx.log_dir,
-            Some(per_file_tools),
+            None,
             ctx.config.agent_timeout_secs,
             Some(ctx.shutdown.clone()),
         )
@@ -579,8 +577,6 @@ async fn run_multipass_review(
         }
     }
 
-    let reviewer_tools: &[&str] = &["Read", "Glob", "Grep", "Edit", "Write", "Bash"];
-
     let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
     let fwd_tx = tx.clone();
     let fwd_handle = tokio::spawn(async move {
@@ -606,7 +602,7 @@ async fn run_multipass_review(
         &ctx.project_dir,
         agent_tx,
         &ctx.log_dir,
-        Some(reviewer_tools),
+        None,
         ctx.config.agent_timeout_secs,
         Some(ctx.shutdown.clone()),
     )

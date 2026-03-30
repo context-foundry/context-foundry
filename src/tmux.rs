@@ -112,7 +112,8 @@ impl TmuxSession {
         provider: &str,
         prompt: &str,
         model: &str,
-        allowed_tools: Option<&[&str]>,
+        effective_tools: &[&str],
+        enforce_phase_rbac: bool,
     ) -> String {
         let mut parts: Vec<String> = vec![provider.to_string()];
 
@@ -124,7 +125,10 @@ impl TmuxSession {
             parts.push(model.into());
         }
 
-        if crate::agent::is_running_as_root() {
+        if enforce_phase_rbac {
+            parts.push("--allowedTools".into());
+            parts.push(effective_tools.join(","));
+        } else if crate::agent::is_running_as_root() {
             parts.push("--allowedTools".into());
             parts.push(crate::agent::ROOT_ALLOWED_TOOLS.into());
         } else {
@@ -137,10 +141,8 @@ impl TmuxSession {
         parts.push("--append-system-prompt".into());
         parts.push(shell_escape_single_quote(&agent_system_directives()));
 
-        if let Some(tools) = allowed_tools {
-            parts.push("--tools".into());
-            parts.push(tools.join(","));
-        }
+        parts.push("--tools".into());
+        parts.push(effective_tools.join(","));
 
         let cmd = parts.join(" ");
         format!("CLAUDECODE= {}", cmd)
@@ -218,7 +220,7 @@ mod tests {
     #[test]
     fn test_build_cli_command_basic() {
         let result =
-            TmuxSession::build_cli_command("claude", "do something", "opus", None);
+            TmuxSession::build_cli_command("claude", "do something", "opus", &["Read", "Glob", "Grep", "Bash"], false);
         assert!(result.contains("claude"));
         assert!(result.contains("-p"));
         assert!(result.contains("'do something'"));
@@ -233,6 +235,8 @@ mod tests {
         assert!(result.contains("stream-json"));
         assert!(result.contains("--verbose"));
         assert!(result.starts_with("CLAUDECODE= "));
+        assert!(result.contains("--tools"));
+        assert!(result.contains("Read,Glob,Grep,Bash"));
     }
 
     #[test]
@@ -241,7 +245,8 @@ mod tests {
             "claude",
             "prompt",
             "opus",
-            Some(&["Read", "Write"]),
+            &["Read", "Write"],
+            false,
         );
         assert!(result.contains("--tools"));
         assert!(result.contains("Read,Write"));
@@ -249,8 +254,16 @@ mod tests {
 
     #[test]
     fn test_build_cli_command_empty_model() {
-        let result = TmuxSession::build_cli_command("claude", "prompt", "", None);
+        let result = TmuxSession::build_cli_command("claude", "prompt", "", &["Read"], false);
         assert!(!result.contains("--model"));
+    }
+
+    #[test]
+    fn test_build_cli_command_enforce_rbac() {
+        let result = TmuxSession::build_cli_command("claude", "prompt", "opus", &["Read", "Glob"], true);
+        assert!(result.contains("--allowedTools"));
+        assert!(result.contains("Read,Glob"));
+        assert!(!result.contains("--dangerously-skip-permissions"));
     }
 
     #[test]

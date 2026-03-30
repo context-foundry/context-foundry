@@ -1540,7 +1540,7 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                 &ctx.spec_file_prompt_path(),
                 &ctx.tasks_file_prompt_path(),
             );
-            // Scout is read-only investigation -- skip extension context to save tokens.
+            // Scout is investigation-only -- skip extension context to save tokens.
             let scout_start = Instant::now();
             let scout_result = agent::run_agent(
                 &AgentRole::Scout,
@@ -1550,7 +1550,7 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                 &ctx.project_dir,
                 agent_tx,
                 &ctx.log_dir,
-                None, // full tool access for task creation (needs Write)
+                None,
                 ctx.config.agent_timeout_secs,
                 Some(ctx.shutdown.clone()),
             )
@@ -2431,8 +2431,6 @@ async fn process_task(
         };
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(msg)));
     } else {
-        let scout_tools: &[&str] = &["Read", "Write", "Glob", "Grep", "Bash"];
-
         let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
         let fwd_tx = tx.clone();
         let fwd_handle = tokio::spawn(async move {
@@ -2466,7 +2464,7 @@ async fn process_task(
             &ctx.spec_file_prompt_path(),
             &ctx.tasks_file_prompt_path(),
         );
-        // Scout is read-only investigation -- skip extension context to save tokens.
+        // Scout is investigation-only -- skip extension context to save tokens.
         let scout_start = Instant::now();
         let scout_result = agent::run_agent(
             &AgentRole::Scout,
@@ -2476,7 +2474,7 @@ async fn process_task(
             &ctx.project_dir,
             agent_tx,
             &ctx.log_dir,
-            Some(scout_tools),
+            None,
             ctx.config.agent_timeout_secs,
             Some(ctx.shutdown.clone()),
         )
@@ -4453,7 +4451,7 @@ async fn run_pattern_extraction(
         &ctx.project_dir,
         agent_tx,
         &ctx.log_dir,
-        Some(&["Read", "Write"]),
+        None,
         ctx.config.agent_timeout_secs,
         Some(ctx.shutdown.clone()),
     )

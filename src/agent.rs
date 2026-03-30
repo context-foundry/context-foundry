@@ -40,6 +40,21 @@ impl std::fmt::Display for AgentRole {
     }
 }
 
+/// Centralized source of truth for which tools each agent role may use.
+/// This is tool-surface reduction, not a hard filesystem security boundary --
+/// any role with Bash access is still trusted code.
+pub fn allowed_tools_for_role(role: &AgentRole) -> &'static [&'static str] {
+    match role {
+        AgentRole::Scout => &["Read", "Glob", "Grep", "Bash", "WebFetch", "WebSearch"],
+        AgentRole::Planner => &["Read", "Glob", "Grep", "Edit", "Write"],
+        AgentRole::PlanReview => &["Read", "Glob", "Grep", "Edit", "Write"],
+        AgentRole::Builder => &["Bash", "Edit", "Write", "Read", "Glob", "Grep", "NotebookEdit", "WebFetch", "WebSearch"],
+        AgentRole::Reviewer => &["Read", "Glob", "Grep", "Bash", "Edit", "Write"],
+        AgentRole::Fixer => &["Read", "Glob", "Grep", "Bash", "Edit", "Write"],
+        AgentRole::Discovery => &["Read", "Glob", "Grep", "Bash", "Edit", "Write"],
+    }
+}
+
 /// Parsed events from claude's stream-json output.
 #[derive(Debug, Clone)]
 pub enum AgentOutputEvent {
@@ -661,10 +676,19 @@ pub async fn run_agent(
     timeout_secs: u64,
     shutdown: Option<Arc<AtomicBool>>,
 ) -> Result<AgentResult> {
+    let role_tools = allowed_tools_for_role(role);
+    let effective_tools: &[&str] = allowed_tools.unwrap_or(role_tools);
+
     // For Codex, delegate to run_provider_session which has full
     // Codex support (JSON output parsing, stall detection), plus
     // a single automatic retry on transport stalls in the build loop.
     if provider == ModelProvider::Codex {
+        let config = Config::load(project_dir);
+        if config.enforce_phase_rbac {
+            let _ = output_tx.send(AgentOutputEvent::Stderr(
+                "[foundry] enforce_phase_rbac: Codex provider does not support tool allowlists; enforcement not applied".to_string(),
+            ));
+        }
         let max_attempts = RUN_AGENT_CODEX_MAX_ATTEMPTS;
         let mut attempt = 1;
         loop {
@@ -709,7 +733,7 @@ pub async fn run_agent(
                     project_dir,
                     output_tx,
                     log_dir,
-                    allowed_tools,
+                    Some(effective_tools),
                     timeout_secs,
                     shutdown,
                 ))
@@ -748,7 +772,7 @@ pub async fn run_agent(
                 project_dir,
                 output_tx,
                 log_dir,
-                allowed_tools,
+                effective_tools,
                 timeout_secs,
                 shutdown,
             )
@@ -762,7 +786,7 @@ pub async fn run_agent(
                 project_dir,
                 output_tx,
                 log_dir,
-                allowed_tools,
+                effective_tools,
                 timeout_secs,
                 shutdown,
                 config.tmux_session_prefix.clone(),
@@ -781,13 +805,15 @@ async fn run_agent_pty(
     project_dir: &Path,
     output_tx: mpsc::UnboundedSender<AgentOutputEvent>,
     log_dir: &Path,
-    allowed_tools: Option<&[&str]>,
+    effective_tools: &[&str],
     timeout_secs: u64,
     shutdown: Option<Arc<AtomicBool>>,
 ) -> Result<AgentResult> {
     let timestamp = chrono::Utc::now().format("%Y%m%d-%H%M%S");
     let log_file_path = log_dir.join(format!("{}-{}.jsonl", role, timestamp));
     std::fs::create_dir_all(log_dir)?;
+
+    let config = Config::load(project_dir);
 
     // Build command for PTY execution
     let mut cmd = ModelProvider::Claude.command_builder();
@@ -797,23 +823,25 @@ async fn run_agent_pty(
         cmd.arg("--model");
         cmd.arg(model);
     }
-    append_permission_flags_pty(&mut cmd);
+    if config.enforce_phase_rbac {
+        cmd.arg("--allowedTools");
+        cmd.arg(effective_tools.join(","));
+    } else {
+        append_permission_flags_pty(&mut cmd);
+    }
     cmd.arg("--output-format");
     cmd.arg("stream-json");
     cmd.arg("--verbose");
     // Override any CLAUDE.md instructions that conflict with foundry's orchestration.
     cmd.arg("--append-system-prompt");
     cmd.arg(agent_system_directives());
-    if let Some(tools) = allowed_tools {
-        cmd.arg("--tools");
-        cmd.arg(tools.join(","));
-    }
+    cmd.arg("--tools");
+    cmd.arg(effective_tools.join(","));
     cmd.cwd(project_dir);
     // Prevent nested Claude detection -- set on the command, not process-wide
     cmd.env("CLAUDECODE", "");
 
     // Sandbox wrapping: replace cmd with docker run wrapper if sandbox is active
-    let config = Config::load(project_dir);
     let sandbox_cfg = config.sandbox_config();
     let cmd = if sandbox_cfg.is_active() {
         // Build the program and args for wrap_command_builder
@@ -823,16 +851,19 @@ async fn run_agent_pty(
             args.push("--model".to_string());
             args.push(model.to_string());
         }
-        append_permission_flags_args(&mut args);
+        if config.enforce_phase_rbac {
+            args.push("--allowedTools".to_string());
+            args.push(effective_tools.join(","));
+        } else {
+            append_permission_flags_args(&mut args);
+        }
         args.push("--output-format".to_string());
         args.push("stream-json".to_string());
         args.push("--verbose".to_string());
         args.push("--append-system-prompt".to_string());
         args.push(agent_system_directives());
-        if let Some(tools) = allowed_tools {
-            args.push("--tools".to_string());
-            args.push(tools.join(","));
-        }
+        args.push("--tools".to_string());
+        args.push(effective_tools.join(","));
         sandbox_cfg.wrap_command_builder(program, &args, project_dir, &[("CLAUDECODE", "")])
     } else {
         cmd
@@ -973,7 +1004,7 @@ async fn run_agent_tmux(
     project_dir: &Path,
     output_tx: mpsc::UnboundedSender<AgentOutputEvent>,
     log_dir: &Path,
-    allowed_tools: Option<&[&str]>,
+    effective_tools: &[&str],
     timeout_secs: u64,
     shutdown: Option<Arc<AtomicBool>>,
     tmux_prefix: String,
@@ -983,6 +1014,8 @@ async fn run_agent_tmux(
     let log_file_path = log_dir.join(format!("{}-{}.jsonl", role, timestamp));
     std::fs::create_dir_all(log_dir)?;
 
+    let config = Config::load(project_dir);
+
     let role_slug = format!("{}", role).to_lowercase();
     let abs_log_dir = dunce::canonicalize(log_dir).unwrap_or_else(|_| log_dir.to_path_buf());
 
@@ -990,7 +1023,7 @@ async fn run_agent_tmux(
         .context("failed to create tmux session")?;
 
     let cli_command =
-        TmuxSession::build_cli_command(ModelProvider::Claude.slug(), prompt, model, allowed_tools);
+        TmuxSession::build_cli_command(ModelProvider::Claude.slug(), prompt, model, effective_tools, config.enforce_phase_rbac);
 
     session
         .send_keys(&cli_command)
@@ -2545,5 +2578,102 @@ mod tests {
         assert!(post.is_empty(), "sessions not cleaned up: {:?}", post);
 
         let _ = std::fs::remove_dir_all(&project_dir);
+    }
+
+    #[test]
+    fn test_allowed_tools_for_role_scout() {
+        let tools = allowed_tools_for_role(&AgentRole::Scout);
+        assert_eq!(tools, &["Read", "Glob", "Grep", "Bash", "WebFetch", "WebSearch"]);
+        assert!(!tools.contains(&"Edit"));
+        assert!(!tools.contains(&"Write"));
+    }
+
+    #[test]
+    fn test_allowed_tools_for_role_planner() {
+        let tools = allowed_tools_for_role(&AgentRole::Planner);
+        assert_eq!(tools, &["Read", "Glob", "Grep", "Edit", "Write"]);
+        assert!(!tools.contains(&"Bash"));
+        assert!(!tools.contains(&"WebFetch"));
+        assert!(!tools.contains(&"NotebookEdit"));
+    }
+
+    #[test]
+    fn test_allowed_tools_for_role_plan_review() {
+        let tools = allowed_tools_for_role(&AgentRole::PlanReview);
+        assert_eq!(tools, allowed_tools_for_role(&AgentRole::Planner));
+    }
+
+    #[test]
+    fn test_allowed_tools_for_role_builder() {
+        let tools = allowed_tools_for_role(&AgentRole::Builder);
+        assert!(tools.contains(&"Bash"));
+        assert!(tools.contains(&"Edit"));
+        assert!(tools.contains(&"Write"));
+        assert!(tools.contains(&"Read"));
+        assert!(tools.contains(&"Glob"));
+        assert!(tools.contains(&"Grep"));
+        assert!(tools.contains(&"NotebookEdit"));
+        assert!(tools.contains(&"WebFetch"));
+        assert!(tools.contains(&"WebSearch"));
+        assert_eq!(tools.len(), 9);
+    }
+
+    #[test]
+    fn test_allowed_tools_for_role_reviewer() {
+        let tools = allowed_tools_for_role(&AgentRole::Reviewer);
+        assert_eq!(tools, &["Read", "Glob", "Grep", "Bash", "Edit", "Write"]);
+        assert!(!tools.contains(&"NotebookEdit"));
+        assert!(!tools.contains(&"WebFetch"));
+    }
+
+    #[test]
+    fn test_allowed_tools_for_role_fixer() {
+        let tools = allowed_tools_for_role(&AgentRole::Fixer);
+        assert_eq!(tools, allowed_tools_for_role(&AgentRole::Reviewer));
+    }
+
+    #[test]
+    fn test_allowed_tools_for_role_discovery() {
+        let tools = allowed_tools_for_role(&AgentRole::Discovery);
+        assert_eq!(tools, &["Read", "Glob", "Grep", "Bash", "Edit", "Write"]);
+    }
+
+    #[test]
+    fn test_all_roles_have_allowlists() {
+        let roles = [
+            AgentRole::Scout,
+            AgentRole::Planner,
+            AgentRole::Builder,
+            AgentRole::Reviewer,
+            AgentRole::Fixer,
+            AgentRole::PlanReview,
+            AgentRole::Discovery,
+        ];
+        for role in &roles {
+            let tools = allowed_tools_for_role(role);
+            assert!(!tools.is_empty(), "role {:?} should have non-empty tool list", role);
+        }
+    }
+
+    #[test]
+    fn test_scout_lacks_edit_write() {
+        let tools = allowed_tools_for_role(&AgentRole::Scout);
+        assert!(!tools.contains(&"Edit"));
+        assert!(!tools.contains(&"Write"));
+    }
+
+    #[test]
+    fn test_builder_has_full_access() {
+        let tools = allowed_tools_for_role(&AgentRole::Builder);
+        for root_tool in ROOT_ALLOWED_TOOLS.split(',') {
+            if root_tool == "TodoWrite" {
+                continue;
+            }
+            assert!(
+                tools.contains(&root_tool),
+                "Builder should have tool '{}' from ROOT_ALLOWED_TOOLS",
+                root_tool
+            );
+        }
     }
 }

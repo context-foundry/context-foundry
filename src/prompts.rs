@@ -197,7 +197,7 @@ details in the middle, risks last (recency bias):
 [things that could go wrong -- dependency conflicts, breaking changes, missing APIs]
 
 RULES:
-- Do NOT modify any project files — you are read-only
+- Do NOT modify any project files — investigation only (tool-surface reduction; no Edit/Write access, but Bash is available)
 - Do NOT implement anything — investigation only
 - Do NOT read files in .buildloop/logs/
 - Be concise — the planner reads this report, not a human
@@ -919,7 +919,7 @@ CONFIDENCE SCORING:
 - Findings below the project's confidence threshold will be logged for manual review instead of auto-fixed
 - When in doubt, assign lower confidence -- it is better to flag for human review than to fix a false positive
 
-Set "fixed" to false for all findings -- you are read-only and must NOT modify any code files.
+Set "fixed" to false for all findings -- per-file analysis is report-only. Fixes are applied in the integration pass.
 
 RULES:
 - Do NOT modify any files except .buildloop/review-report.md
