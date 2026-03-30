@@ -136,7 +136,7 @@ fn fetch_pr_metadata(pr_number: u32, repo: &str) -> Result<PrMetadata> {
 }
 
 fn setup_temp_buildloop(project_dir: &Path, pr_number: u32, repo: &str) -> Result<PathBuf> {
-    let pr_review_dir = project_dir.join(format!(".buildloop/pr-review-{}-{}", repo.replace('/', "-"), pr_number));
+    let pr_review_dir = project_dir.join(format!(".buildloop/pr-review-{}-{}", repo.replace('/', "--"), pr_number));
     let log_dir = pr_review_dir.join("logs");
     std::fs::create_dir_all(&log_dir).context("Failed to create PR review buildloop directory")?;
     Ok(pr_review_dir)
@@ -263,7 +263,7 @@ pub async fn run(
     };
 
     // Observatory: session tracking
-    let session_id = format!("pr-review-{}-{}", repo.replace('/', "-"), pr_number);
+    let session_id = format!("pr-review-{}-{}", repo.replace('/', "--"), pr_number);
     let session_start = Instant::now();
 
     observatory::log_event(
@@ -281,7 +281,7 @@ pub async fn run(
     );
 
     let changed_files_str = metadata.changed_files.join("\n");
-    let review_report_relative = format!(".buildloop/pr-review-{}-{}/review-report.md", repo.replace('/', "-"), pr_number);
+    let review_report_relative = format!(".buildloop/pr-review-{}-{}/review-report.md", repo.replace('/', "--"), pr_number);
     let prompt = prompts::pr_review_prompt(
         pr_number,
         &metadata.title,
@@ -408,7 +408,7 @@ pub async fn run(
         &session_id,
         project_dir,
         ObservatoryEvent::ReviewFindings {
-            task_id: format!("pr-review-{}-{}", repo.replace('/', "-"), pr_number),
+            task_id: format!("pr-review-{}-{}", repo.replace('/', "--"), pr_number),
             high,
             medium,
             low,
@@ -506,8 +506,8 @@ mod tests {
     fn test_session_id_includes_repo_slug() {
         let repo = "owner/repo-name";
         let pr_number = 42u32;
-        let session_id = format!("pr-review-{}-{}", repo.replace('/', "-"), pr_number);
-        assert_eq!(session_id, "pr-review-owner-repo-name-42");
+        let session_id = format!("pr-review-{}-{}", repo.replace('/', "--"), pr_number);
+        assert_eq!(session_id, "pr-review-owner--repo-name-42");
     }
 
     #[test]
@@ -515,11 +515,23 @@ mod tests {
         let pr_number = 42u32;
         let repo_a = "alice/project";
         let repo_b = "bob/project";
-        let id_a = format!("pr-review-{}-{}", repo_a.replace('/', "-"), pr_number);
-        let id_b = format!("pr-review-{}-{}", repo_b.replace('/', "-"), pr_number);
+        let id_a = format!("pr-review-{}-{}", repo_a.replace('/', "--"), pr_number);
+        let id_b = format!("pr-review-{}-{}", repo_b.replace('/', "--"), pr_number);
         assert_ne!(id_a, id_b);
-        assert_eq!(id_a, "pr-review-alice-project-42");
-        assert_eq!(id_b, "pr-review-bob-project-42");
+        assert_eq!(id_a, "pr-review-alice--project-42");
+        assert_eq!(id_b, "pr-review-bob--project-42");
+    }
+
+    #[test]
+    fn test_session_id_no_ambiguity_with_hyphenated_org() {
+        let pr_number = 10u32;
+        let repo_a = "alice-org/repo";
+        let repo_b = "alice/org-repo";
+        let id_a = format!("pr-review-{}-{}", repo_a.replace('/', "--"), pr_number);
+        let id_b = format!("pr-review-{}-{}", repo_b.replace('/', "--"), pr_number);
+        assert_ne!(id_a, id_b);
+        assert_eq!(id_a, "pr-review-alice-org--repo-10");
+        assert_eq!(id_b, "pr-review-alice--org-repo-10");
     }
 
     #[test]

@@ -19,6 +19,7 @@ pub struct StatsReport {
     pub patterns: PatternsInfo,
     pub trust: Option<TrustDashboard>,
     pub trend: Option<TrendData>,
+    pub pr_reviews: Option<PrReviewStats>,
 }
 
 #[derive(Debug, Serialize)]
@@ -141,6 +142,25 @@ pub struct DailyMetric {
     pub date: String,
     pub value: f64,
     pub count: usize,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PrReviewStats {
+    pub total_reviews: usize,
+    pub total_cost_usd: f64,
+    pub findings_high: usize,
+    pub findings_medium: usize,
+    pub findings_low: usize,
+    pub reviews: Vec<PrReviewEntry>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PrReviewEntry {
+    pub session_id: String,
+    pub high: usize,
+    pub medium: usize,
+    pub low: usize,
+    pub cost_usd: f64,
 }
 
 // ─── Entry Point ─────────────────────────────────────────────
@@ -279,6 +299,10 @@ struct CompletedTask {
 
 // ─── Computation ─────────────────────────────────────────────
 
+fn is_pr_review_session(session_id: &str) -> bool {
+    session_id.starts_with("pr-review-")
+}
+
 pub fn compute_stats(
     events: &[EventEnvelope],
     skipped: usize,
@@ -323,6 +347,11 @@ pub fn compute_stats(
     let mut completed_tasks: Vec<CompletedTask> = Vec::new();
     let mut task_descriptions: HashMap<String, String> = HashMap::new();
 
+    // PR review tracking (D58.1)
+    let mut pr_review_sessions: HashSet<String> = HashSet::new();
+    let mut pr_review_costs: HashMap<String, f64> = HashMap::new();
+    let mut pr_review_findings: Vec<PrReviewEntry> = Vec::new();
+
     for (idx, ev) in events.iter().enumerate() {
         session_events
             .entry(ev.session_id.clone())
@@ -331,10 +360,16 @@ pub fn compute_stats(
 
         match ev.event_type.as_str() {
             "session_started" => {
-                sessions.insert(ev.session_id.clone());
+                if is_pr_review_session(&ev.session_id) {
+                    pr_review_sessions.insert(ev.session_id.clone());
+                } else {
+                    sessions.insert(ev.session_id.clone());
+                }
             }
             "task_started" => {
-                if let Some(task_id) = ev.payload.get("task_id").and_then(|v| v.as_str()) {
+                if is_pr_review_session(&ev.session_id) {
+                    // PR reviews don't emit TaskStarted, but skip if they ever do
+                } else if let Some(task_id) = ev.payload.get("task_id").and_then(|v| v.as_str()) {
                     tasks.insert((ev.session_id.clone(), task_id.to_string()));
                     if let Some(complexity) =
                         ev.payload.get("complexity").and_then(|v| v.as_str())
@@ -350,32 +385,39 @@ pub fn compute_stats(
                 }
             }
             "agent_done" => {
-                agent_done_count += 1;
                 let cost = ev
                     .payload
                     .get("cost_usd")
                     .and_then(|v| v.as_f64())
                     .unwrap_or(0.0);
-                total_cost += cost;
 
-                if let Some(role) = ev.payload.get("role").and_then(|v| v.as_str()) {
-                    let entry = phase_map.entry(role.to_string()).or_default();
-                    entry.0 += 1;
-                    entry.1 += cost;
-                    entry.2 += ev
-                        .payload
-                        .get("tokens_in")
-                        .and_then(|v| v.as_u64())
-                        .unwrap_or(0);
-                    entry.3 += ev
-                        .payload
-                        .get("tokens_out")
-                        .and_then(|v| v.as_u64())
-                        .unwrap_or(0);
+                if is_pr_review_session(&ev.session_id) {
+                    *pr_review_costs.entry(ev.session_id.clone()).or_insert(0.0) += cost;
+                } else {
+                    agent_done_count += 1;
+                    total_cost += cost;
+
+                    if let Some(role) = ev.payload.get("role").and_then(|v| v.as_str()) {
+                        let entry = phase_map.entry(role.to_string()).or_default();
+                        entry.0 += 1;
+                        entry.1 += cost;
+                        entry.2 += ev
+                            .payload
+                            .get("tokens_in")
+                            .and_then(|v| v.as_u64())
+                            .unwrap_or(0);
+                        entry.3 += ev
+                            .payload
+                            .get("tokens_out")
+                            .and_then(|v| v.as_u64())
+                            .unwrap_or(0);
+                    }
                 }
             }
             "committed" => {
-                if let (Some(task_id), Some(commit_type)) = (
+                if is_pr_review_session(&ev.session_id) {
+                    // PR reviews don't emit Committed, but skip if they ever do
+                } else if let (Some(task_id), Some(commit_type)) = (
                     ev.payload.get("task_id").and_then(|v| v.as_str()),
                     ev.payload.get("commit_type").and_then(|v| v.as_str()),
                 ) {
@@ -393,7 +435,19 @@ pub fn compute_stats(
                 }
             }
             "review_findings" => {
-                if let Some(task_id) = ev.payload.get("task_id").and_then(|v| v.as_str()) {
+                if is_pr_review_session(&ev.session_id) {
+                    let high = ev.payload.get("high").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+                    let medium = ev.payload.get("medium").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+                    let low = ev.payload.get("low").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+                    let cost = pr_review_costs.get(&ev.session_id).copied().unwrap_or(0.0);
+                    pr_review_findings.push(PrReviewEntry {
+                        session_id: ev.session_id.clone(),
+                        high,
+                        medium,
+                        low,
+                        cost_usd: cost,
+                    });
+                } else if let Some(task_id) = ev.payload.get("task_id").and_then(|v| v.as_str()) {
                     let key = (ev.session_id.clone(), task_id.to_string());
                     tasks_reviewed.insert(key.clone());
                     let high = ev
@@ -492,6 +546,9 @@ pub fn compute_stats(
 
     let mut task_costs = Vec::new();
     for (session_id, indices) in &session_events {
+        if is_pr_review_session(session_id) {
+            continue;
+        }
         let mut current_task: Option<String> = None;
         let mut current_cost = 0.0f64;
 
@@ -758,6 +815,26 @@ pub fn compute_stats(
         None
     };
 
+    // ── PR Review Stats (D58.1) ──
+
+    let pr_reviews = if !pr_review_sessions.is_empty() {
+        let total_reviews = pr_review_sessions.len();
+        let total_pr_cost: f64 = pr_review_costs.values().sum();
+        let total_high: usize = pr_review_findings.iter().map(|r| r.high).sum();
+        let total_medium: usize = pr_review_findings.iter().map(|r| r.medium).sum();
+        let total_low: usize = pr_review_findings.iter().map(|r| r.low).sum();
+        Some(PrReviewStats {
+            total_reviews,
+            total_cost_usd: total_pr_cost,
+            findings_high: total_high,
+            findings_medium: total_medium,
+            findings_low: total_low,
+            reviews: pr_review_findings,
+        })
+    } else {
+        None
+    };
+
     // ── Assemble report ──
 
     StatsReport {
@@ -808,6 +885,7 @@ pub fn compute_stats(
         },
         trust,
         trend: trend_data,
+        pr_reviews,
     }
 }
 
@@ -1218,6 +1296,19 @@ fn print_table(report: &StatsReport) {
         } else {
             println!("  Avg cost:   (no data)");
         }
+    }
+
+    // PR Reviews (D58.1)
+    if let Some(ref pr) = report.pr_reviews {
+        println!();
+        println!("PR Reviews (excluded from build-loop metrics above)");
+        println!("---------------------------------------------------");
+        println!("  Total reviews:  {}", pr.total_reviews);
+        println!("  Total cost:     ${:.2}", pr.total_cost_usd);
+        println!(
+            "  Findings:       {} high, {} medium, {} low",
+            pr.findings_high, pr.findings_medium, pr.findings_low
+        );
     }
 }
 
@@ -1922,5 +2013,117 @@ mod tests {
         let events = synthetic_session();
         let report = compute_stats(&events, 0, 7, None, false);
         assert!(report.trend.is_none());
+    }
+
+    #[test]
+    fn test_is_pr_review_session() {
+        assert!(is_pr_review_session("pr-review-owner--repo-42"));
+        assert!(is_pr_review_session("pr-review-alice-org--repo-10"));
+        assert!(!is_pr_review_session("build-sess-1"));
+        assert!(!is_pr_review_session(""));
+        assert!(!is_pr_review_session("af20d11b-1234-5678-9abc-def012345678"));
+    }
+
+    #[test]
+    fn test_pr_review_sessions_excluded_from_build_stats() {
+        let p = "/test/project";
+        let events = vec![
+            // Build-loop session
+            make_event(
+                "2025-01-15T10:00:00Z", "build-sess-1", p, "session_started",
+                serde_json::json!({"type": "SessionStarted", "config": {}}),
+            ),
+            make_event(
+                "2025-01-15T10:01:00Z", "build-sess-1", p, "task_started",
+                serde_json::json!({"type": "TaskStarted", "task_id": "T1", "description": "task", "complexity": "medium"}),
+            ),
+            make_event(
+                "2025-01-15T10:02:00Z", "build-sess-1", p, "agent_done",
+                serde_json::json!({"type": "AgentDone", "role": "Builder", "success": true, "duration_secs": 30.0, "tokens_in": 1000, "tokens_out": 500, "cost_usd": 0.10, "context_pct": 10}),
+            ),
+            make_event(
+                "2025-01-15T10:03:00Z", "build-sess-1", p, "review_findings",
+                serde_json::json!({"type": "ReviewFindings", "task_id": "T1", "high": 1, "medium": 0, "low": 0, "findings_json": "[]"}),
+            ),
+            make_event(
+                "2025-01-15T10:04:00Z", "build-sess-1", p, "committed",
+                serde_json::json!({"type": "Committed", "task_id": "T1", "sha": "abc", "commit_type": "feat"}),
+            ),
+            make_event(
+                "2025-01-15T10:05:00Z", "build-sess-1", p, "session_ended",
+                serde_json::json!({"type": "SessionEnded", "total_tasks": 1, "feat_count": 1, "wip_count": 0, "total_cost_usd": 0.10, "duration_secs": 300.0}),
+            ),
+            // PR review session -- should be excluded from build stats
+            make_event(
+                "2025-01-15T11:00:00Z", "pr-review-owner--repo-42", p, "session_started",
+                serde_json::json!({"type": "SessionStarted", "config": {"pr_number": 42}}),
+            ),
+            make_event(
+                "2025-01-15T11:01:00Z", "pr-review-owner--repo-42", p, "agent_done",
+                serde_json::json!({"type": "AgentDone", "role": "Reviewer", "success": true, "duration_secs": 60.0, "tokens_in": 5000, "tokens_out": 2000, "cost_usd": 0.50, "context_pct": 40}),
+            ),
+            make_event(
+                "2025-01-15T11:02:00Z", "pr-review-owner--repo-42", p, "review_findings",
+                serde_json::json!({"type": "ReviewFindings", "task_id": "pr-review-owner--repo-42", "high": 2, "medium": 1, "low": 3, "findings_json": "[]"}),
+            ),
+            make_event(
+                "2025-01-15T11:03:00Z", "pr-review-owner--repo-42", p, "session_ended",
+                serde_json::json!({"type": "SessionEnded", "total_tasks": 0, "feat_count": 0, "wip_count": 0, "total_cost_usd": 0.50, "duration_secs": 180.0}),
+            ),
+        ];
+
+        let report = compute_stats(&events, 0, 7, None, false);
+
+        // Build-loop metrics should only reflect the build session
+        assert_eq!(report.summary.total_sessions, 1, "PR review session should not inflate total_sessions");
+        assert_eq!(report.summary.total_tasks, 1);
+        assert_eq!(report.summary.feat_count, 1);
+        assert!((report.summary.total_cost_usd - 0.10).abs() < 0.001, "PR review cost should not inflate total_cost");
+
+        // Phase costs should only have Builder from build session, not Reviewer from PR review
+        let reviewer_phase = report.phase_costs.iter().find(|p| p.role == "Reviewer");
+        assert!(reviewer_phase.is_none(), "PR review Reviewer cost should not appear in phase_costs");
+
+        // Quality metrics should only reflect build-loop review_findings
+        assert_eq!(report.quality.tasks_reviewed, 1, "PR review findings should not inflate tasks_reviewed");
+        assert_eq!(report.quality.tasks_with_findings, 1);
+
+        // PR review stats should be present and accurate
+        let pr = report.pr_reviews.as_ref().expect("pr_reviews should be Some");
+        assert_eq!(pr.total_reviews, 1);
+        assert!((pr.total_cost_usd - 0.50).abs() < 0.001);
+        assert_eq!(pr.findings_high, 2);
+        assert_eq!(pr.findings_medium, 1);
+        assert_eq!(pr.findings_low, 3);
+        assert_eq!(pr.reviews.len(), 1);
+    }
+
+    #[test]
+    fn test_pr_review_no_findings_still_excluded() {
+        let p = "/test/project";
+        let events = vec![
+            make_event(
+                "2025-01-15T11:00:00Z", "pr-review-org--repo-7", p, "session_started",
+                serde_json::json!({"type": "SessionStarted", "config": {"pr_number": 7}}),
+            ),
+            make_event(
+                "2025-01-15T11:01:00Z", "pr-review-org--repo-7", p, "agent_done",
+                serde_json::json!({"type": "AgentDone", "role": "Reviewer", "success": true, "duration_secs": 20.0, "tokens_in": 1000, "tokens_out": 500, "cost_usd": 0.05, "context_pct": 10}),
+            ),
+            make_event(
+                "2025-01-15T11:02:00Z", "pr-review-org--repo-7", p, "session_ended",
+                serde_json::json!({"type": "SessionEnded", "total_tasks": 0, "feat_count": 0, "wip_count": 0, "total_cost_usd": 0.05, "duration_secs": 60.0}),
+            ),
+        ];
+
+        let report = compute_stats(&events, 0, 7, None, false);
+
+        assert_eq!(report.summary.total_sessions, 0, "PR review-only should yield 0 build sessions");
+        assert_eq!(report.summary.total_cost_usd, 0.0);
+        assert!(report.phase_costs.is_empty());
+
+        let pr = report.pr_reviews.as_ref().expect("pr_reviews should be Some");
+        assert_eq!(pr.total_reviews, 1);
+        assert!((pr.total_cost_usd - 0.05).abs() < 0.001);
     }
 }
