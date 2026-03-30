@@ -561,7 +561,7 @@ async fn run_multipass_pr_review(
         return (
             Err(anyhow!("No reviewable files in PR (all files were binary, submodule, or empty-diff)")),
             total_usage,
-            serde_json::json!({"high": [], "medium": [], "low": []}),
+            serde_json::Value::Null,
             0,
         );
     }
@@ -573,7 +573,7 @@ async fn run_multipass_pr_review(
                 reviewable_files.len()
             )),
             total_usage,
-            serde_json::json!({"high": [], "medium": [], "low": []}),
+            serde_json::Value::Null,
             reviewable_files.len(),
         );
     }
@@ -848,7 +848,7 @@ pub async fn run(
     };
 
     if let Err(ref e) = agent_result {
-        if let Some(pf_findings) = per_file_findings {
+        if let Some(pf_findings) = per_file_findings.filter(|v| v.is_object()) {
             // Integration agent failed but per-file findings exist -- use them
             eprintln!("Integration agent failed: {}. Using per-file findings.", e);
 
