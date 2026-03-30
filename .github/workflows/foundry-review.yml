@@ -23,19 +23,12 @@ jobs:
           fetch-depth: 0
 
       - name: Install foundry
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -e
-          REPO="context-foundry/context-foundry"
-          VERSION=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
-          if [ -z "$VERSION" ]; then
-            echo "::error::Failed to determine latest foundry version"
-            exit 1
-          fi
-          ARCHIVE="foundry-linux.tar.gz"
-          URL="https://github.com/${REPO}/releases/download/${VERSION}/${ARCHIVE}"
-          echo "Installing foundry ${VERSION}..."
-          curl -fsSL "$URL" -o "/tmp/${ARCHIVE}"
-          tar xzf "/tmp/${ARCHIVE}" -C /tmp
+          gh release download --repo context-foundry/context-foundry --pattern 'foundry-linux.tar.gz' -D /tmp
+          tar xzf /tmp/foundry-linux.tar.gz -C /tmp
           chmod +x /tmp/foundry
           sudo mv /tmp/foundry /usr/local/bin/foundry
           foundry --version
@@ -46,23 +39,28 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
         run: |
-          foundry review-pr ${{ github.event.pull_request.number }} \
-            --repo ${{ github.repository }} \
+          foundry review-pr "$PR_NUMBER" \
+            --repo "$REPO" \
             --output comment
 
       - name: Post failure comment
         if: steps.review.outcome == 'failure'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          REVIEW_OUTCOME: ${{ steps.review.outcome }}
         run: |
-          gh pr comment ${{ github.event.pull_request.number }} \
-            --repo ${{ github.repository }} \
+          gh pr comment "$PR_NUMBER" \
+            --repo "$REPO" \
             --body "## Foundry Review Failed
 
           The automated foundry review encountered an error and could not complete.
 
-          **Step outcome:** \`${{ steps.review.outcome }}\`
+          **Step outcome:** \`${REVIEW_OUTCOME}\`
 
           This does not block the PR. Please review manually or re-trigger by pushing a new commit.
 
