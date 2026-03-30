@@ -556,6 +556,7 @@ impl Config {
             (None, Some(p)) => p,
             (None, None) => {
                 let mut config = Self::default();
+                config.normalize();
                 config.apply_env_overrides();
                 return config;
             }
@@ -570,6 +571,7 @@ impl Config {
             Err(e) => {
                 eprintln!("warning: failed to deserialize merged config: {e} -- using defaults");
                 let mut config = Self::default();
+                config.normalize();
                 config.apply_env_overrides();
                 config
             }
@@ -593,12 +595,14 @@ impl Config {
                 Err(e) => {
                     eprintln!("warning: failed to deserialize global config: {e} -- using defaults");
                     let mut config = Self::default();
+                    config.normalize();
                     config.apply_env_overrides();
                     config
                 }
             },
             None => {
                 let mut config = Self::default();
+                config.normalize();
                 config.apply_env_overrides();
                 config
             }
@@ -1334,5 +1338,18 @@ mod tests {
         let mut config: Config = serde_json::from_str(json).unwrap();
         config.normalize();
         assert_eq!(config.pr_review_concurrency, 1);
+    }
+
+    #[test]
+    fn test_fallback_path_normalize_then_env_overrides() {
+        // Simulate what load() and load_global_only() fallback paths do:
+        // Self::default() -> normalize() -> apply_env_overrides()
+        // This verifies that normalize() runs correctly on default configs
+        // and catches regressions if normalize() is accidentally removed from a path.
+        let mut config: Config = serde_json::from_str(r#"{"pr_review_concurrency": 0, "run_mode": "loop"}"#).unwrap();
+        config.normalize();
+        config.apply_env_overrides();
+        assert_eq!(config.pr_review_concurrency, 1, "normalize must clamp pr_review_concurrency to >= 1");
+        assert_eq!(config.run_mode, "auto", "normalize must convert legacy 'loop' mode to 'auto'");
     }
 }

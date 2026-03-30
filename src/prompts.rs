@@ -852,6 +852,7 @@ BORDERLINE CASES -- use these to sharpen your judgment:
 Borderline 1: Missing error check on file read -- HIGH, not MEDIUM
   file: src/loader.rs:23
   issue: fs::read_to_string(user_path) called with .unwrap() instead of error handling
+  category: crash
   WRONG: MEDIUM (it is just missing error handling)
   RIGHT: HIGH -- the path comes from user input. A nonexistent or unreadable file
   crashes the process. Any unhandled error on external/user-controlled input is HIGH
@@ -860,21 +861,29 @@ Borderline 1: Missing error check on file read -- HIGH, not MEDIUM
 Borderline 2: Ignored return value only used in tests -- LOW, not MEDIUM
   file: src/processor.rs:87
   issue: validate_schema() return value is discarded; only test code checks it
+  category: logic
   WRONG: MEDIUM (ignoring a return value is a potential bug)
   RIGHT: LOW -- the return value has no production effect. No caller in production
-  code uses it. Test-only contracts do not affect runtime behavior.
+  code uses it. Test-only contracts do not affect runtime behavior. If no production
+  code path depends on the value, it is LOW.
 
 Borderline 3: unwrap() on user input vs unwrap() on hardcoded constant -- HIGH vs SKIP
   file: src/config.rs:14
   issue_a: config.get(user_key).unwrap() -- user_key comes from CLI args
   issue_b: "127.0.0.1".parse::<IpAddr>().unwrap() -- hardcoded valid literal
+  category: crash
   (a) is HIGH: the key comes from external input. If the key is missing or invalid,
   the program crashes. External input can always be wrong.
   (b) is SKIP: the literal "127.0.0.1" is a compile-time-known valid IP address.
   The unwrap cannot fail. Do not report unwrap() on values that are provably valid
   at compile time (string literals, numeric constants, hardcoded regex patterns).
 
-WHAT TO SKIP (do not report):
+WHAT TO REPORT:
+- Bugs, panics, security issues, logic errors
+- Missing error handling at system boundaries (user input, API calls, file I/O)
+- Race conditions, resource leaks, crash paths
+
+WHAT TO SKIP (do not report at all):
 - Style preferences consistent with the existing codebase
 - Minor naming in local scope
 - Missing comments or documentation
@@ -993,6 +1002,7 @@ BORDERLINE CASES -- use these to sharpen your judgment:
 Borderline 1: Missing error check on file read -- HIGH, not MEDIUM
   file: src/loader.rs:23
   issue: fs::read_to_string(user_path) called with .unwrap() instead of error handling
+  category: crash
   WRONG: MEDIUM (it is just missing error handling)
   RIGHT: HIGH -- the path comes from user input. A nonexistent or unreadable file
   crashes the process. Any unhandled error on external/user-controlled input is HIGH
@@ -1001,14 +1011,17 @@ Borderline 1: Missing error check on file read -- HIGH, not MEDIUM
 Borderline 2: Ignored return value only used in tests -- LOW, not MEDIUM
   file: src/processor.rs:87
   issue: validate_schema() return value is discarded; only test code checks it
+  category: logic
   WRONG: MEDIUM (ignoring a return value is a potential bug)
   RIGHT: LOW -- the return value has no production effect. No caller in production
-  code uses it. Test-only contracts do not affect runtime behavior.
+  code uses it. Test-only contracts do not affect runtime behavior. If no production
+  code path depends on the value, it is LOW.
 
 Borderline 3: unwrap() on user input vs unwrap() on hardcoded constant -- HIGH vs SKIP
   file: src/config.rs:14
   issue_a: config.get(user_key).unwrap() -- user_key comes from CLI args
   issue_b: "127.0.0.1".parse::<IpAddr>().unwrap() -- hardcoded valid literal
+  category: crash
   (a) is HIGH: the key comes from external input. If the key is missing or invalid,
   the program crashes. External input can always be wrong.
   (b) is SKIP: the literal "127.0.0.1" is a compile-time-known valid IP address.
@@ -1135,6 +1148,7 @@ BORDERLINE CASES -- use these to sharpen your judgment:
 Borderline 1: Missing error check on file read -- HIGH, not MEDIUM
   file: src/loader.rs:23
   issue: fs::read_to_string(user_path) called with .unwrap() instead of error handling
+  category: crash
   WRONG: MEDIUM (it is just missing error handling)
   RIGHT: HIGH -- the path comes from user input. A nonexistent or unreadable file
   crashes the process. Any unhandled error on external/user-controlled input is HIGH
@@ -1143,14 +1157,17 @@ Borderline 1: Missing error check on file read -- HIGH, not MEDIUM
 Borderline 2: Ignored return value only used in tests -- LOW, not MEDIUM
   file: src/processor.rs:87
   issue: validate_schema() return value is discarded; only test code checks it
+  category: logic
   WRONG: MEDIUM (ignoring a return value is a potential bug)
   RIGHT: LOW -- the return value has no production effect. No caller in production
-  code uses it. Test-only contracts do not affect runtime behavior.
+  code uses it. Test-only contracts do not affect runtime behavior. If no production
+  code path depends on the value, it is LOW.
 
 Borderline 3: unwrap() on user input vs unwrap() on hardcoded constant -- HIGH vs SKIP
   file: src/config.rs:14
   issue_a: config.get(user_key).unwrap() -- user_key comes from CLI args
   issue_b: "127.0.0.1".parse::<IpAddr>().unwrap() -- hardcoded valid literal
+  category: crash
   (a) is HIGH: the key comes from external input. If the key is missing or invalid,
   the program crashes. External input can always be wrong.
   (b) is SKIP: the literal "127.0.0.1" is a compile-time-known valid IP address.
@@ -1282,6 +1299,7 @@ BORDERLINE CASES -- use these to sharpen your judgment:
 Borderline 1: Missing error check on file read -- HIGH, not MEDIUM
   file: src/loader.rs:23
   issue: fs::read_to_string(user_path) called with .unwrap() instead of error handling
+  category: crash
   WRONG: MEDIUM (it is just missing error handling)
   RIGHT: HIGH -- the path comes from user input. A nonexistent or unreadable file
   crashes the process. Any unhandled error on external/user-controlled input is HIGH
@@ -1290,14 +1308,17 @@ Borderline 1: Missing error check on file read -- HIGH, not MEDIUM
 Borderline 2: Ignored return value only used in tests -- LOW, not MEDIUM
   file: src/processor.rs:87
   issue: validate_schema() return value is discarded; only test code checks it
+  category: logic
   WRONG: MEDIUM (ignoring a return value is a potential bug)
   RIGHT: LOW -- the return value has no production effect. No caller in production
-  code uses it. Test-only contracts do not affect runtime behavior.
+  code uses it. Test-only contracts do not affect runtime behavior. If no production
+  code path depends on the value, it is LOW.
 
 Borderline 3: unwrap() on user input vs unwrap() on hardcoded constant -- HIGH vs SKIP
   file: src/config.rs:14
   issue_a: config.get(user_key).unwrap() -- user_key comes from CLI args
   issue_b: "127.0.0.1".parse::<IpAddr>().unwrap() -- hardcoded valid literal
+  category: crash
   (a) is HIGH: the key comes from external input. If the key is missing or invalid,
   the program crashes. External input can always be wrong.
   (b) is SKIP: the literal "127.0.0.1" is a compile-time-known valid IP address.
@@ -2396,5 +2417,53 @@ mod tests {
             integration.contains(skip_needle),
             "pr_review_integration_prompt missing WHAT TO SKIP section"
         );
+    }
+
+    #[test]
+    fn test_all_reviewer_prompts_borderline_have_categories() {
+        let cat_crash = "category: crash";
+        let cat_logic = "category: logic";
+
+        let prompts: Vec<(&str, String)> = vec![
+            (
+                "reviewer_prompt",
+                reviewer_prompt("T1", "test", "file.rs", 1, "", None, "SPEC.md", "TASKS.md", ""),
+            ),
+            (
+                "reviewer_per_file_prompt",
+                reviewer_per_file_prompt("T1", "test", "src/foo.rs", "", "SPEC.md", "TASKS.md"),
+            ),
+            (
+                "reviewer_integration_prompt",
+                reviewer_integration_prompt(
+                    "T1", "test", "file.rs", "{}", "", None, "SPEC.md", "TASKS.md", "",
+                ),
+            ),
+            (
+                "pr_review_prompt",
+                pr_review_prompt(1, "test", "body", "feat", "main", "diff", "file.rs", "/tmp/report.md"),
+            ),
+            (
+                "pr_review_per_file_prompt",
+                pr_review_per_file_prompt(1, "test", "src/foo.rs", "diff", "/tmp/report.md"),
+            ),
+            (
+                "pr_review_integration_prompt",
+                pr_review_integration_prompt(
+                    1, "test", "body", "feat", "main", "file.rs", "{}", "/tmp/report.md",
+                ),
+            ),
+        ];
+
+        for (name, prompt) in &prompts {
+            assert!(
+                prompt.contains(cat_crash),
+                "{name} borderline examples missing 'category: crash'"
+            );
+            assert!(
+                prompt.contains(cat_logic),
+                "{name} borderline examples missing 'category: logic'"
+            );
+        }
     }
 }
