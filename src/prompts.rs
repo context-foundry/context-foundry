@@ -1130,6 +1130,33 @@ Example 3 (LOW -- report only):
   WHY LOW: Local scope, self-evident from context, consistent with surrounding code.
   Style choices that match the existing codebase are LOW.
 
+BORDERLINE CASES -- use these to sharpen your judgment:
+
+Borderline 1: Missing error check on file read -- HIGH, not MEDIUM
+  file: src/loader.rs:23
+  issue: fs::read_to_string(user_path) called with .unwrap() instead of error handling
+  WRONG: MEDIUM (it is just missing error handling)
+  RIGHT: HIGH -- the path comes from user input. A nonexistent or unreadable file
+  crashes the process. Any unhandled error on external/user-controlled input is HIGH
+  because the caller controls whether it triggers.
+
+Borderline 2: Ignored return value only used in tests -- LOW, not MEDIUM
+  file: src/processor.rs:87
+  issue: validate_schema() return value is discarded; only test code checks it
+  WRONG: MEDIUM (ignoring a return value is a potential bug)
+  RIGHT: LOW -- the return value has no production effect. No caller in production
+  code uses it. Test-only contracts do not affect runtime behavior.
+
+Borderline 3: unwrap() on user input vs unwrap() on hardcoded constant -- HIGH vs SKIP
+  file: src/config.rs:14
+  issue_a: config.get(user_key).unwrap() -- user_key comes from CLI args
+  issue_b: "127.0.0.1".parse::<IpAddr>().unwrap() -- hardcoded valid literal
+  (a) is HIGH: the key comes from external input. If the key is missing or invalid,
+  the program crashes. External input can always be wrong.
+  (b) is SKIP: the literal "127.0.0.1" is a compile-time-known valid IP address.
+  The unwrap cannot fail. Do not report unwrap() on values that are provably valid
+  at compile time (string literals, numeric constants, hardcoded regex patterns).
+
 WHAT TO REPORT:
 - Bugs, panics, security issues, logic errors
 - Missing error handling at system boundaries (user input, API calls, file I/O)
@@ -1249,6 +1276,33 @@ Example 3 (LOW -- report only):
   category: style
   WHY LOW: Local scope, self-evident from context, consistent with surrounding code.
   Style choices that match the existing codebase are LOW.
+
+BORDERLINE CASES -- use these to sharpen your judgment:
+
+Borderline 1: Missing error check on file read -- HIGH, not MEDIUM
+  file: src/loader.rs:23
+  issue: fs::read_to_string(user_path) called with .unwrap() instead of error handling
+  WRONG: MEDIUM (it is just missing error handling)
+  RIGHT: HIGH -- the path comes from user input. A nonexistent or unreadable file
+  crashes the process. Any unhandled error on external/user-controlled input is HIGH
+  because the caller controls whether it triggers.
+
+Borderline 2: Ignored return value only used in tests -- LOW, not MEDIUM
+  file: src/processor.rs:87
+  issue: validate_schema() return value is discarded; only test code checks it
+  WRONG: MEDIUM (ignoring a return value is a potential bug)
+  RIGHT: LOW -- the return value has no production effect. No caller in production
+  code uses it. Test-only contracts do not affect runtime behavior.
+
+Borderline 3: unwrap() on user input vs unwrap() on hardcoded constant -- HIGH vs SKIP
+  file: src/config.rs:14
+  issue_a: config.get(user_key).unwrap() -- user_key comes from CLI args
+  issue_b: "127.0.0.1".parse::<IpAddr>().unwrap() -- hardcoded valid literal
+  (a) is HIGH: the key comes from external input. If the key is missing or invalid,
+  the program crashes. External input can always be wrong.
+  (b) is SKIP: the literal "127.0.0.1" is a compile-time-known valid IP address.
+  The unwrap cannot fail. Do not report unwrap() on values that are provably valid
+  at compile time (string literals, numeric constants, hardcoded regex patterns).
 
 PROVENANCE RULES (source_evidence):
 - EVERY finding MUST include source_evidence -- findings without it will be discarded
@@ -2076,6 +2130,77 @@ mod tests {
         assert!(
             integration.contains(needle_3),
             "reviewer_integration_prompt missing borderline 3"
+        );
+    }
+
+    #[test]
+    fn test_pr_review_prompts_contain_borderline_examples() {
+        let needle_header = "BORDERLINE CASES";
+        let needle_1 = "Borderline 1: Missing error check on file read";
+        let needle_2 = "Borderline 2: Ignored return value only used in tests";
+        let needle_3 = "Borderline 3: unwrap() on user input vs unwrap() on hardcoded constant";
+
+        // Main pr_review_prompt (single-pass)
+        let main = pr_review_prompt(
+            1, "test", "body", "feat", "main", "diff", "file.rs", "/tmp/report.md",
+        );
+        assert!(
+            main.contains(needle_header),
+            "pr_review_prompt missing BORDERLINE CASES header"
+        );
+        assert!(
+            main.contains(needle_1),
+            "pr_review_prompt missing borderline 1"
+        );
+        assert!(
+            main.contains(needle_2),
+            "pr_review_prompt missing borderline 2"
+        );
+        assert!(
+            main.contains(needle_3),
+            "pr_review_prompt missing borderline 3"
+        );
+
+        // Per-file pr_review prompt (multipass)
+        let per_file = pr_review_per_file_prompt(
+            1, "test", "src/foo.rs", "diff", "/tmp/report.md",
+        );
+        assert!(
+            per_file.contains(needle_header),
+            "pr_review_per_file_prompt missing BORDERLINE CASES header"
+        );
+        assert!(
+            per_file.contains(needle_1),
+            "pr_review_per_file_prompt missing borderline 1"
+        );
+        assert!(
+            per_file.contains(needle_2),
+            "pr_review_per_file_prompt missing borderline 2"
+        );
+        assert!(
+            per_file.contains(needle_3),
+            "pr_review_per_file_prompt missing borderline 3"
+        );
+
+        // Integration pr_review prompt (multipass)
+        let integration = pr_review_integration_prompt(
+            1, "test", "body", "feat", "main", "file.rs", "{}", "/tmp/report.md",
+        );
+        assert!(
+            integration.contains(needle_header),
+            "pr_review_integration_prompt missing BORDERLINE CASES header"
+        );
+        assert!(
+            integration.contains(needle_1),
+            "pr_review_integration_prompt missing borderline 1"
+        );
+        assert!(
+            integration.contains(needle_2),
+            "pr_review_integration_prompt missing borderline 2"
+        );
+        assert!(
+            integration.contains(needle_3),
+            "pr_review_integration_prompt missing borderline 3"
         );
     }
 
