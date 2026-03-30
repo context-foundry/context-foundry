@@ -824,7 +824,7 @@ pub fn compute_stats(
     // ── PR Review Stats (D58.1) ──
 
     let pr_reviews = if !pr_review_sessions.is_empty() {
-        let total_reviews = pr_review_sessions.len();
+        let total_reviews = pr_review_findings.len();
         let total_pr_cost: f64 = pr_review_costs.values().sum();
         let total_high: usize = pr_review_findings.iter().map(|r| r.high).sum();
         let total_medium: usize = pr_review_findings.iter().map(|r| r.medium).sum();
@@ -2129,8 +2129,79 @@ mod tests {
         assert!(report.phase_costs.is_empty());
 
         let pr = report.pr_reviews.as_ref().expect("pr_reviews should be Some");
-        assert_eq!(pr.total_reviews, 1);
+        assert_eq!(pr.total_reviews, 0);
         assert!((pr.total_cost_usd - 0.05).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_pr_review_orphaned_session_not_counted_as_review() {
+        // A PR review session starts but the agent crashes before emitting review_findings.
+        // total_reviews should be 0, but cost should still be tracked.
+        let p = "/test/project";
+        let events = vec![
+            make_event(
+                "2025-01-15T11:00:00Z", "pr-review-owner--repo-99", p, "session_started",
+                serde_json::json!({"type": "SessionStarted", "config": {"pr_number": 99}}),
+            ),
+            make_event(
+                "2025-01-15T11:01:00Z", "pr-review-owner--repo-99", p, "agent_done",
+                serde_json::json!({"type": "AgentDone", "role": "Reviewer", "success": false, "duration_secs": 45.0, "tokens_in": 3000, "tokens_out": 100, "cost_usd": 0.25, "context_pct": 20}),
+            ),
+            make_event(
+                "2025-01-15T11:02:00Z", "pr-review-owner--repo-99", p, "session_ended",
+                serde_json::json!({"type": "SessionEnded", "total_tasks": 0, "feat_count": 0, "wip_count": 0, "total_cost_usd": 0.25, "duration_secs": 120.0}),
+            ),
+        ];
+
+        let report = compute_stats(&events, 0, 7, None, false);
+
+        let pr = report.pr_reviews.as_ref().expect("pr_reviews should be Some (session existed)");
+        assert_eq!(pr.total_reviews, 0, "orphaned session (no review_findings) should not count as a completed review");
+        assert!((pr.total_cost_usd - 0.25).abs() < 0.001, "cost should still be tracked even for failed reviews");
+        assert_eq!(pr.findings_high, 0);
+        assert_eq!(pr.findings_medium, 0);
+        assert_eq!(pr.findings_low, 0);
+        assert!(pr.reviews.is_empty());
+    }
+
+    #[test]
+    fn test_pr_review_mixed_completed_and_orphaned() {
+        // Two PR review sessions: one completes with findings, one crashes.
+        // total_reviews should be 1 (only the completed one).
+        let p = "/test/project";
+        let events = vec![
+            // Completed review
+            make_event(
+                "2025-01-15T11:00:00Z", "pr-review-owner--repo-42", p, "session_started",
+                serde_json::json!({"type": "SessionStarted", "config": {"pr_number": 42}}),
+            ),
+            make_event(
+                "2025-01-15T11:01:00Z", "pr-review-owner--repo-42", p, "agent_done",
+                serde_json::json!({"type": "AgentDone", "role": "Reviewer", "success": true, "duration_secs": 60.0, "tokens_in": 5000, "tokens_out": 2000, "cost_usd": 0.50, "context_pct": 40}),
+            ),
+            make_event(
+                "2025-01-15T11:02:00Z", "pr-review-owner--repo-42", p, "review_findings",
+                serde_json::json!({"type": "ReviewFindings", "task_id": "pr-review-owner--repo-42", "high": 1, "medium": 0, "low": 2, "findings_json": "[]"}),
+            ),
+            // Orphaned review (crashed, no review_findings)
+            make_event(
+                "2025-01-15T12:00:00Z", "pr-review-owner--repo-55", p, "session_started",
+                serde_json::json!({"type": "SessionStarted", "config": {"pr_number": 55}}),
+            ),
+            make_event(
+                "2025-01-15T12:01:00Z", "pr-review-owner--repo-55", p, "agent_done",
+                serde_json::json!({"type": "AgentDone", "role": "Reviewer", "success": false, "duration_secs": 30.0, "tokens_in": 2000, "tokens_out": 50, "cost_usd": 0.15, "context_pct": 10}),
+            ),
+        ];
+
+        let report = compute_stats(&events, 0, 7, None, false);
+
+        let pr = report.pr_reviews.as_ref().expect("pr_reviews should be Some");
+        assert_eq!(pr.total_reviews, 1, "only the completed review should count");
+        assert!((pr.total_cost_usd - 0.65).abs() < 0.001, "total cost should include both sessions ($0.50 + $0.15)");
+        assert_eq!(pr.findings_high, 1);
+        assert_eq!(pr.findings_low, 2);
+        assert_eq!(pr.reviews.len(), 1);
     }
 
     #[test]

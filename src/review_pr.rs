@@ -377,25 +377,51 @@ async fn run_multipass_pr_review(
     review_report: &Path,
     review_report_relative: &str,
 ) -> (Result<AgentResult>, AgentUsage, serde_json::Value) {
-    eprintln!(
-        "Multi-pass PR review: {} files exceed threshold, running per-file analysis",
-        metadata.changed_files.len()
-    );
-
     let file_diffs = split_diff_by_file(diff);
     let diff_map: std::collections::HashMap<&str, &str> = file_diffs
         .iter()
         .map(|(f, d)| (f.as_str(), d.as_str()))
         .collect();
 
+    // Filter out files not in the diff (binary, submodule, rename-limited) or with empty/binary diff content
+    let reviewable_files: Vec<&String> = metadata
+        .changed_files
+        .iter()
+        .filter(|file| match diff_map.get(file.as_str()) {
+            None => {
+                eprintln!(
+                    "Skipping {} (not in diff -- binary, submodule, or rename-limited)",
+                    file
+                );
+                false
+            }
+            Some(diff_content) => {
+                let is_binary_diff = diff_content.contains("Binary files ")
+                    && diff_content.contains(" differ");
+                if diff_content.trim().is_empty() || is_binary_diff {
+                    eprintln!("Skipping {} (binary or empty diff)", file);
+                    false
+                } else {
+                    true
+                }
+            }
+        })
+        .collect();
+
+    eprintln!(
+        "Multi-pass PR review: {}/{} files have reviewable diffs, running per-file analysis",
+        reviewable_files.len(),
+        metadata.changed_files.len()
+    );
+
     let mut total_usage = AgentUsage::default();
     let mut all_per_file_findings: Vec<serde_json::Value> = Vec::new();
 
-    for (i, file) in metadata.changed_files.iter().enumerate() {
+    for (i, file) in reviewable_files.iter().enumerate() {
         eprintln!(
             "Reviewing file {}/{}: {}",
             i + 1,
-            metadata.changed_files.len(),
+            reviewable_files.len(),
             file
         );
 
@@ -1001,6 +1027,16 @@ mod tests {
         let result = split_diff_by_file(diff);
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].0, "src/only.rs");
+    }
+
+    #[test]
+    fn test_split_diff_by_file_binary() {
+        let diff = "diff --git a/image.png b/image.png\nBinary files /dev/null and b/image.png differ\ndiff --git a/src/main.rs b/src/main.rs\nindex abc..def 100644\n--- a/src/main.rs\n+++ b/src/main.rs\n@@ -1,2 +1,3 @@\n+new line";
+        let result = split_diff_by_file(diff);
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].0, "image.png");
+        assert!(result[0].1.contains("Binary files"));
+        assert_eq!(result[1].0, "src/main.rs");
     }
 
     #[test]
