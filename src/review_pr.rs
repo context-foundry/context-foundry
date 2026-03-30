@@ -27,6 +27,56 @@ struct PrMetadata {
     changed_files: Vec<String>,
 }
 
+// ─── Security: Project Rules Neutralization ─────────────────────
+
+/// RAII guard that renames CLAUDE.md and .claude/rules/ to prevent the Claude CLI
+/// from auto-loading untrusted project rules. Restores on drop.
+struct ProjectRulesGuard {
+    renamed: Vec<(PathBuf, PathBuf)>,
+}
+
+impl Drop for ProjectRulesGuard {
+    fn drop(&mut self) {
+        for (disabled_path, original_path) in &self.renamed {
+            let _ = std::fs::rename(disabled_path, original_path);
+        }
+    }
+}
+
+fn neutralize_project_rules(project_dir: &Path) -> ProjectRulesGuard {
+    let candidates = [
+        project_dir.join("CLAUDE.md"),
+        project_dir.join(".claude").join("CLAUDE.md"),
+        project_dir.join(".claude").join("rules"),
+    ];
+
+    let mut renamed: Vec<(PathBuf, PathBuf)> = Vec::new();
+
+    for path in &candidates {
+        if path.exists() {
+            let disabled_path = path.with_file_name(format!(
+                "{}.foundry-disabled",
+                path.file_name().unwrap().to_string_lossy()
+            ));
+            match std::fs::rename(path, &disabled_path) {
+                Ok(()) => renamed.push((disabled_path, path.clone())),
+                Err(err) => {
+                    eprintln!("Warning: failed to neutralize {}: {}", path.display(), err);
+                }
+            }
+        }
+    }
+
+    if !renamed.is_empty() {
+        eprintln!(
+            "Neutralized {} project rule source(s) for secure PR review",
+            renamed.len()
+        );
+    }
+
+    ProjectRulesGuard { renamed }
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────
 
 fn parse_output_mode(s: &str) -> Result<ReviewPrOutput> {
@@ -501,7 +551,7 @@ async fn run_multipass_pr_review(
             session_id,
             project_dir,
             ObservatoryEvent::AgentStarted {
-                role: "Reviewer".to_string(),
+                role: "Reviewer (per-file)".to_string(),
                 provider: pr_provider.to_string(),
                 model: pr_model.to_string(),
             },
@@ -534,7 +584,7 @@ async fn run_multipass_pr_review(
             session_id,
             project_dir,
             ObservatoryEvent::AgentDone {
-                role: "Reviewer".to_string(),
+                role: "Reviewer (per-file)".to_string(),
                 success: result.is_ok(),
                 duration_secs: per_file_start.elapsed().as_secs_f64(),
                 tokens_in: agent_usage.tokens_in,
@@ -623,7 +673,7 @@ async fn run_multipass_pr_review(
         session_id,
         project_dir,
         ObservatoryEvent::AgentStarted {
-            role: "Reviewer".to_string(),
+            role: "Reviewer (integration)".to_string(),
             provider: pr_provider.to_string(),
             model: pr_model.to_string(),
         },
@@ -656,7 +706,7 @@ async fn run_multipass_pr_review(
         session_id,
         project_dir,
         ObservatoryEvent::AgentDone {
-            role: "Reviewer".to_string(),
+            role: "Reviewer (integration)".to_string(),
             success: integration_result.is_ok(),
             duration_secs: integration_start.elapsed().as_secs_f64(),
             tokens_in: agent_usage.tokens_in,
@@ -713,6 +763,15 @@ pub async fn run(
         Config::load_global_only()
     } else {
         Config::load(project_dir)
+    };
+
+    // Neutralize CLAUDE.md and .claude/rules/ so the Claude CLI subprocess
+    // does not auto-load untrusted project rules from the PR checkout.
+    // The guard restores the files when it goes out of scope.
+    let _rules_guard = if ignore_project_config {
+        Some(neutralize_project_rules(project_dir))
+    } else {
+        None
     };
 
     // Resolve PR review model/provider with fallback to reviewer defaults
@@ -1490,5 +1549,43 @@ mod tests {
         let output = build_json_output(42, 7, &findings, 0.10, 15.0).unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&output).unwrap();
         assert_eq!(parsed["summary"]["files_reviewed"], 7);
+    }
+
+    #[test]
+    fn test_neutralize_project_rules_renames_and_restores() {
+        let tmp = std::env::temp_dir().join("foundry-test-neutralize");
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(tmp.join(".claude/rules")).unwrap();
+        std::fs::write(tmp.join("CLAUDE.md"), "# Instructions").unwrap();
+        std::fs::write(tmp.join(".claude/CLAUDE.md"), "# More").unwrap();
+        std::fs::write(tmp.join(".claude/rules/test.md"), "rule").unwrap();
+
+        {
+            let guard = neutralize_project_rules(&tmp);
+            assert!(!tmp.join("CLAUDE.md").exists());
+            assert!(!tmp.join(".claude/CLAUDE.md").exists());
+            assert!(!tmp.join(".claude/rules").exists());
+            assert_eq!(guard.renamed.len(), 3);
+        }
+        // Guard dropped -- files restored
+        assert!(tmp.join("CLAUDE.md").exists());
+        assert!(tmp.join(".claude/CLAUDE.md").exists());
+        assert!(tmp.join(".claude/rules").exists());
+        assert_eq!(
+            std::fs::read_to_string(tmp.join("CLAUDE.md")).unwrap(),
+            "# Instructions"
+        );
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn test_neutralize_project_rules_no_files() {
+        let tmp = std::env::temp_dir().join("foundry-test-neutralize-empty");
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+
+        let guard = neutralize_project_rules(&tmp);
+        assert!(guard.renamed.is_empty());
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 }

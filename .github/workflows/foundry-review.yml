@@ -55,6 +55,10 @@ jobs:
           FOUNDRY_AGENT_TIMEOUT_SECS: ${{ vars.FOUNDRY_AGENT_TIMEOUT_SECS }}
           FOUNDRY_PR_REVIEW_MULTIPASS_THRESHOLD: ${{ vars.FOUNDRY_PR_REVIEW_MULTIPASS_THRESHOLD }}
         run: |
+          # --ignore-project-config: prevents the PR checkout's .foundry.json from
+          # influencing review config, AND neutralizes CLAUDE.md / .claude/rules/
+          # so the Claude CLI subprocess cannot load untrusted project rules injected
+          # by a malicious PR. See D68.1 for details.
           foundry review-pr "$PR_NUMBER" \
             --repo "$REPO" \
             --output comment \
