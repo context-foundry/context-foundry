@@ -17,6 +17,7 @@ mod orchestrator;
 mod tmux;
 mod sandbox;
 mod stats;
+mod review_pr;
 mod budget;
 mod patterns;
 mod prompts;
@@ -72,6 +73,17 @@ enum Commands {
     Update,
     /// Extract patterns from build artifacts (.buildloop/)
     Extract,
+    /// Review a GitHub PR with the foundry reviewer agent
+    ReviewPr {
+        /// PR number to review
+        pr_number: u32,
+        /// Repository in OWNER/REPO format (defaults to git remote origin)
+        #[arg(long)]
+        repo: Option<String>,
+        /// Output format: stdout, json, or comment (default: stdout)
+        #[arg(long, default_value = "stdout")]
+        output: String,
+    },
     /// Show observatory analytics
     Stats {
         /// Number of days to look back (default: 7)
@@ -136,6 +148,13 @@ async fn main() -> Result<()> {
         }
         Commands::Extract => {
             app::run_extract(&project_dir)?;
+        }
+        Commands::ReviewPr {
+            pr_number,
+            repo,
+            output,
+        } => {
+            review_pr::run(&project_dir, pr_number, repo, &output).await?;
         }
         Commands::Stats {
             days,
