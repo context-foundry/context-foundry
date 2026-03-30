@@ -17,6 +17,8 @@ pub struct StatsReport {
     pub phase_costs: Vec<PhaseCostEntry>,
     pub quality: Quality,
     pub patterns: PatternsInfo,
+    pub trust: Option<TrustDashboard>,
+    pub trend: Option<TrendData>,
 }
 
 #[derive(Debug, Serialize)]
@@ -98,9 +100,52 @@ pub struct PatternEffectiveness {
     pub low_signal: bool,
 }
 
+#[derive(Debug, Serialize)]
+pub struct TrustDashboard {
+    pub acceptance_rate: Option<f64>,
+    pub completed_tasks: usize,
+    pub feat_tasks: usize,
+    pub review_rescue_rate: Option<f64>,
+    pub rescued_tasks: usize,
+    pub tasks_with_findings: usize,
+    pub longest_feat_streak: usize,
+    pub model_comparisons: Vec<ModelComparison>,
+    pub regression_proxies: Vec<RegressionProxy>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ModelComparison {
+    pub model_key: String,
+    pub task_count: usize,
+    pub feat_rate: f64,
+    pub avg_cost_per_task: f64,
+    pub avg_duration_per_task: f64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct RegressionProxy {
+    pub discovery_task_id: String,
+    pub discovery_description: String,
+    pub prior_feat_task_id: String,
+    pub shared_tokens: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct TrendData {
+    pub daily_pass_rate: Vec<DailyMetric>,
+    pub daily_avg_cost: Vec<DailyMetric>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct DailyMetric {
+    pub date: String,
+    pub value: f64,
+    pub count: usize,
+}
+
 // ─── Entry Point ─────────────────────────────────────────────
 
-pub fn run_stats(days: u32, project: &Path, output: &str) -> Result<()> {
+pub fn run_stats(days: u32, project: &Path, output: &str, trend: bool) -> Result<()> {
     match output {
         "table" | "json" => {}
         other => bail!("invalid output format '{}': expected 'table' or 'json'", other),
@@ -114,6 +159,7 @@ pub fn run_stats(days: u32, project: &Path, output: &str) -> Result<()> {
         skipped,
         days,
         Some(&canonical.display().to_string()),
+        trend,
     );
 
     match output {
@@ -204,6 +250,33 @@ pub fn load_events(
     Ok((events, skipped))
 }
 
+// ─── Internal Types ─────────────────────────────────────────
+
+struct CompletedTask {
+    task_id: String,
+    verdict: String,
+    #[allow(dead_code)]
+    complexity: String,
+    total_cost_usd: f64,
+    total_duration_secs: f64,
+    findings_high: usize,
+    findings_medium: usize,
+    #[allow(dead_code)]
+    findings_low: usize,
+    #[allow(dead_code)]
+    phases_run: String,
+    builder_provider: String,
+    builder_model: String,
+    #[allow(dead_code)]
+    reviewer_provider: String,
+    #[allow(dead_code)]
+    reviewer_model: String,
+    #[allow(dead_code)]
+    commit_sha: String,
+    timestamp: String,
+    description: String,
+}
+
 // ─── Computation ─────────────────────────────────────────────
 
 pub fn compute_stats(
@@ -211,6 +284,7 @@ pub fn compute_stats(
     skipped: usize,
     days: u32,
     project: Option<&str>,
+    trend: bool,
 ) -> StatsReport {
     let today = Utc::now().date_naive();
     let cutoff = today - chrono::Duration::days(days as i64);
@@ -245,6 +319,10 @@ pub fn compute_stats(
     let mut pattern_citation_counts: HashMap<String, usize> = HashMap::new();
     let mut pattern_cited_tasks: HashMap<String, HashSet<String>> = HashMap::new();
 
+    // TaskCompleted tracking (T24.3)
+    let mut completed_tasks: Vec<CompletedTask> = Vec::new();
+    let mut task_descriptions: HashMap<String, String> = HashMap::new();
+
     for (idx, ev) in events.iter().enumerate() {
         session_events
             .entry(ev.session_id.clone())
@@ -265,6 +343,9 @@ pub fn compute_stats(
                             (ev.session_id.clone(), task_id.to_string()),
                             complexity.to_string(),
                         );
+                    }
+                    if let Some(desc) = ev.payload.get("description").and_then(|v| v.as_str()) {
+                        task_descriptions.insert(task_id.to_string(), desc.to_string());
                     }
                 }
             }
@@ -354,6 +435,27 @@ pub fn compute_stats(
                         .or_default()
                         .insert(task_id.to_string());
                 }
+            }
+            "task_completed" => {
+                let tc = CompletedTask {
+                    task_id: ev.payload.get("task_id").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                    verdict: ev.payload.get("verdict").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                    complexity: ev.payload.get("complexity").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                    total_cost_usd: ev.payload.get("total_cost_usd").and_then(|v| v.as_f64()).unwrap_or(0.0),
+                    total_duration_secs: ev.payload.get("total_duration_secs").and_then(|v| v.as_f64()).unwrap_or(0.0),
+                    findings_high: ev.payload.get("findings_high").and_then(|v| v.as_u64()).unwrap_or(0) as usize,
+                    findings_medium: ev.payload.get("findings_medium").and_then(|v| v.as_u64()).unwrap_or(0) as usize,
+                    findings_low: ev.payload.get("findings_low").and_then(|v| v.as_u64()).unwrap_or(0) as usize,
+                    phases_run: ev.payload.get("phases_run").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                    builder_provider: ev.payload.get("builder_provider").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                    builder_model: ev.payload.get("builder_model").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                    reviewer_provider: ev.payload.get("reviewer_provider").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                    reviewer_model: ev.payload.get("reviewer_model").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                    commit_sha: ev.payload.get("commit_sha").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                    timestamp: ev.timestamp.clone(),
+                    description: String::new(),
+                };
+                completed_tasks.push(tc);
             }
             _ => {}
         }
@@ -508,6 +610,154 @@ pub fn compute_stats(
         .collect();
     effectiveness.sort_by(|a, b| b.injection_count.cmp(&a.injection_count));
 
+    // ── Trust Dashboard (T24.3) ──
+
+    // Fill descriptions for completed tasks
+    for ct in &mut completed_tasks {
+        if ct.description.is_empty() {
+            if let Some(desc) = task_descriptions.get(&ct.task_id) {
+                ct.description = desc.clone();
+            }
+        }
+    }
+
+    let trust = if !completed_tasks.is_empty() {
+        let total_completed = completed_tasks.len();
+        let feat_completed = completed_tasks.iter().filter(|t| t.verdict == "feat").count();
+
+        let acceptance_rate = if total_completed > 0 {
+            Some(feat_completed as f64 / total_completed as f64)
+        } else {
+            None
+        };
+
+        // Review rescue rate: tasks with findings_high + findings_medium > 0 that ended as feat
+        let tasks_with_hi_med: Vec<&CompletedTask> = completed_tasks
+            .iter()
+            .filter(|t| t.findings_high + t.findings_medium > 0)
+            .collect();
+        let rescued = tasks_with_hi_med.iter().filter(|t| t.verdict == "feat").count();
+        let review_rescue_rate = if !tasks_with_hi_med.is_empty() {
+            Some(rescued as f64 / tasks_with_hi_med.len() as f64)
+        } else {
+            None
+        };
+
+        // Longest feat streak: sort by timestamp, find max consecutive feats
+        let mut sorted_tasks: Vec<&CompletedTask> = completed_tasks.iter().collect();
+        sorted_tasks.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
+        let mut max_streak = 0usize;
+        let mut current_streak = 0usize;
+        for t in &sorted_tasks {
+            if t.verdict == "feat" {
+                current_streak += 1;
+                if current_streak > max_streak {
+                    max_streak = current_streak;
+                }
+            } else {
+                current_streak = 0;
+            }
+        }
+
+        // Model comparison: group by builder_provider:builder_model
+        let mut model_groups: HashMap<String, Vec<&CompletedTask>> = HashMap::new();
+        for t in &completed_tasks {
+            let key = format!("{}:{}", t.builder_provider, t.builder_model);
+            model_groups.entry(key).or_default().push(t);
+        }
+        let mut model_comparisons: Vec<ModelComparison> = model_groups
+            .into_iter()
+            .map(|(key, tasks)| {
+                let count = tasks.len();
+                let feats = tasks.iter().filter(|t| t.verdict == "feat").count();
+                let total_cost: f64 = tasks.iter().map(|t| t.total_cost_usd).sum();
+                let total_dur: f64 = tasks.iter().map(|t| t.total_duration_secs).sum();
+                ModelComparison {
+                    model_key: key,
+                    task_count: count,
+                    feat_rate: if count > 0 { feats as f64 / count as f64 } else { 0.0 },
+                    avg_cost_per_task: if count > 0 { total_cost / count as f64 } else { 0.0 },
+                    avg_duration_per_task: if count > 0 { total_dur / count as f64 } else { 0.0 },
+                }
+            })
+            .collect();
+        model_comparisons.sort_by(|a, b| b.task_count.cmp(&a.task_count));
+
+        // Regression proxy
+        let regression_proxies = compute_regression_proxies(&completed_tasks);
+
+        Some(TrustDashboard {
+            acceptance_rate,
+            completed_tasks: total_completed,
+            feat_tasks: feat_completed,
+            review_rescue_rate,
+            rescued_tasks: rescued,
+            tasks_with_findings: tasks_with_hi_med.len(),
+            longest_feat_streak: max_streak,
+            model_comparisons,
+            regression_proxies,
+        })
+    } else {
+        // Fallback to derived metrics from T24.1-style events
+        let total_committed = feat_count + wip_count;
+        if total_committed > 0 {
+            let acceptance_rate = Some(feat_count as f64 / total_committed as f64);
+
+            let rescued = tasks_with_findings
+                .iter()
+                .filter(|key| {
+                    task_committed.get(*key).map(|ct| ct.to_lowercase() == "feat").unwrap_or(false)
+                })
+                .count();
+            let review_rescue_rate = if !tasks_with_findings.is_empty() {
+                Some(rescued as f64 / tasks_with_findings.len() as f64)
+            } else {
+                None
+            };
+
+            // Longest feat streak from committed events (sorted by timestamp)
+            let mut committed_events: Vec<&EventEnvelope> = events
+                .iter()
+                .filter(|e| e.event_type == "committed")
+                .collect();
+            committed_events.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
+            let mut max_streak = 0usize;
+            let mut current_streak = 0usize;
+            for ev in &committed_events {
+                let ct = ev.payload.get("commit_type").and_then(|v| v.as_str()).unwrap_or("");
+                if ct.to_lowercase() == "feat" {
+                    current_streak += 1;
+                    if current_streak > max_streak {
+                        max_streak = current_streak;
+                    }
+                } else {
+                    current_streak = 0;
+                }
+            }
+
+            Some(TrustDashboard {
+                acceptance_rate,
+                completed_tasks: total_committed,
+                feat_tasks: feat_count,
+                review_rescue_rate,
+                rescued_tasks: rescued,
+                tasks_with_findings: tasks_with_findings.len(),
+                longest_feat_streak: max_streak,
+                model_comparisons: vec![],
+                regression_proxies: vec![],
+            })
+        } else {
+            None
+        }
+    };
+
+    // ── Trend Data (T24.3) ──
+    let trend_data = if trend {
+        Some(compute_trend_data(&completed_tasks, events, days))
+    } else {
+        None
+    };
+
     // ── Assemble report ──
 
     StatsReport {
@@ -556,7 +806,194 @@ pub fn compute_stats(
             top_patterns,
             effectiveness,
         },
+        trust,
+        trend: trend_data,
     }
+}
+
+// ─── Helper Functions (T24.3) ────────────────────────────────
+
+fn normalize_tokens(text: &str) -> Vec<String> {
+    static STOPWORDS: &[&str] = &[
+        "a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for",
+        "of", "with", "by", "from", "is", "are", "was", "were", "be", "been",
+        "being", "have", "has", "had", "do", "does", "did", "will", "would",
+        "could", "should", "may", "might", "shall", "can", "need", "must",
+        "it", "its", "this", "that", "these", "those", "not", "no", "so",
+        "if", "then", "else", "when", "up", "out", "all", "each", "every",
+        "both", "few", "more", "most", "other", "some", "such", "only",
+        "into", "over", "after", "before", "between", "under", "above",
+        "add", "update", "fix", "remove", "change", "make", "set", "get",
+    ];
+    text.to_lowercase()
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|w| w.len() >= 3 && !STOPWORDS.contains(w))
+        .map(|w| w.to_string())
+        .collect()
+}
+
+fn compute_regression_proxies(completed_tasks: &[CompletedTask]) -> Vec<RegressionProxy> {
+    let mut sorted: Vec<&CompletedTask> = completed_tasks.iter().collect();
+    sorted.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
+
+    let mut feat_history: Vec<(&str, &str, Vec<String>)> = Vec::new();
+    let mut proxies: Vec<RegressionProxy> = Vec::new();
+
+    for task in &sorted {
+        if task.verdict == "feat" {
+            let tokens = normalize_tokens(&task.description);
+            feat_history.push((&task.task_id, &task.description, tokens));
+        }
+
+        if task.task_id.starts_with('D') || task.task_id.starts_with('d') {
+            let disc_tokens = normalize_tokens(&task.description);
+            for (feat_id, _feat_desc, feat_tokens) in &feat_history {
+                let shared: Vec<String> = disc_tokens
+                    .iter()
+                    .filter(|t| feat_tokens.contains(t))
+                    .cloned()
+                    .collect();
+                if shared.len() >= 2 {
+                    proxies.push(RegressionProxy {
+                        discovery_task_id: task.task_id.clone(),
+                        discovery_description: task.description.clone(),
+                        prior_feat_task_id: feat_id.to_string(),
+                        shared_tokens: shared,
+                    });
+                    break;
+                }
+            }
+        }
+    }
+
+    proxies
+}
+
+fn compute_trend_data(
+    completed_tasks: &[CompletedTask],
+    events: &[EventEnvelope],
+    days: u32,
+) -> TrendData {
+    let today = Utc::now().date_naive();
+    let cutoff = today - chrono::Duration::days(days as i64);
+
+    if !completed_tasks.is_empty() {
+        let mut daily: BTreeMap<String, (usize, usize, f64)> = BTreeMap::new();
+
+        for task in completed_tasks {
+            let date_str = task.timestamp.get(..10).unwrap_or("").to_string();
+            if date_str.is_empty() {
+                continue;
+            }
+            let entry = daily.entry(date_str).or_insert((0, 0, 0.0));
+            entry.1 += 1;
+            if task.verdict == "feat" {
+                entry.0 += 1;
+            }
+            entry.2 += task.total_cost_usd;
+        }
+
+        let daily_pass_rate: Vec<DailyMetric> = daily
+            .iter()
+            .map(|(date, (feats, total, _))| DailyMetric {
+                date: date.clone(),
+                value: if *total > 0 { *feats as f64 / *total as f64 } else { 0.0 },
+                count: *total,
+            })
+            .collect();
+
+        let daily_avg_cost: Vec<DailyMetric> = daily
+            .iter()
+            .map(|(date, (_, total, cost))| DailyMetric {
+                date: date.clone(),
+                value: if *total > 0 { *cost / *total as f64 } else { 0.0 },
+                count: *total,
+            })
+            .collect();
+
+        TrendData {
+            daily_pass_rate,
+            daily_avg_cost,
+        }
+    } else {
+        // Fallback: derive from committed events
+        let mut daily: BTreeMap<String, (usize, usize)> = BTreeMap::new();
+        let mut daily_cost: BTreeMap<String, (f64, usize)> = BTreeMap::new();
+
+        for ev in events {
+            let date_str = ev.timestamp.get(..10).unwrap_or("").to_string();
+            if date_str.is_empty() {
+                continue;
+            }
+            match ev.event_type.as_str() {
+                "committed" => {
+                    let entry = daily.entry(date_str).or_insert((0, 0));
+                    entry.1 += 1;
+                    let ct = ev.payload.get("commit_type").and_then(|v| v.as_str()).unwrap_or("");
+                    if ct.to_lowercase() == "feat" {
+                        entry.0 += 1;
+                    }
+                }
+                "agent_done" => {
+                    let cost = ev.payload.get("cost_usd").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                    let entry = daily_cost.entry(date_str).or_insert((0.0, 0));
+                    entry.0 += cost;
+                    entry.1 += 1;
+                }
+                _ => {}
+            }
+        }
+
+        let _ = cutoff;
+
+        let daily_pass_rate: Vec<DailyMetric> = daily
+            .iter()
+            .map(|(date, (feats, total))| DailyMetric {
+                date: date.clone(),
+                value: if *total > 0 { *feats as f64 / *total as f64 } else { 0.0 },
+                count: *total,
+            })
+            .collect();
+
+        let daily_avg_cost: Vec<DailyMetric> = daily
+            .iter()
+            .map(|(date, (_, total))| {
+                let cost_data = daily_cost.get(date);
+                let total_cost = cost_data.map(|(c, _)| *c).unwrap_or(0.0);
+                DailyMetric {
+                    date: date.clone(),
+                    value: if *total > 0 { total_cost / *total as f64 } else { 0.0 },
+                    count: *total,
+                }
+            })
+            .collect();
+
+        TrendData {
+            daily_pass_rate,
+            daily_avg_cost,
+        }
+    }
+}
+
+fn sparkline(values: &[f64]) -> String {
+    if values.is_empty() {
+        return String::new();
+    }
+    let chars = ['_', '.', '-', '~', '=', '#', '@', '*'];
+    let min = values.iter().cloned().fold(f64::INFINITY, f64::min);
+    let max = values.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    let range = max - min;
+    values
+        .iter()
+        .map(|v| {
+            if range == 0.0 {
+                chars[chars.len() / 2]
+            } else {
+                let idx = (((v - min) / range) * (chars.len() - 1) as f64).round() as usize;
+                chars[idx.min(chars.len() - 1)]
+            }
+        })
+        .collect()
 }
 
 // ─── Table Output ────────────────────────────────────────────
@@ -699,6 +1136,89 @@ fn print_table(report: &StatsReport) {
             }
         }
     }
+
+    // Trust Dashboard (T24.3)
+    if let Some(ref trust) = report.trust {
+        println!();
+        println!("Trust Dashboard");
+        println!("---------------");
+        match trust.acceptance_rate {
+            Some(r) => println!(
+                "  Acceptance rate:      {:.1}%  ({} feat / {} completed)",
+                r * 100.0, trust.feat_tasks, trust.completed_tasks
+            ),
+            None => println!("  Acceptance rate:      n/a  (no completed tasks)"),
+        }
+        match trust.review_rescue_rate {
+            Some(r) => println!(
+                "  Review rescue rate:   {:.1}%  ({} rescued / {} with findings)",
+                r * 100.0, trust.rescued_tasks, trust.tasks_with_findings
+            ),
+            None => println!("  Review rescue rate:   n/a  (no tasks with findings)"),
+        }
+        println!("  Longest feat streak:  {}", trust.longest_feat_streak);
+
+        if !trust.model_comparisons.is_empty() {
+            println!();
+            println!("  Model Comparison:");
+            println!(
+                "  {:<30} {:>6} {:>8} {:>10} {:>10}",
+                "Model", "Tasks", "Feat %", "Avg Cost", "Avg Dur"
+            );
+            for mc in &trust.model_comparisons {
+                println!(
+                    "  {:<30} {:>6} {:>7.1}% {:>9.2} {:>9.1}s",
+                    mc.model_key, mc.task_count, mc.feat_rate * 100.0,
+                    mc.avg_cost_per_task, mc.avg_duration_per_task
+                );
+            }
+        }
+
+        if !trust.regression_proxies.is_empty() {
+            println!();
+            println!("  Regression Proxies (heuristic -- shared token overlap, not causal):");
+            for rp in &trust.regression_proxies {
+                println!(
+                    "    {} may revisit {} (shared: {})",
+                    rp.discovery_task_id,
+                    rp.prior_feat_task_id,
+                    rp.shared_tokens.join(", ")
+                );
+            }
+        }
+    }
+
+    // Trend (T24.3)
+    if let Some(ref trend) = report.trend {
+        println!();
+        println!("Trend");
+        println!("-----");
+        if !trend.daily_pass_rate.is_empty() {
+            let values: Vec<f64> = trend.daily_pass_rate.iter().map(|d| d.value).collect();
+            let spark = sparkline(&values);
+            let first = &trend.daily_pass_rate[0].date;
+            let last = &trend.daily_pass_rate[trend.daily_pass_rate.len() - 1].date;
+            println!("  Pass rate:  {} .. {}  [{}]", first, last, spark);
+            for d in &trend.daily_pass_rate {
+                println!("    {}  {:.0}%  ({} tasks)", d.date, d.value * 100.0, d.count);
+            }
+        } else {
+            println!("  Pass rate:  (no data)");
+        }
+        println!();
+        if !trend.daily_avg_cost.is_empty() {
+            let values: Vec<f64> = trend.daily_avg_cost.iter().map(|d| d.value).collect();
+            let spark = sparkline(&values);
+            let first = &trend.daily_avg_cost[0].date;
+            let last = &trend.daily_avg_cost[trend.daily_avg_cost.len() - 1].date;
+            println!("  Avg cost:   {} .. {}  [{}]", first, last, spark);
+            for d in &trend.daily_avg_cost {
+                println!("    {}  ${:.2}  ({} tasks)", d.date, d.value, d.count);
+            }
+        } else {
+            println!("  Avg cost:   (no data)");
+        }
+    }
 }
 
 // ─── Tests ───────────────────────────────────────────────────
@@ -782,7 +1302,7 @@ mod tests {
 
     #[test]
     fn test_empty_report() {
-        let report = compute_stats(&[], 0, 7, None);
+        let report = compute_stats(&[], 0, 7, None, false);
         assert_eq!(report.summary.total_sessions, 0);
         assert_eq!(report.summary.total_tasks, 0);
         assert_eq!(report.summary.total_cost_usd, 0.0);
@@ -795,7 +1315,7 @@ mod tests {
     #[test]
     fn test_summary_metrics() {
         let events = synthetic_session();
-        let report = compute_stats(&events, 0, 7, None);
+        let report = compute_stats(&events, 0, 7, None, false);
 
         assert_eq!(report.summary.total_sessions, 1);
         assert_eq!(report.summary.total_tasks, 2);
@@ -808,7 +1328,7 @@ mod tests {
     #[test]
     fn test_phase_costs() {
         let events = synthetic_session();
-        let report = compute_stats(&events, 0, 7, None);
+        let report = compute_stats(&events, 0, 7, None, false);
 
         // builder: 2 invocations (0.25 + 0.15 = 0.40)
         let builder = report
@@ -834,7 +1354,7 @@ mod tests {
     #[test]
     fn test_pass_rate_by_complexity() {
         let events = synthetic_session();
-        let report = compute_stats(&events, 0, 7, None);
+        let report = compute_stats(&events, 0, 7, None, false);
 
         // medium: T1 committed as feat -> 100%
         let medium = report
@@ -862,7 +1382,7 @@ mod tests {
     #[test]
     fn test_task_cost_boundaries() {
         let events = synthetic_session();
-        let report = compute_stats(&events, 0, 7, None);
+        let report = compute_stats(&events, 0, 7, None, false);
 
         // T1 cost: planner(0.05) + builder(0.25) = 0.30
         let t1 = report
@@ -886,7 +1406,7 @@ mod tests {
     #[test]
     fn test_quality_signals() {
         let events = synthetic_session();
-        let report = compute_stats(&events, 0, 7, None);
+        let report = compute_stats(&events, 0, 7, None, false);
 
         // 2 reviewed tasks, 1 with findings (T2 has high=1)
         assert_eq!(report.quality.tasks_reviewed, 2);
@@ -902,7 +1422,7 @@ mod tests {
     #[test]
     fn test_pattern_totals() {
         let events = synthetic_session();
-        let report = compute_stats(&events, 0, 7, None);
+        let report = compute_stats(&events, 0, 7, None, false);
 
         assert_eq!(report.patterns.total_injections, 1);
         assert_eq!(report.patterns.unique_patterns, 2);
@@ -930,7 +1450,7 @@ mod tests {
                 serde_json::json!({"task_id": "T1", "phase": "builder", "target_pct": 80, "actual_pct": 95, "recovery_action": "skip_doubt"}),
             ),
         ];
-        let report = compute_stats(&events, 0, 7, None);
+        let report = compute_stats(&events, 0, 7, None, false);
 
         assert_eq!(report.quality.budget_overruns, 1);
         assert_eq!(report.quality.budgeted_executions, 2);
@@ -994,7 +1514,7 @@ mod tests {
     #[test]
     fn test_json_output_has_required_keys() {
         let events = synthetic_session();
-        let report = compute_stats(&events, 0, 7, Some("/test/project"));
+        let report = compute_stats(&events, 0, 7, Some("/test/project"), false);
 
         let json = serde_json::to_value(&report).unwrap();
         assert!(json.get("window").is_some());
@@ -1015,7 +1535,7 @@ mod tests {
                 serde_json::json!({"task_id": "T1", "sha": "abc", "commit_type": "feat"}),
             ),
         ];
-        let report = compute_stats(&events, 0, 7, None);
+        let report = compute_stats(&events, 0, 7, None, false);
         // No WIP commits -> ratio is None
         assert!(report.summary.feat_wip_ratio.is_none());
         assert_eq!(report.summary.feat_count, 1);
@@ -1054,7 +1574,7 @@ mod tests {
                 serde_json::json!({"type": "PatternCited", "task_id": "T1", "role": "Planner", "artifact": "current-plan.md", "pattern_id": "pat-b"}),
             ),
         ];
-        let report = compute_stats(&events, 0, 7, None);
+        let report = compute_stats(&events, 0, 7, None, false);
 
         // pat-a: injected 3 times, cited 2 times
         let pat_a = report.patterns.effectiveness.iter().find(|e| e.pattern_id == "pat-a").unwrap();
@@ -1084,7 +1604,7 @@ mod tests {
                 serde_json::json!({"type": "PatternInjected", "task_id": format!("T{}", i), "pattern_ids": ["pat-x"], "count": 1}),
             ));
         }
-        let report = compute_stats(&events, 0, 7, None);
+        let report = compute_stats(&events, 0, 7, None, false);
 
         let pat_x = report.patterns.effectiveness.iter().find(|e| e.pattern_id == "pat-x").unwrap();
         assert_eq!(pat_x.injection_count, 5);
@@ -1123,7 +1643,7 @@ mod tests {
                 serde_json::json!({"type": "PatternApplied", "task_id": "T1", "pattern_ids": ["pat-a"], "count": 1}),
             ),
         ];
-        let report = compute_stats(&events, 0, 7, None);
+        let report = compute_stats(&events, 0, 7, None, false);
 
         // pat-a: injected 3, cited 1
         let pat_a = report.patterns.effectiveness.iter().find(|e| e.pattern_id == "pat-a").unwrap();
@@ -1152,9 +1672,255 @@ mod tests {
                 serde_json::json!({"type": "PatternInjected", "task_id": "T2", "pattern_ids": ["pat-a"], "count": 1}),
             ),
         ];
-        let report = compute_stats(&events, 0, 7, None);
+        let report = compute_stats(&events, 0, 7, None, false);
 
         // pat-a only injected 2 times, below threshold of 3
         assert!(report.patterns.effectiveness.is_empty());
+    }
+
+    #[test]
+    fn test_trust_dashboard_from_task_completed() {
+        let p = "/test/project";
+        let s = "sess-1";
+        let events = vec![
+            make_event(
+                "2025-01-15T10:00:00Z", s, p, "session_started",
+                serde_json::json!({"type": "SessionStarted", "config": {}}),
+            ),
+            make_event(
+                "2025-01-15T10:01:00Z", s, p, "task_started",
+                serde_json::json!({"type": "TaskStarted", "task_id": "T1", "description": "Build feature X", "complexity": "Medium"}),
+            ),
+            make_event(
+                "2025-01-15T10:05:00Z", s, p, "task_completed",
+                serde_json::json!({
+                    "type": "TaskCompleted",
+                    "task_id": "T1", "verdict": "feat", "complexity": "Medium",
+                    "total_cost_usd": 0.50, "total_duration_secs": 240.0,
+                    "findings_high": 0, "findings_medium": 1, "findings_low": 2,
+                    "phases_run": "SPID", "builder_provider": "claude", "builder_model": "opus",
+                    "reviewer_provider": "claude", "reviewer_model": "sonnet",
+                    "commit_sha": "abc123"
+                }),
+            ),
+            make_event(
+                "2025-01-15T10:10:00Z", s, p, "task_started",
+                serde_json::json!({"type": "TaskStarted", "task_id": "T2", "description": "Fix bug Y", "complexity": "Simple"}),
+            ),
+            make_event(
+                "2025-01-15T10:15:00Z", s, p, "task_completed",
+                serde_json::json!({
+                    "type": "TaskCompleted",
+                    "task_id": "T2", "verdict": "wip", "complexity": "Simple",
+                    "total_cost_usd": 0.30, "total_duration_secs": 300.0,
+                    "findings_high": 2, "findings_medium": 1, "findings_low": 0,
+                    "phases_run": "-PID", "builder_provider": "claude", "builder_model": "opus",
+                    "reviewer_provider": "claude", "reviewer_model": "sonnet",
+                    "commit_sha": "def456"
+                }),
+            ),
+            make_event(
+                "2025-01-15T10:20:00Z", s, p, "task_completed",
+                serde_json::json!({
+                    "type": "TaskCompleted",
+                    "task_id": "T3", "verdict": "feat", "complexity": "Medium",
+                    "total_cost_usd": 0.40, "total_duration_secs": 200.0,
+                    "findings_high": 1, "findings_medium": 0, "findings_low": 1,
+                    "phases_run": "SPID", "builder_provider": "codex", "builder_model": "",
+                    "reviewer_provider": "claude", "reviewer_model": "sonnet",
+                    "commit_sha": "ghi789"
+                }),
+            ),
+        ];
+        let report = compute_stats(&events, 0, 7, None, false);
+        let trust = report.trust.unwrap();
+
+        // 3 completed, 2 feat -> 66.7%
+        assert_eq!(trust.completed_tasks, 3);
+        assert_eq!(trust.feat_tasks, 2);
+        assert!((trust.acceptance_rate.unwrap() - 2.0 / 3.0).abs() < 0.001);
+
+        // Tasks with findings (high+medium > 0): T1 (0+1=1), T2 (2+1=3), T3 (1+0=1) -> all 3
+        // Rescued (verdict=feat among those): T1 and T3 -> 2/3
+        assert_eq!(trust.tasks_with_findings, 3);
+        assert_eq!(trust.rescued_tasks, 2);
+        assert!((trust.review_rescue_rate.unwrap() - 2.0 / 3.0).abs() < 0.001);
+
+        // Longest feat streak: T1=feat, T2=wip, T3=feat -> streak = 1
+        assert_eq!(trust.longest_feat_streak, 1);
+
+        // Model comparison: claude:opus (2 tasks), codex: (1 task)
+        assert_eq!(trust.model_comparisons.len(), 2);
+        let claude_opus = trust.model_comparisons.iter().find(|m| m.model_key == "claude:opus").unwrap();
+        assert_eq!(claude_opus.task_count, 2);
+        assert!((claude_opus.feat_rate - 0.5).abs() < 0.001);
+        assert!((claude_opus.avg_cost_per_task - 0.40).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_trust_dashboard_fallback_no_task_completed() {
+        let events = synthetic_session();
+        let report = compute_stats(&events, 0, 7, None, false);
+        let trust = report.trust.unwrap();
+
+        // Fallback: 1 feat + 1 wip = 2 completed, acceptance = 50%
+        assert_eq!(trust.completed_tasks, 2);
+        assert_eq!(trust.feat_tasks, 1);
+        assert!((trust.acceptance_rate.unwrap() - 0.5).abs() < 0.001);
+
+        // T2 has high=1, committed as WIP -> 0 rescued / 1 with findings
+        assert_eq!(trust.tasks_with_findings, 1);
+        assert_eq!(trust.rescued_tasks, 0);
+        assert!((trust.review_rescue_rate.unwrap() - 0.0).abs() < 0.001);
+
+        // Streak: T1=feat, T2=WIP -> streak = 1
+        assert_eq!(trust.longest_feat_streak, 1);
+
+        // No model comparisons in fallback mode
+        assert!(trust.model_comparisons.is_empty());
+    }
+
+    #[test]
+    fn test_trend_data_from_task_completed() {
+        let p = "/test/project";
+        let s = "sess-1";
+        let events = vec![
+            make_event(
+                "2025-01-15T10:00:00Z", s, p, "task_completed",
+                serde_json::json!({
+                    "type": "TaskCompleted",
+                    "task_id": "T1", "verdict": "feat", "complexity": "Medium",
+                    "total_cost_usd": 0.50, "total_duration_secs": 100.0,
+                    "findings_high": 0, "findings_medium": 0, "findings_low": 0,
+                    "phases_run": "SPID", "builder_provider": "claude", "builder_model": "opus",
+                    "reviewer_provider": "claude", "reviewer_model": "sonnet",
+                    "commit_sha": "a"
+                }),
+            ),
+            make_event(
+                "2025-01-15T11:00:00Z", s, p, "task_completed",
+                serde_json::json!({
+                    "type": "TaskCompleted",
+                    "task_id": "T2", "verdict": "wip", "complexity": "Simple",
+                    "total_cost_usd": 0.30, "total_duration_secs": 50.0,
+                    "findings_high": 1, "findings_medium": 0, "findings_low": 0,
+                    "phases_run": "-PID", "builder_provider": "claude", "builder_model": "opus",
+                    "reviewer_provider": "claude", "reviewer_model": "sonnet",
+                    "commit_sha": "b"
+                }),
+            ),
+            make_event(
+                "2025-01-16T09:00:00Z", s, p, "task_completed",
+                serde_json::json!({
+                    "type": "TaskCompleted",
+                    "task_id": "T3", "verdict": "feat", "complexity": "Medium",
+                    "total_cost_usd": 0.60, "total_duration_secs": 120.0,
+                    "findings_high": 0, "findings_medium": 0, "findings_low": 0,
+                    "phases_run": "SPID", "builder_provider": "claude", "builder_model": "opus",
+                    "reviewer_provider": "claude", "reviewer_model": "sonnet",
+                    "commit_sha": "c"
+                }),
+            ),
+        ];
+        let report = compute_stats(&events, 0, 7, None, true);
+        let trend = report.trend.unwrap();
+
+        // Day 2025-01-15: 2 tasks, 1 feat -> 50% pass rate, avg cost (0.50+0.30)/2 = 0.40
+        assert_eq!(trend.daily_pass_rate.len(), 2);
+        let day1 = &trend.daily_pass_rate[0];
+        assert_eq!(day1.date, "2025-01-15");
+        assert!((day1.value - 0.5).abs() < 0.001);
+        assert_eq!(day1.count, 2);
+
+        let day1_cost = &trend.daily_avg_cost[0];
+        assert!((day1_cost.value - 0.40).abs() < 0.001);
+
+        // Day 2025-01-16: 1 task, 1 feat -> 100% pass rate, avg cost 0.60
+        let day2 = &trend.daily_pass_rate[1];
+        assert_eq!(day2.date, "2025-01-16");
+        assert!((day2.value - 1.0).abs() < 0.001);
+        assert_eq!(day2.count, 1);
+    }
+
+    #[test]
+    fn test_regression_proxy() {
+        let p = "/test/project";
+        let s = "sess-1";
+        let events = vec![
+            make_event(
+                "2025-01-15T10:00:00Z", s, p, "task_started",
+                serde_json::json!({"type": "TaskStarted", "task_id": "T1.1", "description": "Implement authentication middleware", "complexity": "Complex"}),
+            ),
+            make_event(
+                "2025-01-15T10:05:00Z", s, p, "task_completed",
+                serde_json::json!({
+                    "type": "TaskCompleted",
+                    "task_id": "T1.1", "verdict": "feat", "complexity": "Complex",
+                    "total_cost_usd": 1.0, "total_duration_secs": 300.0,
+                    "findings_high": 0, "findings_medium": 0, "findings_low": 0,
+                    "phases_run": "SPID", "builder_provider": "claude", "builder_model": "opus",
+                    "reviewer_provider": "claude", "reviewer_model": "sonnet",
+                    "commit_sha": "aaa"
+                }),
+            ),
+            make_event(
+                "2025-01-16T10:00:00Z", s, p, "task_started",
+                serde_json::json!({"type": "TaskStarted", "task_id": "D1.1", "description": "Authentication middleware returns wrong status code", "complexity": "Simple"}),
+            ),
+            make_event(
+                "2025-01-16T10:05:00Z", s, p, "task_completed",
+                serde_json::json!({
+                    "type": "TaskCompleted",
+                    "task_id": "D1.1", "verdict": "feat", "complexity": "Simple",
+                    "total_cost_usd": 0.30, "total_duration_secs": 100.0,
+                    "findings_high": 0, "findings_medium": 0, "findings_low": 0,
+                    "phases_run": "-PID", "builder_provider": "claude", "builder_model": "opus",
+                    "reviewer_provider": "claude", "reviewer_model": "sonnet",
+                    "commit_sha": "bbb"
+                }),
+            ),
+        ];
+        let report = compute_stats(&events, 0, 7, None, false);
+        let trust = report.trust.unwrap();
+
+        // D1.1 should match T1.1: shared tokens "authentication" and "middleware"
+        assert_eq!(trust.regression_proxies.len(), 1);
+        assert_eq!(trust.regression_proxies[0].discovery_task_id, "D1.1");
+        assert_eq!(trust.regression_proxies[0].prior_feat_task_id, "T1.1");
+        assert!(trust.regression_proxies[0].shared_tokens.contains(&"authentication".to_string()));
+        assert!(trust.regression_proxies[0].shared_tokens.contains(&"middleware".to_string()));
+    }
+
+    #[test]
+    fn test_sparkline() {
+        let values = vec![0.0, 0.25, 0.5, 0.75, 1.0];
+        let spark = sparkline(&values);
+        assert_eq!(spark.len(), 5);
+        assert_eq!(spark.chars().next().unwrap(), '_');
+        assert_eq!(spark.chars().last().unwrap(), '*');
+
+        assert_eq!(sparkline(&[]), "");
+
+        let same = sparkline(&[0.5, 0.5, 0.5]);
+        assert_eq!(same.len(), 3);
+        let chars: Vec<char> = same.chars().collect();
+        assert!(chars.iter().all(|c| *c == chars[0]));
+    }
+
+    #[test]
+    fn test_normalize_tokens() {
+        let tokens = normalize_tokens("Implement authentication middleware for API");
+        assert!(tokens.contains(&"implement".to_string()));
+        assert!(tokens.contains(&"authentication".to_string()));
+        assert!(tokens.contains(&"middleware".to_string()));
+        assert!(tokens.contains(&"api".to_string()));
+        assert!(!tokens.contains(&"for".to_string()));
+    }
+
+    #[test]
+    fn test_compute_stats_passes_trend_false() {
+        let events = synthetic_session();
+        let report = compute_stats(&events, 0, 7, None, false);
+        assert!(report.trend.is_none());
     }
 }

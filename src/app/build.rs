@@ -2300,6 +2300,7 @@ async fn process_task(
         task_info.clone(),
     )));
     let task_start = std::time::Instant::now();
+    let task_cost_snapshot = ctx.session_cost_millicents.load(std::sync::atomic::Ordering::Relaxed);
 
     let scout_report = ctx.buildloop_dir.join("scout-report.md");
     let task_complexity = complexity::classify_task(task_desc);
@@ -2312,6 +2313,8 @@ async fn process_task(
         || checkpoint_skip_scout
         || (ctx.config.skip_scout_for_simple && task_complexity == TaskComplexity::Simple);
     let build_claims = ctx.buildloop_dir.join("build-claims.md");
+    let mut eff_task_builder_provider = ctx.config.builder_provider.clone();
+    let mut eff_task_builder_model = ctx.config.builder_model.clone();
     if !skip_scout && !checkpoint_skip_scout {
         let _ = std::fs::remove_file(&scout_report);
     }
@@ -3577,8 +3580,16 @@ async fn process_task(
         };
         let builder_start = Instant::now();
         let (eff_builder_provider, eff_builder_model) = match budget_model_override.take() {
-            Some((p, m)) => (Config::parse_provider(&p), m),
-            None => (Config::parse_provider(&ctx.config.builder_provider), ctx.config.builder_model.clone()),
+            Some((p, m)) => {
+                eff_task_builder_provider = p.clone();
+                eff_task_builder_model = m.clone();
+                (Config::parse_provider(&p), m)
+            }
+            None => {
+                eff_task_builder_provider = ctx.config.builder_provider.clone();
+                eff_task_builder_model = ctx.config.builder_model.clone();
+                (Config::parse_provider(&ctx.config.builder_provider), ctx.config.builder_model.clone())
+            }
         };
         let build_result = agent::run_agent(
             &AgentRole::Builder,
@@ -4197,6 +4208,36 @@ async fn process_task(
             sha: commit_sha.clone().unwrap_or_default(),
             commit_type: commit_type.to_string(),
         });
+    }
+
+    // Emit TaskCompleted with aggregated task-level metrics
+    {
+        let task_cost_now = ctx.session_cost_millicents.load(std::sync::atomic::Ordering::Relaxed);
+        let task_total_cost_usd = (task_cost_now.saturating_sub(task_cost_snapshot)) as f64 / 100_000.0;
+        let task_duration_secs = task_start.elapsed().as_secs_f64();
+        let verdict = if validated { "feat" } else { "wip" };
+        let doubt_char_tc = if skip_verify || ctx.config.backpressure_only { "-" } else { "D" };
+        let phases_run_str = format!("{}{}{}I{}", scout_char, planner_char, plan_review_char, doubt_char_tc);
+        observatory::log_event(
+            &ctx.session_id,
+            &ctx.project_dir,
+            ObservatoryEvent::TaskCompleted {
+                task_id: task_id.to_string(),
+                verdict: verdict.to_string(),
+                complexity: format!("{:?}", task_complexity),
+                total_cost_usd: task_total_cost_usd,
+                total_duration_secs: task_duration_secs,
+                findings_high: review_findings.0,
+                findings_medium: review_findings.1,
+                findings_low: review_findings.2,
+                phases_run: phases_run_str,
+                builder_provider: eff_task_builder_provider.clone(),
+                builder_model: eff_task_builder_model.clone(),
+                reviewer_provider: ctx.config.reviewer_provider.clone(),
+                reviewer_model: ctx.config.reviewer_model.clone(),
+                commit_sha: commit_sha.clone().unwrap_or_default(),
+            },
+        );
     }
 
     // Skip pattern extraction for trivial tasks (< 3 files changed or

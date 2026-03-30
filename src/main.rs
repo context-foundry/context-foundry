@@ -83,6 +83,9 @@ enum Commands {
         /// Output format: table or json (default: table)
         #[arg(long, default_value = "table")]
         output: String,
+        /// Show daily trend sparklines
+        #[arg(long)]
+        trend: bool,
     },
 }
 
@@ -138,9 +141,10 @@ async fn main() -> Result<()> {
             days,
             project,
             output,
+            trend,
         } => {
             let stats_project = project.unwrap_or_else(|| project_dir.clone());
-            stats::run_stats(days, &stats_project, &output)?;
+            stats::run_stats(days, &stats_project, &output, trend)?;
         }
     }
 
