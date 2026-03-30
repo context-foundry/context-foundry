@@ -147,6 +147,7 @@ pub struct DailyMetric {
 #[derive(Debug, Serialize)]
 pub struct PrReviewStats {
     pub total_reviews: usize,
+    pub failed_reviews: usize,
     pub total_cost_usd: f64,
     pub findings_high: usize,
     pub findings_medium: usize,
@@ -833,12 +834,14 @@ pub fn compute_stats(
 
     let pr_reviews = if !pr_review_sessions.is_empty() {
         let total_reviews = pr_review_findings.len();
+        let failed_reviews = pr_review_sessions.len() - pr_review_findings.len();
         let total_pr_cost: f64 = pr_review_costs.values().sum();
         let total_high: usize = pr_review_findings.iter().map(|r| r.high).sum();
         let total_medium: usize = pr_review_findings.iter().map(|r| r.medium).sum();
         let total_low: usize = pr_review_findings.iter().map(|r| r.low).sum();
         Some(PrReviewStats {
             total_reviews,
+            failed_reviews,
             total_cost_usd: total_pr_cost,
             findings_high: total_high,
             findings_medium: total_medium,
@@ -1321,6 +1324,9 @@ fn print_table(report: &StatsReport) {
         println!("PR Reviews (excluded from build-loop metrics above)");
         println!("---------------------------------------------------");
         println!("  Total reviews:  {}", pr.total_reviews);
+        if pr.failed_reviews > 0 {
+            println!("  Failed reviews: {}", pr.failed_reviews);
+        }
         println!("  Total cost:     ${:.2}", pr.total_cost_usd);
         println!(
             "  Findings:       {} high, {} medium, {} low",
@@ -2108,6 +2114,7 @@ mod tests {
         // PR review stats should be present and accurate
         let pr = report.pr_reviews.as_ref().expect("pr_reviews should be Some");
         assert_eq!(pr.total_reviews, 1);
+        assert_eq!(pr.failed_reviews, 0, "completed review should not be counted as failed");
         assert!((pr.total_cost_usd - 0.50).abs() < 0.001);
         assert_eq!(pr.findings_high, 2);
         assert_eq!(pr.findings_medium, 1);
@@ -2141,6 +2148,7 @@ mod tests {
 
         let pr = report.pr_reviews.as_ref().expect("pr_reviews should be Some");
         assert_eq!(pr.total_reviews, 0);
+        assert_eq!(pr.failed_reviews, 1, "session with no review_findings counts as failed");
         assert!((pr.total_cost_usd - 0.05).abs() < 0.001);
     }
 
@@ -2168,6 +2176,7 @@ mod tests {
 
         let pr = report.pr_reviews.as_ref().expect("pr_reviews should be Some (session existed)");
         assert_eq!(pr.total_reviews, 0, "orphaned session (no review_findings) should not count as a completed review");
+        assert_eq!(pr.failed_reviews, 1, "orphaned session should count as failed review");
         assert!((pr.total_cost_usd - 0.25).abs() < 0.001, "cost should still be tracked even for failed reviews");
         assert_eq!(pr.findings_high, 0);
         assert_eq!(pr.findings_medium, 0);
@@ -2209,6 +2218,7 @@ mod tests {
 
         let pr = report.pr_reviews.as_ref().expect("pr_reviews should be Some");
         assert_eq!(pr.total_reviews, 1, "only the completed review should count");
+        assert_eq!(pr.failed_reviews, 1, "orphaned session should count as failed review");
         assert!((pr.total_cost_usd - 0.65).abs() < 0.001, "total cost should include both sessions ($0.50 + $0.15)");
         assert_eq!(pr.findings_high, 1);
         assert_eq!(pr.findings_low, 2);

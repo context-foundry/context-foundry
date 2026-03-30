@@ -388,6 +388,23 @@ fn post_pr_comment(pr_number: u32, repo: &str, body: &str) -> Result<()> {
     Ok(())
 }
 
+fn build_per_file_fallback_report(
+    pr_number: u32,
+    files_reviewed: usize,
+    findings: &serde_json::Value,
+) -> String {
+    let (high, medium, low) = count_findings(findings);
+    let verdict = if high + medium > 0 { "CONCERNS" } else { "PASS" };
+    let findings_json = serde_json::to_string_pretty(findings).unwrap_or_default();
+    format!(
+        "# Foundry PR Review: #{pr_number}\n\n\
+         > Integration review agent failed. Results below are from per-file analysis ({files_reviewed} files).\n\n\
+         ## Verdict: {verdict}\n\n\
+         **Findings:** {high} high, {medium} medium, {low} low\n\n\
+         ```json\n{findings_json}\n```\n"
+    )
+}
+
 // ─── Multi-pass PR Review ───────────────────────────────────────
 
 #[allow(clippy::too_many_arguments)]
@@ -807,6 +824,70 @@ pub async fn run(
     };
 
     if let Err(ref e) = agent_result {
+        if let Some(pf_findings) = per_file_findings {
+            // Integration agent failed but per-file findings exist -- use them
+            eprintln!("Integration agent failed: {}. Using per-file findings.", e);
+
+            let (high, medium, low) = count_findings(&pf_findings);
+
+            observatory::log_event(
+                &session_id,
+                project_dir,
+                ObservatoryEvent::ReviewFindings {
+                    task_id: format!("pr-review-{}-{}", repo.replace('/', "--"), pr_number),
+                    high,
+                    medium,
+                    low,
+                    findings_json: serde_json::to_string(&pf_findings).unwrap_or_default(),
+                },
+            );
+
+            let total_duration_secs = session_start.elapsed().as_secs_f64();
+
+            let report_content = build_per_file_fallback_report(
+                pr_number,
+                metadata.changed_files.len(),
+                &pf_findings,
+            );
+
+            let output_result = match output_mode {
+                ReviewPrOutput::Stdout => {
+                    println!("{}", report_content);
+                    Ok(())
+                }
+                ReviewPrOutput::Json => {
+                    build_json_output(
+                        pr_number,
+                        metadata.changed_files.len(),
+                        &pf_findings,
+                        usage.cost_usd,
+                        total_duration_secs,
+                    )
+                    .map(|s| println!("{}", s))
+                }
+                ReviewPrOutput::Comment => {
+                    post_pr_comment(pr_number, &repo, &report_content)
+                }
+            };
+
+            observatory::log_event(
+                &session_id,
+                project_dir,
+                ObservatoryEvent::SessionEnded {
+                    total_tasks: 1,
+                    feat_count: if high == 0 && medium == 0 { 1 } else { 0 },
+                    wip_count: if high > 0 || medium > 0 { 1 } else { 0 },
+                    total_cost_usd: usage.cost_usd,
+                    duration_secs: total_duration_secs,
+                },
+            );
+
+            let _ = std::fs::remove_dir_all(&buildloop_dir);
+
+            return output_result;
+        }
+
+        // No per-file findings available (single-pass failure)
         observatory::log_event(
             &session_id,
             project_dir,
@@ -1255,5 +1336,32 @@ mod tests {
         // JSON block should contain the per-file finding
         let parsed = parse_findings_json(&final_report).unwrap();
         assert_eq!(parsed["high"].as_array().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn test_build_per_file_fallback_report_concerns() {
+        let findings = serde_json::json!({
+            "high": [{"file": "a.rs", "issue": "critical bug"}],
+            "medium": [],
+            "low": [{"file": "b.rs", "issue": "style"}]
+        });
+        let report = build_per_file_fallback_report(42, 5, &findings);
+        assert!(report.contains("# Foundry PR Review: #42"));
+        assert!(report.contains("Verdict: CONCERNS"));
+        assert!(report.contains("1 high, 0 medium, 1 low"));
+        assert!(report.contains("Integration review agent failed"));
+        assert!(report.contains("```json"));
+    }
+
+    #[test]
+    fn test_build_per_file_fallback_report_pass() {
+        let findings = serde_json::json!({
+            "high": [],
+            "medium": [],
+            "low": []
+        });
+        let report = build_per_file_fallback_report(10, 3, &findings);
+        assert!(report.contains("Verdict: PASS"));
+        assert!(report.contains("0 high, 0 medium, 0 low"));
     }
 }
