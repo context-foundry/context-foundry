@@ -67,6 +67,16 @@
       "model": "gpt-4o-mini",
       "lines": 93,
       "generation": 7
+    },
+    {
+      "file": "docker-compose-up-the-volcano.js",
+      "name": "docker compose up the Volcano",
+      "location": "Mount Bromo, East Java, Indonesia",
+      "biome": "volcanic",
+      "generated": "2026-03-31T03:31:45.851Z",
+      "model": "gpt-4o-mini",
+      "lines": 84,
+      "generation": 8
     }
   ]
 }
