@@ -97,6 +97,16 @@
       "model": "gpt-4o-mini",
       "lines": 80,
       "generation": 10
+    },
+    {
+      "file": "underground-pipeline.js",
+      "name": "Underground Pipeline",
+      "location": "Waitomo Glowworm Caves, North Island, New Zealand",
+      "biome": "underground",
+      "generated": "2026-04-01T14:07:29.657Z",
+      "model": "gpt-4o-mini",
+      "lines": 85,
+      "generation": 11
     }
   ]
 }

@@ -70,5 +70,17 @@
     "cost_usd": 0.0016,
     "retries": 0,
     "validation": "pass"
+  },
+  {
+    "ts": "2026-04-01T14:07:29.658Z",
+    "scene": "underground-pipeline.js",
+    "seed_id": "underground-pipeline",
+    "biome": "underground",
+    "model": "gpt-4o-mini",
+    "input_tokens": 8311,
+    "output_tokens": 846,
+    "cost_usd": 0.0018,
+    "retries": 0,
+    "validation": "pass"
   }
 ]
