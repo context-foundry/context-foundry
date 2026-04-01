@@ -87,6 +87,16 @@
       "model": "gpt-4o-mini",
       "lines": 83,
       "generation": 9
+    },
+    {
+      "file": "singleton-peak.js",
+      "name": "Singleton Peak",
+      "location": "Mount Fuji, Shizuoka, Japan",
+      "biome": "mountain",
+      "generated": "2026-04-01T07:57:12.007Z",
+      "model": "gpt-4o-mini",
+      "lines": 80,
+      "generation": 10
     }
   ]
 }

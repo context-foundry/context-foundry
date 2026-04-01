@@ -58,5 +58,17 @@
     "cost_usd": 0.0035,
     "retries": 1,
     "validation": "pass"
+  },
+  {
+    "ts": "2026-04-01T07:57:12.008Z",
+    "scene": "singleton-peak.js",
+    "seed_id": "singleton-peak",
+    "biome": "mountain",
+    "model": "gpt-4o-mini",
+    "input_tokens": 7409,
+    "output_tokens": 891,
+    "cost_usd": 0.0016,
+    "retries": 0,
+    "validation": "pass"
   }
 ]
