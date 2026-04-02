@@ -107,6 +107,16 @@
       "model": "gpt-4o-mini",
       "lines": 85,
       "generation": 11
+    },
+    {
+      "file": "null-pointer-bay.js",
+      "name": "Null Pointer Bay",
+      "location": "Mosquito Bay, Vieques, Puerto Rico",
+      "biome": "ocean",
+      "generated": "2026-04-02T19:18:00.394Z",
+      "model": "gpt-4o-mini",
+      "lines": 86,
+      "generation": 12
     }
   ]
 }
