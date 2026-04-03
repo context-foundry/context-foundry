@@ -94,5 +94,17 @@
     "cost_usd": 0.0035,
     "retries": 1,
     "validation": "pass"
+  },
+  {
+    "ts": "2026-04-03T09:12:16.597Z",
+    "scene": "legacy-codebase-ruins.js",
+    "seed_id": "legacy-codebase-ruins",
+    "biome": "urban",
+    "model": "gpt-4o-mini",
+    "input_tokens": 8130,
+    "output_tokens": 892,
+    "cost_usd": 0.0018,
+    "retries": 0,
+    "validation": "pass"
   }
 ]

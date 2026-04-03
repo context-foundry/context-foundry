@@ -117,6 +117,16 @@
       "model": "gpt-4o-mini",
       "lines": 86,
       "generation": 12
+    },
+    {
+      "file": "legacy-codebase-ruins.js",
+      "name": "Legacy Codebase Ruins",
+      "location": "Angkor Wat, Siem Reap, Cambodia",
+      "biome": "urban",
+      "generated": "2026-04-03T09:12:16.596Z",
+      "model": "gpt-4o-mini",
+      "lines": 80,
+      "generation": 13
     }
   ]
 }
