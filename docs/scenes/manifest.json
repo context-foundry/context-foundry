@@ -137,6 +137,16 @@
       "model": "gpt-4o-mini",
       "lines": 88,
       "generation": 14
+    },
+    {
+      "file": "danakil-kernel-temperature.js",
+      "name": "Danakil Kernel Temperature",
+      "location": "Danakil Depression, Afar Region, Ethiopia",
+      "biome": "extreme",
+      "generated": "2026-04-03T22:55:50.089Z",
+      "model": "gpt-4o-mini",
+      "lines": 80,
+      "generation": 15
     }
   ]
 }
