@@ -106,5 +106,17 @@
     "cost_usd": 0.0018,
     "retries": 0,
     "validation": "pass"
+  },
+  {
+    "ts": "2026-04-03T20:56:29.213Z",
+    "scene": "cerrado-compile-time.js",
+    "seed_id": "cerrado-compile-time",
+    "biome": "savanna",
+    "model": "gpt-4o-mini",
+    "input_tokens": 15237,
+    "output_tokens": 1837,
+    "cost_usd": 0.0034,
+    "retries": 1,
+    "validation": "pass"
   }
 ]
