@@ -142,5 +142,17 @@
     "cost_usd": 0.0017,
     "retries": 0,
     "validation": "pass"
+  },
+  {
+    "ts": "2026-04-05T13:32:33.668Z",
+    "scene": "buffer-overflow-canyon.js",
+    "seed_id": "buffer-overflow-canyon",
+    "biome": "desert",
+    "model": "gpt-4o-mini",
+    "input_tokens": 14855,
+    "output_tokens": 1763,
+    "cost_usd": 0.0033,
+    "retries": 1,
+    "validation": "pass"
   }
 ]

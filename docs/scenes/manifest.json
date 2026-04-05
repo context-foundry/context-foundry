@@ -157,6 +157,16 @@
       "model": "gpt-4o-mini",
       "lines": 83,
       "generation": 16
+    },
+    {
+      "file": "buffer-overflow-canyon.js",
+      "name": "Buffer Overflow Canyon",
+      "location": "Antelope Canyon, Arizona, USA",
+      "biome": "desert",
+      "generated": "2026-04-05T13:32:33.667Z",
+      "model": "gpt-4o-mini",
+      "lines": 82,
+      "generation": 17
     }
   ]
 }
