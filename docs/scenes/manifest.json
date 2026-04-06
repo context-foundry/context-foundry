@@ -167,6 +167,16 @@
       "model": "gpt-4o-mini",
       "lines": 82,
       "generation": 17
+    },
+    {
+      "file": "mangrove-memory-leak.js",
+      "name": "Mangrove Memory Leak",
+      "location": "Sundarbans, Bangladesh-India Border",
+      "biome": "forest",
+      "generated": "2026-04-06T06:11:19.015Z",
+      "model": "gpt-4o-mini",
+      "lines": 97,
+      "generation": 18
     }
   ]
 }

@@ -154,5 +154,17 @@
     "cost_usd": 0.0033,
     "retries": 1,
     "validation": "pass"
+  },
+  {
+    "ts": "2026-04-06T06:11:19.016Z",
+    "scene": "mangrove-memory-leak.js",
+    "seed_id": "mangrove-memory-leak",
+    "biome": "forest",
+    "model": "gpt-4o-mini",
+    "input_tokens": 8309,
+    "output_tokens": 1110,
+    "cost_usd": 0.0019,
+    "retries": 0,
+    "validation": "pass"
   }
 ]
