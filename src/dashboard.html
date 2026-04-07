@@ -33,6 +33,24 @@
     header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
     header h1 { font-size: 1.75rem; font-weight: 600; color: var(--text); margin: 0; }
     #last-updated { font-size: 0.8rem; color: var(--text-muted); }
+    .days-selector { display: flex; align-items: center; gap: 8px; }
+    .days-selector span { font-size: 0.8rem; color: var(--text-muted); }
+    .days-btn {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text-muted);
+      font-size: 0.8rem;
+      padding: 4px 12px;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    .days-btn:hover { background: var(--surface-hover); color: var(--text); }
+    .days-btn.active {
+      background: var(--accent-subtle);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
     #error-banner {
       background: var(--error);
       color: #fff;
@@ -114,7 +132,16 @@
   <div id="app">
     <header>
       <h1>Foundry Observatory</h1>
-      <span id="last-updated"></span>
+      <div style="display:flex;align-items:center;gap:16px">
+        <div class="days-selector">
+          <span>Window:</span>
+          <button class="days-btn" data-days="1">1d</button>
+          <button class="days-btn active" data-days="7">7d</button>
+          <button class="days-btn" data-days="14">14d</button>
+          <button class="days-btn" data-days="30">30d</button>
+        </div>
+        <span id="last-updated"></span>
+      </div>
     </header>
     <div id="error-banner" style="display:none"></div>
     <section id="summary-cards"></section>
@@ -144,8 +171,10 @@
       return String(n);
     }
 
+    var selectedDays = 7;
+
     async function fetchStats() {
-      var resp = await fetch('/api/stats?days=7');
+      var resp = await fetch('/api/stats?days=' + selectedDays);
       if (!resp.ok) throw new Error(resp.statusText);
       return resp.json();
     }
@@ -361,6 +390,19 @@
         banner.style.display = 'block';
       });
     }, 60000);
+
+    document.querySelectorAll('.days-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        document.querySelectorAll('.days-btn').forEach(function(b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+        selectedDays = parseInt(btn.getAttribute('data-days'), 10);
+        fetchStats().then(renderDashboard).catch(function(err) {
+          var banner = document.getElementById('error-banner');
+          banner.textContent = 'Failed to load stats: ' + err.message;
+          banner.style.display = 'block';
+        });
+      });
+    });
   </script>
 </body>
 </html>

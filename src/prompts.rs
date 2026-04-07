@@ -258,8 +258,7 @@ but is relevant to the questions' domain -- architecture gotchas, hidden depende
 naming conventions, etc. Keep this brief.]
 
 RULES:
-- Do NOT modify any project files -- investigation only
-- Do NOT implement anything
+- Write ONLY to .buildloop/research-report.md -- do NOT modify any project source files
 - Do NOT read files in .buildloop/logs/
 - Answer ALL questions, even if the answer is "not found" or "does not exist"
 - Cite specific file paths and line numbers for every claim
