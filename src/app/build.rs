@@ -3034,6 +3034,7 @@ async fn process_task(
     } else {
         // ─── Check for Look-Ahead Plan ───────────────────────────
         let la_plan = lookahead_plan_path(ctx, task_id);
+        let mut la_plan_used = false;
         if la_plan.exists() {
             // A look-ahead planner already produced a plan for this task.
             // Promote it to current-plan.md and skip the planner stage.
@@ -3042,16 +3043,28 @@ async fn process_task(
                     "Using pre-planned plan for {}",
                     task_id
                 ))));
+                la_plan_used = true;
             } else {
                 // rename failed (cross-device?), try copy+delete
-                let _ = std::fs::copy(&la_plan, &ctx.current_plan);
-                let _ = std::fs::remove_file(&la_plan);
-                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                    "Using pre-planned plan for {}",
-                    task_id
-                ))));
+                match std::fs::copy(&la_plan, &ctx.current_plan) {
+                    Ok(_) => {
+                        let _ = std::fs::remove_file(&la_plan);
+                        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                            "Using pre-planned plan for {}",
+                            task_id
+                        ))));
+                        la_plan_used = true;
+                    }
+                    Err(e) => {
+                        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                            "Warning: lookahead plan copy also failed for {}: {} -- running planner instead",
+                            task_id, e
+                        ))));
+                    }
+                }
             }
-        } else {
+        }
+        if !la_plan_used {
             // ─── Run Planner ─────────────────────────────────────────
             let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
             let fwd_tx = tx.clone();

@@ -42,7 +42,15 @@ struct ProjectRulesGuard {
 impl Drop for ProjectRulesGuard {
     fn drop(&mut self) {
         for (disabled_path, original_path) in &self.renamed {
-            let _ = std::fs::rename(disabled_path, original_path);
+            if let Err(e) = std::fs::rename(disabled_path, original_path) {
+                eprintln!(
+                    "WARNING: failed to restore project rule '{}' from '{}': {} -- \
+                     file may remain renamed as .foundry-disabled, run `foundry review-pr` again to recover",
+                    original_path.display(),
+                    disabled_path.display(),
+                    e,
+                );
+            }
         }
     }
 }
@@ -55,6 +63,33 @@ fn neutralize_project_rules(project_dir: &Path) -> ProjectRulesGuard {
         project_dir.join(".claude").join("settings.json"),
         project_dir.join(".claude").join("settings.local.json"),
     ];
+
+    // Recover stale .foundry-disabled files from a previous failed restore.
+    // If the disabled version exists but the original does not, rename it back.
+    for path in &candidates {
+        let disabled_path = path.with_file_name(format!(
+            "{}.foundry-disabled",
+            path.file_name().unwrap().to_string_lossy()
+        ));
+        if disabled_path.exists() && !path.exists() {
+            match std::fs::rename(&disabled_path, path) {
+                Ok(()) => {
+                    eprintln!(
+                        "Recovered stale .foundry-disabled file: {} -> {}",
+                        disabled_path.display(),
+                        path.display(),
+                    );
+                }
+                Err(e) => {
+                    eprintln!(
+                        "WARNING: failed to recover stale .foundry-disabled file '{}': {}",
+                        disabled_path.display(),
+                        e,
+                    );
+                }
+            }
+        }
+    }
 
     let mut renamed: Vec<(PathBuf, PathBuf)> = Vec::new();
 
@@ -1718,6 +1753,33 @@ mod tests {
 
         let guard = neutralize_project_rules(&tmp);
         assert!(guard.renamed.is_empty());
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn test_neutralize_recovers_stale_disabled_files() {
+        let tmp = std::env::temp_dir().join("foundry-test-stale-recovery");
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(tmp.join(".claude")).unwrap();
+
+        // Simulate a stale .foundry-disabled file (original missing, disabled present)
+        std::fs::write(tmp.join("CLAUDE.md.foundry-disabled"), "# Stale").unwrap();
+        assert!(!tmp.join("CLAUDE.md").exists());
+
+        // neutralize_project_rules should recover it before proceeding
+        let guard = neutralize_project_rules(&tmp);
+        // After recovery, the file is at its original path, then gets re-neutralized
+        assert!(tmp.join("CLAUDE.md.foundry-disabled").exists());
+        assert!(!tmp.join("CLAUDE.md").exists());
+        assert_eq!(guard.renamed.len(), 1);
+
+        // Drop restores
+        drop(guard);
+        assert!(tmp.join("CLAUDE.md").exists());
+        assert_eq!(
+            std::fs::read_to_string(tmp.join("CLAUDE.md")).unwrap(),
+            "# Stale"
+        );
         let _ = std::fs::remove_dir_all(&tmp);
     }
 
