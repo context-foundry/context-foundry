@@ -2448,8 +2448,11 @@ async fn process_task(
         description: task_desc.to_string(),
         complexity: format!("{:?}", task_complexity),
     });
-    let skip_qr = skip_scout
+    let skip_query = skip_scout
         || checkpoint_skip_query
+        || (ctx.config.skip_scout_for_simple && task_complexity == TaskComplexity::Simple);
+    let skip_research = skip_scout
+        || (checkpoint_skip_query && checkpoint_skip_research)
         || (ctx.config.skip_scout_for_simple && task_complexity == TaskComplexity::Simple);
     let build_claims = ctx.buildloop_dir.join("build-claims.md");
     let mut eff_task_builder_provider = ctx.config.builder_provider.clone();
@@ -2457,7 +2460,8 @@ async fn process_task(
     // Stale artifact cleanup: failures here mean the next phase may read stale data.
     // Log warnings so the root cause is visible.
     let mut stale_cleanup_failures: Vec<String> = Vec::new();
-    if !skip_qr && !checkpoint_skip_query {
+    if !skip_query && !checkpoint_skip_query {
+        // Full Q+R cleanup: neither was checkpointed
         for path in [&questions_file, &research_report] {
             if let Err(e) = std::fs::remove_file(path) {
                 if e.kind() != std::io::ErrorKind::NotFound {
@@ -2465,6 +2469,14 @@ async fn process_task(
                     eprintln!("Warning: failed to remove stale {}: {}", name, e);
                     stale_cleanup_failures.push(name.to_string());
                 }
+            }
+        }
+    } else if !skip_research && !checkpoint_skip_research {
+        // Query was checkpointed but Research was not -- clean only research-report.md
+        if let Err(e) = std::fs::remove_file(&research_report) {
+            if e.kind() != std::io::ErrorKind::NotFound {
+                eprintln!("Warning: failed to remove stale research-report.md: {}", e);
+                stale_cleanup_failures.push("research-report.md".to_string());
             }
         }
     }
@@ -2588,8 +2600,8 @@ async fn process_task(
     let mut last_rate_limited = false;
 
     // ─── Run Query + Research (skip if recent report exists and codebase hasn't changed much) ───
-    if skip_qr {
-        let msg = if checkpoint_skip_query {
+    if skip_query && skip_research {
+        let msg = if checkpoint_skip_query && checkpoint_skip_research {
             "Checkpoint: reusing questions + research from previous session".to_string()
         } else if ctx.config.skip_scout_for_simple && task_complexity == TaskComplexity::Simple {
             "Skipping Q+R for simple task".to_string()
@@ -2610,6 +2622,14 @@ async fn process_task(
             TaskComplexity::Complex => "Complex",
         };
 
+        if skip_query {
+            let msg = if checkpoint_skip_query {
+                "Checkpoint: reusing questions from previous session".to_string()
+            } else {
+                "Skipping Query (research report outdated)".to_string()
+            };
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(msg)));
+        } else {
         // ─── Query Phase ─────────────────────────────────────────
         {
             let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
@@ -2775,6 +2795,7 @@ async fn process_task(
 
         // Checkpoint: query completed
         write_checkpoint(&ctx.buildloop_dir, task_id, task_desc, "query");
+        } // end if !skip_query else block
 
         // ─── Research Phase (with phase isolation) ───────────────
         {
@@ -2988,7 +3009,7 @@ async fn process_task(
             result.partial_results.push("questions.md".to_string());
         }
         stage_results.push(result);
-    } else if !skip_qr && stage_results.last().map(|r| r.stage.as_str()) != Some("Query") {
+    } else if !skip_query && stage_results.last().map(|r| r.stage.as_str()) != Some("Query") {
         let mut result = StageResult::success("Query", &format!("Generate questions for {}", task_id));
         if questions_file.exists() {
             result.partial_results.push("questions.md".to_string());
@@ -3005,7 +3026,7 @@ async fn process_task(
             result.partial_results.push("research-report.md".to_string());
         }
         stage_results.push(result);
-    } else if !skip_qr && stage_results.last().map(|r| r.stage.as_str()) != Some("Research") {
+    } else if !skip_research && stage_results.last().map(|r| r.stage.as_str()) != Some("Research") {
         let mut result = StageResult::success("Research", &format!("Investigate codebase for {}", task_id));
         if research_report.exists() {
             result.partial_results.push("research-report.md".to_string());
@@ -3014,12 +3035,12 @@ async fn process_task(
     }
 
     // Checkpoint: research completed
-    if !checkpoint_skip_research && !skip_qr {
+    if !checkpoint_skip_research && !skip_research {
         write_checkpoint(&ctx.buildloop_dir, task_id, task_desc, "research");
     }
 
     // Gate: research-report.md must exist before planner proceeds (unless Q+R was skipped)
-    if !skip_qr && !research_report.exists() {
+    if !skip_research && !research_report.exists() {
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
             "Research report missing for {} -- planner will proceed without it",
             task_id
@@ -3028,8 +3049,8 @@ async fn process_task(
 
     // Helper: progress indicator characters.
     // Checkpoint-resumed stages count as "ran" for progress indicators.
-    let query_char = if skip_qr && !checkpoint_skip_query { "-" } else { "Q" };
-    let research_char = if skip_qr && !checkpoint_skip_research { "-" } else { "R" };
+    let query_char = if skip_query && !checkpoint_skip_query { "-" } else { "Q" };
+    let research_char = if skip_research && !checkpoint_skip_research { "-" } else { "R" };
     let planner_char = if skip_planner && !checkpoint_skip_planner { "-" } else { "P" };
 
     if skip_planner {
@@ -5902,6 +5923,87 @@ mod tests {
         };
         assert!(checkpoint_skip_builder_ok,
             "builder skip should be true when planner skip is true and build-claims.md exists");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_checkpoint_query_done_research_not_done_does_not_skip_research() {
+        // Bug D86.1(a): When checkpoint completed_stage="query", questions.md exists
+        // but research-report.md does NOT exist, Research must still run.
+        // The old skip_qr flag was true (checkpoint_skip_query was true), which
+        // caused both Q+R to be skipped. The fix splits into skip_query/skip_research.
+
+        let dir = std::env::temp_dir().join(format!(
+            "foundry-checkpoint-qr-split-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+
+        // Checkpoint: query completed (crash during research)
+        write_checkpoint(&dir, "D86.1", "test task", "query");
+
+        let cp = read_checkpoint(&dir).unwrap();
+        let resume_stage: Option<&str> = match cp.completed_stage.as_str() {
+            "query" => Some("research"),
+            "research" => Some("planner"),
+            "planner" => Some("plan_review"),
+            "plan_review" => Some("builder"),
+            "builder" => Some("doubt"),
+            "scout" => Some("planner"),
+            _ => None,
+        };
+        assert_eq!(resume_stage, Some("research"));
+
+        // questions.md EXISTS (query completed successfully)
+        let questions_file = dir.join("questions.md");
+        std::fs::write(&questions_file, "# Questions\n1. What modules are involved?").unwrap();
+
+        // research-report.md does NOT exist (research never ran)
+        let research_report = dir.join("research-report.md");
+        assert!(!research_report.exists());
+
+        // Compute checkpoint skip flags (same logic as process_task)
+        let checkpoint_skip_query = match resume_stage {
+            Some("research" | "planner" | "plan_review" | "builder" | "doubt") => {
+                questions_file.exists()
+            }
+            _ => false,
+        };
+        assert!(checkpoint_skip_query, "query skip should be true (questions.md exists)");
+
+        let checkpoint_skip_research = match resume_stage {
+            Some("planner" | "plan_review" | "builder" | "doubt") if checkpoint_skip_query => {
+                research_report.exists()
+            }
+            _ => false,
+        };
+        assert!(!checkpoint_skip_research, "research skip must be false (resume_stage is 'research', not planner/builder/doubt)");
+
+        // Compute skip_query and skip_research with skip_scout=false, simple_task=false
+        let skip_scout = false;
+        let simple_task = false;
+        let skip_query = skip_scout
+            || checkpoint_skip_query
+            || simple_task;
+        let skip_research = skip_scout
+            || (checkpoint_skip_query && checkpoint_skip_research)
+            || simple_task;
+
+        assert!(skip_query, "Query should be skipped (checkpoint_skip_query is true)");
+        assert!(!skip_research, "Research must NOT be skipped (checkpoint_skip_research is false)");
+
+        // The outer Q+R block should NOT be fully skipped
+        let both_skipped = skip_query && skip_research;
+        assert!(!both_skipped, "Q+R block must not be fully skipped when only Query was checkpointed");
+
+        // Stale artifact cleanup: research-report.md should be cleaned when
+        // skip_research=false and checkpoint_skip_research=false
+        let should_clean_research = !skip_research && !checkpoint_skip_research;
+        assert!(should_clean_research, "stale research-report.md should be cleaned when Research will re-run");
 
         let _ = std::fs::remove_dir_all(&dir);
     }

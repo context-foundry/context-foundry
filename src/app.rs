@@ -685,10 +685,12 @@ fn handle_planning_event(state: &mut AppState, event: AppEvent, config: &Config)
             );
         }
         AppEvent::LoopEvent(LoopEvent::StatsReady(report)) => {
+            if state.stats_loading {
+                state.stats_overlay_report = Some(*report);
+                state.show_stats_overlay = true;
+                state.stats_overlay_scroll = 0;
+            }
             state.stats_loading = false;
-            state.stats_overlay_report = Some(*report);
-            state.show_stats_overlay = true;
-            state.stats_overlay_scroll = 0;
         }
         AppEvent::LoopEvent(LoopEvent::StatsLoadFailed) => {
             state.stats_loading = false;
@@ -968,10 +970,12 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                 state.log(msg.clone());
             }
             LoopEvent::StatsReady(report) => {
+                if state.stats_loading {
+                    state.stats_overlay_report = Some(*report);
+                    state.show_stats_overlay = true;
+                    state.stats_overlay_scroll = 0;
+                }
                 state.stats_loading = false;
-                state.stats_overlay_report = Some(*report);
-                state.show_stats_overlay = true;
-                state.stats_overlay_scroll = 0;
             }
             LoopEvent::StatsLoadFailed => {
                 state.stats_loading = false;
