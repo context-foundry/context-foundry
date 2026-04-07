@@ -2455,6 +2455,7 @@ async fn process_task(
         || (checkpoint_skip_query && checkpoint_skip_research)
         || (ctx.config.skip_scout_for_simple && task_complexity == TaskComplexity::Simple);
     let build_claims = ctx.buildloop_dir.join("build-claims.md");
+    let mut query_failed = false;
     let mut eff_task_builder_provider = ctx.config.builder_provider.clone();
     let mut eff_task_builder_model = ctx.config.builder_model.clone();
     // Stale artifact cleanup: failures here mean the next phase may read stale data.
@@ -2756,6 +2757,7 @@ async fn process_task(
                     FailureType::Crash,
                     vec!["Query is non-blocking -- pipeline continues without questions".to_string()],
                 ));
+                query_failed = true;
             }
 
             adaptive_sleep(
@@ -2797,6 +2799,7 @@ async fn process_task(
         write_checkpoint(&ctx.buildloop_dir, task_id, task_desc, "query");
         } // end if !skip_query else block
 
+        if !query_failed {
         // ─── Research Phase (with phase isolation) ───────────────
         {
             // Phase isolation: hide TASKS.md and UPDATED_SPECS.md from Research
@@ -2997,6 +3000,19 @@ async fn process_task(
                 return (false, last_rate_limited, false);
             }
         }
+        } else {
+            // Query failed -- skip Research (no questions.md to investigate)
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                "Skipping Research for {} -- Query failed, no questions to investigate",
+                task_id
+            ))));
+            stage_results.push(StageResult::failure(
+                "Research",
+                &format!("Investigate codebase for {}", task_id),
+                FailureType::Crash,
+                vec!["Skipped: Query failed and produced no questions.md".to_string()],
+            ));
+        }
     }
 
     // Stage results for Q+R
@@ -3009,7 +3025,7 @@ async fn process_task(
             result.partial_results.push("questions.md".to_string());
         }
         stage_results.push(result);
-    } else if !skip_query && stage_results.last().map(|r| r.stage.as_str()) != Some("Query") {
+    } else if !skip_query && !query_failed && stage_results.last().map(|r| r.stage.as_str()) != Some("Query") {
         let mut result = StageResult::success("Query", &format!("Generate questions for {}", task_id));
         if questions_file.exists() {
             result.partial_results.push("questions.md".to_string());

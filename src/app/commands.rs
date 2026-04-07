@@ -735,6 +735,7 @@ pub(super) fn run_patterns_prune(yes: bool) -> Result<()> {
     }
 
     let mut total_pruned = 0usize;
+    let mut successfully_pruned: Vec<String> = Vec::new();
 
     for (source_path, ids_to_remove) in &by_source {
         let content = match std::fs::read_to_string(source_path) {
@@ -764,6 +765,7 @@ pub(super) fn run_patterns_prune(yes: bool) -> Result<()> {
                 let dest = archived_dir.join(format!("{}.json", p.pattern_id));
                 atomic_write_file(&dest, json.as_bytes())?;
                 total_pruned += 1;
+                successfully_pruned.push(p.pattern_id.clone());
             }
             if keep.is_empty() {
                 std::fs::remove_file(source_path)?;
@@ -788,6 +790,7 @@ pub(super) fn run_patterns_prune(yes: bool) -> Result<()> {
                             let dest = archived_dir.join(format!("{}.json", p.pattern_id));
                             atomic_write_file(&dest, json.as_bytes())?;
                             total_pruned += 1;
+                            successfully_pruned.push(p.pattern_id.clone());
                         }
                     } else {
                         keep_vals.push(pv.clone());
@@ -810,6 +813,7 @@ pub(super) fn run_patterns_prune(yes: bool) -> Result<()> {
                 let dest = archived_dir.join(format!("{}.json", p.pattern_id));
                 std::fs::rename(source_path, &dest)?;
                 total_pruned += 1;
+                successfully_pruned.push(p.pattern_id.clone());
             }
         }
     }
@@ -822,12 +826,12 @@ pub(super) fn run_patterns_prune(yes: bool) -> Result<()> {
         .open(&log_path)
         .context("failed to open prune-log.jsonl")?;
     let now = Utc::now().to_rfc3339();
-    for id in &actionable {
+    for id in &successfully_pruned {
         let entry = serde_json::json!({
             "pattern_id": id,
             "pruned_at": now,
             "reason": "injection_count >= 10, citation_count == 0 over 30 days",
-            "injection_count": injection_counts[id],
+            "injection_count": injection_counts.get(id).copied().unwrap_or(0),
         });
         writeln!(log_file, "{}", entry)?;
     }
@@ -938,8 +942,20 @@ pub(super) fn run_patterns_promote(apply: bool, days: u32) -> Result<()> {
         let target_claude_md = target_dir.join("CLAUDE.md");
         let relative_path = format!("extensions/{}/CLAUDE.md", ext_name);
 
+        // Read existing CLAUDE.md content for deduplication
+        let existing_content = if target_claude_md.exists() {
+            std::fs::read_to_string(&target_claude_md).unwrap_or_default()
+        } else {
+            String::new()
+        };
+
         let mut prose_blocks = String::new();
         for id in pattern_ids {
+            // Skip patterns already present in CLAUDE.md (idempotency for partial-failure re-runs)
+            if existing_content.contains(&format!("`{}`", *id)) {
+                continue;
+            }
+
             let (pattern, _) = &pattern_map[*id];
             let inj = injection_counts.get(*id).copied().unwrap_or(0);
             let cit = citation_counts.get(*id).copied().unwrap_or(0);
@@ -952,18 +968,16 @@ pub(super) fn run_patterns_promote(apply: bool, days: u32) -> Result<()> {
             promotion_log.push(((*id).clone(), ext_name.clone(), relative_path.clone()));
         }
 
-        if apply {
+        if apply && !prose_blocks.is_empty() {
             // Create extension directory and patterns/ subdirectory
             std::fs::create_dir_all(&target_dir)?;
             std::fs::create_dir_all(target_dir.join("patterns"))?;
 
-            let content = if target_claude_md.exists() {
-                let existing = std::fs::read_to_string(&target_claude_md)
-                    .context("failed to read existing CLAUDE.md")?;
-                if existing.contains("## Promoted Patterns") {
-                    format!("{}\n{}", existing.trim_end(), prose_blocks)
+            let content = if !existing_content.is_empty() {
+                if existing_content.contains("## Promoted Patterns") {
+                    format!("{}\n{}", existing_content.trim_end(), prose_blocks)
                 } else {
-                    format!("{}\n\n## Promoted Patterns\n\n{}", existing.trim_end(), prose_blocks)
+                    format!("{}\n\n## Promoted Patterns\n\n{}", existing_content.trim_end(), prose_blocks)
                 }
             } else {
                 let title = {
@@ -980,10 +994,14 @@ pub(super) fn run_patterns_promote(apply: bool, days: u32) -> Result<()> {
             };
 
             atomic_write_file(&target_claude_md, content.as_bytes())?;
-        } else {
+        } else if !apply {
             // Dry-run: print what would be promoted
             println!("--- Extension: {} ({})", ext_name, target_dir.display());
             for id in pattern_ids {
+                // Skip already-promoted patterns in dry-run output too
+                if existing_content.contains(&format!("`{}`", *id)) {
+                    continue;
+                }
                 let (pattern, _) = &pattern_map[*id];
                 let inj = injection_counts.get(*id).copied().unwrap_or(0);
                 let cit = citation_counts.get(*id).copied().unwrap_or(0);
