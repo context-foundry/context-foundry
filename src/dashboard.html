@@ -124,8 +124,26 @@
     </section>
     <section id="patterns-table"></section>
     <section id="trust-dashboard"></section>
+    <section id="cache-efficiency"></section>
+    <section id="provider-versions"></section>
   </div>
   <script>
+    function escapeHtml(str) {
+      if (str == null) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function fmtTokens(n) {
+      if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+      if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
+      return String(n);
+    }
+
     async function fetchStats() {
       var resp = await fetch('/api/stats?days=7');
       if (!resp.ok) throw new Error(resp.statusText);
@@ -138,6 +156,8 @@
       renderDailyTrend(data.trend);
       renderPatterns(data.patterns);
       renderTrust(data.trust);
+      renderCacheEfficiency(data.cache_efficiency);
+      renderProviderVersions(data.provider_versions);
       var now = new Date();
       document.getElementById('last-updated').textContent =
         'Updated ' + now.toTimeString().slice(0, 8);
@@ -172,7 +192,7 @@
       var html = '<h2>Cost by Phase</h2><div class="chart-container">';
       phases.forEach(function(p) {
         var pct = Math.max(((p.cost_usd || 0) / max) * 100, 1);
-        html += '<div class="bar-row"><span class="bar-label">' + (p.role || 'unknown') + '</span>' +
+        html += '<div class="bar-row"><span class="bar-label">' + escapeHtml(p.role || 'unknown') + '</span>' +
           '<span class="bar" style="width:' + pct + '%"></span>' +
           '<span class="bar-value">$' + (p.cost_usd || 0).toFixed(2) + '</span></div>';
       });
@@ -194,11 +214,11 @@
       trend.daily_pass_rate.forEach(function(d) {
         var v = d.value != null ? d.value : 0;
         var color = v >= 80 ? 'var(--success)' : (v >= 50 ? 'var(--warning)' : 'var(--error)');
-        html += '<div class="trend-bar" style="height:' + Math.max(v, 2) + '%;background:' + color + '" title="' + d.date + ': ' + v.toFixed(0) + '%"></div>';
+        html += '<div class="trend-bar" style="height:' + Math.max(v, 2) + '%;background:' + color + '" title="' + escapeHtml(d.date) + ': ' + v.toFixed(0) + '%"></div>';
       });
       html += '</div><div class="trend-labels">';
       trend.daily_pass_rate.forEach(function(d) {
-        html += '<span class="trend-label">' + (d.date || '').slice(-5) + '</span>';
+        html += '<span class="trend-label">' + escapeHtml((d.date || '').slice(-5)) + '</span>';
       });
       html += '</div></div>';
 
@@ -211,11 +231,11 @@
         trend.daily_avg_cost.forEach(function(d) {
           var v = d.value != null ? d.value : 0;
           var pct = Math.max((v / maxCost) * 100, 2);
-          html += '<div class="trend-bar" style="height:' + pct + '%" title="' + d.date + ': $' + v.toFixed(2) + '"></div>';
+          html += '<div class="trend-bar" style="height:' + pct + '%" title="' + escapeHtml(d.date) + ': $' + v.toFixed(2) + '"></div>';
         });
         html += '</div><div class="trend-labels">';
         trend.daily_avg_cost.forEach(function(d) {
-          html += '<span class="trend-label">' + (d.date || '').slice(-5) + '</span>';
+          html += '<span class="trend-label">' + escapeHtml((d.date || '').slice(-5)) + '</span>';
         });
         html += '</div></div>';
       }
@@ -238,7 +258,7 @@
       sorted.forEach(function(p) {
         var pid = (p.pattern_id || '').length > 40 ? p.pattern_id.slice(0, 40) + '...' : (p.pattern_id || '');
         var ls = p.low_signal ? '<span style="color:var(--warning)">Yes</span>' : 'No';
-        html += '<tr><td>' + pid + '</td><td>' + (p.injection_count || 0) + '</td><td>' + (p.citation_count || 0) + '</td>' +
+        html += '<tr><td>' + escapeHtml(pid) + '</td><td>' + (p.injection_count || 0) + '</td><td>' + (p.citation_count || 0) + '</td>' +
           '<td>' + ((p.citation_rate || 0) * 100).toFixed(0) + '%</td><td>' + ls + '</td></tr>';
       });
       html += '</tbody></table>';
@@ -264,12 +284,66 @@
       if (trust.model_comparisons && trust.model_comparisons.length > 0) {
         html += '<table><thead><tr><th>Model</th><th>Tasks</th><th>Feat Rate</th><th>Avg Cost</th><th>Avg Duration</th></tr></thead><tbody>';
         trust.model_comparisons.forEach(function(m) {
-          html += '<tr><td>' + (m.model_key || '') + '</td><td>' + (m.task_count || 0) + '</td>' +
+          html += '<tr><td>' + escapeHtml(m.model_key || '') + '</td><td>' + (m.task_count || 0) + '</td>' +
             '<td>' + ((m.feat_rate || 0) * 100).toFixed(0) + '%</td>' +
             '<td>$' + (m.avg_cost_per_task || 0).toFixed(2) + '</td>' +
             '<td>' + (m.avg_duration_per_task || 0).toFixed(0) + 's</td></tr>';
         });
         html += '</tbody></table>';
+      }
+      el.innerHTML = html;
+    }
+
+    function renderCacheEfficiency(cache) {
+      var el = document.getElementById('cache-efficiency');
+      if (!cache) {
+        el.innerHTML = '';
+        return;
+      }
+      var html = '<h2>Cache Efficiency</h2><div class="cards">';
+      html += '<div class="card"><div class="label">Cache Read Tokens</div><div class="value">' + fmtTokens(cache.total_cache_read || 0) + '</div></div>';
+      html += '<div class="card"><div class="label">Cache Creation Tokens</div><div class="value">' + fmtTokens(cache.total_cache_creation || 0) + '</div></div>';
+      var hitStr = cache.cache_hit_ratio != null ? (cache.cache_hit_ratio * 100).toFixed(1) + '%' : 'n/a';
+      html += '<div class="card"><div class="label">Hit Ratio</div><div class="value">' + hitStr + '</div></div>';
+      html += '</div>';
+
+      if (cache.per_phase && cache.per_phase.length > 0) {
+        html += '<table><thead><tr><th>Phase</th><th>Cache Read</th><th>Cache Creation</th><th>Hit Ratio</th></tr></thead><tbody>';
+        cache.per_phase.forEach(function(p) {
+          var ratio = p.hit_ratio != null ? (p.hit_ratio * 100).toFixed(1) + '%' : 'n/a';
+          html += '<tr><td>' + escapeHtml(p.role || '') + '</td><td>' + fmtTokens(p.cache_read || 0) + '</td>' +
+            '<td>' + fmtTokens(p.cache_creation || 0) + '</td><td>' + ratio + '</td></tr>';
+        });
+        html += '</tbody></table>';
+      }
+
+      if (cache.anomalies && cache.anomalies.length > 0) {
+        html += '<p style="font-size:0.8rem;color:var(--warning);margin-top:12px">Cache Miss Anomalies (cache_read=0, cache_creation&gt;50K):</p>';
+        html += '<table><thead><tr><th>Phase</th><th>Session</th><th>Creation Tokens</th></tr></thead><tbody>';
+        cache.anomalies.forEach(function(a) {
+          var sid = (a.session_id || '').slice(0, 8);
+          html += '<tr><td>' + escapeHtml(a.role || '') + '</td><td>' + escapeHtml(sid) + '</td>' +
+            '<td>' + fmtTokens(a.cache_creation || 0) + '</td></tr>';
+        });
+        html += '</tbody></table>';
+      }
+
+      el.innerHTML = html;
+    }
+
+    function renderProviderVersions(pv) {
+      var el = document.getElementById('provider-versions');
+      if (!pv) {
+        el.innerHTML = '';
+        return;
+      }
+      var html = '<h2>Provider Versions</h2>';
+      var versionStr = (pv.versions || []).map(function(v) { return escapeHtml(v); }).join(', ');
+      html += '<p style="color:var(--text)">' + (versionStr || 'none') + '</p>';
+      if (pv.warnings && pv.warnings.length > 0) {
+        pv.warnings.forEach(function(w) {
+          html += '<p style="color:var(--warning);font-size:0.85rem">Warning: ' + escapeHtml(w) + '</p>';
+        });
       }
       el.innerHTML = html;
     }
