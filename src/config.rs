@@ -313,6 +313,10 @@ pub struct Config {
     /// Max concurrent per-file review agents in multipass PR review.
     /// 1 = sequential (original behavior). Default: 4.
     pub pr_review_concurrency: usize,
+
+    /// Port for the `foundry dashboard` web server (default: 9400).
+    /// Serves only on localhost (127.0.0.1).
+    pub dashboard_port: u16,
 }
 
 impl Default for Config {
@@ -413,6 +417,7 @@ impl Default for Config {
             pr_review_provider: String::new(),
             pr_review_multipass_threshold: 0,
             pr_review_concurrency: 4,
+            dashboard_port: 9400,
         }
     }
 }

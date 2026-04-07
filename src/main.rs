@@ -25,6 +25,7 @@ mod task;
 mod tui;
 mod update;
 mod utils;
+mod dashboard;
 
 #[derive(Parser)]
 #[command(
@@ -107,6 +108,12 @@ enum Commands {
         /// Show daily trend sparklines
         #[arg(long)]
         trend: bool,
+    },
+    /// Start the observatory web dashboard
+    Dashboard {
+        /// Port to serve on (default: 9400, binds to 127.0.0.1 only)
+        #[arg(long, default_value = "9400")]
+        port: u16,
     },
 }
 
@@ -201,6 +208,11 @@ async fn main() -> Result<()> {
         } => {
             let stats_project = project.unwrap_or_else(|| project_dir.clone());
             stats::run_stats(days, &stats_project, &output, trend)?;
+        }
+        Commands::Dashboard { port } => {
+            let config = config::Config::load(&project_dir);
+            let effective_port = if port == 9400 { config.dashboard_port } else { port };
+            dashboard::run_dashboard(effective_port, &project_dir).await?;
         }
     }
 

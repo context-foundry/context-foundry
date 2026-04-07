@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Foundry Dashboard</title>
+  <style>
+    :root {
+      --bg: #1a1a2e;
+      --surface: #16213e;
+      --surface-hover: #1a2744;
+      --border: #2a3a5c;
+      --text: #e8e8e8;
+      --text-muted: #8892a4;
+      --accent: #E3734B;
+      --accent-hover: #f0855f;
+      --accent-subtle: rgba(227, 115, 75, 0.15);
+      --success: #4ade80;
+      --warning: #fbbf24;
+      --error: #f87171;
+      --radius: 8px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 0.9rem;
+      margin: 0;
+      padding: 24px;
+    }
+    #app { max-width: 1080px; margin: 0 auto; }
+    header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+    header h1 { font-size: 1.75rem; font-weight: 600; color: var(--text); margin: 0; }
+    #last-updated { font-size: 0.8rem; color: var(--text-muted); }
+    #error-banner {
+      background: var(--error);
+      color: #fff;
+      padding: 8px 16px;
+      border-radius: var(--radius);
+      margin-bottom: 16px;
+      font-size: 0.85rem;
+    }
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    }
+    .card .label { font-size: 0.8rem; color: var(--text-muted); margin-bottom: 4px; }
+    .card .value { font-size: 1.5rem; font-weight: 700; color: var(--accent); }
+    .card .sub { font-size: 0.8rem; color: var(--text-muted); margin-top: 4px; }
+    h2 { font-size: 1.25rem; margin: 24px 0 12px; color: var(--text); }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--surface);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    th {
+      text-align: left;
+      padding: 10px 12px;
+      background: var(--surface-hover);
+      color: var(--text-muted);
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border-bottom: 1px solid var(--border);
+    }
+    td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.9rem;
+    }
+    tr:last-child td { border-bottom: none; }
+    .chart-container {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      margin-bottom: 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    }
+    .bar {
+      background: var(--accent);
+      border-radius: 4px;
+      height: 24px;
+      display: inline-block;
+      transition: width 0.3s;
+    }
+    .bar-row { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+    .bar-label { min-width: 80px; font-size: 0.85rem; color: var(--text-muted); text-align: right; }
+    .bar-value { font-size: 0.8rem; color: var(--text-muted); min-width: 60px; }
+    .trend-row { display: flex; align-items: flex-end; gap: 2px; height: 80px; }
+    .trend-bar { background: var(--accent); border-radius: 2px 2px 0 0; min-width: 8px; flex: 1; }
+    .trend-label { font-size: 0.7rem; color: var(--text-muted); text-align: center; margin-top: 4px; }
+    .pass-rate-good { color: var(--success); }
+    .pass-rate-mid { color: var(--warning); }
+    .pass-rate-bad { color: var(--error); }
+    .trend-section { flex: 1; min-width: 0; }
+    .trend-labels { display: flex; gap: 2px; }
+    .trend-labels span { flex: 1; min-width: 8px; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <header>
+      <h1>Foundry Observatory</h1>
+      <span id="last-updated"></span>
+    </header>
+    <div id="error-banner" style="display:none"></div>
+    <section id="summary-cards"></section>
+    <section id="charts">
+      <div id="cost-by-phase"></div>
+      <div id="daily-trend"></div>
+    </section>
+    <section id="patterns-table"></section>
+    <section id="trust-dashboard"></section>
+  </div>
+  <script>
+    async function fetchStats() {
+      var resp = await fetch('/api/stats?days=7');
+      if (!resp.ok) throw new Error(resp.statusText);
+      return resp.json();
+    }
+
+    function renderDashboard(data) {
+      renderSummaryCards(data.summary, data.window);
+      renderCostByPhase(data.phase_costs);
+      renderDailyTrend(data.trend);
+      renderPatterns(data.patterns);
+      renderTrust(data.trust);
+      var now = new Date();
+      document.getElementById('last-updated').textContent =
+        'Updated ' + now.toTimeString().slice(0, 8);
+      document.getElementById('error-banner').style.display = 'none';
+    }
+
+    function renderSummaryCards(summary, window) {
+      var el = document.getElementById('summary-cards');
+      var total = summary.total_tasks || 0;
+      var rate = total > 0 ? (summary.feat_count / total * 100).toFixed(0) : null;
+      var rateClass = rate === null ? '' : (rate >= 80 ? 'pass-rate-good' : (rate >= 50 ? 'pass-rate-mid' : 'pass-rate-bad'));
+      el.innerHTML = '<div class="cards">' +
+        '<div class="card"><div class="label">Tasks</div><div class="value">' + total + '</div>' +
+        '<div class="sub">' + (summary.feat_count || 0) + ' feat / ' + (summary.wip_count || 0) + ' WIP</div></div>' +
+        '<div class="card"><div class="label">Total Cost</div><div class="value">$' + (summary.total_cost_usd || 0).toFixed(2) + '</div>' +
+        '<div class="sub">' + window.days + '-day window</div></div>' +
+        '<div class="card"><div class="label">Pass Rate</div><div class="value ' + rateClass + '">' + (rate !== null ? rate + '%' : 'N/A') + '</div>' +
+        '<div class="sub">' + (summary.total_sessions || 0) + ' sessions</div></div>' +
+        '<div class="card"><div class="label">Events Parsed</div><div class="value">' + (window.events_parsed || 0) + '</div>' +
+        '<div class="sub">' + (window.lines_skipped || 0) + ' skipped</div></div>' +
+        '</div>';
+    }
+
+    function renderCostByPhase(phases) {
+      var el = document.getElementById('cost-by-phase');
+      if (!phases || phases.length === 0) {
+        el.innerHTML = '<h2>Cost by Phase</h2><p style="color:var(--text-muted)">No phase data</p>';
+        return;
+      }
+      var max = Math.max.apply(null, phases.map(function(p) { return p.cost_usd || 0; }));
+      if (max === 0) max = 1;
+      var html = '<h2>Cost by Phase</h2><div class="chart-container">';
+      phases.forEach(function(p) {
+        var pct = Math.max(((p.cost_usd || 0) / max) * 100, 1);
+        html += '<div class="bar-row"><span class="bar-label">' + (p.role || 'unknown') + '</span>' +
+          '<span class="bar" style="width:' + pct + '%"></span>' +
+          '<span class="bar-value">$' + (p.cost_usd || 0).toFixed(2) + '</span></div>';
+      });
+      html += '</div>';
+      el.innerHTML = html;
+    }
+
+    function renderDailyTrend(trend) {
+      var el = document.getElementById('daily-trend');
+      if (!trend || (!trend.daily_pass_rate || trend.daily_pass_rate.length === 0)) {
+        el.innerHTML = '<h2>Daily Trend</h2><p style="color:var(--text-muted)">No trend data</p>';
+        return;
+      }
+      var html = '<h2>Daily Trend</h2><div class="chart-container" style="display:flex;gap:24px">';
+
+      // Pass Rate chart
+      html += '<div class="trend-section"><div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:8px">Pass Rate</div>';
+      html += '<div class="trend-row">';
+      trend.daily_pass_rate.forEach(function(d) {
+        var v = d.value != null ? d.value : 0;
+        var color = v >= 80 ? 'var(--success)' : (v >= 50 ? 'var(--warning)' : 'var(--error)');
+        html += '<div class="trend-bar" style="height:' + Math.max(v, 2) + '%;background:' + color + '" title="' + d.date + ': ' + v.toFixed(0) + '%"></div>';
+      });
+      html += '</div><div class="trend-labels">';
+      trend.daily_pass_rate.forEach(function(d) {
+        html += '<span class="trend-label">' + (d.date || '').slice(-5) + '</span>';
+      });
+      html += '</div></div>';
+
+      // Avg Cost chart
+      if (trend.daily_avg_cost && trend.daily_avg_cost.length > 0) {
+        var maxCost = Math.max.apply(null, trend.daily_avg_cost.map(function(d) { return d.value || 0; }));
+        if (maxCost === 0) maxCost = 1;
+        html += '<div class="trend-section"><div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:8px">Avg Cost</div>';
+        html += '<div class="trend-row">';
+        trend.daily_avg_cost.forEach(function(d) {
+          var v = d.value != null ? d.value : 0;
+          var pct = Math.max((v / maxCost) * 100, 2);
+          html += '<div class="trend-bar" style="height:' + pct + '%" title="' + d.date + ': $' + v.toFixed(2) + '"></div>';
+        });
+        html += '</div><div class="trend-labels">';
+        trend.daily_avg_cost.forEach(function(d) {
+          html += '<span class="trend-label">' + (d.date || '').slice(-5) + '</span>';
+        });
+        html += '</div></div>';
+      }
+
+      html += '</div>';
+      el.innerHTML = html;
+    }
+
+    function renderPatterns(patterns) {
+      var el = document.getElementById('patterns-table');
+      if (!patterns || !patterns.effectiveness || patterns.effectiveness.length === 0) {
+        el.innerHTML = '<h2>Pattern Effectiveness</h2><p style="color:var(--text-muted)">No pattern data</p>';
+        return;
+      }
+      var sorted = patterns.effectiveness.slice().sort(function(a, b) { return (b.injection_count || 0) - (a.injection_count || 0); }).slice(0, 20);
+      var html = '<h2>Pattern Effectiveness</h2>';
+      html += '<p style="font-size:0.8rem;color:var(--text-muted);margin-bottom:12px">' +
+        (patterns.total_injections || 0) + ' total injections across ' + (patterns.unique_patterns || 0) + ' unique patterns</p>';
+      html += '<table><thead><tr><th>Pattern ID</th><th>Injections</th><th>Citations</th><th>Citation Rate</th><th>Low Signal</th></tr></thead><tbody>';
+      sorted.forEach(function(p) {
+        var pid = (p.pattern_id || '').length > 40 ? p.pattern_id.slice(0, 40) + '...' : (p.pattern_id || '');
+        var ls = p.low_signal ? '<span style="color:var(--warning)">Yes</span>' : 'No';
+        html += '<tr><td>' + pid + '</td><td>' + (p.injection_count || 0) + '</td><td>' + (p.citation_count || 0) + '</td>' +
+          '<td>' + ((p.citation_rate || 0) * 100).toFixed(0) + '%</td><td>' + ls + '</td></tr>';
+      });
+      html += '</tbody></table>';
+      el.innerHTML = html;
+    }
+
+    function renderTrust(trust) {
+      var el = document.getElementById('trust-dashboard');
+      if (!trust) {
+        el.innerHTML = '<h2>Trust Dashboard</h2><p style="color:var(--text-muted)">No trust data</p>';
+        return;
+      }
+      var accRate = trust.acceptance_rate != null ? (trust.acceptance_rate * 100).toFixed(0) + '%' : 'N/A';
+      var rescueRate = trust.review_rescue_rate != null ? (trust.review_rescue_rate * 100).toFixed(0) + '%' : 'N/A';
+      var html = '<h2>Trust Dashboard</h2><div class="cards">';
+      html += '<div class="card"><div class="label">Acceptance Rate</div><div class="value">' + accRate + '</div>' +
+        '<div class="sub">' + (trust.feat_tasks || 0) + '/' + (trust.completed_tasks || 0) + ' tasks</div></div>';
+      html += '<div class="card"><div class="label">Review Rescue Rate</div><div class="value">' + rescueRate + '</div>' +
+        '<div class="sub">' + (trust.rescued_tasks || 0) + '/' + (trust.tasks_with_findings || 0) + ' findings</div></div>';
+      html += '<div class="card"><div class="label">Longest Feat Streak</div><div class="value">' + (trust.longest_feat_streak || 0) + '</div></div>';
+      html += '</div>';
+
+      if (trust.model_comparisons && trust.model_comparisons.length > 0) {
+        html += '<table><thead><tr><th>Model</th><th>Tasks</th><th>Feat Rate</th><th>Avg Cost</th><th>Avg Duration</th></tr></thead><tbody>';
+        trust.model_comparisons.forEach(function(m) {
+          html += '<tr><td>' + (m.model || '') + '</td><td>' + (m.tasks || 0) + '</td>' +
+            '<td>' + ((m.feat_rate || 0) * 100).toFixed(0) + '%</td>' +
+            '<td>$' + (m.avg_cost || 0).toFixed(2) + '</td>' +
+            '<td>' + (m.avg_duration_secs || 0).toFixed(0) + 's</td></tr>';
+        });
+        html += '</tbody></table>';
+      }
+      el.innerHTML = html;
+    }
+
+    fetchStats().then(renderDashboard).catch(function(err) {
+      var banner = document.getElementById('error-banner');
+      banner.textContent = 'Failed to load stats: ' + err.message;
+      banner.style.display = 'block';
+    });
+
+    setInterval(function() {
+      fetchStats().then(renderDashboard).catch(function(err) {
+        var banner = document.getElementById('error-banner');
+        banner.textContent = 'Failed to load stats: ' + err.message;
+        banner.style.display = 'block';
+      });
+    }, 60000);
+  </script>
+</body>
+</html>
