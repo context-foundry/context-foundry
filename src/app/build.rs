@@ -1547,14 +1547,20 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
     // ─── Scout State ──────────────────────────────────────────────
     // Scout runs once at session start, then reuses the report for
     // subsequent tasks unless the previous commit touched structural files.
-    // If a recent scout-report exists on disk (< 10 min old), reuse it
-    // across Foundry restarts to avoid re-scouting the same codebase.
+    // If a recent research-report.md OR scout-report.md exists on disk
+    // (< 10 min old), reuse it across Foundry restarts to avoid re-running
+    // Q+R or re-scouting the same codebase. The bootstrap scout path writes
+    // scout-report.md and bypasses Q+R, so either file being fresh suffices.
     let research_report_path = ctx.buildloop_dir.join("research-report.md");
-    let mut qr_has_run = research_report_path.exists()
-        && std::fs::metadata(&research_report_path)
-            .and_then(|m| m.modified())
-            .map(|mtime| mtime.elapsed().map(|d| d.as_secs() < 600).unwrap_or(false))
-            .unwrap_or(false);
+    let scout_report_path = ctx.buildloop_dir.join("scout-report.md");
+    let is_fresh = |path: &std::path::Path| -> bool {
+        path.exists()
+            && std::fs::metadata(path)
+                .and_then(|m| m.modified())
+                .map(|mtime| mtime.elapsed().map(|d| d.as_secs() < 600).unwrap_or(false))
+                .unwrap_or(false)
+    };
+    let mut qr_has_run = is_fresh(&research_report_path) || is_fresh(&scout_report_path);
 
     // ─── Bootstrap Scout ──────────────────────────────────────────
     // If TASKS.md has no pending tasks, run a bootstrap scout that

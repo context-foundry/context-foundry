@@ -2983,6 +2983,29 @@ mod tests {
         }
     }
 
+    #[test]
+    fn test_query_role_uses_allowed_tools_not_skip_permissions() {
+        let tools = allowed_tools_for_role(&AgentRole::Query);
+        assert_eq!(tools, &["Write"], "Query role should only have Write tool");
+        // Verify that with enforce_phase_rbac=true (default), the CLI command
+        // uses --allowedTools instead of --dangerously-skip-permissions
+        let cmd = crate::tmux::TmuxSession::build_cli_command(
+            "claude", "test prompt", "sonnet", tools, true,
+        );
+        assert!(
+            cmd.contains("--allowedTools"),
+            "Query CLI command must contain --allowedTools, got: {}", cmd
+        );
+        assert!(
+            cmd.contains("Write"),
+            "Query CLI command must list Write tool, got: {}", cmd
+        );
+        assert!(
+            !cmd.contains("--dangerously-skip-permissions"),
+            "Query CLI command must NOT contain --dangerously-skip-permissions, got: {}", cmd
+        );
+    }
+
     // ─── Malformed stream-json input tests ─────────────────────────
 
     #[test]

@@ -294,7 +294,7 @@ pub struct Config {
     /// for Claude backend agents. This is tool-surface reduction, not a hard
     /// filesystem security boundary -- any role with Bash access is still trusted code.
     /// Codex provider does not support this; a warning is logged when enabled with Codex.
-    #[serde(default)]
+    #[serde(default = "default_true")]
     pub enforce_phase_rbac: bool,
 
     /// Model for PR review via `foundry review-pr`. Defaults to reviewer_model.
@@ -412,7 +412,7 @@ impl Default for Config {
             semgrep_enabled: false,
             semgrep_rulesets: Vec::new(),
             require_human_approval: false,
-            enforce_phase_rbac: false,
+            enforce_phase_rbac: true,
             pr_review_model: String::new(),
             pr_review_provider: String::new(),
             pr_review_multipass_threshold: 0,
@@ -1140,6 +1140,23 @@ mod tests {
     #[test]
     fn default_config_disables_require_human_approval() {
         assert!(!Config::default().require_human_approval);
+    }
+
+    #[test]
+    fn default_config_enables_enforce_phase_rbac() {
+        assert!(Config::default().enforce_phase_rbac);
+    }
+
+    #[test]
+    fn config_deserializes_enforce_phase_rbac_default_true() {
+        let config: Config = serde_json::from_str(r#"{"builder_model":"opus"}"#).unwrap();
+        assert!(config.enforce_phase_rbac);
+    }
+
+    #[test]
+    fn config_deserializes_enforce_phase_rbac_explicit_false() {
+        let config: Config = serde_json::from_str(r#"{"enforce_phase_rbac":false}"#).unwrap();
+        assert!(!config.enforce_phase_rbac);
     }
 
     #[test]
