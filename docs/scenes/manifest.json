@@ -207,6 +207,16 @@
       "model": "gpt-4o-mini",
       "lines": 82,
       "generation": 21
+    },
+    {
+      "file": "the-pipe-operator.js",
+      "name": "The Pipe Operator",
+      "location": "Thurston Lava Tube, Hawaii Volcanoes NP, USA",
+      "biome": "volcanic",
+      "generated": "2026-04-07T17:19:04.695Z",
+      "model": "gpt-4o-mini",
+      "lines": 85,
+      "generation": 22
     }
   ]
 }
