@@ -631,6 +631,8 @@ async fn run_multipass_pr_review(
                     tokens_out: agent_usage.tokens_out,
                     cost_usd: agent_usage.cost_usd,
                     context_pct: agent_usage.context_pct,
+                    cache_creation_tokens: agent_usage.cache_creation_tokens,
+                    cache_read_tokens: agent_usage.cache_read_tokens,
                 },
             );
 
@@ -660,6 +662,8 @@ async fn run_multipass_pr_review(
                 total_usage.tokens_out += agent_usage.tokens_out;
                 total_usage.cost_usd += agent_usage.cost_usd;
                 total_usage.context_pct = total_usage.context_pct.max(agent_usage.context_pct);
+                total_usage.cache_creation_tokens += agent_usage.cache_creation_tokens;
+                total_usage.cache_read_tokens += agent_usage.cache_read_tokens;
 
                 if success {
                     per_file_success_count += 1;
@@ -774,6 +778,8 @@ async fn run_multipass_pr_review(
     total_usage.tokens_out += agent_usage.tokens_out;
     total_usage.cost_usd += agent_usage.cost_usd;
     total_usage.context_pct = total_usage.context_pct.max(agent_usage.context_pct);
+    total_usage.cache_creation_tokens += agent_usage.cache_creation_tokens;
+    total_usage.cache_read_tokens += agent_usage.cache_read_tokens;
 
     observatory::log_event(
         session_id,
@@ -786,6 +792,8 @@ async fn run_multipass_pr_review(
             tokens_out: agent_usage.tokens_out,
             cost_usd: agent_usage.cost_usd,
             context_pct: agent_usage.context_pct,
+            cache_creation_tokens: agent_usage.cache_creation_tokens,
+            cache_read_tokens: agent_usage.cache_read_tokens,
         },
     );
 
@@ -979,6 +987,8 @@ pub async fn run(
                 tokens_out: usage.tokens_out,
                 cost_usd: usage.cost_usd,
                 context_pct: usage.context_pct,
+                cache_creation_tokens: usage.cache_creation_tokens,
+                cache_read_tokens: usage.cache_read_tokens,
             },
         );
 

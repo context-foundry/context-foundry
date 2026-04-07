@@ -817,6 +817,8 @@ async fn run_parallel_builder(
                 tokens_out: slot_usage.tokens_out,
                 cost_usd: slot_usage.cost_usd,
                 context_pct: slot_usage.context_pct,
+                cache_creation_tokens: slot_usage.cache_creation_tokens,
+                cache_read_tokens: slot_usage.cache_read_tokens,
             });
 
             (slot_idx, ok, rl, slot_usage)
@@ -1580,6 +1582,8 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                 tokens_out: agent_usage.tokens_out,
                 cost_usd: agent_usage.cost_usd,
                 context_pct: agent_usage.context_pct,
+                cache_creation_tokens: agent_usage.cache_creation_tokens,
+                cache_read_tokens: agent_usage.cache_read_tokens,
             });
             scout_has_run = true;
 
@@ -1915,6 +1919,8 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                 tokens_out: agent_usage.tokens_out,
                 cost_usd: agent_usage.cost_usd,
                 context_pct: agent_usage.context_pct,
+                cache_creation_tokens: agent_usage.cache_creation_tokens,
+                cache_read_tokens: agent_usage.cache_read_tokens,
             });
 
             // Check stop after discovery agent completion
@@ -2508,6 +2514,8 @@ async fn process_task(
             tokens_out: agent_usage.tokens_out,
             cost_usd: agent_usage.cost_usd,
             context_pct: agent_usage.context_pct,
+            cache_creation_tokens: agent_usage.cache_creation_tokens,
+            cache_read_tokens: agent_usage.cache_read_tokens,
         });
         // Budget telemetry: Scout
         if ctx.config.budget_recovery_enabled {
@@ -2752,6 +2760,8 @@ async fn process_task(
                 tokens_out: agent_usage.tokens_out,
                 cost_usd: agent_usage.cost_usd,
                 context_pct: agent_usage.context_pct,
+                cache_creation_tokens: agent_usage.cache_creation_tokens,
+                cache_read_tokens: agent_usage.cache_read_tokens,
             });
             // Budget telemetry: Planner
             if ctx.config.budget_recovery_enabled {
@@ -3038,6 +3048,8 @@ async fn process_task(
                 tokens_out: retry_usage.tokens_out,
                 cost_usd: retry_usage.cost_usd,
                 context_pct: retry_usage.context_pct,
+                cache_creation_tokens: retry_usage.cache_creation_tokens,
+                cache_read_tokens: retry_usage.cache_read_tokens,
             });
             // Budget telemetry: Planner retry
             if ctx.config.budget_recovery_enabled {
@@ -3243,6 +3255,8 @@ async fn process_task(
                 tokens_out: agent_usage.tokens_out,
                 cost_usd: agent_usage.cost_usd,
                 context_pct: agent_usage.context_pct,
+                cache_creation_tokens: agent_usage.cache_creation_tokens,
+                cache_read_tokens: agent_usage.cache_read_tokens,
             });
 
             match review_result {
@@ -3644,6 +3658,8 @@ async fn process_task(
             tokens_out: agent_usage.tokens_out,
             cost_usd: agent_usage.cost_usd,
             context_pct: agent_usage.context_pct,
+            cache_creation_tokens: agent_usage.cache_creation_tokens,
+            cache_read_tokens: agent_usage.cache_read_tokens,
         });
         // Budget telemetry: Builder
         if ctx.config.budget_recovery_enabled {
@@ -5259,6 +5275,8 @@ mod tests {
             input_tokens: 5000,
             output_tokens: 2000,
             context_window: 200000,
+            cache_creation_tokens: 0,
+            cache_read_tokens: 0,
         };
         usage.accumulate(&evt);
 
@@ -5494,6 +5512,7 @@ mod tests {
             tokens_in: 5000,
             tokens_out: 2000,
             context_pct: 45,
+            ..Default::default()
         };
         let record = budget::evaluate_phase(
             &AgentRole::Builder,

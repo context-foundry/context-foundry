@@ -186,6 +186,8 @@ pub(super) async fn run_review_loop(
             tokens_out: multipass_usage.tokens_out,
             cost_usd: multipass_usage.cost_usd,
             context_pct: multipass_usage.context_pct,
+            cache_creation_tokens: multipass_usage.cache_creation_tokens,
+            cache_read_tokens: multipass_usage.cache_read_tokens,
         });
         restore_phase_guard(&mut phase_guard, tx);
         return (passed, fixes, findings, multipass_budget);
@@ -269,6 +271,8 @@ pub(super) async fn run_review_loop(
         tokens_out: agent_usage.tokens_out,
         cost_usd: agent_usage.cost_usd,
         context_pct: agent_usage.context_pct,
+        cache_creation_tokens: agent_usage.cache_creation_tokens,
+        cache_read_tokens: agent_usage.cache_read_tokens,
     });
     // Budget telemetry: Reviewer
     let mut reviewer_budget_record: Option<budget::PhaseBudgetRecord> = None;
@@ -505,6 +509,8 @@ async fn run_multipass_review(
         total_usage.tokens_out += agent_usage.tokens_out;
         total_usage.cost_usd += agent_usage.cost_usd;
         total_usage.context_pct = total_usage.context_pct.max(agent_usage.context_pct);
+        total_usage.cache_creation_tokens += agent_usage.cache_creation_tokens;
+        total_usage.cache_read_tokens += agent_usage.cache_read_tokens;
         observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::AgentDone {
             role: format!("{}", AgentRole::Reviewer),
             success: result.as_ref().map(|r| r.success).unwrap_or(false),
@@ -513,6 +519,8 @@ async fn run_multipass_review(
             tokens_out: agent_usage.tokens_out,
             cost_usd: agent_usage.cost_usd,
             context_pct: agent_usage.context_pct,
+            cache_creation_tokens: agent_usage.cache_creation_tokens,
+            cache_read_tokens: agent_usage.cache_read_tokens,
         });
 
         if result.as_ref().map(|r| r.success).unwrap_or(false) {
@@ -616,6 +624,8 @@ async fn run_multipass_review(
     total_usage.tokens_out += agent_usage.tokens_out;
     total_usage.cost_usd += agent_usage.cost_usd;
     total_usage.context_pct = total_usage.context_pct.max(agent_usage.context_pct);
+    total_usage.cache_creation_tokens += agent_usage.cache_creation_tokens;
+    total_usage.cache_read_tokens += agent_usage.cache_read_tokens;
     observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::AgentDone {
         role: format!("{}", AgentRole::Reviewer),
         success: review_result.as_ref().map(|r| r.success).unwrap_or(false),
@@ -624,6 +634,8 @@ async fn run_multipass_review(
         tokens_out: agent_usage.tokens_out,
         cost_usd: agent_usage.cost_usd,
         context_pct: agent_usage.context_pct,
+        cache_creation_tokens: agent_usage.cache_creation_tokens,
+        cache_read_tokens: agent_usage.cache_read_tokens,
     });
 
     if !review_result.as_ref().map(|r| r.success).unwrap_or(false) {

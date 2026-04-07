@@ -184,6 +184,7 @@ mod tests {
             tokens_in: 1000,
             tokens_out: 500,
             cost_usd: 0.01,
+            ..Default::default()
         };
         let targets = BudgetTargets::default();
         let record = evaluate_phase(&AgentRole::Planner, &usage, &targets, 10);
@@ -199,6 +200,7 @@ mod tests {
             tokens_in: 5000,
             tokens_out: 2000,
             cost_usd: 0.05,
+            ..Default::default()
         };
         let targets = BudgetTargets::default();
         let record = evaluate_phase(&AgentRole::Planner, &usage, &targets, 10);
@@ -214,6 +216,7 @@ mod tests {
             tokens_in: 8000,
             tokens_out: 3000,
             cost_usd: 0.10,
+            ..Default::default()
         };
         let targets = BudgetTargets::default();
         let record = evaluate_phase(&AgentRole::Planner, &usage, &targets, 5);
@@ -229,6 +232,7 @@ mod tests {
             tokens_in: 15000,
             tokens_out: 5000,
             cost_usd: 0.20,
+            ..Default::default()
         };
         let targets = BudgetTargets::default();
         let record = evaluate_phase(&AgentRole::Planner, &usage, &targets, 5);
@@ -244,6 +248,7 @@ mod tests {
             tokens_in: 25000,
             tokens_out: 8000,
             cost_usd: 0.50,
+            ..Default::default()
         };
         let targets = BudgetTargets::default();
         let record = evaluate_phase(&AgentRole::Planner, &usage, &targets, 5);
@@ -294,6 +299,7 @@ mod tests {
             tokens_in: 3000,
             tokens_out: 1000,
             cost_usd: 0.03,
+            ..Default::default()
         };
         let targets = BudgetTargets::default();
         let record = evaluate_phase(&AgentRole::PlanReview, &usage, &targets, 5);
@@ -328,6 +334,7 @@ mod tests {
                 tokens_in: 1000,
                 tokens_out: 500,
                 cost_usd: 0.01,
+                ..Default::default()
             };
             let record = evaluate_phase(role, &usage, &targets, threshold);
             if record.overrun && record.recovery_action != RecoveryAction::Continue {
@@ -372,6 +379,7 @@ mod tests {
             tokens_in: 1000,
             tokens_out: 500,
             cost_usd: 0.01,
+            ..Default::default()
         };
         let record = evaluate_phase(&AgentRole::Planner, &usage, &BudgetTargets::default(), 10);
         assert_eq!(record.recovery_action, RecoveryAction::Summarize);
@@ -384,6 +392,7 @@ mod tests {
             tokens_in: 1000,
             tokens_out: 500,
             cost_usd: 0.01,
+            ..Default::default()
         };
         let record = evaluate_phase(&AgentRole::Planner, &usage, &BudgetTargets::default(), 20);
         assert_eq!(record.recovery_action, RecoveryAction::Summarize);
@@ -396,6 +405,7 @@ mod tests {
             tokens_in: 1000,
             tokens_out: 500,
             cost_usd: 0.01,
+            ..Default::default()
         };
         let record = evaluate_phase(&AgentRole::Planner, &usage, &BudgetTargets::default(), 30);
         assert_eq!(record.recovery_action, RecoveryAction::Summarize);
@@ -408,6 +418,7 @@ mod tests {
             tokens_in: 1000,
             tokens_out: 500,
             cost_usd: 0.01,
+            ..Default::default()
         };
         let record = evaluate_phase(&AgentRole::Planner, &usage, &BudgetTargets::default(), 20);
         assert_eq!(record.recovery_action, RecoveryAction::Escalate);
@@ -420,6 +431,7 @@ mod tests {
             tokens_in: 1000,
             tokens_out: 500,
             cost_usd: 0.01,
+            ..Default::default()
         };
         let record = evaluate_phase(&AgentRole::Planner, &usage, &BudgetTargets::default(), 20);
         assert_eq!(record.recovery_action, RecoveryAction::SplitRecommended);
@@ -432,6 +444,7 @@ mod tests {
             tokens_in: 1000,
             tokens_out: 500,
             cost_usd: 0.01,
+            ..Default::default()
         };
         let record = evaluate_phase(&AgentRole::Planner, &usage, &BudgetTargets::default(), 30);
         assert_eq!(record.recovery_action, RecoveryAction::Continue);
@@ -456,6 +469,7 @@ mod tests {
             tokens_in: 3000,
             tokens_out: 1000,
             cost_usd: 0.03,
+            ..Default::default()
         };
         let targets = BudgetTargets::default();
         let record = evaluate_phase(&AgentRole::Scout, &usage, &targets, threshold);
@@ -489,6 +503,7 @@ mod tests {
             tokens_in: 20000,
             tokens_out: 8000,
             cost_usd: 0.30,
+            ..Default::default()
         };
         let record = evaluate_phase(&AgentRole::Reviewer, &usage, &BudgetTargets::default(), 10);
         assert_eq!(record.phase, "VERIFY");
@@ -510,6 +525,7 @@ mod tests {
             tokens_in: 15000,
             tokens_out: 5000,
             cost_usd: 0.25,
+            ..Default::default()
         };
         let record = evaluate_phase(&AgentRole::Reviewer, &usage, &BudgetTargets::default(), 10);
         assert_eq!(record.phase, "VERIFY");

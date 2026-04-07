@@ -14,6 +14,8 @@ pub struct AgentUsage {
     pub tokens_in: u64,
     pub tokens_out: u64,
     pub context_pct: u8,
+    pub cache_creation_tokens: u64,
+    pub cache_read_tokens: u64,
 }
 
 /// Envelope written as a single JSON line to the events file.
@@ -59,6 +61,10 @@ pub enum ObservatoryEvent {
         tokens_out: u64,
         cost_usd: f64,
         context_pct: u8,
+        #[serde(default)]
+        cache_creation_tokens: u64,
+        #[serde(default)]
+        cache_read_tokens: u64,
     },
     ReviewFindings {
         task_id: String,
@@ -213,11 +219,15 @@ impl AgentUsage {
             input_tokens,
             output_tokens,
             context_window,
+            cache_creation_tokens,
+            cache_read_tokens,
         } = event
         {
             self.cost_usd += cost_usd;
             self.tokens_in += input_tokens;
             self.tokens_out += output_tokens;
+            self.cache_creation_tokens += cache_creation_tokens;
+            self.cache_read_tokens += cache_read_tokens;
             if *context_window > 0 {
                 let total = input_tokens + output_tokens;
                 self.context_pct =

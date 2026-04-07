@@ -1804,6 +1804,7 @@ fn handle_agent_output(state: &mut AppState, output: AgentOutputEvent) {
             input_tokens,
             output_tokens,
             context_window,
+            ..
         } => {
             state.session_cost_usd += cost_usd;
             state.session_input_tokens += input_tokens;
@@ -1891,6 +1892,7 @@ fn handle_dual_build_output(state: &mut AppState, idx: usize, output: AgentOutpu
             input_tokens,
             output_tokens,
             context_window,
+            ..
         } => {
             state.session_cost_usd += cost_usd;
             state.session_input_tokens += input_tokens;

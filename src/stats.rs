@@ -20,6 +20,7 @@ pub struct StatsReport {
     pub trust: Option<TrustDashboard>,
     pub trend: Option<TrendData>,
     pub pr_reviews: Option<PrReviewStats>,
+    pub cache_efficiency: Option<CacheEfficiency>,
 }
 
 #[derive(Debug, Serialize)]
@@ -162,6 +163,31 @@ pub struct PrReviewEntry {
     pub medium: usize,
     pub low: usize,
     pub cost_usd: f64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct CacheEfficiency {
+    pub total_cache_creation: u64,
+    pub total_cache_read: u64,
+    pub cache_hit_ratio: Option<f64>,
+    pub per_phase: Vec<PhaseCacheEntry>,
+    pub anomalies: Vec<CacheAnomaly>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PhaseCacheEntry {
+    pub role: String,
+    pub cache_creation: u64,
+    pub cache_read: u64,
+    pub hit_ratio: Option<f64>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct CacheAnomaly {
+    pub role: String,
+    pub session_id: String,
+    pub cache_creation: u64,
+    pub cache_read: u64,
 }
 
 // ─── Entry Point ─────────────────────────────────────────────
@@ -351,6 +377,13 @@ pub fn compute_stats(
     let mut pr_review_costs: HashMap<String, f64> = HashMap::new();
     let mut pr_review_findings: Vec<PrReviewEntry> = Vec::new();
 
+    // Cache token tracking (T27.1)
+    let mut total_cache_creation: u64 = 0;
+    let mut total_cache_read: u64 = 0;
+    let mut phase_cache_map: HashMap<String, (u64, u64)> = HashMap::new();
+    let mut cache_anomalies: Vec<CacheAnomaly> = Vec::new();
+    let mut has_any_cache_data = false;
+
     for (idx, ev) in events.iter().enumerate() {
         session_events
             .entry(ev.session_id.clone())
@@ -410,6 +443,25 @@ pub fn compute_stats(
                             .get("tokens_out")
                             .and_then(|v| v.as_u64())
                             .unwrap_or(0);
+
+                        let cc = ev.payload.get("cache_creation_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
+                        let cr = ev.payload.get("cache_read_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
+                        if cc > 0 || cr > 0 {
+                            has_any_cache_data = true;
+                        }
+                        total_cache_creation += cc;
+                        total_cache_read += cr;
+                        let cache_entry = phase_cache_map.entry(role.to_string()).or_default();
+                        cache_entry.0 += cc;
+                        cache_entry.1 += cr;
+                        if cr == 0 && cc > 50_000 {
+                            cache_anomalies.push(CacheAnomaly {
+                                role: role.to_string(),
+                                session_id: ev.session_id.clone(),
+                                cache_creation: cc,
+                                cache_read: cr,
+                            });
+                        }
                     }
                 }
             }
@@ -852,6 +904,44 @@ pub fn compute_stats(
         None
     };
 
+    // ── Cache Efficiency (T27.1) ──
+    let cache_efficiency = if has_any_cache_data {
+        let cache_hit_ratio = {
+            let total = total_cache_read + total_cache_creation;
+            if total > 0 {
+                Some(total_cache_read as f64 / total as f64)
+            } else {
+                None
+            }
+        };
+        let mut per_phase: Vec<PhaseCacheEntry> = phase_cache_map
+            .into_iter()
+            .map(|(role, (creation, read))| {
+                let total = read + creation;
+                PhaseCacheEntry {
+                    role,
+                    cache_creation: creation,
+                    cache_read: read,
+                    hit_ratio: if total > 0 {
+                        Some(read as f64 / total as f64)
+                    } else {
+                        None
+                    },
+                }
+            })
+            .collect();
+        per_phase.sort_by(|a, b| a.role.cmp(&b.role));
+        Some(CacheEfficiency {
+            total_cache_creation,
+            total_cache_read,
+            cache_hit_ratio,
+            per_phase,
+            anomalies: cache_anomalies,
+        })
+    } else {
+        None
+    };
+
     // ── Assemble report ──
 
     StatsReport {
@@ -903,6 +993,7 @@ pub fn compute_stats(
         trust,
         trend: trend_data,
         pr_reviews,
+        cache_efficiency,
     }
 }
 
@@ -1355,6 +1446,57 @@ fn print_table(report: &StatsReport) {
             pr.findings_high, pr.findings_medium, pr.findings_low
         );
     }
+
+    // Cache Efficiency (T27.1)
+    if let Some(ref ce) = report.cache_efficiency {
+        println!();
+        println!("Cache Efficiency");
+        println!("----------------");
+        println!(
+            "  Total cache read:      {}",
+            fmt_tokens(ce.total_cache_read)
+        );
+        println!(
+            "  Total cache creation:  {}",
+            fmt_tokens(ce.total_cache_creation)
+        );
+        match ce.cache_hit_ratio {
+            Some(r) => println!("  Cache hit ratio:       {:.1}%", r * 100.0),
+            None => println!("  Cache hit ratio:       n/a"),
+        }
+        if !ce.per_phase.is_empty() {
+            println!();
+            println!(
+                "  {:<16} {:>12} {:>12} {:>10}",
+                "Phase", "Cache Read", "Cache Create", "Hit Ratio"
+            );
+            for p in &ce.per_phase {
+                let ratio_str = match p.hit_ratio {
+                    Some(r) => format!("{:.1}%", r * 100.0),
+                    None => "n/a".to_string(),
+                };
+                println!(
+                    "  {:<16} {:>12} {:>12} {:>10}",
+                    p.role,
+                    fmt_tokens(p.cache_read),
+                    fmt_tokens(p.cache_creation),
+                    ratio_str
+                );
+            }
+        }
+        if !ce.anomalies.is_empty() {
+            println!();
+            println!("  Cache Miss Anomalies (cache_read=0, cache_creation>50K):");
+            for a in &ce.anomalies {
+                println!(
+                    "    {} in session {} (creation: {})",
+                    a.role,
+                    &a.session_id[..8.min(a.session_id.len())],
+                    fmt_tokens(a.cache_creation)
+                );
+            }
+        }
+    }
 }
 
 // ─── Tests ───────────────────────────────────────────────────
@@ -1394,11 +1536,11 @@ mod tests {
             ),
             make_event(
                 "2025-01-15T10:02:00Z", s, p, "agent_done",
-                serde_json::json!({"type": "AgentDone", "role": "planner", "success": true, "duration_secs": 30.0, "tokens_in": 1000, "tokens_out": 500, "cost_usd": 0.05, "context_pct": 10}),
+                serde_json::json!({"type": "AgentDone", "role": "planner", "success": true, "duration_secs": 30.0, "tokens_in": 1000, "tokens_out": 500, "cost_usd": 0.05, "context_pct": 10, "cache_creation_tokens": 200, "cache_read_tokens": 800}),
             ),
             make_event(
                 "2025-01-15T10:03:00Z", s, p, "agent_done",
-                serde_json::json!({"type": "AgentDone", "role": "builder", "success": true, "duration_secs": 60.0, "tokens_in": 5000, "tokens_out": 2000, "cost_usd": 0.25, "context_pct": 30}),
+                serde_json::json!({"type": "AgentDone", "role": "builder", "success": true, "duration_secs": 60.0, "tokens_in": 5000, "tokens_out": 2000, "cost_usd": 0.25, "context_pct": 30, "cache_creation_tokens": 1000, "cache_read_tokens": 4000}),
             ),
             make_event(
                 "2025-01-15T10:04:00Z", s, p, "review_findings",
@@ -1419,7 +1561,7 @@ mod tests {
             ),
             make_event(
                 "2025-01-15T10:11:00Z", s, p, "agent_done",
-                serde_json::json!({"type": "AgentDone", "role": "builder", "success": true, "duration_secs": 45.0, "tokens_in": 3000, "tokens_out": 1000, "cost_usd": 0.15, "context_pct": 20}),
+                serde_json::json!({"type": "AgentDone", "role": "builder", "success": true, "duration_secs": 45.0, "tokens_in": 3000, "tokens_out": 1000, "cost_usd": 0.15, "context_pct": 20, "cache_creation_tokens": 500, "cache_read_tokens": 2500}),
             ),
             make_event(
                 "2025-01-15T10:12:00Z", s, p, "review_findings",
@@ -2289,5 +2431,60 @@ mod tests {
             assert_eq!(trust.completed_tasks, 1);
             assert_eq!(trust.feat_tasks, 1);
         }
+    }
+
+    #[test]
+    fn test_cache_efficiency() {
+        let events = synthetic_session();
+        let report = compute_stats(&events, 0, 7, None, false);
+
+        let ce = report.cache_efficiency.as_ref().expect("cache_efficiency should be present");
+        // planner: 200 creation, 800 read; builder: 1000+500=1500 creation, 4000+2500=6500 read
+        assert_eq!(ce.total_cache_creation, 1700);
+        assert_eq!(ce.total_cache_read, 7300);
+        let ratio = ce.cache_hit_ratio.expect("ratio should be present");
+        // 7300 / (7300 + 1700) = 0.8111...
+        assert!((ratio - 7300.0 / 9000.0).abs() < 0.001);
+        assert!(!ce.per_phase.is_empty());
+        assert!(ce.anomalies.is_empty());
+    }
+
+    #[test]
+    fn test_cache_efficiency_absent_for_old_events() {
+        let p = "/test/project";
+        let s = "sess-old";
+        let events = vec![
+            make_event(
+                "2025-01-15T10:00:00Z", s, p, "session_started",
+                serde_json::json!({"type": "SessionStarted", "config": {}}),
+            ),
+            make_event(
+                "2025-01-15T10:02:00Z", s, p, "agent_done",
+                serde_json::json!({"type": "AgentDone", "role": "builder", "success": true, "duration_secs": 30.0, "tokens_in": 1000, "tokens_out": 500, "cost_usd": 0.05, "context_pct": 10}),
+            ),
+        ];
+        let report = compute_stats(&events, 0, 7, None, false);
+        assert!(report.cache_efficiency.is_none(), "old events without cache fields should not produce cache_efficiency");
+    }
+
+    #[test]
+    fn test_cache_anomaly_detection() {
+        let p = "/test/project";
+        let s = "sess-anomaly";
+        let events = vec![
+            make_event(
+                "2025-01-15T10:00:00Z", s, p, "session_started",
+                serde_json::json!({"type": "SessionStarted", "config": {}}),
+            ),
+            make_event(
+                "2025-01-15T10:02:00Z", s, p, "agent_done",
+                serde_json::json!({"type": "AgentDone", "role": "builder", "success": true, "duration_secs": 60.0, "tokens_in": 80000, "tokens_out": 5000, "cost_usd": 0.50, "context_pct": 40, "cache_creation_tokens": 80000, "cache_read_tokens": 0}),
+            ),
+        ];
+        let report = compute_stats(&events, 0, 7, None, false);
+        let ce = report.cache_efficiency.as_ref().expect("cache_efficiency should be present");
+        assert_eq!(ce.anomalies.len(), 1);
+        assert_eq!(ce.anomalies[0].role, "builder");
+        assert_eq!(ce.anomalies[0].cache_creation, 80000);
     }
 }

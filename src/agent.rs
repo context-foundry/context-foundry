@@ -74,6 +74,8 @@ pub enum AgentOutputEvent {
         input_tokens: u64,
         output_tokens: u64,
         context_window: u64,
+        cache_creation_tokens: u64,
+        cache_read_tokens: u64,
     },
 }
 
@@ -1157,6 +1159,8 @@ async fn run_agent_tmux(
                                             input_tokens: usage.input_tokens,
                                             output_tokens: usage.output_tokens,
                                             context_window: usage.context_window,
+                                            cache_creation_tokens: usage.cache_creation_tokens,
+                                            cache_read_tokens: usage.cache_read_tokens,
                                         });
                                     }
                                 });
@@ -1169,6 +1173,8 @@ async fn run_agent_tmux(
                                             input_tokens: usage.input_tokens,
                                             output_tokens: usage.output_tokens,
                                             context_window: usage.context_window,
+                                            cache_creation_tokens: usage.cache_creation_tokens,
+                                            cache_read_tokens: usage.cache_read_tokens,
                                         });
                                     }
                                 });
@@ -1223,6 +1229,8 @@ async fn run_agent_tmux(
                                                 input_tokens: usage.input_tokens,
                                                 output_tokens: usage.output_tokens,
                                                 context_window: usage.context_window,
+                                                cache_creation_tokens: usage.cache_creation_tokens,
+                                                cache_read_tokens: usage.cache_read_tokens,
                                             });
                                         }
                                     });
@@ -1235,6 +1243,8 @@ async fn run_agent_tmux(
                                                 input_tokens: usage.input_tokens,
                                                 output_tokens: usage.output_tokens,
                                                 context_window: usage.context_window,
+                                                cache_creation_tokens: usage.cache_creation_tokens,
+                                                cache_read_tokens: usage.cache_read_tokens,
                                             });
                                         }
                                     });
@@ -1371,6 +1381,8 @@ fn read_pty_output(
                                     input_tokens: usage.input_tokens,
                                     output_tokens: usage.output_tokens,
                                     context_window: usage.context_window,
+                                    cache_creation_tokens: usage.cache_creation_tokens,
+                                    cache_read_tokens: usage.cache_read_tokens,
                                 });
                             }
                         });
@@ -1384,6 +1396,8 @@ fn read_pty_output(
                                     input_tokens: usage.input_tokens,
                                     output_tokens: usage.output_tokens,
                                     context_window: usage.context_window,
+                                    cache_creation_tokens: usage.cache_creation_tokens,
+                                    cache_read_tokens: usage.cache_read_tokens,
                                 });
                             }
                         });
@@ -1453,6 +1467,8 @@ fn read_provider_output(
                                         input_tokens: usage.input_tokens,
                                         output_tokens: usage.output_tokens,
                                         context_window: usage.context_window,
+                                        cache_creation_tokens: usage.cache_creation_tokens,
+                                        cache_read_tokens: usage.cache_read_tokens,
                                     });
                                 }
                             });
@@ -1469,6 +1485,8 @@ fn read_provider_output(
                                         input_tokens: usage.input_tokens,
                                         output_tokens: usage.output_tokens,
                                         context_window: usage.context_window,
+                                        cache_creation_tokens: usage.cache_creation_tokens,
+                                        cache_read_tokens: usage.cache_read_tokens,
                                     });
                                 }
                             });
@@ -1799,14 +1817,16 @@ fn parse_claude_result_event(v: &Value) -> Option<AgentOutputEvent> {
             .and_then(|c| c.as_f64())
             .unwrap_or(0.0);
         let usage = v.get("usage");
-        let cumulative_input = usage
+        let cache_creation = usage
             .and_then(|u| u.get("cache_creation_input_tokens"))
             .and_then(|t| t.as_u64())
-            .unwrap_or(0)
-            + usage
-                .and_then(|u| u.get("cache_read_input_tokens"))
-                .and_then(|t| t.as_u64())
-                .unwrap_or(0)
+            .unwrap_or(0);
+        let cache_read = usage
+            .and_then(|u| u.get("cache_read_input_tokens"))
+            .and_then(|t| t.as_u64())
+            .unwrap_or(0);
+        let cumulative_input = cache_creation
+            + cache_read
             + usage
                 .and_then(|u| u.get("input_tokens"))
                 .and_then(|t| t.as_u64())
@@ -1840,6 +1860,8 @@ fn parse_claude_result_event(v: &Value) -> Option<AgentOutputEvent> {
             input_tokens: estimated_input,
             output_tokens,
             context_window,
+            cache_creation_tokens: cache_creation,
+            cache_read_tokens: cache_read,
         }));
     });
 
@@ -1871,6 +1893,8 @@ struct ResultUsage {
     input_tokens: u64,
     output_tokens: u64,
     context_window: u64,
+    cache_creation_tokens: u64,
+    cache_read_tokens: u64,
 }
 
 thread_local! {
