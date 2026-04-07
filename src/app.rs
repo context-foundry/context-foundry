@@ -2245,6 +2245,10 @@ pub fn run_patterns_prune(yes: bool) -> Result<()> {
     commands::run_patterns_prune(yes)
 }
 
+pub fn run_patterns_promote(apply: bool, days: u32) -> Result<()> {
+    commands::run_patterns_promote(apply, days)
+}
+
 // ─── Running Explorer Helpers ─────────────────────────────────
 
 fn move_running_explorer_selection(state: &mut AppState, delta: isize) {

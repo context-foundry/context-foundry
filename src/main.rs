@@ -118,6 +118,15 @@ enum PatternAction {
         #[arg(long)]
         yes: bool,
     },
+    /// Promote high-citation patterns into extension CLAUDE.md prose
+    Promote {
+        /// Actually write files (default is dry-run)
+        #[arg(long)]
+        apply: bool,
+        /// Number of days to look back for observatory events (default: 90)
+        #[arg(long, default_value = "90")]
+        days: u32,
+    },
 }
 
 #[tokio::main]
@@ -179,6 +188,9 @@ async fn main() -> Result<()> {
         Commands::Patterns { action } => match action {
             PatternAction::Prune { yes } => {
                 app::run_patterns_prune(yes)?;
+            }
+            PatternAction::Promote { apply, days } => {
+                app::run_patterns_promote(apply, days)?;
             }
         },
         Commands::Stats {

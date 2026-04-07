@@ -823,6 +823,288 @@ pub(super) fn run_patterns_prune(yes: bool) -> Result<()> {
     Ok(())
 }
 
+pub(super) fn run_patterns_promote(apply: bool, days: u32) -> Result<()> {
+    let home = std::env::var("HOME").context("HOME not set")?;
+    let obs_dir = PathBuf::from(&home).join(".foundry").join("observatory");
+
+    let (events, _skipped) = crate::stats::load_events(&obs_dir, days, None)?;
+    if events.is_empty() {
+        println!("No observatory events found in last {} days.", days);
+        return Ok(());
+    }
+
+    // Count injections and citations per pattern
+    let mut injection_counts: HashMap<String, usize> = HashMap::new();
+    let mut citation_counts: HashMap<String, usize> = HashMap::new();
+
+    for ev in &events {
+        if ev.event_type == "pattern_injected" {
+            if let Some(ids) = ev.payload.get("pattern_ids").and_then(|v| v.as_array()) {
+                for id_val in ids {
+                    if let Some(id) = id_val.as_str() {
+                        *injection_counts.entry(id.to_string()).or_insert(0) += 1;
+                    }
+                }
+            }
+        } else if ev.event_type == "pattern_cited" {
+            if let Some(id) = ev.payload.get("pattern_id").and_then(|v| v.as_str()) {
+                *citation_counts.entry(id.to_string()).or_insert(0) += 1;
+            }
+        }
+    }
+
+    // Find qualifying patterns: injection_count >= 5 and citation_rate >= 0.3
+    let qualifying_ids: Vec<String> = injection_counts
+        .iter()
+        .filter(|(id, &inj_count)| {
+            if inj_count < 5 {
+                return false;
+            }
+            let cit_count = citation_counts.get(*id).copied().unwrap_or(0);
+            let rate = cit_count as f64 / inj_count as f64;
+            rate >= 0.3
+        })
+        .map(|(id, _)| id.clone())
+        .collect();
+
+    if qualifying_ids.is_empty() {
+        println!("No patterns qualify for promotion (need injection_count >= 5 and citation_rate >= 0.3).");
+        return Ok(());
+    }
+
+    // Load all patterns with source file tracking
+    let config = Config::load(&PathBuf::from("."));
+    let patterns_dir = patterns::resolve_patterns_dir(&config.patterns_dir);
+    let patterns_with_sources = patterns::load_patterns_with_sources(&patterns_dir);
+
+    let pattern_map: HashMap<String, (Pattern, PathBuf)> = patterns_with_sources
+        .into_iter()
+        .map(|(p, path)| (p.pattern_id.clone(), (p, path)))
+        .collect();
+
+    // Filter to patterns that exist and are not already promoted
+    let promotable: Vec<&String> = qualifying_ids
+        .iter()
+        .filter(|id| {
+            pattern_map.get(*id).is_some_and(|(p, _)| p.promoted_to.is_empty())
+        })
+        .collect();
+
+    if promotable.is_empty() {
+        println!("All qualifying patterns are already promoted.");
+        return Ok(());
+    }
+
+    // Group promotable patterns by their primary tech stack (extension target)
+    let home_path = PathBuf::from(&home);
+    let ext_dir = home_path.join(".foundry").join("extensions");
+
+    let mut by_extension: BTreeMap<String, Vec<&String>> = BTreeMap::new();
+    for id in &promotable {
+        let (pattern, _) = &pattern_map[*id];
+        let ext_name = pattern.tech_stack.first()
+            .map(|s| s.to_lowercase())
+            .unwrap_or_else(|| "general".to_string());
+        by_extension.entry(ext_name).or_default().push(id);
+    }
+
+    let today = Utc::now().format("%Y-%m-%d").to_string();
+    // (pattern_id, ext_name, relative_path)
+    let mut promotion_log: Vec<(String, String, String)> = Vec::new();
+
+    for (ext_name, pattern_ids) in &by_extension {
+        let target_dir = ext_dir.join(ext_name);
+        let target_claude_md = target_dir.join("CLAUDE.md");
+        let relative_path = format!("extensions/{}/CLAUDE.md", ext_name);
+
+        let mut prose_blocks = String::new();
+        for id in pattern_ids {
+            let (pattern, _) = &pattern_map[*id];
+            let inj = injection_counts.get(*id).copied().unwrap_or(0);
+            let cit = citation_counts.get(*id).copied().unwrap_or(0);
+            let rate = if inj > 0 { cit as f64 / inj as f64 } else { 0.0 };
+
+            let block = generate_prose_block(pattern, inj, cit, rate);
+            prose_blocks.push_str(&block);
+            prose_blocks.push('\n');
+
+            promotion_log.push(((*id).clone(), ext_name.clone(), relative_path.clone()));
+        }
+
+        if apply {
+            // Create extension directory and patterns/ subdirectory
+            std::fs::create_dir_all(&target_dir)?;
+            std::fs::create_dir_all(target_dir.join("patterns"))?;
+
+            let content = if target_claude_md.exists() {
+                let existing = std::fs::read_to_string(&target_claude_md)
+                    .context("failed to read existing CLAUDE.md")?;
+                if existing.contains("## Promoted Patterns") {
+                    format!("{}\n{}", existing.trim_end(), prose_blocks)
+                } else {
+                    format!("{}\n\n## Promoted Patterns\n\n{}", existing.trim_end(), prose_blocks)
+                }
+            } else {
+                let title = ext_name.chars().next().map(|c| c.to_uppercase().to_string()).unwrap_or_default()
+                    + &ext_name[1..];
+                format!("# Context Foundry - {} Extension\n\n## Promoted Patterns\n\n{}", title, prose_blocks)
+            };
+
+            atomic_write_file(&target_claude_md, content.as_bytes())?;
+        } else {
+            // Dry-run: print what would be promoted
+            println!("--- Extension: {} ({})", ext_name, target_dir.display());
+            for id in pattern_ids {
+                let (pattern, _) = &pattern_map[*id];
+                let inj = injection_counts.get(*id).copied().unwrap_or(0);
+                let cit = citation_counts.get(*id).copied().unwrap_or(0);
+                let rate = if inj > 0 { cit as f64 / inj as f64 * 100.0 } else { 0.0 };
+                println!("  {} - \"{}\" (injected {}x, cited {}x, {:.0}% citation rate)",
+                    id, pattern.title, inj, cit, rate);
+            }
+            let block_preview = &prose_blocks;
+            println!("\n  Generated prose:\n");
+            for line in block_preview.lines() {
+                println!("    {}", line);
+            }
+            println!();
+        }
+    }
+
+    if apply {
+        // Mark promoted patterns in their source JSON files using serde_json::Value
+        let mut by_source: HashMap<PathBuf, Vec<(String, String, String)>> = HashMap::new();
+        for (pattern_id, _ext_name, rel_path) in &promotion_log {
+            let (_, source_path) = &pattern_map[pattern_id];
+            by_source
+                .entry(source_path.clone())
+                .or_default()
+                .push((pattern_id.clone(), rel_path.clone(), today.clone()));
+        }
+
+        for (source_path, promotions) in &by_source {
+            let content = match std::fs::read_to_string(source_path) {
+                Ok(c) => c,
+                Err(e) => {
+                    eprintln!("warning: failed to read {}: {}", source_path.display(), e);
+                    continue;
+                }
+            };
+
+            let promoted_ids: HashMap<&str, (&str, &str)> = promotions
+                .iter()
+                .map(|(id, path, date)| (id.as_str(), (path.as_str(), date.as_str())))
+                .collect();
+
+            // Try array format
+            if let Ok(mut arr) = serde_json::from_str::<Vec<serde_json::Value>>(&content) {
+                let mut modified = false;
+                for val in &mut arr {
+                    if let Some(id) = val.get("pattern_id").and_then(|v| v.as_str()) {
+                        if let Some((path, date)) = promoted_ids.get(id) {
+                            if let Some(obj) = val.as_object_mut() {
+                                obj.insert("promoted_to".to_string(), serde_json::Value::String(path.to_string()));
+                                obj.insert("promoted_at".to_string(), serde_json::Value::String(date.to_string()));
+                            }
+                            modified = true;
+                        }
+                    }
+                }
+                if modified {
+                    let json = serde_json::to_string_pretty(&arr)?;
+                    atomic_write_file(source_path, json.as_bytes())?;
+                }
+                continue;
+            }
+
+            // Try wrapper format
+            if let Ok(mut val) = serde_json::from_str::<serde_json::Value>(&content) {
+                if let Some(pats) = val.get_mut("patterns").and_then(|v| v.as_array_mut()) {
+                    let mut modified = false;
+                    for pv in pats.iter_mut() {
+                        if let Some(id) = pv.get("pattern_id").and_then(|v| v.as_str()) {
+                            if let Some((path, date)) = promoted_ids.get(id) {
+                                if let Some(obj) = pv.as_object_mut() {
+                                    obj.insert("promoted_to".to_string(), serde_json::Value::String(path.to_string()));
+                                    obj.insert("promoted_at".to_string(), serde_json::Value::String(date.to_string()));
+                                }
+                                modified = true;
+                            }
+                        }
+                    }
+                    if modified {
+                        let json = serde_json::to_string_pretty(&val)?;
+                        atomic_write_file(source_path, json.as_bytes())?;
+                    }
+                    continue;
+                }
+            }
+
+            // Try single pattern format
+            if let Ok(mut val) = serde_json::from_str::<serde_json::Value>(&content) {
+                if let Some(id) = val.get("pattern_id").and_then(|v| v.as_str()) {
+                    if let Some((path, date)) = promoted_ids.get(id) {
+                        if let Some(obj) = val.as_object_mut() {
+                            obj.insert("promoted_to".to_string(), serde_json::Value::String(path.to_string()));
+                            obj.insert("promoted_at".to_string(), serde_json::Value::String(date.to_string()));
+                        }
+                        let json = serde_json::to_string_pretty(&val)?;
+                        atomic_write_file(source_path, json.as_bytes())?;
+                    }
+                }
+            }
+        }
+
+        let ext_count = by_extension.len();
+        println!(
+            "Promoted {} pattern(s) to {} extension(s).",
+            promotion_log.len(),
+            ext_count,
+        );
+        for (ext_name, pattern_ids) in &by_extension {
+            println!("  {} ({} pattern(s)):", ext_name, pattern_ids.len());
+            for id in pattern_ids {
+                println!("    - {}", id);
+            }
+        }
+    } else {
+        println!("Dry-run complete. Use --apply to write files.");
+    }
+
+    Ok(())
+}
+
+fn generate_prose_block(pattern: &Pattern, injection_count: usize, citation_count: usize, citation_rate: f64) -> String {
+    let mut out = String::new();
+
+    out.push_str(&format!("### {}\n\n", pattern.title));
+
+    let issue_text = pattern.issue.as_deref().unwrap_or("(no issue description)");
+    out.push_str(&format!("**Problem:** {}\n\n", issue_text));
+
+    if let Some(ref sol) = pattern.solution {
+        let mut parts = Vec::new();
+        if !sol.planner.is_empty() {
+            parts.push(sol.planner.as_str());
+        }
+        if !sol.reviewer.is_empty() {
+            parts.push(sol.reviewer.as_str());
+        }
+        let combined = parts.join(" ");
+        if !combined.is_empty() {
+            out.push_str(&format!("**Solution:** {}\n\n", combined));
+        }
+    }
+
+    let rate_pct = citation_rate * 100.0;
+    out.push_str(&format!(
+        "**Why:** Promoted from pattern `{}` -- cited {} times across {} injections ({:.0}% citation rate).\n",
+        pattern.pattern_id, citation_count, injection_count, rate_pct,
+    ));
+
+    out
+}
+
 fn load_tasks(project_dir: &Path) -> Result<Vec<Task>> {
     let contract_paths = ContractPaths::resolve(project_dir);
     task::parse_tasks(&contract_paths.tasks_path)

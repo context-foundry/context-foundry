@@ -43,6 +43,13 @@ pub struct Pattern {
     /// Tracked automatically after each task to measure pattern usefulness.
     #[serde(default)]
     pub used_count: usize,
+    /// Extension CLAUDE.md path this pattern was promoted to (e.g. "extensions/rust/CLAUDE.md").
+    /// Non-empty means the pattern has graduated to extension prose and should be excluded from injection.
+    #[serde(default)]
+    pub promoted_to: String,
+    /// ISO date when the pattern was promoted (e.g. "2026-04-07").
+    #[serde(default)]
+    pub promoted_at: String,
 }
 
 /// Wrapper object format used by extension pattern files.
@@ -108,6 +115,40 @@ pub fn load_patterns(dir: &Path) -> Vec<Pattern> {
     patterns
 }
 
+/// Load all patterns from JSON files in a directory, returning each pattern paired with its source file path.
+/// Needed by the promote command to know which JSON file to write `promoted_to` back to.
+pub fn load_patterns_with_sources(dir: &Path) -> Vec<(Pattern, PathBuf)> {
+    let mut results = Vec::new();
+
+    let entries = match std::fs::read_dir(dir) {
+        Ok(e) => e,
+        Err(_) => return results,
+    };
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) == Some("json") {
+            if let Ok(content) = std::fs::read_to_string(&path) {
+                if let Ok(arr) = serde_json::from_str::<Vec<Pattern>>(&content) {
+                    for p in arr {
+                        results.push((p, path.clone()));
+                    }
+                } else if let Ok(wrapper) = serde_json::from_str::<PatternWrapper>(&content) {
+                    for p in wrapper.patterns {
+                        results.push((p, path.clone()));
+                    }
+                } else if let Ok(p) = serde_json::from_str::<Pattern>(&content) {
+                    results.push((p, path.clone()));
+                } else {
+                    eprintln!("warning: failed to parse patterns file: {}", path.display());
+                }
+            }
+        }
+    }
+
+    results
+}
+
 /// Detect the project's tech stack by checking for marker files in the project directory.
 pub fn detect_project_tech_stack(project_dir: &Path) -> Vec<String> {
     let mut stacks = Vec::new();
@@ -150,6 +191,11 @@ pub fn keyword_scores(patterns: &[Pattern], task_desc: &str, detected_stack: &[S
         .iter()
         .enumerate()
         .filter_map(|(i, p)| {
+            // Skip promoted patterns -- they now live in extension CLAUDE.md
+            if !p.promoted_to.is_empty() {
+                return None;
+            }
+
             let mut score = 0usize;
 
             for kw in &p.keywords {
@@ -513,6 +559,8 @@ mod tests {
             auto_apply: false,
             learned_from: None,
             used_count: 0,
+            promoted_to: String::new(),
+            promoted_at: String::new(),
         };
         let patterns = vec![&pattern];
 
@@ -695,6 +743,8 @@ mod tests {
                 auto_apply: false,
                 learned_from: None,
                 used_count: 0,
+                promoted_to: String::new(),
+                promoted_at: String::new(),
             },
             Pattern {
                 pattern_id: "new-1".to_string(),
@@ -710,6 +760,8 @@ mod tests {
                 auto_apply: false,
                 learned_from: None,
                 used_count: 0,
+                promoted_to: String::new(),
+                promoted_at: String::new(),
             },
         ];
 
@@ -781,6 +833,8 @@ mod tests {
             auto_apply: false,
             learned_from: None,
             used_count: used,
+            promoted_to: String::new(),
+            promoted_at: String::new(),
         }
     }
 
@@ -970,6 +1024,8 @@ mod tests {
             auto_apply: false,
             learned_from: None,
             used_count: 0,
+            promoted_to: String::new(),
+            promoted_at: String::new(),
         };
         let rust_pattern = Pattern {
             pattern_id: "utf8-byte-slice-panic".to_string(),
@@ -985,6 +1041,8 @@ mod tests {
             auto_apply: false,
             learned_from: None,
             used_count: 0,
+            promoted_to: String::new(),
+            promoted_at: String::new(),
         };
         let patterns = vec![react_pattern, rust_pattern];
         let rust_stack = vec!["rust".to_string()];
@@ -1022,6 +1080,8 @@ mod tests {
             auto_apply: false,
             learned_from: None,
             used_count: 0,
+            promoted_to: String::new(),
+            promoted_at: String::new(),
         };
         let patterns = vec![agnostic_pattern];
         let rust_stack = vec!["rust".to_string()];
@@ -1030,5 +1090,115 @@ mod tests {
         let score_with = scores_with_stack.iter().find(|(i, _)| *i == 0).map(|(_, s)| *s).unwrap_or(0);
         let score_without = scores_without_stack.iter().find(|(i, _)| *i == 0).map(|(_, s)| *s).unwrap_or(0);
         assert_eq!(score_with, score_without, "patterns with empty tech_stack should not be penalized");
+    }
+
+    #[test]
+    fn test_promoted_patterns_excluded_from_matching() {
+        let active = Pattern {
+            pattern_id: "active-pattern".to_string(),
+            title: "Active Pattern".to_string(),
+            first_seen: String::new(),
+            last_seen: String::new(),
+            frequency: 3,
+            severity: None,
+            keywords: vec!["rust".to_string()],
+            tech_stack: vec![],
+            issue: None,
+            solution: None,
+            auto_apply: false,
+            learned_from: None,
+            used_count: 0,
+            promoted_to: String::new(),
+            promoted_at: String::new(),
+        };
+        let promoted = Pattern {
+            pattern_id: "promoted-pattern".to_string(),
+            title: "Promoted Pattern".to_string(),
+            first_seen: String::new(),
+            last_seen: String::new(),
+            frequency: 3,
+            severity: None,
+            keywords: vec!["rust".to_string()],
+            tech_stack: vec![],
+            issue: None,
+            solution: None,
+            auto_apply: false,
+            learned_from: None,
+            used_count: 0,
+            promoted_to: "extensions/rust/CLAUDE.md".to_string(),
+            promoted_at: "2026-04-07".to_string(),
+        };
+        let patterns = vec![active, promoted];
+        let matched = match_patterns(&patterns, "rust project", &[]);
+        assert_eq!(matched.len(), 1, "only active pattern should match");
+        assert_eq!(matched[0].pattern_id, "active-pattern");
+    }
+
+    #[test]
+    fn test_promoted_patterns_excluded_from_keyword_scores() {
+        let active = Pattern {
+            pattern_id: "active-pattern".to_string(),
+            title: "Active Pattern".to_string(),
+            first_seen: String::new(),
+            last_seen: String::new(),
+            frequency: 3,
+            severity: None,
+            keywords: vec!["rust".to_string()],
+            tech_stack: vec![],
+            issue: None,
+            solution: None,
+            auto_apply: false,
+            learned_from: None,
+            used_count: 0,
+            promoted_to: String::new(),
+            promoted_at: String::new(),
+        };
+        let promoted = Pattern {
+            pattern_id: "promoted-pattern".to_string(),
+            title: "Promoted Pattern".to_string(),
+            first_seen: String::new(),
+            last_seen: String::new(),
+            frequency: 3,
+            severity: None,
+            keywords: vec!["rust".to_string()],
+            tech_stack: vec![],
+            issue: None,
+            solution: None,
+            auto_apply: false,
+            learned_from: None,
+            used_count: 0,
+            promoted_to: "extensions/rust/CLAUDE.md".to_string(),
+            promoted_at: "2026-04-07".to_string(),
+        };
+        let patterns = vec![active, promoted];
+        let scores = keyword_scores(&patterns, "rust project", &[]);
+        let indices: Vec<usize> = scores.iter().map(|(i, _)| *i).collect();
+        assert!(indices.contains(&0), "active pattern index should be present");
+        assert!(!indices.contains(&1), "promoted pattern index should NOT be present");
+    }
+
+    #[test]
+    fn test_load_patterns_with_sources() {
+        let dir = std::env::temp_dir().join("foundry_test_load_with_sources");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let patterns_json = serde_json::to_string_pretty(&vec![
+            make_test_pattern("src-1", "Source Pattern One", 1, 0),
+            make_test_pattern("src-2", "Source Pattern Two", 2, 0),
+        ]).unwrap();
+        let json_path = dir.join("test-patterns.json");
+        std::fs::write(&json_path, &patterns_json).unwrap();
+
+        let results = load_patterns_with_sources(&dir);
+        assert_eq!(results.len(), 2, "should load both patterns");
+        for (_, path) in &results {
+            assert_eq!(path, &json_path, "source path should match");
+        }
+        let ids: Vec<&str> = results.iter().map(|(p, _)| p.pattern_id.as_str()).collect();
+        assert!(ids.contains(&"src-1"));
+        assert!(ids.contains(&"src-2"));
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

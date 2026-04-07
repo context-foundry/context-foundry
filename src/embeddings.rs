@@ -907,6 +907,8 @@ mod tests {
             auto_apply: false,
             learned_from: None,
             used_count: 0,
+            promoted_to: String::new(),
+            promoted_at: String::new(),
         }
     }
 }
