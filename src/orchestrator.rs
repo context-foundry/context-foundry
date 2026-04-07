@@ -355,7 +355,7 @@ pub async fn orchestrate(
         // Check shutdown flag before starting next iteration
         if shutdown
             .as_ref()
-            .is_some_and(|flag| flag.load(Ordering::Relaxed))
+            .is_some_and(|flag| flag.load(Ordering::Acquire))
         {
             on_event("Shutdown requested, aborting design loop.");
             return Ok(OrchestratorOutcome {
@@ -696,7 +696,7 @@ pub async fn run_design_command(project_dir: &Path, intent: &str) -> Result<()> 
     let shutdown_signal = shutdown.clone();
     tokio::spawn(async move {
         let _ = tokio::signal::ctrl_c().await;
-        shutdown_signal.store(true, Ordering::Relaxed);
+        shutdown_signal.store(true, Ordering::Release);
     });
 
     let outcome = orchestrate(

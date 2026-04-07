@@ -6,6 +6,7 @@ use serde::Serialize;
 
 use crate::agent::AgentExitKind;
 use crate::config::Config;
+use crate::sync_flag::SyncFlag;
 
 use super::contract::ContractPaths;
 
@@ -91,15 +92,15 @@ pub(super) struct RunContext {
     pub(super) current_plan: PathBuf,
     pub(super) review_report: PathBuf,
     pub(super) shutdown: Arc<AtomicBool>,
-    pub(super) review_gate: Arc<AtomicBool>,
+    pub(super) review_gate: Arc<SyncFlag>,
     pub(super) tasks_file_lock: Arc<Mutex<()>>,
     /// Cumulative session cost in millicents (1 USD = 100_000 millicents).
     /// Shared between build loop and output forwarding tasks.
     pub(super) session_cost_millicents: Arc<std::sync::atomic::AtomicU64>,
     /// Gate: set to true when awaiting commit approval, cleared when user responds.
-    pub(super) commit_approval_gate: Arc<AtomicBool>,
+    pub(super) commit_approval_gate: Arc<SyncFlag>,
     /// Result: true = approved (feat), false = denied (WIP). Only valid when gate is cleared.
-    pub(super) commit_approval_result: Arc<AtomicBool>,
+    pub(super) commit_approval_result: Arc<SyncFlag>,
 }
 
 impl RunContext {
@@ -125,11 +126,11 @@ impl RunContext {
             current_plan: buildloop_dir.join("current-plan.md"),
             review_report: buildloop_dir.join("review-report.md"),
             shutdown,
-            review_gate: Arc::new(AtomicBool::new(false)),
+            review_gate: Arc::new(SyncFlag::new(false)),
             tasks_file_lock,
             session_cost_millicents: Arc::new(std::sync::atomic::AtomicU64::new(0)),
-            commit_approval_gate: Arc::new(AtomicBool::new(false)),
-            commit_approval_result: Arc::new(AtomicBool::new(false)),
+            commit_approval_gate: Arc::new(SyncFlag::new(false)),
+            commit_approval_result: Arc::new(SyncFlag::new(false)),
         }
     }
 
@@ -143,7 +144,7 @@ impl RunContext {
 
     pub(super) fn is_stop_requested(&self) -> bool {
         let stop_file_exists = self.stop_file().exists();
-        let shutdown_flag = self.shutdown.load(Ordering::Relaxed);
+        let shutdown_flag = self.shutdown.load(Ordering::Acquire);
         stop_file_exists || shutdown_flag
     }
 
@@ -404,9 +405,9 @@ mod tests {
         assert!(!Arc::ptr_eq(&child0.commit_approval_result, &parent.commit_approval_result));
 
         // Setting one pipeline's gate should not affect the other
-        child0.commit_approval_gate.store(true, Ordering::Relaxed);
-        assert!(!child1.commit_approval_gate.load(Ordering::Relaxed));
-        assert!(!parent.commit_approval_gate.load(Ordering::Relaxed));
+        child0.commit_approval_gate.set();
+        assert!(!child1.commit_approval_gate.get());
+        assert!(!parent.commit_approval_gate.get());
 
         let _ = std::fs::remove_dir_all(parent_dir);
     }
@@ -441,9 +442,9 @@ mod tests {
         assert!(!Arc::ptr_eq(&child0.review_gate, &parent.review_gate));
 
         // Setting one pipeline's review_gate should not affect the other
-        child0.review_gate.store(true, Ordering::Release);
-        assert!(!child1.review_gate.load(Ordering::Acquire));
-        assert!(!parent.review_gate.load(Ordering::Acquire));
+        child0.review_gate.set();
+        assert!(!child1.review_gate.get());
+        assert!(!parent.review_gate.get());
 
         let _ = std::fs::remove_dir_all(parent_dir);
     }

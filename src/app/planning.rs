@@ -137,7 +137,7 @@ pub(super) async fn run_plan_mode(project_dir: &Path, max_iterations: u64) -> Re
     let shutdown_signal = ctx.shutdown.clone();
     tokio::spawn(async move {
         let _ = tokio::signal::ctrl_c().await;
-        shutdown_signal.store(true, Ordering::Relaxed);
+        shutdown_signal.store(true, Ordering::Release);
     });
 
     super::commands::ensure_required_providers_available(
@@ -182,7 +182,7 @@ pub(super) async fn run_plan_mode(project_dir: &Path, max_iterations: u64) -> Re
             break;
         }
 
-        if ctx.shutdown.load(Ordering::Relaxed) {
+        if ctx.shutdown.load(Ordering::Acquire) {
             eprintln!("Shutdown signal received");
             break;
         }

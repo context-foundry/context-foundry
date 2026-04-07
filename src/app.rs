@@ -205,9 +205,9 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
         // When user requests stop, kill the running agent immediately.
         // Discovery and other read-only agents have nothing critical to preserve.
         if state.stop_after_task {
-            shutdown.store(true, Ordering::Relaxed);
+            shutdown.store(true, Ordering::Release);
         } else {
-            shutdown.store(false, Ordering::Relaxed);
+            shutdown.store(false, Ordering::Release);
         }
 
         if let Some(editor_path) =
@@ -240,7 +240,7 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
 
     // Signal all spawned agent processes to terminate so spawn_blocking
     // threads exit promptly instead of blocking tokio runtime shutdown.
-    shutdown.store(true, Ordering::Relaxed);
+    shutdown.store(true, Ordering::Release);
     terminal_reader_handle.abort();
 
     // Restore terminal
@@ -1015,7 +1015,7 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
             LoopEvent::PrApproved { pr_num, ref session_id } => {
                 // Clear the gate for the specific session that was approved
                 if let Some(gate) = state.review_gates.remove(session_id) {
-                    gate.store(false, Ordering::Release);
+                    gate.clear();
                 }
                 if state.review_session_id.as_deref() == Some(session_id.as_str()) {
                     // Active review was approved -- advance display state
@@ -1044,7 +1044,7 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
             LoopEvent::PrClosed { pr_num, ref session_id } => {
                 // Clear the gate for the specific session whose PR was closed
                 if let Some(gate) = state.review_gates.remove(session_id) {
-                    gate.store(false, Ordering::Release);
+                    gate.clear();
                 }
                 if state.review_session_id.as_deref() == Some(session_id.as_str()) {
                     // Active review was closed -- advance display state
@@ -1185,10 +1185,10 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                     state.approval_proposed_type = None;
                     if let Some(sid) = session_id {
                         if let Some(result_arc) = state.commit_approval_results.get(&sid) {
-                            result_arc.store(approved, Ordering::Relaxed);
+                            result_arc.store(approved);
                         }
                         if let Some(gate_arc) = state.commit_approval_gates.get(&sid) {
-                            gate_arc.store(false, Ordering::Release);
+                            gate_arc.clear();
                         }
                         state.commit_approval_gates.remove(&sid);
                         state.commit_approval_results.remove(&sid);
@@ -1215,7 +1215,7 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                 {
                     if let Some(ref sid) = state.review_session_id.take() {
                         if let Some(gate) = state.review_gates.remove(sid) {
-                            gate.store(false, Ordering::Release);
+                            gate.clear();
                         }
                     }
                     state.awaiting_pr = None;
@@ -1304,10 +1304,10 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                     state.approval_proposed_type = None;
                     if let Some(sid) = session_id {
                         if let Some(result_arc) = state.commit_approval_results.get(&sid) {
-                            result_arc.store(approved, Ordering::Relaxed);
+                            result_arc.store(approved);
                         }
                         if let Some(gate_arc) = state.commit_approval_gates.get(&sid) {
-                            gate_arc.store(false, Ordering::Release);
+                            gate_arc.clear();
                         }
                         state.commit_approval_gates.remove(&sid);
                         state.commit_approval_results.remove(&sid);
@@ -1334,7 +1334,7 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                 {
                     if let Some(ref sid) = state.review_session_id.take() {
                         if let Some(gate) = state.review_gates.remove(sid) {
-                            gate.store(false, Ordering::Release);
+                            gate.clear();
                         }
                     }
                     state.awaiting_pr = None;

@@ -17,6 +17,7 @@ mod orchestrator;
 mod tmux;
 mod sandbox;
 mod stats;
+mod sync_flag;
 mod review_pr;
 mod budget;
 mod patterns;

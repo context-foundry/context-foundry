@@ -564,7 +564,32 @@ async fn run_multipass_pr_review(
         let total = total_files;
 
         join_set.spawn(async move {
-            let _permit = sem.acquire_owned().await.unwrap();
+            let _permit = match tokio::time::timeout(
+                Duration::from_secs(config_owned.agent_timeout_secs * 2),
+                sem.acquire_owned(),
+            )
+            .await
+            {
+                Ok(Ok(permit)) => permit,
+                Ok(Err(_)) => {
+                    // Semaphore closed -- should not happen in normal operation
+                    eprintln!(
+                        "Semaphore closed while waiting for permit for file {}/{}",
+                        i + 1, total
+                    );
+                    return (i, file_name, None, AgentUsage::default(), false);
+                }
+                Err(_) => {
+                    // Timeout -- a permit holder likely panicked
+                    eprintln!(
+                        "Timeout waiting for semaphore permit for file {}/{} ({}s) -- skipping",
+                        i + 1,
+                        total,
+                        config_owned.agent_timeout_secs * 2
+                    );
+                    return (i, file_name, None, AgentUsage::default(), false);
+                }
+            };
 
             let per_file_report = buildloop_dir_owned.join(format!("review-per-file-{}.md", i));
             let _ = std::fs::remove_file(&per_file_report);

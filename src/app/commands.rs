@@ -309,7 +309,7 @@ pub(super) async fn run_headless(project_dir: &Path, output_format: Option<Strin
     let shutdown_signal = run_context.shutdown.clone();
     tokio::spawn(async move {
         let _ = tokio::signal::ctrl_c().await;
-        shutdown_signal.store(true, Ordering::Relaxed);
+        shutdown_signal.store(true, Ordering::Release);
     });
 
     for message in contract_paths.warnings() {
@@ -488,15 +488,15 @@ pub(super) async fn run_headless(project_dir: &Path, output_format: Option<Strin
                         "[foundry] WARNING: require_human_approval is TUI-only -- auto-approving {} in headless mode",
                         task_id
                     );
-                    // Auto-approve: set result to true, then clear the gate with Release
-                    result.store(true, Ordering::Relaxed);
-                    gate.store(false, Ordering::Release);
+                    // Auto-approve: set result to true, then clear the gate
+                    result.store(true);
+                    gate.clear();
                 }
                 LoopEvent::CommitApprovalResponse { .. } => {}
                 LoopEvent::WaitingForReview { ref gate, .. } => {
                     // In headless mode there is no TUI to clear the gate; auto-clear it so
                     // the build loop continues instead of hanging forever.
-                    gate.store(false, Ordering::Release);
+                    gate.clear();
                 }
             },
             AppEvent::UpdateAvailable(version) => {

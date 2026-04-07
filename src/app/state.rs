@@ -1,6 +1,6 @@
 use std::collections::{HashMap, VecDeque};
-use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
+use crate::sync_flag::SyncFlag;
 use std::time::SystemTime;
 
 use chrono::{DateTime, Utc};
@@ -300,7 +300,7 @@ pub struct AppState {
     pub dual_selection: DualSelection, // Ctrl+D cycle: Off, First, Second, Both
     pub builder_model_specs: Vec<String>, // raw config values (e.g., ["claude:opus", "codex:"])
     pub awaiting_review: bool,
-    pub(super) review_gates: HashMap<String, Arc<AtomicBool>>,
+    pub(super) review_gates: HashMap<String, Arc<SyncFlag>>,
     pub(super) review_session_id: Option<String>,
     pub(super) pending_reviews: VecDeque<(String, Option<u64>)>,
     pub awaiting_pr: Option<u64>,
@@ -373,8 +373,8 @@ pub struct AppState {
     pub approval_task_id: Option<String>,
     /// The proposed commit type (for display, e.g. "feat").
     pub approval_proposed_type: Option<String>,
-    pub(super) commit_approval_gates: HashMap<String, Arc<AtomicBool>>,
-    pub(super) commit_approval_results: HashMap<String, Arc<AtomicBool>>,
+    pub(super) commit_approval_gates: HashMap<String, Arc<SyncFlag>>,
+    pub(super) commit_approval_results: HashMap<String, Arc<SyncFlag>>,
     pub(super) approval_session_id: Option<String>,
     /// Queue of (session_id, task_id, proposed_commit_type) for approvals that
     /// arrived while another approval was already being shown to the user.
@@ -610,7 +610,7 @@ pub(super) enum LoopEvent {
     WaitingForReview {
         pr_num: Option<u64>,
         session_id: String,
-        gate: Arc<AtomicBool>,
+        gate: Arc<SyncFlag>,
     },
     PrApproved {
         pr_num: u64,
@@ -637,8 +637,8 @@ pub(super) enum LoopEvent {
         task_id: String,
         proposed_commit_type: String,
         session_id: String,
-        gate: Arc<AtomicBool>,
-        result: Arc<AtomicBool>,
+        gate: Arc<SyncFlag>,
+        result: Arc<SyncFlag>,
     },
     CommitApprovalResponse {
         approved: bool,

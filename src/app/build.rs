@@ -16,7 +16,7 @@ use crate::{
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
 use super::context::{FailureType, RunContext, StageResult};
@@ -1255,12 +1255,12 @@ async fn poll_pr_review(
     project_dir: PathBuf,
     poll_interval_secs: u64,
     tx: mpsc::UnboundedSender<AppEvent>,
-    review_gate: Arc<AtomicBool>,
+    review_gate: Arc<crate::sync_flag::SyncFlag>,
 ) {
     let mut last_decision = String::new();
     loop {
         // Check gate FIRST (before sleeping), so first poll is immediate
-        if !review_gate.load(Ordering::Acquire) {
+        if !review_gate.get() {
             return;
         }
 
@@ -4268,7 +4268,7 @@ async fn process_task(
     let mut human_denied_approval = false;
     let validated = if validated && ctx.config.require_human_approval {
         // Arm gate BEFORE sending event to avoid race where TUI responds before gate is set
-        ctx.commit_approval_gate.store(true, Ordering::Release);
+        ctx.commit_approval_gate.set();
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::AwaitCommitApproval {
             task_id: task_id.to_string(),
             proposed_commit_type: "feat".to_string(),
@@ -4277,7 +4277,7 @@ async fn process_task(
             result: ctx.commit_approval_result.clone(),
         }));
 
-        while ctx.commit_approval_gate.load(Ordering::Acquire) {
+        while ctx.commit_approval_gate.get() {
             if ctx.is_stop_requested() {
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Finished));
                 return (false, false, false);
@@ -4285,7 +4285,7 @@ async fn process_task(
             tokio::time::sleep(Duration::from_millis(200)).await;
         }
 
-        let approved = ctx.commit_approval_result.load(Ordering::Acquire);
+        let approved = ctx.commit_approval_result.get();
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::CommitApprovalResponse {
             approved,
         }));
@@ -4402,7 +4402,7 @@ async fn process_task(
                 }
 
                 // Pause: signal TUI and wait for user to press Enter or PR approval
-                ctx.review_gate.store(true, Ordering::Release);
+                ctx.review_gate.set();
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::WaitingForReview {
                     pr_num,
                     session_id: ctx.session_id.clone(),
@@ -4435,7 +4435,7 @@ async fn process_task(
                     None
                 };
 
-                while ctx.review_gate.load(Ordering::Acquire) {
+                while ctx.review_gate.get() {
                     if ctx.is_stop_requested() {
                         if let Some(h) = poll_handle {
                             h.abort();
@@ -4468,7 +4468,7 @@ async fn process_task(
 
                 // Still pause after fallback commit in review mode
                 if committed {
-                    ctx.review_gate.store(true, Ordering::Release);
+                    ctx.review_gate.set();
                     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::WaitingForReview {
                         pr_num: None,
                         session_id: ctx.session_id.clone(),
@@ -4477,7 +4477,7 @@ async fn process_task(
                     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
                         "Waiting for review -- press Enter to continue to next task".to_string(),
                     )));
-                    while ctx.review_gate.load(Ordering::Acquire) {
+                    while ctx.review_gate.get() {
                         if ctx.is_stop_requested() {
                             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Finished));
                             return (false, false, false);
@@ -5093,7 +5093,7 @@ mod tests {
     fn test_is_stop_requested_detects_shutdown_flag() {
         let (ctx, dir) = make_test_ctx("shutdown-flag");
         assert!(!ctx.is_stop_requested());
-        ctx.shutdown.store(true, Ordering::Relaxed);
+        ctx.shutdown.store(true, Ordering::Release);
         assert!(ctx.is_stop_requested());
         let _ = std::fs::remove_dir_all(&dir);
     }

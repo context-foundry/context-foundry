@@ -632,7 +632,7 @@ pub async fn run_provider_session(options: ProviderRunOptions<'_>) -> Result<Age
                 Ok(None) => {
                     if cancel_flag
                         .as_ref()
-                        .is_some_and(|flag| flag.load(Ordering::Relaxed))
+                        .is_some_and(|flag| flag.load(Ordering::Acquire))
                     {
                         let _ = child.kill();
                         let _ = child.wait();
@@ -1003,7 +1003,7 @@ async fn run_agent_pty(
                 Ok(None) => {
                     if shutdown
                         .as_ref()
-                        .is_some_and(|flag| flag.load(Ordering::Relaxed))
+                        .is_some_and(|flag| flag.load(Ordering::Acquire))
                     {
                         let _ = child.kill();
                         let _ = child.wait();
@@ -1143,7 +1143,7 @@ async fn run_agent_tmux(
             // Check shutdown flag
             if shutdown
                 .as_ref()
-                .is_some_and(|flag| flag.load(Ordering::Relaxed))
+                .is_some_and(|flag| flag.load(Ordering::Acquire))
             {
                 session.kill().ok();
                 result.exit_kind = AgentExitKind::Cancelled;
