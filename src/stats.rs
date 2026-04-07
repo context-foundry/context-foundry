@@ -464,7 +464,7 @@ fn known_bad_cc_version(version: &str) -> Option<&'static str> {
     None
 }
 
-fn is_pr_review_session(session_id: &str) -> bool {
+pub fn is_pr_review_session(session_id: &str) -> bool {
     session_id.starts_with("pr-review-")
 }
 

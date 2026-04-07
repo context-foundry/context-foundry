@@ -607,8 +607,7 @@ pub(super) fn run_extract(project_dir: &Path) -> Result<()> {
 }
 
 pub(super) fn run_patterns_prune(yes: bool) -> Result<()> {
-    let home = std::env::var("HOME").context("HOME not set")?;
-    let obs_dir = PathBuf::from(&home).join(".foundry").join("observatory");
+    let obs_dir = crate::stats::observatory_dir()?;
 
     let (events, _skipped) = crate::stats::load_events(&obs_dir, 30, None)?;
     if events.is_empty() {
@@ -621,6 +620,9 @@ pub(super) fn run_patterns_prune(yes: bool) -> Result<()> {
     let mut citation_counts: HashMap<String, usize> = HashMap::new();
 
     for ev in &events {
+        if crate::stats::is_pr_review_session(&ev.session_id) {
+            continue;
+        }
         if ev.event_type == "pattern_injected" {
             if let Some(ids) = ev.payload.get("pattern_ids").and_then(|v| v.as_array()) {
                 for id_val in ids {
@@ -839,7 +841,7 @@ pub(super) fn run_patterns_prune(yes: bool) -> Result<()> {
 
 pub(super) fn run_patterns_promote(apply: bool, days: u32) -> Result<()> {
     let home = std::env::var("HOME").context("HOME not set")?;
-    let obs_dir = PathBuf::from(&home).join(".foundry").join("observatory");
+    let obs_dir = crate::stats::observatory_dir()?;
 
     let (events, _skipped) = crate::stats::load_events(&obs_dir, days, None)?;
     if events.is_empty() {
@@ -852,6 +854,9 @@ pub(super) fn run_patterns_promote(apply: bool, days: u32) -> Result<()> {
     let mut citation_counts: HashMap<String, usize> = HashMap::new();
 
     for ev in &events {
+        if crate::stats::is_pr_review_session(&ev.session_id) {
+            continue;
+        }
         if ev.event_type == "pattern_injected" {
             if let Some(ids) = ev.payload.get("pattern_ids").and_then(|v| v.as_array()) {
                 for id_val in ids {
