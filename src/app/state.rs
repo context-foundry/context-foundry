@@ -10,6 +10,7 @@ use std::path::PathBuf;
 use crate::agent::{AgentOutputEvent, AgentRole};
 use crate::git;
 use crate::orchestrator::OrchestratorOutcome;
+use crate::stats::StatsReport;
 use crate::task::{self, Task};
 use crate::tui::theme::TuiTheme;
 
@@ -306,6 +307,9 @@ pub struct AppState {
     pub pr_poll_last_check: Option<std::time::Instant>,
     pub show_patterns: bool,
     pub show_findings: bool,
+    pub show_stats_overlay: bool,
+    pub stats_overlay_report: Option<StatsReport>,
+    pub stats_overlay_scroll: usize,
     pub findings_scroll: usize,
     pub last_orchestrator_outcome: Option<OrchestratorOutcome>,
     pub patterns_scroll: usize,
@@ -419,6 +423,9 @@ impl AppState {
             pr_poll_last_check: None,
             show_patterns: false,
             show_findings: false,
+            show_stats_overlay: false,
+            stats_overlay_report: None,
+            stats_overlay_scroll: 0,
             findings_scroll: 0,
             last_orchestrator_outcome: None,
             patterns_scroll: 0,

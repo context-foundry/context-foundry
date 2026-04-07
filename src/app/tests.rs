@@ -1049,6 +1049,49 @@ fn running_patterns_scroll_uses_natural_direction() {
 }
 
 #[test]
+fn running_s_toggles_stats_overlay() {
+    let mut state = AppState::new(PathBuf::from(".buildloop"));
+    state.phase = AppPhase::Running;
+
+    // Start with overlay manually enabled (compute won't work without observatory dir)
+    assert!(!state.show_stats_overlay);
+    state.show_stats_overlay = true;
+
+    // s -> dismiss overlay
+    handle_event(
+        &mut state,
+        AppEvent::Key(event::KeyEvent::new(KeyCode::Char('s'), KeyModifiers::NONE)),
+        &Config::default(),
+    );
+    assert!(!state.show_stats_overlay);
+    assert!(state.stats_overlay_report.is_none());
+    assert_eq!(state.stats_overlay_scroll, 0);
+}
+
+#[test]
+fn running_stats_overlay_scroll_uses_natural_direction() {
+    let mut state = AppState::new(PathBuf::from(".buildloop"));
+    state.phase = AppPhase::Running;
+    state.show_stats_overlay = true;
+
+    // Down scrolls deeper (increases offset)
+    handle_event(
+        &mut state,
+        AppEvent::Key(event::KeyEvent::new(KeyCode::Down, KeyModifiers::NONE)),
+        &Config::default(),
+    );
+    assert_eq!(state.stats_overlay_scroll, 3);
+
+    // Up scrolls back toward top (decreases offset)
+    handle_event(
+        &mut state,
+        AppEvent::Key(event::KeyEvent::new(KeyCode::Up, KeyModifiers::NONE)),
+        &Config::default(),
+    );
+    assert_eq!(state.stats_overlay_scroll, 0);
+}
+
+#[test]
 fn running_queue_updated_event_populates_task_queue() {
     let mut state = AppState::new(PathBuf::from(".buildloop"));
     let tasks = vec![

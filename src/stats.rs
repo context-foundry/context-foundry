@@ -9,7 +9,7 @@ use crate::observatory::EventEnvelope;
 
 // ─── Report Structs ──────────────────────────────────────────
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct StatsReport {
     pub window: WindowInfo,
     pub project: Option<String>,
@@ -24,7 +24,7 @@ pub struct StatsReport {
     pub provider_versions: Option<ProviderVersions>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct WindowInfo {
     pub days: u32,
     pub from: String,
@@ -33,7 +33,7 @@ pub struct WindowInfo {
     pub lines_skipped: usize,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Summary {
     pub total_sessions: usize,
     pub total_tasks: usize,
@@ -45,7 +45,7 @@ pub struct Summary {
     pub task_costs: Vec<TaskCostEntry>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct ComplexityPassRate {
     pub complexity: String,
     pub total: usize,
@@ -53,14 +53,14 @@ pub struct ComplexityPassRate {
     pub rate: f64,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct TaskCostEntry {
     pub task_id: String,
     pub session_id: String,
     pub cost_usd: f64,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct PhaseCostEntry {
     pub role: String,
     pub invocations: usize,
@@ -69,7 +69,7 @@ pub struct PhaseCostEntry {
     pub tokens_out: u64,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Quality {
     pub doubt_finding_rate: Option<f64>,
     pub tasks_with_findings: usize,
@@ -79,7 +79,7 @@ pub struct Quality {
     pub budgeted_executions: usize,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct PatternsInfo {
     pub total_injections: usize,
     pub unique_patterns: usize,
@@ -87,13 +87,13 @@ pub struct PatternsInfo {
     pub effectiveness: Vec<PatternEffectiveness>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct PatternCount {
     pub pattern_id: String,
     pub count: usize,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct PatternEffectiveness {
     pub pattern_id: String,
     pub injection_count: usize,
@@ -103,7 +103,7 @@ pub struct PatternEffectiveness {
     pub low_signal: bool,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct TrustDashboard {
     pub acceptance_rate: Option<f64>,
     pub completed_tasks: usize,
@@ -116,7 +116,7 @@ pub struct TrustDashboard {
     pub regression_proxies: Vec<RegressionProxy>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct ModelComparison {
     pub model_key: String,
     pub task_count: usize,
@@ -125,7 +125,7 @@ pub struct ModelComparison {
     pub avg_duration_per_task: f64,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct RegressionProxy {
     pub discovery_task_id: String,
     pub discovery_description: String,
@@ -133,20 +133,20 @@ pub struct RegressionProxy {
     pub shared_tokens: Vec<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct TrendData {
     pub daily_pass_rate: Vec<DailyMetric>,
     pub daily_avg_cost: Vec<DailyMetric>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct DailyMetric {
     pub date: String,
     pub value: f64,
     pub count: usize,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct PrReviewStats {
     pub total_reviews: usize,
     pub failed_reviews: usize,
@@ -157,7 +157,7 @@ pub struct PrReviewStats {
     pub reviews: Vec<PrReviewEntry>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct PrReviewEntry {
     pub session_id: String,
     pub high: usize,
@@ -166,7 +166,7 @@ pub struct PrReviewEntry {
     pub cost_usd: f64,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct CacheEfficiency {
     pub total_cache_creation: u64,
     pub total_cache_read: u64,
@@ -175,7 +175,7 @@ pub struct CacheEfficiency {
     pub anomalies: Vec<CacheAnomaly>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct PhaseCacheEntry {
     pub role: String,
     pub cache_creation: u64,
@@ -183,7 +183,7 @@ pub struct PhaseCacheEntry {
     pub hit_ratio: Option<f64>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct CacheAnomaly {
     pub role: String,
     pub session_id: String,
@@ -191,7 +191,7 @@ pub struct CacheAnomaly {
     pub cache_read: u64,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct ProviderVersions {
     pub versions: Vec<String>,
     pub warnings: Vec<String>,
@@ -340,7 +340,7 @@ pub fn print_session_summary(session_id: &str, _project_dir: &Path) -> Result<()
     Ok(())
 }
 
-fn observatory_dir() -> Result<PathBuf> {
+pub fn observatory_dir() -> Result<PathBuf> {
     let home = std::env::var("HOME").context("HOME not set")?;
     Ok(PathBuf::from(home).join(".foundry").join("observatory"))
 }

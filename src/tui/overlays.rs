@@ -415,3 +415,420 @@ fn render_patterns_status_bar(frame: &mut Frame, area: Rect, state: &AppState) {
 
     frame.render_widget(Paragraph::new(Line::from(spans)), area);
 }
+
+// ─── Stats Overlay ──────────────────────────────────────────
+
+pub(super) fn render_stats_overlay(frame: &mut Frame, state: &AppState) {
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Min(10),   // Content area
+            Constraint::Length(1), // Status bar
+        ])
+        .split(frame.area());
+
+    render_stats_overlay_content(frame, chunks[0], state);
+    render_stats_overlay_status_bar(frame, chunks[1], state);
+}
+
+fn render_stats_overlay_content(frame: &mut Frame, area: Rect, state: &AppState) {
+    let theme = &state.tui_theme;
+
+    let Some(ref report) = state.stats_overlay_report else {
+        let empty = Paragraph::new(vec![
+            Line::from(""),
+            Line::from(Span::styled(
+                "  No stats data available.",
+                Style::default().fg(theme.muted),
+            )),
+        ])
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(theme.border))
+                .title(Span::styled(
+                    " Stats Report ",
+                    Style::default().fg(theme.info).add_modifier(Modifier::BOLD),
+                )),
+        );
+        frame.render_widget(empty, area);
+        return;
+    };
+
+    let mut display_lines: Vec<Line> = Vec::new();
+
+    // ── Session Summary ──
+    display_lines.push(Line::from(Span::styled(
+        "  Session Summary",
+        Style::default().fg(theme.info).add_modifier(Modifier::BOLD),
+    )));
+    display_lines.push(Line::from(""));
+    display_lines.push(Line::from(Span::styled(
+        format!("  Sessions: {}", report.summary.total_sessions),
+        Style::default().fg(theme.text),
+    )));
+    display_lines.push(Line::from(Span::styled(
+        format!("  Tasks: {}", report.summary.total_tasks),
+        Style::default().fg(theme.text),
+    )));
+    let ratio_str = match report.summary.feat_wip_ratio {
+        Some(r) => format!("{:.1}", r),
+        None => "n/a".to_string(),
+    };
+    display_lines.push(Line::from(Span::styled(
+        format!(
+            "  Commits: {} feat / {} WIP (ratio: {})",
+            report.summary.feat_count, report.summary.wip_count, ratio_str
+        ),
+        Style::default().fg(theme.text),
+    )));
+    display_lines.push(Line::from(Span::styled(
+        format!("  Total Cost: ${:.2}", report.summary.total_cost_usd),
+        Style::default().fg(theme.text),
+    )));
+    display_lines.push(Line::from(""));
+
+    // ── Cost by Phase ──
+    display_lines.push(Line::from(Span::styled(
+        "  Cost by Phase",
+        Style::default().fg(theme.info).add_modifier(Modifier::BOLD),
+    )));
+    display_lines.push(Line::from(""));
+    if report.phase_costs.is_empty() {
+        display_lines.push(Line::from(Span::styled(
+            "  (no data)",
+            Style::default().fg(theme.muted),
+        )));
+    } else {
+        display_lines.push(Line::from(Span::styled(
+            format!(
+                "  {:<16} {:>6} {:>10} {:>10} {:>10}",
+                "Role", "Runs", "Cost ($)", "Tokens In", "Tokens Out"
+            ),
+            Style::default().fg(theme.muted),
+        )));
+        for entry in &report.phase_costs {
+            display_lines.push(Line::from(Span::styled(
+                format!(
+                    "  {:<16} {:>6} {:>10.2} {:>10} {:>10}",
+                    entry.role,
+                    entry.invocations,
+                    entry.cost_usd,
+                    fmt_overlay_tokens(entry.tokens_in),
+                    fmt_overlay_tokens(entry.tokens_out),
+                ),
+                Style::default().fg(theme.text),
+            )));
+        }
+    }
+    display_lines.push(Line::from(""));
+
+    // ── Quality Signals ──
+    display_lines.push(Line::from(Span::styled(
+        "  Quality Signals",
+        Style::default().fg(theme.info).add_modifier(Modifier::BOLD),
+    )));
+    display_lines.push(Line::from(""));
+    match report.quality.doubt_finding_rate {
+        Some(r) => {
+            display_lines.push(Line::from(Span::styled(
+                format!(
+                    "  Doubt finding rate: {:.1}% ({} of {} reviewed tasks had findings)",
+                    r * 100.0,
+                    report.quality.tasks_with_findings,
+                    report.quality.tasks_reviewed,
+                ),
+                Style::default().fg(theme.text),
+            )));
+        }
+        None => {
+            display_lines.push(Line::from(Span::styled(
+                "  Doubt finding rate: n/a (no reviewed tasks)",
+                Style::default().fg(theme.text),
+            )));
+        }
+    }
+    match report.quality.budget_overrun_rate {
+        Some(r) => {
+            display_lines.push(Line::from(Span::styled(
+                format!(
+                    "  Budget overrun rate: {:.1}% ({} of {} budgeted executions)",
+                    r * 100.0,
+                    report.quality.budget_overruns,
+                    report.quality.budgeted_executions,
+                ),
+                Style::default().fg(theme.text),
+            )));
+        }
+        None => {
+            display_lines.push(Line::from(Span::styled(
+                "  Budget overrun rate: n/a",
+                Style::default().fg(theme.text),
+            )));
+        }
+    }
+    if !report.summary.pass_rate_by_complexity.is_empty() {
+        display_lines.push(Line::from(Span::styled(
+            "  Pass Rate by Complexity:",
+            Style::default().fg(theme.text),
+        )));
+        for c in &report.summary.pass_rate_by_complexity {
+            display_lines.push(Line::from(Span::styled(
+                format!(
+                    "    {:<12} {:.1}% ({}/{})",
+                    c.complexity,
+                    c.rate * 100.0,
+                    c.feat,
+                    c.total,
+                ),
+                Style::default().fg(theme.text),
+            )));
+        }
+    }
+    display_lines.push(Line::from(""));
+
+    // ── Pattern Effectiveness (top 10) ──
+    display_lines.push(Line::from(Span::styled(
+        "  Pattern Effectiveness (top 10)",
+        Style::default().fg(theme.info).add_modifier(Modifier::BOLD),
+    )));
+    display_lines.push(Line::from(""));
+    display_lines.push(Line::from(Span::styled(
+        format!(
+            "  Total injections: {} ({} unique patterns)",
+            report.patterns.total_injections, report.patterns.unique_patterns,
+        ),
+        Style::default().fg(theme.text),
+    )));
+    if report.patterns.effectiveness.is_empty() {
+        display_lines.push(Line::from(Span::styled(
+            "  (no data)",
+            Style::default().fg(theme.muted),
+        )));
+    } else {
+        display_lines.push(Line::from(Span::styled(
+            format!(
+                "  {:<36} {:>6} {:>6} {:>7} {:>6}",
+                "Pattern", "Inj", "Cite", "Rate", "Signal"
+            ),
+            Style::default().fg(theme.muted),
+        )));
+        for eff in report.patterns.effectiveness.iter().take(10) {
+            let pid = truncate_str(&eff.pattern_id, 36);
+            let signal = if eff.low_signal { "LOW" } else { "ok" };
+            display_lines.push(Line::from(Span::styled(
+                format!(
+                    "  {:<36} {:>6} {:>6} {:>6.1}% {:>6}",
+                    pid,
+                    eff.injection_count,
+                    eff.citation_count,
+                    eff.citation_rate * 100.0,
+                    signal,
+                ),
+                Style::default().fg(theme.text),
+            )));
+        }
+    }
+    display_lines.push(Line::from(""));
+
+    // ── Trust Dashboard ──
+    display_lines.push(Line::from(Span::styled(
+        "  Trust Dashboard",
+        Style::default().fg(theme.info).add_modifier(Modifier::BOLD),
+    )));
+    display_lines.push(Line::from(""));
+    if let Some(ref trust) = report.trust {
+        match trust.acceptance_rate {
+            Some(r) => {
+                display_lines.push(Line::from(Span::styled(
+                    format!(
+                        "  Acceptance rate: {:.1}% ({} feat / {} completed)",
+                        r * 100.0, trust.feat_tasks, trust.completed_tasks,
+                    ),
+                    Style::default().fg(theme.text),
+                )));
+            }
+            None => {
+                display_lines.push(Line::from(Span::styled(
+                    "  Acceptance rate: n/a",
+                    Style::default().fg(theme.text),
+                )));
+            }
+        }
+        match trust.review_rescue_rate {
+            Some(r) => {
+                display_lines.push(Line::from(Span::styled(
+                    format!(
+                        "  Review rescue rate: {:.1}% ({} rescued / {} with findings)",
+                        r * 100.0, trust.rescued_tasks, trust.tasks_with_findings,
+                    ),
+                    Style::default().fg(theme.text),
+                )));
+            }
+            None => {
+                display_lines.push(Line::from(Span::styled(
+                    "  Review rescue rate: n/a",
+                    Style::default().fg(theme.text),
+                )));
+            }
+        }
+        display_lines.push(Line::from(Span::styled(
+            format!("  Longest feat streak: {}", trust.longest_feat_streak),
+            Style::default().fg(theme.text),
+        )));
+        if !trust.model_comparisons.is_empty() {
+            display_lines.push(Line::from(Span::styled(
+                "  Model Comparison:",
+                Style::default().fg(theme.text),
+            )));
+            display_lines.push(Line::from(Span::styled(
+                format!(
+                    "  {:<28} {:>6} {:>8} {:>10} {:>10}",
+                    "Model", "Tasks", "Feat %", "Avg Cost", "Avg Dur"
+                ),
+                Style::default().fg(theme.muted),
+            )));
+            for mc in &trust.model_comparisons {
+                display_lines.push(Line::from(Span::styled(
+                    format!(
+                        "  {:<28} {:>6} {:>7.1}% {:>10.2} {:>10.0}",
+                        truncate_str(&mc.model_key, 28),
+                        mc.task_count,
+                        mc.feat_rate * 100.0,
+                        mc.avg_cost_per_task,
+                        mc.avg_duration_per_task,
+                    ),
+                    Style::default().fg(theme.text),
+                )));
+            }
+        }
+    } else {
+        display_lines.push(Line::from(Span::styled(
+            "  (no data)",
+            Style::default().fg(theme.muted),
+        )));
+    }
+    display_lines.push(Line::from(""));
+
+    // ── Cache Efficiency ──
+    if let Some(ref cache) = report.cache_efficiency {
+        display_lines.push(Line::from(Span::styled(
+            "  Cache Efficiency",
+            Style::default().fg(theme.info).add_modifier(Modifier::BOLD),
+        )));
+        display_lines.push(Line::from(""));
+        display_lines.push(Line::from(Span::styled(
+            format!("  Cache read tokens: {}", fmt_overlay_tokens(cache.total_cache_read)),
+            Style::default().fg(theme.text),
+        )));
+        display_lines.push(Line::from(Span::styled(
+            format!("  Cache creation tokens: {}", fmt_overlay_tokens(cache.total_cache_creation)),
+            Style::default().fg(theme.text),
+        )));
+        let hit_str = match cache.cache_hit_ratio {
+            Some(r) => format!("{:.1}%", r * 100.0),
+            None => "n/a".to_string(),
+        };
+        display_lines.push(Line::from(Span::styled(
+            format!("  Hit ratio: {}", hit_str),
+            Style::default().fg(theme.text),
+        )));
+        display_lines.push(Line::from(""));
+    }
+
+    // ── Provider Versions ──
+    if let Some(ref pv) = report.provider_versions {
+        display_lines.push(Line::from(Span::styled(
+            format!("  Provider Versions: {}", pv.versions.join(", ")),
+            Style::default().fg(theme.text),
+        )));
+        for w in &pv.warnings {
+            display_lines.push(Line::from(Span::styled(
+                format!("  Warning: {}", w),
+                Style::default().fg(Color::Yellow),
+            )));
+        }
+        display_lines.push(Line::from(""));
+    }
+
+    // ── Render with scroll ──
+    let total_lines = display_lines.len();
+    let max_lines = area.height.saturating_sub(2) as usize;
+    let scroll = state
+        .stats_overlay_scroll
+        .min(total_lines.saturating_sub(max_lines));
+    let visible: Vec<Line> = display_lines
+        .into_iter()
+        .skip(scroll)
+        .take(max_lines)
+        .collect();
+
+    let paragraph = Paragraph::new(visible).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(theme.border))
+            .title(Span::styled(
+                " Stats Report ",
+                Style::default().fg(theme.info).add_modifier(Modifier::BOLD),
+            )),
+    );
+    frame.render_widget(paragraph, area);
+}
+
+fn render_stats_overlay_status_bar(frame: &mut Frame, area: Rect, state: &AppState) {
+    let mut spans = vec![
+        Span::styled(
+            " s ",
+            Style::default()
+                .fg(Color::Black)
+                .bg(state.tui_theme.info)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(" back  "),
+        Span::styled(
+            " Esc ",
+            Style::default()
+                .fg(Color::Black)
+                .bg(state.tui_theme.muted)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(" back  "),
+        Span::styled(
+            " ↑↓ ",
+            Style::default()
+                .fg(Color::Black)
+                .bg(state.tui_theme.muted)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(" scroll  "),
+        Span::styled(
+            " q ",
+            Style::default()
+                .fg(Color::Black)
+                .bg(state.tui_theme.muted)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(" quit"),
+    ];
+
+    if let Some(ref version) = state.update_available {
+        spans.push(Span::styled(
+            format!(" | v{} available", version),
+            Style::default()
+                .fg(state.tui_theme.success)
+                .add_modifier(Modifier::BOLD),
+        ));
+    }
+
+    frame.render_widget(Paragraph::new(Line::from(spans)), area);
+}
+
+fn fmt_overlay_tokens(n: u64) -> String {
+    if n >= 1_000_000 {
+        format!("{:.1}M", n as f64 / 1_000_000.0)
+    } else if n >= 1_000 {
+        format!("{:.0}K", n as f64 / 1_000.0)
+    } else {
+        format!("{}", n)
+    }
+}

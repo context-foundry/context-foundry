@@ -171,7 +171,9 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
         // Draw based on phase
         terminal.draw(|frame| match state.phase {
             AppPhase::Startup => {
-                if state.show_findings {
+                if state.show_stats_overlay {
+                    tui::render_stats_overlay(frame, &state);
+                } else if state.show_findings {
                     tui::render_findings(frame, &state);
                 } else if state.show_run_view {
                     tui::render(frame, &state, &config);
@@ -180,7 +182,9 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
                 }
             }
             AppPhase::Planning | AppPhase::Running => {
-                if state.show_findings {
+                if state.show_stats_overlay {
+                    tui::render_stats_overlay(frame, &state);
+                } else if state.show_findings {
                     tui::render_findings(frame, &state);
                 } else if state.show_patterns {
                     tui::render_patterns(frame, &state, &config);
@@ -681,10 +685,25 @@ fn handle_planning_event(state: &mut AppState, event: AppEvent, config: &Config)
 fn handle_planning_key(state: &mut AppState, key: event::KeyEvent, config: &Config) {
     match key.code {
         KeyCode::Char('q') | KeyCode::Esc => {
-            state.should_quit = true;
+            if state.show_stats_overlay {
+                state.show_stats_overlay = false;
+                state.stats_overlay_report = None;
+                state.stats_overlay_scroll = 0;
+            } else {
+                state.should_quit = true;
+            }
         }
         KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
             state.should_quit = true;
+        }
+        KeyCode::Char('s') if !key.modifiers.contains(KeyModifiers::CONTROL) => {
+            if state.show_stats_overlay {
+                state.show_stats_overlay = false;
+                state.stats_overlay_report = None;
+                state.stats_overlay_scroll = 0;
+            } else {
+                compute_and_show_stats_overlay(state);
+            }
         }
         KeyCode::Char('f') => {
             if state.last_orchestrator_outcome.is_some() {
@@ -708,7 +727,9 @@ fn handle_planning_key(state: &mut AppState, key: event::KeyEvent, config: &Conf
             state.log(format!("Theme: {}", name));
         }
         KeyCode::Up => {
-            if state.show_findings {
+            if state.show_stats_overlay {
+                state.stats_overlay_scroll = state.stats_overlay_scroll.saturating_sub(3);
+            } else if state.show_findings {
                 state.findings_scroll = state.findings_scroll.saturating_sub(3);
             } else if state.show_patterns {
                 state.patterns_scroll = state.patterns_scroll.saturating_sub(3);
@@ -719,7 +740,9 @@ fn handle_planning_key(state: &mut AppState, key: event::KeyEvent, config: &Conf
             }
         }
         KeyCode::Down => {
-            if state.show_findings {
+            if state.show_stats_overlay {
+                state.stats_overlay_scroll = state.stats_overlay_scroll.saturating_add(3);
+            } else if state.show_findings {
                 state.findings_scroll = state.findings_scroll.saturating_add(3);
             } else if state.show_patterns {
                 state.patterns_scroll = state.patterns_scroll.saturating_add(3);
@@ -1329,7 +1352,11 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                 } else {
                     match key.code {
                         KeyCode::Char('q') => {
-                            if state.stop_after_task {
+                            if state.show_stats_overlay {
+                                state.show_stats_overlay = false;
+                                state.stats_overlay_report = None;
+                                state.stats_overlay_scroll = 0;
+                            } else if state.stop_after_task {
                                 // Cancel stop -- resume running
                                 state.stop_after_task = false;
                                 let _ = std::fs::remove_file(state.buildloop_dir.join("stop"));
@@ -1340,6 +1367,13 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                                 let _ = std::fs::create_dir_all(&state.buildloop_dir);
                                 let _ = std::fs::write(state.buildloop_dir.join("stop"), "");
                                 state.log("Stopping after current task (q again to cancel, Ctrl+C to force quit)");
+                            }
+                        }
+                        KeyCode::Esc => {
+                            if state.show_stats_overlay {
+                                state.show_stats_overlay = false;
+                                state.stats_overlay_report = None;
+                                state.stats_overlay_scroll = 0;
                             }
                         }
                         KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
@@ -1370,6 +1404,15 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                                 refresh_patterns_cache(state, config);
                             }
                         }
+                        KeyCode::Char('s') if !key.modifiers.contains(KeyModifiers::CONTROL) => {
+                            if state.show_stats_overlay {
+                                state.show_stats_overlay = false;
+                                state.stats_overlay_report = None;
+                                state.stats_overlay_scroll = 0;
+                            } else {
+                                compute_and_show_stats_overlay(state);
+                            }
+                        }
                         // Sandbox toggle removed -- config-only override for implementers.
                         KeyCode::Char('s') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                             state.log("Sandbox toggle disabled -- override via .foundry.json only".to_string());
@@ -1393,7 +1436,9 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                             }
                         }
                         KeyCode::Up => {
-                            if state.show_findings {
+                            if state.show_stats_overlay {
+                                state.stats_overlay_scroll = state.stats_overlay_scroll.saturating_sub(3);
+                            } else if state.show_findings {
                                 state.findings_scroll = state.findings_scroll.saturating_sub(3);
                             } else if state.show_patterns {
                                 state.patterns_scroll = state.patterns_scroll.saturating_sub(3);
@@ -1404,7 +1449,9 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                             }
                         }
                         KeyCode::Down => {
-                            if state.show_findings {
+                            if state.show_stats_overlay {
+                                state.stats_overlay_scroll = state.stats_overlay_scroll.saturating_add(3);
+                            } else if state.show_findings {
                                 state.findings_scroll = state.findings_scroll.saturating_add(3);
                             } else if state.show_patterns {
                                 state.patterns_scroll = state.patterns_scroll.saturating_add(3);
@@ -1478,7 +1525,9 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
             } else {
                 match mouse.kind {
                     MouseEventKind::ScrollUp => {
-                        if state.show_patterns {
+                        if state.show_stats_overlay {
+                            state.stats_overlay_scroll = state.stats_overlay_scroll.saturating_sub(3);
+                        } else if state.show_patterns {
                             state.patterns_scroll = state.patterns_scroll.saturating_sub(3);
                         } else if state.show_findings {
                             state.findings_scroll = state.findings_scroll.saturating_sub(3);
@@ -1512,7 +1561,9 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                         }
                     }
                     MouseEventKind::ScrollDown => {
-                        if state.show_patterns {
+                        if state.show_stats_overlay {
+                            state.stats_overlay_scroll = state.stats_overlay_scroll.saturating_add(3);
+                        } else if state.show_patterns {
                             state.patterns_scroll = state.patterns_scroll.saturating_add(3);
                         } else if state.show_findings {
                             state.findings_scroll = state.findings_scroll.saturating_add(3);
@@ -1724,6 +1775,38 @@ fn commit_inject_task(state: &mut AppState, description: &str, run_next: bool) {
 }
 
 const AGENT_OUTPUT_CAP: usize = 2000;
+
+fn compute_and_show_stats_overlay(state: &mut AppState) {
+    let obs_dir = match crate::stats::observatory_dir() {
+        Ok(d) => d,
+        Err(_) => {
+            state.log("Stats: cannot find observatory dir");
+            return;
+        }
+    };
+    let project_dir = state
+        .buildloop_dir
+        .parent()
+        .unwrap_or(std::path::Path::new("."));
+    let canonical = dunce::canonicalize(project_dir).unwrap_or_else(|_| project_dir.to_path_buf());
+    let (events, skipped) = match crate::stats::load_events(&obs_dir, 1, Some(&canonical)) {
+        Ok(r) => r,
+        Err(_) => {
+            state.log("Stats: failed to load events");
+            return;
+        }
+    };
+    let report = crate::stats::compute_stats(
+        &events,
+        skipped,
+        1,
+        Some(&canonical.display().to_string()),
+        false,
+    );
+    state.stats_overlay_report = Some(report);
+    state.show_stats_overlay = true;
+    state.stats_overlay_scroll = 0;
+}
 
 fn refresh_patterns_cache(state: &mut AppState, config: &Config) {
     use crate::patterns;

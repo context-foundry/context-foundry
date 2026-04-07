@@ -952,6 +952,14 @@ pub(super) fn render_status_bar(frame: &mut Frame, area: Rect, state: &AppState)
         ),
         Span::raw(" patterns  "),
         Span::styled(
+            " s ",
+            Style::default()
+                .fg(Color::Black)
+                .bg(state.tui_theme.muted)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(" stats  "),
+        Span::styled(
             " ^T ",
             Style::default()
                 .fg(Color::Black)
