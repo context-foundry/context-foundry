@@ -24,6 +24,7 @@ pub(super) async fn run_review_loop(
     extension_context: &str,
     tx: &mpsc::UnboundedSender<AppEvent>,
 ) -> (bool, usize, (usize, usize, usize), Option<budget::PhaseBudgetRecord>) {
+    let cc_version = crate::agent::detect_cc_version();
     let files_changed = get_changed_files(&ctx.project_dir);
     if files_changed.is_empty() {
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
@@ -161,6 +162,7 @@ pub(super) async fn run_review_loop(
             role: format!("{}", AgentRole::Reviewer),
             provider: ctx.config.reviewer_provider.clone(),
             model: ctx.config.reviewer_model.clone(),
+            cc_version: cc_version.clone(),
         });
         let multipass_start = Instant::now();
         let result = run_multipass_review(
@@ -220,6 +222,7 @@ pub(super) async fn run_review_loop(
         role: format!("{}", AgentRole::Reviewer),
         provider: ctx.config.reviewer_provider.clone(),
         model: ctx.config.reviewer_model.clone(),
+        cc_version: cc_version.clone(),
     });
 
     let prompt = prompts::reviewer_prompt(
@@ -442,6 +445,7 @@ async fn run_multipass_review(
     diff_for_review: Option<&str>,
     semgrep_findings: &str,
 ) -> (bool, usize, (usize, usize, usize), Option<budget::PhaseBudgetRecord>, AgentUsage) {
+    let cc_version = crate::agent::detect_cc_version();
     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
         "Multi-pass review: {} files exceed threshold ({}), running per-file analysis",
         files_changed.len(),
@@ -487,6 +491,7 @@ async fn run_multipass_review(
             role: format!("{}", AgentRole::Reviewer),
             provider: ctx.config.reviewer_provider.clone(),
             model: ctx.config.reviewer_model.clone(),
+            cc_version: cc_version.clone(),
         });
         let per_file_start = Instant::now();
         let result = agent::run_agent(
@@ -602,6 +607,7 @@ async fn run_multipass_review(
         role: format!("{}", AgentRole::Reviewer),
         provider: ctx.config.reviewer_provider.clone(),
         model: ctx.config.reviewer_model.clone(),
+        cc_version: cc_version.clone(),
     });
     let integration_start = Instant::now();
     let review_result = agent::run_agent(

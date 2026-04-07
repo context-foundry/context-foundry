@@ -497,6 +497,7 @@ async fn run_multipass_pr_review(
     review_report: &Path,
     review_report_relative: &str,
 ) -> (Result<AgentResult>, AgentUsage, serde_json::Value, usize) {
+    let cc_version = crate::agent::detect_cc_version();
     let file_diffs = split_diff_by_file(diff);
     let diff_map: std::collections::HashMap<&str, &str> = file_diffs
         .iter()
@@ -555,6 +556,7 @@ async fn run_multipass_pr_review(
         let pr_model_owned = pr_model.to_string();
         let session_id_owned = session_id.to_string();
         let project_dir_owned = project_dir.to_path_buf();
+        let cc_version_owned = cc_version.clone();
         let log_dir_owned = log_dir.to_path_buf();
         let config_owned = config.clone();
         let buildloop_dir_owned = buildloop_dir.to_path_buf();
@@ -598,6 +600,7 @@ async fn run_multipass_pr_review(
                     role: "Reviewer (per-file)".to_string(),
                     provider: pr_provider_owned.clone(),
                     model: pr_model_owned.clone(),
+                    cc_version: cc_version_owned.clone(),
                 },
             );
             let per_file_start = Instant::now();
@@ -753,6 +756,7 @@ async fn run_multipass_pr_review(
             role: "Reviewer (integration)".to_string(),
             provider: pr_provider.to_string(),
             model: pr_model.to_string(),
+            cc_version: cc_version.clone(),
         },
     );
     let integration_start = Instant::now();
@@ -869,6 +873,7 @@ pub async fn run(
 
     // Observatory: session tracking
     let session_id = format!("pr-review-{}-{}", repo.replace('/', "--"), pr_number);
+    let cc_version = crate::agent::detect_cc_version();
     let session_start = Instant::now();
 
     observatory::log_event(
@@ -884,6 +889,7 @@ pub async fn run(
                 "diff_line_count": diff.lines().count(),
                 "changed_file_count": metadata.changed_files.len(),
             }),
+            cc_version: cc_version.clone(),
         },
     );
 
@@ -954,6 +960,7 @@ pub async fn run(
                 role: "Reviewer".to_string(),
                 provider: pr_provider.clone(),
                 model: pr_model.clone(),
+                cc_version: cc_version.clone(),
             },
         );
         let agent_start = Instant::now();

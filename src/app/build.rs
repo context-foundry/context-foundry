@@ -593,6 +593,7 @@ async fn run_parallel_builder(
     groups: &[Vec<usize>],
     extension_context: &str,
 ) -> (bool, bool, AgentUsage) {
+    let cc_version = crate::agent::detect_cc_version();
     let task_id = &task_info.id;
     let task_desc = &task_info.description;
     let total_slots = groups.len();
@@ -747,6 +748,7 @@ async fn run_parallel_builder(
         let slot_project_dir_obs = ctx.project_dir.clone();
         let slot_builder_provider = ctx.config.builder_provider.clone();
         let slot_builder_model = ctx.config.builder_model.clone();
+        let slot_cc_version = cc_version.clone();
         let slot_config = ctx.config.clone();
 
         let fut = async move {
@@ -779,6 +781,7 @@ async fn run_parallel_builder(
                 role: format!("{}", AgentRole::Builder),
                 provider: slot_builder_provider.clone(),
                 model: slot_builder_model.clone(),
+                cc_version: slot_cc_version.clone(),
             });
             let slot_start = Instant::now();
 
@@ -1393,6 +1396,7 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
 
     // ─── Observatory Session ─────────────────────────────────────
     let session_id = observatory::generate_session_id();
+    let cc_version = crate::agent::detect_cc_version();
     let mut ctx = ctx;
     ctx.session_id = session_id.clone();
     let loop_start = std::time::Instant::now();
@@ -1418,6 +1422,7 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
             "cost_limit": ctx.config.cost_limit,
             "agent_timeout_secs": ctx.config.agent_timeout_secs,
         }),
+        cc_version: cc_version.clone(),
     });
 
     // Helper: emit SessionEnded. Called before each return point.
@@ -1535,6 +1540,7 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                 role: format!("{}", AgentRole::Scout),
                 provider: ctx.config.scout_provider.clone(),
                 model: ctx.config.scout_model.clone(),
+                cc_version: cc_version.clone(),
             });
 
             // Read SPEC.md for user intent if it exists
@@ -1877,6 +1883,7 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                 role: format!("{}", AgentRole::Discovery),
                 provider: ctx.config.discovery_provider.clone(),
                 model: ctx.config.discovery_model.clone(),
+                cc_version: cc_version.clone(),
             });
 
             let build_history = if session_build_claims.is_empty() {
@@ -2165,6 +2172,7 @@ async fn process_task(
     patterns_dir: &std::path::Path,
     extension_context: &str,
 ) -> (bool, bool, bool) {
+    let cc_version = crate::agent::detect_cc_version();
     // Handle dual selection: Both forks two full pipelines, First/Second
     // resolve an effective single-pipeline config before any stage starts.
     let dual_sel = DualSelection::from_str(&ctx.config.dual_selection);
@@ -2471,6 +2479,7 @@ async fn process_task(
             role: format!("{}", AgentRole::Scout),
             provider: ctx.config.scout_provider.clone(),
             model: ctx.config.scout_model.clone(),
+            cc_version: cc_version.clone(),
         });
 
         // Read UPDATED_SPECS.md for enhancement requests
@@ -2715,6 +2724,7 @@ async fn process_task(
                 role: format!("{}", AgentRole::Planner),
                 provider: ctx.config.planner_provider.clone(),
                 model: ctx.config.planner_model.clone(),
+                cc_version: cc_version.clone(),
             });
 
             let mut prompt = prompts::planner_prompt(
@@ -3019,6 +3029,7 @@ async fn process_task(
                 role: format!("{}", AgentRole::Planner),
                 provider: ctx.config.planner_provider.clone(),
                 model: ctx.config.planner_model.clone(),
+                cc_version: cc_version.clone(),
             });
 
             let retry_result = agent::run_agent(
@@ -3207,6 +3218,7 @@ async fn process_task(
                 role: format!("{}", AgentRole::PlanReview),
                 provider: ctx.config.orchestrator_proposer_provider.clone(),
                 model: ctx.config.orchestrator_proposer_model.clone(),
+                cc_version: cc_version.clone(),
             });
             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
                 "P+ subphase: routing plan for {} through orchestrator review loop", task_id
@@ -3595,6 +3607,7 @@ async fn process_task(
             role: format!("{}", AgentRole::Builder),
             provider: ctx.config.builder_provider.clone(),
             model: ctx.config.builder_model.clone(),
+            cc_version: cc_version.clone(),
         });
 
         let prompt = if skip_planner {

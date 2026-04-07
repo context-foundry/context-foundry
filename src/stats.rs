@@ -21,6 +21,7 @@ pub struct StatsReport {
     pub trend: Option<TrendData>,
     pub pr_reviews: Option<PrReviewStats>,
     pub cache_efficiency: Option<CacheEfficiency>,
+    pub provider_versions: Option<ProviderVersions>,
 }
 
 #[derive(Debug, Serialize)]
@@ -190,6 +191,12 @@ pub struct CacheAnomaly {
     pub cache_read: u64,
 }
 
+#[derive(Debug, Serialize)]
+pub struct ProviderVersions {
+    pub versions: Vec<String>,
+    pub warnings: Vec<String>,
+}
+
 // ─── Entry Point ─────────────────────────────────────────────
 
 pub fn run_stats(days: u32, project: &Path, output: &str, trend: bool) -> Result<()> {
@@ -326,6 +333,25 @@ struct CompletedTask {
 
 // ─── Computation ─────────────────────────────────────────────
 
+/// Returns a warning string if the given CC version is known to have caching or
+/// behavioral issues. Hardcoded list -- extend as new bad versions are discovered.
+fn known_bad_cc_version(version: &str) -> Option<&'static str> {
+    let parts: Vec<&str> = version.split('.').collect();
+    if parts.len() != 3 {
+        return None;
+    }
+    let major: u32 = match parts[0].parse() { Ok(v) => v, Err(_) => return None };
+    let minor: u32 = match parts[1].parse() { Ok(v) => v, Err(_) => return None };
+    let patch: u32 = match parts[2].parse() { Ok(v) => v, Err(_) => return None };
+
+    // >= 2.1.69: --resume cache miss bug
+    if (major, minor, patch) >= (2, 1, 69) && (major, minor) <= (2, 1) {
+        return Some("--resume cache miss bug (>= 2.1.69)");
+    }
+
+    None
+}
+
 fn is_pr_review_session(session_id: &str) -> bool {
     session_id.starts_with("pr-review-")
 }
@@ -383,6 +409,7 @@ pub fn compute_stats(
     let mut phase_cache_map: HashMap<String, (u64, u64)> = HashMap::new();
     let mut cache_anomalies: Vec<CacheAnomaly> = Vec::new();
     let mut has_any_cache_data = false;
+    let mut cc_versions_seen: HashSet<String> = HashSet::new();
 
     for (idx, ev) in events.iter().enumerate() {
         session_events
@@ -396,6 +423,18 @@ pub fn compute_stats(
                     pr_review_sessions.insert(ev.session_id.clone());
                 } else {
                     sessions.insert(ev.session_id.clone());
+                }
+                if let Some(v) = ev.payload.get("cc_version").and_then(|v| v.as_str()) {
+                    if !v.is_empty() && v != "unknown" {
+                        cc_versions_seen.insert(v.to_string());
+                    }
+                }
+            }
+            "agent_started" => {
+                if let Some(v) = ev.payload.get("cc_version").and_then(|v| v.as_str()) {
+                    if !v.is_empty() && v != "unknown" {
+                        cc_versions_seen.insert(v.to_string());
+                    }
                 }
             }
             "task_started" => {
@@ -942,6 +981,27 @@ pub fn compute_stats(
         None
     };
 
+    // ── Provider Versions (T27.2) ──
+    let provider_versions = if cc_versions_seen.is_empty() {
+        None
+    } else {
+        let mut versions: Vec<String> = cc_versions_seen.into_iter().collect();
+        versions.sort();
+        let mut warnings: Vec<String> = Vec::new();
+        if versions.len() > 1 {
+            warnings.push(format!(
+                "{} CC versions detected -- cache behavior may differ",
+                versions.len()
+            ));
+        }
+        for v in &versions {
+            if let Some(known_issue) = known_bad_cc_version(v) {
+                warnings.push(format!("CC {} -- {}", v, known_issue));
+            }
+        }
+        Some(ProviderVersions { versions, warnings })
+    };
+
     // ── Assemble report ──
 
     StatsReport {
@@ -994,6 +1054,7 @@ pub fn compute_stats(
         trend: trend_data,
         pr_reviews,
         cache_efficiency,
+        provider_versions,
     }
 }
 
@@ -1495,6 +1556,17 @@ fn print_table(report: &StatsReport) {
                     fmt_tokens(a.cache_creation)
                 );
             }
+        }
+    }
+
+    // Provider Versions (T27.2)
+    if let Some(ref pv) = report.provider_versions {
+        println!();
+        println!("Provider Versions");
+        println!("-----------------");
+        println!("  CC versions: {}", pv.versions.join(", "));
+        for w in &pv.warnings {
+            println!("  WARNING: {}", w);
         }
     }
 }
@@ -2486,5 +2558,72 @@ mod tests {
         assert_eq!(ce.anomalies.len(), 1);
         assert_eq!(ce.anomalies[0].role, "builder");
         assert_eq!(ce.anomalies[0].cache_creation, 80000);
+    }
+
+    #[test]
+    fn test_provider_versions_collected() {
+        let p = "/test/project";
+        let s = "sess-1";
+        let events = vec![
+            make_event(
+                "2025-01-15T10:00:00Z", s, p, "session_started",
+                serde_json::json!({"type": "SessionStarted", "config": {}, "cc_version": "1.0.20"}),
+            ),
+            make_event(
+                "2025-01-15T10:01:00Z", s, p, "agent_started",
+                serde_json::json!({"type": "AgentStarted", "role": "planner", "provider": "claude", "model": "opus", "cc_version": "1.0.20"}),
+            ),
+            make_event(
+                "2025-01-15T10:05:00Z", s, p, "agent_done",
+                serde_json::json!({"type": "AgentDone", "role": "planner", "success": true, "duration_secs": 30.0, "tokens_in": 1000, "tokens_out": 500, "cost_usd": 0.05, "context_pct": 10}),
+            ),
+        ];
+        let report = compute_stats(&events, 0, 7, None, false);
+        let pv = report.provider_versions.as_ref().expect("provider_versions should be present");
+        assert_eq!(pv.versions, vec!["1.0.20"]);
+        assert!(pv.warnings.is_empty());
+    }
+
+    #[test]
+    fn test_provider_versions_multiple_detected() {
+        let p = "/test/project";
+        let events = vec![
+            make_event(
+                "2025-01-15T10:00:00Z", "sess-1", p, "session_started",
+                serde_json::json!({"type": "SessionStarted", "config": {}, "cc_version": "1.0.20"}),
+            ),
+            make_event(
+                "2025-01-15T11:00:00Z", "sess-2", p, "session_started",
+                serde_json::json!({"type": "SessionStarted", "config": {}, "cc_version": "1.0.21"}),
+            ),
+        ];
+        let report = compute_stats(&events, 0, 7, None, false);
+        let pv = report.provider_versions.as_ref().expect("provider_versions should be present");
+        assert_eq!(pv.versions.len(), 2);
+        assert!(pv.warnings.iter().any(|w| w.contains("2 CC versions detected")));
+    }
+
+    #[test]
+    fn test_provider_versions_absent_for_old_events() {
+        let p = "/test/project";
+        let s = "sess-old";
+        let events = vec![
+            make_event(
+                "2025-01-15T10:00:00Z", s, p, "session_started",
+                serde_json::json!({"type": "SessionStarted", "config": {}}),
+            ),
+        ];
+        let report = compute_stats(&events, 0, 7, None, false);
+        assert!(report.provider_versions.is_none(), "old events without cc_version should not produce provider_versions");
+    }
+
+    #[test]
+    fn test_known_bad_cc_version() {
+        assert!(known_bad_cc_version("2.1.69").is_some());
+        assert!(known_bad_cc_version("2.1.70").is_some());
+        assert!(known_bad_cc_version("2.1.68").is_none());
+        assert!(known_bad_cc_version("1.0.20").is_none());
+        assert!(known_bad_cc_version("invalid").is_none());
+        assert!(known_bad_cc_version("3.0.0").is_none());
     }
 }

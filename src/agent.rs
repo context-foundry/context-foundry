@@ -223,6 +223,30 @@ pub fn is_running_as_root() -> bool {
     }
 }
 
+/// Detect the installed Claude CLI version by running `claude --version`.
+/// Returns a version string like "1.0.20" or "unknown" on failure.
+pub fn detect_cc_version() -> String {
+    let output = match std::process::Command::new("claude").arg("--version").output() {
+        Ok(o) => o,
+        Err(_) => return "unknown".to_string(),
+    };
+    let raw = String::from_utf8_lossy(&output.stdout);
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return "unknown".to_string();
+    }
+    let version = if let Some(rest) = trimmed.strip_prefix("claude-code ") {
+        rest.trim()
+    } else {
+        trimmed
+    };
+    if version.is_empty() {
+        "unknown".to_string()
+    } else {
+        version.to_string()
+    }
+}
+
 /// The default tool allowlist used as a fallback when `--dangerously-skip-permissions`
 /// is unavailable (e.g. running as root). Covers every tool an agent might need.
 pub const ROOT_ALLOWED_TOOLS: &str = "Bash,Edit,Write,Read,Glob,Grep,NotebookEdit,WebFetch,WebSearch,TodoWrite";

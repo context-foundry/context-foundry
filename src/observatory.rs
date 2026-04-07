@@ -35,6 +35,7 @@ pub struct EventEnvelope {
 pub enum ObservatoryEvent {
     SessionStarted {
         config: serde_json::Value,
+        cc_version: String,
     },
     SessionEnded {
         total_tasks: usize,
@@ -52,6 +53,7 @@ pub enum ObservatoryEvent {
         role: String,
         provider: String,
         model: String,
+        cc_version: String,
     },
     AgentDone {
         role: String,
