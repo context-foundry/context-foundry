@@ -49,11 +49,17 @@ async fn handle_connection(mut stream: tokio::net::TcpStream, project_dir: PathB
 
     let (status, content_type, body) = if method == "GET" && path == "/" {
         ("200 OK", "text/html; charset=utf-8", DASHBOARD_HTML.to_string())
-    } else if method == "GET" && path.starts_with("/api/stats") {
-        match handle_api_stats(path, &project_dir) {
-            Ok(json) => ("200 OK", "application/json", json),
-            Err(e) => {
+    } else if method == "GET" && (path == "/api/stats" || path.starts_with("/api/stats?")) {
+        let path_owned = path.to_string();
+        let dir_clone = project_dir.clone();
+        match tokio::task::spawn_blocking(move || handle_api_stats(&path_owned, &dir_clone)).await {
+            Ok(Ok(json)) => ("200 OK", "application/json", json),
+            Ok(Err(e)) => {
                 let msg = serde_json::to_string(&json!({"error": e.to_string()})).unwrap_or_else(|_| r#"{"error":"internal error"}"#.to_string());
+                ("500 Internal Server Error", "application/json", msg)
+            }
+            Err(e) => {
+                let msg = serde_json::to_string(&json!({"error": format!("task panicked: {}", e)})).unwrap_or_else(|_| r#"{"error":"internal error"}"#.to_string());
                 ("500 Internal Server Error", "application/json", msg)
             }
         }
