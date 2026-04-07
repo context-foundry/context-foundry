@@ -341,10 +341,31 @@ pub fn commit_task_pr(
         .status()?;
     if status.success() {
         // Nothing staged -- return to base and clean up the empty branch
-        let _ = Command::new("git")
+        let checkout_back = Command::new("git")
             .args(["checkout", &base_branch])
             .current_dir(project_dir)
             .output();
+        match &checkout_back {
+            Ok(out) if !out.status.success() => {
+                eprintln!(
+                    "[foundry] WARNING: checkout back to {} failed after empty branch cleanup: {}",
+                    base_branch,
+                    String::from_utf8_lossy(&out.stderr).trim()
+                );
+                // Force checkout as recovery
+                let _ = Command::new("git")
+                    .args(["checkout", "--force", &base_branch])
+                    .current_dir(project_dir)
+                    .output();
+            }
+            Err(e) => {
+                eprintln!(
+                    "[foundry] WARNING: checkout back to {} failed after empty branch cleanup: {}",
+                    base_branch, e
+                );
+            }
+            _ => {}
+        }
         let _ = Command::new("git")
             .args(["branch", "-d", &feature_branch])
             .current_dir(project_dir)
@@ -369,10 +390,30 @@ pub fn commit_task_pr(
         .current_dir(project_dir)
         .output()?;
     if !commit_result.status.success() {
-        let _ = Command::new("git")
+        let checkout_back = Command::new("git")
             .args(["checkout", &base_branch])
             .current_dir(project_dir)
             .output();
+        match &checkout_back {
+            Ok(out) if !out.status.success() => {
+                eprintln!(
+                    "[foundry] WARNING: checkout back to {} failed after commit failure: {}",
+                    base_branch,
+                    String::from_utf8_lossy(&out.stderr).trim()
+                );
+                let _ = Command::new("git")
+                    .args(["checkout", "--force", &base_branch])
+                    .current_dir(project_dir)
+                    .output();
+            }
+            Err(e) => {
+                eprintln!(
+                    "[foundry] WARNING: checkout back to {} failed after commit failure: {}",
+                    base_branch, e
+                );
+            }
+            _ => {}
+        }
         return Ok((false, None));
     }
 
@@ -485,10 +526,52 @@ pub fn commit_task_pr(
     }
 
     // Switch back to base branch for the next task
-    let _ = Command::new("git")
+    let checkout_back = Command::new("git")
         .args(["checkout", &base_branch])
         .current_dir(project_dir)
         .output();
+    let checkout_ok = match &checkout_back {
+        Ok(out) if out.status.success() => true,
+        Ok(out) => {
+            eprintln!(
+                "[foundry] ERROR: checkout back to {} failed: {} -- attempting force checkout",
+                base_branch,
+                String::from_utf8_lossy(&out.stderr).trim()
+            );
+            // Attempt force checkout as recovery
+            let force = Command::new("git")
+                .args(["checkout", "--force", &base_branch])
+                .current_dir(project_dir)
+                .output();
+            match force {
+                Ok(f) if f.status.success() => {
+                    eprintln!("[foundry] Force checkout to {} succeeded", base_branch);
+                    true
+                }
+                _ => {
+                    eprintln!(
+                        "[foundry] CRITICAL: force checkout to {} also failed -- bailing to prevent wrong-branch commits",
+                        base_branch
+                    );
+                    false
+                }
+            }
+        }
+        Err(e) => {
+            eprintln!(
+                "[foundry] CRITICAL: could not run git checkout {}: {}",
+                base_branch, e
+            );
+            false
+        }
+    };
+    if !checkout_ok {
+        anyhow::bail!(
+            "Failed to return to base branch {} after committing on {}. Manual intervention required.",
+            base_branch,
+            feature_branch
+        );
+    }
 
     // Re-apply TASKS.md modifications (mark_done + progress indicator) to the base
     // branch working directory. The feature branch commit captured these changes, but
@@ -508,18 +591,46 @@ pub fn commit_task_pr(
     {
         if feature_tasks_content.status.success() {
             let tasks_bytes = &feature_tasks_content.stdout;
-            let _ = crate::utils::atomic_write_file(plan_path, tasks_bytes);
-            // Stage and commit the TASKS.md update on the base branch
-            let _ = Command::new("git")
-                .args(["add", &plan_path.to_string_lossy()])
-                .current_dir(project_dir)
-                .output();
-            let base_msg = format!("mark {} done on base branch", task_id);
-            let _ = Command::new("git")
-                .args(["commit", "-m", &base_msg])
-                .current_dir(project_dir)
-                .output();
-            let _ = maybe_push_commit(project_dir, config.auto_push_remote.as_deref());
+            if let Err(e) = crate::utils::atomic_write_file(plan_path, tasks_bytes) {
+                eprintln!(
+                    "[foundry] WARNING: failed to write TASKS.md to base branch: {} -- task may re-run on next loop",
+                    e
+                );
+            } else {
+                // Stage and commit the TASKS.md update on the base branch
+                let add_result = Command::new("git")
+                    .args(["add", &plan_path.to_string_lossy()])
+                    .current_dir(project_dir)
+                    .output();
+                if let Ok(out) = &add_result {
+                    if !out.status.success() {
+                        eprintln!(
+                            "[foundry] WARNING: git add TASKS.md on base branch failed: {}",
+                            String::from_utf8_lossy(&out.stderr).trim()
+                        );
+                    }
+                } else if let Err(e) = &add_result {
+                    eprintln!("[foundry] WARNING: git add TASKS.md on base branch failed: {}", e);
+                }
+                let base_msg = format!("mark {} done on base branch", task_id);
+                let commit_result = Command::new("git")
+                    .args(["commit", "-m", &base_msg])
+                    .current_dir(project_dir)
+                    .output();
+                if let Ok(out) = &commit_result {
+                    if !out.status.success() {
+                        eprintln!(
+                            "[foundry] WARNING: commit TASKS.md on base branch failed: {}",
+                            String::from_utf8_lossy(&out.stderr).trim()
+                        );
+                    }
+                } else if let Err(e) = &commit_result {
+                    eprintln!("[foundry] WARNING: commit TASKS.md on base branch failed: {}", e);
+                }
+                if let Err(e) = maybe_push_commit(project_dir, config.auto_push_remote.as_deref()) {
+                    eprintln!("[foundry] WARNING: push base branch failed: {}", e);
+                }
+            }
         }
     }
 
