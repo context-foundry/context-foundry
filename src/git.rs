@@ -278,10 +278,20 @@ fn maybe_push_commit(project_dir: &Path, remote: Option<&str>) -> Result<()> {
         return Ok(());
     };
 
-    let _ = Command::new("git")
+    let output = Command::new("git")
         .args(["push", remote, "HEAD"])
         .current_dir(project_dir)
         .output()?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        anyhow::bail!(
+            "git push to '{}' failed (exit {}): {}",
+            remote,
+            output.status,
+            stderr.trim()
+        );
+    }
 
     Ok(())
 }
@@ -875,6 +885,31 @@ mod tests {
 
         let _ = fs::remove_dir_all(repo_dir);
         let _ = fs::remove_dir_all(remote_dir);
+    }
+
+    #[test]
+    fn maybe_push_commit_returns_error_on_push_failure() {
+        use super::maybe_push_commit;
+
+        let repo_dir = temp_dir("foundry-push-fail");
+        init_repo(&repo_dir);
+        fs::write(repo_dir.join("file.txt"), "data\n").expect("write file");
+        git(&repo_dir, &["add", "file.txt"]);
+        git(&repo_dir, &["commit", "-m", "test commit"]);
+
+        let result = maybe_push_commit(&repo_dir, Some("nonexistent-remote"));
+        assert!(
+            result.is_err(),
+            "push to nonexistent remote should return Err"
+        );
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("nonexistent-remote"),
+            "error should mention the remote name: {}",
+            err_msg
+        );
+
+        let _ = fs::remove_dir_all(repo_dir);
     }
 
     #[test]
