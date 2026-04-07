@@ -264,10 +264,10 @@
       if (trust.model_comparisons && trust.model_comparisons.length > 0) {
         html += '<table><thead><tr><th>Model</th><th>Tasks</th><th>Feat Rate</th><th>Avg Cost</th><th>Avg Duration</th></tr></thead><tbody>';
         trust.model_comparisons.forEach(function(m) {
-          html += '<tr><td>' + (m.model || '') + '</td><td>' + (m.tasks || 0) + '</td>' +
+          html += '<tr><td>' + (m.model_key || '') + '</td><td>' + (m.task_count || 0) + '</td>' +
             '<td>' + ((m.feat_rate || 0) * 100).toFixed(0) + '%</td>' +
-            '<td>$' + (m.avg_cost || 0).toFixed(2) + '</td>' +
-            '<td>' + (m.avg_duration_secs || 0).toFixed(0) + 's</td></tr>';
+            '<td>$' + (m.avg_cost_per_task || 0).toFixed(2) + '</td>' +
+            '<td>' + (m.avg_duration_per_task || 0).toFixed(0) + 's</td></tr>';
         });
         html += '</tbody></table>';
       }

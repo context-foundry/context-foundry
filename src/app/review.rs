@@ -198,7 +198,11 @@ pub(super) async fn run_review_loop(
     // The reviewer has full write access and fixes issues it finds in a single pass.
     // No separate fixer agent -- the reviewer audits, fixes, re-verifies, and reports.
 
-    let _ = std::fs::remove_file(&ctx.review_report);
+    if let Err(e) = std::fs::remove_file(&ctx.review_report) {
+        if e.kind() != std::io::ErrorKind::NotFound {
+            eprintln!("Warning: failed to remove stale review-report.md: {}", e);
+        }
+    }
 
     // Snapshot changed files before review so we can detect if reviewer applied fixes.
     let pre_review_files = get_changed_files(&ctx.project_dir);
@@ -464,7 +468,11 @@ async fn run_multipass_review(
         ))));
 
         // Remove stale report before each per-file reviewer.
-        let _ = std::fs::remove_file(&ctx.review_report);
+        if let Err(e) = std::fs::remove_file(&ctx.review_report) {
+            if e.kind() != std::io::ErrorKind::NotFound {
+                eprintln!("Warning: failed to remove stale review-report.md before per-file review: {}", e);
+            }
+        }
 
         let file_diff = get_diff_for_file(&ctx.project_dir, file);
         let prompt = prompts::reviewer_per_file_prompt(
@@ -544,7 +552,11 @@ async fn run_multipass_review(
     }
 
     // Clean up per-file report before integration pass.
-    let _ = std::fs::remove_file(&ctx.review_report);
+    if let Err(e) = std::fs::remove_file(&ctx.review_report) {
+        if e.kind() != std::io::ErrorKind::NotFound {
+            eprintln!("Warning: failed to remove stale review-report.md before integration pass: {}", e);
+        }
+    }
 
     let merged_per_file = merge_findings(&all_per_file_findings);
     let per_file_findings_json = serde_json::to_string_pretty(&merged_per_file).unwrap_or_default();

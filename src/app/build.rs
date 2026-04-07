@@ -621,7 +621,9 @@ async fn run_parallel_builder(
     ))));
 
     let base_dir = ctx.buildloop_dir.join("parallel-build");
-    let _ = std::fs::create_dir_all(&base_dir);
+    if let Err(e) = std::fs::create_dir_all(&base_dir) {
+        eprintln!("Warning: failed to create parallel-build dir {}: {}", base_dir.display(), e);
+    }
 
     // Create worktrees for each slot
     let mut slot_contexts: Vec<(PathBuf, RunContext)> = Vec::new();
@@ -687,28 +689,42 @@ async fn run_parallel_builder(
         if let Ok(rel) = ctx.spec_path.strip_prefix(&ctx.project_dir) {
             let dest = slot_dir.join(rel);
             if let Some(parent) = dest.parent() {
-                let _ = std::fs::create_dir_all(parent);
+                if let Err(e) = std::fs::create_dir_all(parent) {
+                    eprintln!("Warning: failed to create parent dir for SPEC in slot-{}: {}", slot_idx, e);
+                }
             }
-            let _ = std::fs::copy(&ctx.spec_path, &dest);
+            if let Err(e) = std::fs::copy(&ctx.spec_path, &dest) {
+                eprintln!("Warning: failed to copy SPEC.md into slot-{}: {}", slot_idx, e);
+            }
         }
         if let Ok(rel) = ctx.plan_path.strip_prefix(&ctx.project_dir) {
             let dest = slot_dir.join(rel);
             if let Some(parent) = dest.parent() {
-                let _ = std::fs::create_dir_all(parent);
+                if let Err(e) = std::fs::create_dir_all(parent) {
+                    eprintln!("Warning: failed to create parent dir for TASKS in slot-{}: {}", slot_idx, e);
+                }
             }
-            let _ = std::fs::copy(&ctx.plan_path, &dest);
+            if let Err(e) = std::fs::copy(&ctx.plan_path, &dest) {
+                eprintln!("Warning: failed to copy TASKS.md into slot-{}: {}", slot_idx, e);
+            }
         }
         // Copy current-plan.md
         let plan_src = ctx.buildloop_dir.join("current-plan.md");
         if plan_src.exists() {
             let wt_buildloop = slot_dir.join(".buildloop");
-            let _ = std::fs::create_dir_all(&wt_buildloop);
-            let _ = std::fs::copy(&plan_src, wt_buildloop.join("current-plan.md"));
+            if let Err(e) = std::fs::create_dir_all(&wt_buildloop) {
+                eprintln!("Warning: failed to create .buildloop dir in slot-{}: {}", slot_idx, e);
+            }
+            if let Err(e) = std::fs::copy(&plan_src, wt_buildloop.join("current-plan.md")) {
+                eprintln!("Warning: failed to copy current-plan.md into slot-{}: {}", slot_idx, e);
+            }
         }
         // CLAUDE.md
         let claude_md_src = ctx.project_dir.join("CLAUDE.md");
         if claude_md_src.exists() {
-            let _ = std::fs::copy(&claude_md_src, slot_dir.join("CLAUDE.md"));
+            if let Err(e) = std::fs::copy(&claude_md_src, slot_dir.join("CLAUDE.md")) {
+                eprintln!("Warning: failed to copy CLAUDE.md into slot-{}: {}", slot_idx, e);
+            }
         }
 
         let wt_ctx = ctx.derive_sub_session(
@@ -751,7 +767,9 @@ async fn run_parallel_builder(
         let model = ctx.config.builder_model.clone();
         let wt_project_dir = slot_contexts[slot_idx].1.project_dir.clone();
         let wt_log_dir = slot_contexts[slot_idx].1.log_dir.clone();
-        let _ = std::fs::create_dir_all(&wt_log_dir);
+        if let Err(e) = std::fs::create_dir_all(&wt_log_dir) {
+            eprintln!("Warning: failed to create log dir for slot-{}: {}", slot_idx, e);
+        }
         let timeout = ctx.config.agent_timeout_secs;
         let shutdown = ctx.shutdown.clone();
         let counter = done_counter.clone();
@@ -1087,7 +1105,9 @@ fn run_dual_pipelines<'a>(
         let dual_start = Instant::now();
 
         let arena_dir = ctx.buildloop_dir.join("arena");
-        let _ = std::fs::create_dir_all(&arena_dir);
+        if let Err(e) = std::fs::create_dir_all(&arena_dir) {
+            eprintln!("Warning: failed to create arena dir {}: {}", arena_dir.display(), e);
+        }
 
         // Create worktrees and RunContexts for each pipeline
         let mut wt_contexts: Vec<(PathBuf, RunContext)> = Vec::new();
@@ -1153,21 +1173,31 @@ fn run_dual_pipelines<'a>(
             if let Ok(rel) = ctx.spec_path.strip_prefix(&ctx.project_dir) {
                 let dest = wt_path.join(rel);
                 if let Some(parent) = dest.parent() {
-                    let _ = std::fs::create_dir_all(parent);
+                    if let Err(e) = std::fs::create_dir_all(parent) {
+                        eprintln!("Warning: failed to create parent dir for SPEC in pipeline-{}: {}", idx, e);
+                    }
                 }
-                let _ = std::fs::copy(&ctx.spec_path, &dest);
+                if let Err(e) = std::fs::copy(&ctx.spec_path, &dest) {
+                    eprintln!("Warning: failed to copy SPEC.md into pipeline-{}: {}", idx, e);
+                }
             }
             if let Ok(rel) = ctx.plan_path.strip_prefix(&ctx.project_dir) {
                 let dest = wt_path.join(rel);
                 if let Some(parent) = dest.parent() {
-                    let _ = std::fs::create_dir_all(parent);
+                    if let Err(e) = std::fs::create_dir_all(parent) {
+                        eprintln!("Warning: failed to create parent dir for TASKS in pipeline-{}: {}", idx, e);
+                    }
                 }
-                let _ = std::fs::copy(&ctx.plan_path, &dest);
+                if let Err(e) = std::fs::copy(&ctx.plan_path, &dest) {
+                    eprintln!("Warning: failed to copy TASKS.md into pipeline-{}: {}", idx, e);
+                }
             }
             // CLAUDE.md (may be untracked/gitignored)
             let claude_md_src = ctx.project_dir.join("CLAUDE.md");
             if claude_md_src.exists() {
-                let _ = std::fs::copy(&claude_md_src, wt_path.join("CLAUDE.md"));
+                if let Err(e) = std::fs::copy(&claude_md_src, wt_path.join("CLAUDE.md")) {
+                    eprintln!("Warning: failed to copy CLAUDE.md into pipeline-{}: {}", idx, e);
+                }
             }
 
             // Create RunContext for this worktree

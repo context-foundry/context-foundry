@@ -592,7 +592,11 @@ async fn run_multipass_pr_review(
             };
 
             let per_file_report = buildloop_dir_owned.join(format!("review-per-file-{}.md", i));
-            let _ = std::fs::remove_file(&per_file_report);
+            if let Err(e) = std::fs::remove_file(&per_file_report) {
+                if e.kind() != std::io::ErrorKind::NotFound {
+                    eprintln!("Warning: failed to remove stale review-per-file-{}.md: {}", i, e);
+                }
+            }
             let per_file_report_relative =
                 format!("{}/review-per-file-{}.md", buildloop_dir_rel, i);
 
@@ -713,7 +717,11 @@ async fn run_multipass_pr_review(
 
     // Clean up per-file temp reports
     for i in 0..total_files {
-        let _ = std::fs::remove_file(buildloop_dir.join(format!("review-per-file-{}.md", i)));
+        if let Err(e) = std::fs::remove_file(buildloop_dir.join(format!("review-per-file-{}.md", i))) {
+            if e.kind() != std::io::ErrorKind::NotFound {
+                eprintln!("Warning: failed to remove stale review-per-file-{}.md: {}", i, e);
+            }
+        }
     }
 
     if reviewable_files.is_empty() {
@@ -738,7 +746,11 @@ async fn run_multipass_pr_review(
     }
 
     // Clean up before integration pass
-    let _ = std::fs::remove_file(review_report);
+    if let Err(e) = std::fs::remove_file(review_report) {
+        if e.kind() != std::io::ErrorKind::NotFound {
+            eprintln!("Warning: failed to remove stale review-report.md before integration pass: {}", e);
+        }
+    }
 
     let merged_findings = merge_pr_findings(&all_per_file_findings);
     let per_file_findings_json =
@@ -867,7 +879,11 @@ pub async fn run(
     let review_report = buildloop_dir.join("review-report.md");
 
     // Remove any existing review-report.md
-    let _ = std::fs::remove_file(&review_report);
+    if let Err(e) = std::fs::remove_file(&review_report) {
+        if e.kind() != std::io::ErrorKind::NotFound {
+            eprintln!("Warning: failed to remove stale review-report.md: {}", e);
+        }
+    }
 
     let config = if ignore_project_config {
         Config::load_global_only()
