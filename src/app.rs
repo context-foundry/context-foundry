@@ -2241,6 +2241,10 @@ pub fn run_extract(project_dir: &Path) -> Result<()> {
     commands::run_extract(project_dir)
 }
 
+pub fn run_patterns_prune(yes: bool) -> Result<()> {
+    commands::run_patterns_prune(yes)
+}
+
 // ─── Running Explorer Helpers ─────────────────────────────────
 
 fn move_running_explorer_selection(state: &mut AppState, delta: isize) {

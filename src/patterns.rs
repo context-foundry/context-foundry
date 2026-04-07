@@ -108,10 +108,29 @@ pub fn load_patterns(dir: &Path) -> Vec<Pattern> {
     patterns
 }
 
+/// Detect the project's tech stack by checking for marker files in the project directory.
+pub fn detect_project_tech_stack(project_dir: &Path) -> Vec<String> {
+    let mut stacks = Vec::new();
+    if project_dir.join("Cargo.toml").exists() {
+        stacks.push("rust".to_string());
+    }
+    if project_dir.join("package.json").exists() {
+        stacks.push("javascript".to_string());
+        stacks.push("typescript".to_string());
+    }
+    if project_dir.join("pyproject.toml").exists() || project_dir.join("setup.py").exists() {
+        stacks.push("python".to_string());
+    }
+    if project_dir.join("go.mod").exists() {
+        stacks.push("go".to_string());
+    }
+    stacks
+}
+
 /// Match patterns against a task description using whole-word keyword matching.
 /// Returns patterns sorted by relevance (highest score first).
-pub fn match_patterns<'a>(patterns: &'a [Pattern], task_desc: &str) -> Vec<&'a Pattern> {
-    let scored = keyword_scores(patterns, task_desc);
+pub fn match_patterns<'a>(patterns: &'a [Pattern], task_desc: &str, detected_stack: &[String]) -> Vec<&'a Pattern> {
+    let scored = keyword_scores(patterns, task_desc, detected_stack);
     let mut result: Vec<(&Pattern, usize)> = scored
         .into_iter()
         .filter(|(_, score)| *score > 0)
@@ -123,7 +142,7 @@ pub fn match_patterns<'a>(patterns: &'a [Pattern], task_desc: &str) -> Vec<&'a P
 
 /// Returns (pattern_index, keyword_score) pairs for all patterns.
 /// Used by the semantic matcher as the keyword baseline for reranking.
-pub fn keyword_scores(patterns: &[Pattern], task_desc: &str) -> Vec<(usize, usize)> {
+pub fn keyword_scores(patterns: &[Pattern], task_desc: &str, detected_stack: &[String]) -> Vec<(usize, usize)> {
     let desc_lower = task_desc.to_lowercase();
     let desc_words: Vec<&str> = desc_lower.split_whitespace().collect();
 
@@ -170,6 +189,17 @@ pub fn keyword_scores(patterns: &[Pattern], task_desc: &str) -> Vec<(usize, usiz
                 }
                 if p.used_count == 0 && p.frequency >= 5 {
                     score = score.saturating_sub(1); // never-cited noise
+                }
+            }
+
+            // Tech-stack affinity: penalize patterns from unrelated domains
+            if score > 0 && !detected_stack.is_empty() && !p.tech_stack.is_empty() {
+                let has_match = p.tech_stack.iter().any(|ts| {
+                    let ts_lower = ts.to_lowercase();
+                    detected_stack.iter().any(|ds| ds.to_lowercase() == ts_lower)
+                });
+                if !has_match {
+                    score = score.saturating_sub(3);
                 }
             }
 
@@ -798,7 +828,7 @@ mod tests {
             make_test_pattern("high-use", "High Use Pattern", 5, 3), // ratio 0.6
             make_test_pattern("low-use", "Low Use Pattern", 5, 0),  // ratio 0.0
         ];
-        let scores = keyword_scores(&patterns, "rust project");
+        let scores = keyword_scores(&patterns, "rust project", &[]);
         let high_score = scores.iter().find(|(i, _)| *i == 0).map(|(_, s)| *s).unwrap_or(0);
         let low_score = scores.iter().find(|(i, _)| *i == 1).map(|(_, s)| *s).unwrap_or(0);
         assert!(
@@ -885,5 +915,120 @@ mod tests {
         );
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_detect_project_tech_stack_rust() {
+        let dir = std::env::temp_dir().join("foundry_test_detect_stack_rust");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("Cargo.toml"), "[package]\nname = \"test\"").unwrap();
+        let stacks = detect_project_tech_stack(&dir);
+        assert!(stacks.contains(&"rust".to_string()));
+        assert!(!stacks.contains(&"python".to_string()));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_detect_project_tech_stack_multiple() {
+        let dir = std::env::temp_dir().join("foundry_test_detect_stack_multi");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("package.json"), "{}").unwrap();
+        std::fs::write(dir.join("pyproject.toml"), "[project]").unwrap();
+        let stacks = detect_project_tech_stack(&dir);
+        assert!(stacks.contains(&"javascript".to_string()));
+        assert!(stacks.contains(&"typescript".to_string()));
+        assert!(stacks.contains(&"python".to_string()));
+        assert!(!stacks.contains(&"rust".to_string()));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_detect_project_tech_stack_empty() {
+        let dir = std::env::temp_dir().join("foundry_test_detect_stack_empty");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let stacks = detect_project_tech_stack(&dir);
+        assert!(stacks.is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_tech_stack_affinity_penalty() {
+        let react_pattern = Pattern {
+            pattern_id: "no-default-starter-css".to_string(),
+            title: "Never use default starter template".to_string(),
+            first_seen: String::new(),
+            last_seen: String::new(),
+            frequency: 5,
+            severity: Some("HIGH".to_string()),
+            keywords: vec!["css".to_string(), "styling".to_string(), "html".to_string()],
+            tech_stack: vec!["html".to_string(), "css".to_string(), "react".to_string()],
+            issue: None,
+            solution: None,
+            auto_apply: false,
+            learned_from: None,
+            used_count: 0,
+        };
+        let rust_pattern = Pattern {
+            pattern_id: "utf8-byte-slice-panic".to_string(),
+            title: "Never slice Rust strings by byte index".to_string(),
+            first_seen: String::new(),
+            last_seen: String::new(),
+            frequency: 5,
+            severity: Some("HIGH".to_string()),
+            keywords: vec!["rust".to_string(), "string".to_string(), "utf8".to_string()],
+            tech_stack: vec!["rust".to_string()],
+            issue: None,
+            solution: None,
+            auto_apply: false,
+            learned_from: None,
+            used_count: 0,
+        };
+        let patterns = vec![react_pattern, rust_pattern];
+        let rust_stack = vec!["rust".to_string()];
+
+        // With Rust detected stack, the React pattern should be penalized
+        let scores = keyword_scores(&patterns, "fix css styling in rust string handling", &rust_stack);
+        let react_score = scores.iter().find(|(i, _)| *i == 0).map(|(_, s)| *s).unwrap_or(0);
+        let rust_score = scores.iter().find(|(i, _)| *i == 1).map(|(_, s)| *s).unwrap_or(0);
+        assert!(
+            rust_score > react_score,
+            "rust pattern (score={}) should outscore react pattern (score={}) in a Rust project",
+            rust_score, react_score
+        );
+
+        // With empty detected stack, no penalty applied (stack-agnostic mode)
+        let scores_no_stack = keyword_scores(&patterns, "fix css styling in rust string handling", &[]);
+        let react_score_no_stack = scores_no_stack.iter().find(|(i, _)| *i == 0).map(|(_, s)| *s).unwrap_or(0);
+        assert!(react_score_no_stack > react_score, "no-stack mode should not penalize react pattern");
+    }
+
+    #[test]
+    fn test_tech_stack_affinity_empty_pattern_stack_no_penalty() {
+        // Patterns with empty tech_stack are stack-agnostic and should NOT be penalized
+        let agnostic_pattern = Pattern {
+            pattern_id: "agnostic-pattern".to_string(),
+            title: "Agnostic Pattern".to_string(),
+            first_seen: String::new(),
+            last_seen: String::new(),
+            frequency: 3,
+            severity: Some("MEDIUM".to_string()),
+            keywords: vec!["rust".to_string()],
+            tech_stack: vec![],
+            issue: None,
+            solution: None,
+            auto_apply: false,
+            learned_from: None,
+            used_count: 0,
+        };
+        let patterns = vec![agnostic_pattern];
+        let rust_stack = vec!["rust".to_string()];
+        let scores_with_stack = keyword_scores(&patterns, "rust project", &rust_stack);
+        let scores_without_stack = keyword_scores(&patterns, "rust project", &[]);
+        let score_with = scores_with_stack.iter().find(|(i, _)| *i == 0).map(|(_, s)| *s).unwrap_or(0);
+        let score_without = scores_without_stack.iter().find(|(i, _)| *i == 0).map(|(_, s)| *s).unwrap_or(0);
+        assert_eq!(score_with, score_without, "patterns with empty tech_stack should not be penalized");
     }
 }

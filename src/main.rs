@@ -88,6 +88,11 @@ enum Commands {
         #[arg(long)]
         ignore_project_config: bool,
     },
+    /// Manage learned patterns
+    Patterns {
+        #[command(subcommand)]
+        action: PatternAction,
+    },
     /// Show observatory analytics
     Stats {
         /// Number of days to look back (default: 7)
@@ -102,6 +107,16 @@ enum Commands {
         /// Show daily trend sparklines
         #[arg(long)]
         trend: bool,
+    },
+}
+
+#[derive(Subcommand)]
+enum PatternAction {
+    /// Prune zero-citation patterns from the global pattern store
+    Prune {
+        /// Skip confirmation prompt
+        #[arg(long)]
+        yes: bool,
     },
 }
 
@@ -161,6 +176,11 @@ async fn main() -> Result<()> {
         } => {
             review_pr::run(&project_dir, pr_number, repo, &output, ignore_project_config).await?;
         }
+        Commands::Patterns { action } => match action {
+            PatternAction::Prune { yes } => {
+                app::run_patterns_prune(yes)?;
+            }
+        },
         Commands::Stats {
             days,
             project,

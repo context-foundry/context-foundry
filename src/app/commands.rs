@@ -1,17 +1,21 @@
-use std::collections::BTreeMap;
-use std::path::Path;
+use std::collections::{BTreeMap, HashMap};
+use std::io::{self, BufRead, Write};
+use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
+use chrono::Utc;
 use serde::Serialize;
 use tokio::sync::mpsc;
 
 use crate::agent::{AgentOutputEvent, ModelProvider};
 use crate::config::Config;
 use crate::patterns;
+use crate::patterns::Pattern;
 use crate::task::{self, Task};
 use crate::update;
+use crate::utils::atomic_write_file;
 
 use super::build;
 use super::context::RunContext;
@@ -584,6 +588,237 @@ pub(super) fn run_extract(project_dir: &Path) -> Result<()> {
             patterns_dir.display()
         );
     }
+
+    Ok(())
+}
+
+pub(super) fn run_patterns_prune(yes: bool) -> Result<()> {
+    let home = std::env::var("HOME").context("HOME not set")?;
+    let obs_dir = PathBuf::from(&home).join(".foundry").join("observatory");
+
+    let (events, _skipped) = crate::stats::load_events(&obs_dir, 30, None)?;
+    if events.is_empty() {
+        println!("No observatory events found in last 30 days.");
+        return Ok(());
+    }
+
+    // Count injections and citations per pattern
+    let mut injection_counts: HashMap<String, usize> = HashMap::new();
+    let mut citation_counts: HashMap<String, usize> = HashMap::new();
+
+    for ev in &events {
+        if ev.event_type == "pattern_injected" {
+            if let Some(ids) = ev.payload.get("pattern_ids").and_then(|v| v.as_array()) {
+                for id_val in ids {
+                    if let Some(id) = id_val.as_str() {
+                        *injection_counts.entry(id.to_string()).or_insert(0) += 1;
+                    }
+                }
+            }
+        } else if ev.event_type == "pattern_cited" {
+            if let Some(id) = ev.payload.get("pattern_id").and_then(|v| v.as_str()) {
+                *citation_counts.entry(id.to_string()).or_insert(0) += 1;
+            }
+        }
+    }
+
+    // Find prune candidates: injected >= 10 times, cited 0 times
+    let prune_candidates: Vec<String> = injection_counts
+        .iter()
+        .filter(|(id, count)| **count >= 10 && citation_counts.get(*id).copied().unwrap_or(0) == 0)
+        .map(|(id, _)| id.clone())
+        .collect();
+
+    if prune_candidates.is_empty() {
+        println!("No patterns qualify for pruning (need injection_count >= 10 and citation_count == 0).");
+        return Ok(());
+    }
+
+    // Resolve patterns directory
+    let config = Config::load(&PathBuf::from("."));
+    let patterns_dir = patterns::resolve_patterns_dir(&config.patterns_dir);
+
+    // Build source map: pattern_id -> source file path
+    let mut source_map: HashMap<String, PathBuf> = HashMap::new();
+    if let Ok(entries) = std::fs::read_dir(&patterns_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("json") {
+                continue;
+            }
+            let content = match std::fs::read_to_string(&path) {
+                Ok(c) => c,
+                Err(_) => continue,
+            };
+            // Try array format
+            if let Ok(arr) = serde_json::from_str::<Vec<Pattern>>(&content) {
+                for p in &arr {
+                    source_map.insert(p.pattern_id.clone(), path.clone());
+                }
+            } else if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) {
+                if let Some(pats) = val.get("patterns").and_then(|v| v.as_array()) {
+                    for pv in pats {
+                        if let Some(id) = pv.get("pattern_id").and_then(|v| v.as_str()) {
+                            source_map.insert(id.to_string(), path.clone());
+                        }
+                    }
+                }
+            } else if let Ok(p) = serde_json::from_str::<Pattern>(&content) {
+                source_map.insert(p.pattern_id.clone(), path.clone());
+            }
+        }
+    }
+
+    // Filter to actionable: exists in source map AND not already archived
+    let archived_dir = patterns_dir.join("archived");
+    let actionable: Vec<String> = prune_candidates
+        .into_iter()
+        .filter(|id| {
+            source_map.contains_key(id)
+                && !archived_dir.join(format!("{}.json", id)).exists()
+        })
+        .collect();
+
+    if actionable.is_empty() {
+        println!("All qualifying patterns are already archived.");
+        return Ok(());
+    }
+
+    println!("Patterns to prune ({} total):", actionable.len());
+    for id in &actionable {
+        println!(
+            "  {} (injected {}x, cited 0x, source: {})",
+            id,
+            injection_counts[id],
+            source_map[id].display()
+        );
+    }
+
+    if !yes {
+        eprint!("\nProceed? [y/N] ");
+        io::stderr().flush()?;
+        let mut line = String::new();
+        io::stdin().lock().read_line(&mut line)?;
+        if !line.trim().starts_with('y') && !line.trim().starts_with('Y') {
+            println!("Aborted.");
+            return Ok(());
+        }
+    }
+
+    std::fs::create_dir_all(&archived_dir)?;
+
+    // Group actionable by source file
+    let mut by_source: HashMap<PathBuf, Vec<String>> = HashMap::new();
+    for id in &actionable {
+        by_source
+            .entry(source_map[id].clone())
+            .or_default()
+            .push(id.clone());
+    }
+
+    let mut total_pruned = 0usize;
+
+    for (source_path, ids_to_remove) in &by_source {
+        let content = match std::fs::read_to_string(source_path) {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("warning: failed to read {}: {}", source_path.display(), e);
+                continue;
+            }
+        };
+
+        let removal_set: std::collections::HashSet<&str> =
+            ids_to_remove.iter().map(|s| s.as_str()).collect();
+
+        // Try array format
+        if let Ok(arr) = serde_json::from_str::<Vec<Pattern>>(&content) {
+            let mut keep = Vec::new();
+            let mut prune = Vec::new();
+            for p in arr {
+                if removal_set.contains(p.pattern_id.as_str()) {
+                    prune.push(p);
+                } else {
+                    keep.push(p);
+                }
+            }
+            for p in &prune {
+                let json = serde_json::to_string_pretty(p)?;
+                let dest = archived_dir.join(format!("{}.json", p.pattern_id));
+                atomic_write_file(&dest, json.as_bytes())?;
+                total_pruned += 1;
+            }
+            if keep.is_empty() {
+                std::fs::remove_file(source_path)?;
+            } else {
+                let json = serde_json::to_string_pretty(&keep)?;
+                atomic_write_file(source_path, json.as_bytes())?;
+            }
+            continue;
+        }
+
+        // Try wrapper format
+        if let Ok(mut val) = serde_json::from_str::<serde_json::Value>(&content) {
+            if val.get("patterns").and_then(|v| v.as_array()).is_some() {
+                let pats_arr = val["patterns"].as_array().unwrap().clone();
+                let mut keep_vals = Vec::new();
+                for pv in &pats_arr {
+                    let pid = pv.get("pattern_id").and_then(|v| v.as_str()).unwrap_or("");
+                    if removal_set.contains(pid) {
+                        // Archive this pattern
+                        if let Ok(p) = serde_json::from_value::<Pattern>(pv.clone()) {
+                            let json = serde_json::to_string_pretty(&p)?;
+                            let dest = archived_dir.join(format!("{}.json", p.pattern_id));
+                            atomic_write_file(&dest, json.as_bytes())?;
+                            total_pruned += 1;
+                        }
+                    } else {
+                        keep_vals.push(pv.clone());
+                    }
+                }
+                if keep_vals.is_empty() {
+                    std::fs::remove_file(source_path)?;
+                } else {
+                    val["patterns"] = serde_json::Value::Array(keep_vals);
+                    let json = serde_json::to_string_pretty(&val)?;
+                    atomic_write_file(source_path, json.as_bytes())?;
+                }
+                continue;
+            }
+        }
+
+        // Try single pattern
+        if let Ok(p) = serde_json::from_str::<Pattern>(&content) {
+            if removal_set.contains(p.pattern_id.as_str()) {
+                let dest = archived_dir.join(format!("{}.json", p.pattern_id));
+                std::fs::rename(source_path, &dest)?;
+                total_pruned += 1;
+            }
+        }
+    }
+
+    // Write prune log
+    let log_path = archived_dir.join("prune-log.jsonl");
+    let mut log_file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&log_path)
+        .context("failed to open prune-log.jsonl")?;
+    let now = Utc::now().to_rfc3339();
+    for id in &actionable {
+        let entry = serde_json::json!({
+            "pattern_id": id,
+            "pruned_at": now,
+            "reason": "injection_count >= 10, citation_count == 0 over 30 days",
+            "injection_count": injection_counts[id],
+        });
+        writeln!(log_file, "{}", entry)?;
+    }
+
+    println!(
+        "Pruned {} pattern(s) to {}",
+        total_pruned,
+        archived_dir.display()
+    );
 
     Ok(())
 }

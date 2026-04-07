@@ -178,8 +178,9 @@ fn spawn_lookahead_planner(
         let patterns_dir = patterns::resolve_patterns_dir(&ctx.config.patterns_dir);
         let all_patterns = patterns::load_patterns(&patterns_dir);
 
+        let detected_stack = patterns::detect_project_tech_stack(&ctx.project_dir);
         let matched = if ctx.config.semantic_match_enabled {
-            let keyword_scores = patterns::keyword_scores(&all_patterns, &task_desc);
+            let keyword_scores = patterns::keyword_scores(&all_patterns, &task_desc, &detected_stack);
             let (scored, _result) = crate::embeddings::match_patterns_semantic(
                 &all_patterns,
                 &task_desc,
@@ -191,7 +192,7 @@ fn spawn_lookahead_planner(
             .await;
             scored.into_iter().map(|(p, _)| p).collect::<Vec<_>>()
         } else {
-            patterns::match_patterns(&all_patterns, &task_desc)
+            patterns::match_patterns(&all_patterns, &task_desc, &detected_stack)
         };
 
         let lookahead_complexity = complexity::classify_task(&task_desc);
@@ -2350,8 +2351,9 @@ async fn process_task(
     let _ = std::fs::remove_file(&ctx.review_report);
     let _ = std::fs::remove_file(&patterns_extracted);
 
+    let detected_stack = patterns::detect_project_tech_stack(&ctx.project_dir);
     let matched = if ctx.config.semantic_match_enabled {
-        let keyword_scores = patterns::keyword_scores(cached_patterns, task_desc);
+        let keyword_scores = patterns::keyword_scores(cached_patterns, task_desc, &detected_stack);
         let (scored, result) = crate::embeddings::match_patterns_semantic(
             cached_patterns,
             task_desc,
@@ -2369,7 +2371,7 @@ async fn process_task(
         ))));
         scored.into_iter().map(|(p, _)| p).collect::<Vec<_>>()
     } else {
-        patterns::match_patterns(cached_patterns, task_desc)
+        patterns::match_patterns(cached_patterns, task_desc, &detected_stack)
     };
 
     let effective_pattern_count = patterns::scaled_injection_count(
