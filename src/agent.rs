@@ -51,7 +51,7 @@ pub fn allowed_tools_for_role(role: &AgentRole) -> &'static [&'static str] {
     match role {
         AgentRole::Scout => &["Read", "Glob", "Grep", "Bash", "WebFetch", "WebSearch"],
         AgentRole::Query => &["Write"],
-        AgentRole::Research => &["Read", "Glob", "Grep", "Bash", "WebFetch", "WebSearch"],
+        AgentRole::Research => &["Read", "Glob", "Grep", "Bash", "Write", "WebFetch", "WebSearch"],
         AgentRole::Planner => &["Read", "Glob", "Grep", "Edit", "Write"],
         AgentRole::PlanReview => &["Read", "Glob", "Grep", "Edit", "Write"],
         AgentRole::Builder => &["Bash", "Edit", "Write", "Read", "Glob", "Grep", "NotebookEdit", "WebFetch", "WebSearch"],

@@ -2862,7 +2862,7 @@ async fn process_task(
                 cc_version: cc_version.clone(),
             });
 
-            let research_prompt_text = prompts::research_prompt(task_id);
+            let research_prompt_text = prompts::research_prompt();
             let research_start = Instant::now();
             let research_result = agent::run_agent(
                 &AgentRole::Research,

@@ -149,63 +149,6 @@ RULES:
     )
 }
 
-#[allow(dead_code)]
-pub fn scout_prompt(
-    task_id: &str,
-    task_desc: &str,
-    updated_specs: Option<&str>,
-    spec_file: &str,
-    tasks_file: &str,
-) -> String {
-    let updated_specs_block = updated_specs
-        .filter(|s| !s.trim().is_empty())
-        .map(|specs| format!("\nUPDATED SPECS (user's latest enhancement request):\n{specs}\n"))
-        .unwrap_or_default();
-
-    format!(
-        r#"You are the SCOUT agent. Investigate the codebase before planning begins.
-
-Task ID: {task_id}
-Task Description: {task_desc}
-{updated_specs_block}
-YOUR JOB:
-1. Read {spec_file} and UPDATED_SPECS.md for project context
-2. Read {tasks_file} to see completed tasks and what's been built
-3. Detect the tech stack (Cargo.toml, package.json, pyproject.toml, etc.)
-4. Find the files most relevant to this task — read them
-5. Note existing patterns, conventions, and architecture decisions
-6. Identify risks or gotchas the planner should know about
-
-WRITE YOUR REPORT to .buildloop/scout-report.md.
-Structure it for downstream agents -- key facts first (beginning bias),
-details in the middle, risks last (recency bias):
-
-# Scout Report: {task_id}
-
-## Key Facts (read this first)
-[3-5 bullets: tech stack, critical files, hard constraints for this task]
-
-## Relevant Files
-[files the builder will need to read or modify, most important first, with 1-line descriptions]
-
-## Architecture Notes
-[how the existing code is structured, key abstractions, data flow]
-
-## Suggested Approach
-[high-level direction for the planner, based on what you found]
-
-## Risks and Constraints (read this last)
-[things that could go wrong -- dependency conflicts, breaking changes, missing APIs]
-
-RULES:
-- Do NOT modify any project files — investigation only (tool-surface reduction; no Edit/Write access, but Bash is available)
-- Do NOT implement anything — investigation only
-- Do NOT read files in .buildloop/logs/
-- Be concise — the planner reads this report, not a human
-- Focus on what matters for THIS task, not a general survey"#
-    )
-}
-
 pub fn query_prompt(
     task_id: &str,
     task_desc: &str,
@@ -282,20 +225,19 @@ RULES:
     )
 }
 
-pub fn research_prompt(task_id: &str) -> String {
-    format!(
-        r#"You are the RESEARCH agent for an autonomous build loop.
+pub fn research_prompt() -> String {
+    r#"You are the RESEARCH agent for an autonomous build loop.
 
 YOUR JOB: Read .buildloop/questions.md and answer every question by investigating the codebase.
 You have full access to the project's source code, build system, and file structure.
 
-IMPORTANT: You do NOT know what task is being planned. You only have the questions.
+IMPORTANT: You do not have the task description. You only have the questions.
 Answer each question based purely on what you find in the codebase. Do not speculate
 about implementation approaches -- report what EXISTS, not what SHOULD exist.
 
 WRITE your answers to .buildloop/research-report.md using this exact format:
 
-# Research Report: {task_id}
+# Research Report
 
 ## Q1: [copy the question text from questions.md]
 **Answer:** [detailed answer based on code investigation]
@@ -323,7 +265,7 @@ RULES:
 - Cite specific file paths and line numbers for every claim
 - Include short code snippets (3-10 lines) as evidence when relevant
 - Do NOT speculate about what should be built -- only report what exists"#
-    )
+        .to_string()
 }
 
 pub fn planner_prompt(
