@@ -1,0 +1,1870 @@
+{
+  "nodes": [
+    {
+      "id": "startAgentflow_0",
+      "type": "agentFlow",
+      "position": {
+        "x": -179.5,
+        "y": 41.5
+      },
+      "data": {
+        "id": "startAgentflow_0",
+        "label": "Start",
+        "version": 1.1,
+        "name": "startAgentflow",
+        "type": "Start",
+        "color": "#7EE787",
+        "hideInput": true,
+        "baseClasses": [
+          "Start"
+        ],
+        "category": "Agent Flows",
+        "description": "Starting point of the agentflow",
+        "inputParams": [
+          {
+            "label": "Input Type",
+            "name": "startInputType",
+            "type": "options",
+            "options": [
+              {
+                "label": "Chat Input",
+                "name": "chatInput",
+                "description": "Start the conversation with chat input"
+              },
+              {
+                "label": "Form Input",
+                "name": "formInput",
+                "description": "Start the workflow with form inputs"
+              }
+            ],
+            "default": "formInput",
+            "id": "startAgentflow_0-input-startInputType-options",
+            "display": true
+          },
+          {
+            "label": "Form Title",
+            "name": "formTitle",
+            "type": "string",
+            "placeholder": "Please Fill Out The Form",
+            "show": {
+              "startInputType": "formInput"
+            },
+            "id": "startAgentflow_0-input-formTitle-string",
+            "display": true
+          },
+          {
+            "label": "Form Description",
+            "name": "formDescription",
+            "type": "string",
+            "placeholder": "Complete all fields below to continue",
+            "show": {
+              "startInputType": "formInput"
+            },
+            "id": "startAgentflow_0-input-formDescription-string",
+            "display": true
+          },
+          {
+            "label": "Form Input Types",
+            "name": "formInputTypes",
+            "description": "Specify the type of form input",
+            "type": "array",
+            "show": {
+              "startInputType": "formInput"
+            },
+            "array": [
+              {
+                "label": "Type",
+                "name": "type",
+                "type": "options",
+                "options": [
+                  {
+                    "label": "String",
+                    "name": "string"
+                  },
+                  {
+                    "label": "Number",
+                    "name": "number"
+                  },
+                  {
+                    "label": "Boolean",
+                    "name": "boolean"
+                  },
+                  {
+                    "label": "Options",
+                    "name": "options"
+                  }
+                ],
+                "default": "string"
+              },
+              {
+                "label": "Label",
+                "name": "label",
+                "type": "string",
+                "placeholder": "Label for the input"
+              },
+              {
+                "label": "Variable Name",
+                "name": "name",
+                "type": "string",
+                "placeholder": "Variable name for the input (must be camel case)",
+                "description": "Variable name must be camel case. For example: firstName, lastName, etc."
+              },
+              {
+                "label": "Add Options",
+                "name": "addOptions",
+                "type": "array",
+                "show": {
+                  "formInputTypes[$index].type": "options"
+                },
+                "array": [
+                  {
+                    "label": "Option",
+                    "name": "option",
+                    "type": "string"
+                  }
+                ]
+              }
+            ],
+            "id": "startAgentflow_0-input-formInputTypes-array",
+            "display": true
+          },
+          {
+            "label": "Ephemeral Memory",
+            "name": "startEphemeralMemory",
+            "type": "boolean",
+            "description": "Start fresh for every execution without past chat history",
+            "optional": true,
+            "id": "startAgentflow_0-input-startEphemeralMemory-boolean",
+            "display": true
+          },
+          {
+            "label": "Flow State",
+            "name": "startState",
+            "description": "Runtime state during the execution of the workflow",
+            "type": "array",
+            "optional": true,
+            "array": [
+              {
+                "label": "Key",
+                "name": "key",
+                "type": "string",
+                "placeholder": "Foo"
+              },
+              {
+                "label": "Value",
+                "name": "value",
+                "type": "string",
+                "placeholder": "Bar",
+                "optional": true
+              }
+            ],
+            "id": "startAgentflow_0-input-startState-array",
+            "display": true
+          },
+          {
+            "label": "Persist State",
+            "name": "startPersistState",
+            "type": "boolean",
+            "description": "Persist the state in the same session",
+            "optional": true,
+            "id": "startAgentflow_0-input-startPersistState-boolean",
+            "display": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "startInputType": "formInput",
+          "formTitle": "Succession Planning Orchestrator",
+          "formDescription": "Analyze your organization to identify succession risks, evaluate potential successors for critical roles, and generate development plans.",
+          "formInputTypes": [
+            {
+              "type": "string",
+              "label": "Organization/Business Unit",
+              "name": "organization",
+              "addOptions": ""
+            },
+            {
+              "type": "string",
+              "label": "Department (optional)",
+              "name": "department",
+              "addOptions": ""
+            },
+            {
+              "type": "number",
+              "label": "Risk Threshold (%)",
+              "name": "threshold",
+              "addOptions": ""
+            }
+          ],
+          "startEphemeralMemory": "",
+          "startState": [
+            {
+              "key": "criticalRoles",
+              "value": ""
+            },
+            {
+              "key": "findings",
+              "value": ""
+            }
+          ],
+          "startPersistState": ""
+        },
+        "outputAnchors": [
+          {
+            "id": "startAgentflow_0-output-startAgentflow",
+            "label": "Start",
+            "name": "startAgentflow"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "width": 102,
+      "height": 65,
+      "selected": false,
+      "positionAbsolute": {
+        "x": -179.5,
+        "y": 41.5
+      },
+      "dragging": false
+    },
+    {
+      "id": "llmAgentflow_0",
+      "position": {
+        "x": -21.25,
+        "y": 39
+      },
+      "data": {
+        "id": "llmAgentflow_0",
+        "label": "Role Identifier",
+        "version": 1,
+        "name": "llmAgentflow",
+        "type": "LLM",
+        "color": "#64B5F6",
+        "baseClasses": [
+          "LLM"
+        ],
+        "category": "Agent Flows",
+        "description": "Identifies critical roles requiring succession planning",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "llmModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true,
+            "id": "llmAgentflow_0-input-llmModel-asyncOptions",
+            "display": true
+          },
+          {
+            "label": "Messages",
+            "name": "llmMessages",
+            "type": "array",
+            "optional": true,
+            "acceptVariable": true,
+            "array": [
+              {
+                "label": "Role",
+                "name": "role",
+                "type": "options",
+                "options": [
+                  {
+                    "label": "System",
+                    "name": "system"
+                  },
+                  {
+                    "label": "Assistant",
+                    "name": "assistant"
+                  },
+                  {
+                    "label": "Developer",
+                    "name": "developer"
+                  },
+                  {
+                    "label": "User",
+                    "name": "user"
+                  }
+                ]
+              },
+              {
+                "label": "Content",
+                "name": "content",
+                "type": "string",
+                "acceptVariable": true,
+                "generateInstruction": true,
+                "rows": 4
+              }
+            ],
+            "id": "llmAgentflow_0-input-llmMessages-array",
+            "display": true
+          },
+          {
+            "label": "Enable Memory",
+            "name": "llmEnableMemory",
+            "type": "boolean",
+            "description": "Enable memory for the conversation thread",
+            "default": true,
+            "optional": true,
+            "id": "llmAgentflow_0-input-llmEnableMemory-boolean",
+            "display": true
+          },
+          {
+            "label": "Memory Type",
+            "name": "llmMemoryType",
+            "type": "options",
+            "options": [
+              {
+                "label": "All Messages",
+                "name": "allMessages",
+                "description": "Retrieve all messages from the conversation"
+              },
+              {
+                "label": "Window Size",
+                "name": "windowSize",
+                "description": "Uses a fixed window size to surface the last N messages"
+              },
+              {
+                "label": "Conversation Summary",
+                "name": "conversationSummary",
+                "description": "Summarizes the whole conversation"
+              },
+              {
+                "label": "Conversation Summary Buffer",
+                "name": "conversationSummaryBuffer",
+                "description": "Summarize conversations once token limit is reached. Default to 2000"
+              }
+            ],
+            "optional": true,
+            "default": "allMessages",
+            "show": {
+              "llmEnableMemory": true
+            },
+            "id": "llmAgentflow_0-input-llmMemoryType-options",
+            "display": true
+          },
+          {
+            "label": "Input Message",
+            "name": "llmUserMessage",
+            "type": "string",
+            "description": "Add an input message as user message at the end of the conversation",
+            "rows": 4,
+            "optional": true,
+            "acceptVariable": true,
+            "show": {
+              "llmEnableMemory": true
+            },
+            "id": "llmAgentflow_0-input-llmUserMessage-string",
+            "display": true
+          },
+          {
+            "label": "Return Response As",
+            "name": "llmReturnResponseAs",
+            "type": "options",
+            "options": [
+              {
+                "label": "User Message",
+                "name": "userMessage"
+              },
+              {
+                "label": "Assistant Message",
+                "name": "assistantMessage"
+              }
+            ],
+            "default": "userMessage",
+            "id": "llmAgentflow_0-input-llmReturnResponseAs-options",
+            "display": true
+          },
+          {
+            "label": "JSON Structured Output",
+            "name": "llmStructuredOutput",
+            "description": "Instruct the LLM to give output in a JSON structured schema",
+            "type": "array",
+            "optional": true,
+            "acceptVariable": true,
+            "array": [
+              {
+                "label": "Key",
+                "name": "key",
+                "type": "string"
+              },
+              {
+                "label": "Type",
+                "name": "type",
+                "type": "options",
+                "options": [
+                  {
+                    "label": "String",
+                    "name": "string"
+                  },
+                  {
+                    "label": "String Array",
+                    "name": "stringArray"
+                  },
+                  {
+                    "label": "Number",
+                    "name": "number"
+                  },
+                  {
+                    "label": "Boolean",
+                    "name": "boolean"
+                  },
+                  {
+                    "label": "Enum",
+                    "name": "enum"
+                  },
+                  {
+                    "label": "JSON Array",
+                    "name": "jsonArray"
+                  }
+                ]
+              },
+              {
+                "label": "Enum Values",
+                "name": "enumValues",
+                "type": "string",
+                "placeholder": "value1, value2, value3",
+                "description": "Enum values. Separated by comma",
+                "optional": true,
+                "show": {
+                  "llmStructuredOutput[$index].type": "enum"
+                }
+              },
+              {
+                "label": "JSON Schema",
+                "name": "jsonSchema",
+                "type": "code",
+                "placeholder": "{}",
+                "description": "JSON schema for the structured output",
+                "optional": true,
+                "hideCodeExecute": true,
+                "show": {
+                  "llmStructuredOutput[$index].type": "jsonArray"
+                }
+              },
+              {
+                "label": "Description",
+                "name": "description",
+                "type": "string",
+                "placeholder": "Description of the key"
+              }
+            ],
+            "id": "llmAgentflow_0-input-llmStructuredOutput-array",
+            "display": true
+          },
+          {
+            "label": "Update Flow State",
+            "name": "llmUpdateState",
+            "description": "Update runtime state during the execution of the workflow",
+            "type": "array",
+            "optional": true,
+            "acceptVariable": true,
+            "array": [
+              {
+                "label": "Key",
+                "name": "key",
+                "type": "asyncOptions",
+                "loadMethod": "listRuntimeStateKeys",
+                "freeSolo": true
+              },
+              {
+                "label": "Value",
+                "name": "value",
+                "type": "string",
+                "acceptVariable": true,
+                "acceptNodeOutputAsVariable": true
+              }
+            ],
+            "id": "llmAgentflow_0-input-llmUpdateState-array",
+            "display": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "llmModel": "chatOpenAI",
+          "llmMessages": [
+            {
+              "role": "system",
+              "content": "<p>You are a Succession Planning Analyst. Your job is to identify critical roles that require succession planning.</p><p>For the given organization/department, identify 4-6 critical roles based on:</p><p>1. <strong>Business Impact</strong> - Revenue responsibility, strategic authority, operational continuity</p><p>2. <strong>Difficulty to Fill</strong> - Specialized skills, market scarcity, institutional knowledge</p><p>3. <strong>Incumbent Risk</strong> - Tenure >10 years (retirement risk), flight risk signals, performance indicators</p><p>For DEMO purposes, generate realistic mock data for each critical role.</p><p>Return a JSON array where each role includes: roleTitle, roleId (e.g., CR-001), department, incumbentName, incumbentTenure (years), flightRisk (0-100), criticalityScore (1-100), successionUrgency (Critical/High/Medium/Low).</p>"
+            },
+            {
+              "role": "user",
+              "content": "<p>Organization: <span class=\"variable\" data-type=\"mention\" data-id=\"$form.organization\" data-label=\"$form.organization\">{{ $form.organization }}</span></p><p>Department: <span class=\"variable\" data-type=\"mention\" data-id=\"$form.department\" data-label=\"$form.department\">{{ $form.department }}</span></p><p>Risk Threshold: <span class=\"variable\" data-type=\"mention\" data-id=\"$form.threshold\" data-label=\"$form.threshold\">{{ $form.threshold }}</span>%</p><p>Existing findings (if any): <span class=\"variable\" data-type=\"mention\" data-id=\"$flow.state.findings\" data-label=\"$flow.state.findings\">{{ $flow.state.findings }}</span></p><p>Identify critical roles for succession planning analysis.</p>"
+            }
+          ],
+          "llmEnableMemory": true,
+          "llmMemoryType": "allMessages",
+          "llmUserMessage": "",
+          "llmReturnResponseAs": "userMessage",
+          "llmStructuredOutput": [
+            {
+              "key": "criticalRoles",
+              "type": "jsonArray",
+              "enumValues": "",
+              "jsonSchema": "{\n  \"roleTitle\": {\n    \"type\": \"string\",\n    \"description\": \"Job title of the critical role\"\n  },\n  \"roleId\": {\n    \"type\": \"string\",\n    \"description\": \"Unique identifier (e.g., CR-001)\"\n  },\n  \"department\": {\n    \"type\": \"string\",\n    \"description\": \"Department name\"\n  },\n  \"incumbentName\": {\n    \"type\": \"string\",\n    \"description\": \"Current holder's name\"\n  },\n  \"incumbentTenure\": {\n    \"type\": \"number\",\n    \"description\": \"Years in role\"\n  },\n  \"flightRisk\": {\n    \"type\": \"number\",\n    \"description\": \"Percentage (0-100)\"\n  },\n  \"criticalityScore\": {\n    \"type\": \"number\",\n    \"description\": \"Score from 1-100\"\n  },\n  \"successionUrgency\": {\n    \"type\": \"string\",\n    \"description\": \"Critical, High, Medium, or Low\"\n  }\n}",
+              "description": "Array of critical roles requiring succession planning"
+            }
+          ],
+          "llmUpdateState": [
+            {
+              "key": "criticalRoles",
+              "value": "<p><span class=\"variable\" data-type=\"mention\" data-id=\"output.criticalRoles\" data-label=\"output.criticalRoles\">{{ output.criticalRoles }}</span></p>"
+            }
+          ],
+          "llmModelConfig": {
+            "cache": "",
+            "modelName": "gpt-4.1-mini",
+            "temperature": 0.2,
+            "streaming": true,
+            "maxTokens": "",
+            "topP": "",
+            "frequencyPenalty": "",
+            "presencePenalty": "",
+            "timeout": "",
+            "strictToolCalling": "",
+            "stopSequence": "",
+            "basepath": "",
+            "proxyUrl": "",
+            "baseOptions": "",
+            "allowImageUploads": "",
+            "reasoningEffort": "medium",
+            "llmModel": "chatOpenAI"
+          }
+        },
+        "outputAnchors": [
+          {
+            "id": "llmAgentflow_0-output-llmAgentflow",
+            "label": "LLM",
+            "name": "llmAgentflow"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "type": "agentFlow",
+      "width": 174,
+      "height": 71,
+      "selected": false,
+      "positionAbsolute": {
+        "x": -21.25,
+        "y": 39
+      },
+      "dragging": false
+    },
+    {
+      "id": "iterationAgentflow_0",
+      "position": {
+        "x": 204.79536930141506,
+        "y": -50.01068378076032
+      },
+      "data": {
+        "id": "iterationAgentflow_0",
+        "label": "Assessment Loop",
+        "version": 1,
+        "name": "iterationAgentflow",
+        "type": "Iteration",
+        "color": "#9C89B8",
+        "baseClasses": [
+          "Iteration"
+        ],
+        "category": "Agent Flows",
+        "description": "Evaluate successors for each critical role",
+        "inputParams": [
+          {
+            "label": "Array Input",
+            "name": "iterationInput",
+            "type": "string",
+            "description": "The input array to iterate over",
+            "acceptVariable": true,
+            "rows": 4,
+            "id": "iterationAgentflow_0-input-iterationInput-string",
+            "display": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "iterationInput": "<p><span class=\"variable\" data-type=\"mention\" data-id=\"$flow.state.criticalRoles\" data-label=\"$flow.state.criticalRoles\">{{ $flow.state.criticalRoles }}</span></p>"
+        },
+        "outputAnchors": [
+          {
+            "id": "iterationAgentflow_0-output-iterationAgentflow",
+            "label": "Iteration",
+            "name": "iterationAgentflow"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "type": "iteration",
+      "width": 300,
+      "height": 250,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 204.79536930141506,
+        "y": -50.01068378076032
+      },
+      "dragging": false
+    },
+    {
+      "id": "agentAgentflow_0",
+      "position": {
+        "x": 64.7890461631884,
+        "y": 79.4833402176751
+      },
+      "data": {
+        "id": "agentAgentflow_0",
+        "label": "Successor Assessor",
+        "version": 1,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#4DD0E1",
+        "baseClasses": [
+          "Agent"
+        ],
+        "category": "Agent Flows",
+        "description": "Evaluates potential successors using sequential assessment criteria",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true,
+            "id": "agentAgentflow_0-input-agentModel-asyncOptions",
+            "display": true
+          },
+          {
+            "label": "Messages",
+            "name": "agentMessages",
+            "type": "array",
+            "optional": true,
+            "acceptVariable": true,
+            "array": [
+              {
+                "label": "Role",
+                "name": "role",
+                "type": "options",
+                "options": [
+                  {
+                    "label": "System",
+                    "name": "system"
+                  },
+                  {
+                    "label": "Assistant",
+                    "name": "assistant"
+                  },
+                  {
+                    "label": "Developer",
+                    "name": "developer"
+                  },
+                  {
+                    "label": "User",
+                    "name": "user"
+                  }
+                ]
+              },
+              {
+                "label": "Content",
+                "name": "content",
+                "type": "string",
+                "acceptVariable": true,
+                "generateInstruction": true,
+                "rows": 4
+              }
+            ],
+            "id": "agentAgentflow_0-input-agentMessages-array",
+            "display": true
+          },
+          {
+            "label": "Tools",
+            "name": "agentTools",
+            "type": "array",
+            "optional": true,
+            "array": [
+              {
+                "label": "Tool",
+                "name": "agentSelectedTool",
+                "type": "asyncOptions",
+                "loadMethod": "listTools",
+                "loadConfig": true
+              },
+              {
+                "label": "Require Human Input",
+                "name": "agentSelectedToolRequiresHumanInput",
+                "type": "boolean",
+                "optional": true
+              }
+            ],
+            "id": "agentAgentflow_0-input-agentTools-array",
+            "display": true
+          },
+          {
+            "label": "Enable Memory",
+            "name": "agentEnableMemory",
+            "type": "boolean",
+            "description": "Enable memory for the conversation thread",
+            "default": true,
+            "optional": true,
+            "id": "agentAgentflow_0-input-agentEnableMemory-boolean",
+            "display": true
+          },
+          {
+            "label": "Memory Type",
+            "name": "agentMemoryType",
+            "type": "options",
+            "options": [
+              {
+                "label": "All Messages",
+                "name": "allMessages",
+                "description": "Retrieve all messages from the conversation"
+              },
+              {
+                "label": "Window Size",
+                "name": "windowSize",
+                "description": "Uses a fixed window size to surface the last N messages"
+              },
+              {
+                "label": "Conversation Summary",
+                "name": "conversationSummary",
+                "description": "Summarizes the whole conversation"
+              },
+              {
+                "label": "Conversation Summary Buffer",
+                "name": "conversationSummaryBuffer",
+                "description": "Summarize conversations once token limit is reached. Default to 2000"
+              }
+            ],
+            "optional": true,
+            "default": "allMessages",
+            "show": {
+              "agentEnableMemory": true
+            },
+            "id": "agentAgentflow_0-input-agentMemoryType-options",
+            "display": true
+          },
+          {
+            "label": "Input Message",
+            "name": "agentUserMessage",
+            "type": "string",
+            "description": "Add an input message as user message at the end of the conversation",
+            "rows": 4,
+            "optional": true,
+            "acceptVariable": true,
+            "show": {
+              "agentEnableMemory": true
+            },
+            "id": "agentAgentflow_0-input-agentUserMessage-string",
+            "display": true
+          },
+          {
+            "label": "Return Response As",
+            "name": "agentReturnResponseAs",
+            "type": "options",
+            "options": [
+              {
+                "label": "User Message",
+                "name": "userMessage"
+              },
+              {
+                "label": "Assistant Message",
+                "name": "assistantMessage"
+              }
+            ],
+            "default": "userMessage",
+            "id": "agentAgentflow_0-input-agentReturnResponseAs-options",
+            "display": true
+          },
+          {
+            "label": "Update Flow State",
+            "name": "agentUpdateState",
+            "description": "Update runtime state during the execution of the workflow",
+            "type": "array",
+            "optional": true,
+            "acceptVariable": true,
+            "array": [
+              {
+                "label": "Key",
+                "name": "key",
+                "type": "asyncOptions",
+                "loadMethod": "listRuntimeStateKeys",
+                "freeSolo": true
+              },
+              {
+                "label": "Value",
+                "name": "value",
+                "type": "string",
+                "acceptVariable": true,
+                "acceptNodeOutputAsVariable": true
+              }
+            ],
+            "id": "agentAgentflow_0-input-agentUpdateState-array",
+            "display": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatOpenAI",
+          "agentMessages": [
+            {
+              "role": "system",
+              "content": "<p>You are a Talent Assessment Specialist evaluating potential successors for critical roles.</p><p><strong>SEQUENTIAL ASSESSMENT METHODOLOGY</strong></p><p>For each role, identify 3-5 potential successors and evaluate using:</p><p><strong>Step 1: Skill Match (30%)</strong> - Technical competencies, leadership capabilities, domain expertise</p><p><strong>Step 2: Performance Trajectory (25%)</strong> - 3-year trend, project success rate, goal achievement</p><p><strong>Step 3: Career Aspirations (20%)</strong> - Expressed goals, leadership interest, growth willingness</p><p><strong>Step 4: Readiness Timeline (15%)</strong> - Gap analysis, development speed, months until ready</p><p><strong>Step 5: Development Needs (10%)</strong> - Skill gaps, experience gaps, interventions</p><p><strong>READINESS CLASSIFICATION</strong></p><ul><li><strong>Ready Now</strong> (\u226590%): Immediately deployable</li><li><strong>Ready 1-2 Years</strong> (70-89%): Needs targeted development</li><li><strong>High Potential</strong> (&lt;70%): Long-term candidate</li></ul><p>For each role provide: Role assessment summary, Successor candidates with scores, Readiness classifications, Development plans for non-ready candidates, Succession coverage %, Manager alerts if coverage is low.</p>"
+            }
+          ],
+          "agentTools": [
+            {
+              "agentSelectedTool": "currentDateTime",
+              "agentSelectedToolRequiresHumanInput": "",
+              "agentSelectedToolConfig": {
+                "agentSelectedTool": "currentDateTime"
+              }
+            },
+            {
+              "agentSelectedTool": "calculator",
+              "agentSelectedToolRequiresHumanInput": "",
+              "agentSelectedToolConfig": {
+                "agentSelectedTool": "calculator"
+              }
+            }
+          ],
+          "agentEnableMemory": true,
+          "agentMemoryType": "allMessages",
+          "agentUserMessage": "<p>Critical Role to Assess:</p><p><span class=\"variable\" data-type=\"mention\" data-id=\"$iteration\" data-label=\"$iteration\">{{ $iteration }}</span></p><p>Risk Threshold: <span class=\"variable\" data-type=\"mention\" data-id=\"$form.threshold\" data-label=\"$form.threshold\">{{ $form.threshold }}</span>%</p><p>Generate 3-5 mock successor candidates, evaluate each, classify readiness, and create development plans.</p>",
+          "agentReturnResponseAs": "userMessage",
+          "agentUpdateState": "",
+          "agentModelConfig": {
+            "cache": "",
+            "modelName": "gpt-4.1-mini",
+            "temperature": 0.3,
+            "streaming": true,
+            "maxTokens": "",
+            "topP": "",
+            "frequencyPenalty": "",
+            "presencePenalty": "",
+            "timeout": "",
+            "strictToolCalling": "",
+            "stopSequence": "",
+            "basepath": "",
+            "proxyUrl": "",
+            "baseOptions": "",
+            "allowImageUploads": "",
+            "reasoningEffort": "medium",
+            "agentModel": "chatOpenAI"
+          }
+        },
+        "outputAnchors": [
+          {
+            "id": "agentAgentflow_0-output-agentAgentflow",
+            "label": "Agent",
+            "name": "agentAgentflow"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "type": "agentFlow",
+      "parentNode": "iterationAgentflow_0",
+      "extent": "parent",
+      "width": 174,
+      "height": 99,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 269.58441546460347,
+        "y": 29.47265643691479
+      },
+      "dragging": false
+    },
+    {
+      "id": "llmAgentflow_1",
+      "position": {
+        "x": 559.1361788991524,
+        "y": 38.7953457899211
+      },
+      "data": {
+        "id": "llmAgentflow_1",
+        "label": "Report Synthesizer",
+        "version": 1,
+        "name": "llmAgentflow",
+        "type": "LLM",
+        "color": "#64B5F6",
+        "baseClasses": [
+          "LLM"
+        ],
+        "category": "Agent Flows",
+        "description": "Synthesizes assessments into comprehensive succession report",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "llmModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true,
+            "id": "llmAgentflow_1-input-llmModel-asyncOptions",
+            "display": true
+          },
+          {
+            "label": "Messages",
+            "name": "llmMessages",
+            "type": "array",
+            "optional": true,
+            "acceptVariable": true,
+            "array": [
+              {
+                "label": "Role",
+                "name": "role",
+                "type": "options",
+                "options": [
+                  {
+                    "label": "System",
+                    "name": "system"
+                  },
+                  {
+                    "label": "Assistant",
+                    "name": "assistant"
+                  },
+                  {
+                    "label": "Developer",
+                    "name": "developer"
+                  },
+                  {
+                    "label": "User",
+                    "name": "user"
+                  }
+                ]
+              },
+              {
+                "label": "Content",
+                "name": "content",
+                "type": "string",
+                "acceptVariable": true,
+                "generateInstruction": true,
+                "rows": 4
+              }
+            ],
+            "id": "llmAgentflow_1-input-llmMessages-array",
+            "display": true
+          },
+          {
+            "label": "Enable Memory",
+            "name": "llmEnableMemory",
+            "type": "boolean",
+            "description": "Enable memory for the conversation thread",
+            "default": true,
+            "optional": true,
+            "id": "llmAgentflow_1-input-llmEnableMemory-boolean",
+            "display": true
+          },
+          {
+            "label": "Return Response As",
+            "name": "llmReturnResponseAs",
+            "type": "options",
+            "options": [
+              {
+                "label": "User Message",
+                "name": "userMessage"
+              },
+              {
+                "label": "Assistant Message",
+                "name": "assistantMessage"
+              }
+            ],
+            "default": "userMessage",
+            "id": "llmAgentflow_1-input-llmReturnResponseAs-options",
+            "display": true
+          },
+          {
+            "label": "JSON Structured Output",
+            "name": "llmStructuredOutput",
+            "description": "Instruct the LLM to give output in a JSON structured schema",
+            "type": "array",
+            "optional": true,
+            "acceptVariable": true,
+            "array": [
+              {
+                "label": "Key",
+                "name": "key",
+                "type": "string"
+              },
+              {
+                "label": "Type",
+                "name": "type",
+                "type": "options",
+                "options": [
+                  {
+                    "label": "String",
+                    "name": "string"
+                  },
+                  {
+                    "label": "String Array",
+                    "name": "stringArray"
+                  },
+                  {
+                    "label": "Number",
+                    "name": "number"
+                  },
+                  {
+                    "label": "Boolean",
+                    "name": "boolean"
+                  },
+                  {
+                    "label": "Enum",
+                    "name": "enum"
+                  },
+                  {
+                    "label": "JSON Array",
+                    "name": "jsonArray"
+                  }
+                ]
+              },
+              {
+                "label": "Description",
+                "name": "description",
+                "type": "string",
+                "placeholder": "Description of the key"
+              }
+            ],
+            "id": "llmAgentflow_1-input-llmStructuredOutput-array",
+            "display": true
+          },
+          {
+            "label": "Update Flow State",
+            "name": "llmUpdateState",
+            "description": "Update runtime state during the execution of the workflow",
+            "type": "array",
+            "optional": true,
+            "acceptVariable": true,
+            "array": [
+              {
+                "label": "Key",
+                "name": "key",
+                "type": "asyncOptions",
+                "loadMethod": "listRuntimeStateKeys",
+                "freeSolo": true
+              },
+              {
+                "label": "Value",
+                "name": "value",
+                "type": "string",
+                "acceptVariable": true,
+                "acceptNodeOutputAsVariable": true
+              }
+            ],
+            "id": "llmAgentflow_1-input-llmUpdateState-array",
+            "display": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "llmModel": "chatOpenAI",
+          "llmMessages": [
+            {
+              "role": "system",
+              "content": "<p>You are an Executive Report Writer for succession planning.</p><p><strong>REPORT STRUCTURE</strong></p><p>1. <strong>Executive Dashboard</strong> - Overall succession coverage %, Critical gaps (roles with 0 Ready Now successors), Risk heat map</p><p>2. <strong>Role-by-Role Analysis</strong> - Current state summary, Successor pipeline status, Readiness distribution</p><p>3. <strong>Talent Pool Summary</strong> - Ready Now candidates, Ready 1-2 Years candidates, High Potential candidates</p><p>4. <strong>Development Plans</strong> - Aggregated recommendations, Common skill gaps, Priority interventions</p><p>5. <strong>Manager Alerts</strong> - Critical gaps requiring attention, Flight risk warnings, Single-point dependencies</p><p>6. <strong>Recommendations</strong> - Immediate actions (0-30 days), Short-term (1-6 months), Long-term strategic initiatives</p><p><strong>FORMATTING</strong></p><ul><li>Use markdown tables for metrics</li><li>Use emoji: \ud83d\udfe2 (healthy \u226580%), \ud83d\udfe1 (at risk 50-79%), \ud83d\udd34 (critical &lt;50%)</li><li>Include specific percentages</li></ul>"
+            },
+            {
+              "role": "user",
+              "content": "<p>Organization: <span class=\"variable\" data-type=\"mention\" data-id=\"$form.organization\" data-label=\"$form.organization\">{{ $form.organization }}</span></p><p>Department: <span class=\"variable\" data-type=\"mention\" data-id=\"$form.department\" data-label=\"$form.department\">{{ $form.department }}</span></p><p>Risk Threshold: <span class=\"variable\" data-type=\"mention\" data-id=\"$form.threshold\" data-label=\"$form.threshold\">{{ $form.threshold }}</span>%</p><p>&lt;assessment_results&gt;</p><p><span class=\"variable\" data-type=\"mention\" data-id=\"iterationAgentflow_0\" data-label=\"iterationAgentflow_0\">{{ iterationAgentflow_0 }}</span></p><p>&lt;/assessment_results&gt;</p><p>&lt;existing_findings&gt;</p><p><span class=\"variable\" data-type=\"mention\" data-id=\"$flow.state.findings\" data-label=\"$flow.state.findings\">{{ $flow.state.findings }}</span></p><p>&lt;/existing_findings&gt;</p><p>Synthesize into a comprehensive Succession Planning Report.</p>"
+            }
+          ],
+          "llmEnableMemory": false,
+          "llmReturnResponseAs": "userMessage",
+          "llmStructuredOutput": "",
+          "llmUpdateState": [
+            {
+              "key": "findings",
+              "value": "<p><span class=\"variable\" data-type=\"mention\" data-id=\"output\" data-label=\"output\">{{ output }}</span></p>"
+            }
+          ],
+          "llmModelConfig": {
+            "cache": "",
+            "modelName": "gpt-4.1-mini",
+            "temperature": 0.4,
+            "streaming": true,
+            "maxTokens": "4096",
+            "topP": "",
+            "frequencyPenalty": "",
+            "presencePenalty": "",
+            "timeout": "",
+            "strictToolCalling": "",
+            "stopSequence": "",
+            "basepath": "",
+            "proxyUrl": "",
+            "baseOptions": "",
+            "allowImageUploads": "",
+            "reasoningEffort": "medium",
+            "llmModel": "chatOpenAI"
+          }
+        },
+        "outputAnchors": [
+          {
+            "id": "llmAgentflow_1-output-llmAgentflow",
+            "label": "LLM",
+            "name": "llmAgentflow"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "type": "agentFlow",
+      "width": 174,
+      "height": 71,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 559.1361788991524,
+        "y": 38.7953457899211
+      },
+      "dragging": false
+    },
+    {
+      "id": "conditionAgentAgentflow_0",
+      "position": {
+        "x": 783.610017823362,
+        "y": 35.07935247258487
+      },
+      "data": {
+        "id": "conditionAgentAgentflow_0",
+        "label": "Analysis Complete?",
+        "version": 1.1,
+        "name": "conditionAgentAgentflow",
+        "type": "ConditionAgent",
+        "color": "#ff8fab",
+        "baseClasses": [
+          "ConditionAgent"
+        ],
+        "category": "Agent Flows",
+        "description": "Decides if more analysis is needed",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "conditionAgentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true,
+            "id": "conditionAgentAgentflow_0-input-conditionAgentModel-asyncOptions",
+            "display": true
+          },
+          {
+            "label": "Instructions",
+            "name": "conditionAgentInstructions",
+            "type": "string",
+            "description": "A general instructions of what the condition agent should do",
+            "rows": 4,
+            "acceptVariable": true,
+            "placeholder": "Determine if the user is interested in learning about AI",
+            "id": "conditionAgentAgentflow_0-input-conditionAgentInstructions-string",
+            "display": true
+          },
+          {
+            "label": "Input",
+            "name": "conditionAgentInput",
+            "type": "string",
+            "description": "Input to be used for the condition agent",
+            "rows": 4,
+            "acceptVariable": true,
+            "id": "conditionAgentAgentflow_0-input-conditionAgentInput-string",
+            "display": true
+          },
+          {
+            "label": "Scenarios",
+            "name": "conditionAgentScenarios",
+            "description": "Define the scenarios that will be used as the conditions to split the flow",
+            "type": "array",
+            "array": [
+              {
+                "label": "Scenario",
+                "name": "scenario",
+                "type": "string",
+                "placeholder": "User is asking for a pizza"
+              }
+            ],
+            "default": [
+              {
+                "scenario": "More analysis needed"
+              },
+              {
+                "scenario": "Analysis complete"
+              }
+            ],
+            "id": "conditionAgentAgentflow_0-input-conditionAgentScenarios-array",
+            "display": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "conditionAgentModel": "chatOpenAI",
+          "conditionAgentInstructions": "<p>You are a quality controller for succession planning analysis. Evaluate if the analysis is complete.</p><p><strong>Complete if:</strong></p><ul><li>All critical roles have been assessed</li><li>Each role has successor candidates identified</li><li>Development plans have been created</li><li>Report is comprehensive</li></ul><p><strong>More analysis needed if:</strong></p><ul><li>Roles with 0 successors identified</li><li>Major gaps remain unexplained</li><li>Coverage is below threshold</li></ul>",
+          "conditionAgentInput": "<p>&lt;critical_roles&gt;</p><p><span class=\"variable\" data-type=\"mention\" data-id=\"$flow.state.criticalRoles\" data-label=\"$flow.state.criticalRoles\">{{ $flow.state.criticalRoles }}</span></p><p>&lt;/critical_roles&gt;</p><p>&lt;findings&gt;</p><p><span class=\"variable\" data-type=\"mention\" data-id=\"$flow.state.findings\" data-label=\"$flow.state.findings\">{{ $flow.state.findings }}</span></p><p>&lt;/findings&gt;</p><p>Risk Threshold: <span class=\"variable\" data-type=\"mention\" data-id=\"$form.threshold\" data-label=\"$form.threshold\">{{ $form.threshold }}</span>%</p>",
+          "conditionAgentScenarios": [
+            {
+              "scenario": "More analysis needed - gaps or issues require re-assessment"
+            },
+            {
+              "scenario": "Analysis complete - all roles assessed with comprehensive report"
+            }
+          ],
+          "conditionAgentModelConfig": {
+            "cache": "",
+            "modelName": "gpt-4.1-mini",
+            "temperature": 0.1,
+            "streaming": true,
+            "maxTokens": "",
+            "topP": "",
+            "frequencyPenalty": "",
+            "presencePenalty": "",
+            "timeout": "",
+            "strictToolCalling": "",
+            "stopSequence": "",
+            "basepath": "",
+            "proxyUrl": "",
+            "baseOptions": "",
+            "allowImageUploads": "",
+            "reasoningEffort": "medium",
+            "conditionAgentModel": "chatOpenAI"
+          }
+        },
+        "outputAnchors": [
+          {
+            "id": "conditionAgentAgentflow_0-output-0",
+            "label": "Condition Agent",
+            "name": "conditionAgentAgentflow"
+          },
+          {
+            "id": "conditionAgentAgentflow_0-output-1",
+            "label": "Condition Agent",
+            "name": "conditionAgentAgentflow"
+          }
+        ],
+        "outputs": {
+          "conditionAgentAgentflow": ""
+        },
+        "selected": false
+      },
+      "type": "agentFlow",
+      "width": 186,
+      "height": 80,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 783.610017823362,
+        "y": 35.07935247258487
+      },
+      "dragging": false
+    },
+    {
+      "id": "loopAgentflow_0",
+      "position": {
+        "x": 1034.4868362077264,
+        "y": -33.75879891336878
+      },
+      "data": {
+        "id": "loopAgentflow_0",
+        "label": "Back to Planner",
+        "version": 1,
+        "name": "loopAgentflow",
+        "type": "Loop",
+        "color": "#FFA07A",
+        "hideOutput": true,
+        "baseClasses": [
+          "Loop"
+        ],
+        "category": "Agent Flows",
+        "description": "Loop back to Role Identifier for re-analysis",
+        "inputParams": [
+          {
+            "label": "Loop Back To",
+            "name": "loopBackToNode",
+            "type": "asyncOptions",
+            "loadMethod": "listPreviousNodes",
+            "freeSolo": true,
+            "id": "loopAgentflow_0-input-loopBackToNode-asyncOptions",
+            "display": true
+          },
+          {
+            "label": "Max Loop Count",
+            "name": "maxLoopCount",
+            "type": "number",
+            "default": 3,
+            "id": "loopAgentflow_0-input-maxLoopCount-number",
+            "display": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "loopBackToNode": "llmAgentflow_0-Role Identifier",
+          "maxLoopCount": 3
+        },
+        "outputAnchors": [],
+        "outputs": {},
+        "selected": false
+      },
+      "type": "agentFlow",
+      "width": 173,
+      "height": 65,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 1034.4868362077264,
+        "y": -33.75879891336878
+      },
+      "dragging": false
+    },
+    {
+      "id": "directReplyAgentflow_0",
+      "position": {
+        "x": 1025.3084160229323,
+        "y": 101.62289881234005
+      },
+      "data": {
+        "id": "directReplyAgentflow_0",
+        "label": "Final Report",
+        "version": 1,
+        "name": "directReplyAgentflow",
+        "type": "DirectReply",
+        "color": "#4DDBBB",
+        "hideOutput": true,
+        "baseClasses": [
+          "DirectReply"
+        ],
+        "category": "Agent Flows",
+        "description": "Output the final succession planning report",
+        "inputParams": [
+          {
+            "label": "Message",
+            "name": "directReplyMessage",
+            "type": "string",
+            "rows": 4,
+            "acceptVariable": true,
+            "id": "directReplyAgentflow_0-input-directReplyMessage-string",
+            "display": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "directReplyMessage": "<p><span class=\"variable\" data-type=\"mention\" data-id=\"$flow.state.findings\" data-label=\"$flow.state.findings\">{{ $flow.state.findings }}</span></p>"
+        },
+        "outputAnchors": [],
+        "outputs": {},
+        "selected": false
+      },
+      "type": "agentFlow",
+      "width": 178,
+      "height": 65,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 1025.3084160229323,
+        "y": 101.62289881234005
+      },
+      "dragging": false
+    },
+    {
+      "id": "stickyNoteAgentflow_0",
+      "type": "stickyNote",
+      "position": {
+        "x": -400,
+        "y": -100
+      },
+      "data": {
+        "id": "stickyNoteAgentflow_0",
+        "label": "Sticky Note",
+        "version": 1,
+        "name": "stickyNoteAgentflow",
+        "type": "StickyNote",
+        "color": "#fee440",
+        "baseClasses": [
+          "StickyNote"
+        ],
+        "category": "Agent Flows",
+        "description": "Add notes to the agent flow",
+        "inputParams": [
+          {
+            "label": "",
+            "name": "note",
+            "type": "string",
+            "rows": 1,
+            "placeholder": "Type something here",
+            "optional": true,
+            "id": "stickyNoteAgentflow_0-input-note-string",
+            "display": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "note": "\ud83d\udccb SUCCESSION PLANNING ORCHESTRATOR\n\nPURPOSE: Identify succession risks, evaluate potential successors for critical roles, generate development plans.\n\nDEMO MODE: Generates realistic mock data for roles, candidates, and assessments based on your organization input.\n\nPATTERNS USED:\n\u2022 Iteration (evaluate N roles dynamically)\n\u2022 Conditional (quality gate for completeness)  \n\u2022 Loop (iterative refinement if gaps found)\n\nINPUT: Organization, Department, Risk Threshold %\nOUTPUT: Executive succession planning report with recommendations"
+        },
+        "outputAnchors": [
+          {
+            "id": "stickyNoteAgentflow_0-output-stickyNoteAgentflow",
+            "label": "Sticky Note",
+            "name": "stickyNoteAgentflow"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "width": 215,
+      "height": 122,
+      "positionAbsolute": {
+        "x": -400,
+        "y": -100
+      },
+      "selected": false,
+      "dragging": false
+    },
+    {
+      "id": "stickyNoteAgentflow_1",
+      "type": "stickyNote",
+      "position": {
+        "x": -400,
+        "y": 100
+      },
+      "data": {
+        "id": "stickyNoteAgentflow_1",
+        "label": "Sticky Note",
+        "version": 1,
+        "name": "stickyNoteAgentflow",
+        "type": "StickyNote",
+        "color": "#b4e7ff",
+        "baseClasses": [
+          "StickyNote"
+        ],
+        "category": "Agent Flows",
+        "description": "Add notes to the agent flow",
+        "inputParams": [
+          {
+            "label": "",
+            "name": "note",
+            "type": "string",
+            "rows": 1,
+            "placeholder": "Type something here",
+            "optional": true,
+            "id": "stickyNoteAgentflow_1-input-note-string",
+            "display": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "note": "\ud83d\udca1 ROLE IDENTIFIER (LLM)\n\nIDENTIFIES: 4-6 critical roles needing succession planning\n\n3 CRITERIA:\n1. Business Impact - Revenue responsibility, strategic authority, operational continuity\n2. Difficulty to Fill - Specialized skills, market scarcity, institutional knowledge  \n3. Incumbent Risk - Tenure >10 years (retirement), flight risk, performance\n\nOUTPUT: JSON array of critical roles (roleTitle, roleId, department, incumbentName, tenure, flightRisk, criticalityScore, successionUrgency)\n\nSTORES: $flow.state.criticalRoles (feeds Assessment Loop)\n\nCAN BE CALLED MULTIPLE TIMES: Loop pattern can return here for expanded role identification"
+        },
+        "outputAnchors": [
+          {
+            "id": "stickyNoteAgentflow_0-output-stickyNoteAgentflow",
+            "label": "Sticky Note",
+            "name": "stickyNoteAgentflow"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "width": 215,
+      "height": 122,
+      "positionAbsolute": {
+        "x": -400,
+        "y": 100
+      },
+      "selected": false,
+      "dragging": false
+    },
+    {
+      "id": "stickyNoteAgentflow_2",
+      "type": "stickyNote",
+      "position": {
+        "x": 100,
+        "y": -150
+      },
+      "data": {
+        "id": "stickyNoteAgentflow_2",
+        "label": "Sticky Note",
+        "version": 1,
+        "name": "stickyNoteAgentflow",
+        "type": "StickyNote",
+        "color": "#d4a5ff",
+        "baseClasses": [
+          "StickyNote"
+        ],
+        "category": "Agent Flows",
+        "description": "Add notes to the agent flow",
+        "inputParams": [
+          {
+            "label": "",
+            "name": "note",
+            "type": "string",
+            "rows": 1,
+            "placeholder": "Type something here",
+            "optional": true,
+            "id": "stickyNoteAgentflow_2-input-note-string",
+            "display": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "note": "\ud83d\udd04 ASSESSMENT LOOP (Iteration)\n\nPROCESSES: Each critical role independently\n\nHOW ITERATIONS WORK:\n\u2022 Input: $flow.state.criticalRoles array\n\u2022 Iteration Count: 5 roles = 5 iterations, 6 roles = 6 iterations\n\u2022 Each iteration: Successor Assessor evaluates ONE role\n\u2022 Output: Consolidated array of all role assessments\n\nITERATION VARIABLE:\n$iteration = current role object (roleTitle, incumbentName, criticalityScore, etc.)\n\nTHIS IS THE CORE: Most execution time spent here evaluating successors for each role.\n\nTO SEE ITERATION COUNT: Check Role Identifier output \u2192 count array length"
+        },
+        "outputAnchors": [
+          {
+            "id": "stickyNoteAgentflow_0-output-stickyNoteAgentflow",
+            "label": "Sticky Note",
+            "name": "stickyNoteAgentflow"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "width": 215,
+      "height": 122,
+      "positionAbsolute": {
+        "x": 100,
+        "y": -150
+      },
+      "selected": false,
+      "dragging": false
+    },
+    {
+      "id": "stickyNoteAgentflow_3",
+      "type": "stickyNote",
+      "position": {
+        "x": 80,
+        "y": 260
+      },
+      "data": {
+        "id": "stickyNoteAgentflow_3",
+        "label": "Sticky Note",
+        "version": 1,
+        "name": "stickyNoteAgentflow",
+        "type": "StickyNote",
+        "color": "#a5ffa5",
+        "baseClasses": [
+          "StickyNote"
+        ],
+        "category": "Agent Flows",
+        "description": "Add notes to the agent flow",
+        "inputParams": [
+          {
+            "label": "",
+            "name": "note",
+            "type": "string",
+            "rows": 1,
+            "placeholder": "Type something here",
+            "optional": true,
+            "id": "stickyNoteAgentflow_3-input-note-string",
+            "display": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "note": "\u2699\ufe0f SUCCESSOR ASSESSOR (Agent - Inside Iteration)\n\nEVALUATES: 3-5 potential successors for ONE role (current iteration)\n\n5-STEP WEIGHTED METHODOLOGY:\n1. Skill Match (30%) - Technical competencies, leadership, domain expertise\n2. Performance Trajectory (25%) - 3-year trend, project success, goal achievement\n3. Career Aspirations (20%) - Expressed goals, leadership interest, growth willingness\n4. Readiness Timeline (15%) - Gap analysis, development speed, months until ready\n5. Development Needs (10%) - Skill gaps, experience gaps, interventions\n\nREADINESS THRESHOLDS:\n\ud83d\udfe2 Ready Now (\u226590%) - Immediately deployable\n\ud83d\udfe1 Ready 1-2 Years (70-89%) - Targeted development needed\n\ud83d\udd34 High Potential (<70%) - Long-term candidate, significant development\n\nOUTPUT: Role assessment with successor pipeline, readiness distribution, development plans"
+        },
+        "outputAnchors": [
+          {
+            "id": "stickyNoteAgentflow_0-output-stickyNoteAgentflow",
+            "label": "Sticky Note",
+            "name": "stickyNoteAgentflow"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "width": 215,
+      "height": 122,
+      "positionAbsolute": {
+        "x": 80,
+        "y": 260
+      },
+      "selected": false,
+      "dragging": false
+    },
+    {
+      "id": "stickyNoteAgentflow_4",
+      "type": "stickyNote",
+      "position": {
+        "x": 550,
+        "y": 250
+      },
+      "data": {
+        "id": "stickyNoteAgentflow_4",
+        "label": "Sticky Note",
+        "version": 1,
+        "name": "stickyNoteAgentflow",
+        "type": "StickyNote",
+        "color": "#ffe5b3",
+        "baseClasses": [
+          "StickyNote"
+        ],
+        "category": "Agent Flows",
+        "description": "Add notes to the agent flow",
+        "inputParams": [
+          {
+            "label": "",
+            "name": "note",
+            "type": "string",
+            "rows": 1,
+            "placeholder": "Type something here",
+            "optional": true,
+            "id": "stickyNoteAgentflow_4-input-note-string",
+            "display": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "note": "\ud83d\udcca REPORT SYNTHESIZER (LLM)\n\nCOMBINES: All role assessments into executive succession planning report\n\n6-SECTION REPORT STRUCTURE:\n1. Executive Dashboard - Overall succession coverage %, critical gaps, risk heat map\n2. Role-by-Role Analysis - Current state, successor pipeline, readiness distribution\n3. Talent Pool Summary - Ready Now candidates, Ready 1-2 Years, High Potential\n4. Development Plans - Aggregated skill gaps, common needs, priority interventions  \n5. Manager Alerts - Critical gaps needing attention, flight risks, single-point failures\n6. Recommendations - Immediate actions (0-30 days), short-term (1-6 months), long-term\n\nMEMORY: Disabled (receives all data from iteration output)\n\nSTORES: $flow.state.findings (used by quality gate and final report)"
+        },
+        "outputAnchors": [
+          {
+            "id": "stickyNoteAgentflow_0-output-stickyNoteAgentflow",
+            "label": "Sticky Note",
+            "name": "stickyNoteAgentflow"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "width": 215,
+      "height": 122,
+      "positionAbsolute": {
+        "x": 550,
+        "y": 250
+      },
+      "selected": false,
+      "dragging": false
+    },
+    {
+      "id": "stickyNoteAgentflow_5",
+      "type": "stickyNote",
+      "position": {
+        "x": 750,
+        "y": -80
+      },
+      "data": {
+        "id": "stickyNoteAgentflow_5",
+        "label": "Sticky Note",
+        "version": 1,
+        "name": "stickyNoteAgentflow",
+        "type": "StickyNote",
+        "color": "#ffb3b3",
+        "baseClasses": [
+          "StickyNote"
+        ],
+        "category": "Agent Flows",
+        "description": "Add notes to the agent flow",
+        "inputParams": [
+          {
+            "label": "",
+            "name": "note",
+            "type": "string",
+            "rows": 1,
+            "placeholder": "Type something here",
+            "optional": true,
+            "id": "stickyNoteAgentflow_5-input-note-string",
+            "display": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "note": "\u2696\ufe0f ANALYSIS COMPLETE? (ConditionAgent)\n\nDECISION: Is succession analysis comprehensive or do we need more roles?\n\nROUTE TO FINAL REPORT (Path 1) if:\n\u2705 All critical roles have been assessed\n\u2705 Each role has successor candidates identified\n\u2705 Development plans created\n\u2705 Report is comprehensive\n\nLOOP BACK FOR MORE ANALYSIS (Path 0) if:\n\u26a0\ufe0f Roles with 0 Ready Now successors (critical gap)\n\u26a0\ufe0f Major gaps remain unexplained\n\u26a0\ufe0f Coverage below risk threshold\n\nMAX LOOPS: 3 (prevents infinite loops)\n\nEVALUATES: $flow.state.criticalRoles + $flow.state.findings"
+        },
+        "outputAnchors": [
+          {
+            "id": "stickyNoteAgentflow_0-output-stickyNoteAgentflow",
+            "label": "Sticky Note",
+            "name": "stickyNoteAgentflow"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "width": 215,
+      "height": 122,
+      "positionAbsolute": {
+        "x": 750,
+        "y": -80
+      },
+      "selected": false,
+      "dragging": false
+    },
+    {
+      "id": "stickyNoteAgentflow_6",
+      "type": "stickyNote",
+      "position": {
+        "x": 1000,
+        "y": -180
+      },
+      "data": {
+        "id": "stickyNoteAgentflow_6",
+        "label": "Sticky Note",
+        "version": 1,
+        "name": "stickyNoteAgentflow",
+        "type": "StickyNote",
+        "color": "#ffa07a",
+        "baseClasses": [
+          "StickyNote"
+        ],
+        "category": "Agent Flows",
+        "description": "Add notes to the agent flow",
+        "inputParams": [
+          {
+            "label": "",
+            "name": "note",
+            "type": "string",
+            "rows": 1,
+            "placeholder": "Type something here",
+            "optional": true,
+            "id": "stickyNoteAgentflow_6-input-note-string",
+            "display": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "note": "\ud83d\udd01 LOOP BACK (Loop Node)\n\nLOOPS TO: Role Identifier (llmAgentflow_0)\nMAX LOOPS: 3\n\nWHY LOOP? If first pass finds succession gaps:\nExample: \"CFO has 0 Ready Now successors\"\n\nSECOND PASS STRATEGIES:\n\u2022 Expand search to adjacent departments  \n\u2022 Lower selection criteria (consider Ready 1-2 Years)\n\u2022 Look at external/lateral candidates\n\u2022 Cross-functional succession paths\n\nPROGRESSIVE REFINEMENT:\nLoop 1: Initial 5 roles assessed\nLoop 2: Expanded search finds 2 more candidates for CFO\nLoop 3: Final comprehensive view with all gaps addressed\n\nCONTEXT PRESERVED: Role Identifier sees previous findings to avoid duplicates"
+        },
+        "outputAnchors": [
+          {
+            "id": "stickyNoteAgentflow_0-output-stickyNoteAgentflow",
+            "label": "Sticky Note",
+            "name": "stickyNoteAgentflow"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "width": 215,
+      "height": 122,
+      "positionAbsolute": {
+        "x": 1000,
+        "y": -180
+      },
+      "selected": false,
+      "dragging": false
+    },
+    {
+      "id": "stickyNoteAgentflow_7",
+      "type": "stickyNote",
+      "position": {
+        "x": -400,
+        "y": 300
+      },
+      "data": {
+        "id": "stickyNoteAgentflow_7",
+        "label": "Sticky Note",
+        "version": 1,
+        "name": "stickyNoteAgentflow",
+        "type": "StickyNote",
+        "color": "#ffd6ff",
+        "baseClasses": [
+          "StickyNote"
+        ],
+        "category": "Agent Flows",
+        "description": "Add notes to the agent flow",
+        "inputParams": [
+          {
+            "label": "",
+            "name": "note",
+            "type": "string",
+            "rows": 1,
+            "placeholder": "Type something here",
+            "optional": true,
+            "id": "stickyNoteAgentflow_7-input-note-string",
+            "display": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "note": "\ud83d\udd04 STATE VARIABLES (Data Flow)\n\n1. criticalRoles (array)\n   Set by: Role Identifier  \n   Used by: Assessment Loop (iteration input)\n   \n2. findings (string - accumulates across loops!)\n   Set by: Report Synthesizer\n   Used by: Analysis Complete?, Final Report, Role Identifier (on loop)\n\nSTATE ACCUMULATION PATTERN:\nLoop 0 (First pass): findings = \"Initial assessment of 5 roles...\"\nLoop 1 (If needed): findings = \"[Initial assessment]\n[Expanded analysis]...\"  \nLoop 2 (If needed): findings = \"[Previous]\n[Final comprehensive view]...\"\n\nKEY: Role Identifier can read existing findings to:\n\u2022 Avoid duplicate role identification\n\u2022 Target gaps from previous analysis\n\u2022 Provide context-aware refinement"
+        },
+        "outputAnchors": [
+          {
+            "id": "stickyNoteAgentflow_0-output-stickyNoteAgentflow",
+            "label": "Sticky Note",
+            "name": "stickyNoteAgentflow"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "width": 215,
+      "height": 122,
+      "positionAbsolute": {
+        "x": -400,
+        "y": 300
+      },
+      "selected": false,
+      "dragging": false
+    }
+  ],
+  "edges": [
+    {
+      "source": "startAgentflow_0",
+      "sourceHandle": "startAgentflow_0-output-startAgentflow",
+      "target": "llmAgentflow_0",
+      "targetHandle": "llmAgentflow_0",
+      "data": {
+        "sourceColor": "#7EE787",
+        "targetColor": "#64B5F6",
+        "isHumanInput": false
+      },
+      "type": "agentFlow",
+      "id": "startAgentflow_0-startAgentflow_0-output-startAgentflow-llmAgentflow_0-llmAgentflow_0"
+    },
+    {
+      "source": "llmAgentflow_0",
+      "sourceHandle": "llmAgentflow_0-output-llmAgentflow",
+      "target": "iterationAgentflow_0",
+      "targetHandle": "iterationAgentflow_0",
+      "data": {
+        "sourceColor": "#64B5F6",
+        "targetColor": "#9C89B8",
+        "isHumanInput": false
+      },
+      "type": "agentFlow",
+      "id": "llmAgentflow_0-llmAgentflow_0-output-llmAgentflow-iterationAgentflow_0-iterationAgentflow_0"
+    },
+    {
+      "source": "iterationAgentflow_0",
+      "sourceHandle": "iterationAgentflow_0-output-iterationAgentflow",
+      "target": "llmAgentflow_1",
+      "targetHandle": "llmAgentflow_1",
+      "data": {
+        "sourceColor": "#9C89B8",
+        "targetColor": "#64B5F6",
+        "isHumanInput": false
+      },
+      "type": "agentFlow",
+      "id": "iterationAgentflow_0-iterationAgentflow_0-output-iterationAgentflow-llmAgentflow_1-llmAgentflow_1"
+    },
+    {
+      "source": "llmAgentflow_1",
+      "sourceHandle": "llmAgentflow_1-output-llmAgentflow",
+      "target": "conditionAgentAgentflow_0",
+      "targetHandle": "conditionAgentAgentflow_0",
+      "data": {
+        "sourceColor": "#64B5F6",
+        "targetColor": "#ff8fab",
+        "isHumanInput": false
+      },
+      "type": "agentFlow",
+      "id": "llmAgentflow_1-llmAgentflow_1-output-llmAgentflow-conditionAgentAgentflow_0-conditionAgentAgentflow_0"
+    },
+    {
+      "source": "conditionAgentAgentflow_0",
+      "sourceHandle": "conditionAgentAgentflow_0-output-0",
+      "target": "loopAgentflow_0",
+      "targetHandle": "loopAgentflow_0",
+      "data": {
+        "sourceColor": "#ff8fab",
+        "targetColor": "#FFA07A",
+        "edgeLabel": "0",
+        "isHumanInput": false
+      },
+      "type": "agentFlow",
+      "id": "conditionAgentAgentflow_0-conditionAgentAgentflow_0-output-0-loopAgentflow_0-loopAgentflow_0"
+    },
+    {
+      "source": "conditionAgentAgentflow_0",
+      "sourceHandle": "conditionAgentAgentflow_0-output-1",
+      "target": "directReplyAgentflow_0",
+      "targetHandle": "directReplyAgentflow_0",
+      "data": {
+        "sourceColor": "#ff8fab",
+        "targetColor": "#4DDBBB",
+        "edgeLabel": "1",
+        "isHumanInput": false
+      },
+      "type": "agentFlow",
+      "id": "conditionAgentAgentflow_0-conditionAgentAgentflow_0-output-1-directReplyAgentflow_0-directReplyAgentflow_0"
+    }
+  ]
+}

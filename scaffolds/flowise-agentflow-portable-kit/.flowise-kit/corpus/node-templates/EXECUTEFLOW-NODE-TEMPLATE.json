@@ -1,0 +1,101 @@
+{
+  "id": "executeFlowAgentflow_0",
+  "position": {
+    "x": 0,
+    "y": 0
+  },
+  "data": {
+    "id": "executeFlowAgentflow_0",
+    "label": "Execute Flow",
+    "version": 1.1,
+    "name": "executeFlowAgentflow",
+    "type": "ExecuteFlow",
+    "color": "#9C27B0",
+    "baseClasses": ["ExecuteFlow"],
+    "category": "Agent Flows",
+    "description": "Execute another flow as a sub-workflow",
+    "inputParams": [
+      {
+        "label": "Select Flow",
+        "name": "executeFlowSelectedFlow",
+        "type": "asyncOptions",
+        "loadMethod": "listFlows",
+        "id": "executeFlowAgentflow_0-input-executeFlowSelectedFlow-asyncOptions"
+      },
+      {
+        "label": "Input (JSON)",
+        "name": "executeFlowInput",
+        "type": "json",
+        "acceptVariable": true,
+        "id": "executeFlowAgentflow_0-input-executeFlowInput-json"
+      },
+      {
+        "label": "Override Config",
+        "name": "executeFlowOverrideConfig",
+        "type": "json",
+        "optional": true,
+        "id": "executeFlowAgentflow_0-input-executeFlowOverrideConfig-json"
+      },
+      {
+        "label": "Base URL",
+        "name": "executeFlowBaseURL",
+        "type": "string",
+        "optional": true,
+        "id": "executeFlowAgentflow_0-input-executeFlowBaseURL-string"
+      },
+      {
+        "label": "Return Response As",
+        "name": "executeFlowReturnResponseAs",
+        "type": "options",
+        "options": [
+          {
+            "label": "User Message",
+            "name": "userMessage"
+          },
+          {
+            "label": "Assistant Message",
+            "name": "assistantMessage"
+          }
+        ],
+        "default": "userMessage",
+        "id": "executeFlowAgentflow_0-input-executeFlowReturnResponseAs-options"
+      },
+      {
+        "label": "Update State",
+        "name": "executeFlowUpdateState",
+        "type": "array",
+        "optional": true,
+        "id": "executeFlowAgentflow_0-input-executeFlowUpdateState-array"
+      }
+    ],
+    "inputAnchors": [],
+    "inputs": {
+      "executeFlowSelectedFlow": "",
+      "executeFlowInput": "{}",
+      "executeFlowOverrideConfig": "",
+      "executeFlowBaseURL": "",
+      "executeFlowReturnResponseAs": "userMessage",
+      "executeFlowUpdateState": ""
+    },
+    "outputAnchors": [
+      {
+        "id": "executeFlowAgentflow_0-output-executeFlowAgentflow",
+        "name": "executeFlowAgentflow",
+        "label": "Execute Flow",
+        "description": "Execute Flow",
+        "type": "ExecuteFlow"
+      }
+    ],
+    "outputs": {},
+    "selected": false
+  },
+  "type": "agentFlow",
+  "width": 300,
+  "height": 400,
+  "selected": false,
+  "positionAbsolute": {
+    "x": 0,
+    "y": 0
+  },
+  "dragging": false
+}

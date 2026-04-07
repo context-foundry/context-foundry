@@ -1,0 +1,24 @@
+{
+  "query": "Build a routing and human approval flow for helpdesk triage",
+  "selected_patterns": [
+    "routing",
+    "chaining"
+  ],
+  "examples": [
+    "example-flows/afv2-patterns/03-routing.json",
+    "example-flows/succession-planning-orchestrator.json",
+    "example-flows/afv2-patterns/01-chaining.json"
+  ],
+  "templates": [
+    ".flowise-kit/corpus/node-templates/CONDITIONAGENT-NODE-TEMPLATE.json",
+    ".flowise-kit/corpus/node-templates/AGENT-NODE-TEMPLATE.json"
+  ],
+  "expertise_paths": [
+    "$.patterns[?(@.pattern_id=='afv2-routing-pattern')]",
+    "$.patterns[?(@.pattern_id=='afv2-chaining-pattern')]"
+  ],
+  "benchmarks": [
+    "routing-helpdesk",
+    "chaining-review"
+  ]
+}

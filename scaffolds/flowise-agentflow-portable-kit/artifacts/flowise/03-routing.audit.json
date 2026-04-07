@@ -1,0 +1,211 @@
+[
+  {
+    "file": "/Users/name/homelab/context-foundry/scaffolds/flowise-agentflow-portable-kit/example-flows/afv2-patterns/03-routing.json",
+    "profile": "core",
+    "summary": {
+      "ACTION": 6,
+      "ADVICE": 16,
+      "total": 22
+    },
+    "findings": [
+      {
+        "rule_id": "incomplete-input-params",
+        "severity": "ACTION",
+        "node_id": "startAgentflow_0",
+        "node_label": "Start",
+        "message": "Start node has only 1 inputParams (expected >= 5). This will cause blank config panels or SVG errors in the Flowise UI.",
+        "details": null,
+        "suggestion": "Copy the complete inputParams array from the START-NODE-TEMPLATE.json."
+      },
+      {
+        "rule_id": "incomplete-input-params",
+        "severity": "ACTION",
+        "node_id": "agent_billing",
+        "node_label": "Agent.Billing",
+        "message": "Agent node has only 5 inputParams (expected >= 10). This will cause blank config panels or SVG errors in the Flowise UI.",
+        "details": null,
+        "suggestion": "Copy the complete inputParams array from the AGENT-NODE-TEMPLATE.json."
+      },
+      {
+        "rule_id": "incomplete-input-params",
+        "severity": "ACTION",
+        "node_id": "agent_technical",
+        "node_label": "Agent.Technical",
+        "message": "Agent node has only 5 inputParams (expected >= 10). This will cause blank config panels or SVG errors in the Flowise UI.",
+        "details": null,
+        "suggestion": "Copy the complete inputParams array from the AGENT-NODE-TEMPLATE.json."
+      },
+      {
+        "rule_id": "incomplete-input-params",
+        "severity": "ACTION",
+        "node_id": "agent_general",
+        "node_label": "Agent.General",
+        "message": "Agent node has only 5 inputParams (expected >= 10). This will cause blank config panels or SVG errors in the Flowise UI.",
+        "details": null,
+        "suggestion": "Copy the complete inputParams array from the AGENT-NODE-TEMPLATE.json."
+      },
+      {
+        "rule_id": "incomplete-input-params",
+        "severity": "ACTION",
+        "node_id": "agent_fail",
+        "node_label": "Agent.ErrorHandler",
+        "message": "Agent node has only 5 inputParams (expected >= 10). This will cause blank config panels or SVG errors in the Flowise UI.",
+        "details": null,
+        "suggestion": "Copy the complete inputParams array from the AGENT-NODE-TEMPLATE.json."
+      },
+      {
+        "rule_id": "incomplete-input-params",
+        "severity": "ACTION",
+        "node_id": "agent_synthesize",
+        "node_label": "Agent.Synthesize",
+        "message": "Agent node has only 5 inputParams (expected >= 10). This will cause blank config panels or SVG errors in the Flowise UI.",
+        "details": null,
+        "suggestion": "Copy the complete inputParams array from the AGENT-NODE-TEMPLATE.json."
+      },
+      {
+        "rule_id": "invalid-node-id-format",
+        "severity": "ADVICE",
+        "node_id": "router_condition",
+        "node_label": "Intent Router",
+        "message": "Node ID 'router_condition' does not match expected pattern '{nodeType}_{index}'.",
+        "details": null,
+        "suggestion": "Use format like 'conditionAgentAgentflow_0'."
+      },
+      {
+        "rule_id": "invalid-node-id-format",
+        "severity": "ADVICE",
+        "node_id": "agent_billing",
+        "node_label": "Agent.Billing",
+        "message": "Node ID 'agent_billing' does not match expected pattern '{nodeType}_{index}'.",
+        "details": null,
+        "suggestion": "Use format like 'agentAgentflow_0'."
+      },
+      {
+        "rule_id": "invalid-node-id-format",
+        "severity": "ADVICE",
+        "node_id": "agent_technical",
+        "node_label": "Agent.Technical",
+        "message": "Node ID 'agent_technical' does not match expected pattern '{nodeType}_{index}'.",
+        "details": null,
+        "suggestion": "Use format like 'agentAgentflow_0'."
+      },
+      {
+        "rule_id": "invalid-node-id-format",
+        "severity": "ADVICE",
+        "node_id": "agent_general",
+        "node_label": "Agent.General",
+        "message": "Node ID 'agent_general' does not match expected pattern '{nodeType}_{index}'.",
+        "details": null,
+        "suggestion": "Use format like 'agentAgentflow_0'."
+      },
+      {
+        "rule_id": "invalid-node-id-format",
+        "severity": "ADVICE",
+        "node_id": "agent_fail",
+        "node_label": "Agent.ErrorHandler",
+        "message": "Node ID 'agent_fail' does not match expected pattern '{nodeType}_{index}'.",
+        "details": null,
+        "suggestion": "Use format like 'agentAgentflow_0'."
+      },
+      {
+        "rule_id": "invalid-node-id-format",
+        "severity": "ADVICE",
+        "node_id": "agent_synthesize",
+        "node_label": "Agent.Synthesize",
+        "message": "Node ID 'agent_synthesize' does not match expected pattern '{nodeType}_{index}'.",
+        "details": null,
+        "suggestion": "Use format like 'agentAgentflow_0'."
+      },
+      {
+        "rule_id": "invalid-node-id-format",
+        "severity": "ADVICE",
+        "node_id": "directReply_final",
+        "node_label": "Direct Reply",
+        "message": "Node ID 'directReply_final' does not match expected pattern '{nodeType}_{index}'.",
+        "details": null,
+        "suggestion": "Use format like 'directReplyAgentflow_0'."
+      },
+      {
+        "rule_id": "shared-state-collision",
+        "severity": "ADVICE",
+        "node_id": null,
+        "node_label": null,
+        "message": "State key 'domain.response' is written by 4 nodes: agent_billing, agent_technical, agent_general, agent_fail.",
+        "details": "CCA best practice: subagents should have isolated contexts. Shared state writes risk clobbering -- one agent may overwrite another's output before it's consumed.",
+        "suggestion": "Use distinct state keys per agent, or ensure writes are sequenced."
+      },
+      {
+        "rule_id": "shared-state-collision",
+        "severity": "ADVICE",
+        "node_id": null,
+        "node_label": null,
+        "message": "State key 'domain.name' is written by 4 nodes: agent_billing, agent_technical, agent_general, agent_fail.",
+        "details": "CCA best practice: subagents should have isolated contexts. Shared state writes risk clobbering -- one agent may overwrite another's output before it's consumed.",
+        "suggestion": "Use distinct state keys per agent, or ensure writes are sequenced."
+      },
+      {
+        "rule_id": "unbounded-memory",
+        "severity": "ADVICE",
+        "node_id": null,
+        "node_label": null,
+        "message": "All 5 LLM/Agent nodes have memory enabled.",
+        "details": "CCA best practice: context is a finite resource. When all nodes accumulate full conversation history, context windows fill quickly. Consider selective memory enablement.",
+        "suggestion": "Disable memory on intermediate processing nodes that don't need conversation history."
+      },
+      {
+        "rule_id": "empty-system-prompt",
+        "severity": "ADVICE",
+        "node_id": "agent_billing",
+        "node_label": "Agent.Billing",
+        "message": "Agent node has no messages configured.",
+        "details": "Without instructions, the agent has no guidance on its role or task.",
+        "suggestion": "Add a system message defining the agent's role and responsibilities."
+      },
+      {
+        "rule_id": "empty-system-prompt",
+        "severity": "ADVICE",
+        "node_id": "agent_technical",
+        "node_label": "Agent.Technical",
+        "message": "Agent node has no messages configured.",
+        "details": "Without instructions, the agent has no guidance on its role or task.",
+        "suggestion": "Add a system message defining the agent's role and responsibilities."
+      },
+      {
+        "rule_id": "empty-system-prompt",
+        "severity": "ADVICE",
+        "node_id": "agent_general",
+        "node_label": "Agent.General",
+        "message": "Agent node has no messages configured.",
+        "details": "Without instructions, the agent has no guidance on its role or task.",
+        "suggestion": "Add a system message defining the agent's role and responsibilities."
+      },
+      {
+        "rule_id": "empty-system-prompt",
+        "severity": "ADVICE",
+        "node_id": "agent_fail",
+        "node_label": "Agent.ErrorHandler",
+        "message": "Agent node has no messages configured.",
+        "details": "Without instructions, the agent has no guidance on its role or task.",
+        "suggestion": "Add a system message defining the agent's role and responsibilities."
+      },
+      {
+        "rule_id": "empty-system-prompt",
+        "severity": "ADVICE",
+        "node_id": "agent_synthesize",
+        "node_label": "Agent.Synthesize",
+        "message": "Agent node has no messages configured.",
+        "details": "Without instructions, the agent has no guidance on its role or task.",
+        "suggestion": "Add a system message defining the agent's role and responsibilities."
+      },
+      {
+        "rule_id": "copy-paste-model-config",
+        "severity": "ADVICE",
+        "node_id": null,
+        "node_label": null,
+        "message": "3 agents share identical config: claude-sonnet-4-5-20250929 at temperature 0.3.",
+        "details": "Agents: Agent.Billing, Agent.Technical, Agent.General. All use provider 'chatAnthropic' with the same model and temperature, suggesting they were copy-pasted rather than individually tuned.",
+        "suggestion": "Review each agent's role and adjust model choice and temperature to match the task. Extraction/routing tasks work well at low temp (0.1-0.3), while generation/synthesis tasks benefit from higher temp (0.5-0.8)."
+      }
+    ]
+  }
+]

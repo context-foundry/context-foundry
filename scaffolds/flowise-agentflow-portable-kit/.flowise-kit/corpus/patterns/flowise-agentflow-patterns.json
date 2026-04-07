@@ -1,0 +1,213 @@
+{
+  "pattern_type": "common-issues",
+  "domain": "flowise",
+  "version": "1.0.0",
+  "last_updated": "2025-12-01",
+
+  "patterns": [
+    {
+      "pattern_id": "flowise-html-span-variable-format-001",
+      "title": "Variable References MUST Use HTML Span Format",
+      "first_seen": "2025-12-01",
+      "last_seen": "2025-12-01",
+      "frequency": 10,
+      "severity": "critical",
+      "keywords": ["flowise", "agentflow", "variables", "html-span"],
+      "tech_stack": ["flowise", "agentflow"],
+      "issue": "Variables show as literal {{ $form.name }} in output, state variables don't resolve, flow appears to work but values are not passed, or DirectReply outputs raw variable syntax. Flowise AgentFlow v2 parser requires HTML span wrapper with specific attributes to identify and resolve variables at runtime.",
+      "solution": {
+        "planner": "Wrap ALL variable references in HTML span with proper attributes: <span class=\"variable\" data-type=\"mention\" data-id=\"$form.organization\" data-label=\"$form.organization\">{{ $form.organization }}</span>. Never use plain {{ }} syntax.",
+        "reviewer": "Check all variable references use the HTML span format with data-type, data-id, and data-label attributes. Flag any plain {{ variable }} syntax as incorrect."
+      },
+      "auto_apply": false,
+      "learned_from": "Succession Planning Orchestrator Build Session"
+    },
+    {
+      "pattern_id": "flowise-llm-structured-output-format-001",
+      "title": "LLM Structured Output Must Be Array with Schema",
+      "first_seen": "2025-12-01",
+      "last_seen": "2025-12-01",
+      "frequency": 5,
+      "severity": "critical",
+      "keywords": ["flowise", "agentflow", "llm", "structured-output", "json-schema"],
+      "tech_stack": ["flowise", "agentflow"],
+      "issue": "LLM output is plain text instead of JSON, state updates fail silently, iteration receives empty or malformed array, or JSON schema appears to be ignored. Flowise AgentFlow v2 changed the structured output format from a single JSON schema string to an array of output definitions. The old llmJsonSchema field is ignored.",
+      "solution": {
+        "planner": "Use llmStructuredOutput array format with full field specification (key, type, jsonSchema, description). Available types: string, stringArray, number, boolean, enum, jsonArray.",
+        "reviewer": "Flag any use of llmJsonSchema as incorrect. Verify llmStructuredOutput is an array with all four fields: key, type, jsonSchema, description."
+      },
+      "auto_apply": false,
+      "learned_from": "Succession Planning Orchestrator Build Session"
+    },
+    {
+      "pattern_id": "flowise-state-update-field-name-001",
+      "title": "State Updates Use llmUpdateState Not llmStateUpdates",
+      "first_seen": "2025-12-01",
+      "last_seen": "2025-12-01",
+      "frequency": 5,
+      "severity": "critical",
+      "keywords": ["flowise", "agentflow", "state", "llm", "field-names"],
+      "tech_stack": ["flowise", "agentflow"],
+      "issue": "State variables remain empty after LLM execution, downstream nodes receive null/undefined, or iteration fails with empty array. Field name changed in AgentFlow v2: old field llmStateUpdates is ignored. Additionally, value format changed from {{ llmOutput }} to {{ output.keyName }}.",
+      "solution": {
+        "planner": "Use llmUpdateState (not llmStateUpdates) with output.variableName reference in HTML span format.",
+        "reviewer": "Flag any use of llmStateUpdates as incorrect. Verify llmUpdateState references use output.keyName format."
+      },
+      "auto_apply": false,
+      "learned_from": "Succession Planning Orchestrator Build Session"
+    },
+    {
+      "pattern_id": "flowise-directreply-field-name-001",
+      "title": "DirectReply Uses directReplyMessage Not directReplyContent",
+      "first_seen": "2025-12-01",
+      "last_seen": "2025-12-01",
+      "frequency": 3,
+      "severity": "high",
+      "keywords": ["flowise", "agentflow", "directreply", "output", "field-names"],
+      "tech_stack": ["flowise", "agentflow"],
+      "issue": "DirectReply outputs nothing, final report is blank, or flow completes but no output is displayed. Field name is directReplyMessage not directReplyContent. Missing hideOutput flag can also cause display issues.",
+      "solution": {
+        "planner": "Use directReplyMessage field, set hideOutput: true, and use color #4DDBBB for DirectReply nodes.",
+        "reviewer": "Flag any use of directReplyContent as incorrect. Verify DirectReply nodes have hideOutput: true."
+      },
+      "auto_apply": false,
+      "learned_from": "Succession Planning Orchestrator Build Session"
+    },
+    {
+      "pattern_id": "flowise-iteration-child-parent-binding-001",
+      "title": "Iteration Children Need parentNode + extent Not parentId",
+      "first_seen": "2025-12-01",
+      "last_seen": "2025-12-01",
+      "frequency": 4,
+      "severity": "critical",
+      "keywords": ["flowise", "agentflow", "iteration", "parent-child"],
+      "tech_stack": ["flowise", "agentflow"],
+      "issue": "Agent inside Iteration doesn't execute, Iteration shows empty or no child node, child node appears outside Iteration container visually, or $iteration variable is undefined in child. Flowise uses parentNode + extent for parent-child binding in Iteration containers. The parentId field is not recognized.",
+      "solution": {
+        "planner": "Use parentNode and extent: 'parent' properties on child nodes. Reference $iteration to receive each item.",
+        "reviewer": "Verify all Iteration child nodes have both parentNode AND extent: 'parent'. Flag any use of parentId."
+      },
+      "auto_apply": false,
+      "learned_from": "Succession Planning Orchestrator Build Session"
+    },
+    {
+      "pattern_id": "flowise-llm-memory-config-required-001",
+      "title": "LLM Nodes Require Full Memory Configuration",
+      "first_seen": "2025-12-01",
+      "last_seen": "2025-12-01",
+      "frequency": 3,
+      "severity": "medium",
+      "keywords": ["flowise", "agentflow", "llm", "memory", "configuration"],
+      "tech_stack": ["flowise", "agentflow"],
+      "issue": "LLM doesn't retain context between messages, conversation history not passed to model, or unexpected behavior in multi-turn flows. Missing memory configuration fields cause Flowise to use inconsistent defaults.",
+      "solution": {
+        "planner": "Always include all four memory configuration fields: llmEnableMemory, llmMemoryType, llmUserMessage, and llmReturnResponseAs.",
+        "reviewer": "Verify LLM nodes include all four memory fields. Flag any LLM node missing llmEnableMemory or llmMemoryType."
+      },
+      "auto_apply": false,
+      "learned_from": "Succession Planning Orchestrator Build Session"
+    },
+    {
+      "pattern_id": "flowise-state-variable-camelcase-001",
+      "title": "State Variables Must Use camelCase",
+      "first_seen": "2025-12-01",
+      "last_seen": "2025-12-01",
+      "frequency": 2,
+      "severity": "medium",
+      "keywords": ["flowise", "agentflow", "state", "naming", "convention"],
+      "tech_stack": ["flowise", "agentflow"],
+      "issue": "State variable references fail or inconsistent variable resolution. Flowise state management expects camelCase variable names. Snake_case or other formats may not resolve correctly.",
+      "solution": {
+        "planner": "Use camelCase for all state variable keys (e.g., criticalRoles, iterationCount, flowState).",
+        "reviewer": "Flag any snake_case or other non-camelCase state variable keys."
+      },
+      "auto_apply": false,
+      "learned_from": "Succession Planning Orchestrator Build Session"
+    },
+    {
+      "pattern_id": "flowise-iteration-input-format-001",
+      "title": "Iteration Input Must Use HTML Span Array Reference",
+      "first_seen": "2025-12-01",
+      "last_seen": "2025-12-01",
+      "frequency": 3,
+      "severity": "high",
+      "keywords": ["flowise", "agentflow", "iteration", "array", "input"],
+      "tech_stack": ["flowise", "agentflow"],
+      "issue": "Iteration doesn't execute any cycles, child agent receives undefined instead of array items, or Iteration completes immediately with no output. Iteration node requires properly formatted array reference; plain variable syntax or malformed JSON causes iteration to skip.",
+      "solution": {
+        "planner": "Use HTML span format pointing to JSON array state variable. Ensure upstream LLM produces JSON array via llmStructuredOutput with type: jsonArray.",
+        "reviewer": "Verify iterationInput uses full HTML span format and references a state variable containing a valid JSON array."
+      },
+      "auto_apply": false,
+      "learned_from": "Succession Planning Orchestrator Build Session"
+    },
+    {
+      "pattern_id": "flowise-conditionagent-scenario-output-match-001",
+      "title": "ConditionAgent Scenarios Must Match Output Anchor Count",
+      "first_seen": "2025-12-01",
+      "last_seen": "2025-12-01",
+      "frequency": 2,
+      "severity": "high",
+      "keywords": ["flowise", "agentflow", "conditionagent", "routing", "scenarios"],
+      "tech_stack": ["flowise", "agentflow"],
+      "issue": "ConditionAgent always routes to same path, unexpected routing behavior, or some scenarios never trigger. ConditionAgent returns scenario index (0, 1, 2...) which maps to output anchors. Mismatch causes routing failures.",
+      "solution": {
+        "planner": "Ensure conditionAgentScenarios array length equals outputAnchors count. Use edgeLabel '0' or '1' matching scenario index.",
+        "reviewer": "Count scenarios and output anchors and verify they match. Check edge labels correspond to correct scenario indices."
+      },
+      "auto_apply": false,
+      "learned_from": "Succession Planning Orchestrator Build Session"
+    },
+    {
+      "pattern_id": "flowise-loop-backtonode-format-001",
+      "title": "Loop Node loopBackToNode Uses NodeId-Label Format",
+      "first_seen": "2025-12-01",
+      "last_seen": "2025-12-01",
+      "frequency": 2,
+      "severity": "medium",
+      "keywords": ["flowise", "agentflow", "loop", "configuration"],
+      "tech_stack": ["flowise", "agentflow"],
+      "issue": "Loop doesn't return to expected node, flow ends instead of looping, or infinite loop / unexpected behavior. loopBackToNode requires both the node ID and its label, separated by hyphen.",
+      "solution": {
+        "planner": "Use nodeId-Label format for loop target (e.g., 'llmAgentflow_0-Role Identifier'). Always set maxLoopCount to prevent infinite loops.",
+        "reviewer": "Verify loopBackToNode includes both node ID and label. Check maxLoopCount is set."
+      },
+      "auto_apply": false,
+      "learned_from": "Succession Planning Orchestrator Build Session"
+    },
+    {
+      "pattern_id": "flowise-node-id-naming-convention-001",
+      "title": "Node IDs Follow nodeType_index Pattern",
+      "first_seen": "2025-12-01",
+      "last_seen": "2025-12-01",
+      "frequency": 2,
+      "severity": "medium",
+      "keywords": ["flowise", "agentflow", "naming", "convention", "node-id"],
+      "tech_stack": ["flowise", "agentflow"],
+      "issue": "References to nodes fail, edge connections don't work, or node not found errors. Flowise expects consistent node ID format; custom names or formats may break internal references.",
+      "solution": {
+        "planner": "Use standard nodeType_index naming (e.g., llmAgentflow_0, agentAgentflow_0, iterationAgentflow_0). Edge ID format: {source}-{sourceHandle}-{target}-{targetHandle}.",
+        "reviewer": "Verify all node IDs follow the nodeType_index pattern. Flag any custom or non-standard node ID formats."
+      },
+      "auto_apply": false,
+      "learned_from": "Succession Planning Orchestrator Build Session"
+    },
+    {
+      "pattern_id": "flowise-read-templates-first-001",
+      "title": "ALWAYS Read Masterclass Templates Before Building",
+      "first_seen": "2025-12-01",
+      "last_seen": "2025-12-01",
+      "frequency": 100,
+      "severity": "critical",
+      "keywords": ["flowise", "agentflow", "templates", "best-practice"],
+      "tech_stack": ["flowise", "agentflow"],
+      "issue": "Flow doesn't work on import, field names are wrong, structure doesn't match Flowise expectations, or hours spent debugging avoidable issues. Flowise AgentFlow v2 has specific field names and structures that are NOT intuitive and differ from documentation. Working templates are the only reliable reference.",
+      "solution": {
+        "planner": "Read all masterclass templates (deep-research-agentflow.json, software-dev-team-agents.json, etc.) before writing any JSON. Copy structure exactly.",
+        "reviewer": "Verify that flow structure matches masterclass template patterns. Flag any field names not found in the reference templates."
+      },
+      "auto_apply": false,
+      "learned_from": "Succession Planning Orchestrator Build Session"
+    }
+  ]
+}

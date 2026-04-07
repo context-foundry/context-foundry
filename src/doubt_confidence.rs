@@ -57,7 +57,7 @@ fn history_path() -> PathBuf {
     if let Some(base) = base {
         PathBuf::from(base).join(".foundry/doubt-history.json")
     } else {
-        PathBuf::from("/tmp/.foundry/doubt-history.json")
+        std::env::temp_dir().join(".foundry").join("doubt-history.json")
     }
 }
 

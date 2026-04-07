@@ -1,0 +1,56 @@
+{
+  "id": "iterationAgentflow_0",
+  "position": {
+    "x": 600,
+    "y": 300
+  },
+  "data": {
+    "id": "iterationAgentflow_0",
+    "label": "For Each Loop",
+    "version": 1,
+    "name": "iterationAgentflow",
+    "type": "Iteration",
+    "color": "#9C89B8",
+    "baseClasses": [
+      "Iteration"
+    ],
+    "category": "Agent Flows",
+    "description": "Execute the nodes within the iteration block for each item in an array (for-each loop)",
+    "inputParams": [
+      {
+        "label": "Array Input",
+        "name": "iterationInput",
+        "type": "string",
+        "description": "The input array to iterate over. Can be a Flow State variable or node output.",
+        "placeholder": "{{ $flow.state.items }} or {{ agentNode.output }}",
+        "acceptVariable": true,
+        "rows": 4,
+        "id": "iterationAgentflow_0-input-iterationInput-string",
+        "display": true
+      }
+    ],
+    "inputAnchors": [],
+    "inputs": {
+      "iterationInput": ""
+    },
+    "outputAnchors": [
+      {
+        "id": "iterationAgentflow_0-output-iterationAgentflow",
+        "label": "Iteration",
+        "name": "iterationAgentflow",
+        "description": "Iteration output (array of results from each iteration)"
+      }
+    ],
+    "outputs": {},
+    "selected": false
+  },
+  "type": "iteration",
+  "width": 300,
+  "height": 251,
+  "selected": false,
+  "positionAbsolute": {
+    "x": 600,
+    "y": 300
+  },
+  "dragging": false
+}

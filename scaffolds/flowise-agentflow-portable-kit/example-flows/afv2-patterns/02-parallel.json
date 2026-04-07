@@ -1,0 +1,874 @@
+{
+  "nodes": [
+    {
+      "id": "startAgentflow_0",
+      "type": "agentFlow",
+      "position": {
+        "x": -700,
+        "y": 200
+      },
+      "data": {
+        "id": "startAgentflow_0",
+        "label": "Start",
+        "version": 1.1,
+        "name": "startAgentflow",
+        "type": "Start",
+        "color": "#7EE787",
+        "hideInput": true,
+        "baseClasses": [
+          "Start"
+        ],
+        "category": "Agent Flows",
+        "description": "Starting point of the agentflow",
+        "inputParams": [
+          {
+            "label": "Input Type",
+            "name": "startInputType",
+            "type": "options",
+            "options": [
+              {
+                "label": "Chat Input",
+                "name": "chatInput",
+                "description": "Start the conversation with chat input"
+              }
+            ],
+            "default": "chatInput"
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "startInputType": "chatInput"
+        },
+        "outputAnchors": [
+          {
+            "id": "startAgentflow_0-output-startAgentflow",
+            "label": "Start",
+            "name": "startAgentflow"
+          }
+        ],
+        "outputs": {}
+      },
+      "width": 116,
+      "height": 68
+    },
+    {
+      "id": "stickyNote_purpose",
+      "type": "stickyNote",
+      "position": {
+        "x": -700,
+        "y": 50
+      },
+      "data": {
+        "id": "stickyNote_purpose",
+        "label": "Sticky Note",
+        "version": 1,
+        "name": "stickyNoteAgentflow",
+        "type": "StickyNote",
+        "color": "#fee440",
+        "baseClasses": [
+          "StickyNote"
+        ],
+        "category": "Agent Flows",
+        "description": "Add notes to the agent flow",
+        "inputParams": [
+          {
+            "label": "",
+            "name": "note",
+            "type": "string",
+            "rows": 1,
+            "placeholder": "Type something here",
+            "optional": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "note": "PURPOSE:\nParallel multi-source information gathering. Three branches execute concurrently: web search, knowledge base retrieval, and structured analysis. Results are aggregated, conflicts resolved, and synthesized into comprehensive report."
+        },
+        "outputAnchors": [
+          {
+            "id": "stickyNote_purpose-output-stickyNoteAgentflow",
+            "label": "Sticky Note",
+            "name": "stickyNoteAgentflow"
+          }
+        ],
+        "outputs": {}
+      },
+      "width": 300,
+      "height": 122
+    },
+    {
+      "id": "agent_web_search",
+      "type": "agentFlow",
+      "position": {
+        "x": -300,
+        "y": 0
+      },
+      "data": {
+        "id": "agent_web_search",
+        "label": "Agent.WebSearch",
+        "version": 2.2,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#4DD0E1",
+        "baseClasses": [
+          "Agent"
+        ],
+        "category": "Agent Flows",
+        "description": "Branch A: external web search",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true
+          },
+          {
+            "label": "Messages",
+            "name": "agentMessages",
+            "type": "array",
+            "optional": true,
+            "acceptVariable": true
+          },
+          {
+            "label": "Anthropic Built-in Tools",
+            "name": "agentToolsBuiltInAnthropic",
+            "type": "multiOptions",
+            "optional": true,
+            "options": [
+              {
+                "label": "Web Search",
+                "name": "web_search_20250305"
+              }
+            ]
+          },
+          {
+            "label": "Tools",
+            "name": "agentTools",
+            "type": "array",
+            "optional": true
+          },
+          {
+            "label": "Enable Memory",
+            "name": "agentEnableMemory",
+            "type": "boolean",
+            "default": false,
+            "optional": true
+          },
+          {
+            "label": "Update State",
+            "name": "agentStateUpdates",
+            "type": "array",
+            "optional": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatAnthropic",
+          "agentMessages": "",
+          "agentToolsBuiltInAnthropic": [
+            "web_search_20250305"
+          ],
+          "agentTools": [
+            {
+              "agentSelectedTool": "currentDateTime",
+              "agentSelectedToolRequiresHumanInput": "",
+              "agentSelectedToolConfig": {
+                "agentSelectedTool": "currentDateTime"
+              }
+            }
+          ],
+          "agentEnableMemory": true,
+          "agentStateUpdates": [
+            {
+              "key": "branches.web.results",
+              "value": "{{ web_results }}"
+            },
+            {
+              "key": "branches.web.completed",
+              "value": "true"
+            }
+          ],
+          "agentModelConfig": {
+            "credential": "Anthropic API Key",
+            "modelName": "claude-sonnet-4-5-20250929",
+            "temperature": 0.3,
+            "streaming": true,
+            "agentModel": "chatAnthropic"
+          }
+        },
+        "outputAnchors": [
+          {
+            "id": "agent_web_search-output-agentAgentflow",
+            "label": "Agent",
+            "name": "agentAgentflow"
+          }
+        ],
+        "outputs": {}
+      },
+      "width": 221,
+      "height": 80
+    },
+    {
+      "id": "agent_kb",
+      "type": "agentFlow",
+      "position": {
+        "x": -300,
+        "y": 200
+      },
+      "data": {
+        "id": "agent_kb",
+        "label": "Agent.KnowledgeBase",
+        "version": 2.2,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#9575CD",
+        "baseClasses": [
+          "Agent"
+        ],
+        "category": "Agent Flows",
+        "description": "Branch B: internal KB/RAG retrieval",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true
+          },
+          {
+            "label": "Messages",
+            "name": "agentMessages",
+            "type": "array",
+            "optional": true,
+            "acceptVariable": true
+          },
+          {
+            "label": "Tools",
+            "name": "agentTools",
+            "type": "array",
+            "optional": true
+          },
+          {
+            "label": "Enable Memory",
+            "name": "agentEnableMemory",
+            "type": "boolean",
+            "default": false,
+            "optional": true
+          },
+          {
+            "label": "Update State",
+            "name": "agentStateUpdates",
+            "type": "array",
+            "optional": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatAnthropic",
+          "agentMessages": "",
+          "agentTools": [
+            {
+              "agentSelectedTool": "currentDateTime",
+              "agentSelectedToolRequiresHumanInput": "",
+              "agentSelectedToolConfig": {
+                "agentSelectedTool": "currentDateTime"
+              }
+            }
+          ],
+          "agentEnableMemory": true,
+          "agentStateUpdates": [
+            {
+              "key": "branches.kb.results",
+              "value": "{{ kb_results }}"
+            },
+            {
+              "key": "branches.kb.citations",
+              "value": "{{ citations }}"
+            },
+            {
+              "key": "branches.kb.completed",
+              "value": "true"
+            }
+          ],
+          "agentModelConfig": {
+            "credential": "Anthropic API Key",
+            "modelName": "claude-sonnet-4-5-20250929",
+            "temperature": 0.3,
+            "streaming": true,
+            "agentModel": "chatAnthropic"
+          }
+        },
+        "outputAnchors": [
+          {
+            "id": "agent_kb-output-agentAgentflow",
+            "label": "Agent",
+            "name": "agentAgentflow"
+          }
+        ],
+        "outputs": {}
+      },
+      "width": 221,
+      "height": 80
+    },
+    {
+      "id": "agent_analyzer",
+      "type": "agentFlow",
+      "position": {
+        "x": -300,
+        "y": 400
+      },
+      "data": {
+        "id": "agent_analyzer",
+        "label": "Agent.Analyzer",
+        "version": 2.2,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#4DD0E1",
+        "baseClasses": [
+          "Agent"
+        ],
+        "category": "Agent Flows",
+        "description": "Branch C: structured analysis",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true
+          },
+          {
+            "label": "Messages",
+            "name": "agentMessages",
+            "type": "array",
+            "optional": true,
+            "acceptVariable": true
+          },
+          {
+            "label": "Tools",
+            "name": "agentTools",
+            "type": "array",
+            "optional": true
+          },
+          {
+            "label": "Enable Memory",
+            "name": "agentEnableMemory",
+            "type": "boolean",
+            "default": false,
+            "optional": true
+          },
+          {
+            "label": "Update State",
+            "name": "agentStateUpdates",
+            "type": "array",
+            "optional": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatAnthropic",
+          "agentMessages": "",
+          "agentTools": [
+            {
+              "agentSelectedTool": "calculator",
+              "agentSelectedToolRequiresHumanInput": "",
+              "agentSelectedToolConfig": {
+                "agentSelectedTool": "calculator"
+              }
+            },
+            {
+              "agentSelectedTool": "currentDateTime",
+              "agentSelectedToolRequiresHumanInput": "",
+              "agentSelectedToolConfig": {
+                "agentSelectedTool": "currentDateTime"
+              }
+            }
+          ],
+          "agentEnableMemory": true,
+          "agentStateUpdates": [
+            {
+              "key": "branches.analysis.results",
+              "value": "{{ analysis }}"
+            },
+            {
+              "key": "branches.analysis.completed",
+              "value": "true"
+            }
+          ],
+          "agentModelConfig": {
+            "credential": "Anthropic API Key",
+            "modelName": "claude-sonnet-4-5-20250929",
+            "temperature": 0.2,
+            "streaming": true,
+            "agentModel": "chatAnthropic"
+          }
+        },
+        "outputAnchors": [
+          {
+            "id": "agent_analyzer-output-agentAgentflow",
+            "label": "Agent",
+            "name": "agentAgentflow"
+          }
+        ],
+        "outputs": {}
+      },
+      "width": 221,
+      "height": 80
+    },
+    {
+      "id": "stickyNote_parallel",
+      "type": "stickyNote",
+      "position": {
+        "x": -300,
+        "y": 550
+      },
+      "data": {
+        "id": "stickyNote_parallel",
+        "label": "Sticky Note",
+        "version": 1,
+        "name": "stickyNoteAgentflow",
+        "type": "StickyNote",
+        "color": "#fee440",
+        "baseClasses": [
+          "StickyNote"
+        ],
+        "category": "Agent Flows",
+        "description": "Add notes to the agent flow",
+        "inputParams": [
+          {
+            "label": "",
+            "name": "note",
+            "type": "string",
+            "rows": 1,
+            "placeholder": "Type something here",
+            "optional": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "note": "PARALLEL EXECUTION:\nAll three branches (Web Search, KB, Analyzer) execute concurrently. Each updates state.branches.{name}.completed when done. Aggregator waits for all branches via state checks before proceeding."
+        },
+        "outputAnchors": [
+          {
+            "id": "stickyNote_parallel-output-stickyNoteAgentflow",
+            "label": "Sticky Note",
+            "name": "stickyNoteAgentflow"
+          }
+        ],
+        "outputs": {}
+      },
+      "width": 300,
+      "height": 122
+    },
+    {
+      "id": "agent_aggregator",
+      "type": "agentFlow",
+      "position": {
+        "x": 100,
+        "y": 200
+      },
+      "data": {
+        "id": "agent_aggregator",
+        "label": "Agent.Aggregator",
+        "version": 2.2,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#FFA726",
+        "baseClasses": [
+          "Agent"
+        ],
+        "category": "Agent Flows",
+        "description": "Dedup/rank/reconcile conflicts; produce summary",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true
+          },
+          {
+            "label": "Messages",
+            "name": "agentMessages",
+            "type": "array",
+            "optional": true,
+            "acceptVariable": true
+          },
+          {
+            "label": "Tools",
+            "name": "agentTools",
+            "type": "array",
+            "optional": true
+          },
+          {
+            "label": "Enable Memory",
+            "name": "agentEnableMemory",
+            "type": "boolean",
+            "default": false,
+            "optional": true
+          },
+          {
+            "label": "Update State",
+            "name": "agentStateUpdates",
+            "type": "array",
+            "optional": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatAnthropic",
+          "agentMessages": "",
+          "agentTools": [
+            {
+              "agentSelectedTool": "currentDateTime",
+              "agentSelectedToolRequiresHumanInput": "",
+              "agentSelectedToolConfig": {
+                "agentSelectedTool": "currentDateTime"
+              }
+            }
+          ],
+          "agentEnableMemory": true,
+          "agentStateUpdates": [
+            {
+              "key": "aggregate.summary",
+              "value": "{{ summary }}"
+            },
+            {
+              "key": "aggregate.citations",
+              "value": "{{ all_citations }}"
+            },
+            {
+              "key": "aggregate.conflicts_resolved",
+              "value": "{{ conflicts }}"
+            }
+          ],
+          "agentModelConfig": {
+            "credential": "Anthropic API Key",
+            "modelName": "claude-sonnet-4-5-20250929",
+            "temperature": 0.2,
+            "streaming": true,
+            "agentModel": "chatAnthropic"
+          }
+        },
+        "outputAnchors": [
+          {
+            "id": "agent_aggregator-output-agentAgentflow",
+            "label": "Agent",
+            "name": "agentAgentflow"
+          }
+        ],
+        "outputs": {}
+      },
+      "width": 221,
+      "height": 80
+    },
+    {
+      "id": "stickyNote_aggregation",
+      "type": "stickyNote",
+      "position": {
+        "x": 100,
+        "y": 350
+      },
+      "data": {
+        "id": "stickyNote_aggregation",
+        "label": "Sticky Note",
+        "version": 1,
+        "name": "stickyNoteAgentflow",
+        "type": "StickyNote",
+        "color": "#fee440",
+        "baseClasses": [
+          "StickyNote"
+        ],
+        "category": "Agent Flows",
+        "description": "Add notes to the agent flow",
+        "inputParams": [
+          {
+            "label": "",
+            "name": "note",
+            "type": "string",
+            "rows": 1,
+            "placeholder": "Type something here",
+            "optional": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "note": "AGGREGATION:\nCombines results from all branches. Deduplicates information, ranks by source reliability, resolves conflicts using consensus/recency. Produces unified summary with consolidated citations."
+        },
+        "outputAnchors": [
+          {
+            "id": "stickyNote_aggregation-output-stickyNoteAgentflow",
+            "label": "Sticky Note",
+            "name": "stickyNoteAgentflow"
+          }
+        ],
+        "outputs": {}
+      },
+      "width": 300,
+      "height": 122
+    },
+    {
+      "id": "agent_report",
+      "type": "agentFlow",
+      "position": {
+        "x": 500,
+        "y": 200
+      },
+      "data": {
+        "id": "agent_report",
+        "label": "Agent.Report",
+        "version": 2.2,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#66BB6A",
+        "baseClasses": [
+          "Agent"
+        ],
+        "category": "Agent Flows",
+        "description": "Generate final report with metrics",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true
+          },
+          {
+            "label": "Messages",
+            "name": "agentMessages",
+            "type": "array",
+            "optional": true,
+            "acceptVariable": true
+          },
+          {
+            "label": "Tools",
+            "name": "agentTools",
+            "type": "array",
+            "optional": true
+          },
+          {
+            "label": "Enable Memory",
+            "name": "agentEnableMemory",
+            "type": "boolean",
+            "default": false,
+            "optional": true
+          },
+          {
+            "label": "Update State",
+            "name": "agentStateUpdates",
+            "type": "array",
+            "optional": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatAnthropic",
+          "agentMessages": "",
+          "agentTools": [
+            {
+              "agentSelectedTool": "currentDateTime",
+              "agentSelectedToolRequiresHumanInput": "",
+              "agentSelectedToolConfig": {
+                "agentSelectedTool": "currentDateTime"
+              }
+            }
+          ],
+          "agentEnableMemory": true,
+          "agentStateUpdates": [
+            {
+              "key": "output",
+              "value": "{{ final_report }}"
+            },
+            {
+              "key": "report.generated",
+              "value": "true"
+            },
+            {
+              "key": "report.timestamp",
+              "value": "{{ currentDateTime }}"
+            }
+          ],
+          "agentModelConfig": {
+            "credential": "Anthropic API Key",
+            "modelName": "claude-sonnet-4-5-20250929",
+            "temperature": 0.3,
+            "streaming": true,
+            "agentModel": "chatAnthropic"
+          }
+        },
+        "outputAnchors": [
+          {
+            "id": "agent_report-output-agentAgentflow",
+            "label": "Agent",
+            "name": "agentAgentflow"
+          }
+        ],
+        "outputs": {}
+      },
+      "width": 221,
+      "height": 80
+    },
+    {
+      "id": "stickyNote_output",
+      "type": "stickyNote",
+      "position": {
+        "x": 500,
+        "y": 350
+      },
+      "data": {
+        "id": "stickyNote_output",
+        "label": "Sticky Note",
+        "version": 1,
+        "name": "stickyNoteAgentflow",
+        "type": "StickyNote",
+        "color": "#fee440",
+        "baseClasses": [
+          "StickyNote"
+        ],
+        "category": "Agent Flows",
+        "description": "Add notes to the agent flow",
+        "inputParams": [
+          {
+            "label": "",
+            "name": "note",
+            "type": "string",
+            "rows": 1,
+            "placeholder": "Type something here",
+            "optional": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "note": "OUTPUT FORMAT:\nStructured report with: 1) Synthesized findings from all sources, 2) Citations organized by source type (web/KB/analysis), 3) Coverage metrics (sources consulted, conflicts resolved), 4) Confidence scores per finding."
+        },
+        "outputAnchors": [
+          {
+            "id": "stickyNote_output-output-stickyNoteAgentflow",
+            "label": "Sticky Note",
+            "name": "stickyNoteAgentflow"
+          }
+        ],
+        "outputs": {}
+      },
+      "width": 300,
+      "height": 122
+    },
+    {
+      "id": "directReply_final",
+      "type": "agentFlow",
+      "position": {
+        "x": 700,
+        "y": 100
+      },
+      "data": {
+        "id": "directReply_final",
+        "label": "Direct Reply",
+        "version": 1,
+        "name": "directReplyAgentflow",
+        "type": "DirectReply",
+        "color": "#4DDBBB",
+        "hideOutput": true,
+        "baseClasses": [
+          "DirectReply"
+        ],
+        "category": "Agent Flows",
+        "description": "Directly reply to the user with a message and terminate the workflow",
+        "inputParams": [
+          {
+            "label": "Message",
+            "name": "directReplyMessage",
+            "type": "string",
+            "rows": 4,
+            "acceptVariable": true,
+            "id": "directReply_final-input-directReplyMessage-string",
+            "display": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "directReplyMessage": "<p>✅ <strong>Parallel Research Complete</strong></p><p></p><p>Multi-source information gathering finished successfully. All 3 parallel branches executed concurrently and results aggregated.</p><p></p><p>📊 <strong>Execution Summary:</strong></p><p>• Web Search → real-time data</p><p>• Knowledge Base → historical context</p><p>• Analyzer → pattern analysis</p><p>• Aggregator → deduplicated synthesis</p><p>• Report → final documentation</p><p></p><p>Comprehensive research report with citations organized by source is ready.</p>"
+        },
+        "outputAnchors": [],
+        "outputs": {}
+      },
+      "width": 205,
+      "height": 67
+    }
+  ],
+  "edges": [
+    {
+      "source": "startAgentflow_0",
+      "sourceHandle": "startAgentflow_0-output-startAgentflow",
+      "target": "agent_web_search",
+      "targetHandle": "agent_web_search-input",
+      "type": "buttonedge",
+      "id": "edge_start_to_web",
+      "label": "query"
+    },
+    {
+      "source": "startAgentflow_0",
+      "sourceHandle": "startAgentflow_0-output-startAgentflow",
+      "target": "agent_kb",
+      "targetHandle": "agent_kb-input",
+      "type": "buttonedge",
+      "id": "edge_start_to_kb",
+      "label": "query"
+    },
+    {
+      "source": "startAgentflow_0",
+      "sourceHandle": "startAgentflow_0-output-startAgentflow",
+      "target": "agent_analyzer",
+      "targetHandle": "agent_analyzer-input",
+      "type": "buttonedge",
+      "id": "edge_start_to_analyzer",
+      "label": "query"
+    },
+    {
+      "source": "agent_web_search",
+      "sourceHandle": "agent_web_search-output-agentAgentflow",
+      "target": "agent_aggregator",
+      "targetHandle": "agent_aggregator-input",
+      "type": "buttonedge",
+      "id": "edge_web_to_agg",
+      "label": "web_results"
+    },
+    {
+      "source": "agent_kb",
+      "sourceHandle": "agent_kb-output-agentAgentflow",
+      "target": "agent_aggregator",
+      "targetHandle": "agent_aggregator-input",
+      "type": "buttonedge",
+      "id": "edge_kb_to_agg",
+      "label": "kb_results"
+    },
+    {
+      "source": "agent_analyzer",
+      "sourceHandle": "agent_analyzer-output-agentAgentflow",
+      "target": "agent_aggregator",
+      "targetHandle": "agent_aggregator-input",
+      "type": "buttonedge",
+      "id": "edge_analyzer_to_agg",
+      "label": "analysis"
+    },
+    {
+      "source": "agent_aggregator",
+      "sourceHandle": "agent_aggregator-output-agentAgentflow",
+      "target": "agent_report",
+      "targetHandle": "agent_report-input",
+      "type": "buttonedge",
+      "id": "edge_agg_to_report",
+      "label": "aggregate"
+    },
+    {
+      "source": "agent_report",
+      "sourceHandle": "agent_report-output-agentAgentflow",
+      "target": "directReply_final",
+      "targetHandle": "directReply_final-input",
+      "type": "buttonedge",
+      "id": "edge_final_to_reply",
+      "label": "complete"
+    }
+  ]
+}

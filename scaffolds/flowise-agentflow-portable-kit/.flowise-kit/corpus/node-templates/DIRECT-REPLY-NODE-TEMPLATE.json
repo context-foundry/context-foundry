@@ -1,0 +1,50 @@
+{
+  "id": "directReplyAgentflow_0",
+  "position": {
+    "x": 1700,
+    "y": 300
+  },
+  "data": {
+    "id": "directReplyAgentflow_0",
+    "label": "Direct Reply",
+    "version": 1,
+    "name": "directReplyAgentflow",
+    "type": "DirectReply",
+    "color": "#4DDBBB",
+    "hideOutput": true,
+    "baseClasses": [
+      "DirectReply"
+    ],
+    "category": "Agent Flows",
+    "description": "Directly reply to the user with a message and terminate the workflow",
+    "inputParams": [
+      {
+        "label": "Message",
+        "name": "directReplyMessage",
+        "type": "string",
+        "rows": 4,
+        "acceptVariable": true,
+        "placeholder": "Type your message here or use variables like {{ $flow.state.result }}",
+        "description": "The message to send to the user. Supports variables and previous node outputs.",
+        "id": "directReplyAgentflow_0-input-directReplyMessage-string",
+        "display": true
+      }
+    ],
+    "inputAnchors": [],
+    "inputs": {
+      "directReplyMessage": ""
+    },
+    "outputAnchors": [],
+    "outputs": {},
+    "selected": false
+  },
+  "type": "agentFlow",
+  "width": 205,
+  "height": 67,
+  "selected": false,
+  "positionAbsolute": {
+    "x": 1700,
+    "y": 300
+  },
+  "dragging": false
+}

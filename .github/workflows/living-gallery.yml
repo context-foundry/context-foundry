@@ -16,7 +16,7 @@ permissions:
 jobs:
   generate:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
@@ -48,11 +48,12 @@ jobs:
             echo "No changes to commit"
             exit 0
           fi
-          SCENE_NAME=$(git diff --cached --name-only | grep '\.js$' | head -1 | xargs basename .js)
-          git commit -m "gallery: Generate scene ${SCENE_NAME}
-
-          Automated by Living Gallery workflow.
-          Model: claude-sonnet-4
-          "
+          SCENE_FILE=$(git diff --cached --name-only --diff-filter=AM | grep '^docs/scenes/.*\.js$' | head -1 || true)
+          if [ -n "$SCENE_FILE" ]; then
+            COMMIT_SUBJECT="gallery: Generate scene $(basename "$SCENE_FILE" .js)"
+          else
+            COMMIT_SUBJECT="gallery: Update living gallery metadata"
+          fi
+          git commit -m "$COMMIT_SUBJECT" -m "Automated by Living Gallery workflow." -m "Model: gpt-4o-mini"
           git pull --rebase
           git push

@@ -1,0 +1,54 @@
+{
+  "id": "stickyNoteAgentflow_0",
+  "type": "stickyNote",
+  "position": {
+    "x": 0,
+    "y": 0
+  },
+  "data": {
+    "id": "stickyNoteAgentflow_0",
+    "label": "Sticky Note",
+    "version": 1,
+    "name": "stickyNoteAgentflow",
+    "type": "StickyNote",
+    "color": "#fee440",
+    "baseClasses": [
+      "StickyNote"
+    ],
+    "category": "Agent Flows",
+    "description": "Add notes to the agent flow",
+    "inputParams": [
+      {
+        "label": "",
+        "name": "note",
+        "type": "string",
+        "rows": 1,
+        "placeholder": "Type something here",
+        "optional": true,
+        "id": "stickyNoteAgentflow_0-input-note-string",
+        "display": true
+      }
+    ],
+    "inputAnchors": [],
+    "inputs": {
+      "note": "PURPOSE:\nAdd your documentation note here to explain this part of the flow"
+    },
+    "outputAnchors": [
+      {
+        "id": "stickyNoteAgentflow_0-output-stickyNoteAgentflow",
+        "label": "Sticky Note",
+        "name": "stickyNoteAgentflow"
+      }
+    ],
+    "outputs": {},
+    "selected": false
+  },
+  "width": 215,
+  "height": 122,
+  "positionAbsolute": {
+    "x": 0,
+    "y": 0
+  },
+  "selected": false,
+  "dragging": false
+}

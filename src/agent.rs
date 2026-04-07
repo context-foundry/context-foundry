@@ -122,32 +122,55 @@ impl ModelProvider {
 
     /// Resolve the node CLI entry-point for this provider on Windows.
     /// Returns `Some(path)` if found, `None` otherwise.
+    ///
+    /// Tries two strategies:
+    /// 1. `where claude.cmd` -> sibling `node_modules/` (standard npm global)
+    /// 2. `npm root -g` -> global modules root (works with Volta, pnpm, fnm, nvm-windows)
     #[cfg(target_os = "windows")]
     fn resolve_node_cli(self) -> Option<std::path::PathBuf> {
         let cmd_name = match self {
             ModelProvider::Claude => "claude.cmd",
             ModelProvider::Codex => "codex.cmd",
         };
-        let output = std::process::Command::new("where")
+        let module = match self {
+            ModelProvider::Claude => "@anthropic-ai/claude-code/cli.js",
+            ModelProvider::Codex => "@anthropic-ai/codex/cli.js",
+        };
+
+        // Strategy 1: find .cmd via `where`, look for sibling node_modules
+        if let Ok(output) = std::process::Command::new("where")
             .arg(cmd_name)
             .output()
-            .ok()?;
-        if !output.status.success() {
-            return None;
+        {
+            if output.status.success() {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                if let Some(first_line) = stdout.lines().next() {
+                    let cmd_path = std::path::PathBuf::from(first_line.trim());
+                    if let Some(dir) = cmd_path.parent() {
+                        let cli_js = dir.join("node_modules").join(module);
+                        if cli_js.exists() {
+                            return Some(cli_js);
+                        }
+                    }
+                }
+            }
         }
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let cmd_path = std::path::PathBuf::from(stdout.lines().next()?.trim());
-        let dir = cmd_path.parent()?;
-        let module = match self {
-            ModelProvider::Claude => "node_modules/@anthropic-ai/claude-code/cli.js",
-            ModelProvider::Codex => "node_modules/@anthropic-ai/codex/cli.js",
-        };
-        let cli_js = dir.join(module);
-        if cli_js.exists() {
-            Some(cli_js)
-        } else {
-            None
+
+        // Strategy 2: ask npm for the global modules root (handles Volta, pnpm, fnm)
+        if let Ok(output) = std::process::Command::new("npm")
+            .args(["root", "-g"])
+            .output()
+        {
+            if output.status.success() {
+                let root = String::from_utf8_lossy(&output.stdout);
+                let cli_js = std::path::PathBuf::from(root.trim()).join(module);
+                if cli_js.exists() {
+                    return Some(cli_js);
+                }
+            }
         }
+
+        None
     }
 
     /// Builds a `CommandBuilder` for this provider (for PTY execution).
@@ -161,7 +184,18 @@ impl ModelProvider {
                 cmd.arg(cli_js.to_string_lossy().to_string());
                 return cmd;
             }
+            // Last resort: invoke via cmd.exe /c so .cmd wrappers are handled.
+            // portable_pty's CreateProcessW can't execute .cmd files directly.
+            eprintln!(
+                "[foundry] warning: could not resolve {} cli.js; using cmd.exe /c fallback",
+                self.slug()
+            );
+            let mut cmd = CommandBuilder::new("cmd");
+            cmd.arg("/c");
+            cmd.arg(self.slug());
+            return cmd;
         }
+        #[cfg(not(target_os = "windows"))]
         CommandBuilder::new(self.slug())
     }
 
@@ -1467,11 +1501,21 @@ fn read_provider_output(
 }
 
 fn parse_claude_provider_line(line: &str, model_name: &str) -> ParsedClaudeLine {
-    let v: Value = match serde_json::from_str(line) {
-        Ok(v) => v,
-        Err(_) => return ParsedClaudeLine::Unparsed,
-    };
-    parse_claude_json(&v, model_name)
+    // Fast path: try parsing raw line (works on Unix and clean PTY output)
+    if let Ok(v) = serde_json::from_str::<Value>(line) {
+        return parse_claude_json(&v, model_name);
+    }
+    // On Windows, ConPTY injects ANSI escape sequences (cursor visibility,
+    // bracketed paste, etc.) into the output stream. These appear at the start,
+    // end, or even mid-line within JSON events, making them unparseable.
+    // Strip ANSI and retry before giving up.
+    let cleaned = strip_ansi(line);
+    if !cleaned.is_empty() && cleaned != line {
+        if let Ok(v) = serde_json::from_str::<Value>(&cleaned) {
+            return parse_claude_json(&v, model_name);
+        }
+    }
+    ParsedClaudeLine::Unparsed
 }
 
 fn parse_claude_json(v: &Value, model_name: &str) -> ParsedClaudeLine {
@@ -2155,6 +2199,38 @@ mod tests {
     fn strip_ansi_stray_control_chars() {
         // BEL and other control chars outside escape sequences
         assert_eq!(strip_ansi("a\x07b\x08c"), "abc");
+    }
+
+    #[test]
+    fn parse_claude_line_strips_ansi_before_json() {
+        // Simulate ConPTY injecting cursor-hide before JSON
+        let line = "\x1b[?25l{\"type\":\"system\",\"subtype\":\"init\",\"session_id\":\"abc\"}";
+        match parse_claude_provider_line(line, "opus") {
+            ParsedClaudeLine::Event(_) | ParsedClaudeLine::Ignore => {} // parsed OK
+            ParsedClaudeLine::Unparsed => panic!("should have parsed after ANSI strip"),
+        }
+    }
+
+    #[test]
+    fn parse_claude_line_strips_ansi_wrapping_json() {
+        // ConPTY bracketed paste + cursor-show wrapping a full event
+        let line = "\x1b[?2004l{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"hello\"}]}}\x1b[?25h";
+        match parse_claude_provider_line(line, "opus") {
+            ParsedClaudeLine::Event(AgentOutputEvent::Text(t)) => {
+                assert_eq!(t, "hello");
+            }
+            other => panic!("expected Text event, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_claude_line_clean_json_fast_path() {
+        // Clean JSON without ANSI should still work (fast path)
+        let line = r#"{"type":"system","subtype":"init","session_id":"x"}"#;
+        match parse_claude_provider_line(line, "opus") {
+            ParsedClaudeLine::Unparsed => panic!("clean JSON should parse"),
+            _ => {}
+        }
     }
 
     #[test]

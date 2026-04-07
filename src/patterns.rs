@@ -57,7 +57,7 @@ struct PatternWrapper {
 }
 
 /// Expand `~/` prefix using $HOME environment variable.
-/// Falls back to /tmp/.foundry/patterns if HOME is unset (e.g., containers).
+/// Falls back to platform temp dir + .foundry/patterns if HOME is unset (e.g., containers).
 pub fn resolve_patterns_dir(config_str: &str) -> PathBuf {
     if let Some(rest) = config_str.strip_prefix("~/") {
         let base = if cfg!(target_os = "windows") {
@@ -70,9 +70,10 @@ pub fn resolve_patterns_dir(config_str: &str) -> PathBuf {
         if let Some(base) = base {
             return PathBuf::from(base).join(rest);
         }
-        // HOME unset — use /tmp fallback instead of literal ~/
-        eprintln!("warning: HOME not set, using /tmp/.foundry/patterns for pattern storage");
-        return PathBuf::from("/tmp/.foundry/patterns");
+        // HOME unset — use platform temp dir instead of literal ~/
+        let fallback = std::env::temp_dir().join(".foundry").join("patterns");
+        eprintln!("warning: HOME not set, using {} for pattern storage", fallback.display());
+        return fallback;
     }
     PathBuf::from(config_str)
 }

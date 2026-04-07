@@ -199,8 +199,9 @@ fn cache_dir() -> PathBuf {
     if let Some(base) = base {
         PathBuf::from(base).join(".foundry/cache")
     } else {
-        eprintln!("warning: HOME not set, using /tmp/.foundry/cache for embedding cache");
-        PathBuf::from("/tmp/.foundry/cache")
+        let fallback = std::env::temp_dir().join(".foundry").join("cache");
+        eprintln!("warning: HOME not set, using {} for embedding cache", fallback.display());
+        fallback
     }
 }
 
