@@ -15,15 +15,20 @@ pub struct PhaseIsolation {
 }
 
 /// Returns the list of files that must be hidden from the Research (R) phase.
-/// Hides TASKS.md and UPDATED_SPECS.md to enforce phase isolation -- Research
-/// answers questions based on codebase investigation, not task context.
-pub fn research_restricted_paths(tasks_path: &Path, updated_specs_path: &Path) -> Vec<PathBuf> {
+/// Hides TASKS.md, UPDATED_SPECS.md, and checkpoint.json to enforce phase isolation --
+/// Research answers questions based on codebase investigation, not task context.
+/// checkpoint.json contains the full task_desc which would defeat isolation.
+pub fn research_restricted_paths(tasks_path: &Path, updated_specs_path: &Path, buildloop_dir: &Path) -> Vec<PathBuf> {
     let mut paths = Vec::new();
     if tasks_path.exists() {
         paths.push(tasks_path.to_path_buf());
     }
     if updated_specs_path.exists() {
         paths.push(updated_specs_path.to_path_buf());
+    }
+    let checkpoint = buildloop_dir.join("checkpoint.json");
+    if checkpoint.exists() {
+        paths.push(checkpoint);
     }
     paths
 }
@@ -294,10 +299,29 @@ mod tests {
         fs::write(&tasks, "- [ ] T1.1: do stuff").unwrap();
         let updated_specs = dir.path().join("UPDATED_SPECS.md");
         fs::write(&updated_specs, "Enhancement request").unwrap();
-        let result = research_restricted_paths(&tasks, &updated_specs);
-        assert_eq!(result.len(), 2);
+        let buildloop = dir.path().join(".buildloop");
+        fs::create_dir_all(&buildloop).unwrap();
+        let checkpoint = buildloop.join("checkpoint.json");
+        fs::write(&checkpoint, r#"{"task_id":"T1","task_desc":"test","completed_stage":"query","timestamp":"2026-01-01T00:00:00Z"}"#).unwrap();
+        let result = research_restricted_paths(&tasks, &updated_specs, &buildloop);
+        assert_eq!(result.len(), 3);
         assert_eq!(result[0], tasks);
         assert_eq!(result[1], updated_specs);
+        assert_eq!(result[2], checkpoint);
+    }
+
+    #[test]
+    fn test_research_restricted_paths_without_checkpoint() {
+        let dir = tempfile::tempdir().unwrap();
+        let tasks = dir.path().join("TASKS.md");
+        fs::write(&tasks, "- [ ] T1.1: do stuff").unwrap();
+        let updated_specs = dir.path().join("UPDATED_SPECS.md");
+        // updated_specs does not exist
+        let buildloop = dir.path().join(".buildloop");
+        // buildloop does not exist, so checkpoint.json won't exist
+        let result = research_restricted_paths(&tasks, &updated_specs, &buildloop);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0], tasks);
     }
 
     #[test]

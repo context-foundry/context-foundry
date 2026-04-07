@@ -61,7 +61,11 @@ fn read_checkpoint(buildloop_dir: &std::path::Path) -> Option<Checkpoint> {
 }
 
 fn clear_checkpoint(buildloop_dir: &std::path::Path) {
-    let _ = std::fs::remove_file(buildloop_dir.join("checkpoint.json"));
+    if let Err(e) = std::fs::remove_file(buildloop_dir.join("checkpoint.json")) {
+        if e.kind() != std::io::ErrorKind::NotFound {
+            eprintln!("Warning: failed to remove checkpoint.json: {}", e);
+        }
+    }
 }
 
 /// Write accumulated budget telemetry to disk. Called before early returns
@@ -241,7 +245,11 @@ fn spawn_lookahead_planner(
             ))));
         } else {
             // Clean up partial plan file on failure.
-            let _ = std::fs::remove_file(&plan_path);
+            if let Err(e) = std::fs::remove_file(&plan_path) {
+                if e.kind() != std::io::ErrorKind::NotFound {
+                    eprintln!("Warning: failed to remove failed look-ahead plan {}: {}", plan_path.display(), e);
+                }
+            }
             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
                 "Look-ahead: planning failed for {} (will plan normally)",
                 task_id
@@ -296,8 +304,12 @@ fn restore_state_files(
 
     // Ensure .buildloop dir exists
     if !ctx.buildloop_dir.exists() {
-        let _ = std::fs::create_dir_all(&ctx.buildloop_dir);
-        let _ = std::fs::create_dir_all(&ctx.log_dir);
+        if let Err(e) = std::fs::create_dir_all(&ctx.buildloop_dir) {
+            eprintln!("Warning: failed to create buildloop dir during restore: {}", e);
+        }
+        if let Err(e) = std::fs::create_dir_all(&ctx.log_dir) {
+            eprintln!("Warning: failed to create log dir during restore: {}", e);
+        }
     }
 
     // Files where truncation (exists but empty/tiny) should also trigger restore.
@@ -322,7 +334,9 @@ fn restore_state_files(
 
         if needs_restore {
             if let Some(parent) = path.parent() {
-                let _ = std::fs::create_dir_all(parent);
+                if let Err(e) = std::fs::create_dir_all(parent) {
+                    eprintln!("Warning: failed to create parent dir {}: {}", parent.display(), e);
+                }
             }
             match atomic_write_file(path, content) {
                 Ok(()) => restored += 1,
@@ -1721,8 +1735,12 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
                     "Pausing after denied commit -- loop will stop after this task".to_string(),
                 )));
-                let _ = std::fs::create_dir_all(&ctx.buildloop_dir);
-                let _ = std::fs::write(ctx.buildloop_dir.join("stop"), "");
+                if let Err(e) = std::fs::create_dir_all(&ctx.buildloop_dir) {
+                    eprintln!("Warning: failed to create buildloop dir for stop file: {}", e);
+                }
+                if let Err(e) = std::fs::write(ctx.buildloop_dir.join("stop"), "") {
+                    eprintln!("Warning: failed to write stop file: {}", e);
+                }
             }
 
             // Collect build claims for targeted discovery
@@ -1788,7 +1806,11 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                     la.handle.abort();
                     let _ = std::fs::remove_file(lookahead_plan_path(&ctx, &la.task_id));
                 }
-                let _ = std::fs::remove_file(stop_file);
+                if let Err(e) = std::fs::remove_file(&stop_file) {
+                    if e.kind() != std::io::ErrorKind::NotFound {
+                        eprintln!("Warning: failed to remove stop file: {}", e);
+                    }
+                }
                 emit_session_ended!();
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Finished));
                 return;
@@ -1845,7 +1867,11 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                         )));
                         let stop_file = ctx.stop_file();
                         if stop_file.exists() {
-                            let _ = std::fs::remove_file(stop_file);
+                            if let Err(e) = std::fs::remove_file(&stop_file) {
+                                if e.kind() != std::io::ErrorKind::NotFound {
+                                    eprintln!("Warning: failed to remove stop file: {}", e);
+                                }
+                            }
                         }
                         emit_session_ended!();
                         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Finished));
@@ -1939,7 +1965,11 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                 )));
                 let stop_file = ctx.stop_file();
                 if stop_file.exists() {
-                    let _ = std::fs::remove_file(stop_file);
+                    if let Err(e) = std::fs::remove_file(&stop_file) {
+                        if e.kind() != std::io::ErrorKind::NotFound {
+                            eprintln!("Warning: failed to remove stop file: {}", e);
+                        }
+                    }
                 }
                 emit_session_ended!();
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Finished));
@@ -1971,7 +2001,11 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                     )));
                     let stop_file = ctx.stop_file();
                     if stop_file.exists() {
-                        let _ = std::fs::remove_file(stop_file);
+                        if let Err(e) = std::fs::remove_file(&stop_file) {
+                            if e.kind() != std::io::ErrorKind::NotFound {
+                                eprintln!("Warning: failed to remove stop file: {}", e);
+                            }
+                        }
                     }
                     emit_session_ended!();
                     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Finished));
@@ -1999,7 +2033,11 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                 )));
                 let stop_file = ctx.stop_file();
                 if stop_file.exists() {
-                    let _ = std::fs::remove_file(stop_file);
+                    if let Err(e) = std::fs::remove_file(&stop_file) {
+                        if e.kind() != std::io::ErrorKind::NotFound {
+                            eprintln!("Warning: failed to remove stop file: {}", e);
+                        }
+                    }
                 }
                 emit_session_ended!();
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Finished));
@@ -2380,18 +2418,54 @@ async fn process_task(
     let build_claims = ctx.buildloop_dir.join("build-claims.md");
     let mut eff_task_builder_provider = ctx.config.builder_provider.clone();
     let mut eff_task_builder_model = ctx.config.builder_model.clone();
+    // Stale artifact cleanup: failures here mean the next phase may read stale data.
+    // Log warnings so the root cause is visible.
+    let mut stale_cleanup_failures: Vec<String> = Vec::new();
     if !skip_qr && !checkpoint_skip_query {
-        let _ = std::fs::remove_file(&questions_file);
-        let _ = std::fs::remove_file(&research_report);
+        for path in [&questions_file, &research_report] {
+            if let Err(e) = std::fs::remove_file(path) {
+                if e.kind() != std::io::ErrorKind::NotFound {
+                    let name = path.file_name().unwrap_or_default().to_string_lossy();
+                    eprintln!("Warning: failed to remove stale {}: {}", name, e);
+                    stale_cleanup_failures.push(name.to_string());
+                }
+            }
+        }
     }
     if !checkpoint_skip_builder {
-        let _ = std::fs::remove_file(&build_claims);
+        if let Err(e) = std::fs::remove_file(&build_claims) {
+            if e.kind() != std::io::ErrorKind::NotFound {
+                eprintln!("Warning: failed to remove stale build-claims.md: {}", e);
+                stale_cleanup_failures.push("build-claims.md".to_string());
+            }
+        }
     }
     if !checkpoint_skip_planner {
-        let _ = std::fs::remove_file(&ctx.current_plan);
+        if let Err(e) = std::fs::remove_file(&ctx.current_plan) {
+            if e.kind() != std::io::ErrorKind::NotFound {
+                eprintln!("Warning: failed to remove stale current-plan.md: {}", e);
+                stale_cleanup_failures.push("current-plan.md".to_string());
+            }
+        }
     }
-    let _ = std::fs::remove_file(&ctx.review_report);
-    let _ = std::fs::remove_file(&patterns_extracted);
+    if let Err(e) = std::fs::remove_file(&ctx.review_report) {
+        if e.kind() != std::io::ErrorKind::NotFound {
+            eprintln!("Warning: failed to remove stale review-report.md: {}", e);
+            stale_cleanup_failures.push("review-report.md".to_string());
+        }
+    }
+    if let Err(e) = std::fs::remove_file(&patterns_extracted) {
+        if e.kind() != std::io::ErrorKind::NotFound {
+            eprintln!("Warning: failed to remove stale patterns-extracted.json: {}", e);
+            stale_cleanup_failures.push("patterns-extracted.json".to_string());
+        }
+    }
+    if !stale_cleanup_failures.is_empty() {
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+            "Warning: could not remove stale artifacts [{}] -- pipeline may read data from previous run",
+            stale_cleanup_failures.join(", ")
+        ))));
+    }
 
     let detected_stack = patterns::detect_project_tech_stack(&ctx.project_dir);
     let matched = if ctx.config.semantic_match_enabled {
@@ -2666,6 +2740,7 @@ async fn process_task(
                 let restricted = crate::isolation::research_restricted_paths(
                     &ctx.plan_path,
                     &ctx.updated_specs_path,
+                    &ctx.buildloop_dir,
                 );
                 match crate::isolation::PhaseIsolation::activate(&restricted) {
                     Ok(iso) => Some(iso),
