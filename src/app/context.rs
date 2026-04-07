@@ -101,6 +101,8 @@ pub(super) struct RunContext {
     pub(super) commit_approval_gate: Arc<SyncFlag>,
     /// Result: true = approved (feat), false = denied (WIP). Only valid when gate is cleared.
     pub(super) commit_approval_result: Arc<SyncFlag>,
+    /// Claude CLI version, detected once at session start.
+    pub(super) cc_version: String,
 }
 
 impl RunContext {
@@ -131,6 +133,7 @@ impl RunContext {
             session_cost_millicents: Arc::new(std::sync::atomic::AtomicU64::new(0)),
             commit_approval_gate: Arc::new(SyncFlag::new(false)),
             commit_approval_result: Arc::new(SyncFlag::new(false)),
+            cc_version: crate::agent::detect_cc_version(),
         }
     }
 

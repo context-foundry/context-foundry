@@ -496,8 +496,8 @@ async fn run_multipass_pr_review(
     log_dir: &Path,
     review_report: &Path,
     review_report_relative: &str,
+    cc_version: String,
 ) -> (Result<AgentResult>, AgentUsage, serde_json::Value, usize) {
-    let cc_version = crate::agent::detect_cc_version();
     let file_diffs = split_diff_by_file(diff);
     let diff_map: std::collections::HashMap<&str, &str> = file_diffs
         .iter()
@@ -949,6 +949,7 @@ pub async fn run(
             &log_dir,
             &review_report,
             &review_report_relative,
+            cc_version.clone(),
         )
         .await;
         (res, usg, Some(pf), reviewable_count)

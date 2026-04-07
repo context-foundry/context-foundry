@@ -1458,6 +1458,14 @@ fn read_pty_output(
                         });
                     }
                     ParsedClaudeLine::Ignore => {
+                        // Valid JSON parsed -- update last_parsed_event_at so the
+                        // tertiary idle check doesn't fire for thinking-only assistant
+                        // messages (which are valid JSON with no displayable content).
+                        {
+                            let mut guard =
+                                progress.lock().unwrap_or_else(|p| p.into_inner());
+                            guard.record_parsed_event_at(Instant::now());
+                        }
                         // Drain usage even when the Result event itself was suppressed
                         LAST_RESULT_USAGE.with(|cell| {
                             if let Some(usage) = cell.take() {
@@ -2441,6 +2449,36 @@ mod tests {
         // At 71s: last_parsed_event_at = 10s (61s ago > timeout), raw at 65s (6s ago).
         // Tertiary fires.
         assert!(state.is_truly_idle(start + Duration::from_secs(71), timeout));
+    }
+
+    #[test]
+    fn test_ignore_events_refresh_last_parsed_event_at_preventing_tertiary_idle() {
+        // Simulates the PTY path where the agent emits valid-but-ignored JSON events
+        // (thinking-only assistant messages, empty results). These are ParsedClaudeLine::Ignore
+        // events that should refresh last_parsed_event_at to prevent spurious tertiary idle.
+        let start = Instant::now();
+        let mut state = ProviderProgressState::new(start);
+        let timeout = Duration::from_secs(60);
+
+        // Raw bytes arrive continuously (agent is alive)
+        state.record_raw_bytes_at(start + Duration::from_secs(30));
+        state.record_progress_at(start + Duration::from_secs(30));
+
+        // An Ignore event arrives at 40s -- this is the record_parsed_event_at call
+        // that the PTY Ignore handler must make.
+        state.record_parsed_event_at(start + Duration::from_secs(40));
+
+        // More raw bytes at 55s
+        state.record_raw_bytes_at(start + Duration::from_secs(55));
+        state.record_progress_at(start + Duration::from_secs(55));
+
+        // At 95s: last_parsed_event_at = 40s (55s ago < 60s timeout).
+        // Tertiary should NOT fire because the Ignore event refreshed last_parsed_event_at.
+        assert!(!state.is_truly_idle(start + Duration::from_secs(95), timeout));
+
+        // At 101s: last_parsed_event_at = 40s (61s ago > timeout), raw at 55s (46s ago < timeout).
+        // NOW tertiary fires because no new parsed event (including Ignore) arrived.
+        assert!(state.is_truly_idle(start + Duration::from_secs(101), timeout));
     }
 
     #[test]

@@ -24,7 +24,7 @@ pub(super) async fn run_review_loop(
     extension_context: &str,
     tx: &mpsc::UnboundedSender<AppEvent>,
 ) -> (bool, usize, (usize, usize, usize), Option<budget::PhaseBudgetRecord>) {
-    let cc_version = crate::agent::detect_cc_version();
+    let cc_version = ctx.cc_version.clone();
     let files_changed = get_changed_files(&ctx.project_dir);
     if files_changed.is_empty() {
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
@@ -445,7 +445,7 @@ async fn run_multipass_review(
     diff_for_review: Option<&str>,
     semgrep_findings: &str,
 ) -> (bool, usize, (usize, usize, usize), Option<budget::PhaseBudgetRecord>, AgentUsage) {
-    let cc_version = crate::agent::detect_cc_version();
+    let cc_version = ctx.cc_version.clone();
     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
         "Multi-pass review: {} files exceed threshold ({}), running per-file analysis",
         files_changed.len(),

@@ -607,7 +607,7 @@ async fn run_parallel_builder(
     groups: &[Vec<usize>],
     extension_context: &str,
 ) -> (bool, bool, AgentUsage) {
-    let cc_version = crate::agent::detect_cc_version();
+    let cc_version = ctx.cc_version.clone();
     let task_id = &task_info.id;
     let task_desc = &task_info.description;
     let total_slots = groups.len();
@@ -1410,7 +1410,7 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
 
     // ─── Observatory Session ─────────────────────────────────────
     let session_id = observatory::generate_session_id();
-    let cc_version = crate::agent::detect_cc_version();
+    let cc_version = ctx.cc_version.clone();
     let mut ctx = ctx;
     ctx.session_id = session_id.clone();
     let loop_start = std::time::Instant::now();
@@ -2212,7 +2212,7 @@ async fn process_task(
     patterns_dir: &std::path::Path,
     extension_context: &str,
 ) -> (bool, bool, bool) {
-    let cc_version = crate::agent::detect_cc_version();
+    let cc_version = ctx.cc_version.clone();
     // Handle dual selection: Both forks two full pipelines, First/Second
     // resolve an effective single-pipeline config before any stage starts.
     let dual_sel = DualSelection::from_str(&ctx.config.dual_selection);
