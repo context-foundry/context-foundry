@@ -190,5 +190,17 @@
     "cost_usd": 0.0034,
     "retries": 1,
     "validation": "pass"
+  },
+  {
+    "ts": "2026-04-07T15:47:36.878Z",
+    "scene": "ssh-tunnel-to-paradise.js",
+    "seed_id": "ssh-tunnel-to-paradise",
+    "biome": "underground",
+    "model": "gpt-4o-mini",
+    "input_tokens": 7418,
+    "output_tokens": 807,
+    "cost_usd": 0.0016,
+    "retries": 0,
+    "validation": "pass"
   }
 ]

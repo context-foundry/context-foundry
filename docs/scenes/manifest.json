@@ -197,6 +197,16 @@
       "model": "gpt-4o-mini",
       "lines": 94,
       "generation": 20
+    },
+    {
+      "file": "ssh-tunnel-to-paradise.js",
+      "name": "SSH Tunnel to Paradise",
+      "location": "Phong Nha Cave, Quang Binh, Vietnam",
+      "biome": "underground",
+      "generated": "2026-04-07T15:47:36.877Z",
+      "model": "gpt-4o-mini",
+      "lines": 82,
+      "generation": 21
     }
   ]
 }
