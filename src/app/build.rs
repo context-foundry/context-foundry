@@ -3042,7 +3042,7 @@ async fn process_task(
             result.partial_results.push("research-report.md".to_string());
         }
         stage_results.push(result);
-    } else if !skip_research && stage_results.last().map(|r| r.stage.as_str()) != Some("Research") {
+    } else if !skip_research && !query_failed && stage_results.last().map(|r| r.stage.as_str()) != Some("Research") {
         let mut result = StageResult::success("Research", &format!("Investigate codebase for {}", task_id));
         if research_report.exists() {
             result.partial_results.push("research-report.md".to_string());
@@ -3051,12 +3051,12 @@ async fn process_task(
     }
 
     // Checkpoint: research completed
-    if !checkpoint_skip_research && !skip_research {
+    if !checkpoint_skip_research && !skip_research && !query_failed {
         write_checkpoint(&ctx.buildloop_dir, task_id, task_desc, "research");
     }
 
     // Gate: research-report.md must exist before planner proceeds (unless Q+R was skipped)
-    if !skip_research && !research_report.exists() {
+    if !skip_research && !query_failed && !research_report.exists() {
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
             "Research report missing for {} -- planner will proceed without it",
             task_id
@@ -3066,7 +3066,7 @@ async fn process_task(
     // Helper: progress indicator characters.
     // Checkpoint-resumed stages count as "ran" for progress indicators.
     let query_char = if skip_query && !checkpoint_skip_query { "-" } else { "Q" };
-    let research_char = if skip_research && !checkpoint_skip_research { "-" } else { "R" };
+    let research_char = if (skip_research && !checkpoint_skip_research) || query_failed { "-" } else { "R" };
     let planner_char = if skip_planner && !checkpoint_skip_planner { "-" } else { "P" };
 
     if skip_planner {
