@@ -678,7 +678,12 @@ impl Config {
         });
         value["preview_wrap"] = serde_json::json!(wrap);
         let json = serde_json::to_string_pretty(&value).unwrap_or_default();
-        let _ = crate::utils::atomic_write_file(&config_path, json.as_bytes());
+        if let Err(e) = crate::utils::atomic_write_file(&config_path, json.as_bytes()) {
+            eprintln!(
+                "warning: failed to save preview_wrap to {} -- change will not persist across restarts: {e}",
+                config_path.display(),
+            );
+        }
     }
 
     pub fn save_extensions(project_dir: &Path, extensions: &[String]) {
@@ -693,7 +698,12 @@ impl Config {
         });
         value["extensions"] = serde_json::json!(extensions);
         let json = serde_json::to_string_pretty(&value).unwrap_or_default();
-        let _ = crate::utils::atomic_write_file(&config_path, json.as_bytes());
+        if let Err(e) = crate::utils::atomic_write_file(&config_path, json.as_bytes()) {
+            eprintln!(
+                "warning: failed to save extensions to {} -- change will not persist across restarts: {e}",
+                config_path.display(),
+            );
+        }
     }
 
     /// Persist the run_mode to .foundry.json without overwriting other config fields.
@@ -715,7 +725,12 @@ impl Config {
             obj.remove("mode");
         }
         let json = serde_json::to_string_pretty(&value).unwrap_or_default();
-        let _ = crate::utils::atomic_write_file(&config_path, json.as_bytes());
+        if let Err(e) = crate::utils::atomic_write_file(&config_path, json.as_bytes()) {
+            eprintln!(
+                "warning: failed to save run_mode to {} -- change will not persist across restarts: {e}",
+                config_path.display(),
+            );
+        }
     }
 
     pub fn save_dual_selection(project_dir: &Path, selection: &str) {
@@ -730,7 +745,12 @@ impl Config {
         });
         value["dual_selection"] = serde_json::json!(selection);
         let json = serde_json::to_string_pretty(&value).unwrap_or_default();
-        let _ = crate::utils::atomic_write_file(&config_path, json.as_bytes());
+        if let Err(e) = crate::utils::atomic_write_file(&config_path, json.as_bytes()) {
+            eprintln!(
+                "warning: failed to save dual_selection to {} -- change will not persist across restarts: {e}",
+                config_path.display(),
+            );
+        }
     }
 
     fn model_provider_hint(model: &str) -> Option<ModelProvider> {
