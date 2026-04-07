@@ -2816,4 +2816,296 @@ mod tests {
             );
         }
     }
+
+    // ─── Malformed stream-json input tests ─────────────────────────
+
+    #[test]
+    fn malformed_json_missing_type_field() {
+        let json = r#"{"message":"no type field here"}"#;
+        assert!(matches!(
+            parse_claude_provider_line(json, "claude"),
+            ParsedClaudeLine::Unparsed
+        ));
+    }
+
+    #[test]
+    fn malformed_json_null_type_field() {
+        let json = r#"{"type":null}"#;
+        assert!(matches!(
+            parse_claude_provider_line(json, "claude"),
+            ParsedClaudeLine::Unparsed
+        ));
+    }
+
+    #[test]
+    fn malformed_json_numeric_type_field() {
+        let json = r#"{"type":42}"#;
+        assert!(matches!(
+            parse_claude_provider_line(json, "claude"),
+            ParsedClaudeLine::Unparsed
+        ));
+    }
+
+    #[test]
+    fn malformed_json_unknown_type_renders_as_text() {
+        let json = r#"{"type":"banana","message":"unexpected"}"#;
+        match parse_claude_provider_line(json, "claude") {
+            ParsedClaudeLine::Event(AgentOutputEvent::Text(t)) => {
+                assert!(t.contains("[banana]"), "expected [banana] label, got: {}", t);
+            }
+            other => panic!("expected Text event with [banana], got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn malformed_assistant_missing_message_field() {
+        let json = r#"{"type":"assistant"}"#;
+        assert!(matches!(
+            parse_claude_provider_line(json, "claude"),
+            ParsedClaudeLine::Ignore
+        ));
+    }
+
+    #[test]
+    fn malformed_assistant_missing_content_array() {
+        let json = r#"{"type":"assistant","message":{}}"#;
+        assert!(matches!(
+            parse_claude_provider_line(json, "claude"),
+            ParsedClaudeLine::Ignore
+        ));
+    }
+
+    #[test]
+    fn malformed_assistant_empty_content_array() {
+        let json = r#"{"type":"assistant","message":{"content":[]}}"#;
+        assert!(matches!(
+            parse_claude_provider_line(json, "claude"),
+            ParsedClaudeLine::Ignore
+        ));
+    }
+
+    #[test]
+    fn malformed_assistant_content_not_array() {
+        let json = r#"{"type":"assistant","message":{"content":"not an array"}}"#;
+        assert!(matches!(
+            parse_claude_provider_line(json, "claude"),
+            ParsedClaudeLine::Ignore
+        ));
+    }
+
+    #[test]
+    fn malformed_content_block_missing_type() {
+        let json = r#"{"type":"assistant","message":{"content":[{"text":"hello"}]}}"#;
+        assert!(matches!(
+            parse_claude_provider_line(json, "claude"),
+            ParsedClaudeLine::Ignore
+        ));
+    }
+
+    #[test]
+    fn malformed_content_block_unknown_type() {
+        let json = r#"{"type":"assistant","message":{"content":[{"type":"unknown_block","data":"stuff"}]}}"#;
+        assert!(matches!(
+            parse_claude_provider_line(json, "claude"),
+            ParsedClaudeLine::Ignore
+        ));
+    }
+
+    #[test]
+    fn malformed_tool_use_missing_name_defaults_to_unknown() {
+        let json = r#"{"type":"assistant","message":{"content":[{"type":"tool_use","input":{"file_path":"/tmp/x"}}]}}"#;
+        match parse_claude_provider_line(json, "claude") {
+            ParsedClaudeLine::Event(AgentOutputEvent::ToolUse { tool, .. }) => {
+                assert_eq!(tool, "unknown");
+            }
+            other => panic!("expected ToolUse with tool=unknown, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn malformed_tool_use_missing_input() {
+        let json = r#"{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Read"}]}}"#;
+        match parse_claude_provider_line(json, "claude") {
+            ParsedClaudeLine::Event(AgentOutputEvent::ToolUse {
+                tool,
+                input_preview,
+            }) => {
+                assert_eq!(tool, "Read");
+                assert!(input_preview.is_empty(), "expected empty input_preview, got: {}", input_preview);
+            }
+            other => panic!("expected ToolUse with empty input, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn malformed_text_block_missing_text_field() {
+        let json = r#"{"type":"assistant","message":{"content":[{"type":"text"}]}}"#;
+        assert!(matches!(
+            parse_claude_provider_line(json, "claude"),
+            ParsedClaudeLine::Ignore
+        ));
+    }
+
+    #[test]
+    fn malformed_text_block_empty_text() {
+        let json = r#"{"type":"assistant","message":{"content":[{"type":"text","text":""}]}}"#;
+        assert!(matches!(
+            parse_claude_provider_line(json, "claude"),
+            ParsedClaudeLine::Ignore
+        ));
+    }
+
+    #[test]
+    fn malformed_user_message_missing_content() {
+        let json = r#"{"type":"user","message":{}}"#;
+        assert!(matches!(
+            parse_claude_provider_line(json, "claude"),
+            ParsedClaudeLine::Ignore
+        ));
+    }
+
+    #[test]
+    fn malformed_user_message_missing_message() {
+        let json = r#"{"type":"user"}"#;
+        assert!(matches!(
+            parse_claude_provider_line(json, "claude"),
+            ParsedClaudeLine::Ignore
+        ));
+    }
+
+    #[test]
+    fn malformed_result_missing_everything() {
+        LAST_TURN_INPUT_TOKENS.with(|c| c.set(0));
+        LAST_RESULT_USAGE.with(|c| c.set(None));
+        let json = r#"{"type":"result"}"#;
+        let event = parse_stream_event(json);
+        // extract_first_string fallback finds "result" (the type value), so this
+        // returns Some(Result("result")) rather than None. The key point is no crash.
+        assert!(event.is_some(), "minimal result should not crash");
+        let usage = LAST_RESULT_USAGE.with(|c| c.take());
+        assert!(usage.is_some(), "LAST_RESULT_USAGE should still be set even with missing fields");
+    }
+
+    #[test]
+    fn malformed_result_missing_usage() {
+        LAST_TURN_INPUT_TOKENS.with(|c| c.set(0));
+        LAST_RESULT_USAGE.with(|c| c.set(None));
+        let json = r#"{"type":"result","subtype":"success","result":"done"}"#;
+        let event = parse_stream_event(json);
+        match event {
+            Some(AgentOutputEvent::Result(text)) => assert_eq!(text, "done"),
+            other => panic!("expected Result(\"done\"), got {:?}", other),
+        }
+        let usage = LAST_RESULT_USAGE.with(|c| c.take());
+        match usage {
+            Some(u) => {
+                assert_eq!(u.cost_usd, 0.0);
+                assert_eq!(u.input_tokens, 0);
+                assert_eq!(u.output_tokens, 0);
+            }
+            None => panic!("LAST_RESULT_USAGE should be Some with zero values"),
+        }
+    }
+
+    #[test]
+    fn malformed_system_empty_body() {
+        let json = r#"{"type":"system"}"#;
+        assert!(matches!(
+            parse_claude_provider_line(json, "claude"),
+            ParsedClaudeLine::Ignore
+        ));
+    }
+
+    #[test]
+    fn malformed_system_error_subtype_no_message() {
+        let json = r#"{"type":"system","subtype":"error_something"}"#;
+        match parse_claude_provider_line(json, "claude") {
+            ParsedClaudeLine::Event(AgentOutputEvent::Stderr(text)) => {
+                assert!(
+                    text.contains("error_something"),
+                    "expected error_something in stderr text, got: {}",
+                    text
+                );
+            }
+            other => panic!("expected Stderr with error_something, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn malformed_truncated_json() {
+        let json = r#"{"type":"assistant","message":{"content":[{"type":"te"#;
+        assert!(matches!(
+            parse_claude_provider_line(json, "claude"),
+            ParsedClaudeLine::Unparsed
+        ));
+    }
+
+    #[test]
+    fn malformed_not_json_at_all() {
+        let line = "This is not JSON at all";
+        assert!(matches!(
+            parse_claude_provider_line(line, "claude"),
+            ParsedClaudeLine::Unparsed
+        ));
+    }
+
+    #[test]
+    fn malformed_json_array_instead_of_object() {
+        let json = r#"[1, 2, 3]"#;
+        assert!(matches!(
+            parse_claude_provider_line(json, "claude"),
+            ParsedClaudeLine::Unparsed
+        ));
+    }
+
+    #[test]
+    fn malformed_error_event_missing_message() {
+        let json = r#"{"type":"error"}"#;
+        // extract_string_by_keys falls back to extract_first_string, which finds
+        // "error" (the value of "type") via map.values() scan. So the Stderr text
+        // is "error", not the fallback message. The key point is no crash.
+        match parse_claude_provider_line(json, "claude") {
+            ParsedClaudeLine::Event(AgentOutputEvent::Stderr(text)) => {
+                assert!(
+                    !text.is_empty(),
+                    "expected non-empty stderr text for error event",
+                );
+            }
+            other => panic!("expected Stderr event, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn malformed_rate_limit_null_message() {
+        let json = r#"{"type":"rate_limit_event","message":null}"#;
+        match parse_stream_event(json) {
+            Some(AgentOutputEvent::Text(t)) => {
+                assert!(
+                    t.contains("API rate limited"),
+                    "expected rate limit fallback text, got: {}",
+                    t
+                );
+            }
+            other => panic!("expected Text with rate limit message, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn malformed_codex_not_json() {
+        let line = "not json at all";
+        assert!(parse_codex_event(line, "gpt-5.4").is_none());
+    }
+
+    #[test]
+    fn malformed_codex_empty_object() {
+        let json = "{}";
+        assert!(parse_codex_event(json, "gpt-5.4").is_none());
+    }
+
+    #[test]
+    fn malformed_tool_result_empty_content() {
+        let json = r#"{"type":"user","message":{"content":[{"type":"tool_result","content":"","is_error":false}]}}"#;
+        let event = parse_stream_event(json);
+        assert!(event.is_none(), "empty tool_result content should return None");
+    }
 }
