@@ -18,6 +18,8 @@ use tokio::sync::mpsc;
 #[derive(Debug, Clone, PartialEq)]
 pub enum AgentRole {
     Scout,
+    Query,
+    Research,
     Planner,
     Builder,
     Reviewer,
@@ -30,6 +32,8 @@ impl std::fmt::Display for AgentRole {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             AgentRole::Scout => write!(f, "SCOUT"),
+            AgentRole::Query => write!(f, "QUERY"),
+            AgentRole::Research => write!(f, "RESEARCH"),
             AgentRole::Planner => write!(f, "PLAN"),
             AgentRole::Builder => write!(f, "IMPLEMENT"),
             AgentRole::Reviewer => write!(f, "VERIFY"),
@@ -46,6 +50,8 @@ impl std::fmt::Display for AgentRole {
 pub fn allowed_tools_for_role(role: &AgentRole) -> &'static [&'static str] {
     match role {
         AgentRole::Scout => &["Read", "Glob", "Grep", "Bash", "WebFetch", "WebSearch"],
+        AgentRole::Query => &["Read", "Glob", "Grep", "Bash", "WebFetch", "WebSearch"],
+        AgentRole::Research => &["Read", "Glob", "Grep", "Bash", "WebFetch", "WebSearch"],
         AgentRole::Planner => &["Read", "Glob", "Grep", "Edit", "Write"],
         AgentRole::PlanReview => &["Read", "Glob", "Grep", "Edit", "Write"],
         AgentRole::Builder => &["Bash", "Edit", "Write", "Read", "Glob", "Grep", "NotebookEdit", "WebFetch", "WebSearch"],

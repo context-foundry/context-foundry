@@ -20,6 +20,8 @@ fn default_budget_overrun_threshold() -> u8 {
 #[serde(default)]
 pub struct Config {
     pub scout_model: String,
+    pub query_model: String,
+    pub research_model: String,
     pub planner_model: String,
     pub builder_model: String,
     /// Dual-model execution: e.g. ["claude:opus", "codex:"].
@@ -35,6 +37,8 @@ pub struct Config {
 
     /// Provider per build-loop role: "claude" (default) or "codex".
     pub scout_provider: String,
+    pub query_provider: String,
+    pub research_provider: String,
     pub planner_provider: String,
     pub builder_provider: String,
     pub reviewer_provider: String,
@@ -315,6 +319,8 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             scout_model: "sonnet".into(),
+            query_model: "sonnet".into(),
+            research_model: "sonnet".into(),
             planner_model: "opus".into(),
             builder_model: "opus".into(),
             builder_models: Vec::new(),
@@ -324,6 +330,8 @@ impl Default for Config {
             discovery_model: "opus".into(),
 
             scout_provider: "claude".into(),
+            query_provider: "claude".into(),
+            research_provider: "claude".into(),
             planner_provider: "claude".into(),
             builder_provider: "claude".into(),
             reviewer_provider: "claude".into(),
@@ -483,6 +491,8 @@ impl Config {
         if !self.model.is_empty() {
             let m = self.model.clone();
             self.scout_model = m.clone();
+            self.query_model = m.clone();
+            self.research_model = m.clone();
             self.planner_model = m.clone();
             self.builder_model = m.clone();
             self.reviewer_model = m.clone();
@@ -760,12 +770,16 @@ impl Config {
         let provider_kind = Self::parse_provider(&provider);
         let mut config = self.clone();
         config.scout_provider = provider.clone();
+        config.query_provider = provider.clone();
+        config.research_provider = provider.clone();
         config.planner_provider = provider.clone();
         config.builder_provider = provider.clone();
         config.reviewer_provider = provider.clone();
         config.fixer_provider = provider.clone();
         config.discovery_provider = provider.clone();
         config.scout_model = Self::normalize_model_for_provider(provider_kind, &self.scout_model);
+        config.query_model = Self::normalize_model_for_provider(provider_kind, &self.query_model);
+        config.research_model = Self::normalize_model_for_provider(provider_kind, &self.research_model);
         config.planner_model =
             Self::normalize_model_for_provider(provider_kind, &self.planner_model);
         config.builder_model = model;
@@ -802,6 +816,8 @@ impl Config {
     pub fn role_configs(&self) -> Vec<(&str, &str, &str)> {
         vec![
             ("Scout", &self.scout_provider, &self.scout_model),
+            ("Query", &self.query_provider, &self.query_model),
+            ("Research", &self.research_provider, &self.research_model),
             ("Plan", &self.planner_provider, &self.planner_model),
             ("Implement", &self.builder_provider, &self.builder_model),
             ("Reviewer", &self.reviewer_provider, &self.reviewer_model),

@@ -149,6 +149,7 @@ RULES:
     )
 }
 
+#[allow(dead_code)]
 pub fn scout_prompt(
     task_id: &str,
     task_desc: &str,
@@ -205,6 +206,116 @@ RULES:
     )
 }
 
+pub fn query_prompt(
+    task_id: &str,
+    task_desc: &str,
+    task_complexity: &str,
+    max_questions: usize,
+    updated_specs: Option<&str>,
+    spec_file: &str,
+    tasks_file: &str,
+) -> String {
+    let updated_specs_block = updated_specs
+        .filter(|s| !s.trim().is_empty())
+        .map(|specs| format!("\nUPDATED SPECS (user's latest enhancement request):\n{specs}\n"))
+        .unwrap_or_default();
+
+    format!(
+        r#"You are the QUERY agent for an autonomous build loop.
+
+Task ID: {task_id}
+Task Description: {task_desc}
+Task Complexity: {task_complexity}
+{updated_specs_block}
+YOUR JOB: Generate a list of {max_questions} specific questions that must be answered
+by investigating the codebase BEFORE an implementation plan can be written.
+
+You do NOT have access to the project's source code. You only have the task description
+and TASKS.md context. Based on what would need to be true about the codebase for this
+task to succeed, generate questions that a Research agent (with full codebase access)
+must answer.
+
+Read {spec_file} if it exists for project context.
+Read {tasks_file} to understand what has been built already and what is pending.
+
+WRITE your questions to .buildloop/questions.md using this exact format:
+
+# Questions for: {task_id}
+
+## Q1: [question text]
+- priority: HIGH | MEDIUM | LOW
+- rationale: [why this must be answered before planning]
+
+## Q2: [question text]
+- priority: HIGH | MEDIUM | LOW
+- rationale: [why this must be answered before planning]
+
+[continue for each question]
+
+QUESTION GUIDELINES:
+- Ask about existing patterns, conventions, and architecture decisions relevant to the task
+- Ask about specific files, functions, or modules that the task will touch or depend on
+- Ask about potential conflicts, dependencies, or constraints
+- Ask about existing test patterns and build/lint configurations
+- Do NOT ask about things already stated in the task description
+- Do NOT ask implementation questions ("how should we...") -- ask investigation questions ("what does the codebase currently...")
+- Each question must be answerable by reading code, running commands, or checking file structure
+- Prioritize: HIGH = blocks planning entirely, MEDIUM = affects approach, LOW = nice to know
+
+BUDGET: Generate between 3 and {max_questions} questions. Prefer fewer, higher-quality questions.
+
+RULES:
+- Do NOT read any source code files (you do not have codebase access in this phase)
+- Do NOT implement anything
+- Do NOT read files in .buildloop/logs/
+- Write ONLY to .buildloop/questions.md"#
+    )
+}
+
+pub fn research_prompt(task_id: &str) -> String {
+    format!(
+        r#"You are the RESEARCH agent for an autonomous build loop.
+
+YOUR JOB: Read .buildloop/questions.md and answer every question by investigating the codebase.
+You have full access to the project's source code, build system, and file structure.
+
+IMPORTANT: You do NOT know what task is being planned. You only have the questions.
+Answer each question based purely on what you find in the codebase. Do not speculate
+about implementation approaches -- report what EXISTS, not what SHOULD exist.
+
+WRITE your answers to .buildloop/research-report.md using this exact format:
+
+# Research Report: {task_id}
+
+## Q1: [copy the question text from questions.md]
+**Answer:** [detailed answer based on code investigation]
+**Evidence:**
+- [file:line -- relevant code snippet or finding]
+- [file:line -- additional evidence if needed]
+
+## Q2: [copy the question text from questions.md]
+**Answer:** [detailed answer based on code investigation]
+**Evidence:**
+- [file:line -- relevant code snippet or finding]
+
+[continue for ALL questions in questions.md]
+
+## Additional Findings
+[anything important you discovered during investigation that was NOT asked about
+but is relevant to the questions' domain -- architecture gotchas, hidden dependencies,
+naming conventions, etc. Keep this brief.]
+
+RULES:
+- Do NOT modify any project files -- investigation only
+- Do NOT implement anything
+- Do NOT read files in .buildloop/logs/
+- Answer ALL questions, even if the answer is "not found" or "does not exist"
+- Cite specific file paths and line numbers for every claim
+- Include short code snippets (3-10 lines) as evidence when relevant
+- Do NOT speculate about what should be built -- only report what exists"#
+    )
+}
+
 pub fn planner_prompt(
     task_id: &str,
     task_desc: &str,
@@ -237,10 +348,10 @@ Write for machine consumption: be explicit, structured, and deterministic.
 Eliminate all ambiguity — the builder should never need to make judgment calls.
 
 INSTRUCTIONS:
-1. Read .buildloop/scout-report.md first — a scout agent already investigated the codebase for this task
+1. Read .buildloop/research-report.md first — a research agent already investigated the codebase for this task
 2. Read {spec_file} for the relevant sections
 3. Read {tasks_file} to understand where this task fits
-4. If the scout report is missing, look at existing code yourself to understand what's built
+4. If the research report is missing, look at existing code yourself to understand what's built
 5. Write a structured implementation plan to .buildloop/current-plan.md
 
 PLAN FORMAT — Use this exact structure in .buildloop/current-plan.md:

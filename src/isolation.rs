@@ -15,12 +15,15 @@ pub struct PhaseIsolation {
 }
 
 /// Returns the list of files that must be hidden from the Research (R) phase.
-/// Not yet called -- infrastructure for QRPID R-phase isolation.
-#[allow(dead_code)]
-pub fn research_restricted_paths(tasks_path: &Path) -> Vec<PathBuf> {
+/// Hides TASKS.md and UPDATED_SPECS.md to enforce phase isolation -- Research
+/// answers questions based on codebase investigation, not task context.
+pub fn research_restricted_paths(tasks_path: &Path, updated_specs_path: &Path) -> Vec<PathBuf> {
     let mut paths = Vec::new();
     if tasks_path.exists() {
         paths.push(tasks_path.to_path_buf());
+    }
+    if updated_specs_path.exists() {
+        paths.push(updated_specs_path.to_path_buf());
     }
     paths
 }
@@ -275,9 +278,12 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let tasks = dir.path().join("TASKS.md");
         fs::write(&tasks, "- [ ] T1.1: do stuff").unwrap();
-        let result = research_restricted_paths(&tasks);
-        assert_eq!(result.len(), 1);
+        let updated_specs = dir.path().join("UPDATED_SPECS.md");
+        fs::write(&updated_specs, "Enhancement request").unwrap();
+        let result = research_restricted_paths(&tasks, &updated_specs);
+        assert_eq!(result.len(), 2);
         assert_eq!(result[0], tasks);
+        assert_eq!(result[1], updated_specs);
     }
 
     #[test]

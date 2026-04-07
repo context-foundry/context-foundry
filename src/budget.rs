@@ -35,6 +35,8 @@ impl BudgetTargets {
     pub fn target_for_role(&self, role: &AgentRole) -> Option<u8> {
         match role {
             AgentRole::Scout => Some(self.scout),
+            AgentRole::Query => Some(self.scout),
+            AgentRole::Research => Some(self.scout),
             AgentRole::Planner => Some(self.planner),
             AgentRole::Builder => Some(self.builder),
             AgentRole::Reviewer => Some(self.reviewer),

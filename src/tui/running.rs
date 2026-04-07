@@ -478,6 +478,8 @@ pub(super) fn render_agent_output(
     } else if let Some((ref role, _)) = state.current_agent {
         let color = match role {
             AgentRole::Scout => Color::LightBlue,
+            AgentRole::Query => Color::LightCyan,
+            AgentRole::Research => Color::LightBlue,
             AgentRole::Planner => Color::Magenta,
             AgentRole::Builder => Color::Green,
             AgentRole::Reviewer => Color::Cyan,
