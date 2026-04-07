@@ -399,10 +399,45 @@ pub fn archive_completed_phases(
     Ok(total_archived)
 }
 
+/// Returns true if a section is an archive summary (no actionable context for Query agent).
+/// Detection: header contains "archived" (case-insensitive), OR >50% of non-empty content
+/// lines match archive reference patterns (Phase, Discovery, Human, Roadmap, Total archived).
+fn is_archive_summary_section(section_lines: &[&str]) -> bool {
+    if let Some(header) = section_lines.first() {
+        if header.to_lowercase().contains("archived") {
+            return true;
+        }
+    }
+
+    let content_lines: Vec<&&str> = section_lines
+        .iter()
+        .skip(1)
+        .filter(|l| !l.trim().is_empty())
+        .collect();
+
+    if content_lines.is_empty() {
+        return false;
+    }
+
+    let archive_ref_count = content_lines
+        .iter()
+        .filter(|l| {
+            let trimmed = l.trim_start();
+            trimmed.starts_with("- Phase ")
+                || trimmed.starts_with("- Discovery ")
+                || trimmed.starts_with("- Human ")
+                || trimmed.starts_with("- Roadmap ")
+                || trimmed.starts_with("- **Total archived")
+        })
+        .count();
+
+    archive_ref_count > content_lines.len() / 2
+}
+
 /// Extract a trimmed version of TASKS.md content suitable for the Query agent prompt.
-/// Keeps all non-task sections (archive summaries, preamble), all sections with pending
+/// Keeps preamble, genuine non-task sections (e.g. Notes), all sections with pending
 /// tasks, and the 2 most recent completed-only sections. Older completed-only sections
-/// are collapsed to a single summary line.
+/// and archive summary sections are collapsed to a single summary line.
 pub fn extract_query_context(tasks_content: &str) -> String {
     if tasks_content.trim().is_empty() {
         return String::new();
@@ -510,9 +545,23 @@ pub fn extract_query_context(tasks_content: &str) -> String {
                 output.push(String::new());
             }
         } else {
-            // Non-task section (archive summary, etc.) -- include entirely
-            for &line in &lines[section.start..section.end] {
-                output.push(line.to_string());
+            // Non-task section -- collapse archive summaries, keep others in full
+            let section_lines = &lines[section.start..section.end];
+            if is_archive_summary_section(section_lines) {
+                output.push(lines[section.start].to_string());
+                let ref_count = section_lines[1..]
+                    .iter()
+                    .filter(|l| !l.trim().is_empty())
+                    .count();
+                output.push(format!(
+                    "({} archive references omitted)",
+                    ref_count
+                ));
+                output.push(String::new());
+            } else {
+                for &line in section_lines {
+                    output.push(line.to_string());
+                }
             }
         }
     }
@@ -648,11 +697,13 @@ mod tests {
     }
 
     #[test]
-    fn test_extract_query_context_preserves_archive_summary() {
+    fn test_extract_query_context_collapses_archive_summary() {
         let input = "\
-## Archive Summary\n\
+## Completed Work (archived to TASKS-ARCHIVE.md)\n\
 - Phase 1: Context Foundry Visualizer (1 task)\n\
 - Phase 2: TUI polish (3 tasks)\n\
+- Discovery Round 1 (2 tasks archived)\n\
+- Discovery Round 2 (3 tasks archived)\n\
 \n\
 ## Phase 3\n\
 - [x] T3.1: Done thing\n\
@@ -660,13 +711,55 @@ mod tests {
 ## Phase 4\n\
 - [ ] T4.1: Pending thing\n";
         let result = extract_query_context(input);
-        // Archive summary is a non-task section, preserved entirely
-        assert!(result.contains("## Archive Summary"));
-        assert!(result.contains("- Phase 1: Context Foundry Visualizer (1 task)"));
-        assert!(result.contains("- Phase 2: TUI polish (3 tasks)"));
-        // Only 1 completed section, within the last 2, so kept
+        // Archive summary section should be collapsed
+        assert!(result.contains("## Completed Work (archived to TASKS-ARCHIVE.md)"));
+        assert!(result.contains("(4 archive references omitted)"));
+        assert!(!result.contains("- Phase 1: Context Foundry Visualizer (1 task)"));
+        assert!(!result.contains("- Discovery Round 1 (2 tasks archived)"));
+        // Other sections preserved normally
         assert!(result.contains("- [x] T3.1: Done thing"));
         assert!(result.contains("- [ ] T4.1: Pending thing"));
+    }
+
+    #[test]
+    fn test_extract_query_context_collapses_archive_by_content_pattern() {
+        let input = "\
+## Archive Summary\n\
+- Phase 1: Context Foundry Visualizer (1 task)\n\
+- Phase 2: TUI polish (3 tasks)\n\
+- Discovery Round 34 (1 tasks archived)\n\
+- Roadmap (6 tasks)\n\
+- Human Tasks: H1.1, H2.1, H3.1 (3 tasks)\n\
+- **Total archived: ~175 tasks**\n\
+\n\
+## Phase 4\n\
+- [ ] T4.1: Pending thing\n";
+        let result = extract_query_context(input);
+        // Header does not contain "archived" but >50% of lines match archive patterns
+        assert!(result.contains("## Archive Summary"));
+        assert!(result.contains("(6 archive references omitted)"));
+        assert!(!result.contains("- Phase 1: Context Foundry Visualizer"));
+        assert!(!result.contains("- Discovery Round 34"));
+        assert!(!result.contains("- Roadmap (6 tasks)"));
+        // Pending section preserved
+        assert!(result.contains("- [ ] T4.1: Pending thing"));
+    }
+
+    #[test]
+    fn test_extract_query_context_preserves_genuine_non_task_sections() {
+        let input = "\
+## Notes\n\
+This project uses a custom build pipeline.\n\
+See ARCHITECTURE.md for details.\n\
+\n\
+## Phase 1\n\
+- [ ] T1.1: Pending task\n";
+        let result = extract_query_context(input);
+        // Notes section has no archive patterns -- preserved in full
+        assert!(result.contains("## Notes"));
+        assert!(result.contains("This project uses a custom build pipeline."));
+        assert!(result.contains("See ARCHITECTURE.md for details."));
+        assert!(result.contains("- [ ] T1.1: Pending task"));
     }
 
     #[test]
