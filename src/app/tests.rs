@@ -2128,3 +2128,21 @@ fn test_parallel_builder_usage_events_update_session_cost() {
         125_000  // (0.50 + 0.75) * 100_000
     );
 }
+
+#[cfg(unix)]
+#[test]
+fn test_buildloop_dir_creation_fails_on_readonly_parent() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let tmp = std::env::temp_dir().join("foundry-test-buildloop-readonly");
+    let _ = std::fs::remove_dir_all(&tmp);
+    std::fs::create_dir_all(&tmp).unwrap();
+    std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o555)).unwrap();
+
+    let buildloop_dir = tmp.join(".buildloop");
+    let result = std::fs::create_dir_all(&buildloop_dir);
+    assert!(result.is_err(), "create_dir_all should fail when parent is read-only");
+
+    std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let _ = std::fs::remove_dir_all(&tmp);
+}

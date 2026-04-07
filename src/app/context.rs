@@ -135,7 +135,9 @@ impl RunContext {
     }
 
     pub(super) fn ensure_runtime_dirs(&self) {
-        let _ = std::fs::create_dir_all(&self.log_dir);
+        if let Err(e) = std::fs::create_dir_all(&self.log_dir) {
+            eprintln!("Warning: failed to create log directory {}: {}", self.log_dir.display(), e);
+        }
     }
 
     pub(super) fn stop_file(&self) -> PathBuf {

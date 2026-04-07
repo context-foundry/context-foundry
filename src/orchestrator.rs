@@ -336,7 +336,8 @@ pub async fn orchestrate(
     event_tx: Option<mpsc::UnboundedSender<AgentOutputEvent>>,
     shutdown: Option<Arc<AtomicBool>>,
 ) -> Result<OrchestratorOutcome> {
-    let _ = std::fs::create_dir_all(log_dir);
+    std::fs::create_dir_all(log_dir)
+        .with_context(|| format!("Failed to create log directory: {}", log_dir.display()))?;
 
     let mut last_artifact = None;
     let mut last_review = None;

@@ -91,7 +91,13 @@ impl PhaseIsolation {
                         }
                     }
                     if rollback_ok {
-                        let _ = std::fs::remove_dir_all(&staging_dir);
+                        if let Err(e) = std::fs::remove_dir_all(&staging_dir) {
+                            eprintln!(
+                                "Warning: failed to clean up staging directory {}: {}",
+                                staging_dir.display(),
+                                e,
+                            );
+                        }
                     } else {
                         eprintln!(
                             "WARNING: PhaseIsolation::activate() rollback failed to restore \
@@ -141,8 +147,12 @@ impl PhaseIsolation {
                 self.staging_dir.display(),
             );
             // Do NOT remove staging dir -- preserve for forensics (matching Drop behavior)
-        } else {
-            let _ = std::fs::remove_dir_all(&self.staging_dir);
+        } else if let Err(e) = std::fs::remove_dir_all(&self.staging_dir) {
+            eprintln!(
+                "Warning: failed to clean up staging directory {}: {}",
+                self.staging_dir.display(),
+                e,
+            );
         }
         Ok(())
     }
@@ -171,8 +181,12 @@ impl Drop for PhaseIsolation {
                     total,
                     self.staging_dir.display(),
                 );
-            } else {
-                let _ = std::fs::remove_dir_all(&self.staging_dir);
+            } else if let Err(e) = std::fs::remove_dir_all(&self.staging_dir) {
+                eprintln!(
+                    "Warning: failed to clean up staging directory {}: {}",
+                    self.staging_dir.display(),
+                    e,
+                );
             }
         }
     }

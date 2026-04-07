@@ -60,9 +60,12 @@ impl TmuxSession {
             .context("tmux pipe-pane failed")?;
 
         if !pipe_status.success() {
-            let _ = Command::new("tmux")
+            if let Err(e) = Command::new("tmux")
                 .args(["kill-session", "-t", &name])
-                .status();
+                .status()
+            {
+                eprintln!("Warning: failed to kill tmux session '{}' during cleanup: {}", name, e);
+            }
             anyhow::bail!("tmux pipe-pane failed");
         }
 
@@ -100,11 +103,13 @@ impl TmuxSession {
     }
 
     pub fn kill(&self) -> Result<()> {
-        let _ = Command::new("tmux")
+        let status = Command::new("tmux")
             .args(["kill-session", "-t", &self.name])
             .status()
             .context("tmux kill-session failed")?;
-
+        if !status.success() {
+            eprintln!("Warning: tmux kill-session for '{}' exited with {}", self.name, status);
+        }
         Ok(())
     }
 
@@ -182,9 +187,12 @@ pub fn list_sessions(prefix: &str) -> Vec<String> {
 pub fn cleanup_stale_sessions(prefix: &str) -> Vec<String> {
     let sessions = list_sessions(prefix);
     for name in &sessions {
-        let _ = Command::new("tmux")
+        if let Err(e) = Command::new("tmux")
             .args(["kill-session", "-t", name])
-            .status();
+            .status()
+        {
+            eprintln!("Warning: failed to kill stale tmux session '{}': {}", name, e);
+        }
     }
     sessions
 }

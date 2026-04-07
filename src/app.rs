@@ -44,8 +44,13 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
     let config = Config::load(project_dir);
     commands::ensure_required_providers_available(&config, commands::ProviderCommandMode::Run)?;
     let buildloop_dir = project_dir.join(".buildloop");
-    let _ = std::fs::create_dir_all(&buildloop_dir);
-    let _ = std::fs::remove_file(buildloop_dir.join("stop"));
+    std::fs::create_dir_all(&buildloop_dir)
+        .with_context(|| format!("Failed to create .buildloop directory: {}", buildloop_dir.display()))?;
+    if let Err(e) = std::fs::remove_file(buildloop_dir.join("stop")) {
+        if e.kind() != std::io::ErrorKind::NotFound {
+            eprintln!("Warning: failed to remove stale stop file: {}", e);
+        }
+    }
     let shutdown = Arc::new(AtomicBool::new(false));
     let mut state = AppState::new(buildloop_dir);
     state.run_mode = config.run_mode.clone();
@@ -1063,8 +1068,7 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                     state.pending_reviews.retain(|(sid, _)| sid != session_id);
                 }
                 // Create stop file to halt the build loop
-                let _ = std::fs::create_dir_all(&state.buildloop_dir);
-                let _ = std::fs::write(state.buildloop_dir.join("stop"), "");
+                state.write_stop_file();
                 state.stop_after_task = true;
                 state.log(format!(
                     "PR #{} was closed without merge -- stopping",
@@ -1235,23 +1239,21 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                         KeyCode::Char('q') => {
                             if state.stop_after_task {
                                 state.stop_after_task = false;
-                                let _ = std::fs::remove_file(state.buildloop_dir.join("stop"));
+                                state.remove_stop_file();
                                 state.log("Stop cancelled -- resuming build");
                             } else {
                                 state.stop_after_task = true;
-                                let _ = std::fs::create_dir_all(&state.buildloop_dir);
-                                let _ = std::fs::write(state.buildloop_dir.join("stop"), "");
+                                state.write_stop_file();
                                 state.log("Stopping after current task (q again to cancel, Ctrl+C to force quit)");
                             }
                         }
                         KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                             if state.stop_after_task {
-                                let _ = std::fs::remove_file(state.buildloop_dir.join("stop"));
+                                state.remove_stop_file();
                                 state.should_quit = true;
                             } else {
                                 state.stop_after_task = true;
-                                let _ = std::fs::create_dir_all(&state.buildloop_dir);
-                                let _ = std::fs::write(state.buildloop_dir.join("stop"), "");
+                                state.write_stop_file();
                                 state.log(
                                 "Will stop after current task completes (Ctrl+C again to force quit)",
                             );
@@ -1359,13 +1361,12 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                             } else if state.stop_after_task {
                                 // Cancel stop -- resume running
                                 state.stop_after_task = false;
-                                let _ = std::fs::remove_file(state.buildloop_dir.join("stop"));
+                                state.remove_stop_file();
                                 state.log("Stop cancelled -- resuming build");
                             } else {
                                 // Request stop after current task
                                 state.stop_after_task = true;
-                                let _ = std::fs::create_dir_all(&state.buildloop_dir);
-                                let _ = std::fs::write(state.buildloop_dir.join("stop"), "");
+                                state.write_stop_file();
                                 state.log("Stopping after current task (q again to cancel, Ctrl+C to force quit)");
                             }
                         }
@@ -1379,12 +1380,11 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                         KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                             if state.stop_after_task {
                                 // Second Ctrl+C: quit immediately
-                                let _ = std::fs::remove_file(state.buildloop_dir.join("stop"));
+                                state.remove_stop_file();
                                 state.should_quit = true;
                             } else {
                                 state.stop_after_task = true;
-                                let _ = std::fs::create_dir_all(&state.buildloop_dir);
-                                let _ = std::fs::write(state.buildloop_dir.join("stop"), "");
+                                state.write_stop_file();
                                 state.log(
                                 "Will stop after current task completes (Ctrl+C again to force quit)",
                             );
@@ -2233,7 +2233,9 @@ fn spawn_design_loop(
     tokio::spawn(async move {
         let buildloop_dir = project_dir.join(".buildloop");
         let log_dir = buildloop_dir.join("logs");
-        let _ = std::fs::create_dir_all(&log_dir);
+        if let Err(e) = std::fs::create_dir_all(&log_dir) {
+            eprintln!("Warning: failed to create log directory {}: {}", log_dir.display(), e);
+        }
 
         let tx = event_tx.clone();
         let result = orchestrator::orchestrate(

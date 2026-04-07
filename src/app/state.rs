@@ -494,6 +494,24 @@ impl AppState {
         }
     }
 
+    pub(super) fn write_stop_file(&mut self) {
+        if let Err(e) = std::fs::create_dir_all(&self.buildloop_dir) {
+            self.log(format!("Warning: failed to create .buildloop dir: {}", e));
+            return;
+        }
+        if let Err(e) = std::fs::write(self.buildloop_dir.join("stop"), "") {
+            self.log(format!("Warning: failed to write stop file: {}", e));
+        }
+    }
+
+    pub(super) fn remove_stop_file(&mut self) {
+        if let Err(e) = std::fs::remove_file(self.buildloop_dir.join("stop")) {
+            if e.kind() != std::io::ErrorKind::NotFound {
+                self.log(format!("Warning: failed to remove stop file: {}", e));
+            }
+        }
+    }
+
     pub(super) fn clear_agent(&mut self) {
         self.current_agent = None;
         self.current_agent_model = None;
