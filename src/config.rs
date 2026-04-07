@@ -566,31 +566,22 @@ impl Config {
         let project_val = Self::read_json_file(&project_path);
 
         let merged = match (global_val, project_val) {
-            (Some(g), Some(p)) => Self::merge_json(g, p),
-            (Some(g), None) => g,
-            (None, Some(p)) => p,
-            (None, None) => {
-                let mut config = Self::default();
-                config.normalize();
-                config.apply_env_overrides();
-                return config;
-            }
+            (Some(g), Some(p)) => Some(Self::merge_json(g, p)),
+            (Some(g), None) => Some(g),
+            (None, Some(p)) => Some(p),
+            (None, None) => None,
         };
 
-        match serde_json::from_value::<Self>(merged) {
-            Ok(mut config) => {
-                config.normalize();
-                config.apply_env_overrides();
-                config
-            }
-            Err(e) => {
-                eprintln!("warning: failed to deserialize merged config: {e} -- using defaults");
-                let mut config = Self::default();
-                config.normalize();
-                config.apply_env_overrides();
-                config
-            }
-        }
+        let mut config = match merged {
+            Some(val) => serde_json::from_value::<Self>(val).unwrap_or_else(|e| {
+                eprintln!("warning: failed to deserialize config: {e} -- using defaults");
+                Self::default()
+            }),
+            None => Self::default(),
+        };
+        config.normalize();
+        config.apply_env_overrides();
+        config
     }
 
     /// Load config from global `~/.foundry/config.json` only, ignoring any
@@ -600,28 +591,16 @@ impl Config {
         let global_path = Self::global_config_path();
         let global_val = global_path.as_deref().and_then(Self::read_json_file);
 
-        match global_val {
-            Some(val) => match serde_json::from_value::<Self>(val) {
-                Ok(mut config) => {
-                    config.normalize();
-                    config.apply_env_overrides();
-                    config
-                }
-                Err(e) => {
-                    eprintln!("warning: failed to deserialize global config: {e} -- using defaults");
-                    let mut config = Self::default();
-                    config.normalize();
-                    config.apply_env_overrides();
-                    config
-                }
-            },
-            None => {
-                let mut config = Self::default();
-                config.normalize();
-                config.apply_env_overrides();
-                config
-            }
-        }
+        let mut config = match global_val {
+            Some(val) => serde_json::from_value::<Self>(val).unwrap_or_else(|e| {
+                eprintln!("warning: failed to deserialize global config: {e} -- using defaults");
+                Self::default()
+            }),
+            None => Self::default(),
+        };
+        config.normalize();
+        config.apply_env_overrides();
+        config
     }
 
     /// Build a SandboxConfig from this Config's sandbox fields.
@@ -690,8 +669,13 @@ impl Config {
     pub fn save_preview_wrap(project_dir: &Path, wrap: bool) {
         let config_path = project_dir.join(".foundry.json");
         let content = std::fs::read_to_string(&config_path).unwrap_or_else(|_| "{}".to_string());
-        let mut value: serde_json::Value =
-            serde_json::from_str(&content).unwrap_or(serde_json::json!({}));
+        let mut value: serde_json::Value = serde_json::from_str(&content).unwrap_or_else(|e| {
+            eprintln!(
+                "warning: {} contains invalid JSON ({e}) -- existing settings will be lost",
+                config_path.display(),
+            );
+            serde_json::json!({})
+        });
         value["preview_wrap"] = serde_json::json!(wrap);
         let json = serde_json::to_string_pretty(&value).unwrap_or_default();
         let _ = crate::utils::atomic_write_file(&config_path, json.as_bytes());
@@ -700,8 +684,13 @@ impl Config {
     pub fn save_extensions(project_dir: &Path, extensions: &[String]) {
         let config_path = project_dir.join(".foundry.json");
         let content = std::fs::read_to_string(&config_path).unwrap_or_else(|_| "{}".to_string());
-        let mut value: serde_json::Value =
-            serde_json::from_str(&content).unwrap_or(serde_json::json!({}));
+        let mut value: serde_json::Value = serde_json::from_str(&content).unwrap_or_else(|e| {
+            eprintln!(
+                "warning: {} contains invalid JSON ({e}) -- existing settings will be lost",
+                config_path.display(),
+            );
+            serde_json::json!({})
+        });
         value["extensions"] = serde_json::json!(extensions);
         let json = serde_json::to_string_pretty(&value).unwrap_or_default();
         let _ = crate::utils::atomic_write_file(&config_path, json.as_bytes());
@@ -712,8 +701,13 @@ impl Config {
     pub fn save_run_mode(project_dir: &Path, run_mode: &str) {
         let config_path = project_dir.join(".foundry.json");
         let content = std::fs::read_to_string(&config_path).unwrap_or_else(|_| "{}".to_string());
-        let mut value: serde_json::Value =
-            serde_json::from_str(&content).unwrap_or(serde_json::json!({}));
+        let mut value: serde_json::Value = serde_json::from_str(&content).unwrap_or_else(|e| {
+            eprintln!(
+                "warning: {} contains invalid JSON ({e}) -- existing settings will be lost",
+                config_path.display(),
+            );
+            serde_json::json!({})
+        });
         value["run_mode"] = serde_json::json!(run_mode);
         // Remove legacy "mode" key to prevent it from shadowing "run_mode"
         // when JSON is reordered or parsed by a different library.
@@ -727,8 +721,13 @@ impl Config {
     pub fn save_dual_selection(project_dir: &Path, selection: &str) {
         let config_path = project_dir.join(".foundry.json");
         let content = std::fs::read_to_string(&config_path).unwrap_or_else(|_| "{}".to_string());
-        let mut value: serde_json::Value =
-            serde_json::from_str(&content).unwrap_or(serde_json::json!({}));
+        let mut value: serde_json::Value = serde_json::from_str(&content).unwrap_or_else(|e| {
+            eprintln!(
+                "warning: {} contains invalid JSON ({e}) -- existing settings will be lost",
+                config_path.display(),
+            );
+            serde_json::json!({})
+        });
         value["dual_selection"] = serde_json::json!(selection);
         let json = serde_json::to_string_pretty(&value).unwrap_or_default();
         let _ = crate::utils::atomic_write_file(&config_path, json.as_bytes());
@@ -1372,5 +1371,46 @@ mod tests {
         config.apply_env_overrides();
         assert_eq!(config.pr_review_concurrency, 1, "normalize must clamp pr_review_concurrency to >= 1");
         assert_eq!(config.run_mode, "auto", "normalize must convert legacy 'loop' mode to 'auto'");
+    }
+
+    #[test]
+    #[serial]
+    fn load_invalid_json_warns_and_normalizes() {
+        // Config::load() with invalid JSON should:
+        // 1. Log a warning to stderr (not easily captured, verified by code inspection)
+        // 2. Return defaults
+        // 3. Run normalize() on the defaults (single exit path guarantee)
+        let dir = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", dir.path());
+        std::env::remove_var("FOUNDRY_PR_REVIEW_MODEL");
+        std::env::remove_var("FOUNDRY_PR_REVIEW_PROVIDER");
+        std::env::remove_var("FOUNDRY_AGENT_TIMEOUT_SECS");
+        std::env::remove_var("FOUNDRY_PR_REVIEW_MULTIPASS_THRESHOLD");
+        std::env::remove_var("FOUNDRY_PR_REVIEW_CONCURRENCY");
+
+        fs::write(
+            dir.path().join(".foundry.json"),
+            "this is not json at all {{{",
+        )
+        .unwrap();
+        let config = Config::load(dir.path());
+
+        // Verify defaults are used (invalid JSON was not silently applied)
+        assert_eq!(config.agent_timeout_secs, Config::default().agent_timeout_secs);
+        assert_eq!(config.planner_model, Config::default().planner_model);
+
+        // Verify normalize() invariants hold on the returned config
+        assert!(
+            config.pr_review_concurrency >= 1,
+            "normalize must clamp pr_review_concurrency to >= 1"
+        );
+        assert_ne!(
+            config.run_mode, "loop",
+            "normalize must convert legacy 'loop' mode"
+        );
+        assert_ne!(
+            config.run_mode, "hil",
+            "normalize must convert legacy 'hil' mode"
+        );
     }
 }
