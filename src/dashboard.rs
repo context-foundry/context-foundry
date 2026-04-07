@@ -4,6 +4,8 @@ use anyhow::{Context, Result};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 
+use serde_json::json;
+
 use crate::stats;
 
 const DASHBOARD_HTML: &str = include_str!("dashboard.html");
@@ -51,7 +53,7 @@ async fn handle_connection(mut stream: tokio::net::TcpStream, project_dir: PathB
         match handle_api_stats(path, &project_dir) {
             Ok(json) => ("200 OK", "application/json", json),
             Err(e) => {
-                let msg = format!("{{\"error\":\"{}\"}}", e.to_string().replace('"', "'"));
+                let msg = serde_json::to_string(&json!({"error": e.to_string()})).unwrap_or_else(|_| r#"{"error":"internal error"}"#.to_string());
                 ("500 Internal Server Error", "application/json", msg)
             }
         }
@@ -74,7 +76,7 @@ async fn handle_connection(mut stream: tokio::net::TcpStream, project_dir: PathB
     let _ = stream.flush().await;
 }
 
-fn handle_api_stats(path: &str, _project_dir: &Path) -> Result<String> {
+fn handle_api_stats(path: &str, project_dir: &Path) -> Result<String> {
     let days = path
         .split_once('?')
         .and_then(|(_, query)| {
@@ -85,8 +87,24 @@ fn handle_api_stats(path: &str, _project_dir: &Path) -> Result<String> {
         .and_then(|v| v.parse::<u32>().ok())
         .unwrap_or(7);
 
+    let use_global = path
+        .split_once('?')
+        .and_then(|(_, query)| {
+            query
+                .split('&')
+                .find_map(|param| param.strip_prefix("project="))
+        })
+        .map(|v| v == "global")
+        .unwrap_or(false);
+
     let obs_dir = stats::observatory_dir()?;
-    let (events, skipped) = stats::load_events(&obs_dir, days, None)?;
-    let report = stats::compute_stats(&events, skipped, days, None, true);
+    let canonical = dunce::canonicalize(project_dir).unwrap_or_else(|_| project_dir.to_path_buf());
+    let (project_filter, project_str) = if use_global {
+        (None, None)
+    } else {
+        (Some(canonical.as_path()), Some(canonical.display().to_string()))
+    };
+    let (events, skipped) = stats::load_events(&obs_dir, days, project_filter)?;
+    let report = stats::compute_stats(&events, skipped, days, project_str.as_deref(), true);
     serde_json::to_string(&report).context("failed to serialize stats")
 }

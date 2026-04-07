@@ -959,8 +959,16 @@ pub(super) fn run_patterns_promote(apply: bool, days: u32) -> Result<()> {
                     format!("{}\n\n## Promoted Patterns\n\n{}", existing.trim_end(), prose_blocks)
                 }
             } else {
-                let title = ext_name.chars().next().map(|c| c.to_uppercase().to_string()).unwrap_or_default()
-                    + &ext_name[1..];
+                let title = {
+                    let mut chars = ext_name.chars();
+                    match chars.next() {
+                        Some(c) => {
+                            let upper = c.to_uppercase().to_string();
+                            upper + chars.as_str()
+                        }
+                        None => String::new(),
+                    }
+                };
                 format!("# Context Foundry - {} Extension\n\n## Promoted Patterns\n\n{}", title, prose_blocks)
             };
 
