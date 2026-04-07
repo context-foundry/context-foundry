@@ -212,13 +212,23 @@ pub fn query_prompt(
     task_complexity: &str,
     max_questions: usize,
     updated_specs: Option<&str>,
-    spec_file: &str,
-    tasks_file: &str,
+    spec_content: Option<&str>,
+    tasks_content: Option<&str>,
 ) -> String {
     let updated_specs_block = updated_specs
         .filter(|s| !s.trim().is_empty())
         .map(|specs| format!("\nUPDATED SPECS (user's latest enhancement request):\n{specs}\n"))
         .unwrap_or_default();
+
+    let spec_block = spec_content
+        .filter(|s| !s.trim().is_empty())
+        .map(|c| format!("\n--- SPEC.md ---\n{c}\n--- END SPEC.md ---\n"))
+        .unwrap_or_else(|| "\n(No SPEC.md found)\n".to_string());
+
+    let tasks_block = tasks_content
+        .filter(|s| !s.trim().is_empty())
+        .map(|c| format!("\n--- TASKS.md ---\n{c}\n--- END TASKS.md ---\n"))
+        .unwrap_or_else(|| "\n(No TASKS.md found)\n".to_string());
 
     format!(
         r#"You are the QUERY agent for an autonomous build loop.
@@ -235,8 +245,9 @@ and TASKS.md context. Based on what would need to be true about the codebase for
 task to succeed, generate questions that a Research agent (with full codebase access)
 must answer.
 
-Read {spec_file} if it exists for project context.
-Read {tasks_file} to understand what has been built already and what is pending.
+PROJECT CONTEXT:
+{spec_block}
+{tasks_block}
 
 WRITE your questions to .buildloop/questions.md using this exact format:
 
@@ -265,9 +276,8 @@ QUESTION GUIDELINES:
 BUDGET: Generate between 3 and {max_questions} questions. Prefer fewer, higher-quality questions.
 
 RULES:
-- Do NOT read any source code files (you do not have codebase access in this phase)
+- You have NO tool access to the filesystem except Write. All context is provided in this prompt.
 - Do NOT implement anything
-- Do NOT read files in .buildloop/logs/
 - Write ONLY to .buildloop/questions.md"#
     )
 }

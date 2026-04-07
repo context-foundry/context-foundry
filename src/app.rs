@@ -121,6 +121,7 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
 
     // Event channels
     let (event_tx, mut event_rx) = mpsc::unbounded_channel::<AppEvent>();
+    state.event_tx = Some(event_tx.clone());
 
     // Spawn tick timer (10 fps)
     let tick_tx = event_tx.clone();
@@ -683,6 +684,12 @@ fn handle_planning_event(state: &mut AppState, event: AppEvent, config: &Config)
                 .to_string(),
             );
         }
+        AppEvent::LoopEvent(LoopEvent::StatsReady(report)) => {
+            state.stats_loading = false;
+            state.stats_overlay_report = Some(*report);
+            state.show_stats_overlay = true;
+            state.stats_overlay_scroll = 0;
+        }
         AppEvent::LoopEvent(_) => {}
     }
 }
@@ -692,6 +699,7 @@ fn handle_planning_key(state: &mut AppState, key: event::KeyEvent, config: &Conf
         KeyCode::Char('q') | KeyCode::Esc => {
             if state.show_stats_overlay {
                 state.show_stats_overlay = false;
+                state.stats_loading = false;
                 state.stats_overlay_report = None;
                 state.stats_overlay_scroll = 0;
             } else {
@@ -704,6 +712,7 @@ fn handle_planning_key(state: &mut AppState, key: event::KeyEvent, config: &Conf
         KeyCode::Char('s') if !key.modifiers.contains(KeyModifiers::CONTROL) => {
             if state.show_stats_overlay {
                 state.show_stats_overlay = false;
+                state.stats_loading = false;
                 state.stats_overlay_report = None;
                 state.stats_overlay_scroll = 0;
             } else {
@@ -953,6 +962,12 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                     }
                 }
                 state.log(msg.clone());
+            }
+            LoopEvent::StatsReady(report) => {
+                state.stats_loading = false;
+                state.stats_overlay_report = Some(*report);
+                state.show_stats_overlay = true;
+                state.stats_overlay_scroll = 0;
             }
             LoopEvent::BackgroundLog(ref msg) => {
                 // Track patterns learned from "Merged patterns: N new added" messages
@@ -1356,6 +1371,7 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                         KeyCode::Char('q') => {
                             if state.show_stats_overlay {
                                 state.show_stats_overlay = false;
+                                state.stats_loading = false;
                                 state.stats_overlay_report = None;
                                 state.stats_overlay_scroll = 0;
                             } else if state.stop_after_task {
@@ -1373,6 +1389,7 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                         KeyCode::Esc => {
                             if state.show_stats_overlay {
                                 state.show_stats_overlay = false;
+                                state.stats_loading = false;
                                 state.stats_overlay_report = None;
                                 state.stats_overlay_scroll = 0;
                             }
@@ -1407,6 +1424,7 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                         KeyCode::Char('s') if !key.modifiers.contains(KeyModifiers::CONTROL) => {
                             if state.show_stats_overlay {
                                 state.show_stats_overlay = false;
+                                state.stats_loading = false;
                                 state.stats_overlay_report = None;
                                 state.stats_overlay_scroll = 0;
                             } else {
@@ -1777,35 +1795,54 @@ fn commit_inject_task(state: &mut AppState, description: &str, run_next: bool) {
 const AGENT_OUTPUT_CAP: usize = 2000;
 
 fn compute_and_show_stats_overlay(state: &mut AppState) {
-    let obs_dir = match crate::stats::observatory_dir() {
-        Ok(d) => d,
-        Err(_) => {
-            state.log("Stats: cannot find observatory dir");
+    if state.stats_loading {
+        return;
+    }
+    let event_tx = match state.event_tx.clone() {
+        Some(tx) => tx,
+        None => {
+            state.log("Stats: event channel not available".to_string());
             return;
         }
     };
-    let project_dir = state
-        .buildloop_dir
-        .parent()
-        .unwrap_or(std::path::Path::new("."));
-    let canonical = dunce::canonicalize(project_dir).unwrap_or_else(|_| project_dir.to_path_buf());
-    let (events, skipped) = match crate::stats::load_events(&obs_dir, 1, Some(&canonical)) {
-        Ok(r) => r,
-        Err(_) => {
-            state.log("Stats: failed to load events");
-            return;
+    let buildloop_dir = state.buildloop_dir.clone();
+    state.stats_loading = true;
+    tokio::spawn(async move {
+        let result = tokio::task::spawn_blocking(move || {
+            let obs_dir = match crate::stats::observatory_dir() {
+                Ok(d) => d,
+                Err(_) => return None,
+            };
+            let project_dir = buildloop_dir
+                .parent()
+                .unwrap_or(std::path::Path::new("."));
+            let canonical =
+                dunce::canonicalize(project_dir).unwrap_or_else(|_| project_dir.to_path_buf());
+            let (events, skipped) =
+                match crate::stats::load_events(&obs_dir, 1, Some(&canonical)) {
+                    Ok(r) => r,
+                    Err(_) => return None,
+                };
+            Some(crate::stats::compute_stats(
+                &events,
+                skipped,
+                1,
+                Some(&canonical.display().to_string()),
+                false,
+            ))
+        })
+        .await;
+        match result {
+            Ok(Some(report)) => {
+                let _ = event_tx.send(AppEvent::LoopEvent(LoopEvent::StatsReady(Box::new(report))));
+            }
+            _ => {
+                let _ = event_tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+                    "Stats: failed to load events".to_string(),
+                )));
+            }
         }
-    };
-    let report = crate::stats::compute_stats(
-        &events,
-        skipped,
-        1,
-        Some(&canonical.display().to_string()),
-        false,
-    );
-    state.stats_overlay_report = Some(report);
-    state.show_stats_overlay = true;
-    state.stats_overlay_scroll = 0;
+    });
 }
 
 fn refresh_patterns_cache(state: &mut AppState, config: &Config) {

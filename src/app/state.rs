@@ -367,6 +367,7 @@ pub struct AppState {
     pub sandbox_enabled: bool,
     /// Human-readable sandbox status label for TUI display.
     pub sandbox_status_label: String,
+    pub stats_loading: bool,
     /// True when the TUI is showing a commit approval prompt.
     pub awaiting_commit_approval: bool,
     /// The task ID being approved (for display in the prompt).
@@ -379,6 +380,7 @@ pub struct AppState {
     /// Queue of (session_id, task_id, proposed_commit_type) for approvals that
     /// arrived while another approval was already being shown to the user.
     pub(super) pending_approvals: VecDeque<(String, String, String)>,
+    pub(super) event_tx: Option<tokio::sync::mpsc::UnboundedSender<AppEvent>>,
 }
 
 impl AppState {
@@ -483,6 +485,8 @@ impl AppState {
             commit_approval_results: HashMap::new(),
             approval_session_id: None,
             pending_approvals: VecDeque::new(),
+            event_tx: None,
+            stats_loading: false,
         }
     }
 
@@ -663,6 +667,7 @@ pub(super) enum LoopEvent {
     },
     #[allow(dead_code)]
     TmuxSessionStarted(String),
+    StatsReady(Box<StatsReport>),
     SessionIdAssigned(String),
     Finished,
 }

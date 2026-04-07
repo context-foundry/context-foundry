@@ -2631,6 +2631,12 @@ async fn process_task(
             let updated_specs = std::fs::read_to_string(&ctx.updated_specs_path)
                 .ok()
                 .filter(|s| !s.trim().is_empty());
+            let spec_content = std::fs::read_to_string(&ctx.spec_path)
+                .ok()
+                .filter(|s| !s.trim().is_empty());
+            let tasks_content = std::fs::read_to_string(&ctx.plan_path)
+                .ok()
+                .filter(|s| !s.trim().is_empty());
 
             let query_prompt_text = prompts::query_prompt(
                 task_id,
@@ -2638,8 +2644,8 @@ async fn process_task(
                 complexity_str,
                 max_questions,
                 updated_specs.as_deref(),
-                &ctx.spec_file_prompt_path(),
-                &ctx.tasks_file_prompt_path(),
+                spec_content.as_deref(),
+                tasks_content.as_deref(),
             );
             let query_start = Instant::now();
             let query_result = agent::run_agent(

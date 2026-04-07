@@ -50,7 +50,7 @@ impl std::fmt::Display for AgentRole {
 pub fn allowed_tools_for_role(role: &AgentRole) -> &'static [&'static str] {
     match role {
         AgentRole::Scout => &["Read", "Glob", "Grep", "Bash", "WebFetch", "WebSearch"],
-        AgentRole::Query => &["Read", "Glob", "Grep", "Bash", "WebFetch", "WebSearch"],
+        AgentRole::Query => &["Write"],
         AgentRole::Research => &["Read", "Glob", "Grep", "Bash", "WebFetch", "WebSearch"],
         AgentRole::Planner => &["Read", "Glob", "Grep", "Edit", "Write"],
         AgentRole::PlanReview => &["Read", "Glob", "Grep", "Edit", "Write"],
