@@ -2946,6 +2946,8 @@ mod tests {
     fn test_all_roles_have_allowlists() {
         let roles = [
             AgentRole::Scout,
+            AgentRole::Query,
+            AgentRole::Research,
             AgentRole::Planner,
             AgentRole::Builder,
             AgentRole::Reviewer,

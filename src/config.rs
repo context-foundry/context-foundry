@@ -885,6 +885,8 @@ mod tests {
         assert_eq!(pipeline.reviewer_provider, "codex");
         assert_eq!(pipeline.fixer_provider, "codex");
         assert_eq!(pipeline.discovery_provider, "codex");
+        assert_eq!(pipeline.query_provider, "codex");
+        assert_eq!(pipeline.research_provider, "codex");
 
         assert_eq!(pipeline.scout_model, "");
         assert_eq!(pipeline.planner_model, "");
@@ -892,6 +894,8 @@ mod tests {
         assert_eq!(pipeline.reviewer_model, "");
         assert_eq!(pipeline.fixer_model, "");
         assert_eq!(pipeline.discovery_model, "");
+        assert_eq!(pipeline.query_model, "");
+        assert_eq!(pipeline.research_model, "");
     }
 
     #[test]
@@ -903,6 +907,8 @@ mod tests {
         config.reviewer_model = "haiku".into();
         config.fixer_model = "sonnet".into();
         config.discovery_model = "opus".into();
+        config.query_model = "haiku".into();
+        config.research_model = "sonnet".into();
 
         let pipeline = config.for_pipeline("claude:opus");
 
@@ -912,6 +918,8 @@ mod tests {
         assert_eq!(pipeline.reviewer_model, "haiku");
         assert_eq!(pipeline.fixer_model, "sonnet");
         assert_eq!(pipeline.discovery_model, "opus");
+        assert_eq!(pipeline.query_model, "haiku");
+        assert_eq!(pipeline.research_model, "sonnet");
     }
 
     #[test]
