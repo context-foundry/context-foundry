@@ -177,7 +177,9 @@ pub(super) async fn run_plan_mode(project_dir: &Path, max_iterations: u64) -> Re
 
         let stop_file = ctx.stop_file();
         if stop_file.exists() {
-            let _ = std::fs::remove_file(stop_file);
+            if let Err(e) = std::fs::remove_file(&stop_file) {
+                eprintln!("Warning: failed to remove stop file {}: {}", stop_file.display(), e);
+            }
             eprintln!("Stop signal received");
             break;
         }

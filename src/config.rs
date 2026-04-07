@@ -228,7 +228,7 @@ pub struct Config {
     /// Enable per-phase file isolation for QRPID pipeline boundaries.
     /// When true, restricted artifacts are physically moved out of the workspace
     /// before spawning isolated agents (e.g., Doubt cannot read current-plan.md).
-    #[serde(default)]
+    #[serde(default = "default_true")]
     pub phase_isolation: bool,
 
     /// Per-phase context budget targets (percentage of context window).
@@ -399,7 +399,7 @@ impl Default for Config {
             agent_backend: "pty".into(),
             tmux_session_prefix: "foundry".into(),
             tmux_keep_sessions: false,
-            phase_isolation: false,
+            phase_isolation: true,
             budget_targets: BudgetTargets::default(),
             budget_overrun_threshold: 10,
             budget_recovery_enabled: false,
@@ -1145,6 +1145,23 @@ mod tests {
     #[test]
     fn default_config_enables_enforce_phase_rbac() {
         assert!(Config::default().enforce_phase_rbac);
+    }
+
+    #[test]
+    fn default_config_enables_phase_isolation() {
+        assert!(Config::default().phase_isolation);
+    }
+
+    #[test]
+    fn config_deserializes_phase_isolation_default_true() {
+        let config: Config = serde_json::from_str(r#"{"builder_model":"opus"}"#).unwrap();
+        assert!(config.phase_isolation);
+    }
+
+    #[test]
+    fn config_deserializes_phase_isolation_explicit_false() {
+        let config: Config = serde_json::from_str(r#"{"phase_isolation":false}"#).unwrap();
+        assert!(!config.phase_isolation);
     }
 
     #[test]

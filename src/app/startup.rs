@@ -512,7 +512,11 @@ pub(super) fn handle_startup_intent_input(state: &mut AppState, key: event::KeyE
             let updated_specs = super::contract::ContractPaths::resolve(project_dir)
                 .updated_specs_path
                 .clone();
-            let _ = std::fs::remove_file(&updated_specs);
+            if let Err(e) = std::fs::remove_file(&updated_specs) {
+                if e.kind() != std::io::ErrorKind::NotFound {
+                    eprintln!("Warning: failed to remove {}: {}", updated_specs.display(), e);
+                }
+            }
         }
         KeyCode::Char(c) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
             startup.intent_input.push(c);
