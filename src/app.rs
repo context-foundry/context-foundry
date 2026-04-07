@@ -690,6 +690,10 @@ fn handle_planning_event(state: &mut AppState, event: AppEvent, config: &Config)
             state.show_stats_overlay = true;
             state.stats_overlay_scroll = 0;
         }
+        AppEvent::LoopEvent(LoopEvent::StatsLoadFailed) => {
+            state.stats_loading = false;
+            state.log("Stats: failed to load events".to_string());
+        }
         AppEvent::LoopEvent(_) => {}
     }
 }
@@ -968,6 +972,10 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                 state.stats_overlay_report = Some(*report);
                 state.show_stats_overlay = true;
                 state.stats_overlay_scroll = 0;
+            }
+            LoopEvent::StatsLoadFailed => {
+                state.stats_loading = false;
+                state.log("Stats: failed to load events".to_string());
             }
             LoopEvent::BackgroundLog(ref msg) => {
                 // Track patterns learned from "Merged patterns: N new added" messages
@@ -1837,9 +1845,7 @@ fn compute_and_show_stats_overlay(state: &mut AppState) {
                 let _ = event_tx.send(AppEvent::LoopEvent(LoopEvent::StatsReady(Box::new(report))));
             }
             _ => {
-                let _ = event_tx.send(AppEvent::LoopEvent(LoopEvent::Log(
-                    "Stats: failed to load events".to_string(),
-                )));
+                let _ = event_tx.send(AppEvent::LoopEvent(LoopEvent::StatsLoadFailed));
             }
         }
     });

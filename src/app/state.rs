@@ -668,6 +668,7 @@ pub(super) enum LoopEvent {
     #[allow(dead_code)]
     TmuxSessionStarted(String),
     StatsReady(Box<StatsReport>),
+    StatsLoadFailed,
     SessionIdAssigned(String),
     Finished,
 }
