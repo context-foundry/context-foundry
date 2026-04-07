@@ -399,6 +399,127 @@ pub fn archive_completed_phases(
     Ok(total_archived)
 }
 
+/// Extract a trimmed version of TASKS.md content suitable for the Query agent prompt.
+/// Keeps all non-task sections (archive summaries, preamble), all sections with pending
+/// tasks, and the 2 most recent completed-only sections. Older completed-only sections
+/// are collapsed to a single summary line.
+pub fn extract_query_context(tasks_content: &str) -> String {
+    if tasks_content.trim().is_empty() {
+        return String::new();
+    }
+
+    let lines: Vec<&str> = tasks_content.lines().collect();
+
+    // Parse into sections: (start_idx, end_idx, has_pending, has_completed)
+    struct Section {
+        start: usize,
+        end: usize,
+        has_pending: bool,
+        has_completed: bool,
+    }
+
+    let mut sections: Vec<Section> = Vec::new();
+    let mut current_start: Option<usize> = None;
+
+    for (i, line) in lines.iter().enumerate() {
+        if line.starts_with("## ") {
+            if let Some(start) = current_start {
+                sections.push(Section {
+                    start,
+                    end: i,
+                    has_pending: false,
+                    has_completed: false,
+                });
+            }
+            current_start = Some(i);
+        }
+    }
+    if let Some(start) = current_start {
+        sections.push(Section {
+            start,
+            end: lines.len(),
+            has_pending: false,
+            has_completed: false,
+        });
+    }
+
+    // Classify sections
+    for section in sections.iter_mut() {
+        for &line in &lines[section.start..section.end] {
+            let trimmed = line.trim_start();
+            if trimmed.starts_with("- [ ] ") {
+                section.has_pending = true;
+            } else if trimmed.starts_with("- [x] ") {
+                section.has_completed = true;
+            }
+        }
+    }
+
+    // Identify completed-only sections (for trimming)
+    let completed_only_indices: Vec<usize> = sections
+        .iter()
+        .enumerate()
+        .filter(|(_, s)| s.has_completed && !s.has_pending)
+        .map(|(i, _)| i)
+        .collect();
+
+    // Keep the last 2 completed-only sections
+    let keep_completed: std::collections::HashSet<usize> = if completed_only_indices.len() > 2 {
+        completed_only_indices[completed_only_indices.len() - 2..]
+            .iter()
+            .copied()
+            .collect()
+    } else {
+        completed_only_indices.iter().copied().collect()
+    };
+
+    // Lines before the first ## section (preamble)
+    let preamble_end = sections.first().map(|s| s.start).unwrap_or(lines.len());
+
+    let mut output = Vec::new();
+
+    // Include preamble
+    for &line in &lines[..preamble_end] {
+        output.push(line.to_string());
+    }
+
+    // Process each section
+    for (i, section) in sections.iter().enumerate() {
+        if section.has_pending {
+            // Include entirely
+            for &line in &lines[section.start..section.end] {
+                output.push(line.to_string());
+            }
+        } else if section.has_completed {
+            if keep_completed.contains(&i) {
+                // Include entirely
+                for &line in &lines[section.start..section.end] {
+                    output.push(line.to_string());
+                }
+            } else {
+                // Collapsed: header + count
+                output.push(lines[section.start].to_string());
+                let completed_count = lines[section.start..section.end]
+                    .iter()
+                    .filter(|l| l.trim_start().starts_with("- [x] "))
+                    .count();
+                output.push(format!(
+                    "({} completed tasks omitted for brevity)",
+                    completed_count
+                ));
+                output.push(String::new());
+            }
+        } else {
+            // Non-task section (archive summary, etc.) -- include entirely
+            for &line in &lines[section.start..section.end] {
+                output.push(line.to_string());
+            }
+        }
+    }
+
+    output.join("\n")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -484,5 +605,73 @@ mod tests {
         let plan_path = temp_plan_path("foundry-disc-missing-nonexistent");
         let result = highest_discovery_round(&plan_path);
         assert_eq!(result, 0);
+    }
+
+    #[test]
+    fn test_extract_query_context_only_pending() {
+        let input = "# Tasks\n\n## Phase 1\n- [ ] T1.1: Do first thing\n- [ ] T1.2: Do second thing\n";
+        let result = extract_query_context(input);
+        assert!(result.contains("- [ ] T1.1: Do first thing"));
+        assert!(result.contains("- [ ] T1.2: Do second thing"));
+        assert!(result.contains("## Phase 1"));
+    }
+
+    #[test]
+    fn test_extract_query_context_trims_old_completed() {
+        let input = "\
+## Phase 1\n\
+- [x] T1.1: Old task 1\n\
+\n\
+## Phase 2\n\
+- [x] T2.1: Old task 2\n\
+\n\
+## Phase 3\n\
+- [x] T3.1: Recent task 1\n\
+\n\
+## Phase 4\n\
+- [x] T4.1: Recent task 2\n\
+\n\
+## Phase 5\n\
+- [ ] T5.1: Pending task\n";
+        let result = extract_query_context(input);
+        // Phase 1 and 2 should be collapsed (only last 2 completed kept)
+        assert!(result.contains("## Phase 1"));
+        assert!(result.contains("(1 completed tasks omitted for brevity)"));
+        assert!(!result.contains("T1.1: Old task 1"));
+        assert!(result.contains("## Phase 2"));
+        assert!(!result.contains("T2.1: Old task 2"));
+        // Phase 3 and 4 should be kept in full (last 2 completed)
+        assert!(result.contains("- [x] T3.1: Recent task 1"));
+        assert!(result.contains("- [x] T4.1: Recent task 2"));
+        // Pending section fully preserved
+        assert!(result.contains("- [ ] T5.1: Pending task"));
+    }
+
+    #[test]
+    fn test_extract_query_context_preserves_archive_summary() {
+        let input = "\
+## Archive Summary\n\
+- Phase 1: Context Foundry Visualizer (1 task)\n\
+- Phase 2: TUI polish (3 tasks)\n\
+\n\
+## Phase 3\n\
+- [x] T3.1: Done thing\n\
+\n\
+## Phase 4\n\
+- [ ] T4.1: Pending thing\n";
+        let result = extract_query_context(input);
+        // Archive summary is a non-task section, preserved entirely
+        assert!(result.contains("## Archive Summary"));
+        assert!(result.contains("- Phase 1: Context Foundry Visualizer (1 task)"));
+        assert!(result.contains("- Phase 2: TUI polish (3 tasks)"));
+        // Only 1 completed section, within the last 2, so kept
+        assert!(result.contains("- [x] T3.1: Done thing"));
+        assert!(result.contains("- [ ] T4.1: Pending thing"));
+    }
+
+    #[test]
+    fn test_extract_query_context_empty_input() {
+        assert_eq!(extract_query_context(""), "");
+        assert_eq!(extract_query_context("   \n  \n"), "");
     }
 }

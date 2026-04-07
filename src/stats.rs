@@ -230,10 +230,11 @@ pub fn run_stats(days: u32, project: &Path, output: &str, trend: bool) -> Result
 
 /// Print a compact session summary to stdout. Called after the TUI exits.
 /// Prints nothing if the session had zero completed tasks.
-pub fn print_session_summary(session_id: &str, _project_dir: &Path) -> Result<()> {
+pub fn print_session_summary(session_id: &str, project_dir: &Path) -> Result<()> {
     let obs_dir = observatory_dir()?;
+    let canonical = dunce::canonicalize(project_dir).unwrap_or_else(|_| project_dir.to_path_buf());
     // Load only today's events (1 day) -- the session just ended
-    let (events, _skipped) = load_events(&obs_dir, 1, None)?;
+    let (events, _skipped) = load_events(&obs_dir, 1, Some(&canonical))?;
 
     // Filter to this session
     let session_events: Vec<&EventEnvelope> = events

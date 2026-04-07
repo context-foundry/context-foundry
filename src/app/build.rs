@@ -2642,7 +2642,8 @@ async fn process_task(
                 .filter(|s| !s.trim().is_empty());
             let tasks_content = std::fs::read_to_string(&ctx.plan_path)
                 .ok()
-                .filter(|s| !s.trim().is_empty());
+                .filter(|s| !s.trim().is_empty())
+                .map(|s| crate::task::extract_query_context(&s));
 
             let query_prompt_text = prompts::query_prompt(
                 task_id,
