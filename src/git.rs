@@ -513,25 +513,74 @@ pub fn commit_task_pr(
             feature_branch,
             String::from_utf8_lossy(&push_result.stderr).trim()
         );
+        // Push failed -- switch back to base branch and return committed=false.
+        // The local feature branch commit is preserved for manual recovery,
+        // but the task must NOT be marked done since the remote never received it.
+        let checkout_back = Command::new("git")
+            .args(["checkout", &base_branch])
+            .current_dir(project_dir)
+            .output();
+        match &checkout_back {
+            Ok(out) if !out.status.success() => {
+                eprintln!(
+                    "[foundry] WARNING: checkout back to {} failed after push failure: {}",
+                    base_branch,
+                    String::from_utf8_lossy(&out.stderr).trim()
+                );
+                let _ = Command::new("git")
+                    .args(["checkout", "--force", &base_branch])
+                    .current_dir(project_dir)
+                    .output();
+            }
+            Err(e) => {
+                eprintln!(
+                    "[foundry] WARNING: checkout back to {} failed after push failure: {}",
+                    base_branch, e
+                );
+            }
+            _ => {}
+        }
+        return Ok((false, None));
     }
 
     // Annotate TASKS.md with the PR number and push the annotation
     if let Some(pr_num) = pr_number {
         if annotate_tasks_with_pr(plan_path, pr_num, Some(task_id)).is_ok() {
             // Stage only TASKS.md (plan_path) to avoid picking up unrelated changes
-            let _ = Command::new("git")
+            let add_ok = Command::new("git")
                 .args(["add", &plan_path.to_string_lossy()])
                 .current_dir(project_dir)
-                .output();
-            let annotation_msg = format!("annotate TASKS.md with PR #{} for {}", pr_num, task_id);
-            let _ = Command::new("git")
-                .args(["commit", "-m", &annotation_msg])
-                .current_dir(project_dir)
-                .output();
-            let _ = Command::new("git")
-                .args(["push", "--force-with-lease", remote, &feature_branch])
-                .current_dir(project_dir)
-                .output();
+                .output()
+                .map(|o| o.status.success())
+                .unwrap_or(false);
+
+            if add_ok {
+                let commit_ok = Command::new("git")
+                    .args(["commit", "-m", &format!("annotate TASKS.md with PR #{} for {}", pr_num, task_id)])
+                    .current_dir(project_dir)
+                    .output()
+                    .map(|o| o.status.success())
+                    .unwrap_or(false);
+
+                if commit_ok {
+                    let _ = Command::new("git")
+                        .args(["push", "--force-with-lease", remote, &feature_branch])
+                        .current_dir(project_dir)
+                        .output();
+                } else {
+                    // Commit failed -- reset index to avoid dirty state on checkout
+                    let _ = Command::new("git")
+                        .args(["reset", "HEAD"])
+                        .current_dir(project_dir)
+                        .output();
+                }
+            } else {
+                // Add failed -- reset index to avoid dirty state on checkout
+                let _ = Command::new("git")
+                    .args(["reset", "HEAD"])
+                    .current_dir(project_dir)
+                    .output();
+            }
         }
     }
 
@@ -931,7 +980,9 @@ mod tests {
             &repo_dir.join("TASKS.md"),
             false,
         );
-        assert!(result.is_ok() || result.is_err()); // push may fail, that's fine
+        let (committed, pr) = result.expect("should not error on push failure");
+        assert!(!committed, "committed should be false when push fails (no remote)");
+        assert!(pr.is_none(), "pr_number should be None when push fails");
 
         // After the call, we should be back on the base branch
         assert_eq!(
@@ -1164,34 +1215,25 @@ mod tests {
 
         let base = current_branch(&repo_dir);
 
-        // Push will fail (no remote), but local operations should succeed
-        let _ = commit_task_pr(
+        // Push will fail (no remote), so committed=false and TASKS.md not marked done on base
+        let (committed, pr) = commit_task_pr(
             &repo_dir,
             &Config::default(),
             "T1.1",
             "Test task",
             &repo_dir.join("TASKS.md"),
             false,
-        );
+        )
+        .expect("should not error on push failure");
+
+        assert!(!committed, "committed should be false when push fails");
+        assert!(pr.is_none(), "pr should be None when push fails");
 
         // Should be back on base branch
         assert_eq!(
             current_branch(&repo_dir),
             base,
             "should return to base branch"
-        );
-
-        // TASKS.md on base should retain the mark_done + progress indicator
-        let content = fs::read_to_string(repo_dir.join("TASKS.md")).expect("read tasks");
-        assert!(
-            content.contains("- [x] T1.1: Test task"),
-            "T1.1 should be marked done on base, got: {}",
-            content
-        );
-        assert!(
-            content.contains("- [ ] T2.1: Another task"),
-            "T2.1 should remain pending, got: {}",
-            content
         );
 
         let _ = fs::remove_dir_all(repo_dir);
@@ -1224,8 +1266,9 @@ mod tests {
             true,
         );
 
-        // Push will fail (no remote), but local operations should succeed
-        let _ = result;
+        let (committed, pr) = result.expect("should not error on push failure");
+        assert!(!committed, "committed should be false when push fails (no remote)");
+        assert!(pr.is_none(), "pr should be None when push fails");
 
         // After the call, we should be back on the base branch
         assert_eq!(
