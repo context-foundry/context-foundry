@@ -1102,13 +1102,17 @@ pub(super) fn run_patterns_promote(apply: bool, days: u32) -> Result<()> {
             }
         }
 
-        let ext_count = by_extension.len();
+        // Build summary from promotion_log (only newly-promoted patterns)
+        let mut promoted_by_ext: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
+        for (pattern_id, ext_name, _) in &promotion_log {
+            promoted_by_ext.entry(ext_name.as_str()).or_default().push(pattern_id.as_str());
+        }
         println!(
             "Promoted {} pattern(s) to {} extension(s).",
             promotion_log.len(),
-            ext_count,
+            promoted_by_ext.len(),
         );
-        for (ext_name, pattern_ids) in &by_extension {
+        for (ext_name, pattern_ids) in &promoted_by_ext {
             println!("  {} ({} pattern(s)):", ext_name, pattern_ids.len());
             for id in pattern_ids {
                 println!("    - {}", id);

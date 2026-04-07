@@ -2758,6 +2758,12 @@ async fn process_task(
                     vec!["Query is non-blocking -- pipeline continues without questions".to_string()],
                 ));
                 query_failed = true;
+                // Remove partial questions.md so crash recovery won't trust stale content
+                if let Err(e) = std::fs::remove_file(&questions_file) {
+                    if e.kind() != std::io::ErrorKind::NotFound {
+                        eprintln!("Warning: failed to remove partial questions.md after query failure: {}", e);
+                    }
+                }
             }
 
             adaptive_sleep(
@@ -2796,7 +2802,9 @@ async fn process_task(
         }
 
         // Checkpoint: query completed
-        write_checkpoint(&ctx.buildloop_dir, task_id, task_desc, "query");
+        if !query_failed {
+            write_checkpoint(&ctx.buildloop_dir, task_id, task_desc, "query");
+        }
         } // end if !skip_query else block
 
         if !query_failed {
