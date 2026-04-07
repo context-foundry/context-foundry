@@ -313,6 +313,9 @@ struct ProviderProgressState {
     /// When parsed events fail (e.g. unparseable JSON), raw bytes still indicate
     /// the agent is alive and working.
     last_raw_bytes_at: Instant,
+    /// Timestamp of last successfully parsed JSON event (via note_provider_event).
+    /// NOT updated by note_provider_stderr_line (unparseable lines).
+    last_parsed_event_at: Instant,
     last_transport_issue_at: Option<Instant>,
     transport_issue_count: usize,
 }
@@ -322,6 +325,7 @@ impl ProviderProgressState {
         Self {
             last_progress_at: now,
             last_raw_bytes_at: now,
+            last_parsed_event_at: now,
             last_transport_issue_at: None,
             transport_issue_count: 0,
         }
@@ -332,6 +336,12 @@ impl ProviderProgressState {
         self.last_raw_bytes_at = now;
         self.last_transport_issue_at = None;
         self.transport_issue_count = 0;
+    }
+
+    /// Record that a successfully parsed JSON event was received.
+    /// Only called from note_provider_event(), NOT from note_provider_stderr_line().
+    fn record_parsed_event_at(&mut self, now: Instant) {
+        self.last_parsed_event_at = now;
     }
 
     /// Record that raw bytes were received from PTY, even if they didn't parse.
@@ -348,12 +358,31 @@ impl ProviderProgressState {
         now.saturating_duration_since(self.last_progress_at)
     }
 
-    /// Returns true only when BOTH parsed events AND raw bytes have stopped.
-    /// This prevents killing an active agent whose output is unparseable.
+    /// Returns true when the agent should be considered idle.
+    ///
+    /// Two triggers:
+    /// 1. Original: all output has stopped (parsed events, stderr, raw bytes).
+    /// 2. Tertiary: raw bytes/stderr still flowing but no successfully parsed JSON
+    ///    events for > timeout. The agent is alive but output is unusable (e.g.,
+    ///    non-JSON debug info, ConPTY mangling every line).
     fn is_truly_idle(&self, now: Instant, timeout: Duration) -> bool {
-        let no_parsed = self.no_progress_for(now) >= timeout;
+        let no_progress = self.no_progress_for(now) >= timeout;
         let no_raw = now.saturating_duration_since(self.last_raw_bytes_at) >= timeout;
-        no_parsed && no_raw
+
+        // Original: all output has stopped
+        if no_progress && no_raw {
+            return true;
+        }
+
+        // Tertiary: raw bytes or stderr still flowing, but no successfully parsed
+        // JSON events for > timeout.
+        let no_parsed_events =
+            now.saturating_duration_since(self.last_parsed_event_at) >= timeout;
+        if no_parsed_events && !no_raw {
+            return true;
+        }
+
+        false
     }
 
     fn transport_stalled(&self, now: Instant) -> bool {
@@ -398,7 +427,10 @@ fn note_provider_event(
         {
             guard.record_transport_issue_at(now);
         }
-        _ => guard.record_progress_at(now),
+        _ => {
+            guard.record_progress_at(now);
+            guard.record_parsed_event_at(now);
+        }
     }
 }
 
@@ -1196,6 +1228,14 @@ async fn run_agent_tmux(
                                 });
                             }
                             ParsedClaudeLine::Ignore => {
+                                // Valid JSON parsed -- update last_parsed_event_at so the
+                                // tertiary idle check doesn't fire for thinking-only assistant
+                                // messages (which are valid JSON with no displayable content).
+                                {
+                                    let mut guard =
+                                        progress.lock().unwrap_or_else(|p| p.into_inner());
+                                    guard.record_parsed_event_at(Instant::now());
+                                }
                                 LAST_RESULT_USAGE.with(|cell| {
                                     if let Some(usage) = cell.take() {
                                         let _ = tx.send(AgentOutputEvent::Usage {
@@ -1505,6 +1545,14 @@ fn read_provider_output(
                             continue;
                         }
                         ParsedClaudeLine::Ignore => {
+                            // Valid JSON parsed -- update last_parsed_event_at so the
+                            // tertiary idle check doesn't fire for thinking-only assistant
+                            // messages (which are valid JSON with no displayable content).
+                            {
+                                let mut guard =
+                                    progress.lock().unwrap_or_else(|p| p.into_inner());
+                                guard.record_parsed_event_at(Instant::now());
+                            }
                             // A result event with empty text still sets LAST_RESULT_USAGE.
                             // Drain it here so Usage is emitted even when the Result itself
                             // was suppressed (empty non-error result).
@@ -2315,6 +2363,84 @@ mod tests {
         state.record_progress_at(start + Duration::from_secs(20));
 
         assert!(!state.transport_stalled(start + Duration::from_secs(120)));
+    }
+
+    #[test]
+    fn test_is_truly_idle_original_behavior_no_output() {
+        // When no output at all, idle fires after timeout (existing behavior preserved)
+        let start = Instant::now();
+        let state = ProviderProgressState::new(start);
+        let timeout = Duration::from_secs(60);
+
+        assert!(!state.is_truly_idle(start + Duration::from_secs(30), timeout));
+        assert!(state.is_truly_idle(start + Duration::from_secs(61), timeout));
+    }
+
+    #[test]
+    fn test_is_truly_idle_tertiary_fires_with_stderr_but_no_parsed_events() {
+        // Simulates the pathological case: agent outputs non-JSON continuously.
+        // record_raw_bytes_at + record_progress_at called (from note_provider_stderr_line),
+        // but record_parsed_event_at is NEVER called.
+        let start = Instant::now();
+        let mut state = ProviderProgressState::new(start);
+        let timeout = Duration::from_secs(60);
+
+        // Unparseable lines arrive at 30s and 55s
+        state.record_raw_bytes_at(start + Duration::from_secs(30));
+        state.record_progress_at(start + Duration::from_secs(30));
+        state.record_raw_bytes_at(start + Duration::from_secs(55));
+        state.record_progress_at(start + Duration::from_secs(55));
+
+        // At 59s: last_parsed_event_at = start (59s ago < 60s timeout). Not idle yet.
+        assert!(!state.is_truly_idle(start + Duration::from_secs(59), timeout));
+
+        // At 61s: last_parsed_event_at = start (61s ago > timeout), raw bytes at 55s (6s ago).
+        // Tertiary fires: no_parsed_events=true, !no_raw=true
+        assert!(state.is_truly_idle(start + Duration::from_secs(61), timeout));
+    }
+
+    #[test]
+    fn test_is_truly_idle_does_not_fire_when_parsed_events_flow() {
+        // When parsed events keep arriving, neither original nor tertiary fires
+        let start = Instant::now();
+        let mut state = ProviderProgressState::new(start);
+        let timeout = Duration::from_secs(60);
+
+        // Parsed event at 50s
+        state.record_progress_at(start + Duration::from_secs(50));
+        state.record_parsed_event_at(start + Duration::from_secs(50));
+        state.record_raw_bytes_at(start + Duration::from_secs(50));
+
+        // At 100s: last_parsed_event_at = 50s (50s ago < 60s timeout). Not idle.
+        assert!(!state.is_truly_idle(start + Duration::from_secs(100), timeout));
+
+        // At 111s: last_parsed_event_at = 50s (61s ago > timeout), no_raw also > timeout.
+        // Original check fires: no_progress=true, no_raw=true
+        assert!(state.is_truly_idle(start + Duration::from_secs(111), timeout));
+    }
+
+    #[test]
+    fn test_is_truly_idle_tertiary_fires_when_parsed_events_stop_mid_session() {
+        // Agent starts producing parsed events, then switches to only unparseable output
+        let start = Instant::now();
+        let mut state = ProviderProgressState::new(start);
+        let timeout = Duration::from_secs(60);
+
+        // Parsed event at 10s
+        state.record_progress_at(start + Duration::from_secs(10));
+        state.record_parsed_event_at(start + Duration::from_secs(10));
+
+        // Unparseable output continues at 50s, 60s, 65s (no parsed_event_at update)
+        state.record_raw_bytes_at(start + Duration::from_secs(50));
+        state.record_progress_at(start + Duration::from_secs(50));
+        state.record_raw_bytes_at(start + Duration::from_secs(60));
+        state.record_progress_at(start + Duration::from_secs(60));
+        state.record_raw_bytes_at(start + Duration::from_secs(65));
+        state.record_progress_at(start + Duration::from_secs(65));
+
+        // At 71s: last_parsed_event_at = 10s (61s ago > timeout), raw at 65s (6s ago).
+        // Tertiary fires.
+        assert!(state.is_truly_idle(start + Duration::from_secs(71), timeout));
     }
 
     #[test]
