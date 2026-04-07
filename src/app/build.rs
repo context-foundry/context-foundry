@@ -50,7 +50,12 @@ fn write_checkpoint(buildloop_dir: &std::path::Path, task_id: &str, task_desc: &
     };
     let path = buildloop_dir.join("checkpoint.json");
     if let Ok(json) = serde_json::to_string_pretty(&checkpoint) {
-        let _ = atomic_write_file(&path, json.as_bytes());
+        if let Err(e) = atomic_write_file(&path, json.as_bytes()) {
+            eprintln!(
+                "Warning: failed to write checkpoint to {}: {} -- crash recovery may not resume from this stage",
+                path.display(), e
+            );
+        }
     }
 }
 
@@ -1052,7 +1057,12 @@ async fn run_parallel_builder(
     if !combined_claims.is_empty() {
         let claims_path = ctx.buildloop_dir.join("build-claims.md");
         let header = format!("# Build Claims -- {} (parallel builder)\n", task_id);
-        let _ = atomic_write_file(&claims_path, format!("{}{}", header, combined_claims).as_bytes());
+        if let Err(e) = atomic_write_file(&claims_path, format!("{}{}", header, combined_claims).as_bytes()) {
+            eprintln!(
+                "Warning: failed to write combined build claims to {}: {} -- reviewer will run without claims context",
+                claims_path.display(), e
+            );
+        }
     }
 
     // Clean up all worktrees

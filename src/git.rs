@@ -250,7 +250,12 @@ pub fn commit_and_push(
         return Ok(false);
     }
 
-    maybe_push_commit(project_dir, config.auto_push_remote.as_deref())?;
+    if let Err(e) = maybe_push_commit(project_dir, config.auto_push_remote.as_deref()) {
+        eprintln!(
+            "[foundry] WARNING: git push failed after local commit for {}: {} -- commit is local-only",
+            task_id, e
+        );
+    }
 
     Ok(true)
 }
@@ -956,6 +961,45 @@ mod tests {
             err_msg.contains("nonexistent-remote"),
             "error should mention the remote name: {}",
             err_msg
+        );
+
+        let _ = fs::remove_dir_all(repo_dir);
+    }
+
+    #[test]
+    fn commit_and_push_returns_ok_true_when_push_fails() {
+        let repo_dir = temp_dir("foundry-commit-push-fail");
+        init_repo(&repo_dir);
+        fs::write(repo_dir.join("data.txt"), "test\n").expect("write file");
+
+        let config = Config {
+            auto_push_remote: Some("nonexistent-remote".to_string()),
+            ..Config::default()
+        };
+
+        let result = commit_and_push(&repo_dir, &config, "T99.1", "Test push fail", false);
+        assert!(
+            result.is_ok(),
+            "commit_and_push should return Ok even when push fails: {:?}",
+            result.err()
+        );
+        assert_eq!(
+            result.unwrap(),
+            true,
+            "should return true because the local commit succeeded"
+        );
+
+        // Verify the commit actually exists
+        let log = Command::new("git")
+            .args(["log", "--oneline", "-1"])
+            .current_dir(&repo_dir)
+            .output()
+            .expect("git log");
+        let log_str = String::from_utf8_lossy(&log.stdout);
+        assert!(
+            log_str.contains("T99.1"),
+            "commit message should contain task id: {}",
+            log_str
         );
 
         let _ = fs::remove_dir_all(repo_dir);

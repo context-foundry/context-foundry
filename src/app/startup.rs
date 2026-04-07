@@ -665,7 +665,12 @@ fn handle_startup_submit(state: &mut AppState) {
         let updated_specs = super::contract::ContractPaths::resolve(project_dir)
             .updated_specs_path
             .clone();
-        let _ = crate::utils::atomic_write_file(&updated_specs, text.as_bytes());
+        if let Err(e) = crate::utils::atomic_write_file(&updated_specs, text.as_bytes()) {
+            eprintln!(
+                "Warning: failed to write UPDATED_SPECS to {}: {} -- enhancement request may be lost",
+                updated_specs.display(), e
+            );
+        }
     }
 
     match scenario {
@@ -709,10 +714,15 @@ fn handle_startup_submit(state: &mut AppState) {
                     .unwrap_or(std::path::Path::new("."))
                     .to_path_buf();
                 let spec_path = super::contract::ContractPaths::resolve(&project_dir).spec_path;
-                let _ = crate::utils::atomic_write_file(
+                if let Err(e) = crate::utils::atomic_write_file(
                     &spec_path,
                     format!("# Project Brief\n\n{}\n", text).as_bytes(),
-                );
+                ) {
+                    eprintln!(
+                        "Warning: failed to write SPEC.md to {}: {} -- project brief was not saved",
+                        spec_path.display(), e
+                    );
+                }
                 // Return to startup so the user can review SPEC.md before starting.
                 // The scenario will re-detect as NeedsQueue (spec exists, no tasks yet).
                 state.pending_transition = Some(PendingTransition::ShowStartup {
