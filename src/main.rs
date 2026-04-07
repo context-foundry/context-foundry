@@ -112,9 +112,9 @@ enum Commands {
     },
     /// Start the observatory web dashboard
     Dashboard {
-        /// Port to serve on (default: 9400, binds to 127.0.0.1 only)
-        #[arg(long, default_value = "9400")]
-        port: u16,
+        /// Port to serve on (default: from config or 9400, binds to 127.0.0.1 only)
+        #[arg(long)]
+        port: Option<u16>,
     },
 }
 
@@ -212,7 +212,7 @@ async fn main() -> Result<()> {
         }
         Commands::Dashboard { port } => {
             let config = config::Config::load(&project_dir);
-            let effective_port = if port == 9400 { config.dashboard_port } else { port };
+            let effective_port = port.unwrap_or(config.dashboard_port);
             dashboard::run_dashboard(effective_port, &project_dir).await?;
         }
     }
