@@ -242,10 +242,19 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
     // Restore terminal
     tui::restore_terminal(&mut terminal)?;
 
-    println!(
-        "\nFoundry stopped. {} tasks completed.",
-        state.completed_count
-    );
+    if let Some(ref sid) = state.observatory_session_id {
+        let project_dir_canonical = dunce::canonicalize(project_dir)
+            .unwrap_or_else(|_| project_dir.to_path_buf());
+        if let Err(e) = crate::stats::print_session_summary(sid, &project_dir_canonical) {
+            eprintln!("Warning: could not print session summary: {}", e);
+        }
+    }
+    if state.observatory_session_id.is_none() || state.completed_count == 0 {
+        println!(
+            "\nFoundry stopped. {} tasks completed.",
+            state.completed_count
+        );
+    }
     Ok(())
 }
 
@@ -1090,6 +1099,9 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
             }
             LoopEvent::PrPollChecked => {
                 state.pr_poll_last_check = Some(std::time::Instant::now());
+            }
+            LoopEvent::SessionIdAssigned(ref sid) => {
+                state.observatory_session_id = Some(sid.clone());
             }
             LoopEvent::Finished => {
                 // Emit warnings for injected-but-never-referenced extensions

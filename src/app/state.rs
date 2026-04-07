@@ -288,6 +288,7 @@ pub struct AppState {
     pub discovery_round: usize,
     pub is_discovering: bool,
     pub should_quit: bool,
+    pub observatory_session_id: Option<String>,
     pub stop_after_task: bool,
     pub events_received: usize,
     pub tick_count: usize,
@@ -400,6 +401,7 @@ impl AppState {
             discovery_round: 0,
             is_discovering: false,
             should_quit: false,
+            observatory_session_id: None,
             stop_after_task: false,
             events_received: 0,
             tick_count: 0,
@@ -636,5 +638,6 @@ pub(super) enum LoopEvent {
     },
     #[allow(dead_code)]
     TmuxSessionStarted(String),
+    SessionIdAssigned(String),
     Finished,
 }

@@ -371,6 +371,7 @@ pub(super) async fn run_headless(project_dir: &Path, output_format: Option<Strin
     let mut patterns_injected: usize = 0;
     let mut feat_commits: usize = 0;
     let mut wip_commits: usize = 0;
+    let mut observatory_session_id: Option<String> = None;
 
     while let Some(evt) = rx.recv().await {
         match evt {
@@ -459,6 +460,9 @@ pub(super) async fn run_headless(project_dir: &Path, output_format: Option<Strin
                         duration_secs,
                     });
                 }
+                LoopEvent::SessionIdAssigned(sid) => {
+                    observatory_session_id = Some(sid);
+                }
                 LoopEvent::CountsUpdated(_, _)
                 | LoopEvent::NextTaskUpdated(_)
                 | LoopEvent::QueueUpdated(_)
@@ -533,6 +537,16 @@ pub(super) async fn run_headless(project_dir: &Path, output_format: Option<Strin
             serde_json::to_string_pretty(&report)
                 .unwrap_or_else(|e| format!("{{\"error\": \"{}\"}}", e))
         );
+    }
+
+    if !json_output {
+        if let Some(ref sid) = observatory_session_id {
+            let project_dir_canonical = dunce::canonicalize(project_dir)
+                .unwrap_or_else(|_| project_dir.to_path_buf());
+            if let Err(e) = crate::stats::print_session_summary(sid, &project_dir_canonical) {
+                eprintln!("[warn] could not print session summary: {}", e);
+            }
+        }
     }
 
     if let Some(version) = update_version {

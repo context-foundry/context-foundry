@@ -1404,6 +1404,8 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
     let mut session_feats: usize = 0;
     let mut session_wips: usize = 0;
 
+    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::SessionIdAssigned(session_id.clone())));
+
     observatory::log_event(&session_id, &ctx.project_dir, ObservatoryEvent::SessionStarted {
         config: serde_json::json!({
             "planner_provider": ctx.config.planner_provider,
