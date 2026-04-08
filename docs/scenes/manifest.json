@@ -227,6 +227,16 @@
       "model": "gpt-4o-mini",
       "lines": 85,
       "generation": 23
+    },
+    {
+      "file": "the-great-salt-hash.js",
+      "name": "The Great Salt Hash",
+      "location": "Salar de Uyuni, Bolivia",
+      "biome": "desert",
+      "generated": "2026-04-08T06:00:25.765Z",
+      "model": "gpt-4o-mini",
+      "lines": 80,
+      "generation": 24
     }
   ]
 }
