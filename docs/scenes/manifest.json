@@ -247,6 +247,16 @@
       "model": "gpt-4o-mini",
       "lines": 80,
       "generation": 25
+    },
+    {
+      "file": "savanna-garbage-collector.js",
+      "name": "Savanna Garbage Collector",
+      "location": "Masai Mara, Kenya",
+      "biome": "savanna",
+      "generated": "2026-04-08T21:04:20.766Z",
+      "model": "gpt-4o-mini",
+      "lines": 84,
+      "generation": 26
     }
   ]
 }

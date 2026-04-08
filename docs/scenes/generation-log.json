@@ -250,5 +250,17 @@
     "cost_usd": 0.0018,
     "retries": 0,
     "validation": "pass"
+  },
+  {
+    "ts": "2026-04-08T21:04:20.767Z",
+    "scene": "savanna-garbage-collector.js",
+    "seed_id": "savanna-garbage-collector",
+    "biome": "savanna",
+    "model": "gpt-4o-mini",
+    "input_tokens": 16664,
+    "output_tokens": 1636,
+    "cost_usd": 0.0035,
+    "retries": 1,
+    "validation": "pass"
   }
 ]
