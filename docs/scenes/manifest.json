@@ -237,6 +237,16 @@
       "model": "gpt-4o-mini",
       "lines": 80,
       "generation": 24
+    },
+    {
+      "file": "concurrency-at-the-confluence.js",
+      "name": "Concurrency at the Confluence",
+      "location": "Meeting of Waters, Manaus, Brazil",
+      "biome": "ocean",
+      "generated": "2026-04-08T17:34:19.272Z",
+      "model": "gpt-4o-mini",
+      "lines": 80,
+      "generation": 25
     }
   ]
 }
