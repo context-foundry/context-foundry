@@ -307,6 +307,16 @@
       "model": "gpt-4o-mini",
       "lines": 86,
       "generation": 31
+    },
+    {
+      "file": "sinkhole-stack-underflow.js",
+      "name": "Sinkhole Stack Underflow",
+      "location": "Great Blue Hole, Belize",
+      "biome": "extreme",
+      "generated": "2026-04-09T14:19:12.715Z",
+      "model": "gpt-4o-mini",
+      "lines": 85,
+      "generation": 32
     }
   ]
 }

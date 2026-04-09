@@ -369,5 +369,46 @@
     "retries": 0,
     "api_retries": 0,
     "validation": "pass"
+  },
+  {
+    "ts": "2026-04-09T14:17:37.093Z",
+    "scene": "root-access-granted.js",
+    "seed_id": "root-access-granted",
+    "biome": "forest",
+    "model": "gpt-4o-mini",
+    "input_tokens": 15246,
+    "output_tokens": 1658,
+    "cost_usd": 0.0033,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "fail",
+    "error": "Validation failed after 2 attempts: VALIDATION FAILED (2 errors):\n- Too short: 64 lines (min 80)\n- Insufficient animation: found 1 animation patterns (need 2+). Use osc(t,period,phase), Math.sin(t*speed), or Math.cos(t*speed) for time-based animation"
+  },
+  {
+    "ts": "2026-04-09T14:18:28.931Z",
+    "scene": "open-ocean-open-source.js",
+    "seed_id": "open-ocean-open-source",
+    "biome": "ocean",
+    "model": "gpt-4o-mini",
+    "input_tokens": 16288,
+    "output_tokens": 1480,
+    "cost_usd": 0.0033,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "fail",
+    "error": "Validation failed after 2 attempts: VALIDATION FAILED (1 error):\n- Too short: 76 lines (min 80)"
+  },
+  {
+    "ts": "2026-04-09T14:19:12.716Z",
+    "scene": "sinkhole-stack-underflow.js",
+    "seed_id": "sinkhole-stack-underflow",
+    "biome": "extreme",
+    "model": "gpt-4o-mini",
+    "input_tokens": 16284,
+    "output_tokens": 1677,
+    "cost_usd": 0.0034,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "pass"
   }
 ]
