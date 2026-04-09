@@ -337,6 +337,16 @@
       "model": "gpt-4o-mini",
       "lines": 89,
       "generation": 34
+    },
+    {
+      "file": "dry-run-only.js",
+      "name": "Dry Run Only",
+      "location": "Atacama Desert, Chile",
+      "biome": "desert",
+      "generated": "2026-04-09T19:42:04.580Z",
+      "model": "gpt-4o-mini",
+      "lines": 85,
+      "generation": 35
     }
   ]
 }

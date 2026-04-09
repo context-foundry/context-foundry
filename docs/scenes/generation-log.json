@@ -436,5 +436,46 @@
     "retries": 1,
     "api_retries": 0,
     "validation": "pass"
+  },
+  {
+    "ts": "2026-04-09T19:41:04.455Z",
+    "scene": "hello-world-from-orbit.js",
+    "seed_id": "hello-world-from-orbit",
+    "biome": "space",
+    "model": "gpt-4o-mini",
+    "input_tokens": 14914,
+    "output_tokens": 1341,
+    "cost_usd": 0.003,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "fail",
+    "error": "Validation failed after 2 attempts: VALIDATION FAILED (2 errors):\n- Too short: 65 lines (min 80)\n- Insufficient animation: found 1 animation patterns (need 2+). Use osc(t,period,phase), Math.sin(t*speed), or Math.cos(t*speed) for time-based animation"
+  },
+  {
+    "ts": "2026-04-09T19:41:30.763Z",
+    "scene": "sudo-rm-rf-winter.js",
+    "seed_id": "sudo-rm-rf-winter",
+    "biome": "arctic",
+    "model": "gpt-4o-mini",
+    "input_tokens": 16288,
+    "output_tokens": 1475,
+    "cost_usd": 0.0033,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "fail",
+    "error": "Validation failed after 2 attempts: VALIDATION FAILED (1 error):\n- Insufficient animation: found 1 animation patterns (need 2+). Use osc(t,period,phase), Math.sin(t*speed), or Math.cos(t*speed) for time-based animation"
+  },
+  {
+    "ts": "2026-04-09T19:42:04.581Z",
+    "scene": "dry-run-only.js",
+    "seed_id": "dry-run-only",
+    "biome": "desert",
+    "model": "gpt-4o-mini",
+    "input_tokens": 16658,
+    "output_tokens": 1705,
+    "cost_usd": 0.0035,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "pass"
   }
 ]
