@@ -262,5 +262,18 @@
     "cost_usd": 0.0035,
     "retries": 1,
     "validation": "pass"
+  },
+  {
+    "ts": "2026-04-09T03:30:27.314Z",
+    "scene": "blood-falls-segfault.js",
+    "seed_id": "blood-falls-segfault",
+    "biome": "extreme",
+    "model": "gpt-4o-mini",
+    "input_tokens": 7594,
+    "output_tokens": 820,
+    "cost_usd": 0.0016,
+    "retries": 0,
+    "api_retries": 0,
+    "validation": "pass"
   }
 ]

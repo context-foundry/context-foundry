@@ -257,6 +257,16 @@
       "model": "gpt-4o-mini",
       "lines": 84,
       "generation": 26
+    },
+    {
+      "file": "blood-falls-segfault.js",
+      "name": "Blood Falls Segfault",
+      "location": "Blood Falls, Taylor Glacier, Antarctica",
+      "biome": "extreme",
+      "generated": "2026-04-09T03:30:27.314Z",
+      "model": "gpt-4o-mini",
+      "lines": 90,
+      "generation": 27
     }
   ]
 }
