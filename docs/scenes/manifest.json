@@ -357,6 +357,16 @@
       "model": "gpt-4o-mini",
       "lines": 94,
       "generation": 36
+    },
+    {
+      "file": "cache-miss-at-the-mirage.js",
+      "name": "Cache Miss at the Mirage",
+      "location": "Namib Desert, Sossusvlei, Namibia",
+      "biome": "desert",
+      "generated": "2026-04-09T23:03:21.003Z",
+      "model": "gpt-4o-mini",
+      "lines": 85,
+      "generation": 37
     }
   ]
 }

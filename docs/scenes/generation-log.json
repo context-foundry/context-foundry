@@ -504,5 +504,18 @@
     "retries": 0,
     "api_retries": 0,
     "validation": "pass"
+  },
+  {
+    "ts": "2026-04-09T23:03:21.004Z",
+    "scene": "cache-miss-at-the-mirage.js",
+    "seed_id": "cache-miss-at-the-mirage",
+    "biome": "desert",
+    "model": "gpt-4o-mini",
+    "input_tokens": 7605,
+    "output_tokens": 949,
+    "cost_usd": 0.0017,
+    "retries": 0,
+    "api_retries": 0,
+    "validation": "pass"
   }
 ]
