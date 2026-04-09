@@ -277,6 +277,16 @@
       "model": "gpt-4o-mini",
       "lines": 97,
       "generation": 28
+    },
+    {
+      "file": "caching-layer-thermal-springs.js",
+      "name": "Caching Layer: Thermal Springs",
+      "location": "Blue Lagoon, Grindavik, Iceland",
+      "biome": "volcanic",
+      "generated": "2026-04-09T07:57:13.796Z",
+      "model": "gpt-4o-mini",
+      "lines": 112,
+      "generation": 29
     }
   ]
 }
