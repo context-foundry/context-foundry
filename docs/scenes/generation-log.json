@@ -477,5 +477,32 @@
     "retries": 1,
     "api_retries": 0,
     "validation": "pass"
+  },
+  {
+    "ts": "2026-04-09T21:06:26.894Z",
+    "scene": "open-ocean-open-source.js",
+    "seed_id": "open-ocean-open-source",
+    "biome": "ocean",
+    "model": "gpt-4o-mini",
+    "input_tokens": 16288,
+    "output_tokens": 1556,
+    "cost_usd": 0.0034,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "fail",
+    "error": "Validation failed after 2 attempts: VALIDATION FAILED (1 error):\n- Too short: 70 lines (min 80)"
+  },
+  {
+    "ts": "2026-04-09T21:07:06.401Z",
+    "scene": "grep-the-grassland.js",
+    "seed_id": "grep-the-grassland",
+    "biome": "savanna",
+    "model": "gpt-4o-mini",
+    "input_tokens": 7600,
+    "output_tokens": 972,
+    "cost_usd": 0.0017,
+    "retries": 0,
+    "api_retries": 0,
+    "validation": "pass"
   }
 ]
