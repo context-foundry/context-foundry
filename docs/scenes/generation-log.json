@@ -328,5 +328,46 @@
     "retries": 0,
     "api_retries": 0,
     "validation": "pass"
+  },
+  {
+    "ts": "2026-04-09T11:18:24.505Z",
+    "scene": "deadlock-in-the-dead-vlei.js",
+    "seed_id": "deadlock-in-the-dead-vlei",
+    "biome": "forest",
+    "model": "gpt-4o-mini",
+    "input_tokens": 14882,
+    "output_tokens": 1480,
+    "cost_usd": 0.0031,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "fail",
+    "error": "Validation failed after 2 attempts: VALIDATION FAILED (1 error):\n- Too short: 57 lines (min 80)"
+  },
+  {
+    "ts": "2026-04-09T11:19:24.023Z",
+    "scene": "stack-overflow-at-death-valley.js",
+    "seed_id": "stack-overflow-at-death-valley",
+    "biome": "desert",
+    "model": "gpt-4o-mini",
+    "input_tokens": 16658,
+    "output_tokens": 1484,
+    "cost_usd": 0.0034,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "fail",
+    "error": "Validation failed after 2 attempts: VALIDATION FAILED (1 error):\n- Too short: 67 lines (min 80)"
+  },
+  {
+    "ts": "2026-04-09T11:19:45.491Z",
+    "scene": "distributed-table-mountain.js",
+    "seed_id": "distributed-table-mountain",
+    "biome": "mountain",
+    "model": "gpt-4o-mini",
+    "input_tokens": 7411,
+    "output_tokens": 813,
+    "cost_usd": 0.0016,
+    "retries": 0,
+    "api_retries": 0,
+    "validation": "pass"
   }
 ]

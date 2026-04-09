@@ -297,6 +297,16 @@
       "model": "gpt-4o-mini",
       "lines": 89,
       "generation": 30
+    },
+    {
+      "file": "distributed-table-mountain.js",
+      "name": "Distributed Table Mountain",
+      "location": "Table Mountain, Cape Town, South Africa",
+      "biome": "mountain",
+      "generated": "2026-04-09T11:19:45.491Z",
+      "model": "gpt-4o-mini",
+      "lines": 86,
+      "generation": 31
     }
   ]
 }
