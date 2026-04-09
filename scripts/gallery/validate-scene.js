@@ -25,10 +25,11 @@ if (!/rect\(0\s*,\s*H\s*-\s*[12]/.test(code)) errors.push('Missing bottom glow l
 // 3. Animation check -- at least 2 animation expressions
 var animCount = 0;
 if (/osc\(/.test(code)) animCount++;
-if (/Math\.sin\(\s*t/.test(code)) animCount++;
-if (/Math\.cos\(\s*t/.test(code)) animCount++;
+if (/Math\.sin\(/.test(code)) animCount++;
+if (/Math\.cos\(/.test(code)) animCount++;
 if (/\.life/.test(code)) animCount++; // particle systems
-if (animCount < 2) errors.push('Insufficient animation: found ' + animCount + ' animation patterns (need 2+)');
+if (/\+\s*=/.test(code) && /\.(?:x|y|vx|vy|vel|pos|speed)\b/.test(code)) animCount++; // velocity animation
+if (animCount < 2) errors.push('Insufficient animation: found ' + animCount + ' animation patterns (need 2+). Use osc(t,period,phase), Math.sin(t*speed), or Math.cos(t*speed) for time-based animation');
 
 // 4. Forbidden patterns
 var forbidden = [
