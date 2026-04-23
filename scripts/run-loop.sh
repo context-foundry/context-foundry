@@ -21,13 +21,22 @@
 
 set -euo pipefail
 
+_logo(){ cat <<'EOF'
+  ___  ___  _   _ _  _ ____  ____  _  _    _    ___  ___  ___
+ | __>| . \| | | | \| ||    \| () \| || |  | |  / _ \/ _ \| _ \
+ | _> | | || |_| | \ || |) | |    /| \/ |  | |_ | (_)| (_)| |_/
+ |_|  |___/|___/ |_\_||___/ |_|\_\ \__/   |___|  \__/ \__/|___/
+  ———————————————————— v0.8 · RPID Pipeline Runner ————————————
+EOF
+}
+
 MAX_ITER=""; DRY_RUN=false; CLAUDE_MODEL=""; TASKS_FILE="TASKS.md"; _S='/-\|'
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --max) MAX_ITER="$2"; shift 2;; --dry-run) DRY_RUN=true; shift;;
     --model) CLAUDE_MODEL="$2"; shift 2;; --tasks) TASKS_FILE="$2"; shift 2;;
-    -h|--help) sed -n '/^# /s/^# //p' "$0"; exit 0;;
+    -h|--help) _logo; sed -n '/^# /s/^# //p' "$0"; exit 0;;
     *) echo "unknown: $1" >&2; exit 2;;
   esac
 done
@@ -54,6 +63,7 @@ next_task() { grep -oE '\- \[ \] [A-Z][0-9]+\.[0-9]+' "$TASKS_FILE" 2>/dev/null 
 checked()   { grep -qE "^\- \[x\] $1" "$TASKS_FILE"; }
 pending_cnt(){ grep -cE '\- \[ \] [A-Z][0-9]+\.[0-9]+' "$TASKS_FILE" 2>/dev/null || echo 0; }
 
+_logo
 echo "==> foundry loop starting"
 echo "    tasks: $TASKS_FILE | max: ${MAX_ITER:-unlimited} | pending: $(pending_cnt)"
 echo "    model: ${CLAUDE_MODEL:-default}"
