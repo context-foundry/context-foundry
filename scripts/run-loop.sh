@@ -1,207 +1,107 @@
 #!/usr/bin/env bash
-#
-# run-loop.sh — drive Context Foundry's RPID pipeline over a task queue.
-#
-# Finds the next unchecked task in TASKS.md whose ID matches a prefix, invokes
-# `claude -p` in headless mode with an RPID-triggering prompt, captures per-task
-# logs, detects pass/fail by re-reading TASKS.md after each run, and loops
-# until either the queue is empty or a task fails twice in a row.
+# run-loop.sh v0.8 — Ralph Wiggum loop for the RPID pipeline. https://ghuntley.com/ralph/
 #
 # Usage:
-#   ./scripts/run-loop.sh                         # defaults to T_FI_A prefix
-#   ./scripts/run-loop.sh T_FI_F                  # different task prefix
-#   ./scripts/run-loop.sh T_FI_A --max 8          # lower retry budget
-#   ./scripts/run-loop.sh T_FI_A --dry-run        # show plan without running
-#   ./scripts/run-loop.sh T_FI_A --model opus     # pin the model
+#   ./scripts/run-loop.sh              # run all unchecked tasks until queue is empty
+#   ./scripts/run-loop.sh --max 8      # stop after 8 tasks (default: unlimited)
+#   ./scripts/run-loop.sh --dry-run    # show plan without running
+#   ./scripts/run-loop.sh --model opus # pin the model
+#   ./scripts/run-loop.sh --tasks F    # custom tasks file
 #
-# Assumes:
-#   - pwd is the repo root (script resolves TASKS.md as ./TASKS.md)
-#   - claude CLI is on PATH
-#   - RPID pipeline defined in ~/.claude/CLAUDE.md
+# Install (Mac/Linux):
+#   sudo ln -s /path/to/run-loop.sh /usr/local/bin/foundry-loop
 #
-# Stops when:
-#   - no more unchecked tasks match the prefix  → exit 0
-#   - same task fails twice in a row            → exit 1 (abort, investigate)
-#   - max iterations hit                        → exit 2 (safety cap)
-#   - Ctrl+C                                    → current claude -p exits, script halts
+# Install (Windows — WSL):
+#   ln -s /mnt/c/path/to/run-loop.sh ~/.local/bin/foundry-loop
+#
+# Install (Windows — Git Bash, add to ~/.bashrc):
+#   alias foundry-loop='/c/path/to/run-loop.sh'
+#
+# Exit codes: 0=queue drained, 1=task failed twice, 2=max iter reached
 
 set -euo pipefail
 
-# --- defaults ---
-
-PREFIX="T_FI_A"
-MAX_ITER=12
-DRY_RUN=false
-CLAUDE_MODEL=""
-TASKS_FILE="TASKS.md"
-
-# --- parse args ---
+MAX_ITER=""; DRY_RUN=false; CLAUDE_MODEL=""; TASKS_FILE="TASKS.md"; _S='/-\|'
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --max) MAX_ITER="$2"; shift 2 ;;
-    --dry-run) DRY_RUN=true; shift ;;
-    --model) CLAUDE_MODEL="$2"; shift 2 ;;
-    --tasks) TASKS_FILE="$2"; shift 2 ;;
-    --help|-h)
-      grep '^#' "$0" | sed 's/^# \{0,1\}//'
-      exit 0
-      ;;
-    -*)
-      echo "unknown flag: $1" >&2
-      exit 2
-      ;;
-    *)
-      PREFIX="$1"
-      shift
-      ;;
+    --max) MAX_ITER="$2"; shift 2;; --dry-run) DRY_RUN=true; shift;;
+    --model) CLAUDE_MODEL="$2"; shift 2;; --tasks) TASKS_FILE="$2"; shift 2;;
+    -h|--help) sed -n '/^# /s/^# //p' "$0"; exit 0;;
+    *) echo "unknown: $1" >&2; exit 2;;
   esac
 done
 
-# --- prereqs ---
+command -v claude >/dev/null 2>&1 || { echo "claude not on PATH" >&2; exit 2; }
+[[ -f "$TASKS_FILE" ]] || { echo "$TASKS_FILE not found (run from repo root?)" >&2; exit 2; }
 
-command -v claude >/dev/null 2>&1 || { echo "claude CLI not found on PATH" >&2; exit 2; }
-[[ -f "$TASKS_FILE" ]] || { echo "TASKS.md not found at $TASKS_FILE (run from repo root?)" >&2; exit 2; }
+LOG_DIR="$HOME/.foundry/logs/$(date +%Y%m%d-%H%M%S)-$(basename "$(pwd)")"
 
-REPO_NAME="$(basename "$(pwd)")"
-LOG_DIR="$HOME/.foundry/logs/$(date +%Y%m%d-%H%M%S)-${REPO_NAME}-${PREFIX}"
-mkdir -p "$LOG_DIR"
-
-# --- prompt template ---
-# Single-task RPID invocation. The prompt names the task ID explicitly so
-# Claude doesn't have to guess which one is next — the shell loop already
-# picked it.
-
-make_prompt() {
-  local task_id="$1"
-  cat <<EOF
-Work task ${task_id} in ${TASKS_FILE}. Run the full RPID pipeline per ~/.claude/CLAUDE.md:
-
-1. Research — read ${task_id}'s description, read relevant source files, write .buildloop/scout-report.md
-2. Plan — write .buildloop/current-plan.md with explicit file operations and verification steps
-3. Implement — execute the plan, run verification commands, fix failures
-4. Write .buildloop/build-claims.md using the Audit Payload Format
-5. Doubt — spawn a sub-agent to audit the build-claims; fix HIGH + MEDIUM findings
-6. Commit: feat(${task_id}): <summary> on Doubt pass, WIP(${task_id}): <summary> on Doubt fail
-7. Mark ${task_id} as [x] with the RPID indicator ([RPID] or [RPID:fast]) in ${TASKS_FILE}
-
-Work exactly this one task, then exit. Do not start the next task even if time remains.
-Respect the human gates (G1-G6) declared in ${TASKS_FILE}; mark anything blocked on them as KNOWN_GAPS in the build-claims, do not try to bypass.
-EOF
+prompt_for() {
+  local tid="$1"
+  printf 'Work task %s in %s. Run full RPID pipeline per ~/.claude/CLAUDE.md:\n\n' "$tid" "$TASKS_FILE"
+  printf '1. Research — read %s description, write .buildloop/research-report.md\n' "$tid"
+  printf '2. Plan — write .buildloop/current-plan.md with explicit file ops\n'
+  printf '3. Implement — execute plan, run verification, fix failures\n'
+  printf '4. Write .buildloop/build-claims.md (Audit Payload Format)\n'
+  printf '5. Doubt — spawn sub-agent to audit; fix HIGH+MEDIUM findings\n'
+  printf '6. Commit: feat(%s): <summary> on pass, WIP(%s): <summary> on fail\n' "$tid" "$tid"
+  printf '7. Mark %s as [x] with [RPID] or [RPID:fast] in %s\n\n' "$tid" "$TASKS_FILE"
+  printf 'Work exactly this one task, then exit.\n'
 }
 
-# --- helpers ---
-
-find_next_task() {
-  # Grab the first unchecked task line matching the prefix, extract the ID.
-  grep -oE "^- \[ \] ${PREFIX}[0-9]+\.[0-9]+" "$TASKS_FILE" | head -1 | sed -E 's/^- \[ \] //'
-}
-
-task_is_checked() {
-  local task_id="$1"
-  grep -qE "^- \[x\] ${task_id}" "$TASKS_FILE"
-}
-
-count_remaining() {
-  grep -cE "^- \[ \] ${PREFIX}[0-9]+\.[0-9]+" "$TASKS_FILE" || true
-}
-
-# --- main loop ---
+next_task() { grep -oE '\- \[ \] [A-Z][0-9]+\.[0-9]+' "$TASKS_FILE" 2>/dev/null | head -1 | sed 's/- \[ \] //' || true; }
+checked()   { grep -qE "^\- \[x\] $1" "$TASKS_FILE"; }
+pending_cnt(){ grep -cE '\- \[ \] [A-Z][0-9]+\.[0-9]+' "$TASKS_FILE" 2>/dev/null || echo 0; }
 
 echo "==> foundry loop starting"
-echo "    prefix:      ${PREFIX}"
-echo "    tasks file:  ${TASKS_FILE}"
-echo "    max iter:    ${MAX_ITER}"
-echo "    log dir:     ${LOG_DIR}"
-echo "    model:       ${CLAUDE_MODEL:-default}"
-echo "    dry run:     ${DRY_RUN}"
-echo "    pending:     $(count_remaining)"
+echo "    tasks: $TASKS_FILE | max: ${MAX_ITER:-unlimited} | pending: $(pending_cnt)"
+echo "    model: ${CLAUDE_MODEL:-default}"
 echo ""
 
-# --- dry-run: enumerate all pending tasks and exit without invoking claude ---
-
-if [[ "$DRY_RUN" == "true" ]]; then
-  echo "==> dry-run plan (tasks that WOULD be run, in order):"
-  PENDING="$(grep -oE "^- \[ \] ${PREFIX}[0-9]+\.[0-9]+" "$TASKS_FILE" | sed -E 's/^- \[ \] //')"
-  if [[ -z "$PENDING" ]]; then
-    echo "    (no pending tasks matching ${PREFIX})"
-  else
-    idx=0
-    while IFS= read -r task; do
-      idx=$((idx+1))
-      printf "    %2d. %s\n" "$idx" "$task"
-    done <<< "$PENDING"
-    FIRST="$(echo "$PENDING" | head -1)"
-    echo ""
-    echo "    first task prompt preview:"
-    echo "    ---"
-    make_prompt "$FIRST" | sed 's/^/    /'
-    echo "    ---"
-  fi
-  echo ""
-  echo "==> dry-run complete (no claude invocations, no logs written)"
-  rmdir "$LOG_DIR" 2>/dev/null || true
+if [[ "$DRY_RUN" == true ]]; then
+  echo "==> pending tasks:"
+  grep -E '\- \[ \] [A-Z][0-9]+\.[0-9]+' "$TASKS_FILE" 2>/dev/null | sed 's/- \[ \] /    /' || echo "    (none)"
+  FIRST=$(next_task)
+  [[ -n "$FIRST" ]] && { echo ""; echo "    First prompt preview:"; prompt_for "$FIRST" | sed 's/^/    /'; }
   exit 0
 fi
 
-# --- real run ---
+mkdir -p "$LOG_DIR"
+echo "    log dir: $LOG_DIR"
 
-PREV_TASK=""
+FAIL_STREAK=0
 EXIT_CODE=0
 i=0
 
-for ((i=1; i<=MAX_ITER; i++)); do
-  NEXT="$(find_next_task)"
+while true; do
+  i=$((i+1))
+  TASK=$(next_task)
+  [[ -z "$TASK" ]] && { echo "==> no more tasks — done"; break; }
 
-  if [[ -z "$NEXT" ]]; then
-    echo "==> no more pending ${PREFIX} tasks — done"
-    break
-  fi
+  ITER_LABEL="[$i${MAX_ITER:+/$MAX_ITER}]"
+  echo "==> $ITER_LABEL RPID on $TASK (remaining: $(pending_cnt))"
 
-  echo "==> [$i/${MAX_ITER}] RPID on ${NEXT}  (remaining: $(count_remaining))"
+  ARGS=(-p "$(prompt_for "$TASK")" --dangerously-skip-permissions)
+  [[ -n "$CLAUDE_MODEL" ]] && ARGS=(--model "$CLAUDE_MODEL" "${ARGS[@]}")
 
-  # Build claude command.
-  # --dangerously-skip-permissions is required for headless RPID: without it,
-  # every Write/Edit/Bash permission prompt auto-denies because there is no
-  # interactive approver, and the task exits with "blocked writing files".
-  CLAUDE_ARGS=(-p "$(make_prompt "$NEXT")" --dangerously-skip-permissions)
-  if [[ -n "$CLAUDE_MODEL" ]]; then
-    CLAUDE_ARGS=(--model "$CLAUDE_MODEL" "${CLAUDE_ARGS[@]}")
-  fi
+  START=$(date +%s); LOG="$LOG_DIR/$TASK.log"
+  set +e; claude "${ARGS[@]}" >"$LOG" 2>&1 & _PID=$!
+  _i=0; while kill -0 $_PID 2>/dev/null; do printf "\r  ${_S:$((_i++%4)):1}  %s" "$TASK"; sleep 0.1; done
+  wait $_PID; CL_EXIT=$?; set -e; printf "\r%-60s\r" " "
+  DURATION=$(( $(date +%s) - START ))
 
-  START_TS=$(date +%s)
-  LOG_FILE="${LOG_DIR}/${NEXT}.log"
-
-  if claude "${CLAUDE_ARGS[@]}" 2>&1 | tee "$LOG_FILE"; then
-    CLAUDE_EXIT=0
+  if checked "$TASK"; then
+    echo "    PASS: $TASK (${DURATION}s)"
+    FAIL_STREAK=0
   else
-    CLAUDE_EXIT=$?
+    FAIL_STREAK=$((FAIL_STREAK+1))
+    echo "    FAIL/WIP: $TASK (${DURATION}s, exit=$CL_EXIT, streak=$FAIL_STREAK)"
+    [[ $FAIL_STREAK -ge 2 ]] && { echo "==> 2 consecutive failures — aborting"; EXIT_CODE=1; break; }
   fi
 
-  DURATION=$(( $(date +%s) - START_TS ))
-
-  if task_is_checked "$NEXT"; then
-    echo "    PASS: ${NEXT}  (${DURATION}s, log: ${LOG_FILE})"
-    PREV_TASK=""  # reset retry tracking on any success
-  else
-    echo "    FAIL/WIP: ${NEXT}  (${DURATION}s, claude exit ${CLAUDE_EXIT}, log: ${LOG_FILE})"
-    if [[ "$PREV_TASK" == "$NEXT" ]]; then
-      echo "==> same task failed twice in a row — aborting"
-      echo "    investigate: ${LOG_FILE}"
-      EXIT_CODE=1
-      break
-    fi
-    PREV_TASK="$NEXT"
-  fi
+  [[ -n "$MAX_ITER" && $i -ge $MAX_ITER ]] && { echo "==> max iterations ($MAX_ITER) reached"; EXIT_CODE=2; break; }
 done
 
-if [[ $i -gt $MAX_ITER && -n "$(find_next_task)" ]]; then
-  echo "==> max iterations (${MAX_ITER}) reached without draining queue"
-  echo "    remaining: $(count_remaining)"
-  EXIT_CODE=2
-fi
-
-echo ""
-echo "==> loop finished"
-echo "    logs: ${LOG_DIR}"
+echo ""; echo "==> loop finished | logs: $LOG_DIR"
 exit $EXIT_CODE
