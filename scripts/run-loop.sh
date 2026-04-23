@@ -122,7 +122,7 @@ _spin_while() {
     printf "\n\r\033[2K     "
     [[ -n "$next" ]] && printf "\033[2mnext \033[0m\033[36m%s\033[0m  " "$next"
     printf "\033[2m%s  %ds  ^C to cancel\033[0m" "${CLAUDE_MODEL:-$PROVIDER}" "$elapsed"
-    lines=2
+    lines=1
     sleep 0.1
   done
   [[ $lines -gt 0 ]] && printf "\033[%dA\r\033[J" $lines || printf "\r\033[2K"
@@ -205,7 +205,7 @@ Task rules:
 
   set +e
   run_agent "$prompt" >"$LOG_DIR/research-bootstrap.log" 2>&1 & local bpid=$!
-  _spin_while "Research" "exploring repo, writing research-report + ${TASKS_FILE}..." "$bpid" "$start"
+  _spin_while "Research" "exploring repo, generating ${TASKS_FILE}..." "$bpid" "$start"
   wait $bpid; set -e
 }
 
