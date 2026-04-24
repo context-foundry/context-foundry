@@ -31,21 +31,38 @@ where
     unique.join(" + ")
 }
 
-fn stage_model_label(configs: &[Config], stage: &str) -> String {
-    join_stage_labels(configs.iter().map(|config| match stage {
-        "SCOUT" => Config::display_provider_model(&config.scout_provider, &config.scout_model),
-        "PLAN" => Config::display_provider_model(&config.planner_provider, &config.planner_model),
-        "IMPLEMENT" => {
+fn stage_model_label(configs: &[Config], stage_id: &str) -> String {
+    join_stage_labels(configs.iter().map(|config| match stage_id {
+        "scout" => Config::display_provider_model(&config.scout_provider, &config.scout_model),
+        "query" => Config::display_provider_model(&config.query_provider, &config.query_model),
+        "research" => {
+            Config::display_provider_model(&config.research_provider, &config.research_model)
+        }
+        "plan" => Config::display_provider_model(&config.planner_provider, &config.planner_model),
+        "implement" => {
             Config::display_provider_model(&config.builder_provider, &config.builder_model)
         }
-        "DOUBT" => {
+        "doubt" => {
             Config::display_provider_model(&config.reviewer_provider, &config.reviewer_model)
         }
-        "DISCOVER" => {
+        "discover" => {
             Config::display_provider_model(&config.discovery_provider, &config.discovery_model)
         }
         _ => String::new(),
     }))
+}
+
+fn stage_kind_label(stage_id: &str) -> &'static str {
+    match stage_id {
+        "scout" => "scout-report",
+        "query" => "prompt",
+        "research" => "research",
+        "plan" => "current-plan",
+        "implement" => "build-claims",
+        "doubt" => "fresh context",
+        "discover" => "TASKS.md",
+        _ => "",
+    }
 }
 
 pub(super) fn render_pipeline_map(
@@ -68,59 +85,61 @@ pub(super) fn render_pipeline_map(
 
     // ─── Connected pipeline stages (left side) ─────────────
     struct StageInfo {
-        label: &'static str,
+        label: String,
         model_label: String,
-        kind_label: &'static str,
+        kind_label: String,
         border_color: Color,
         text_style: Style,
     }
 
-    // Map active role to connected stage index
-    let active_connected = active_role.as_ref().and_then(|role| match role {
-        AgentRole::Scout => Some(0),
-        AgentRole::Planner => Some(1),
-        AgentRole::Builder => Some(2),
-        AgentRole::Reviewer | AgentRole::Fixer => Some(3),
-        _ => None,
+    // Filter to enabled stages; order follows config.pipeline_stages.
+    let enabled_stages: Vec<&crate::config::PipelineStageConfig> = config
+        .pipeline_stages
+        .iter()
+        .filter(|s| s.enabled)
+        .collect();
+
+    // Map active role -> index in enabled_stages via AgentRole::slug().
+    // Fixer shares the "doubt" slug with Reviewer, matching prior behaviour
+    // where both roles highlighted the DOUBT box.
+    let active_connected = active_role.as_ref().and_then(|role| {
+        let slug = role.slug();
+        enabled_stages.iter().position(|s| s.id == slug)
     });
 
-    let connected: Vec<StageInfo> = [
-        ("SCOUT", "scout-report"),
-        ("PLAN", "current-plan"),
-        ("IMPLEMENT", "build-claims"),
-        ("DOUBT", "fresh context"),
-    ]
-    .iter()
-    .enumerate()
-    .map(|(i, (label, kind))| {
-        let model_label =
-            truncate_str(&stage_model_label(&pipeline_configs, label), 14).to_string();
+    let connected: Vec<StageInfo> = enabled_stages
+        .iter()
+        .enumerate()
+        .map(|(i, stage_cfg)| {
+            let model_label =
+                truncate_str(&stage_model_label(&pipeline_configs, &stage_cfg.id), 14).to_string();
+            let kind_label = stage_kind_label(&stage_cfg.id).to_string();
 
-        let (border_color, text_style) = match active_connected {
-            Some(ai) if i == ai => (
-                pipe_color,
-                Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
-            ),
-            Some(ai) if i < ai => (Color::Green, Style::default().fg(Color::Green)),
-            _ => (theme.muted, Style::default().fg(theme.muted)),
-        };
+            let (border_color, text_style) = match active_connected {
+                Some(ai) if i == ai => (
+                    pipe_color,
+                    Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
+                ),
+                Some(ai) if i < ai => (Color::Green, Style::default().fg(Color::Green)),
+                _ => (theme.muted, Style::default().fg(theme.muted)),
+            };
 
-        StageInfo {
-            label,
-            model_label,
-            kind_label: kind,
-            border_color,
-            text_style,
-        }
-    })
-    .collect();
+            StageInfo {
+                label: stage_cfg.label.clone(),
+                model_label,
+                kind_label,
+                border_color,
+                text_style,
+            }
+        })
+        .collect();
 
     // ─── Disconnected stages (right side) ───────────────────
     let discovery_active = active_role.as_ref() == Some(&AgentRole::Discovery);
     let discovery_used = state.is_discovering || state.discovery_round > 0;
     let patterns_used = state.session_patterns_learned > 0;
 
-    let discovery_model = stage_model_label(&pipeline_configs, "DISCOVER");
+    let discovery_model = stage_model_label(&pipeline_configs, "discover");
     let patterns_model = config
         .role_configs()
         .iter()
@@ -130,9 +149,9 @@ pub(super) fn render_pipeline_map(
 
     let disconnected: Vec<StageInfo> = vec![
         StageInfo {
-            label: "SHIP",
+            label: "SHIP".to_string(),
             model_label: "GitHub".to_string(),
-            kind_label: "git + pr",
+            kind_label: "git + pr".to_string(),
             border_color: if state.ship_active {
                 Color::Green
             } else {
@@ -147,9 +166,9 @@ pub(super) fn render_pipeline_map(
             },
         },
         StageInfo {
-            label: "DISCOVER",
+            label: "DISCOVER".to_string(),
             model_label: truncate_str(&discovery_model, 14).to_string(),
-            kind_label: "TASKS.md",
+            kind_label: "TASKS.md".to_string(),
             border_color: if state.run_mode == "sprint" || state.run_mode == "review" {
                 theme.muted
             } else if discovery_active {
@@ -170,9 +189,9 @@ pub(super) fn render_pipeline_map(
             },
         },
         StageInfo {
-            label: "PATTERNS",
+            label: "PATTERNS".to_string(),
             model_label: truncate_str(&patterns_model, 14).to_string(),
-            kind_label: "~/.foundry/",
+            kind_label: "~/.foundry/".to_string(),
             border_color: if patterns_used {
                 Color::Green
             } else {
@@ -236,7 +255,7 @@ pub(super) fn render_pipeline_map(
         box_mid(
             &mut mid_spans,
             box_width,
-            stage.label,
+            &stage.label,
             stage.text_style,
             stage.border_color,
         );
@@ -250,7 +269,7 @@ pub(super) fn render_pipeline_map(
         box_model(
             &mut kind_spans,
             box_width,
-            stage.kind_label,
+            &stage.kind_label,
             stage.border_color,
             theme.muted,
         );
@@ -281,7 +300,7 @@ pub(super) fn render_pipeline_map(
         box_mid(
             &mut mid_spans,
             box_width,
-            stage.label,
+            &stage.label,
             stage.text_style,
             stage.border_color,
         );
@@ -295,7 +314,7 @@ pub(super) fn render_pipeline_map(
         box_model(
             &mut kind_spans,
             box_width,
-            stage.kind_label,
+            &stage.kind_label,
             stage.border_color,
             theme.muted,
         );

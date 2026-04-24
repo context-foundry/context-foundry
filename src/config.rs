@@ -16,6 +16,55 @@ fn default_budget_overrun_threshold() -> u8 {
     10
 }
 
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(default)]
+pub struct PipelineStageConfig {
+    pub id: String,
+    pub label: String,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+}
+
+impl Default for PipelineStageConfig {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            label: String::new(),
+            enabled: true,
+        }
+    }
+}
+
+fn default_pipeline_stages() -> Vec<PipelineStageConfig> {
+    vec![
+        PipelineStageConfig {
+            id: "query".into(),
+            label: "QUERY".into(),
+            enabled: true,
+        },
+        PipelineStageConfig {
+            id: "research".into(),
+            label: "RESEARCH".into(),
+            enabled: true,
+        },
+        PipelineStageConfig {
+            id: "plan".into(),
+            label: "PLAN".into(),
+            enabled: true,
+        },
+        PipelineStageConfig {
+            id: "implement".into(),
+            label: "IMPLEMENT".into(),
+            enabled: true,
+        },
+        PipelineStageConfig {
+            id: "doubt".into(),
+            label: "DOUBT".into(),
+            enabled: true,
+        },
+    ]
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct Config {
@@ -335,6 +384,13 @@ pub struct Config {
     /// independent diff review. Both write findings to .buildloop/review-report.md.
     /// Override with FOUNDRY_DOUBT_ENGINE env var.
     pub doubt_engine: String,
+
+    /// RPID pipeline stage list rendered in the TUI pipeline map. Stage order
+    /// here is display-only: the build-loop dispatch sequence remains hardcoded.
+    /// Missing from JSON -> 5-stage RPID default (query, research, plan, implement, doubt).
+    /// Accepts either "pipeline_stages" or the shorter "stages" key.
+    #[serde(alias = "stages")]
+    pub pipeline_stages: Vec<PipelineStageConfig>,
 }
 
 impl Default for Config {
@@ -440,6 +496,7 @@ impl Default for Config {
             pr_review_concurrency: 4,
             dashboard_port: 9400,
             doubt_engine: "claude".into(),
+            pipeline_stages: default_pipeline_stages(),
         }
     }
 }
@@ -1607,5 +1664,69 @@ mod tests {
             config.run_mode, "hil",
             "normalize must convert legacy 'hil' mode"
         );
+    }
+
+    #[test]
+    fn default_config_has_five_rpid_pipeline_stages() {
+        let stages = Config::default().pipeline_stages;
+        assert_eq!(stages.len(), 5);
+        assert_eq!(stages[0].id, "query");
+        assert_eq!(stages[0].label, "QUERY");
+        assert!(stages[0].enabled);
+        assert_eq!(stages[1].id, "research");
+        assert_eq!(stages[1].label, "RESEARCH");
+        assert_eq!(stages[2].id, "plan");
+        assert_eq!(stages[2].label, "PLAN");
+        assert_eq!(stages[3].id, "implement");
+        assert_eq!(stages[3].label, "IMPLEMENT");
+        assert_eq!(stages[4].id, "doubt");
+        assert_eq!(stages[4].label, "DOUBT");
+    }
+
+    #[test]
+    fn config_deserializes_missing_pipeline_stages_uses_rpid_defaults() {
+        let config: Config = serde_json::from_str(r#"{"builder_model":"opus"}"#).unwrap();
+        assert_eq!(config.pipeline_stages.len(), 5);
+        assert_eq!(config.pipeline_stages[0].id, "query");
+        assert_eq!(config.pipeline_stages[4].id, "doubt");
+    }
+
+    #[test]
+    fn config_deserializes_explicit_pipeline_stages_overrides_default() {
+        let json = r#"{
+            "pipeline_stages": [
+                {"id":"plan","label":"PLAN","enabled":true},
+                {"id":"implement","label":"BUILD","enabled":false}
+            ]
+        }"#;
+        let config: Config = serde_json::from_str(json).unwrap();
+        assert_eq!(config.pipeline_stages.len(), 2);
+        assert_eq!(config.pipeline_stages[0].id, "plan");
+        assert_eq!(config.pipeline_stages[1].label, "BUILD");
+        assert!(!config.pipeline_stages[1].enabled);
+    }
+
+    #[test]
+    fn config_deserializes_stages_alias() {
+        let json = r#"{"stages":[{"id":"doubt","label":"AUDIT"}]}"#;
+        let config: Config = serde_json::from_str(json).unwrap();
+        assert_eq!(config.pipeline_stages.len(), 1);
+        assert_eq!(config.pipeline_stages[0].id, "doubt");
+        assert_eq!(config.pipeline_stages[0].label, "AUDIT");
+        assert!(config.pipeline_stages[0].enabled);
+    }
+
+    #[test]
+    fn pipeline_stage_config_enabled_defaults_to_true() {
+        let stage: crate::config::PipelineStageConfig =
+            serde_json::from_str(r#"{"id":"plan","label":"PLAN"}"#).unwrap();
+        assert!(stage.enabled);
+    }
+
+    #[test]
+    fn pipeline_stage_config_explicit_enabled_false() {
+        let stage: crate::config::PipelineStageConfig =
+            serde_json::from_str(r#"{"id":"plan","label":"PLAN","enabled":false}"#).unwrap();
+        assert!(!stage.enabled);
     }
 }

@@ -44,6 +44,43 @@ impl std::fmt::Display for AgentRole {
     }
 }
 
+impl AgentRole {
+    /// Canonical lowercase pipeline-stage slug for each role. Two roles may
+    /// share a slug when they share a stage (Reviewer and Fixer both belong
+    /// to the "doubt" stage).
+    pub fn slug(&self) -> &'static str {
+        match self {
+            AgentRole::Scout => "scout",
+            AgentRole::Query => "query",
+            AgentRole::Research => "research",
+            AgentRole::Planner => "plan",
+            AgentRole::Builder => "implement",
+            AgentRole::Reviewer => "doubt",
+            AgentRole::Fixer => "doubt",
+            AgentRole::PlanReview => "plan-review",
+            AgentRole::Discovery => "discover",
+        }
+    }
+
+    /// Inverse mapping for the RPID pipeline slugs. Returns `None` for
+    /// unknown slugs. Mirrors `Config::parse_provider` (trim + lowercase).
+    #[allow(dead_code)]
+    pub fn from_str(s: &str) -> Option<AgentRole> {
+        let key = s.trim().to_ascii_lowercase();
+        match key.as_str() {
+            "query" => Some(AgentRole::Query),
+            "research" => Some(AgentRole::Research),
+            "plan" => Some(AgentRole::Planner),
+            "implement" => Some(AgentRole::Builder),
+            "doubt" => Some(AgentRole::Reviewer),
+            "scout" => Some(AgentRole::Scout),
+            "discover" => Some(AgentRole::Discovery),
+            "plan-review" => Some(AgentRole::PlanReview),
+            _ => None,
+        }
+    }
+}
+
 /// Centralized source of truth for which tools each agent role may use.
 /// This is tool-surface reduction, not a hard filesystem security boundary --
 /// any role with Bash access is still trusted code.
@@ -3405,5 +3442,39 @@ mod tests {
             event.is_none(),
             "empty tool_result content should return None"
         );
+    }
+
+    #[test]
+    fn agent_role_slug_covers_all_variants() {
+        assert_eq!(AgentRole::Scout.slug(), "scout");
+        assert_eq!(AgentRole::Query.slug(), "query");
+        assert_eq!(AgentRole::Research.slug(), "research");
+        assert_eq!(AgentRole::Planner.slug(), "plan");
+        assert_eq!(AgentRole::Builder.slug(), "implement");
+        assert_eq!(AgentRole::Reviewer.slug(), "doubt");
+        assert_eq!(AgentRole::Fixer.slug(), "doubt");
+        assert_eq!(AgentRole::PlanReview.slug(), "plan-review");
+        assert_eq!(AgentRole::Discovery.slug(), "discover");
+    }
+
+    #[test]
+    fn agent_role_from_str_maps_rpid_slugs() {
+        assert_eq!(AgentRole::from_str("query"), Some(AgentRole::Query));
+        assert_eq!(AgentRole::from_str("research"), Some(AgentRole::Research));
+        assert_eq!(AgentRole::from_str("plan"), Some(AgentRole::Planner));
+        assert_eq!(AgentRole::from_str("implement"), Some(AgentRole::Builder));
+        assert_eq!(AgentRole::from_str("doubt"), Some(AgentRole::Reviewer));
+    }
+
+    #[test]
+    fn agent_role_from_str_is_case_insensitive_and_trims() {
+        assert_eq!(AgentRole::from_str("  PLAN  "), Some(AgentRole::Planner));
+        assert_eq!(AgentRole::from_str("Implement"), Some(AgentRole::Builder));
+    }
+
+    #[test]
+    fn agent_role_from_str_returns_none_for_unknown() {
+        assert_eq!(AgentRole::from_str("bogus"), None);
+        assert_eq!(AgentRole::from_str(""), None);
     }
 }
