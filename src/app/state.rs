@@ -1,6 +1,6 @@
+use crate::sync_flag::SyncFlag;
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
-use crate::sync_flag::SyncFlag;
 use std::time::SystemTime;
 
 use chrono::{DateTime, Utc};
@@ -219,6 +219,7 @@ pub enum DualSelection {
     Off,
     First,
     Second,
+    Third,
     Both,
 }
 
@@ -227,6 +228,7 @@ impl DualSelection {
         match s {
             "first" => Self::First,
             "second" => Self::Second,
+            "third" => Self::Third,
             "both" => Self::Both,
             _ => Self::Off,
         }
@@ -237,17 +239,46 @@ impl DualSelection {
             Self::Off => "",
             Self::First => "first",
             Self::Second => "second",
+            Self::Third => "third",
             Self::Both => "both",
         }
     }
 
+    /// Raw next-state cycle. Callers that know how many builder_models are
+    /// configured should prefer `next_for(specs_len)` to skip invalid slots.
     pub fn next(self) -> Self {
         match self {
             Self::Off => Self::First,
             Self::First => Self::Second,
-            Self::Second => Self::Both,
+            Self::Second => Self::Third,
+            Self::Third => Self::Both,
             Self::Both => Self::First,
         }
+    }
+
+    /// Cycle to the next valid selection given how many builder_model specs
+    /// are configured. Skips `Third` when len < 3 and `Both` when len < 2.
+    ///
+    /// Note: once the cycle leaves Off it never returns (same as the underlying
+    /// `next()` cycle). With 3 specs the reachable cycle is
+    /// `First → Second → Third → Both → First → ...`. `Off` is only ever the
+    /// initial state; clearing back to Off requires editing config.
+    pub fn next_for(self, specs_len: usize) -> Self {
+        let mut candidate = self.next();
+        // Bounded loop: at most 5 variants to walk, so cap at 5 iterations.
+        for _ in 0..5 {
+            let ok = match candidate {
+                Self::Off | Self::First => true,
+                Self::Second => specs_len >= 2,
+                Self::Third => specs_len >= 3,
+                Self::Both => specs_len >= 2,
+            };
+            if ok {
+                return candidate;
+            }
+            candidate = candidate.next();
+        }
+        Self::Off
     }
 }
 

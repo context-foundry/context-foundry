@@ -189,7 +189,8 @@ fn spawn_lookahead_planner(
 
         let detected_stack = patterns::detect_project_tech_stack(&ctx.project_dir);
         let matched = if ctx.config.semantic_match_enabled {
-            let keyword_scores = patterns::keyword_scores(&all_patterns, &task_desc, &detected_stack);
+            let keyword_scores =
+                patterns::keyword_scores(&all_patterns, &task_desc, &detected_stack);
             let (scored, _result) = crate::embeddings::match_patterns_semantic(
                 &all_patterns,
                 &task_desc,
@@ -210,11 +211,8 @@ fn spawn_lookahead_planner(
             ctx.config.max_pattern_injection,
             ctx.config.min_pattern_injection,
         );
-        let pattern_context = patterns::format_patterns_for_prompt(
-            &matched,
-            "planner",
-            lookahead_pattern_count,
-        );
+        let pattern_context =
+            patterns::format_patterns_for_prompt(&matched, "planner", lookahead_pattern_count);
 
         let prompt = prompts::planner_lookahead_prompt(
             &task_id,
@@ -252,7 +250,11 @@ fn spawn_lookahead_planner(
             // Clean up partial plan file on failure.
             if let Err(e) = std::fs::remove_file(&plan_path) {
                 if e.kind() != std::io::ErrorKind::NotFound {
-                    eprintln!("Warning: failed to remove failed look-ahead plan {}: {}", plan_path.display(), e);
+                    eprintln!(
+                        "Warning: failed to remove failed look-ahead plan {}: {}",
+                        plan_path.display(),
+                        e
+                    );
                 }
             }
             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
@@ -310,7 +312,10 @@ fn restore_state_files(
     // Ensure .buildloop dir exists
     if !ctx.buildloop_dir.exists() {
         if let Err(e) = std::fs::create_dir_all(&ctx.buildloop_dir) {
-            eprintln!("Warning: failed to create buildloop dir during restore: {}", e);
+            eprintln!(
+                "Warning: failed to create buildloop dir during restore: {}",
+                e
+            );
         }
         if let Err(e) = std::fs::create_dir_all(&ctx.log_dir) {
             eprintln!("Warning: failed to create log dir during restore: {}", e);
@@ -340,7 +345,11 @@ fn restore_state_files(
         if needs_restore {
             if let Some(parent) = path.parent() {
                 if let Err(e) = std::fs::create_dir_all(parent) {
-                    eprintln!("Warning: failed to create parent dir {}: {}", parent.display(), e);
+                    eprintln!(
+                        "Warning: failed to create parent dir {}: {}",
+                        parent.display(),
+                        e
+                    );
                 }
             }
             match atomic_write_file(path, content) {
@@ -536,8 +545,8 @@ fn build_dependency_groups(ops: &[FileOp], project_dir: &std::path::Path) -> Vec
     // For each file, check if it references other files in the ops list
     for i in 0..n {
         // Read actual file content (if exists)
-        let file_content = std::fs::read_to_string(project_dir.join(&ops[i].file_path))
-            .unwrap_or_default();
+        let file_content =
+            std::fs::read_to_string(project_dir.join(&ops[i].file_path)).unwrap_or_default();
         // Combine actual file content with the raw_block from the plan
         let combined = format!("{}\n{}", file_content, ops[i].raw_block);
 
@@ -611,6 +620,7 @@ async fn run_parallel_builder(
     ops: &[FileOp],
     groups: &[Vec<usize>],
     extension_context: &str,
+    pattern_context: &str,
 ) -> (bool, bool, AgentUsage) {
     let cc_version = ctx.cc_version.clone();
     let task_id = &task_info.id;
@@ -627,7 +637,11 @@ async fn run_parallel_builder(
 
     let base_dir = ctx.buildloop_dir.join("parallel-build");
     if let Err(e) = std::fs::create_dir_all(&base_dir) {
-        eprintln!("Warning: failed to create parallel-build dir {}: {}", base_dir.display(), e);
+        eprintln!(
+            "Warning: failed to create parallel-build dir {}: {}",
+            base_dir.display(),
+            e
+        );
     }
 
     // Create worktrees for each slot
@@ -695,22 +709,34 @@ async fn run_parallel_builder(
             let dest = slot_dir.join(rel);
             if let Some(parent) = dest.parent() {
                 if let Err(e) = std::fs::create_dir_all(parent) {
-                    eprintln!("Warning: failed to create parent dir for SPEC in slot-{}: {}", slot_idx, e);
+                    eprintln!(
+                        "Warning: failed to create parent dir for SPEC in slot-{}: {}",
+                        slot_idx, e
+                    );
                 }
             }
             if let Err(e) = std::fs::copy(&ctx.spec_path, &dest) {
-                eprintln!("Warning: failed to copy SPEC.md into slot-{}: {}", slot_idx, e);
+                eprintln!(
+                    "Warning: failed to copy SPEC.md into slot-{}: {}",
+                    slot_idx, e
+                );
             }
         }
         if let Ok(rel) = ctx.plan_path.strip_prefix(&ctx.project_dir) {
             let dest = slot_dir.join(rel);
             if let Some(parent) = dest.parent() {
                 if let Err(e) = std::fs::create_dir_all(parent) {
-                    eprintln!("Warning: failed to create parent dir for TASKS in slot-{}: {}", slot_idx, e);
+                    eprintln!(
+                        "Warning: failed to create parent dir for TASKS in slot-{}: {}",
+                        slot_idx, e
+                    );
                 }
             }
             if let Err(e) = std::fs::copy(&ctx.plan_path, &dest) {
-                eprintln!("Warning: failed to copy TASKS.md into slot-{}: {}", slot_idx, e);
+                eprintln!(
+                    "Warning: failed to copy TASKS.md into slot-{}: {}",
+                    slot_idx, e
+                );
             }
         }
         // Copy current-plan.md
@@ -718,25 +744,31 @@ async fn run_parallel_builder(
         if plan_src.exists() {
             let wt_buildloop = slot_dir.join(".buildloop");
             if let Err(e) = std::fs::create_dir_all(&wt_buildloop) {
-                eprintln!("Warning: failed to create .buildloop dir in slot-{}: {}", slot_idx, e);
+                eprintln!(
+                    "Warning: failed to create .buildloop dir in slot-{}: {}",
+                    slot_idx, e
+                );
             }
             if let Err(e) = std::fs::copy(&plan_src, wt_buildloop.join("current-plan.md")) {
-                eprintln!("Warning: failed to copy current-plan.md into slot-{}: {}", slot_idx, e);
+                eprintln!(
+                    "Warning: failed to copy current-plan.md into slot-{}: {}",
+                    slot_idx, e
+                );
             }
         }
         // CLAUDE.md
         let claude_md_src = ctx.project_dir.join("CLAUDE.md");
         if claude_md_src.exists() {
             if let Err(e) = std::fs::copy(&claude_md_src, slot_dir.join("CLAUDE.md")) {
-                eprintln!("Warning: failed to copy CLAUDE.md into slot-{}: {}", slot_idx, e);
+                eprintln!(
+                    "Warning: failed to copy CLAUDE.md into slot-{}: {}",
+                    slot_idx, e
+                );
             }
         }
 
-        let wt_ctx = ctx.derive_sub_session(
-            ctx.config.clone(),
-            &slot_dir,
-            &format!("slot-{}", slot_idx),
-        );
+        let wt_ctx =
+            ctx.derive_sub_session(ctx.config.clone(), &slot_dir, &format!("slot-{}", slot_idx));
 
         slot_contexts.push((slot_dir, wt_ctx));
     }
@@ -766,6 +798,12 @@ async fn run_parallel_builder(
             &ctx.spec_file_prompt_path(),
             &ctx.tasks_file_prompt_path(),
         );
+        // Inject matched patterns so parallel builders can see and give feedback
+        let prompt = if !pattern_context.is_empty() {
+            format!("{}\n\n--- BEGIN REFERENCE DATA (non-authoritative) ---{}\n--- END REFERENCE DATA ---", prompt, pattern_context)
+        } else {
+            prompt
+        };
         let prompt = prompts::wrap_with_extensions(&prompt, extension_context);
 
         let provider = Config::parse_provider(&ctx.config.builder_provider);
@@ -773,7 +811,10 @@ async fn run_parallel_builder(
         let wt_project_dir = slot_contexts[slot_idx].1.project_dir.clone();
         let wt_log_dir = slot_contexts[slot_idx].1.log_dir.clone();
         if let Err(e) = std::fs::create_dir_all(&wt_log_dir) {
-            eprintln!("Warning: failed to create log dir for slot-{}: {}", slot_idx, e);
+            eprintln!(
+                "Warning: failed to create log dir for slot-{}: {}",
+                slot_idx, e
+            );
         }
         let timeout = ctx.config.agent_timeout_secs;
         let shutdown = ctx.shutdown.clone();
@@ -814,12 +855,16 @@ async fn run_parallel_builder(
             });
 
             // Emit AgentStarted for this slot
-            observatory::log_event(&slot_session_id, &slot_project_dir_obs, ObservatoryEvent::AgentStarted {
-                role: format!("{}", AgentRole::Builder),
-                provider: slot_builder_provider.clone(),
-                model: slot_builder_model.clone(),
-                cc_version: slot_cc_version.clone(),
-            });
+            observatory::log_event(
+                &slot_session_id,
+                &slot_project_dir_obs,
+                ObservatoryEvent::AgentStarted {
+                    role: format!("{}", AgentRole::Builder),
+                    provider: slot_builder_provider.clone(),
+                    model: slot_builder_model.clone(),
+                    cc_version: slot_cc_version.clone(),
+                },
+            );
             let slot_start = Instant::now();
 
             let result = agent::run_agent(
@@ -849,17 +894,21 @@ async fn run_parallel_builder(
             let ok = result.map(|r| r.success).unwrap_or(false);
 
             // Emit AgentDone for this slot
-            observatory::log_event(&slot_session_id, &slot_project_dir_obs, ObservatoryEvent::AgentDone {
-                role: format!("{}", AgentRole::Builder),
-                success: ok,
-                duration_secs: slot_start.elapsed().as_secs_f64(),
-                tokens_in: slot_usage.tokens_in,
-                tokens_out: slot_usage.tokens_out,
-                cost_usd: slot_usage.cost_usd,
-                context_pct: slot_usage.context_pct,
-                cache_creation_tokens: slot_usage.cache_creation_tokens,
-                cache_read_tokens: slot_usage.cache_read_tokens,
-            });
+            observatory::log_event(
+                &slot_session_id,
+                &slot_project_dir_obs,
+                ObservatoryEvent::AgentDone {
+                    role: format!("{}", AgentRole::Builder),
+                    success: ok,
+                    duration_secs: slot_start.elapsed().as_secs_f64(),
+                    tokens_in: slot_usage.tokens_in,
+                    tokens_out: slot_usage.tokens_out,
+                    cost_usd: slot_usage.cost_usd,
+                    context_pct: slot_usage.context_pct,
+                    cache_creation_tokens: slot_usage.cache_creation_tokens,
+                    cache_read_tokens: slot_usage.cache_read_tokens,
+                },
+            );
 
             (slot_idx, ok, rl, slot_usage)
         };
@@ -909,7 +958,8 @@ async fn run_parallel_builder(
                 if !discovered.is_empty() {
                     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
                         "Parallel builder slot-{}: discovered {} changed files via git",
-                        slot_idx, discovered.len()
+                        slot_idx,
+                        discovered.len()
                     ))));
                 }
                 discovered
@@ -925,7 +975,10 @@ async fn run_parallel_builder(
                     slot_idx
                 ))));
                 let group = &groups[*slot_idx];
-                group.iter().map(|&op_idx| ops[op_idx].file_path.clone()).collect()
+                group
+                    .iter()
+                    .map(|&op_idx| ops[op_idx].file_path.clone())
+                    .collect()
             }
         };
         for file_path in &files_to_copy {
@@ -1057,7 +1110,10 @@ async fn run_parallel_builder(
     if !combined_claims.is_empty() {
         let claims_path = ctx.buildloop_dir.join("build-claims.md");
         let header = format!("# Build Claims -- {} (parallel builder)\n", task_id);
-        if let Err(e) = atomic_write_file(&claims_path, format!("{}{}", header, combined_claims).as_bytes()) {
+        if let Err(e) = atomic_write_file(
+            &claims_path,
+            format!("{}{}", header, combined_claims).as_bytes(),
+        ) {
             eprintln!(
                 "Warning: failed to write combined build claims to {}: {} -- reviewer will run without claims context",
                 claims_path.display(), e
@@ -1108,15 +1164,23 @@ fn run_dual_pipelines<'a>(
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::DualBuildStarted {
             models: labels.clone(),
         }));
-        observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::DualPipelineStarted {
-            session_id: ctx.session_id.clone(),
-            models: labels.to_vec(),
-        });
+        observatory::log_event(
+            &ctx.session_id,
+            &ctx.project_dir,
+            ObservatoryEvent::DualPipelineStarted {
+                session_id: ctx.session_id.clone(),
+                models: labels.to_vec(),
+            },
+        );
         let dual_start = Instant::now();
 
         let arena_dir = ctx.buildloop_dir.join("arena");
         if let Err(e) = std::fs::create_dir_all(&arena_dir) {
-            eprintln!("Warning: failed to create arena dir {}: {}", arena_dir.display(), e);
+            eprintln!(
+                "Warning: failed to create arena dir {}: {}",
+                arena_dir.display(),
+                e
+            );
         }
 
         // Create worktrees and RunContexts for each pipeline
@@ -1184,38 +1248,50 @@ fn run_dual_pipelines<'a>(
                 let dest = wt_path.join(rel);
                 if let Some(parent) = dest.parent() {
                     if let Err(e) = std::fs::create_dir_all(parent) {
-                        eprintln!("Warning: failed to create parent dir for SPEC in pipeline-{}: {}", idx, e);
+                        eprintln!(
+                            "Warning: failed to create parent dir for SPEC in pipeline-{}: {}",
+                            idx, e
+                        );
                     }
                 }
                 if let Err(e) = std::fs::copy(&ctx.spec_path, &dest) {
-                    eprintln!("Warning: failed to copy SPEC.md into pipeline-{}: {}", idx, e);
+                    eprintln!(
+                        "Warning: failed to copy SPEC.md into pipeline-{}: {}",
+                        idx, e
+                    );
                 }
             }
             if let Ok(rel) = ctx.plan_path.strip_prefix(&ctx.project_dir) {
                 let dest = wt_path.join(rel);
                 if let Some(parent) = dest.parent() {
                     if let Err(e) = std::fs::create_dir_all(parent) {
-                        eprintln!("Warning: failed to create parent dir for TASKS in pipeline-{}: {}", idx, e);
+                        eprintln!(
+                            "Warning: failed to create parent dir for TASKS in pipeline-{}: {}",
+                            idx, e
+                        );
                     }
                 }
                 if let Err(e) = std::fs::copy(&ctx.plan_path, &dest) {
-                    eprintln!("Warning: failed to copy TASKS.md into pipeline-{}: {}", idx, e);
+                    eprintln!(
+                        "Warning: failed to copy TASKS.md into pipeline-{}: {}",
+                        idx, e
+                    );
                 }
             }
             // CLAUDE.md (may be untracked/gitignored)
             let claude_md_src = ctx.project_dir.join("CLAUDE.md");
             if claude_md_src.exists() {
                 if let Err(e) = std::fs::copy(&claude_md_src, wt_path.join("CLAUDE.md")) {
-                    eprintln!("Warning: failed to copy CLAUDE.md into pipeline-{}: {}", idx, e);
+                    eprintln!(
+                        "Warning: failed to copy CLAUDE.md into pipeline-{}: {}",
+                        idx, e
+                    );
                 }
             }
 
             // Create RunContext for this worktree
-            let wt_ctx = ctx.derive_sub_session(
-                pipeline_config,
-                &wt_path,
-                &format!("pipeline-{}", idx),
-            );
+            let wt_ctx =
+                ctx.derive_sub_session(pipeline_config, &wt_path, &format!("pipeline-{}", idx));
 
             wt_contexts.push((wt_path, wt_ctx));
         }
@@ -1288,12 +1364,16 @@ fn run_dual_pipelines<'a>(
             "Both pipelines complete. Results in .buildloop/arena/ -- evaluate and merge manually."
                 .to_string(),
         )));
-        observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::DualPipelineCompleted {
-            session_id: ctx.session_id.clone(),
-            wall_clock_secs: dual_start.elapsed().as_secs_f64(),
-            pipeline_0_success: result0.0,
-            pipeline_1_success: result1.0,
-        });
+        observatory::log_event(
+            &ctx.session_id,
+            &ctx.project_dir,
+            ObservatoryEvent::DualPipelineCompleted {
+                session_id: ctx.session_id.clone(),
+                wall_clock_secs: dual_start.elapsed().as_secs_f64(),
+                pipeline_0_success: result0.0,
+                pipeline_1_success: result1.0,
+            },
+        );
 
         // Do NOT clean up worktrees -- human evaluates results
 
@@ -1458,28 +1538,34 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
     let mut session_feats: usize = 0;
     let mut session_wips: usize = 0;
 
-    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::SessionIdAssigned(session_id.clone())));
+    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::SessionIdAssigned(
+        session_id.clone(),
+    )));
 
-    observatory::log_event(&session_id, &ctx.project_dir, ObservatoryEvent::SessionStarted {
-        config: serde_json::json!({
-            "planner_provider": ctx.config.planner_provider,
-            "planner_model": ctx.config.planner_model,
-            "builder_provider": ctx.config.builder_provider,
-            "builder_model": ctx.config.builder_model,
-            "reviewer_provider": ctx.config.reviewer_provider,
-            "reviewer_model": ctx.config.reviewer_model,
-            "scout_provider": ctx.config.scout_provider,
-            "scout_model": ctx.config.scout_model,
-            "discovery_provider": ctx.config.discovery_provider,
-            "discovery_model": ctx.config.discovery_model,
-            "run_mode": ctx.config.run_mode,
-            "pipeline_mode": ctx.config.pipeline_mode,
-            "batch_doubt": ctx.config.batch_doubt,
-            "cost_limit": ctx.config.cost_limit,
-            "agent_timeout_secs": ctx.config.agent_timeout_secs,
-        }),
-        cc_version: cc_version.clone(),
-    });
+    observatory::log_event(
+        &session_id,
+        &ctx.project_dir,
+        ObservatoryEvent::SessionStarted {
+            config: serde_json::json!({
+                "planner_provider": ctx.config.planner_provider,
+                "planner_model": ctx.config.planner_model,
+                "builder_provider": ctx.config.builder_provider,
+                "builder_model": ctx.config.builder_model,
+                "reviewer_provider": ctx.config.reviewer_provider,
+                "reviewer_model": ctx.config.reviewer_model,
+                "scout_provider": ctx.config.scout_provider,
+                "scout_model": ctx.config.scout_model,
+                "discovery_provider": ctx.config.discovery_provider,
+                "discovery_model": ctx.config.discovery_model,
+                "run_mode": ctx.config.run_mode,
+                "pipeline_mode": ctx.config.pipeline_mode,
+                "batch_doubt": ctx.config.batch_doubt,
+                "cost_limit": ctx.config.cost_limit,
+                "agent_timeout_secs": ctx.config.agent_timeout_secs,
+            }),
+            cc_version: cc_version.clone(),
+        },
+    );
 
     // Helper: emit SessionEnded. Called before each return point.
     macro_rules! emit_session_ended {
@@ -1491,7 +1577,8 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                     total_tasks: session_tasks,
                     feat_count: session_feats,
                     wip_count: session_wips,
-                    total_cost_usd: ctx.session_cost_millicents.load(Ordering::Relaxed) as f64 / 100_000.0,
+                    total_cost_usd: ctx.session_cost_millicents.load(Ordering::Relaxed) as f64
+                        / 100_000.0,
                     duration_secs: loop_start.elapsed().as_secs_f64(),
                 },
             );
@@ -1541,6 +1628,28 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
 
     // ─── Pattern Cache ─────────────────────────────────────────────
     let patterns_dir = patterns::resolve_patterns_dir(&ctx.config.patterns_dir);
+
+    // Decay stale patterns before loading (lazy cleanup on startup)
+    if ctx.config.pattern_decay_days > 0 {
+        let mut total_decayed =
+            patterns::decay_stale_patterns(&patterns_dir, ctx.config.pattern_decay_days);
+        // Also decay extension pattern dirs
+        for ext_name in &ctx.config.extensions {
+            if let Some(ext) = discovered_extensions.iter().find(|e| &e.name == ext_name) {
+                if let Some(ref pdir) = ext.patterns_dir {
+                    total_decayed +=
+                        patterns::decay_stale_patterns(pdir, ctx.config.pattern_decay_days);
+                }
+            }
+        }
+        if total_decayed > 0 {
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                "Decayed {} stale patterns (unused >{}d)",
+                total_decayed, ctx.config.pattern_decay_days
+            ))));
+        }
+    }
+
     let mut cached_patterns = patterns::load_patterns(&patterns_dir);
 
     // Merge extension patterns into the pool
@@ -1598,12 +1707,16 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                 AgentRole::Scout,
                 Config::display_provider_model(&ctx.config.scout_provider, &ctx.config.scout_model),
             )));
-            observatory::log_event(&session_id, &ctx.project_dir, ObservatoryEvent::AgentStarted {
-                role: format!("{}", AgentRole::Scout),
-                provider: ctx.config.scout_provider.clone(),
-                model: ctx.config.scout_model.clone(),
-                cc_version: cc_version.clone(),
-            });
+            observatory::log_event(
+                &session_id,
+                &ctx.project_dir,
+                ObservatoryEvent::AgentStarted {
+                    role: format!("{}", AgentRole::Scout),
+                    provider: ctx.config.scout_provider.clone(),
+                    model: ctx.config.scout_model.clone(),
+                    cc_version: cc_version.clone(),
+                },
+            );
 
             // Read SPEC.md for user intent if it exists
             let user_intent = std::fs::read_to_string(&ctx.spec_path)
@@ -1615,11 +1728,30 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                 .ok()
                 .filter(|s| !s.trim().is_empty());
 
+            // Search build history for context on similar past work
+            let history_dir = crate::history::resolve_history_dir(&ctx.config.history_dir);
+            let history_query = user_intent.as_deref().unwrap_or("");
+            let history_records = if !history_query.is_empty() {
+                crate::history::search_history(
+                    &history_dir,
+                    history_query,
+                    ctx.config.history_search_results,
+                )
+            } else {
+                Vec::new()
+            };
+            let history_context = crate::history::format_history_for_prompt(&history_records);
+
             let prompt = prompts::bootstrap_scout_prompt(
                 user_intent.as_deref(),
                 updated_specs.as_deref(),
                 &ctx.spec_file_prompt_path(),
                 &ctx.tasks_file_prompt_path(),
+                if history_context.is_empty() {
+                    None
+                } else {
+                    Some(&history_context)
+                },
             );
             // Scout is investigation-only -- skip extension context to save tokens.
             let scout_start = Instant::now();
@@ -1642,17 +1774,21 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
             let _ = tx.send(AppEvent::AgentDone(
                 scout_result.as_ref().map(|r| r.success).unwrap_or(false),
             ));
-            observatory::log_event(&session_id, &ctx.project_dir, ObservatoryEvent::AgentDone {
-                role: format!("{}", AgentRole::Scout),
-                success: scout_result.as_ref().map(|r| r.success).unwrap_or(false),
-                duration_secs: scout_start.elapsed().as_secs_f64(),
-                tokens_in: agent_usage.tokens_in,
-                tokens_out: agent_usage.tokens_out,
-                cost_usd: agent_usage.cost_usd,
-                context_pct: agent_usage.context_pct,
-                cache_creation_tokens: agent_usage.cache_creation_tokens,
-                cache_read_tokens: agent_usage.cache_read_tokens,
-            });
+            observatory::log_event(
+                &session_id,
+                &ctx.project_dir,
+                ObservatoryEvent::AgentDone {
+                    role: format!("{}", AgentRole::Scout),
+                    success: scout_result.as_ref().map(|r| r.success).unwrap_or(false),
+                    duration_secs: scout_start.elapsed().as_secs_f64(),
+                    tokens_in: agent_usage.tokens_in,
+                    tokens_out: agent_usage.tokens_out,
+                    cost_usd: agent_usage.cost_usd,
+                    context_pct: agent_usage.context_pct,
+                    cache_creation_tokens: agent_usage.cache_creation_tokens,
+                    cache_read_tokens: agent_usage.cache_read_tokens,
+                },
+            );
             qr_has_run = true;
 
             if ctx.is_stop_requested() {
@@ -1782,7 +1918,10 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                     "Pausing after denied commit -- loop will stop after this task".to_string(),
                 )));
                 if let Err(e) = std::fs::create_dir_all(&ctx.buildloop_dir) {
-                    eprintln!("Warning: failed to create buildloop dir for stop file: {}", e);
+                    eprintln!(
+                        "Warning: failed to create buildloop dir for stop file: {}",
+                        e
+                    );
                 }
                 if let Err(e) = std::fs::write(ctx.buildloop_dir.join("stop"), "") {
                     eprintln!("Warning: failed to write stop file: {}", e);
@@ -1953,12 +2092,16 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                     &ctx.config.discovery_model,
                 ),
             )));
-            observatory::log_event(&session_id, &ctx.project_dir, ObservatoryEvent::AgentStarted {
-                role: format!("{}", AgentRole::Discovery),
-                provider: ctx.config.discovery_provider.clone(),
-                model: ctx.config.discovery_model.clone(),
-                cc_version: cc_version.clone(),
-            });
+            observatory::log_event(
+                &session_id,
+                &ctx.project_dir,
+                ObservatoryEvent::AgentStarted {
+                    role: format!("{}", AgentRole::Discovery),
+                    provider: ctx.config.discovery_provider.clone(),
+                    model: ctx.config.discovery_model.clone(),
+                    cc_version: cc_version.clone(),
+                },
+            );
 
             let build_history = if session_build_claims.is_empty() {
                 None
@@ -1992,17 +2135,21 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
             let _ = tx.send(AppEvent::AgentDone(
                 result.as_ref().map(|r| r.success).unwrap_or(false),
             ));
-            observatory::log_event(&session_id, &ctx.project_dir, ObservatoryEvent::AgentDone {
-                role: format!("{}", AgentRole::Discovery),
-                success: result.as_ref().map(|r| r.success).unwrap_or(false),
-                duration_secs: discovery_start.elapsed().as_secs_f64(),
-                tokens_in: agent_usage.tokens_in,
-                tokens_out: agent_usage.tokens_out,
-                cost_usd: agent_usage.cost_usd,
-                context_pct: agent_usage.context_pct,
-                cache_creation_tokens: agent_usage.cache_creation_tokens,
-                cache_read_tokens: agent_usage.cache_read_tokens,
-            });
+            observatory::log_event(
+                &session_id,
+                &ctx.project_dir,
+                ObservatoryEvent::AgentDone {
+                    role: format!("{}", AgentRole::Discovery),
+                    success: result.as_ref().map(|r| r.success).unwrap_or(false),
+                    duration_secs: discovery_start.elapsed().as_secs_f64(),
+                    tokens_in: agent_usage.tokens_in,
+                    tokens_out: agent_usage.tokens_out,
+                    cost_usd: agent_usage.cost_usd,
+                    context_pct: agent_usage.context_pct,
+                    cache_creation_tokens: agent_usage.cache_creation_tokens,
+                    cache_read_tokens: agent_usage.cache_read_tokens,
+                },
+            );
 
             // Check stop after discovery agent completion
             if ctx.is_stop_requested() {
@@ -2285,7 +2432,9 @@ async fn process_task(
                 .await;
                 return (v, r, false);
             }
-            DualSelection::First | DualSelection::Second if selected_configs.len() == 1 => {
+            DualSelection::First | DualSelection::Second | DualSelection::Third
+                if selected_configs.len() == 1 =>
+            {
                 let pipeline_config = selected_configs[0].clone();
                 let override_ctx = ctx.derive(pipeline_config);
                 // Box::pin to break async recursion (override_ctx has dual_selection cleared)
@@ -2374,7 +2523,8 @@ async fn process_task(
                 true
             } else {
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
-                    "Checkpoint says query completed but questions.md missing -- re-running query".to_string(),
+                    "Checkpoint says query completed but questions.md missing -- re-running query"
+                        .to_string(),
                 )));
                 false
             }
@@ -2441,23 +2591,30 @@ async fn process_task(
         }
         _ => false,
     };
-    let checkpoint_skip_plan_review = matches!(resume_stage, Some("builder" | "doubt") if checkpoint_skip_planner);
+    let checkpoint_skip_plan_review =
+        matches!(resume_stage, Some("builder" | "doubt") if checkpoint_skip_planner);
 
     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::TaskStarted(
         task_info.clone(),
     )));
     let task_start = std::time::Instant::now();
-    let task_cost_snapshot = ctx.session_cost_millicents.load(std::sync::atomic::Ordering::Relaxed);
+    let task_cost_snapshot = ctx
+        .session_cost_millicents
+        .load(std::sync::atomic::Ordering::Relaxed);
 
     let _scout_report = ctx.buildloop_dir.join("scout-report.md");
     let questions_file = ctx.buildloop_dir.join("questions.md");
     let research_report = ctx.buildloop_dir.join("research-report.md");
     let task_complexity = complexity::classify_task(task_desc);
-    observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::TaskStarted {
-        task_id: task_id.to_string(),
-        description: task_desc.to_string(),
-        complexity: format!("{:?}", task_complexity),
-    });
+    observatory::log_event(
+        &ctx.session_id,
+        &ctx.project_dir,
+        ObservatoryEvent::TaskStarted {
+            task_id: task_id.to_string(),
+            description: task_desc.to_string(),
+            complexity: format!("{:?}", task_complexity),
+        },
+    );
     let skip_query = skip_scout
         || checkpoint_skip_query
         || (ctx.config.skip_scout_for_simple && task_complexity == TaskComplexity::Simple);
@@ -2515,7 +2672,10 @@ async fn process_task(
     }
     if let Err(e) = std::fs::remove_file(&patterns_extracted) {
         if e.kind() != std::io::ErrorKind::NotFound {
-            eprintln!("Warning: failed to remove stale patterns-extracted.json: {}", e);
+            eprintln!(
+                "Warning: failed to remove stale patterns-extracted.json: {}",
+                e
+            );
             stale_cleanup_failures.push("patterns-extracted.json".to_string());
         }
     }
@@ -2557,11 +2717,8 @@ async fn process_task(
 
     let pattern_context =
         patterns::format_patterns_for_prompt(&matched, "planner", effective_pattern_count);
-    let reviewer_pattern_context = patterns::format_patterns_for_prompt(
-        &matched,
-        "reviewer",
-        effective_pattern_count,
-    );
+    let reviewer_pattern_context =
+        patterns::format_patterns_for_prompt(&matched, "reviewer", effective_pattern_count);
 
     if !matched.is_empty() {
         let actually_injected = matched.len().min(effective_pattern_count);
@@ -2570,7 +2727,11 @@ async fn process_task(
             matched.len(),
             actually_injected
         ))));
-        let titles: Vec<String> = matched.iter().take(effective_pattern_count).map(|p| p.title.clone()).collect();
+        let titles: Vec<String> = matched
+            .iter()
+            .take(effective_pattern_count)
+            .map(|p| p.title.clone())
+            .collect();
         let keywords_by_title: HashMap<String, Vec<String>> = matched
             .iter()
             .take(effective_pattern_count)
@@ -2586,16 +2747,28 @@ async fn process_task(
             titles,
             keywords_by_title,
         }));
-        let pattern_ids: Vec<String> = matched.iter().take(effective_pattern_count).map(|p| p.pattern_id.clone()).collect();
-        observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::PatternInjected {
-            task_id: task_id.to_string(),
-            pattern_ids,
-            count: actually_injected,
-        });
+        let pattern_ids: Vec<String> = matched
+            .iter()
+            .take(effective_pattern_count)
+            .map(|p| p.pattern_id.clone())
+            .collect();
+        observatory::log_event(
+            &ctx.session_id,
+            &ctx.project_dir,
+            ObservatoryEvent::PatternInjected {
+                task_id: task_id.to_string(),
+                pattern_ids,
+                count: actually_injected,
+            },
+        );
     }
 
     // Save pattern IDs for later PatternApplied event -- only the ones actually injected
-    let injected_pattern_ids: Vec<String> = matched.iter().take(effective_pattern_count).map(|p| p.pattern_id.clone()).collect();
+    let injected_pattern_ids: Vec<String> = matched
+        .iter()
+        .take(effective_pattern_count)
+        .map(|p| p.pattern_id.clone())
+        .collect();
 
     // Decide whether to skip the planner based on complexity (already computed above).
     // Skip for simple tasks (existing behavior) AND for medium tasks with
@@ -2641,383 +2814,429 @@ async fn process_task(
             };
             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(msg)));
         } else {
-        // ─── Query Phase ─────────────────────────────────────────
-        {
-            let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
-            let fwd_tx = tx.clone();
-            let fwd_handle = tokio::spawn(async move {
-                let mut usage = AgentUsage::default();
-                while let Some(evt) = agent_rx.recv().await {
-                    usage.accumulate(&evt);
-                    let _ = fwd_tx.send(AppEvent::AgentOutput(evt));
-                }
-                usage
-            });
+            // ─── Query Phase ─────────────────────────────────────────
+            {
+                let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
+                let fwd_tx = tx.clone();
+                let fwd_handle = tokio::spawn(async move {
+                    let mut usage = AgentUsage::default();
+                    while let Some(evt) = agent_rx.recv().await {
+                        usage.accumulate(&evt);
+                        let _ = fwd_tx.send(AppEvent::AgentOutput(evt));
+                    }
+                    usage
+                });
 
-            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::AgentStarted(
-                AgentRole::Query,
-                Config::display_provider_model(&ctx.config.query_provider, &ctx.config.query_model),
-            )));
-            observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::AgentStarted {
-                role: format!("{}", AgentRole::Query),
-                provider: ctx.config.query_provider.clone(),
-                model: ctx.config.query_model.clone(),
-                cc_version: cc_version.clone(),
-            });
-
-            let updated_specs = std::fs::read_to_string(&ctx.updated_specs_path)
-                .ok()
-                .filter(|s| !s.trim().is_empty());
-            let spec_content = std::fs::read_to_string(&ctx.spec_path)
-                .ok()
-                .filter(|s| !s.trim().is_empty());
-            let tasks_content = std::fs::read_to_string(&ctx.plan_path)
-                .ok()
-                .filter(|s| !s.trim().is_empty())
-                .map(|s| crate::task::extract_query_context(&s));
-
-            let query_prompt_text = prompts::query_prompt(
-                task_id,
-                task_desc,
-                complexity_str,
-                max_questions,
-                updated_specs.as_deref(),
-                spec_content.as_deref(),
-                tasks_content.as_deref(),
-            );
-            let query_start = Instant::now();
-            let query_result = agent::run_agent(
-                &AgentRole::Query,
-                Config::parse_provider(&ctx.config.query_provider),
-                &ctx.config.query_model,
-                &query_prompt_text,
-                &ctx.project_dir,
-                agent_tx,
-                &ctx.log_dir,
-                None,
-                ctx.config.agent_timeout_secs,
-                Some(ctx.shutdown.clone()),
-                Some(&ctx.config),
-            )
-            .await;
-
-            let agent_usage = fwd_handle.await.unwrap_or_default();
-            last_rate_limited = was_rate_limited(&query_result);
-            let query_ok = query_result.map(|r| r.success).unwrap_or(false);
-            let _ = tx.send(AppEvent::AgentDone(query_ok));
-            observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::AgentDone {
-                role: format!("{}", AgentRole::Query),
-                success: query_ok,
-                duration_secs: query_start.elapsed().as_secs_f64(),
-                tokens_in: agent_usage.tokens_in,
-                tokens_out: agent_usage.tokens_out,
-                cost_usd: agent_usage.cost_usd,
-                context_pct: agent_usage.context_pct,
-                cache_creation_tokens: agent_usage.cache_creation_tokens,
-                cache_read_tokens: agent_usage.cache_read_tokens,
-            });
-
-            // Budget telemetry: Query
-            if ctx.config.budget_recovery_enabled {
-                let record = budget::evaluate_phase(
-                    &AgentRole::Query,
-                    &agent_usage,
-                    &ctx.config.budget_targets,
-                    ctx.config.budget_overrun_threshold,
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::AgentStarted(
+                    AgentRole::Query,
+                    Config::display_provider_model(
+                        &ctx.config.query_provider,
+                        &ctx.config.query_model,
+                    ),
+                )));
+                observatory::log_event(
+                    &ctx.session_id,
+                    &ctx.project_dir,
+                    ObservatoryEvent::AgentStarted {
+                        role: format!("{}", AgentRole::Query),
+                        provider: ctx.config.query_provider.clone(),
+                        model: ctx.config.query_model.clone(),
+                        cc_version: cc_version.clone(),
+                    },
                 );
-                if record.overrun && record.recovery_action != budget::RecoveryAction::Continue {
-                    budget_telemetry.any_overrun = true;
-                    budget_telemetry.recovery_actions_taken.push(format!(
-                        "{}: {}", AgentRole::Query, record.recovery_action
-                    ));
-                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BudgetOverrun {
-                        phase: format!("{}", AgentRole::Query),
-                        target_pct: record.target_pct,
-                        actual_pct: record.actual_pct,
-                        recovery: format!("{}", record.recovery_action),
-                    }));
-                    observatory::log_event(
-                        &ctx.session_id,
-                        &ctx.project_dir,
-                        ObservatoryEvent::BudgetOverrun {
-                            task_id: task_id.to_string(),
+
+                let updated_specs = std::fs::read_to_string(&ctx.updated_specs_path)
+                    .ok()
+                    .filter(|s| !s.trim().is_empty());
+                let spec_content = std::fs::read_to_string(&ctx.spec_path)
+                    .ok()
+                    .filter(|s| !s.trim().is_empty());
+                let tasks_content = std::fs::read_to_string(&ctx.plan_path)
+                    .ok()
+                    .filter(|s| !s.trim().is_empty())
+                    .map(|s| crate::task::extract_query_context(&s));
+
+                let query_prompt_text = prompts::query_prompt(
+                    task_id,
+                    task_desc,
+                    complexity_str,
+                    max_questions,
+                    updated_specs.as_deref(),
+                    spec_content.as_deref(),
+                    tasks_content.as_deref(),
+                );
+                let query_start = Instant::now();
+                let query_result = agent::run_agent(
+                    &AgentRole::Query,
+                    Config::parse_provider(&ctx.config.query_provider),
+                    &ctx.config.query_model,
+                    &query_prompt_text,
+                    &ctx.project_dir,
+                    agent_tx,
+                    &ctx.log_dir,
+                    None,
+                    ctx.config.agent_timeout_secs,
+                    Some(ctx.shutdown.clone()),
+                    Some(&ctx.config),
+                )
+                .await;
+
+                let agent_usage = fwd_handle.await.unwrap_or_default();
+                last_rate_limited = was_rate_limited(&query_result);
+                let query_ok = query_result.map(|r| r.success).unwrap_or(false);
+                let _ = tx.send(AppEvent::AgentDone(query_ok));
+                observatory::log_event(
+                    &ctx.session_id,
+                    &ctx.project_dir,
+                    ObservatoryEvent::AgentDone {
+                        role: format!("{}", AgentRole::Query),
+                        success: query_ok,
+                        duration_secs: query_start.elapsed().as_secs_f64(),
+                        tokens_in: agent_usage.tokens_in,
+                        tokens_out: agent_usage.tokens_out,
+                        cost_usd: agent_usage.cost_usd,
+                        context_pct: agent_usage.context_pct,
+                        cache_creation_tokens: agent_usage.cache_creation_tokens,
+                        cache_read_tokens: agent_usage.cache_read_tokens,
+                    },
+                );
+
+                // Budget telemetry: Query
+                if ctx.config.budget_recovery_enabled {
+                    let record = budget::evaluate_phase(
+                        &AgentRole::Query,
+                        &agent_usage,
+                        &ctx.config.budget_targets,
+                        ctx.config.budget_overrun_threshold,
+                    );
+                    if record.overrun && record.recovery_action != budget::RecoveryAction::Continue
+                    {
+                        budget_telemetry.any_overrun = true;
+                        budget_telemetry.recovery_actions_taken.push(format!(
+                            "{}: {}",
+                            AgentRole::Query,
+                            record.recovery_action
+                        ));
+                        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BudgetOverrun {
                             phase: format!("{}", AgentRole::Query),
                             target_pct: record.target_pct,
                             actual_pct: record.actual_pct,
-                            recovery_action: format!("{}", record.recovery_action),
-                        },
-                    );
-                } else if record.overrun {
-                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                        "Budget: {} used {}% (target {}%, within tolerance)",
-                        AgentRole::Query, record.actual_pct, record.target_pct,
-                    ))));
+                            recovery: format!("{}", record.recovery_action),
+                        }));
+                        observatory::log_event(
+                            &ctx.session_id,
+                            &ctx.project_dir,
+                            ObservatoryEvent::BudgetOverrun {
+                                task_id: task_id.to_string(),
+                                phase: format!("{}", AgentRole::Query),
+                                target_pct: record.target_pct,
+                                actual_pct: record.actual_pct,
+                                recovery_action: format!("{}", record.recovery_action),
+                            },
+                        );
+                    } else if record.overrun {
+                        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                            "Budget: {} used {}% (target {}%, within tolerance)",
+                            AgentRole::Query,
+                            record.actual_pct,
+                            record.target_pct,
+                        ))));
+                    }
+                    budget_telemetry.records.push(record);
                 }
-                budget_telemetry.records.push(record);
-            }
 
-            if !query_ok {
-                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                    "Query failed for {} -- continuing without questions",
-                    task_id
-                ))));
-                stage_results.push(StageResult::failure(
-                    "Query",
-                    &format!("Generate investigation questions for {}", task_id),
-                    FailureType::Crash,
-                    vec!["Query is non-blocking -- pipeline continues without questions".to_string()],
-                ));
-                query_failed = true;
-                // Remove partial questions.md so crash recovery won't trust stale content
-                if let Err(e) = std::fs::remove_file(&questions_file) {
-                    if e.kind() != std::io::ErrorKind::NotFound {
-                        eprintln!("Warning: failed to remove partial questions.md after query failure: {}", e);
+                if !query_ok {
+                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                        "Query failed for {} -- continuing without questions",
+                        task_id
+                    ))));
+                    stage_results.push(StageResult::failure(
+                        "Query",
+                        &format!("Generate investigation questions for {}", task_id),
+                        FailureType::Crash,
+                        vec![
+                            "Query is non-blocking -- pipeline continues without questions"
+                                .to_string(),
+                        ],
+                    ));
+                    query_failed = true;
+                    // Remove partial questions.md so crash recovery won't trust stale content
+                    if let Err(e) = std::fs::remove_file(&questions_file) {
+                        if e.kind() != std::io::ErrorKind::NotFound {
+                            eprintln!("Warning: failed to remove partial questions.md after query failure: {}", e);
+                        }
                     }
                 }
-            }
 
-            adaptive_sleep(
-                &ctx.config,
-                last_rate_limited,
-                ctx.config.pause_between_agents_secs,
-            )
-            .await;
+                adaptive_sleep(
+                    &ctx.config,
+                    last_rate_limited,
+                    ctx.config.pause_between_agents_secs,
+                )
+                .await;
 
-            if ctx.is_stop_requested() {
-                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                    "Stop requested after QUERY for {} -- skipping remaining stages",
-                    task_id
-                ))));
-                {
-                    let _lock = ctx
-                        .tasks_file_lock
-                        .lock()
-                        .unwrap_or_else(|e| e.into_inner());
-                    let _ = task::update_task_progress(
-                        &ctx.plan_path,
-                        task_id,
-                        "Q.....",
+                if ctx.is_stop_requested() {
+                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                        "Stop requested after QUERY for {} -- skipping remaining stages",
+                        task_id
+                    ))));
+                    {
+                        let _lock = ctx
+                            .tasks_file_lock
+                            .lock()
+                            .unwrap_or_else(|e| e.into_inner());
+                        let _ = task::update_task_progress(&ctx.plan_path, task_id, "Q.....");
+                    }
+                    stage_results.push(StageResult::failure(
+                        "Query",
+                        &format!("Generate investigation questions for {}", task_id),
+                        FailureType::StopRequested,
+                        vec![],
+                    ));
+                    let _ = commit_wip_for_mode(ctx, task_id, task_desc);
+                    flush_budget_telemetry(
+                        &ctx.buildloop_dir,
+                        ctx.config.budget_recovery_enabled,
+                        &budget_telemetry,
                     );
+                    return (false, last_rate_limited, false);
                 }
-                stage_results.push(StageResult::failure(
-                    "Query",
-                    &format!("Generate investigation questions for {}", task_id),
-                    FailureType::StopRequested,
-                    vec![],
-                ));
-                let _ = commit_wip_for_mode(ctx, task_id, task_desc);
-                flush_budget_telemetry(&ctx.buildloop_dir, ctx.config.budget_recovery_enabled, &budget_telemetry);
-                return (false, last_rate_limited, false);
             }
-        }
 
-        // Checkpoint: query completed
-        if !query_failed {
-            write_checkpoint(&ctx.buildloop_dir, task_id, task_desc, "query");
-        }
+            // Checkpoint: query completed
+            if !query_failed {
+                write_checkpoint(&ctx.buildloop_dir, task_id, task_desc, "query");
+            }
         } // end if !skip_query else block
 
         if !query_failed {
-        // ─── Research Phase (with phase isolation) ───────────────
-        {
-            // Phase isolation: hide TASKS.md and UPDATED_SPECS.md from Research
-            let isolation = if ctx.config.phase_isolation {
-                let restricted = crate::isolation::research_restricted_paths(
-                    &ctx.plan_path,
-                    &ctx.updated_specs_path,
-                    &ctx.buildloop_dir,
-                );
-                match crate::isolation::PhaseIsolation::activate(&restricted) {
-                    Ok(iso) => Some(iso),
-                    Err(e) => {
-                        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+            // ─── Research Phase (with phase isolation) ───────────────
+            {
+                // Phase isolation: hide TASKS.md and UPDATED_SPECS.md from Research
+                let isolation = if ctx.config.phase_isolation {
+                    let restricted = crate::isolation::research_restricted_paths(
+                        &ctx.plan_path,
+                        &ctx.updated_specs_path,
+                        &ctx.buildloop_dir,
+                    );
+                    match crate::isolation::PhaseIsolation::activate(&restricted) {
+                        Ok(iso) => Some(iso),
+                        Err(e) => {
+                            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
                             "Phase isolation failed for Research: {} -- continuing without isolation", e
                         ))));
-                        None
+                            None
+                        }
+                    }
+                } else {
+                    None
+                };
+
+                let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
+                let fwd_tx = tx.clone();
+                let fwd_handle = tokio::spawn(async move {
+                    let mut usage = AgentUsage::default();
+                    while let Some(evt) = agent_rx.recv().await {
+                        usage.accumulate(&evt);
+                        let _ = fwd_tx.send(AppEvent::AgentOutput(evt));
+                    }
+                    usage
+                });
+
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::AgentStarted(
+                    AgentRole::Research,
+                    Config::display_provider_model(
+                        &ctx.config.research_provider,
+                        &ctx.config.research_model,
+                    ),
+                )));
+                observatory::log_event(
+                    &ctx.session_id,
+                    &ctx.project_dir,
+                    ObservatoryEvent::AgentStarted {
+                        role: format!("{}", AgentRole::Research),
+                        provider: ctx.config.research_provider.clone(),
+                        model: ctx.config.research_model.clone(),
+                        cc_version: cc_version.clone(),
+                    },
+                );
+
+                let research_prompt_text = prompts::research_prompt();
+                let research_start = Instant::now();
+                let research_result = agent::run_agent(
+                    &AgentRole::Research,
+                    Config::parse_provider(&ctx.config.research_provider),
+                    &ctx.config.research_model,
+                    &research_prompt_text,
+                    &ctx.project_dir,
+                    agent_tx,
+                    &ctx.log_dir,
+                    None,
+                    ctx.config.agent_timeout_secs,
+                    Some(ctx.shutdown.clone()),
+                    Some(&ctx.config),
+                )
+                .await;
+
+                // Restore isolated files before processing results
+                if let Some(mut iso) = isolation {
+                    if let Err(e) = iso.restore() {
+                        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                            "Phase isolation restore failed: {}",
+                            e
+                        ))));
                     }
                 }
-            } else {
-                None
-            };
 
-            let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
-            let fwd_tx = tx.clone();
-            let fwd_handle = tokio::spawn(async move {
-                let mut usage = AgentUsage::default();
-                while let Some(evt) = agent_rx.recv().await {
-                    usage.accumulate(&evt);
-                    let _ = fwd_tx.send(AppEvent::AgentOutput(evt));
-                }
-                usage
-            });
-
-            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::AgentStarted(
-                AgentRole::Research,
-                Config::display_provider_model(&ctx.config.research_provider, &ctx.config.research_model),
-            )));
-            observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::AgentStarted {
-                role: format!("{}", AgentRole::Research),
-                provider: ctx.config.research_provider.clone(),
-                model: ctx.config.research_model.clone(),
-                cc_version: cc_version.clone(),
-            });
-
-            let research_prompt_text = prompts::research_prompt();
-            let research_start = Instant::now();
-            let research_result = agent::run_agent(
-                &AgentRole::Research,
-                Config::parse_provider(&ctx.config.research_provider),
-                &ctx.config.research_model,
-                &research_prompt_text,
-                &ctx.project_dir,
-                agent_tx,
-                &ctx.log_dir,
-                None,
-                ctx.config.agent_timeout_secs,
-                Some(ctx.shutdown.clone()),
-                Some(&ctx.config),
-            )
-            .await;
-
-            // Restore isolated files before processing results
-            if let Some(mut iso) = isolation {
-                if let Err(e) = iso.restore() {
-                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                        "Phase isolation restore failed: {}", e
-                    ))));
-                }
-            }
-
-            let agent_usage = fwd_handle.await.unwrap_or_default();
-            last_rate_limited = was_rate_limited(&research_result);
-            let research_ok = research_result.map(|r| r.success).unwrap_or(false);
-            let _ = tx.send(AppEvent::AgentDone(research_ok));
-            observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::AgentDone {
-                role: format!("{}", AgentRole::Research),
-                success: research_ok,
-                duration_secs: research_start.elapsed().as_secs_f64(),
-                tokens_in: agent_usage.tokens_in,
-                tokens_out: agent_usage.tokens_out,
-                cost_usd: agent_usage.cost_usd,
-                context_pct: agent_usage.context_pct,
-                cache_creation_tokens: agent_usage.cache_creation_tokens,
-                cache_read_tokens: agent_usage.cache_read_tokens,
-            });
-
-            // Budget telemetry: Research
-            if ctx.config.budget_recovery_enabled {
-                let record = budget::evaluate_phase(
-                    &AgentRole::Research,
-                    &agent_usage,
-                    &ctx.config.budget_targets,
-                    ctx.config.budget_overrun_threshold,
+                let agent_usage = fwd_handle.await.unwrap_or_default();
+                last_rate_limited = was_rate_limited(&research_result);
+                let research_ok = research_result.map(|r| r.success).unwrap_or(false);
+                let _ = tx.send(AppEvent::AgentDone(research_ok));
+                observatory::log_event(
+                    &ctx.session_id,
+                    &ctx.project_dir,
+                    ObservatoryEvent::AgentDone {
+                        role: format!("{}", AgentRole::Research),
+                        success: research_ok,
+                        duration_secs: research_start.elapsed().as_secs_f64(),
+                        tokens_in: agent_usage.tokens_in,
+                        tokens_out: agent_usage.tokens_out,
+                        cost_usd: agent_usage.cost_usd,
+                        context_pct: agent_usage.context_pct,
+                        cache_creation_tokens: agent_usage.cache_creation_tokens,
+                        cache_read_tokens: agent_usage.cache_read_tokens,
+                    },
                 );
-                if record.overrun && record.recovery_action != budget::RecoveryAction::Continue {
-                    budget_telemetry.any_overrun = true;
-                    budget_telemetry.recovery_actions_taken.push(format!(
-                        "{}: {}", AgentRole::Research, record.recovery_action
-                    ));
-                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BudgetOverrun {
-                        phase: format!("{}", AgentRole::Research),
-                        target_pct: record.target_pct,
-                        actual_pct: record.actual_pct,
-                        recovery: format!("{}", record.recovery_action),
-                    }));
-                    observatory::log_event(
-                        &ctx.session_id,
-                        &ctx.project_dir,
-                        ObservatoryEvent::BudgetOverrun {
-                            task_id: task_id.to_string(),
+
+                // Budget telemetry: Research
+                if ctx.config.budget_recovery_enabled {
+                    let record = budget::evaluate_phase(
+                        &AgentRole::Research,
+                        &agent_usage,
+                        &ctx.config.budget_targets,
+                        ctx.config.budget_overrun_threshold,
+                    );
+                    if record.overrun && record.recovery_action != budget::RecoveryAction::Continue
+                    {
+                        budget_telemetry.any_overrun = true;
+                        budget_telemetry.recovery_actions_taken.push(format!(
+                            "{}: {}",
+                            AgentRole::Research,
+                            record.recovery_action
+                        ));
+                        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BudgetOverrun {
                             phase: format!("{}", AgentRole::Research),
                             target_pct: record.target_pct,
                             actual_pct: record.actual_pct,
-                            recovery_action: format!("{}", record.recovery_action),
-                        },
-                    );
-                    match record.recovery_action {
-                        budget::RecoveryAction::Summarize => {
-                            budget_summary_for_next = Some(budget::summarize_directive(
-                                &format!("{}", AgentRole::Research), record.actual_pct, record.target_pct,
-                            ));
-                        }
-                        budget::RecoveryAction::Escalate => {
-                            budget_model_override = Some(("claude".to_string(), "opus".to_string()));
-                            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                            recovery: format!("{}", record.recovery_action),
+                        }));
+                        observatory::log_event(
+                            &ctx.session_id,
+                            &ctx.project_dir,
+                            ObservatoryEvent::BudgetOverrun {
+                                task_id: task_id.to_string(),
+                                phase: format!("{}", AgentRole::Research),
+                                target_pct: record.target_pct,
+                                actual_pct: record.actual_pct,
+                                recovery_action: format!("{}", record.recovery_action),
+                            },
+                        );
+                        match record.recovery_action {
+                            budget::RecoveryAction::Summarize => {
+                                budget_summary_for_next = Some(budget::summarize_directive(
+                                    &format!("{}", AgentRole::Research),
+                                    record.actual_pct,
+                                    record.target_pct,
+                                ));
+                            }
+                            budget::RecoveryAction::Escalate => {
+                                budget_model_override =
+                                    Some(("claude".to_string(), "opus".to_string()));
+                                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
                                 "Budget recovery: escalating {} model to opus due to {} overrun ({}% > {}%)",
                                 AgentRole::Planner, AgentRole::Research, record.actual_pct, record.target_pct,
                             ))));
-                        }
-                        budget::RecoveryAction::SplitRecommended => {
-                            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                            }
+                            budget::RecoveryAction::SplitRecommended => {
+                                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
                                 "Budget recovery: split recommended for {} ({}% > {}%) -- logged for manual review",
                                 AgentRole::Research, record.actual_pct, record.target_pct,
                             ))));
+                            }
+                            budget::RecoveryAction::Continue => {}
                         }
-                        budget::RecoveryAction::Continue => {}
+                    } else if record.overrun {
+                        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                            "Budget: {} used {}% (target {}%, within tolerance)",
+                            AgentRole::Research,
+                            record.actual_pct,
+                            record.target_pct,
+                        ))));
                     }
-                } else if record.overrun {
-                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                        "Budget: {} used {}% (target {}%, within tolerance)",
-                        AgentRole::Research, record.actual_pct, record.target_pct,
-                    ))));
+                    budget_telemetry.records.push(record);
                 }
-                budget_telemetry.records.push(record);
-            }
 
-            if !research_ok {
-                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                    "Research failed for {} -- continuing without report",
-                    task_id
-                ))));
-                stage_results.push(StageResult::failure(
-                    "Research",
-                    &format!("Investigate codebase for {}", task_id),
-                    FailureType::Crash,
-                    vec!["Research is non-blocking -- pipeline continues without report".to_string()],
-                ));
-            }
+                if !research_ok {
+                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                        "Research failed for {} -- continuing without report",
+                        task_id
+                    ))));
+                    stage_results.push(StageResult::failure(
+                        "Research",
+                        &format!("Investigate codebase for {}", task_id),
+                        FailureType::Crash,
+                        vec![
+                            "Research is non-blocking -- pipeline continues without report"
+                                .to_string(),
+                        ],
+                    ));
+                }
 
-            if last_rate_limited {
-                observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::RateLimited {
-                    provider: ctx.config.research_provider.clone(),
-                    wait_secs: ctx.config.pause_between_agents_secs,
-                });
-            }
-
-            adaptive_sleep(
-                &ctx.config,
-                last_rate_limited,
-                ctx.config.pause_between_agents_secs,
-            )
-            .await;
-
-            if ctx.is_stop_requested() {
-                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                    "Stop requested after RESEARCH for {} -- skipping remaining stages",
-                    task_id
-                ))));
-                {
-                    let _lock = ctx
-                        .tasks_file_lock
-                        .lock()
-                        .unwrap_or_else(|e| e.into_inner());
-                    let _ = task::update_task_progress(
-                        &ctx.plan_path,
-                        task_id,
-                        "QR....",
+                if last_rate_limited {
+                    observatory::log_event(
+                        &ctx.session_id,
+                        &ctx.project_dir,
+                        ObservatoryEvent::RateLimited {
+                            provider: ctx.config.research_provider.clone(),
+                            wait_secs: ctx.config.pause_between_agents_secs,
+                        },
                     );
                 }
-                stage_results.push(StageResult::failure(
-                    "Research",
-                    &format!("Investigate codebase for {}", task_id),
-                    FailureType::StopRequested,
-                    vec![],
-                ));
-                let _ = commit_wip_for_mode(ctx, task_id, task_desc);
-                flush_budget_telemetry(&ctx.buildloop_dir, ctx.config.budget_recovery_enabled, &budget_telemetry);
-                return (false, last_rate_limited, false);
+
+                adaptive_sleep(
+                    &ctx.config,
+                    last_rate_limited,
+                    ctx.config.pause_between_agents_secs,
+                )
+                .await;
+
+                if ctx.is_stop_requested() {
+                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                        "Stop requested after RESEARCH for {} -- skipping remaining stages",
+                        task_id
+                    ))));
+                    {
+                        let _lock = ctx
+                            .tasks_file_lock
+                            .lock()
+                            .unwrap_or_else(|e| e.into_inner());
+                        let _ = task::update_task_progress(&ctx.plan_path, task_id, "QR....");
+                    }
+                    stage_results.push(StageResult::failure(
+                        "Research",
+                        &format!("Investigate codebase for {}", task_id),
+                        FailureType::StopRequested,
+                        vec![],
+                    ));
+                    let _ = commit_wip_for_mode(ctx, task_id, task_desc);
+                    flush_budget_telemetry(
+                        &ctx.buildloop_dir,
+                        ctx.config.budget_recovery_enabled,
+                        &budget_telemetry,
+                    );
+                    return (false, last_rate_limited, false);
+                }
             }
-        }
         } else {
             // Query failed -- skip Research (no questions.md to investigate)
             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
@@ -3043,8 +3262,12 @@ async fn process_task(
             result.partial_results.push("questions.md".to_string());
         }
         stage_results.push(result);
-    } else if !skip_query && !query_failed && stage_results.last().map(|r| r.stage.as_str()) != Some("Query") {
-        let mut result = StageResult::success("Query", &format!("Generate questions for {}", task_id));
+    } else if !skip_query
+        && !query_failed
+        && stage_results.last().map(|r| r.stage.as_str()) != Some("Query")
+    {
+        let mut result =
+            StageResult::success("Query", &format!("Generate questions for {}", task_id));
         if questions_file.exists() {
             result.partial_results.push("questions.md".to_string());
         }
@@ -3057,13 +3280,21 @@ async fn process_task(
             &format!("Investigate codebase for {} (checkpoint)", task_id),
         );
         if research_report.exists() {
-            result.partial_results.push("research-report.md".to_string());
+            result
+                .partial_results
+                .push("research-report.md".to_string());
         }
         stage_results.push(result);
-    } else if !skip_research && !query_failed && stage_results.last().map(|r| r.stage.as_str()) != Some("Research") {
-        let mut result = StageResult::success("Research", &format!("Investigate codebase for {}", task_id));
+    } else if !skip_research
+        && !query_failed
+        && stage_results.last().map(|r| r.stage.as_str()) != Some("Research")
+    {
+        let mut result =
+            StageResult::success("Research", &format!("Investigate codebase for {}", task_id));
         if research_report.exists() {
-            result.partial_results.push("research-report.md".to_string());
+            result
+                .partial_results
+                .push("research-report.md".to_string());
         }
         stage_results.push(result);
     }
@@ -3083,9 +3314,21 @@ async fn process_task(
 
     // Helper: progress indicator characters.
     // Checkpoint-resumed stages count as "ran" for progress indicators.
-    let query_char = if skip_query && !checkpoint_skip_query { "-" } else { "Q" };
-    let research_char = if (skip_research && !checkpoint_skip_research) || query_failed { "-" } else { "R" };
-    let planner_char = if skip_planner && !checkpoint_skip_planner { "-" } else { "P" };
+    let query_char = if skip_query && !checkpoint_skip_query {
+        "-"
+    } else {
+        "Q"
+    };
+    let research_char = if (skip_research && !checkpoint_skip_research) || query_failed {
+        "-"
+    } else {
+        "R"
+    };
+    let planner_char = if skip_planner && !checkpoint_skip_planner {
+        "-"
+    } else {
+        "P"
+    };
 
     if skip_planner {
         let reason = if checkpoint_skip_planner {
@@ -3152,12 +3395,16 @@ async fn process_task(
                     &ctx.config.planner_model,
                 ),
             )));
-            observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::AgentStarted {
-                role: format!("{}", AgentRole::Planner),
-                provider: ctx.config.planner_provider.clone(),
-                model: ctx.config.planner_model.clone(),
-                cc_version: cc_version.clone(),
-            });
+            observatory::log_event(
+                &ctx.session_id,
+                &ctx.project_dir,
+                ObservatoryEvent::AgentStarted {
+                    role: format!("{}", AgentRole::Planner),
+                    provider: ctx.config.planner_provider.clone(),
+                    model: ctx.config.planner_model.clone(),
+                    cc_version: cc_version.clone(),
+                },
+            );
 
             let mut prompt = prompts::planner_prompt(
                 task_id,
@@ -3166,6 +3413,17 @@ async fn process_task(
                 &ctx.spec_file_prompt_path(),
                 &ctx.tasks_file_prompt_path(),
             );
+            // Inject build history into planner for cross-session recall
+            let history_dir = crate::history::resolve_history_dir(&ctx.config.history_dir);
+            let history_records = crate::history::search_history(
+                &history_dir,
+                task_desc,
+                ctx.config.history_search_results,
+            );
+            let history_context = crate::history::format_history_for_prompt(&history_records);
+            if !history_context.is_empty() {
+                prompt = format!("{}\n{}", prompt, history_context);
+            }
             if let Some(summary) = budget_summary_for_next.take() {
                 prompt = format!("{}\n\n{}", summary, prompt);
             }
@@ -3173,7 +3431,10 @@ async fn process_task(
             let planner_start = Instant::now();
             let (eff_planner_provider, eff_planner_model) = match budget_model_override.take() {
                 Some((p, m)) => (Config::parse_provider(&p), m),
-                None => (Config::parse_provider(&ctx.config.planner_provider), ctx.config.planner_model.clone()),
+                None => (
+                    Config::parse_provider(&ctx.config.planner_provider),
+                    ctx.config.planner_model.clone(),
+                ),
             };
             let plan_result = agent::run_agent(
                 &AgentRole::Planner,
@@ -3194,17 +3455,21 @@ async fn process_task(
             last_rate_limited = was_rate_limited(&plan_result);
             let plan_ok = plan_result.map(|r| r.success).unwrap_or(false);
             let _ = tx.send(AppEvent::AgentDone(plan_ok));
-            observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::AgentDone {
-                role: format!("{}", AgentRole::Planner),
-                success: plan_ok,
-                duration_secs: planner_start.elapsed().as_secs_f64(),
-                tokens_in: agent_usage.tokens_in,
-                tokens_out: agent_usage.tokens_out,
-                cost_usd: agent_usage.cost_usd,
-                context_pct: agent_usage.context_pct,
-                cache_creation_tokens: agent_usage.cache_creation_tokens,
-                cache_read_tokens: agent_usage.cache_read_tokens,
-            });
+            observatory::log_event(
+                &ctx.session_id,
+                &ctx.project_dir,
+                ObservatoryEvent::AgentDone {
+                    role: format!("{}", AgentRole::Planner),
+                    success: plan_ok,
+                    duration_secs: planner_start.elapsed().as_secs_f64(),
+                    tokens_in: agent_usage.tokens_in,
+                    tokens_out: agent_usage.tokens_out,
+                    cost_usd: agent_usage.cost_usd,
+                    context_pct: agent_usage.context_pct,
+                    cache_creation_tokens: agent_usage.cache_creation_tokens,
+                    cache_read_tokens: agent_usage.cache_read_tokens,
+                },
+            );
             // Budget telemetry: Planner
             if ctx.config.budget_recovery_enabled {
                 let record = budget::evaluate_phase(
@@ -3216,7 +3481,9 @@ async fn process_task(
                 if record.overrun && record.recovery_action != budget::RecoveryAction::Continue {
                     budget_telemetry.any_overrun = true;
                     budget_telemetry.recovery_actions_taken.push(format!(
-                        "{}: {}", AgentRole::Planner, record.recovery_action
+                        "{}: {}",
+                        AgentRole::Planner,
+                        record.recovery_action
                     ));
                     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BudgetOverrun {
                         phase: format!("{}", AgentRole::Planner),
@@ -3238,11 +3505,14 @@ async fn process_task(
                     match record.recovery_action {
                         budget::RecoveryAction::Summarize => {
                             budget_summary_for_next = Some(budget::summarize_directive(
-                                &format!("{}", AgentRole::Planner), record.actual_pct, record.target_pct,
+                                &format!("{}", AgentRole::Planner),
+                                record.actual_pct,
+                                record.target_pct,
                             ));
                         }
                         budget::RecoveryAction::Escalate => {
-                            budget_model_override = Some(("claude".to_string(), "opus".to_string()));
+                            budget_model_override =
+                                Some(("claude".to_string(), "opus".to_string()));
                             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
                                 "Budget recovery: escalating {} model to opus due to {} overrun ({}% > {}%)",
                                 AgentRole::Builder, AgentRole::Planner, record.actual_pct, record.target_pct,
@@ -3259,16 +3529,22 @@ async fn process_task(
                 } else if record.overrun {
                     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
                         "Budget: {} used {}% (target {}%, within tolerance)",
-                        AgentRole::Planner, record.actual_pct, record.target_pct,
+                        AgentRole::Planner,
+                        record.actual_pct,
+                        record.target_pct,
                     ))));
                 }
                 budget_telemetry.records.push(record);
             }
             if last_rate_limited {
-                observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::RateLimited {
-                    provider: ctx.config.planner_provider.clone(),
-                    wait_secs: ctx.config.pause_between_agents_secs,
-                });
+                observatory::log_event(
+                    &ctx.session_id,
+                    &ctx.project_dir,
+                    ObservatoryEvent::RateLimited {
+                        provider: ctx.config.planner_provider.clone(),
+                        wait_secs: ctx.config.pause_between_agents_secs,
+                    },
+                );
             }
 
             if !plan_ok || !ctx.current_plan.exists() {
@@ -3302,7 +3578,11 @@ async fn process_task(
                     )
                 };
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(message)));
-                flush_budget_telemetry(&ctx.buildloop_dir, ctx.config.budget_recovery_enabled, &budget_telemetry);
+                flush_budget_telemetry(
+                    &ctx.buildloop_dir,
+                    ctx.config.budget_recovery_enabled,
+                    &budget_telemetry,
+                );
                 return (false, last_rate_limited, false);
             }
 
@@ -3337,7 +3617,11 @@ async fn process_task(
                     vec![],
                 ));
                 let _ = commit_wip_for_mode(ctx, task_id, task_desc);
-                flush_budget_telemetry(&ctx.buildloop_dir, ctx.config.budget_recovery_enabled, &budget_telemetry);
+                flush_budget_telemetry(
+                    &ctx.buildloop_dir,
+                    ctx.config.budget_recovery_enabled,
+                    &budget_telemetry,
+                );
                 return (false, last_rate_limited, false);
             }
         }
@@ -3376,7 +3660,6 @@ async fn process_task(
         stage_results.push(result);
     }
 
-
     // ─── Gate: Extension Context ───────────────────────────────
     if !ctx.config.extensions.is_empty() {
         let discovered = extensions::discover_extensions(&ctx.project_dir);
@@ -3405,7 +3688,11 @@ async fn process_task(
                 vec!["Ensure all configured extensions have CLAUDE.md files".to_string()],
             ));
             let _ = commit_wip_for_mode(ctx, task_id, task_desc);
-            flush_budget_telemetry(&ctx.buildloop_dir, ctx.config.budget_recovery_enabled, &budget_telemetry);
+            flush_budget_telemetry(
+                &ctx.buildloop_dir,
+                ctx.config.budget_recovery_enabled,
+                &budget_telemetry,
+            );
             return (false, last_rate_limited, false);
         }
     }
@@ -3423,16 +3710,31 @@ async fn process_task(
             ))));
 
             let failed_output = std::fs::read_to_string(&ctx.current_plan).unwrap_or_default();
+            let mut base_prompt = prompts::planner_prompt(
+                task_id,
+                task_desc,
+                &pattern_context,
+                &ctx.spec_file_prompt_path(),
+                &ctx.tasks_file_prompt_path(),
+            );
+            // Re-inject build history into retry prompt
+            let retry_history_dir = crate::history::resolve_history_dir(&ctx.config.history_dir);
+            let retry_history = crate::history::search_history(
+                &retry_history_dir,
+                task_desc,
+                ctx.config.history_search_results,
+            );
+            let retry_history_ctx = crate::history::format_history_for_prompt(&retry_history);
+            if !retry_history_ctx.is_empty() {
+                base_prompt = format!("{}\n{}", base_prompt, retry_history_ctx);
+            }
             let retry_prompt = format!(
                 "{}\n\n--- VALIDATION ERROR (your previous output failed these checks) ---\n\
                  Error: {}\n\
                  Your previous output:\n```\n{}\n```\n\
                  Fix these specific issues. The plan MUST contain '## File Operations' and '## Verification' sections.\n\
                  --- END VALIDATION ERROR ---",
-                prompts::planner_prompt(
-                    task_id, task_desc, &pattern_context,
-                    &ctx.spec_file_prompt_path(), &ctx.tasks_file_prompt_path(),
-                ),
+                base_prompt,
                 reason,
                 crate::utils::truncate_str(&failed_output, 500),
             );
@@ -3457,12 +3759,16 @@ async fn process_task(
                     &ctx.config.planner_model,
                 ),
             )));
-            observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::AgentStarted {
-                role: format!("{}", AgentRole::Planner),
-                provider: ctx.config.planner_provider.clone(),
-                model: ctx.config.planner_model.clone(),
-                cc_version: cc_version.clone(),
-            });
+            observatory::log_event(
+                &ctx.session_id,
+                &ctx.project_dir,
+                ObservatoryEvent::AgentStarted {
+                    role: format!("{}", AgentRole::Planner),
+                    provider: ctx.config.planner_provider.clone(),
+                    model: ctx.config.planner_model.clone(),
+                    cc_version: cc_version.clone(),
+                },
+            );
 
             let retry_result = agent::run_agent(
                 &AgentRole::Planner,
@@ -3483,17 +3789,21 @@ async fn process_task(
             last_rate_limited = was_rate_limited(&retry_result);
             let retry_ok = retry_result.as_ref().map(|r| r.success).unwrap_or(false);
             let _ = tx.send(AppEvent::AgentDone(retry_ok));
-            observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::AgentDone {
-                role: format!("{}", AgentRole::Planner),
-                success: retry_ok,
-                duration_secs: retry_start.elapsed().as_secs_f64(),
-                tokens_in: retry_usage.tokens_in,
-                tokens_out: retry_usage.tokens_out,
-                cost_usd: retry_usage.cost_usd,
-                context_pct: retry_usage.context_pct,
-                cache_creation_tokens: retry_usage.cache_creation_tokens,
-                cache_read_tokens: retry_usage.cache_read_tokens,
-            });
+            observatory::log_event(
+                &ctx.session_id,
+                &ctx.project_dir,
+                ObservatoryEvent::AgentDone {
+                    role: format!("{}", AgentRole::Planner),
+                    success: retry_ok,
+                    duration_secs: retry_start.elapsed().as_secs_f64(),
+                    tokens_in: retry_usage.tokens_in,
+                    tokens_out: retry_usage.tokens_out,
+                    cost_usd: retry_usage.cost_usd,
+                    context_pct: retry_usage.context_pct,
+                    cache_creation_tokens: retry_usage.cache_creation_tokens,
+                    cache_read_tokens: retry_usage.cache_read_tokens,
+                },
+            );
             // Budget telemetry: Planner retry
             if ctx.config.budget_recovery_enabled {
                 let record = budget::evaluate_phase(
@@ -3505,7 +3815,9 @@ async fn process_task(
                 if record.overrun && record.recovery_action != budget::RecoveryAction::Continue {
                     budget_telemetry.any_overrun = true;
                     budget_telemetry.recovery_actions_taken.push(format!(
-                        "{}: {}", AgentRole::Planner, record.recovery_action
+                        "{}: {}",
+                        AgentRole::Planner,
+                        record.recovery_action
                     ));
                     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BudgetOverrun {
                         phase: format!("{}", AgentRole::Planner),
@@ -3527,11 +3839,14 @@ async fn process_task(
                     match record.recovery_action {
                         budget::RecoveryAction::Summarize => {
                             budget_summary_for_next = Some(budget::summarize_directive(
-                                &format!("{}", AgentRole::Planner), record.actual_pct, record.target_pct,
+                                &format!("{}", AgentRole::Planner),
+                                record.actual_pct,
+                                record.target_pct,
                             ));
                         }
                         budget::RecoveryAction::Escalate => {
-                            budget_model_override = Some(("claude".to_string(), "opus".to_string()));
+                            budget_model_override =
+                                Some(("claude".to_string(), "opus".to_string()));
                             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
                                 "Budget recovery: escalating {} model to opus due to {} retry overrun ({}% > {}%)",
                                 AgentRole::Builder, AgentRole::Planner,
@@ -3549,7 +3864,9 @@ async fn process_task(
                 } else if record.overrun {
                     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
                         "Budget: {} retry used {}% (target {}%, within tolerance)",
-                        AgentRole::Planner, record.actual_pct, record.target_pct,
+                        AgentRole::Planner,
+                        record.actual_pct,
+                        record.target_pct,
                     ))));
                 }
                 budget_telemetry.records.push(record);
@@ -3582,7 +3899,11 @@ async fn process_task(
                     ],
                 ));
                 let _ = commit_wip_for_mode(ctx, task_id, task_desc);
-                flush_budget_telemetry(&ctx.buildloop_dir, ctx.config.budget_recovery_enabled, &budget_telemetry);
+                flush_budget_telemetry(
+                    &ctx.buildloop_dir,
+                    ctx.config.budget_recovery_enabled,
+                    &budget_telemetry,
+                );
                 return (false, last_rate_limited, false);
             }
 
@@ -3617,7 +3938,8 @@ async fn process_task(
             Ok(text) => text,
             Err(e) => {
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                    "P+ skipped: failed to read current-plan.md: {}", e
+                    "P+ skipped: failed to read current-plan.md: {}",
+                    e
                 ))));
                 String::new()
             }
@@ -3641,19 +3963,27 @@ async fn process_task(
         if !plan_text.is_empty() {
             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::AgentStarted(
                 AgentRole::PlanReview,
-                format!("P+ review ({})", Config::display_provider_model(
-                    &ctx.config.orchestrator_proposer_provider,
-                    &ctx.config.orchestrator_proposer_model,
-                )),
+                format!(
+                    "P+ review ({})",
+                    Config::display_provider_model(
+                        &ctx.config.orchestrator_proposer_provider,
+                        &ctx.config.orchestrator_proposer_model,
+                    )
+                ),
             )));
-            observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::AgentStarted {
-                role: format!("{}", AgentRole::PlanReview),
-                provider: ctx.config.orchestrator_proposer_provider.clone(),
-                model: ctx.config.orchestrator_proposer_model.clone(),
-                cc_version: cc_version.clone(),
-            });
+            observatory::log_event(
+                &ctx.session_id,
+                &ctx.project_dir,
+                ObservatoryEvent::AgentStarted {
+                    role: format!("{}", AgentRole::PlanReview),
+                    provider: ctx.config.orchestrator_proposer_provider.clone(),
+                    model: ctx.config.orchestrator_proposer_model.clone(),
+                    cc_version: cc_version.clone(),
+                },
+            );
             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                "P+ subphase: routing plan for {} through orchestrator review loop", task_id
+                "P+ subphase: routing plan for {} through orchestrator review loop",
+                task_id
             ))));
 
             let orch_config = OrchestratorConfig::from_config(&ctx.config);
@@ -3678,9 +4008,7 @@ async fn process_task(
                 &ctx.project_dir,
                 &ctx.log_dir,
                 |msg| {
-                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                        "P+: {}", msg
-                    ))));
+                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!("P+: {}", msg))));
                 },
                 Some(agent_tx),
                 Some(ctx.shutdown.clone()),
@@ -3691,17 +4019,21 @@ async fn process_task(
             let _ = tx.send(AppEvent::AgentDone(
                 review_result.as_ref().map(|r| r.accepted).unwrap_or(false),
             ));
-            observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::AgentDone {
-                role: format!("{}", AgentRole::PlanReview),
-                success: review_result.as_ref().map(|r| r.accepted).unwrap_or(false),
-                duration_secs: plan_review_start.elapsed().as_secs_f64(),
-                tokens_in: agent_usage.tokens_in,
-                tokens_out: agent_usage.tokens_out,
-                cost_usd: agent_usage.cost_usd,
-                context_pct: agent_usage.context_pct,
-                cache_creation_tokens: agent_usage.cache_creation_tokens,
-                cache_read_tokens: agent_usage.cache_read_tokens,
-            });
+            observatory::log_event(
+                &ctx.session_id,
+                &ctx.project_dir,
+                ObservatoryEvent::AgentDone {
+                    role: format!("{}", AgentRole::PlanReview),
+                    success: review_result.as_ref().map(|r| r.accepted).unwrap_or(false),
+                    duration_secs: plan_review_start.elapsed().as_secs_f64(),
+                    tokens_in: agent_usage.tokens_in,
+                    tokens_out: agent_usage.tokens_out,
+                    cost_usd: agent_usage.cost_usd,
+                    context_pct: agent_usage.context_pct,
+                    cache_creation_tokens: agent_usage.cache_creation_tokens,
+                    cache_read_tokens: agent_usage.cache_read_tokens,
+                },
+            );
 
             match review_result {
                 Ok(outcome) => {
@@ -3716,7 +4048,8 @@ async fn process_task(
                             outcome.final_plan_text.as_bytes(),
                         ) {
                             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                                "P+ warning: failed to write reviewed plan: {}", e
+                                "P+ warning: failed to write reviewed plan: {}",
+                                e
                             ))));
                         }
                         plan_review_char = "+";
@@ -3725,10 +4058,9 @@ async fn process_task(
                                 "PlanReview",
                                 &format!("Review plan for {}", task_id),
                             );
-                            result.partial_results.push(format!(
-                                "Accepted in {} iteration(s)",
-                                outcome.iterations,
-                            ));
+                            result
+                                .partial_results
+                                .push(format!("Accepted in {} iteration(s)", outcome.iterations,));
                             stage_results.push(result);
                         }
                     } else {
@@ -3744,7 +4076,10 @@ async fn process_task(
                                 &format!("Review plan for {}", task_id),
                                 FailureType::ReviewFail,
                                 vec![
-                                    format!("{} unresolved findings after {} iteration(s)", finding_count, outcome.iterations),
+                                    format!(
+                                        "{} unresolved findings after {} iteration(s)",
+                                        finding_count, outcome.iterations
+                                    ),
                                     "Using original plan without P+ improvements".to_string(),
                                 ],
                             );
@@ -3758,7 +4093,8 @@ async fn process_task(
                 }
                 Err(e) => {
                     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                        "P+ orchestrator error: {} -- using original plan", e
+                        "P+ orchestrator error: {} -- using original plan",
+                        e
                     ))));
                     plan_review_char = "!";
                     stage_results.push(StageResult::failure(
@@ -3784,7 +4120,9 @@ async fn process_task(
                 if record.overrun && record.recovery_action != budget::RecoveryAction::Continue {
                     budget_telemetry.any_overrun = true;
                     budget_telemetry.recovery_actions_taken.push(format!(
-                        "{}: {}", AgentRole::PlanReview, record.recovery_action
+                        "{}: {}",
+                        AgentRole::PlanReview,
+                        record.recovery_action
                     ));
                     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BudgetOverrun {
                         phase: format!("{}", AgentRole::PlanReview),
@@ -3806,11 +4144,14 @@ async fn process_task(
                     match record.recovery_action {
                         budget::RecoveryAction::Summarize => {
                             budget_summary_for_next = Some(budget::summarize_directive(
-                                &format!("{}", AgentRole::PlanReview), record.actual_pct, record.target_pct,
+                                &format!("{}", AgentRole::PlanReview),
+                                record.actual_pct,
+                                record.target_pct,
                             ));
                         }
                         budget::RecoveryAction::Escalate => {
-                            budget_model_override = Some(("claude".to_string(), "opus".to_string()));
+                            budget_model_override =
+                                Some(("claude".to_string(), "opus".to_string()));
                             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
                                 "Budget recovery: escalating {} model to opus due to {} overrun ({}% > {}%)",
                                 AgentRole::Builder, AgentRole::PlanReview, record.actual_pct, record.target_pct,
@@ -3827,7 +4168,9 @@ async fn process_task(
                 } else if record.overrun {
                     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
                         "Budget: {} used {}% (target {}%, within tolerance)",
-                        AgentRole::PlanReview, record.actual_pct, record.target_pct,
+                        AgentRole::PlanReview,
+                        record.actual_pct,
+                        record.target_pct,
                     ))));
                 }
                 budget_telemetry.records.push(record);
@@ -3842,14 +4185,21 @@ async fn process_task(
 
             if ctx.is_stop_requested() {
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                    "Stop requested after P+ for {} -- skipping remaining stages", task_id
+                    "Stop requested after P+ for {} -- skipping remaining stages",
+                    task_id
                 ))));
                 {
-                    let _lock = ctx.tasks_file_lock.lock().unwrap_or_else(|e| e.into_inner());
+                    let _lock = ctx
+                        .tasks_file_lock
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner());
                     let _ = task::update_task_progress(
                         &ctx.plan_path,
                         task_id,
-                        &format!("{}{}{}{}--", query_char, research_char, planner_char, plan_review_char),
+                        &format!(
+                            "{}{}{}{}--",
+                            query_char, research_char, planner_char, plan_review_char
+                        ),
                     );
                 }
                 stage_results.push(StageResult::failure(
@@ -3859,7 +4209,11 @@ async fn process_task(
                     vec![],
                 ));
                 let _ = commit_wip_for_mode(ctx, task_id, task_desc);
-                flush_budget_telemetry(&ctx.buildloop_dir, ctx.config.budget_recovery_enabled, &budget_telemetry);
+                flush_budget_telemetry(
+                    &ctx.buildloop_dir,
+                    ctx.config.budget_recovery_enabled,
+                    &budget_telemetry,
+                );
                 return (false, last_rate_limited, false);
             }
 
@@ -3872,24 +4226,36 @@ async fn process_task(
                 // Restore original plan from before P+
                 if let Err(e) = atomic_write_file(&ctx.current_plan, plan_text.as_bytes()) {
                     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                        "Failed to restore pre-P+ plan: {}", e
+                        "Failed to restore pre-P+ plan: {}",
+                        e
                     ))));
                 }
                 // Re-check gate with restored plan
                 if let GateResult::Fail(reason2) = gate_builder(ctx) {
                     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                        "GATE BLOCKED builder after restoring pre-P+ plan: {}", reason2
+                        "GATE BLOCKED builder after restoring pre-P+ plan: {}",
+                        reason2
                     ))));
                     {
-                        let _lock = ctx.tasks_file_lock.lock().unwrap_or_else(|e| e.into_inner());
+                        let _lock = ctx
+                            .tasks_file_lock
+                            .lock()
+                            .unwrap_or_else(|e| e.into_inner());
                         let _ = task::update_task_progress(
                             &ctx.plan_path,
                             task_id,
-                            &format!("{}{}{}{}--!", query_char, research_char, planner_char, plan_review_char),
+                            &format!(
+                                "{}{}{}{}--!",
+                                query_char, research_char, planner_char, plan_review_char
+                            ),
                         );
                     }
                     let _ = commit_wip_for_mode(ctx, task_id, task_desc);
-                    flush_budget_telemetry(&ctx.buildloop_dir, ctx.config.budget_recovery_enabled, &budget_telemetry);
+                    flush_budget_telemetry(
+                        &ctx.buildloop_dir,
+                        ctx.config.budget_recovery_enabled,
+                        &budget_telemetry,
+                    );
                     return (false, last_rate_limited, false);
                 }
             }
@@ -3924,246 +4290,328 @@ async fn process_task(
         build_ok = true;
         // last_rate_limited stays false for the resumed session.
     } else {
-    emit_extension_injections(
-        tx,
-        &ctx.config.extensions,
-        extension_context,
-        &AgentRole::Builder,
-        task_id,
-    );
+        emit_extension_injections(
+            tx,
+            &ctx.config.extensions,
+            extension_context,
+            &AgentRole::Builder,
+            task_id,
+        );
 
-    // Check if parallel builder should be used
-    let parallel_data: Option<(Vec<FileOp>, Vec<Vec<usize>>)> = if ctx.config.parallel_builder && !skip_planner {
-        let plan_content = std::fs::read_to_string(&ctx.current_plan).unwrap_or_default();
-        let file_ops = parse_file_operations(&plan_content);
-        if file_ops.len() >= ctx.config.parallel_builder_min_files {
-            let groups = build_dependency_groups(&file_ops, &ctx.project_dir);
-            let independent_count = groups.iter().filter(|g| g.len() == 1).count();
-            if independent_count >= ctx.config.parallel_builder_min_files {
-                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                    "Parallel builder: {} file ops, {} independent -- activating",
-                    file_ops.len(), independent_count
-                ))));
-                Some((file_ops, groups))
-            } else {
-                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+        // Check if parallel builder should be used
+        let parallel_data: Option<(Vec<FileOp>, Vec<Vec<usize>>)> =
+            if ctx.config.parallel_builder && !skip_planner {
+                let plan_content = std::fs::read_to_string(&ctx.current_plan).unwrap_or_default();
+                let file_ops = parse_file_operations(&plan_content);
+                if file_ops.len() >= ctx.config.parallel_builder_min_files {
+                    let groups = build_dependency_groups(&file_ops, &ctx.project_dir);
+                    let independent_count = groups.iter().filter(|g| g.len() == 1).count();
+                    if independent_count >= ctx.config.parallel_builder_min_files {
+                        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                            "Parallel builder: {} file ops, {} independent -- activating",
+                            file_ops.len(),
+                            independent_count
+                        ))));
+                        Some((file_ops, groups))
+                    } else {
+                        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
                     "Parallel builder: only {} independent ops (need {}) -- using sequential",
                     independent_count, ctx.config.parallel_builder_min_files
                 ))));
+                        None
+                    }
+                } else {
+                    None
+                }
+            } else {
                 None
-            }
-        } else {
-            None
-        }
-    } else {
-        None
-    };
+            };
 
-    let builder_rate_limited;
-    (build_ok, builder_rate_limited) = if let Some((ref file_ops, ref groups)) = parallel_data {
-        // Budget recovery is not supported in parallel builder mode -- consume and warn
-        if let Some(_summary) = budget_summary_for_next.take() {
-            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+        let builder_rate_limited;
+        (build_ok, builder_rate_limited) = if let Some((ref file_ops, ref groups)) = parallel_data {
+            // Budget recovery is not supported in parallel builder mode -- consume and warn
+            if let Some(_summary) = budget_summary_for_next.take() {
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
                 "Parallel builder: budget summary directive discarded (unsupported in parallel mode)".to_string()
             )));
-        }
-        if let Some((ref p, ref m)) = budget_model_override.take() {
-            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+            }
+            if let Some((ref p, ref m)) = budget_model_override.take() {
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
                 format!("Parallel builder: budget model override ({}/{}) discarded (unsupported in parallel mode)", p, m)
             )));
-        }
-        let (p_ok, p_rl, p_usage) = run_parallel_builder(task_info, ctx, tx, file_ops, groups, extension_context).await;
+            }
+            let (p_ok, p_rl, p_usage) = run_parallel_builder(
+                task_info,
+                ctx,
+                tx,
+                file_ops,
+                groups,
+                extension_context,
+                &pattern_context,
+            )
+            .await;
 
-        // Budget telemetry: Parallel Builder (aggregated across all slots)
-        if ctx.config.budget_recovery_enabled {
-            let record = budget::evaluate_phase(
-                &AgentRole::Builder,
-                &p_usage,
-                &ctx.config.budget_targets,
-                ctx.config.budget_overrun_threshold,
-            );
-            if record.overrun && record.recovery_action != budget::RecoveryAction::Continue {
-                budget_telemetry.any_overrun = true;
-                budget_telemetry.recovery_actions_taken.push(format!(
-                    "{}: {}", AgentRole::Builder, record.recovery_action
-                ));
-                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BudgetOverrun {
-                    phase: format!("{}", AgentRole::Builder),
-                    target_pct: record.target_pct,
-                    actual_pct: record.actual_pct,
-                    recovery: format!("{}", record.recovery_action),
-                }));
-                observatory::log_event(
-                    &ctx.session_id,
-                    &ctx.project_dir,
-                    ObservatoryEvent::BudgetOverrun {
-                        task_id: task_id.to_string(),
+            // Budget telemetry: Parallel Builder (aggregated across all slots)
+            if ctx.config.budget_recovery_enabled {
+                let record = budget::evaluate_phase(
+                    &AgentRole::Builder,
+                    &p_usage,
+                    &ctx.config.budget_targets,
+                    ctx.config.budget_overrun_threshold,
+                );
+                if record.overrun && record.recovery_action != budget::RecoveryAction::Continue {
+                    budget_telemetry.any_overrun = true;
+                    budget_telemetry.recovery_actions_taken.push(format!(
+                        "{}: {}",
+                        AgentRole::Builder,
+                        record.recovery_action
+                    ));
+                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BudgetOverrun {
                         phase: format!("{}", AgentRole::Builder),
                         target_pct: record.target_pct,
                         actual_pct: record.actual_pct,
-                        recovery_action: format!("{}", record.recovery_action),
-                    },
-                );
-                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                    "Budget recovery: {} for {} ({}% > {}%)",
-                    record.recovery_action, AgentRole::Builder, record.actual_pct, record.target_pct,
-                ))));
-            } else if record.overrun {
-                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                    "Budget: {} used {}% (target {}%, within tolerance)",
-                    AgentRole::Builder, record.actual_pct, record.target_pct,
-                ))));
+                        recovery: format!("{}", record.recovery_action),
+                    }));
+                    observatory::log_event(
+                        &ctx.session_id,
+                        &ctx.project_dir,
+                        ObservatoryEvent::BudgetOverrun {
+                            task_id: task_id.to_string(),
+                            phase: format!("{}", AgentRole::Builder),
+                            target_pct: record.target_pct,
+                            actual_pct: record.actual_pct,
+                            recovery_action: format!("{}", record.recovery_action),
+                        },
+                    );
+                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                        "Budget recovery: {} for {} ({}% > {}%)",
+                        record.recovery_action,
+                        AgentRole::Builder,
+                        record.actual_pct,
+                        record.target_pct,
+                    ))));
+                } else if record.overrun {
+                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                        "Budget: {} used {}% (target {}%, within tolerance)",
+                        AgentRole::Builder,
+                        record.actual_pct,
+                        record.target_pct,
+                    ))));
+                }
+                budget_telemetry.records.push(record);
             }
-            budget_telemetry.records.push(record);
-        }
 
-        (p_ok, p_rl)
-    } else {
-        // Original single-builder path
-        let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
-        let fwd_tx = tx.clone();
-        let fwd_handle = tokio::spawn(async move {
-            let mut usage = AgentUsage::default();
-            while let Some(evt) = agent_rx.recv().await {
-                usage.accumulate(&evt);
-                let _ = fwd_tx.send(AppEvent::AgentOutput(evt));
-            }
-            usage
-        });
-
-        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::AgentStarted(
-            AgentRole::Builder,
-            Config::display_provider_model(&ctx.config.builder_provider, &ctx.config.builder_model),
-        )));
-        observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::AgentStarted {
-            role: format!("{}", AgentRole::Builder),
-            provider: ctx.config.builder_provider.clone(),
-            model: ctx.config.builder_model.clone(),
-            cc_version: cc_version.clone(),
-        });
-
-        let prompt = if skip_planner {
-            prompts::builder_direct_prompt(
-                task_id,
-                task_desc,
-                &ctx.spec_file_prompt_path(),
-                &ctx.tasks_file_prompt_path(),
-            )
+            (p_ok, p_rl)
         } else {
-            prompts::builder_prompt(
-                task_id,
-                task_desc,
-                &ctx.spec_file_prompt_path(),
-                &ctx.tasks_file_prompt_path(),
-            )
-        };
-        let prompt = prompts::wrap_with_extensions(&prompt, extension_context);
-        let prompt = if let Some(summary) = budget_summary_for_next.take() {
-            format!("{}\n\n{}", summary, prompt)
-        } else {
-            prompt
-        };
-        let builder_start = Instant::now();
-        let (eff_builder_provider, eff_builder_model) = match budget_model_override.take() {
-            Some((p, m)) => {
-                eff_task_builder_provider = p.clone();
-                eff_task_builder_model = m.clone();
-                (Config::parse_provider(&p), m)
-            }
-            None => {
-                eff_task_builder_provider = ctx.config.builder_provider.clone();
-                eff_task_builder_model = ctx.config.builder_model.clone();
-                (Config::parse_provider(&ctx.config.builder_provider), ctx.config.builder_model.clone())
-            }
-        };
-        let build_result = agent::run_agent(
-            &AgentRole::Builder,
-            eff_builder_provider,
-            &eff_builder_model,
-            &prompt,
-            &ctx.project_dir,
-            agent_tx,
-            &ctx.log_dir,
-            None,
-            ctx.config.agent_timeout_secs,
-            Some(ctx.shutdown.clone()),
-            Some(&ctx.config),
-        )
-        .await;
-
-        let agent_usage = fwd_handle.await.unwrap_or_default();
-        let rl = was_rate_limited(&build_result);
-        let ok = build_result.map(|r| r.success).unwrap_or(false);
-        let _ = tx.send(AppEvent::AgentDone(ok));
-        observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::AgentDone {
-            role: format!("{}", AgentRole::Builder),
-            success: ok,
-            duration_secs: builder_start.elapsed().as_secs_f64(),
-            tokens_in: agent_usage.tokens_in,
-            tokens_out: agent_usage.tokens_out,
-            cost_usd: agent_usage.cost_usd,
-            context_pct: agent_usage.context_pct,
-            cache_creation_tokens: agent_usage.cache_creation_tokens,
-            cache_read_tokens: agent_usage.cache_read_tokens,
-        });
-        // Budget telemetry: Builder
-        if ctx.config.budget_recovery_enabled {
-            let record = budget::evaluate_phase(
-                &AgentRole::Builder,
-                &agent_usage,
-                &ctx.config.budget_targets,
-                ctx.config.budget_overrun_threshold,
-            );
-            if record.overrun && record.recovery_action != budget::RecoveryAction::Continue {
-                budget_telemetry.any_overrun = true;
-                budget_telemetry.recovery_actions_taken.push(format!(
-                    "{}: {}", AgentRole::Builder, record.recovery_action
-                ));
-                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BudgetOverrun {
-                    phase: format!("{}", AgentRole::Builder),
-                    target_pct: record.target_pct,
-                    actual_pct: record.actual_pct,
-                    recovery: format!("{}", record.recovery_action),
-                }));
-                observatory::log_event(
-                    &ctx.session_id,
-                    &ctx.project_dir,
-                    ObservatoryEvent::BudgetOverrun {
-                        task_id: task_id.to_string(),
-                        phase: format!("{}", AgentRole::Builder),
-                        target_pct: record.target_pct,
-                        actual_pct: record.actual_pct,
-                        recovery_action: format!("{}", record.recovery_action),
-                    },
-                );
-                // Builder is the last phase before review (separate function) -- log all recovery types
-                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                    "Budget recovery: {} for {} ({}% > {}%)",
-                    record.recovery_action, AgentRole::Builder, record.actual_pct, record.target_pct,
-                ))));
-            } else if record.overrun {
-                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                    "Budget: {} used {}% (target {}%, within tolerance)",
-                    AgentRole::Builder, record.actual_pct, record.target_pct,
-                ))));
-            }
-            budget_telemetry.records.push(record);
-        }
-        if rl {
-            observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::RateLimited {
-                provider: ctx.config.builder_provider.clone(),
-                wait_secs: ctx.config.pause_between_agents_secs,
+            // Original single-builder path
+            let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
+            let fwd_tx = tx.clone();
+            let fwd_handle = tokio::spawn(async move {
+                let mut usage = AgentUsage::default();
+                while let Some(evt) = agent_rx.recv().await {
+                    usage.accumulate(&evt);
+                    let _ = fwd_tx.send(AppEvent::AgentOutput(evt));
+                }
+                usage
             });
-        }
-        (ok, rl)
-    };
-    last_rate_limited = builder_rate_limited;
 
-    if !build_ok {
-        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-            "BUILDER failed for {} — committing WIP",
-            task_id
-        ))));
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::AgentStarted(
+                AgentRole::Builder,
+                Config::display_provider_model(
+                    &ctx.config.builder_provider,
+                    &ctx.config.builder_model,
+                ),
+            )));
+            observatory::log_event(
+                &ctx.session_id,
+                &ctx.project_dir,
+                ObservatoryEvent::AgentStarted {
+                    role: format!("{}", AgentRole::Builder),
+                    provider: ctx.config.builder_provider.clone(),
+                    model: ctx.config.builder_model.clone(),
+                    cc_version: cc_version.clone(),
+                },
+            );
+
+            let prompt = if skip_planner {
+                prompts::builder_direct_prompt(
+                    task_id,
+                    task_desc,
+                    &ctx.spec_file_prompt_path(),
+                    &ctx.tasks_file_prompt_path(),
+                )
+            } else {
+                prompts::builder_prompt(
+                    task_id,
+                    task_desc,
+                    &ctx.spec_file_prompt_path(),
+                    &ctx.tasks_file_prompt_path(),
+                )
+            };
+            // Inject matched patterns so the builder can see and give feedback on them
+            let prompt = if !pattern_context.is_empty() {
+                format!("{}\n\n--- BEGIN REFERENCE DATA (non-authoritative) ---{}\n--- END REFERENCE DATA ---", prompt, pattern_context)
+            } else {
+                prompt
+            };
+            let prompt = prompts::wrap_with_extensions(&prompt, extension_context);
+            let prompt = if let Some(summary) = budget_summary_for_next.take() {
+                format!("{}\n\n{}", summary, prompt)
+            } else {
+                prompt
+            };
+            let builder_start = Instant::now();
+            let (eff_builder_provider, eff_builder_model) = match budget_model_override.take() {
+                Some((p, m)) => {
+                    eff_task_builder_provider = p.clone();
+                    eff_task_builder_model = m.clone();
+                    (Config::parse_provider(&p), m)
+                }
+                None => {
+                    eff_task_builder_provider = ctx.config.builder_provider.clone();
+                    eff_task_builder_model = ctx.config.builder_model.clone();
+                    (
+                        Config::parse_provider(&ctx.config.builder_provider),
+                        ctx.config.builder_model.clone(),
+                    )
+                }
+            };
+            let build_result = agent::run_agent(
+                &AgentRole::Builder,
+                eff_builder_provider,
+                &eff_builder_model,
+                &prompt,
+                &ctx.project_dir,
+                agent_tx,
+                &ctx.log_dir,
+                None,
+                ctx.config.agent_timeout_secs,
+                Some(ctx.shutdown.clone()),
+                Some(&ctx.config),
+            )
+            .await;
+
+            let agent_usage = fwd_handle.await.unwrap_or_default();
+            let rl = was_rate_limited(&build_result);
+            let ok = build_result.map(|r| r.success).unwrap_or(false);
+            let _ = tx.send(AppEvent::AgentDone(ok));
+            observatory::log_event(
+                &ctx.session_id,
+                &ctx.project_dir,
+                ObservatoryEvent::AgentDone {
+                    role: format!("{}", AgentRole::Builder),
+                    success: ok,
+                    duration_secs: builder_start.elapsed().as_secs_f64(),
+                    tokens_in: agent_usage.tokens_in,
+                    tokens_out: agent_usage.tokens_out,
+                    cost_usd: agent_usage.cost_usd,
+                    context_pct: agent_usage.context_pct,
+                    cache_creation_tokens: agent_usage.cache_creation_tokens,
+                    cache_read_tokens: agent_usage.cache_read_tokens,
+                },
+            );
+            // Budget telemetry: Builder
+            if ctx.config.budget_recovery_enabled {
+                let record = budget::evaluate_phase(
+                    &AgentRole::Builder,
+                    &agent_usage,
+                    &ctx.config.budget_targets,
+                    ctx.config.budget_overrun_threshold,
+                );
+                if record.overrun && record.recovery_action != budget::RecoveryAction::Continue {
+                    budget_telemetry.any_overrun = true;
+                    budget_telemetry.recovery_actions_taken.push(format!(
+                        "{}: {}",
+                        AgentRole::Builder,
+                        record.recovery_action
+                    ));
+                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BudgetOverrun {
+                        phase: format!("{}", AgentRole::Builder),
+                        target_pct: record.target_pct,
+                        actual_pct: record.actual_pct,
+                        recovery: format!("{}", record.recovery_action),
+                    }));
+                    observatory::log_event(
+                        &ctx.session_id,
+                        &ctx.project_dir,
+                        ObservatoryEvent::BudgetOverrun {
+                            task_id: task_id.to_string(),
+                            phase: format!("{}", AgentRole::Builder),
+                            target_pct: record.target_pct,
+                            actual_pct: record.actual_pct,
+                            recovery_action: format!("{}", record.recovery_action),
+                        },
+                    );
+                    // Builder is the last phase before review (separate function) -- log all recovery types
+                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                        "Budget recovery: {} for {} ({}% > {}%)",
+                        record.recovery_action,
+                        AgentRole::Builder,
+                        record.actual_pct,
+                        record.target_pct,
+                    ))));
+                } else if record.overrun {
+                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                        "Budget: {} used {}% (target {}%, within tolerance)",
+                        AgentRole::Builder,
+                        record.actual_pct,
+                        record.target_pct,
+                    ))));
+                }
+                budget_telemetry.records.push(record);
+            }
+            if rl {
+                observatory::log_event(
+                    &ctx.session_id,
+                    &ctx.project_dir,
+                    ObservatoryEvent::RateLimited {
+                        provider: ctx.config.builder_provider.clone(),
+                        wait_secs: ctx.config.pause_between_agents_secs,
+                    },
+                );
+            }
+            (ok, rl)
+        };
+        last_rate_limited = builder_rate_limited;
+
+        if !build_ok {
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                "BUILDER failed for {} — committing WIP",
+                task_id
+            ))));
+            {
+                let _lock = ctx
+                    .tasks_file_lock
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner());
+                let _ = task::update_task_progress(
+                    &ctx.plan_path,
+                    task_id,
+                    &format!(
+                        "{}{}{}{}I-!",
+                        query_char, research_char, planner_char, plan_review_char
+                    ),
+                );
+            }
+            stage_results.push(StageResult::failure(
+                "Builder",
+                &format!("Implement changes for {}", task_id),
+                FailureType::Crash,
+                vec![
+                    "Check build-claims.md for partial progress".to_string(),
+                    "Review the plan for overly ambitious scope".to_string(),
+                ],
+            ));
+            let _ = commit_wip_for_mode(ctx, task_id, task_desc);
+            flush_budget_telemetry(
+                &ctx.buildloop_dir,
+                ctx.config.budget_recovery_enabled,
+                &budget_telemetry,
+            );
+            return (false, last_rate_limited, false);
+        }
+
+        // Builder completed -- persist progress indicator.
         {
             let _lock = ctx
                 .tasks_file_lock
@@ -4172,124 +4620,108 @@ async fn process_task(
             let _ = task::update_task_progress(
                 &ctx.plan_path,
                 task_id,
-                &format!("{}{}{}{}I-!", query_char, research_char, planner_char, plan_review_char),
+                &format!(
+                    "{}{}{}{}I.",
+                    query_char, research_char, planner_char, plan_review_char
+                ),
             );
         }
-        stage_results.push(StageResult::failure(
-            "Builder",
-            &format!("Implement changes for {}", task_id),
-            FailureType::Crash,
-            vec![
-                "Check build-claims.md for partial progress".to_string(),
-                "Review the plan for overly ambitious scope".to_string(),
-            ],
-        ));
-        let _ = commit_wip_for_mode(ctx, task_id, task_desc);
-        flush_budget_telemetry(&ctx.buildloop_dir, ctx.config.budget_recovery_enabled, &budget_telemetry);
-        return (false, last_rate_limited, false);
-    }
 
-    // Builder completed -- persist progress indicator.
-    {
-        let _lock = ctx
-            .tasks_file_lock
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
-        let _ = task::update_task_progress(
-            &ctx.plan_path,
-            task_id,
-            &format!("{}{}{}{}I.", query_char, research_char, planner_char, plan_review_char),
-        );
-    }
-
-    {
-        let mut result =
-            StageResult::success("Builder", &format!("Implement changes for {}", task_id));
-        if ctx.buildloop_dir.join("build-claims.md").exists() {
-            result.partial_results.push("build-claims.md".to_string());
-        }
-        stage_results.push(result);
-    }
-
-    // ─── Gate: Build/Compile Verification ──────────────────────
-    if let Some(ref build_cmd) = ctx.config.build_command {
-        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-            "Running build command: {}",
-            build_cmd
-        ))));
-        let build_output = std::process::Command::new(if cfg!(target_os = "windows") {
-            "cmd"
-        } else {
-            "sh"
-        })
-        .args(if cfg!(target_os = "windows") {
-            vec!["/C", build_cmd]
-        } else {
-            vec!["-c", build_cmd]
-        })
-        .current_dir(&ctx.project_dir)
-        .output();
-
-        match build_output {
-            Ok(output) if !output.status.success() => {
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                let stdout = String::from_utf8_lossy(&output.stdout);
-                let combined = format!("{}\n{}", stdout, stderr);
-                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                    "BUILD GATE FAILED for {} — build command exited {}: {}",
-                    task_id,
-                    output.status,
-                    crate::utils::truncate_str(combined.trim(), 500),
-                ))));
-                {
-                    let _lock = ctx
-                        .tasks_file_lock
-                        .lock()
-                        .unwrap_or_else(|e| e.into_inner());
-                    let _ = task::update_task_progress(
-                        &ctx.plan_path,
-                        task_id,
-                        &format!("{}{}{}{}I-!", query_char, research_char, planner_char, plan_review_char),
-                    );
-                }
-                stage_results.push(StageResult::failure(
-                    "BuildGate",
-                    &format!("Run build command: {}", build_cmd),
-                    FailureType::GateFail,
-                    vec!["Build command failed -- check compiler errors".to_string()],
-                ));
-                let _ = commit_wip_for_mode(ctx, task_id, task_desc);
-                flush_budget_telemetry(&ctx.buildloop_dir, ctx.config.budget_recovery_enabled, &budget_telemetry);
-                return (false, last_rate_limited, false);
+        {
+            let mut result =
+                StageResult::success("Builder", &format!("Implement changes for {}", task_id));
+            if ctx.buildloop_dir.join("build-claims.md").exists() {
+                result.partial_results.push("build-claims.md".to_string());
             }
-            Err(e) => {
-                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+            stage_results.push(result);
+        }
+
+        // ─── Gate: Build/Compile Verification ──────────────────────
+        if let Some(ref build_cmd) = ctx.config.build_command {
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                "Running build command: {}",
+                build_cmd
+            ))));
+            let build_output = std::process::Command::new(if cfg!(target_os = "windows") {
+                "cmd"
+            } else {
+                "sh"
+            })
+            .args(if cfg!(target_os = "windows") {
+                vec!["/C", build_cmd]
+            } else {
+                vec!["-c", build_cmd]
+            })
+            .current_dir(&ctx.project_dir)
+            .output();
+
+            match build_output {
+                Ok(output) if !output.status.success() => {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    let stdout = String::from_utf8_lossy(&output.stdout);
+                    let combined = format!("{}\n{}", stdout, stderr);
+                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                        "BUILD GATE FAILED for {} — build command exited {}: {}",
+                        task_id,
+                        output.status,
+                        crate::utils::truncate_str(combined.trim(), 500),
+                    ))));
+                    {
+                        let _lock = ctx
+                            .tasks_file_lock
+                            .lock()
+                            .unwrap_or_else(|e| e.into_inner());
+                        let _ = task::update_task_progress(
+                            &ctx.plan_path,
+                            task_id,
+                            &format!(
+                                "{}{}{}{}I-!",
+                                query_char, research_char, planner_char, plan_review_char
+                            ),
+                        );
+                    }
+                    stage_results.push(StageResult::failure(
+                        "BuildGate",
+                        &format!("Run build command: {}", build_cmd),
+                        FailureType::GateFail,
+                        vec!["Build command failed -- check compiler errors".to_string()],
+                    ));
+                    let _ = commit_wip_for_mode(ctx, task_id, task_desc);
+                    flush_budget_telemetry(
+                        &ctx.buildloop_dir,
+                        ctx.config.budget_recovery_enabled,
+                        &budget_telemetry,
+                    );
+                    return (false, last_rate_limited, false);
+                }
+                Err(e) => {
+                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
                     "Build command failed to execute: {} — build gate not validated, skipping checkpoint",
                     e
                 ))));
-                // Do NOT write checkpoint -- the build was never verified.
-                // Doubt will still run, but crash recovery won't skip the builder.
+                    // Do NOT write checkpoint -- the build was never verified.
+                    // Doubt will still run, but crash recovery won't skip the builder.
+                }
+                Ok(_) => {
+                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+                        "Build gate passed".to_string(),
+                    )));
+                    // Only write checkpoint when build gate actually passed
+                    write_checkpoint(&ctx.buildloop_dir, task_id, task_desc, "builder");
+                }
             }
-            Ok(_) => {
-                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
-                    "Build gate passed".to_string(),
-                )));
-                // Only write checkpoint when build gate actually passed
-                write_checkpoint(&ctx.buildloop_dir, task_id, task_desc, "builder");
-            }
+        } else {
+            // No build_command configured -- write checkpoint unconditionally
+            write_checkpoint(&ctx.buildloop_dir, task_id, task_desc, "builder");
         }
-    } else {
-        // No build_command configured -- write checkpoint unconditionally
-        write_checkpoint(&ctx.buildloop_dir, task_id, task_desc, "builder");
-    }
 
-    // ─── Trim Verbose Build Output ──────────────────────────────
-    if let Some((orig, trimmed)) = trim_build_claims(ctx) {
-        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-            "Trimmed test output from {} to {} lines",
-            orig, trimmed
-        ))));
-    }
+        // ─── Trim Verbose Build Output ──────────────────────────────
+        if let Some((orig, trimmed)) = trim_build_claims(ctx) {
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                "Trimmed test output from {} to {} lines",
+                orig, trimmed
+            ))));
+        }
     } // end !checkpoint_skip_builder
 
     adaptive_sleep(
@@ -4313,7 +4745,11 @@ async fn process_task(
         ));
         // Progress indicator already written at [SPI.] above; commit preserves it.
         let _ = commit_wip_for_mode(ctx, task_id, task_desc);
-        flush_budget_telemetry(&ctx.buildloop_dir, ctx.config.budget_recovery_enabled, &budget_telemetry);
+        flush_budget_telemetry(
+            &ctx.buildloop_dir,
+            ctx.config.budget_recovery_enabled,
+            &budget_telemetry,
+        );
         return (false, last_rate_limited, false);
     }
 
@@ -4342,67 +4778,68 @@ async fn process_task(
     // and the config enables it. The builder already ran build/test/lint --
     // verify adds a fresh-context audit which is most valuable for complex
     // tasks with blind spots. Medium and complex tasks always run doubt.
-    let skip_doubt_simple = ctx.config.skip_doubt_for_simple
-        && task_complexity == TaskComplexity::Simple
-        && build_ok;
+    let skip_doubt_simple =
+        ctx.config.skip_doubt_for_simple && task_complexity == TaskComplexity::Simple && build_ok;
     let skip_doubt_confidence = doubt_confidence.should_skip && build_ok;
     let skip_verify = skip_doubt_simple || skip_for_batch || skip_doubt_confidence;
 
-    let (validated, _fix_passes, review_findings, reviewer_budget_record) = if ctx.config.backpressure_only {
-        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
-            "Backpressure-only mode: skipping LLM review (builder verification passed)".to_string(),
-        )));
-        (true, 0usize, (0, 0, 0), None)
-    } else if skip_for_batch {
-        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-            "Batch doubt: deferring review ({} tasks remaining)",
-            pending_count
-        ))));
-        (true, 0usize, (0, 0, 0), None)
-    } else if skip_doubt_simple {
-        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
-            "Simple task with passing build checks -- skipping doubt".to_string(),
-        )));
-        (true, 0usize, (0, 0, 0), None)
-    } else if skip_doubt_confidence {
-        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-            "Learned confidence -- skipping doubt ({})",
-            doubt_confidence.log_message
-        ))));
-        (true, 0usize, (0, 0, 0), None)
-    } else {
-        // ─── Gate: Reviewer Prerequisites ─────────────────────
-        match gate_reviewer(ctx) {
-            GateResult::Fail(reason) => {
-                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                    "GATE WARNING for reviewer on {}: {} -- reviewing without claims",
-                    task_id, reason
-                ))));
-                // Don't block -- reviewer can fall back to reading changed files.
-                // But log it clearly so we know the builder didn't produce claims.
-                review::run_review_loop(
-                    task_id,
-                    task_desc,
-                    ctx,
-                    &reviewer_pattern_context,
-                    extension_context,
-                    tx,
-                )
-                .await
+    let (validated, _fix_passes, review_findings, reviewer_budget_record) =
+        if ctx.config.backpressure_only {
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+                "Backpressure-only mode: skipping LLM review (builder verification passed)"
+                    .to_string(),
+            )));
+            (true, 0usize, (0, 0, 0), None)
+        } else if skip_for_batch {
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                "Batch doubt: deferring review ({} tasks remaining)",
+                pending_count
+            ))));
+            (true, 0usize, (0, 0, 0), None)
+        } else if skip_doubt_simple {
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+                "Simple task with passing build checks -- skipping doubt".to_string(),
+            )));
+            (true, 0usize, (0, 0, 0), None)
+        } else if skip_doubt_confidence {
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                "Learned confidence -- skipping doubt ({})",
+                doubt_confidence.log_message
+            ))));
+            (true, 0usize, (0, 0, 0), None)
+        } else {
+            // ─── Gate: Reviewer Prerequisites ─────────────────────
+            match gate_reviewer(ctx) {
+                GateResult::Fail(reason) => {
+                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                        "GATE WARNING for reviewer on {}: {} -- reviewing without claims",
+                        task_id, reason
+                    ))));
+                    // Don't block -- reviewer can fall back to reading changed files.
+                    // But log it clearly so we know the builder didn't produce claims.
+                    review::run_review_loop(
+                        task_id,
+                        task_desc,
+                        ctx,
+                        &reviewer_pattern_context,
+                        extension_context,
+                        tx,
+                    )
+                    .await
+                }
+                GateResult::Pass => {
+                    review::run_review_loop(
+                        task_id,
+                        task_desc,
+                        ctx,
+                        &reviewer_pattern_context,
+                        extension_context,
+                        tx,
+                    )
+                    .await
+                }
             }
-            GateResult::Pass => {
-                review::run_review_loop(
-                    task_id,
-                    task_desc,
-                    ctx,
-                    &reviewer_pattern_context,
-                    extension_context,
-                    tx,
-                )
-                .await
-            }
-        }
-    };
+        };
 
     // Add Reviewer budget record to telemetry
     if let Some(record) = reviewer_budget_record {
@@ -4477,12 +4914,14 @@ async fn process_task(
         }));
         if approved {
             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                "Human approved: committing {} as feat", task_id
+                "Human approved: committing {} as feat",
+                task_id
             ))));
             true
         } else {
             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                "Human denied: downgrading {} to WIP", task_id
+                "Human denied: downgrading {} to WIP",
+                task_id
             ))));
             human_denied_approval = true;
             false
@@ -4502,7 +4941,10 @@ async fn process_task(
             "D"
         };
         let fail_char = if !validated { "!" } else { "" };
-        let progress = format!("{}{}{}{}I{}{}", query_char, research_char, planner_char, plan_review_char, doubt_char, fail_char);
+        let progress = format!(
+            "{}{}{}{}I{}{}",
+            query_char, research_char, planner_char, plan_review_char, doubt_char, fail_char
+        );
         let _lock = ctx
             .tasks_file_lock
             .lock()
@@ -4514,7 +4956,11 @@ async fn process_task(
     }
 
     // Write budget telemetry
-    flush_budget_telemetry(&ctx.buildloop_dir, ctx.config.budget_recovery_enabled, &budget_telemetry);
+    flush_budget_telemetry(
+        &ctx.buildloop_dir,
+        ctx.config.budget_recovery_enabled,
+        &budget_telemetry,
+    );
 
     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::ShipStarted));
     let committed = if ctx.config.run_mode == "review" {
@@ -4745,22 +5191,36 @@ async fn process_task(
     };
     if committed {
         let commit_type = if validated { "feat" } else { "wip" };
-        observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::Committed {
-            task_id: task_id.to_string(),
-            sha: commit_sha.clone().unwrap_or_default(),
-            commit_type: commit_type.to_string(),
-        });
+        observatory::log_event(
+            &ctx.session_id,
+            &ctx.project_dir,
+            ObservatoryEvent::Committed {
+                task_id: task_id.to_string(),
+                sha: commit_sha.clone().unwrap_or_default(),
+                commit_type: commit_type.to_string(),
+            },
+        );
     }
 
     // Emit TaskCompleted with aggregated task-level metrics
     {
-        let task_cost_now = ctx.session_cost_millicents.load(std::sync::atomic::Ordering::Relaxed);
-        let task_total_cost_usd = (task_cost_now.saturating_sub(task_cost_snapshot)) as f64 / 100_000.0;
+        let task_cost_now = ctx
+            .session_cost_millicents
+            .load(std::sync::atomic::Ordering::Relaxed);
+        let task_total_cost_usd =
+            (task_cost_now.saturating_sub(task_cost_snapshot)) as f64 / 100_000.0;
         let task_duration_secs = task_start.elapsed().as_secs_f64();
         let verdict = if validated { "feat" } else { "wip" };
-        let doubt_char_tc = if skip_verify || ctx.config.backpressure_only { "-" } else { "D" };
+        let doubt_char_tc = if skip_verify || ctx.config.backpressure_only {
+            "-"
+        } else {
+            "D"
+        };
         let fail_char_tc = if !validated { "!" } else { "" };
-        let phases_run_str = format!("{}{}{}{}I{}{}", query_char, research_char, planner_char, plan_review_char, doubt_char_tc, fail_char_tc);
+        let phases_run_str = format!(
+            "{}{}{}{}I{}{}",
+            query_char, research_char, planner_char, plan_review_char, doubt_char_tc, fail_char_tc
+        );
         observatory::log_event(
             &ctx.session_id,
             &ctx.project_dir,
@@ -4793,6 +5253,37 @@ async fn process_task(
         .map(|o| String::from_utf8_lossy(&o.stdout).lines().count())
         .unwrap_or(0);
 
+    // ─── Pattern Feedback (self-repair) ────────────────────────────
+    // Parse PATTERN_FEEDBACK markers from builder output (build-claims.md).
+    // Apply feedback to patterns on disk before citation scanning.
+    if !injected_pattern_ids.is_empty() {
+        let claims_path = ctx.buildloop_dir.join("build-claims.md");
+        if let Ok(claims_content) = std::fs::read_to_string(&claims_path) {
+            let feedback = patterns::parse_pattern_feedback(&claims_content);
+            if !feedback.is_empty() {
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                    "Pattern feedback: {} signals from builder",
+                    feedback.len()
+                ))));
+                if let Err(e) = patterns::apply_feedback(patterns_dir, &feedback) {
+                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                        "Warning: failed to apply pattern feedback: {}",
+                        e
+                    ))));
+                }
+                // Also apply to extension pattern dirs
+                let ext_infos = extensions::discover_extensions(&ctx.project_dir);
+                for ext_name in &ctx.config.extensions {
+                    if let Some(ext) = ext_infos.iter().find(|e| &e.name == ext_name) {
+                        if let Some(ref pdir) = ext.patterns_dir {
+                            let _ = patterns::apply_feedback(pdir, &feedback);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // Scan build artifacts for pattern citations to track usefulness.
     // Only on validated tasks -- failed/WIP tasks should not train the ranking system.
     let mut all_cited: Vec<String> = Vec::new();
@@ -4805,6 +5296,7 @@ async fn process_task(
 
         let artifacts_to_scan: Vec<(std::path::PathBuf, &str)> = vec![
             (ctx.buildloop_dir.join("current-plan.md"), "Planner"),
+            (ctx.buildloop_dir.join("build-claims.md"), "Builder"),
             (ctx.buildloop_dir.join("review-report.md"), "Reviewer"),
         ];
 
@@ -4819,7 +5311,11 @@ async fn process_task(
                             ObservatoryEvent::PatternCited {
                                 task_id: task_id.to_string(),
                                 role: role.to_string(),
-                                artifact: artifact_path.file_name().unwrap_or_default().to_string_lossy().to_string(),
+                                artifact: artifact_path
+                                    .file_name()
+                                    .unwrap_or_default()
+                                    .to_string_lossy()
+                                    .to_string(),
                                 pattern_id: pid.clone(),
                             },
                         );
@@ -4905,11 +5401,35 @@ async fn process_task(
     }));
 
     if validated && !all_cited.is_empty() {
-        observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::PatternApplied {
-            task_id: task_id.to_string(),
-            pattern_ids: all_cited.clone(),
-            count: all_cited.len(),
-        });
+        observatory::log_event(
+            &ctx.session_id,
+            &ctx.project_dir,
+            ObservatoryEvent::PatternApplied {
+                task_id: task_id.to_string(),
+                pattern_ids: all_cited.clone(),
+                count: all_cited.len(),
+            },
+        );
+    }
+
+    // ─── Build History ─────────────────────────────────────────────
+    let history_dir = crate::history::resolve_history_dir(&ctx.config.history_dir);
+    let record = crate::history::new_record(
+        task_id,
+        task_desc,
+        &ctx.project_dir.to_string_lossy(),
+        status,
+        commit_sha.clone(),
+        injected_pattern_ids.clone(),
+        all_cited.clone(),
+        changed_file_count,
+        duration_secs,
+    );
+    if let Err(e) = crate::history::append_record(&history_dir, &record) {
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+            "Warning: failed to write build history: {}",
+            e
+        ))));
     }
 
     // Clear checkpoint — task completed successfully (committed or WIP)
@@ -5368,7 +5888,7 @@ mod tests {
 
         // Simulate checkpoint recovery scenario: planner completed, resuming at plan_review
         let checkpoint_skip_plan_review = false; // P+ has NOT completed yet
-        let checkpoint_skip_planner = true;       // planner completed in prior session
+        let checkpoint_skip_planner = true; // planner completed in prior session
         let plan_review_enabled = true;
 
         // skip_planner incorporates checkpoint_skip_planner (build.rs:2159)
@@ -5379,31 +5899,43 @@ mod tests {
             && plan_review_enabled
             && true // task_complexity == Complex (simulated)
             && (!skip_planner || checkpoint_skip_planner);
-        assert!(p_plus_should_run, "P+ must run when skip_planner is only true due to checkpoint recovery");
+        assert!(
+            p_plus_should_run,
+            "P+ must run when skip_planner is only true due to checkpoint recovery"
+        );
 
         // Verify: when skip_planner is true due to task simplicity (not checkpoint),
         // P+ should NOT run
         let checkpoint_skip_planner_simple = false; // no checkpoint recovery
-        let skip_planner_simple = true;             // skipped because task is simple
+        let skip_planner_simple = true; // skipped because task is simple
         let p_plus_should_not_run = !false // checkpoint_skip_plan_review = false
             && true // plan_review_enabled
             && true // Complex
             && (!skip_planner_simple || checkpoint_skip_planner_simple);
-        assert!(!p_plus_should_not_run, "P+ must NOT run when skip_planner is true due to task simplicity");
+        assert!(
+            !p_plus_should_not_run,
+            "P+ must NOT run when skip_planner is true due to task simplicity"
+        );
 
         // Verify: normal case -- planner ran, no checkpoint, Complex task
         let p_plus_normal = !false  // checkpoint_skip_plan_review = false
             && true  // plan_review_enabled
             && true  // Complex
             && (!false || false); // skip_planner=false, checkpoint_skip_planner=false
-        assert!(p_plus_normal, "P+ must run normally for Complex tasks when planner ran");
+        assert!(
+            p_plus_normal,
+            "P+ must run normally for Complex tasks when planner ran"
+        );
 
         // Verify: P+ already completed in prior session
         let p_plus_already_done = !true  // checkpoint_skip_plan_review = true
             && true
             && true
             && (!false || false);
-        assert!(!p_plus_already_done, "P+ must NOT run when checkpoint says it already completed");
+        assert!(
+            !p_plus_already_done,
+            "P+ must NOT run when checkpoint says it already completed"
+        );
     }
 
     #[test]
@@ -5537,7 +6069,10 @@ mod tests {
         // Simulate: gate failed, checkpoint never written (cleared to simulate)
         clear_checkpoint(&dir);
         let cp_after = read_checkpoint(&dir);
-        assert!(cp_after.is_none(), "checkpoint must not exist after gate failure path");
+        assert!(
+            cp_after.is_none(),
+            "checkpoint must not exist after gate failure path"
+        );
 
         // Verify: no checkpoint -> planner re-runs
         let resume_stage: Option<&str> = cp_after.as_ref().map(|c| c.completed_stage.as_str());
@@ -5592,12 +6127,18 @@ mod tests {
         assert!(path.exists(), "telemetry file must exist after flush");
         let content = std::fs::read_to_string(&path).unwrap();
         assert!(content.contains("D41.1"), "telemetry must contain task_id");
-        assert!(content.contains("SCOUT"), "telemetry must contain phase record");
+        assert!(
+            content.contains("SCOUT"),
+            "telemetry must contain phase record"
+        );
 
         // Clean up and test: budget_recovery_enabled=false should NOT write
         std::fs::remove_file(&path).unwrap();
         flush_budget_telemetry(&dir, false, &telemetry);
-        assert!(!path.exists(), "telemetry must not be written when budget_recovery_enabled is false");
+        assert!(
+            !path.exists(),
+            "telemetry must not be written when budget_recovery_enabled is false"
+        );
 
         // Test: empty records should NOT write
         let empty_telemetry = budget::BudgetTelemetry {
@@ -5606,7 +6147,10 @@ mod tests {
             ..Default::default()
         };
         flush_budget_telemetry(&dir, true, &empty_telemetry);
-        assert!(!path.exists(), "telemetry must not be written when records are empty");
+        assert!(
+            !path.exists(),
+            "telemetry must not be written when records are empty"
+        );
 
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -5620,22 +6164,32 @@ mod tests {
         // consumed with a warning before P+ runs.
 
         // Simulate the state after Planner budget evaluation triggers Escalate
-        let mut budget_summary_for_next: Option<String> = Some(
-            "CONTEXT BUDGET ALERT: The previous PLAN phase used 65% ...".to_string()
-        );
-        let mut budget_model_override: Option<(String, String)> = Some(
-            ("claude".to_string(), "opus".to_string())
-        );
+        let mut budget_summary_for_next: Option<String> =
+            Some("CONTEXT BUDGET ALERT: The previous PLAN phase used 65% ...".to_string());
+        let mut budget_model_override: Option<(String, String)> =
+            Some(("claude".to_string(), "opus".to_string()));
 
         // Simulate: P+ subphase is about to run. The code should .take() both values.
         // This mirrors the consume-and-warn pattern from parallel builder (build.rs:3064-3073).
         let consumed_summary = budget_summary_for_next.take();
         let consumed_override = budget_model_override.take();
 
-        assert!(consumed_summary.is_some(), "summary directive should have been present for consumption");
-        assert!(consumed_override.is_some(), "model override should have been present for consumption");
-        assert!(budget_summary_for_next.is_none(), "summary must be None after .take() so Builder does not receive it");
-        assert!(budget_model_override.is_none(), "override must be None after .take() so Builder does not receive it");
+        assert!(
+            consumed_summary.is_some(),
+            "summary directive should have been present for consumption"
+        );
+        assert!(
+            consumed_override.is_some(),
+            "model override should have been present for consumption"
+        );
+        assert!(
+            budget_summary_for_next.is_none(),
+            "summary must be None after .take() so Builder does not receive it"
+        );
+        assert!(
+            budget_model_override.is_none(),
+            "override must be None after .take() so Builder does not receive it"
+        );
     }
 
     #[test]
@@ -5646,12 +6200,10 @@ mod tests {
         // to leak through to Builder.
 
         // Simulate: Planner overrun sets both directives
-        let mut budget_summary_for_next: Option<String> = Some(
-            "CONTEXT BUDGET ALERT: The previous PLAN phase used 65% ...".to_string()
-        );
-        let mut budget_model_override: Option<(String, String)> = Some(
-            ("claude".to_string(), "opus".to_string())
-        );
+        let mut budget_summary_for_next: Option<String> =
+            Some("CONTEXT BUDGET ALERT: The previous PLAN phase used 65% ...".to_string());
+        let mut budget_model_override: Option<(String, String)> =
+            Some(("claude".to_string(), "opus".to_string()));
 
         // Simulate: current-plan.md read fails, plan_text is empty
         let plan_text = String::new();
@@ -5667,10 +6219,14 @@ mod tests {
         }
 
         // Directives must already be consumed -- they must not reach Builder
-        assert!(budget_summary_for_next.is_none(),
-            "budget summary must be consumed even when plan is unreadable");
-        assert!(budget_model_override.is_none(),
-            "budget model override must be consumed even when plan is unreadable");
+        assert!(
+            budget_summary_for_next.is_none(),
+            "budget summary must be consumed even when plan is unreadable"
+        );
+        assert!(
+            budget_model_override.is_none(),
+            "budget model override must be consumed even when plan is unreadable"
+        );
     }
 
     #[test]
@@ -5691,16 +6247,19 @@ mod tests {
 
         for (role, expected_display) in &roles {
             let display_name = format!("{}", role);
-            assert_eq!(&display_name, expected_display,
+            assert_eq!(
+                &display_name, expected_display,
                 "AgentRole::{:?} Display should be {:?}, got {:?}",
                 role, expected_display, display_name
             );
 
             // Verify the recovery_actions_taken format uses Display name
             let recovery_entry = format!("{}: summarize", role);
-            assert!(recovery_entry.starts_with(expected_display),
+            assert!(
+                recovery_entry.starts_with(expected_display),
                 "recovery action entry should start with Display name {:?}, got {:?}",
-                expected_display, recovery_entry
+                expected_display,
+                recovery_entry
             );
         }
     }
@@ -5727,19 +6286,27 @@ mod tests {
         };
         usage.accumulate(&evt);
 
-        assert_eq!(usage.tokens_in, 5000, "retry usage should accumulate input tokens");
-        assert_eq!(usage.tokens_out, 2000, "retry usage should accumulate output tokens");
-        assert!((usage.cost_usd - 0.15).abs() < f64::EPSILON, "retry usage should accumulate cost");
+        assert_eq!(
+            usage.tokens_in, 5000,
+            "retry usage should accumulate input tokens"
+        );
+        assert_eq!(
+            usage.tokens_out, 2000,
+            "retry usage should accumulate output tokens"
+        );
+        assert!(
+            (usage.cost_usd - 0.15).abs() < f64::EPSILON,
+            "retry usage should accumulate cost"
+        );
 
         // Verify budget evaluation works with accumulated retry usage
         let targets = crate::budget::BudgetTargets::default();
-        let record = crate::budget::evaluate_phase(
-            &crate::agent::AgentRole::Planner,
-            &usage,
-            &targets,
-            10,
+        let record =
+            crate::budget::evaluate_phase(&crate::agent::AgentRole::Planner, &usage, &targets, 10);
+        assert_eq!(
+            record.phase, "PLAN",
+            "retry budget record phase should use Display name"
         );
-        assert_eq!(record.phase, "PLAN", "retry budget record phase should use Display name");
         assert_eq!(record.tokens_in, 5000);
         assert_eq!(record.tokens_out, 2000);
     }
@@ -5783,28 +6350,37 @@ mod tests {
             }
             _ => false,
         };
-        assert!(!checkpoint_skip_planner, "planner skip must be false when current-plan.md is missing");
+        assert!(
+            !checkpoint_skip_planner,
+            "planner skip must be false when current-plan.md is missing"
+        );
 
         // checkpoint_skip_plan_review: depends on checkpoint_skip_planner (the fix)
         let checkpoint_skip_plan_review = match resume_stage {
             Some("builder" | "doubt") if checkpoint_skip_planner => true,
             _ => false,
         };
-        assert!(!checkpoint_skip_plan_review,
-            "plan_review skip must be false when checkpoint_skip_planner is false (cascading)");
+        assert!(
+            !checkpoint_skip_plan_review,
+            "plan_review skip must be false when checkpoint_skip_planner is false (cascading)"
+        );
 
         // checkpoint_skip_builder: depends on checkpoint_skip_planner (the fix)
         let checkpoint_skip_builder = match resume_stage {
-            Some("doubt") if checkpoint_skip_planner => {
-                dir.join("build-claims.md").exists()
-            }
+            Some("doubt") if checkpoint_skip_planner => dir.join("build-claims.md").exists(),
             _ => false,
         };
-        assert!(!checkpoint_skip_builder,
-            "builder skip must be false when checkpoint_skip_planner is false (cascading)");
+        assert!(
+            !checkpoint_skip_builder,
+            "builder skip must be false when checkpoint_skip_planner is false (cascading)"
+        );
 
         // Verify: when current-plan.md EXISTS, the old behavior is preserved
-        std::fs::write(&current_plan, "# Plan\n## File Operations\n## Verification\n").unwrap();
+        std::fs::write(
+            &current_plan,
+            "# Plan\n## File Operations\n## Verification\n",
+        )
+        .unwrap();
         let build_claims = dir.join("build-claims.md");
         std::fs::write(&build_claims, "# Build Claims").unwrap();
 
@@ -5812,21 +6388,28 @@ mod tests {
             Some("plan_review" | "builder" | "doubt") => current_plan.exists(),
             _ => false,
         };
-        assert!(checkpoint_skip_planner_ok, "planner skip should be true when plan exists");
+        assert!(
+            checkpoint_skip_planner_ok,
+            "planner skip should be true when plan exists"
+        );
 
         let checkpoint_skip_plan_review_ok = match resume_stage {
             Some("builder" | "doubt") if checkpoint_skip_planner_ok => true,
             _ => false,
         };
-        assert!(checkpoint_skip_plan_review_ok,
-            "plan_review skip should be true when planner skip is true");
+        assert!(
+            checkpoint_skip_plan_review_ok,
+            "plan_review skip should be true when planner skip is true"
+        );
 
         let checkpoint_skip_builder_ok = match resume_stage {
             Some("doubt") if checkpoint_skip_planner_ok => build_claims.exists(),
             _ => false,
         };
-        assert!(checkpoint_skip_builder_ok,
-            "builder skip should be true when planner skip is true and build-claims.md exists");
+        assert!(
+            checkpoint_skip_builder_ok,
+            "builder skip should be true when planner skip is true and build-claims.md exists"
+        );
 
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -5870,16 +6453,25 @@ mod tests {
         let research_report = dir.join("research-report.md");
         std::fs::write(&research_report, "# Research Report").unwrap();
         let current_plan = dir.join("current-plan.md");
-        std::fs::write(&current_plan, "# Plan\n## File Operations\n## Verification\n").unwrap();
+        std::fs::write(
+            &current_plan,
+            "# Plan\n## File Operations\n## Verification\n",
+        )
+        .unwrap();
         let build_claims = dir.join("build-claims.md");
         std::fs::write(&build_claims, "# Build Claims").unwrap();
 
         // checkpoint_skip_query: questions.md missing -> false
         let checkpoint_skip_query = match resume_stage {
-            Some("research" | "planner" | "plan_review" | "builder" | "doubt") => questions_file.exists(),
+            Some("research" | "planner" | "plan_review" | "builder" | "doubt") => {
+                questions_file.exists()
+            }
             _ => false,
         };
-        assert!(!checkpoint_skip_query, "query skip must be false when questions.md is missing");
+        assert!(
+            !checkpoint_skip_query,
+            "query skip must be false when questions.md is missing"
+        );
 
         // checkpoint_skip_research: must be false because checkpoint_skip_query is false (cascading)
         let checkpoint_skip_research = match resume_stage {
@@ -5888,8 +6480,10 @@ mod tests {
             }
             _ => false,
         };
-        assert!(!checkpoint_skip_research,
-            "research skip must be false when checkpoint_skip_query is false (cascading)");
+        assert!(
+            !checkpoint_skip_research,
+            "research skip must be false when checkpoint_skip_query is false (cascading)"
+        );
 
         // checkpoint_skip_planner: must be false because checkpoint_skip_research is false
         let checkpoint_skip_planner = match resume_stage {
@@ -5898,33 +6492,44 @@ mod tests {
             }
             _ => false,
         };
-        assert!(!checkpoint_skip_planner,
-            "planner skip must be false when checkpoint_skip_research is false (cascading)");
+        assert!(
+            !checkpoint_skip_planner,
+            "planner skip must be false when checkpoint_skip_research is false (cascading)"
+        );
 
         // checkpoint_skip_plan_review: depends on checkpoint_skip_planner
         let checkpoint_skip_plan_review = matches!(
             resume_stage,
             Some("builder" | "doubt") if checkpoint_skip_planner
         );
-        assert!(!checkpoint_skip_plan_review,
-            "plan_review skip must be false when checkpoint_skip_planner is false (cascading)");
+        assert!(
+            !checkpoint_skip_plan_review,
+            "plan_review skip must be false when checkpoint_skip_planner is false (cascading)"
+        );
 
         // checkpoint_skip_builder: depends on checkpoint_skip_planner
         let checkpoint_skip_builder = match resume_stage {
             Some("doubt") if checkpoint_skip_planner => build_claims.exists(),
             _ => false,
         };
-        assert!(!checkpoint_skip_builder,
-            "builder skip must be false when checkpoint_skip_planner is false (cascading)");
+        assert!(
+            !checkpoint_skip_builder,
+            "builder skip must be false when checkpoint_skip_planner is false (cascading)"
+        );
 
         // Positive case: when questions.md and research-report.md EXIST, cascade does not trigger
         std::fs::write(&questions_file, "# Questions").unwrap();
 
         let checkpoint_skip_query_ok = match resume_stage {
-            Some("research" | "planner" | "plan_review" | "builder" | "doubt") => questions_file.exists(),
+            Some("research" | "planner" | "plan_review" | "builder" | "doubt") => {
+                questions_file.exists()
+            }
             _ => false,
         };
-        assert!(checkpoint_skip_query_ok, "query skip should be true when questions.md exists");
+        assert!(
+            checkpoint_skip_query_ok,
+            "query skip should be true when questions.md exists"
+        );
 
         let checkpoint_skip_research_ok = match resume_stage {
             Some("planner" | "plan_review" | "builder" | "doubt") if checkpoint_skip_query_ok => {
@@ -5932,8 +6537,10 @@ mod tests {
             }
             _ => false,
         };
-        assert!(checkpoint_skip_research_ok,
-            "research skip should be true when query skip is true and research-report.md exists");
+        assert!(
+            checkpoint_skip_research_ok,
+            "research skip should be true when query skip is true and research-report.md exists"
+        );
 
         let checkpoint_skip_planner_ok = match resume_stage {
             Some("plan_review" | "builder" | "doubt") if checkpoint_skip_research_ok => {
@@ -5941,22 +6548,28 @@ mod tests {
             }
             _ => false,
         };
-        assert!(checkpoint_skip_planner_ok,
-            "planner skip should be true when research skip is true and plan exists");
+        assert!(
+            checkpoint_skip_planner_ok,
+            "planner skip should be true when research skip is true and plan exists"
+        );
 
         let checkpoint_skip_plan_review_ok = matches!(
             resume_stage,
             Some("builder" | "doubt") if checkpoint_skip_planner_ok
         );
-        assert!(checkpoint_skip_plan_review_ok,
-            "plan_review skip should be true when planner skip is true");
+        assert!(
+            checkpoint_skip_plan_review_ok,
+            "plan_review skip should be true when planner skip is true"
+        );
 
         let checkpoint_skip_builder_ok = match resume_stage {
             Some("doubt") if checkpoint_skip_planner_ok => build_claims.exists(),
             _ => false,
         };
-        assert!(checkpoint_skip_builder_ok,
-            "builder skip should be true when planner skip is true and build-claims.md exists");
+        assert!(
+            checkpoint_skip_builder_ok,
+            "builder skip should be true when planner skip is true and build-claims.md exists"
+        );
 
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -5994,7 +6607,11 @@ mod tests {
 
         // questions.md EXISTS (query completed successfully)
         let questions_file = dir.join("questions.md");
-        std::fs::write(&questions_file, "# Questions\n1. What modules are involved?").unwrap();
+        std::fs::write(
+            &questions_file,
+            "# Questions\n1. What modules are involved?",
+        )
+        .unwrap();
 
         // research-report.md does NOT exist (research never ran)
         let research_report = dir.join("research-report.md");
@@ -6007,7 +6624,10 @@ mod tests {
             }
             _ => false,
         };
-        assert!(checkpoint_skip_query, "query skip should be true (questions.md exists)");
+        assert!(
+            checkpoint_skip_query,
+            "query skip should be true (questions.md exists)"
+        );
 
         let checkpoint_skip_research = match resume_stage {
             Some("planner" | "plan_review" | "builder" | "doubt") if checkpoint_skip_query => {
@@ -6015,29 +6635,41 @@ mod tests {
             }
             _ => false,
         };
-        assert!(!checkpoint_skip_research, "research skip must be false (resume_stage is 'research', not planner/builder/doubt)");
+        assert!(
+            !checkpoint_skip_research,
+            "research skip must be false (resume_stage is 'research', not planner/builder/doubt)"
+        );
 
         // Compute skip_query and skip_research with skip_scout=false, simple_task=false
         let skip_scout = false;
         let simple_task = false;
-        let skip_query = skip_scout
-            || checkpoint_skip_query
-            || simple_task;
-        let skip_research = skip_scout
-            || (checkpoint_skip_query && checkpoint_skip_research)
-            || simple_task;
+        let skip_query = skip_scout || checkpoint_skip_query || simple_task;
+        let skip_research =
+            skip_scout || (checkpoint_skip_query && checkpoint_skip_research) || simple_task;
 
-        assert!(skip_query, "Query should be skipped (checkpoint_skip_query is true)");
-        assert!(!skip_research, "Research must NOT be skipped (checkpoint_skip_research is false)");
+        assert!(
+            skip_query,
+            "Query should be skipped (checkpoint_skip_query is true)"
+        );
+        assert!(
+            !skip_research,
+            "Research must NOT be skipped (checkpoint_skip_research is false)"
+        );
 
         // The outer Q+R block should NOT be fully skipped
         let both_skipped = skip_query && skip_research;
-        assert!(!both_skipped, "Q+R block must not be fully skipped when only Query was checkpointed");
+        assert!(
+            !both_skipped,
+            "Q+R block must not be fully skipped when only Query was checkpointed"
+        );
 
         // Stale artifact cleanup: research-report.md should be cleaned when
         // skip_research=false and checkpoint_skip_research=false
         let should_clean_research = !skip_research && !checkpoint_skip_research;
-        assert!(should_clean_research, "stale research-report.md should be cleaned when Research will re-run");
+        assert!(
+            should_clean_research,
+            "stale research-report.md should be cleaned when Research will re-run"
+        );
 
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -6057,8 +6689,8 @@ mod tests {
 
         // Simulate what process_task does: create a BudgetTelemetry, evaluate
         // phase with aggregated parallel usage, push record, flush.
-        use crate::observatory::AgentUsage;
         use crate::agent::AgentRole;
+        use crate::observatory::AgentUsage;
 
         let usage = AgentUsage {
             cost_usd: 0.05,
@@ -6363,7 +6995,8 @@ mod tests {
         // Simulate the merge loop logic for two files
         let files_to_copy = vec!["subdir/good.rs".to_string(), "subdir/bad.rs".to_string()];
         let mut all_ok = true;
-        let mut copied_files: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+        let mut copied_files: std::collections::HashMap<String, usize> =
+            std::collections::HashMap::new();
         let slot_idx: usize = 0;
 
         for file_path in &files_to_copy {
@@ -6401,7 +7034,8 @@ mod tests {
         std::fs::write(main_dir2.join("subdir"), "i am a file not a dir").unwrap();
 
         let mut all_ok2 = true;
-        let mut copied_files2: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+        let mut copied_files2: std::collections::HashMap<String, usize> =
+            std::collections::HashMap::new();
 
         for file_path in &files_to_copy {
             let src = src_dir.join(file_path);
@@ -6481,7 +7115,8 @@ mod tests {
         let files_slot1 = vec!["shared.rs".to_string()];
 
         let mut all_ok = true;
-        let mut copied_files: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+        let mut copied_files: std::collections::HashMap<String, usize> =
+            std::collections::HashMap::new();
 
         // Process slot 0
         let slot_idx_0: usize = 0;
@@ -6623,7 +7258,8 @@ mod tests {
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
-                .as_nanos() + 1
+                .as_nanos()
+                + 1
         ));
         std::process::Command::new("git")
             .args(["worktree", "add", "--detach"])
@@ -6642,34 +7278,48 @@ mod tests {
 
         // Slot 0 (wt_a): modify planned_a.rs and shared.rs (unplanned)
         std::fs::write(wt_a.join("planned_a.rs"), "fn a() { /* slot 0 */ }").unwrap();
-        std::fs::write(wt_a.join("shared.rs"), "fn shared() { /* slot 0 version */ }").unwrap();
+        std::fs::write(
+            wt_a.join("shared.rs"),
+            "fn shared() { /* slot 0 version */ }",
+        )
+        .unwrap();
 
         // Slot 1 (wt_b): modify planned_b.rs and shared.rs (unplanned)
         std::fs::write(wt_b.join("planned_b.rs"), "fn b() { /* slot 1 */ }").unwrap();
-        std::fs::write(wt_b.join("shared.rs"), "fn shared() { /* slot 1 version */ }").unwrap();
+        std::fs::write(
+            wt_b.join("shared.rs"),
+            "fn shared() { /* slot 1 version */ }",
+        )
+        .unwrap();
 
         // Discover changed files in each worktree
         let files_a = super::discover_changed_files_in_worktree(&wt_a).unwrap();
         let files_b = super::discover_changed_files_in_worktree(&wt_b).unwrap();
 
-        assert!(files_a.contains(&"shared.rs".to_string()), "slot 0 must discover shared.rs");
-        assert!(files_b.contains(&"shared.rs".to_string()), "slot 1 must discover shared.rs");
+        assert!(
+            files_a.contains(&"shared.rs".to_string()),
+            "slot 0 must discover shared.rs"
+        );
+        assert!(
+            files_b.contains(&"shared.rs".to_string()),
+            "slot 1 must discover shared.rs"
+        );
 
         // Simulate planned file operations:
         // Slot 0 owns planned_a.rs, slot 1 owns planned_b.rs.
         // Neither slot owns shared.rs (it is unplanned).
-        let mut planned_file_owner: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+        let mut planned_file_owner: std::collections::HashMap<String, usize> =
+            std::collections::HashMap::new();
         planned_file_owner.insert("planned_a.rs".to_string(), 0);
         planned_file_owner.insert("planned_b.rs".to_string(), 1);
 
         // Simulate the merge loop with conflict detection
-        let mut copied_files: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+        let mut copied_files: std::collections::HashMap<String, usize> =
+            std::collections::HashMap::new();
         let mut conflicts: Vec<(String, usize, usize, usize)> = Vec::new(); // (file, prev_slot, cur_slot, winner)
 
-        let slot_worktrees: Vec<(usize, &std::path::Path, Vec<String>)> = vec![
-            (0, wt_a.as_path(), files_a),
-            (1, wt_b.as_path(), files_b),
-        ];
+        let slot_worktrees: Vec<(usize, &std::path::Path, Vec<String>)> =
+            vec![(0, wt_a.as_path(), files_a), (1, wt_b.as_path(), files_b)];
 
         for (slot_idx, wt_dir, files_to_copy) in &slot_worktrees {
             for file_path in files_to_copy {
@@ -6705,8 +7355,14 @@ mod tests {
         );
 
         // Verify: shared.rs conflict winner is slot 0 (first slot, since neither planned it)
-        let shared_conflict = conflicts.iter().find(|(f, _, _, _)| f == "shared.rs").unwrap();
-        assert_eq!(shared_conflict.3, 0, "winner for unplanned shared.rs must be first slot (0)");
+        let shared_conflict = conflicts
+            .iter()
+            .find(|(f, _, _, _)| f == "shared.rs")
+            .unwrap();
+        assert_eq!(
+            shared_conflict.3, 0,
+            "winner for unplanned shared.rs must be first slot (0)"
+        );
 
         // Verify: shared.rs content is from slot 0 (the winner)
         let shared_content = std::fs::read_to_string(main_dir.join("shared.rs")).unwrap();
@@ -6718,9 +7374,15 @@ mod tests {
 
         // Verify: non-conflicting planned files are correctly copied
         let a_content = std::fs::read_to_string(main_dir.join("planned_a.rs")).unwrap();
-        assert!(a_content.contains("slot 0"), "planned_a.rs must have slot 0 content");
+        assert!(
+            a_content.contains("slot 0"),
+            "planned_a.rs must have slot 0 content"
+        );
         let b_content = std::fs::read_to_string(main_dir.join("planned_b.rs")).unwrap();
-        assert!(b_content.contains("slot 1"), "planned_b.rs must have slot 1 content");
+        assert!(
+            b_content.contains("slot 1"),
+            "planned_b.rs must have slot 1 content"
+        );
 
         // Cleanup
         let _ = std::process::Command::new("git")
@@ -6763,19 +7425,27 @@ mod tests {
         git(&["config", "user.name", "test"]);
 
         // Create tracked file and commit
-        std::fs::write(
-            main_dir.join("target.rs"),
-            "fn target() { /* original */ }",
-        )
-        .unwrap();
+        std::fs::write(main_dir.join("target.rs"), "fn target() { /* original */ }").unwrap();
         git(&["add", "."]);
         git(&["commit", "-m", "initial"]);
 
         // Create two worktrees
         let wt_a = std::env::temp_dir().join(format!("foundry-wt-del-create-a-{}", nanos));
         let wt_b = std::env::temp_dir().join(format!("foundry-wt-del-create-b-{}", nanos + 1));
-        git(&["worktree", "add", "--detach", wt_a.to_str().unwrap(), "HEAD"]);
-        git(&["worktree", "add", "--detach", wt_b.to_str().unwrap(), "HEAD"]);
+        git(&[
+            "worktree",
+            "add",
+            "--detach",
+            wt_a.to_str().unwrap(),
+            "HEAD",
+        ]);
+        git(&[
+            "worktree",
+            "add",
+            "--detach",
+            wt_b.to_str().unwrap(),
+            "HEAD",
+        ]);
 
         // Slot 0 (wt_a): delete target.rs
         std::fs::remove_file(wt_a.join("target.rs")).unwrap();
@@ -6940,8 +7610,20 @@ mod tests {
         // Create two worktrees
         let wt_a = std::env::temp_dir().join(format!("foundry-wt-del-mod-a-{}", nanos));
         let wt_b = std::env::temp_dir().join(format!("foundry-wt-del-mod-b-{}", nanos + 1));
-        git(&["worktree", "add", "--detach", wt_a.to_str().unwrap(), "HEAD"]);
-        git(&["worktree", "add", "--detach", wt_b.to_str().unwrap(), "HEAD"]);
+        git(&[
+            "worktree",
+            "add",
+            "--detach",
+            wt_a.to_str().unwrap(),
+            "HEAD",
+        ]);
+        git(&[
+            "worktree",
+            "add",
+            "--detach",
+            wt_b.to_str().unwrap(),
+            "HEAD",
+        ]);
 
         // Slot 0 (wt_a): delete shared.rs
         std::fs::remove_file(wt_a.join("shared.rs")).unwrap();
@@ -6994,10 +7676,8 @@ mod tests {
             std::collections::HashMap::new();
         let mut conflicts: Vec<(String, &str, usize, usize, usize)> = Vec::new(); // (file, kind, prev_slot, cur_slot, winner)
 
-        let slot_worktrees: Vec<(usize, &std::path::Path, Vec<String>)> = vec![
-            (0, wt_a.as_path(), files_a),
-            (1, wt_b.as_path(), files_b),
-        ];
+        let slot_worktrees: Vec<(usize, &std::path::Path, Vec<String>)> =
+            vec![(0, wt_a.as_path(), files_a), (1, wt_b.as_path(), files_b)];
 
         for (slot_idx, wt_dir, files_to_copy) in &slot_worktrees {
             for file_path in files_to_copy {
@@ -7024,7 +7704,13 @@ mod tests {
                             Some(&owning_slot) => owning_slot,
                             None => *slot_idx, // modification wins by default
                         };
-                        conflicts.push((file_path.clone(), "delete-modify", del_slot, *slot_idx, winner));
+                        conflicts.push((
+                            file_path.clone(),
+                            "delete-modify",
+                            del_slot,
+                            *slot_idx,
+                            winner,
+                        ));
                         if winner == del_slot {
                             continue;
                         }
@@ -7047,7 +7733,13 @@ mod tests {
                             Some(&owning_slot) => owning_slot,
                             None => prev_slot, // modification wins by default
                         };
-                        conflicts.push((file_path.clone(), "modify-delete", prev_slot, *slot_idx, winner));
+                        conflicts.push((
+                            file_path.clone(),
+                            "modify-delete",
+                            prev_slot,
+                            *slot_idx,
+                            winner,
+                        ));
                         if winner == prev_slot {
                             continue;
                         }
@@ -7158,19 +7850,27 @@ mod tests {
         git(&["config", "user.name", "test"]);
 
         // Create tracked file and commit
-        std::fs::write(
-            main_dir.join("shared.rs"),
-            "fn shared() { /* original */ }",
-        )
-        .unwrap();
+        std::fs::write(main_dir.join("shared.rs"), "fn shared() { /* original */ }").unwrap();
         git(&["add", "."]);
         git(&["commit", "-m", "initial"]);
 
         // Create two worktrees
         let wt_a = std::env::temp_dir().join(format!("foundry-wt-copydel-a-{}", nanos));
         let wt_b = std::env::temp_dir().join(format!("foundry-wt-copydel-b-{}", nanos + 1));
-        git(&["worktree", "add", "--detach", wt_a.to_str().unwrap(), "HEAD"]);
-        git(&["worktree", "add", "--detach", wt_b.to_str().unwrap(), "HEAD"]);
+        git(&[
+            "worktree",
+            "add",
+            "--detach",
+            wt_a.to_str().unwrap(),
+            "HEAD",
+        ]);
+        git(&[
+            "worktree",
+            "add",
+            "--detach",
+            wt_b.to_str().unwrap(),
+            "HEAD",
+        ]);
 
         // Slot 0 (wt_a): modify shared.rs (copy intent)
         std::fs::write(
@@ -7203,10 +7903,8 @@ mod tests {
             std::collections::HashMap::new();
         let mut conflicts: Vec<(String, &str, usize, usize, usize)> = Vec::new();
 
-        let slot_worktrees: Vec<(usize, &std::path::Path, Vec<String>)> = vec![
-            (0, wt_a.as_path(), files_a),
-            (1, wt_b.as_path(), files_b),
-        ];
+        let slot_worktrees: Vec<(usize, &std::path::Path, Vec<String>)> =
+            vec![(0, wt_a.as_path(), files_a), (1, wt_b.as_path(), files_b)];
 
         // Simulate the FIXED merge loop (matches production code after D19.1 fix)
         for (slot_idx, wt_dir, files_to_copy) in &slot_worktrees {
@@ -7221,7 +7919,13 @@ mod tests {
                             Some(&owning_slot) => owning_slot,
                             None => prev_slot,
                         };
-                        conflicts.push((file_path.clone(), "copy-copy", prev_slot, *slot_idx, winner));
+                        conflicts.push((
+                            file_path.clone(),
+                            "copy-copy",
+                            prev_slot,
+                            *slot_idx,
+                            winner,
+                        ));
                         if winner == prev_slot {
                             continue;
                         }
@@ -7236,7 +7940,13 @@ mod tests {
                             Some(&owning_slot) => owning_slot,
                             None => *slot_idx,
                         };
-                        conflicts.push((file_path.clone(), "delete-modify", del_slot, *slot_idx, winner));
+                        conflicts.push((
+                            file_path.clone(),
+                            "delete-modify",
+                            del_slot,
+                            *slot_idx,
+                            winner,
+                        ));
                         if winner == del_slot {
                             continue;
                         }
@@ -7258,7 +7968,13 @@ mod tests {
                             Some(&owning_slot) => owning_slot,
                             None => prev_slot,
                         };
-                        conflicts.push((file_path.clone(), "modify-delete", prev_slot, *slot_idx, winner));
+                        conflicts.push((
+                            file_path.clone(),
+                            "modify-delete",
+                            prev_slot,
+                            *slot_idx,
+                            winner,
+                        ));
                         if winner == prev_slot {
                             continue;
                         }

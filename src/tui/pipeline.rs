@@ -139,7 +139,9 @@ pub(super) fn render_pipeline_map(
                 theme.muted
             },
             text_style: if state.ship_active {
-                Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD)
             } else {
                 Style::default().fg(theme.muted)
             },

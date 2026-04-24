@@ -53,6 +53,16 @@ pub struct Config {
 
     pub patterns_dir: String,
 
+    /// Directory for build history JSONL log (cross-session recall).
+    pub history_dir: String,
+
+    /// Days of inactivity before a pattern's auto_apply is disabled.
+    /// 0 disables time-based decay entirely.
+    pub pattern_decay_days: i64,
+
+    /// Max number of history search results injected into scout prompts.
+    pub history_search_results: usize,
+
     /// Skip reviewer/fixer when builder's verification commands pass.
     /// Relies on deterministic backpressure (tests, lints, type checks) instead of LLM review.
     pub backpressure_only: bool,
@@ -317,6 +327,14 @@ pub struct Config {
     /// Port for the `foundry dashboard` web server (default: 9400).
     /// Serves only on localhost (127.0.0.1).
     pub dashboard_port: u16,
+
+    /// Doubt stage execution engine: "claude" (default) or "codex".
+    /// "claude" runs the reviewer as a Claude sub-agent (current behavior).
+    /// "codex" launches Codex as a separate process: `codex exec` audits and
+    /// fixes HIGH/MEDIUM issues, then `codex review --uncommitted` does an
+    /// independent diff review. Both write findings to .buildloop/review-report.md.
+    /// Override with FOUNDRY_DOUBT_ENGINE env var.
+    pub doubt_engine: String,
 }
 
 impl Default for Config {
@@ -349,6 +367,9 @@ impl Default for Config {
             agent_timeout_secs: 600, // 10 minutes
 
             patterns_dir: "~/.foundry/patterns".into(),
+            history_dir: "~/.foundry/history".into(),
+            pattern_decay_days: 90,
+            history_search_results: 5,
 
             backpressure_only: true,
             simple_planner_model: "sonnet".into(),
@@ -418,11 +439,20 @@ impl Default for Config {
             pr_review_multipass_threshold: 0,
             pr_review_concurrency: 4,
             dashboard_port: 9400,
+            doubt_engine: "claude".into(),
         }
     }
 }
 
 impl Config {
+    fn normalize_doubt_engine_value(value: &str) -> Option<&'static str> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "claude" => Some("claude"),
+            "codex" => Some("codex"),
+            _ => None,
+        }
+    }
+
     /// Read a JSON config file and return its content as a serde_json::Value.
     /// Returns None if the file doesn't exist or can't be read/parsed.
     fn read_json_file(path: &Path) -> Option<serde_json::Value> {
@@ -510,6 +540,16 @@ impl Config {
         }
         // Clamp concurrency to at least 1 (JSON config can bypass env var >= 1 check)
         self.pr_review_concurrency = self.pr_review_concurrency.max(1);
+        match Self::normalize_doubt_engine_value(&self.doubt_engine) {
+            Some(engine) => self.doubt_engine = engine.to_string(),
+            None => {
+                eprintln!(
+                    "warning: doubt_engine={:?} is not supported -- defaulting to \"claude\"",
+                    self.doubt_engine
+                );
+                self.doubt_engine = "claude".into();
+            }
+        }
     }
 
     fn apply_env_overrides(&mut self) {
@@ -548,10 +588,29 @@ impl Config {
                 match val.parse::<usize>() {
                     Ok(n) if n >= 1 => self.pr_review_concurrency = n,
                     Ok(_) => {
-                        eprintln!("warning: FOUNDRY_PR_REVIEW_CONCURRENCY must be >= 1 -- ignoring");
+                        eprintln!(
+                            "warning: FOUNDRY_PR_REVIEW_CONCURRENCY must be >= 1 -- ignoring"
+                        );
                     }
                     Err(_) => {
                         eprintln!("warning: FOUNDRY_PR_REVIEW_CONCURRENCY={val:?} is not a valid usize -- ignoring");
+                    }
+                }
+            }
+        }
+        // FOUNDRY_DOUBT_ENGINE mirrors the DOUBT_ENGINE var from CLAUDE.md run-loop usage.
+        // Both names are accepted so shell exports work in both contexts.
+        for var in &["FOUNDRY_DOUBT_ENGINE", "DOUBT_ENGINE"] {
+            if let Ok(val) = std::env::var(var) {
+                if !val.is_empty() {
+                    match Self::normalize_doubt_engine_value(&val) {
+                        Some(engine) => {
+                            self.doubt_engine = engine.to_string();
+                            break;
+                        }
+                        None => {
+                            eprintln!("warning: {}={:?} is not supported -- ignoring", var, val);
+                        }
                     }
                 }
             }
@@ -614,11 +673,12 @@ impl Config {
         )
     }
 
-    /// Parse a provider string ("claude" or "codex") into a ModelProvider.
-    /// Falls back to Claude for unrecognized values.
+    /// Parse a provider string ("claude", "codex", or "opencode") into a
+    /// ModelProvider. Falls back to Claude for unrecognized values.
     pub fn parse_provider(value: &str) -> ModelProvider {
         match value.trim().to_lowercase().as_str() {
             "codex" => ModelProvider::Codex,
+            "opencode" => ModelProvider::OpenCode,
             _ => ModelProvider::Claude,
         }
     }
@@ -654,6 +714,17 @@ impl Config {
                         }
                     };
                     format!("{provider} {capitalized}")
+                }
+            }
+            ModelProvider::OpenCode => {
+                let model = model.trim();
+                if model.is_empty() {
+                    provider.to_string()
+                } else {
+                    // Model is "provider/name" (e.g. "lmstudio/qwen3.6-35b-a3b").
+                    // Show just the tail after the last slash for brevity.
+                    let tail = model.rsplit('/').next().unwrap_or(model);
+                    format!("{provider} {tail}")
                 }
             }
         }
@@ -773,6 +844,13 @@ impl Config {
             return Some(ModelProvider::Codex);
         }
 
+        if lower.starts_with("lmstudio/")
+            || lower.starts_with("ollama/")
+            || lower.starts_with("opencode/")
+        {
+            return Some(ModelProvider::OpenCode);
+        }
+
         None
     }
 
@@ -803,7 +881,8 @@ impl Config {
         config.discovery_provider = provider.clone();
         config.scout_model = Self::normalize_model_for_provider(provider_kind, &self.scout_model);
         config.query_model = Self::normalize_model_for_provider(provider_kind, &self.query_model);
-        config.research_model = Self::normalize_model_for_provider(provider_kind, &self.research_model);
+        config.research_model =
+            Self::normalize_model_for_provider(provider_kind, &self.research_model);
         config.planner_model =
             Self::normalize_model_for_provider(provider_kind, &self.planner_model);
         config.builder_model = model;
@@ -827,6 +906,9 @@ impl Config {
             }
             "second" if self.builder_models.len() >= 2 => {
                 vec![self.for_pipeline(&self.builder_models[1])]
+            }
+            "third" if self.builder_models.len() >= 3 => {
+                vec![self.for_pipeline(&self.builder_models[2])]
             }
             "both" if self.builder_models.len() >= 2 => vec![
                 self.for_pipeline(&self.builder_models[0]),
@@ -882,14 +964,8 @@ mod tests {
 
     #[test]
     fn display_provider_model_formats_empty_and_named_models() {
-        assert_eq!(
-            Config::display_provider_model("claude", "opus"),
-            "Claude"
-        );
-        assert_eq!(
-            Config::display_provider_model("claude", "sonnet"),
-            "Claude"
-        );
+        assert_eq!(Config::display_provider_model("claude", "opus"), "Claude");
+        assert_eq!(Config::display_provider_model("claude", "sonnet"), "Claude");
         assert_eq!(Config::display_provider_model("codex", ""), "Codex");
         assert_eq!(Config::display_model_spec("codex:gpt-5.4"), "Codex Gpt-5.4");
     }
@@ -1015,9 +1091,8 @@ mod tests {
 
     #[test]
     fn config_deserializes_skip_doubt_for_simple() {
-        let config: Config =
-            serde_json::from_str(r#"{"skip_doubt_for_simple":false}"#)
-                .expect("config should deserialize");
+        let config: Config = serde_json::from_str(r#"{"skip_doubt_for_simple":false}"#)
+            .expect("config should deserialize");
         assert!(!config.skip_doubt_for_simple);
     }
 
@@ -1080,8 +1155,8 @@ mod tests {
 
     #[test]
     fn config_deserializes_sandbox_defaults_when_absent() {
-        let config: Config = serde_json::from_str(r#"{"builder_model":"opus"}"#)
-            .expect("config should deserialize");
+        let config: Config =
+            serde_json::from_str(r#"{"builder_model":"opus"}"#).expect("config should deserialize");
         assert!(config.sandbox);
         assert_eq!(config.sandbox_image, "foundry-sandbox:latest");
         assert!(config.sandbox_extra_mounts.is_empty());
@@ -1090,10 +1165,7 @@ mod tests {
     #[test]
     fn model_override_collapses_all_role_models() {
         let dir = tempfile::tempdir().unwrap();
-        fs::write(
-            dir.path().join(".foundry.json"),
-            r#"{"model":"opus"}"#,
-        ).unwrap();
+        fs::write(dir.path().join(".foundry.json"), r#"{"model":"opus"}"#).unwrap();
         let config = Config::load(dir.path());
         assert_eq!(config.model, "opus");
         assert_eq!(config.scout_model, "opus");
@@ -1113,7 +1185,8 @@ mod tests {
         fs::write(
             dir.path().join(".foundry.json"),
             r#"{"scout_model":"haiku","builder_model":"opus"}"#,
-        ).unwrap();
+        )
+        .unwrap();
         let config = Config::load(dir.path());
         assert!(config.model.is_empty());
         assert_eq!(config.scout_model, "haiku");
@@ -1126,7 +1199,10 @@ mod tests {
             r#"{"sandbox_auth_dirs":[".claude",".copilot"],"sandbox_env":["ANTHROPIC_BASE_URL=http://localhost:8080"]}"#,
         ).expect("config should deserialize");
         assert_eq!(config.sandbox_auth_dirs, vec![".claude", ".copilot"]);
-        assert_eq!(config.sandbox_env, vec!["ANTHROPIC_BASE_URL=http://localhost:8080"]);
+        assert_eq!(
+            config.sandbox_env,
+            vec!["ANTHROPIC_BASE_URL=http://localhost:8080"]
+        );
     }
 
     #[cfg(unix)]
@@ -1212,10 +1288,9 @@ mod tests {
 
     #[test]
     fn pr_review_config_deserializes_overrides() {
-        let config: Config = serde_json::from_str(
-            r#"{"pr_review_model":"opus","pr_review_provider":"claude"}"#,
-        )
-        .expect("config should deserialize");
+        let config: Config =
+            serde_json::from_str(r#"{"pr_review_model":"opus","pr_review_provider":"claude"}"#)
+                .expect("config should deserialize");
         assert_eq!(config.pr_review_model, "opus");
         assert_eq!(config.pr_review_provider, "claude");
     }
@@ -1251,7 +1326,8 @@ mod tests {
         fs::write(
             foundry_dir.join("config.json"),
             r#"{"agent_timeout_secs":120,"pr_review_model":"opus","reviewer_model":"haiku"}"#,
-        ).unwrap();
+        )
+        .unwrap();
         std::env::set_var("HOME", dir.path());
         // Clear env overrides
         std::env::remove_var("FOUNDRY_PR_REVIEW_MODEL");
@@ -1275,7 +1351,8 @@ mod tests {
         fs::write(
             foundry_dir.join("config.json"),
             r#"{"mode":"loop","model":"haiku"}"#,
-        ).unwrap();
+        )
+        .unwrap();
         std::env::set_var("HOME", dir.path());
         // Clear env overrides
         std::env::remove_var("FOUNDRY_PR_REVIEW_MODEL");
@@ -1323,7 +1400,8 @@ mod tests {
         fs::write(
             foundry_dir.join("config.json"),
             r#"{"pr_review_model":"sonnet","agent_timeout_secs":600}"#,
-        ).unwrap();
+        )
+        .unwrap();
         std::env::set_var("HOME", dir.path());
         std::env::set_var("FOUNDRY_PR_REVIEW_MODEL", "opus");
         std::env::set_var("FOUNDRY_AGENT_TIMEOUT_SECS", "120");
@@ -1345,7 +1423,8 @@ mod tests {
         fs::write(
             dir.path().join(".foundry.json"),
             r#"{"pr_review_model":"sonnet"}"#,
-        ).unwrap();
+        )
+        .unwrap();
         std::env::set_var("FOUNDRY_PR_REVIEW_MODEL", "opus");
         std::env::set_var("FOUNDRY_AGENT_TIMEOUT_SECS", "180");
 
@@ -1371,7 +1450,10 @@ mod tests {
 
         let config = Config::load_global_only();
         // Should keep the default value
-        assert_eq!(config.agent_timeout_secs, Config::default().agent_timeout_secs);
+        assert_eq!(
+            config.agent_timeout_secs,
+            Config::default().agent_timeout_secs
+        );
 
         std::env::remove_var("FOUNDRY_AGENT_TIMEOUT_SECS");
     }
@@ -1392,6 +1474,47 @@ mod tests {
         assert_eq!(config.pr_review_model, Config::default().pr_review_model);
 
         std::env::remove_var("FOUNDRY_PR_REVIEW_MODEL");
+    }
+
+    #[test]
+    #[serial]
+    fn doubt_engine_env_override_accepts_both_vars_with_priority() {
+        let dir = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", dir.path());
+        std::env::set_var("FOUNDRY_DOUBT_ENGINE", "codex");
+        std::env::set_var("DOUBT_ENGINE", "claude");
+
+        let config = Config::load_global_only();
+        assert_eq!(config.doubt_engine, "codex");
+
+        std::env::remove_var("FOUNDRY_DOUBT_ENGINE");
+        std::env::remove_var("DOUBT_ENGINE");
+    }
+
+    #[test]
+    #[serial]
+    fn doubt_engine_env_override_falls_back_to_second_var_when_first_is_invalid() {
+        let dir = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", dir.path());
+        std::env::set_var("FOUNDRY_DOUBT_ENGINE", "invalid");
+        std::env::set_var("DOUBT_ENGINE", "codex");
+
+        let config = Config::load_global_only();
+        assert_eq!(config.doubt_engine, "codex");
+
+        std::env::remove_var("FOUNDRY_DOUBT_ENGINE");
+        std::env::remove_var("DOUBT_ENGINE");
+    }
+
+    #[test]
+    fn doubt_engine_json_value_is_normalized_and_validated() {
+        let mut config: Config = serde_json::from_str(r#"{"doubt_engine":" CODEX "}"#).unwrap();
+        config.normalize();
+        assert_eq!(config.doubt_engine, "codex");
+
+        let mut invalid: Config = serde_json::from_str(r#"{"doubt_engine":"wat"}"#).unwrap();
+        invalid.normalize();
+        assert_eq!(invalid.doubt_engine, "claude");
     }
 
     #[test]
@@ -1428,11 +1551,18 @@ mod tests {
         // Self::default() -> normalize() -> apply_env_overrides()
         // This verifies that normalize() runs correctly on default configs
         // and catches regressions if normalize() is accidentally removed from a path.
-        let mut config: Config = serde_json::from_str(r#"{"pr_review_concurrency": 0, "run_mode": "loop"}"#).unwrap();
+        let mut config: Config =
+            serde_json::from_str(r#"{"pr_review_concurrency": 0, "run_mode": "loop"}"#).unwrap();
         config.normalize();
         config.apply_env_overrides();
-        assert_eq!(config.pr_review_concurrency, 1, "normalize must clamp pr_review_concurrency to >= 1");
-        assert_eq!(config.run_mode, "auto", "normalize must convert legacy 'loop' mode to 'auto'");
+        assert_eq!(
+            config.pr_review_concurrency, 1,
+            "normalize must clamp pr_review_concurrency to >= 1"
+        );
+        assert_eq!(
+            config.run_mode, "auto",
+            "normalize must convert legacy 'loop' mode to 'auto'"
+        );
     }
 
     #[test]
@@ -1458,7 +1588,10 @@ mod tests {
         let config = Config::load(dir.path());
 
         // Verify defaults are used (invalid JSON was not silently applied)
-        assert_eq!(config.agent_timeout_secs, Config::default().agent_timeout_secs);
+        assert_eq!(
+            config.agent_timeout_secs,
+            Config::default().agent_timeout_secs
+        );
         assert_eq!(config.planner_model, Config::default().planner_model);
 
         // Verify normalize() invariants hold on the returned config

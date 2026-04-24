@@ -51,10 +51,28 @@ pub fn allowed_tools_for_role(role: &AgentRole) -> &'static [&'static str] {
     match role {
         AgentRole::Scout => &["Read", "Glob", "Grep", "Bash", "WebFetch", "WebSearch"],
         AgentRole::Query => &["Write"],
-        AgentRole::Research => &["Read", "Glob", "Grep", "Bash", "Write", "WebFetch", "WebSearch"],
+        AgentRole::Research => &[
+            "Read",
+            "Glob",
+            "Grep",
+            "Bash",
+            "Write",
+            "WebFetch",
+            "WebSearch",
+        ],
         AgentRole::Planner => &["Read", "Glob", "Grep", "Edit", "Write"],
         AgentRole::PlanReview => &["Read", "Glob", "Grep", "Edit", "Write"],
-        AgentRole::Builder => &["Bash", "Edit", "Write", "Read", "Glob", "Grep", "NotebookEdit", "WebFetch", "WebSearch"],
+        AgentRole::Builder => &[
+            "Bash",
+            "Edit",
+            "Write",
+            "Read",
+            "Glob",
+            "Grep",
+            "NotebookEdit",
+            "WebFetch",
+            "WebSearch",
+        ],
         AgentRole::Reviewer => &["Read", "Glob", "Grep", "Bash", "Edit", "Write"],
         AgentRole::Fixer => &["Read", "Glob", "Grep", "Bash", "Edit", "Write"],
         AgentRole::Discovery => &["Read", "Glob", "Grep", "Bash", "Edit", "Write"],
@@ -118,6 +136,7 @@ impl AgentResult {
 pub enum ModelProvider {
     Claude,
     Codex,
+    OpenCode,
 }
 
 impl ModelProvider {
@@ -125,6 +144,7 @@ impl ModelProvider {
         match self {
             ModelProvider::Claude => "claude",
             ModelProvider::Codex => "codex",
+            ModelProvider::OpenCode => "opencode",
         }
     }
 
@@ -136,20 +156,16 @@ impl ModelProvider {
     /// 2. `npm root -g` -> global modules root (works with Volta, pnpm, fnm, nvm-windows)
     #[cfg(target_os = "windows")]
     fn resolve_node_cli(self) -> Option<std::path::PathBuf> {
-        let cmd_name = match self {
-            ModelProvider::Claude => "claude.cmd",
-            ModelProvider::Codex => "codex.cmd",
-        };
-        let module = match self {
-            ModelProvider::Claude => "@anthropic-ai/claude-code/cli.js",
-            ModelProvider::Codex => "@anthropic-ai/codex/cli.js",
+        let (cmd_name, module) = match self {
+            ModelProvider::Claude => ("claude.cmd", "@anthropic-ai/claude-code/cli.js"),
+            ModelProvider::Codex => ("codex.cmd", "@anthropic-ai/codex/cli.js"),
+            // OpenCode is not distributed via npm, so it doesn't have a node
+            // cli.js. The caller falls back to plain PATH resolution.
+            ModelProvider::OpenCode => return None,
         };
 
         // Strategy 1: find .cmd via `where`, look for sibling node_modules
-        if let Ok(output) = std::process::Command::new("where")
-            .arg(cmd_name)
-            .output()
-        {
+        if let Ok(output) = std::process::Command::new("where").arg(cmd_name).output() {
             if output.status.success() {
                 let stdout = String::from_utf8_lossy(&output.stdout);
                 if let Some(first_line) = stdout.lines().next() {
@@ -206,7 +222,6 @@ impl ModelProvider {
         #[cfg(not(target_os = "windows"))]
         CommandBuilder::new(self.slug())
     }
-
 }
 
 /// Returns `true` when the process is running as root/sudo on Unix.
@@ -217,8 +232,7 @@ pub fn is_running_as_root() -> bool {
     {
         // nix::unistd::getuid() would work too, but checking /proc avoids extra deps.
         std::env::var("USER").map(|u| u == "root").unwrap_or(false)
-            || std::path::Path::new("/proc/self/status")
-                .exists()
+            || std::path::Path::new("/proc/self/status").exists()
                 && std::fs::read_to_string("/proc/self/status")
                     .map(|s| s.contains("Uid:\t0\t"))
                     .unwrap_or(false)
@@ -232,7 +246,10 @@ pub fn is_running_as_root() -> bool {
 /// Detect the installed Claude CLI version by running `claude --version`.
 /// Returns a version string like "1.0.20" or "unknown" on failure.
 pub fn detect_cc_version() -> String {
-    let output = match std::process::Command::new("claude").arg("--version").output() {
+    let output = match std::process::Command::new("claude")
+        .arg("--version")
+        .output()
+    {
         Ok(o) => o,
         Err(_) => return "unknown".to_string(),
     };
@@ -255,7 +272,8 @@ pub fn detect_cc_version() -> String {
 
 /// The default tool allowlist used as a fallback when `--dangerously-skip-permissions`
 /// is unavailable (e.g. running as root). Covers every tool an agent might need.
-pub const ROOT_ALLOWED_TOOLS: &str = "Bash,Edit,Write,Read,Glob,Grep,NotebookEdit,WebFetch,WebSearch,TodoWrite";
+pub const ROOT_ALLOWED_TOOLS: &str =
+    "Bash,Edit,Write,Read,Glob,Grep,NotebookEdit,WebFetch,WebSearch,TodoWrite";
 
 /// Append permission flags to a PTY `CommandBuilder`.
 /// Prefers `--dangerously-skip-permissions`; falls back to `--allowedTools` when root.
@@ -283,6 +301,7 @@ impl std::fmt::Display for ModelProvider {
         match self {
             ModelProvider::Claude => write!(f, "Claude"),
             ModelProvider::Codex => write!(f, "Codex"),
+            ModelProvider::OpenCode => write!(f, "OpenCode"),
         }
     }
 }
@@ -376,8 +395,7 @@ impl ProviderProgressState {
 
         // Tertiary: raw bytes or stderr still flowing, but no successfully parsed
         // JSON events for > timeout.
-        let no_parsed_events =
-            now.saturating_duration_since(self.last_parsed_event_at) >= timeout;
+        let no_parsed_events = now.saturating_duration_since(self.last_parsed_event_at) >= timeout;
         if no_parsed_events && !no_raw {
             return true;
         }
@@ -537,7 +555,28 @@ pub async fn run_provider_session(options: ProviderRunOptions<'_>) -> Result<Age
             if options.skip_git_repo_check {
                 cmd.arg("--skip-git-repo-check");
             }
-            cmd.arg(format!("{}\n\n{}", agent_system_directives(), options.prompt));
+            cmd.arg(format!(
+                "{}\n\n{}",
+                agent_system_directives(),
+                options.prompt
+            ));
+            cmd
+        }
+        ModelProvider::OpenCode => {
+            let mut cmd = ModelProvider::OpenCode.command_builder();
+            cmd.arg("run");
+            if !options.model.trim().is_empty() {
+                cmd.arg("--model");
+                cmd.arg(options.model);
+            }
+            cmd.arg("--format");
+            cmd.arg("json");
+            cmd.arg("--dangerously-skip-permissions");
+            cmd.arg(format!(
+                "{}\n\n{}",
+                agent_system_directives(),
+                options.prompt
+            ));
             cmd
         }
     };
@@ -551,45 +590,67 @@ pub async fn run_provider_session(options: ProviderRunOptions<'_>) -> Result<Age
     };
     let sandbox_cfg = config.sandbox_config();
     let cmd = if sandbox_cfg.is_active() {
-        let (program, args, env_vars): (&str, Vec<String>, Vec<(&str, &str)>) = match options.provider {
-            ModelProvider::Claude => {
-                let program = "claude";
-                let mut args = vec!["-p".to_string(), options.prompt.to_string()];
-                if !options.model.trim().is_empty() {
-                    args.push("--model".to_string());
-                    args.push(options.model.to_string());
+        let (program, args, env_vars): (&str, Vec<String>, Vec<(&str, &str)>) =
+            match options.provider {
+                ModelProvider::Claude => {
+                    let program = "claude";
+                    let mut args = vec!["-p".to_string(), options.prompt.to_string()];
+                    if !options.model.trim().is_empty() {
+                        args.push("--model".to_string());
+                        args.push(options.model.to_string());
+                    }
+                    append_permission_flags_args(&mut args);
+                    args.push("--output-format".to_string());
+                    args.push("stream-json".to_string());
+                    args.push("--verbose".to_string());
+                    args.push("--append-system-prompt".to_string());
+                    args.push(agent_system_directives());
+                    (program, args, vec![("CLAUDECODE", "")])
                 }
-                append_permission_flags_args(&mut args);
-                args.push("--output-format".to_string());
-                args.push("stream-json".to_string());
-                args.push("--verbose".to_string());
-                args.push("--append-system-prompt".to_string());
-                args.push(agent_system_directives());
-                (program, args, vec![("CLAUDECODE", "")])
-            }
-            ModelProvider::Codex => {
-                let program = "codex";
-                let mut args = vec!["exec".to_string(), "--json".to_string()];
-                if !options.model.trim().is_empty() {
-                    args.push("--model".to_string());
-                    args.push(options.model.to_string());
+                ModelProvider::Codex => {
+                    let program = "codex";
+                    let mut args = vec!["exec".to_string(), "--json".to_string()];
+                    if !options.model.trim().is_empty() {
+                        args.push("--model".to_string());
+                        args.push(options.model.to_string());
+                    }
+                    args.push("--full-auto".to_string());
+                    args.push("--output-last-message".to_string());
+                    args.push(format!(
+                        "/work/{}",
+                        final_message_path
+                            .strip_prefix(options.project_dir)
+                            .unwrap_or(&final_message_path)
+                            .display()
+                    ));
+                    if options.skip_git_repo_check {
+                        args.push("--skip-git-repo-check".to_string());
+                    }
+                    args.push(format!(
+                        "{}\n\n{}",
+                        agent_system_directives(),
+                        options.prompt
+                    ));
+                    (program, args, vec![])
                 }
-                args.push("--full-auto".to_string());
-                args.push("--output-last-message".to_string());
-                args.push(format!(
-                    "/work/{}",
-                    final_message_path
-                        .strip_prefix(options.project_dir)
-                        .unwrap_or(&final_message_path)
-                        .display()
-                ));
-                if options.skip_git_repo_check {
-                    args.push("--skip-git-repo-check".to_string());
+                ModelProvider::OpenCode => {
+                    let program = "opencode";
+                    let mut args = vec!["run".to_string()];
+                    if !options.model.trim().is_empty() {
+                        args.push("--model".to_string());
+                        args.push(options.model.to_string());
+                    }
+                    args.push("--format".to_string());
+                    args.push("json".to_string());
+                    args.push("--dangerously-skip-permissions".to_string());
+                    args.push(format!(
+                        "{}\n\n{}",
+                        agent_system_directives(),
+                        options.prompt
+                    ));
+                    (program, args, vec![])
                 }
-                args.push(format!("{}\n\n{}", agent_system_directives(), options.prompt));
-                (program, args, vec![])
-            }
-        };
+            };
         sandbox_cfg.wrap_command_builder(program, &args, options.project_dir, &env_vars)
     } else {
         cmd
@@ -851,6 +912,30 @@ pub async fn run_agent(
 
             return Ok(outcome);
         }
+    }
+
+    // OpenCode: delegate to run_provider_session which builds the `opencode run`
+    // CLI invocation. No retry loop or Claude fallback -- OpenCode is typically
+    // a local model (LM Studio / Ollama), so network-style stalls don't apply.
+    if provider == ModelProvider::OpenCode {
+        if config.enforce_phase_rbac {
+            let _ = output_tx.send(AgentOutputEvent::Stderr(
+                "[foundry] enforce_phase_rbac: OpenCode provider does not support tool allowlists; enforcement not applied".to_string(),
+            ));
+        }
+        return run_provider_session(ProviderRunOptions {
+            provider: ModelProvider::OpenCode,
+            model,
+            prompt,
+            project_dir,
+            output_tx,
+            log_dir,
+            timeout_secs,
+            skip_git_repo_check: false,
+            cancel_flag: shutdown,
+            config_override: Some(&config),
+        })
+        .await;
     }
 
     let sandbox_cfg = config.sandbox_config();
@@ -1129,8 +1214,13 @@ async fn run_agent_tmux(
     let session = TmuxSession::create(&tmux_prefix, &role_slug, project_dir, &abs_log_dir)
         .context("failed to create tmux session")?;
 
-    let cli_command =
-        TmuxSession::build_cli_command(ModelProvider::Claude.slug(), prompt, model, effective_tools, config.enforce_phase_rbac);
+    let cli_command = TmuxSession::build_cli_command(
+        ModelProvider::Claude.slug(),
+        prompt,
+        model,
+        effective_tools,
+        config.enforce_phase_rbac,
+    );
 
     session
         .send_keys(&cli_command)
@@ -1161,8 +1251,7 @@ async fn run_agent_tmux(
         let pipe_file = match std::fs::File::open(&session.log_file) {
             Ok(f) => f,
             Err(err) => {
-                result.failure_message =
-                    Some(format!("failed to open pipe log: {}", err));
+                result.failure_message = Some(format!("failed to open pipe log: {}", err));
                 let _ = result_tx.send(result);
                 return;
             }
@@ -1179,8 +1268,7 @@ async fn run_agent_tmux(
             {
                 session.kill().ok();
                 result.exit_kind = AgentExitKind::Cancelled;
-                result.failure_message =
-                    Some(format!("Agent {} cancelled by shutdown", role_name));
+                result.failure_message = Some(format!("Agent {} cancelled by shutdown", role_name));
                 break;
             }
 
@@ -1196,8 +1284,7 @@ async fn run_agent_tmux(
                         }
 
                         {
-                            let mut guard =
-                                progress.lock().unwrap_or_else(|p| p.into_inner());
+                            let mut guard = progress.lock().unwrap_or_else(|p| p.into_inner());
                             guard.record_raw_bytes_at(Instant::now());
                         }
 
@@ -1208,11 +1295,7 @@ async fn run_agent_tmux(
 
                         match parse_claude_provider_line(line, &model_name) {
                             ParsedClaudeLine::Event(event) => {
-                                note_provider_event(
-                                    ModelProvider::Claude,
-                                    &event,
-                                    &progress,
-                                );
+                                note_provider_event(ModelProvider::Claude, &event, &progress);
                                 let _ = tx.send(event);
                                 LAST_RESULT_USAGE.with(|cell| {
                                     if let Some(usage) = cell.take() {
@@ -1286,11 +1369,7 @@ async fn run_agent_tmux(
 
                             match parse_claude_provider_line(line, &model_name) {
                                 ParsedClaudeLine::Event(event) => {
-                                    note_provider_event(
-                                        ModelProvider::Claude,
-                                        &event,
-                                        &progress,
-                                    );
+                                    note_provider_event(ModelProvider::Claude, &event, &progress);
                                     let _ = tx.send(event);
                                     LAST_RESULT_USAGE.with(|cell| {
                                         if let Some(usage) = cell.take() {
@@ -1327,8 +1406,7 @@ async fn run_agent_tmux(
                                             &cleaned,
                                             &progress,
                                         );
-                                        let _ =
-                                            tx.send(AgentOutputEvent::Stderr(cleaned));
+                                        let _ = tx.send(AgentOutputEvent::Stderr(cleaned));
                                     }
                                 }
                             }
@@ -1345,8 +1423,7 @@ async fn run_agent_tmux(
 
             // Check idle timeout
             let now = Instant::now();
-            let progress_snapshot =
-                progress.lock().unwrap_or_else(|p| p.into_inner());
+            let progress_snapshot = progress.lock().unwrap_or_else(|p| p.into_inner());
 
             if progress_snapshot.is_truly_idle(now, Duration::from_secs(timeout_secs)) {
                 drop(progress_snapshot);
@@ -1462,8 +1539,7 @@ fn read_pty_output(
                         // tertiary idle check doesn't fire for thinking-only assistant
                         // messages (which are valid JSON with no displayable content).
                         {
-                            let mut guard =
-                                progress.lock().unwrap_or_else(|p| p.into_inner());
+                            let mut guard = progress.lock().unwrap_or_else(|p| p.into_inner());
                             guard.record_parsed_event_at(Instant::now());
                         }
                         // Drain usage even when the Result event itself was suppressed
@@ -1557,8 +1633,7 @@ fn read_provider_output(
                             // tertiary idle check doesn't fire for thinking-only assistant
                             // messages (which are valid JSON with no displayable content).
                             {
-                                let mut guard =
-                                    progress.lock().unwrap_or_else(|p| p.into_inner());
+                                let mut guard = progress.lock().unwrap_or_else(|p| p.into_inner());
                                 guard.record_parsed_event_at(Instant::now());
                             }
                             // A result event with empty text still sets LAST_RESULT_USAGE.
@@ -1588,6 +1663,11 @@ fn read_provider_output(
                             }
                             continue;
                         }
+                    }
+                    ModelProvider::OpenCode => {
+                        // TODO: parse OpenCode JSON events (--format json).
+                        // For now fall through to raw stderr passthrough so
+                        // output is still visible in the TUI.
                     }
                 }
 
@@ -2785,9 +2865,8 @@ mod tests {
 
     #[test]
     fn test_agent_backend_tmux_from_config() {
-        let config: crate::config::Config =
-            serde_json::from_str(r#"{"agent_backend": "tmux"}"#)
-                .expect("config should deserialize");
+        let config: crate::config::Config = serde_json::from_str(r#"{"agent_backend": "tmux"}"#)
+            .expect("config should deserialize");
         assert_eq!(config.agent_backend, "tmux");
     }
 
@@ -2797,8 +2876,9 @@ mod tests {
         use crate::tmux::TmuxSession;
 
         let tmp = std::env::temp_dir();
-        let session = TmuxSession::create("test", "builder", &std::env::current_dir().unwrap(), &tmp)
-            .expect("should create session");
+        let session =
+            TmuxSession::create("test", "builder", &std::env::current_dir().unwrap(), &tmp)
+                .expect("should create session");
 
         session.send_keys("echo hello").expect("should send keys");
         std::thread::sleep(Duration::from_millis(500));
@@ -2887,7 +2967,10 @@ mod tests {
     #[test]
     fn test_allowed_tools_for_role_scout() {
         let tools = allowed_tools_for_role(&AgentRole::Scout);
-        assert_eq!(tools, &["Read", "Glob", "Grep", "Bash", "WebFetch", "WebSearch"]);
+        assert_eq!(
+            tools,
+            &["Read", "Glob", "Grep", "Bash", "WebFetch", "WebSearch"]
+        );
         assert!(!tools.contains(&"Edit"));
         assert!(!tools.contains(&"Write"));
     }
@@ -2957,7 +3040,11 @@ mod tests {
         ];
         for role in &roles {
             let tools = allowed_tools_for_role(role);
-            assert!(!tools.is_empty(), "role {:?} should have non-empty tool list", role);
+            assert!(
+                !tools.is_empty(),
+                "role {:?} should have non-empty tool list",
+                role
+            );
         }
     }
 
@@ -2990,19 +3077,26 @@ mod tests {
         // Verify that with enforce_phase_rbac=true (default), the CLI command
         // uses --allowedTools instead of --dangerously-skip-permissions
         let cmd = crate::tmux::TmuxSession::build_cli_command(
-            "claude", "test prompt", "sonnet", tools, true,
+            "claude",
+            "test prompt",
+            "sonnet",
+            tools,
+            true,
         );
         assert!(
             cmd.contains("--allowedTools"),
-            "Query CLI command must contain --allowedTools, got: {}", cmd
+            "Query CLI command must contain --allowedTools, got: {}",
+            cmd
         );
         assert!(
             cmd.contains("Write"),
-            "Query CLI command must list Write tool, got: {}", cmd
+            "Query CLI command must list Write tool, got: {}",
+            cmd
         );
         assert!(
             !cmd.contains("--dangerously-skip-permissions"),
-            "Query CLI command must NOT contain --dangerously-skip-permissions, got: {}", cmd
+            "Query CLI command must NOT contain --dangerously-skip-permissions, got: {}",
+            cmd
         );
     }
 
@@ -3040,7 +3134,11 @@ mod tests {
         let json = r#"{"type":"banana","message":"unexpected"}"#;
         match parse_claude_provider_line(json, "claude") {
             ParsedClaudeLine::Event(AgentOutputEvent::Text(t)) => {
-                assert!(t.contains("[banana]"), "expected [banana] label, got: {}", t);
+                assert!(
+                    t.contains("[banana]"),
+                    "expected [banana] label, got: {}",
+                    t
+                );
             }
             other => panic!("expected Text event with [banana], got {:?}", other),
         }
@@ -3113,14 +3211,19 @@ mod tests {
 
     #[test]
     fn malformed_tool_use_missing_input() {
-        let json = r#"{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Read"}]}}"#;
+        let json =
+            r#"{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Read"}]}}"#;
         match parse_claude_provider_line(json, "claude") {
             ParsedClaudeLine::Event(AgentOutputEvent::ToolUse {
                 tool,
                 input_preview,
             }) => {
                 assert_eq!(tool, "Read");
-                assert!(input_preview.is_empty(), "expected empty input_preview, got: {}", input_preview);
+                assert!(
+                    input_preview.is_empty(),
+                    "expected empty input_preview, got: {}",
+                    input_preview
+                );
             }
             other => panic!("expected ToolUse with empty input, got {:?}", other),
         }
@@ -3172,7 +3275,10 @@ mod tests {
         // returns Some(Result("result")) rather than None. The key point is no crash.
         assert!(event.is_some(), "minimal result should not crash");
         let usage = LAST_RESULT_USAGE.with(|c| c.take());
-        assert!(usage.is_some(), "LAST_RESULT_USAGE should still be set even with missing fields");
+        assert!(
+            usage.is_some(),
+            "LAST_RESULT_USAGE should still be set even with missing fields"
+        );
     }
 
     #[test]
@@ -3295,6 +3401,9 @@ mod tests {
     fn malformed_tool_result_empty_content() {
         let json = r#"{"type":"user","message":{"content":[{"type":"tool_result","content":"","is_error":false}]}}"#;
         let event = parse_stream_event(json);
-        assert!(event.is_none(), "empty tool_result content should return None");
+        assert!(
+            event.is_none(),
+            "empty tool_result content should return None"
+        );
     }
 }

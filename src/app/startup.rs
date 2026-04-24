@@ -390,13 +390,15 @@ pub(super) fn handle_startup_key(state: &mut AppState, key: event::KeyEvent) {
         // via .foundry.json (reserved for implementers).
         KeyCode::Char('s') if key.modifiers.contains(KeyModifiers::CONTROL) => {
             if let Some(ref mut s) = state.startup {
-                s.status_message = Some("Sandbox toggle disabled -- override via .foundry.json only".into());
+                s.status_message =
+                    Some("Sandbox toggle disabled -- override via .foundry.json only".into());
             }
         }
         KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => {
             if state.builder_model_specs.len() >= 2 {
                 use crate::app::state::DualSelection;
-                let next = state.dual_selection.next();
+                let specs_len = state.builder_model_specs.len();
+                let next = state.dual_selection.next_for(specs_len);
                 state.dual_selection = next;
                 let project_dir = state
                     .buildloop_dir
@@ -411,6 +413,10 @@ pub(super) fn handle_startup_key(state: &mut AppState, key: event::KeyEvent) {
                     }
                     DualSelection::Second => {
                         let (p, m) = Config::parse_model_spec(&state.builder_model_specs[1]);
+                        format!("Pipeline: {} only", Config::display_provider_model(&p, &m))
+                    }
+                    DualSelection::Third => {
+                        let (p, m) = Config::parse_model_spec(&state.builder_model_specs[2]);
                         format!("Pipeline: {} only", Config::display_provider_model(&p, &m))
                     }
                     DualSelection::Both => {
@@ -514,7 +520,11 @@ pub(super) fn handle_startup_intent_input(state: &mut AppState, key: event::KeyE
                 .clone();
             if let Err(e) = std::fs::remove_file(&updated_specs) {
                 if e.kind() != std::io::ErrorKind::NotFound {
-                    eprintln!("Warning: failed to remove {}: {}", updated_specs.display(), e);
+                    eprintln!(
+                        "Warning: failed to remove {}: {}",
+                        updated_specs.display(),
+                        e
+                    );
                 }
             }
         }
@@ -720,7 +730,8 @@ fn handle_startup_submit(state: &mut AppState) {
                 ) {
                     eprintln!(
                         "Warning: failed to write SPEC.md to {}: {} -- project brief was not saved",
-                        spec_path.display(), e
+                        spec_path.display(),
+                        e
                     );
                 }
                 // Return to startup so the user can review SPEC.md before starting.

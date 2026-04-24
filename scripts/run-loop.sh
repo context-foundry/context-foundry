@@ -101,7 +101,8 @@ checked()    { grep -qE "^\- \[x\] $1" "$TASKS_FILE"; }
 pending_cnt(){ grep -cE '\- \[ \] [A-Z][0-9]+\.[0-9]+' "$TASKS_FILE" 2>/dev/null || true; }
 _task_desc() {
   grep -E "^\- \[ \] ${1}[: ]" "$TASKS_FILE" 2>/dev/null | head -1 \
-    | sed "s/^- \[ \] ${1}[: ]*//" | sed 's/ \[RPID[^]]*\]$//' | cut -c1-48 || true
+    | sed "s/^- \[ \] ${1}[: ]*//" | sed 's/ \[RPID[^]]*\]$//' \
+    | cut -c1-48 | sed 's/[[:space:]]*[-—]*$//' || true
 }
 _next_after_current() {
   grep -oE '\- \[ \] [A-Z][0-9]+\.[0-9]+' "$TASKS_FILE" 2>/dev/null \

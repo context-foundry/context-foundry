@@ -48,18 +48,24 @@ async fn handle_connection(mut stream: tokio::net::TcpStream, project_dir: PathB
     let path = parts.next().unwrap_or("");
 
     let (status, content_type, body) = if method == "GET" && path == "/" {
-        ("200 OK", "text/html; charset=utf-8", DASHBOARD_HTML.to_string())
+        (
+            "200 OK",
+            "text/html; charset=utf-8",
+            DASHBOARD_HTML.to_string(),
+        )
     } else if method == "GET" && (path == "/api/stats" || path.starts_with("/api/stats?")) {
         let path_owned = path.to_string();
         let dir_clone = project_dir.clone();
         match tokio::task::spawn_blocking(move || handle_api_stats(&path_owned, &dir_clone)).await {
             Ok(Ok(json)) => ("200 OK", "application/json", json),
             Ok(Err(e)) => {
-                let msg = serde_json::to_string(&json!({"error": e.to_string()})).unwrap_or_else(|_| r#"{"error":"internal error"}"#.to_string());
+                let msg = serde_json::to_string(&json!({"error": e.to_string()}))
+                    .unwrap_or_else(|_| r#"{"error":"internal error"}"#.to_string());
                 ("500 Internal Server Error", "application/json", msg)
             }
             Err(e) => {
-                let msg = serde_json::to_string(&json!({"error": format!("task panicked: {}", e)})).unwrap_or_else(|_| r#"{"error":"internal error"}"#.to_string());
+                let msg = serde_json::to_string(&json!({"error": format!("task panicked: {}", e)}))
+                    .unwrap_or_else(|_| r#"{"error":"internal error"}"#.to_string());
                 ("500 Internal Server Error", "application/json", msg)
             }
         }
@@ -108,7 +114,10 @@ fn handle_api_stats(path: &str, project_dir: &Path) -> Result<String> {
     let (project_filter, project_str) = if use_global {
         (None, None)
     } else {
-        (Some(canonical.as_path()), Some(canonical.display().to_string()))
+        (
+            Some(canonical.as_path()),
+            Some(canonical.display().to_string()),
+        )
     };
     let (events, skipped) = stats::load_events(&obs_dir, days, project_filter)?;
     let report = stats::compute_stats(&events, skipped, days, project_str.as_deref(), true);

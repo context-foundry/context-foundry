@@ -1,4 +1,5 @@
 use anyhow::Result;
+use chrono::{NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -50,6 +51,56 @@ pub struct Pattern {
     /// ISO date when the pattern was promoted (e.g. "2026-04-07").
     #[serde(default)]
     pub promoted_at: String,
+    /// ISO date when agents last cited this pattern (e.g. "2026-04-09").
+    /// Updated automatically by update_used_counts(). Used for time-based decay.
+    #[serde(default)]
+    pub last_used_at: Option<String>,
+}
+
+/// Feedback signal from a builder agent about a pattern's quality.
+#[derive(Debug, Clone, PartialEq)]
+pub enum PatternFeedback {
+    /// Pattern was helpful and correct
+    Confirmed(String),
+    /// Pattern is outdated or wrong
+    Stale(String),
+    /// Pattern is actively harmful/misleading
+    Wrong(String),
+}
+
+impl Pattern {
+    /// Compute a dynamic star rating (0.0 to 5.0) based on usage recency,
+    /// citation ratio, and frequency. Higher is better.
+    pub fn rating(&self) -> f32 {
+        let mut score: f32 = 0.0;
+
+        // Base: frequency contributes up to 1.5 stars (log scale, caps at ~20 occurrences)
+        let freq_score = (self.frequency as f32).ln_1p().min(3.0) * 0.5;
+        score += freq_score;
+
+        // Citation ratio: up to 2.0 stars for patterns agents actually reference
+        if self.frequency > 0 {
+            let ratio = self.used_count as f32 / self.frequency as f32;
+            score += ratio.min(1.0) * 2.0;
+        }
+
+        // Recency: up to 1.5 stars, decaying over 90 days from last use
+        if let Some(ref date_str) = self.last_used_at {
+            if let Ok(last_used) = NaiveDate::parse_from_str(date_str, "%Y-%m-%d") {
+                let today = Utc::now().date_naive();
+                let days_ago = (today - last_used).num_days().max(0) as f32;
+                let recency = (1.0 - days_ago / 90.0).max(0.0);
+                score += recency * 1.5;
+            }
+        }
+
+        score.min(5.0)
+    }
+
+    /// Return a star display string (e.g. "3.2" rendered as context for prompts).
+    pub fn star_display(&self) -> String {
+        format!("{:.1}/5", self.rating())
+    }
 }
 
 /// Wrapper object format used by extension pattern files.
@@ -79,7 +130,10 @@ pub fn resolve_patterns_dir(config_str: &str) -> PathBuf {
         }
         // HOME unset — use platform temp dir instead of literal ~/
         let fallback = std::env::temp_dir().join(".foundry").join("patterns");
-        eprintln!("warning: HOME not set, using {} for pattern storage", fallback.display());
+        eprintln!(
+            "warning: HOME not set, using {} for pattern storage",
+            fallback.display()
+        );
         return fallback;
     }
     PathBuf::from(config_str)
@@ -170,7 +224,11 @@ pub fn detect_project_tech_stack(project_dir: &Path) -> Vec<String> {
 
 /// Match patterns against a task description using whole-word keyword matching.
 /// Returns patterns sorted by relevance (highest score first).
-pub fn match_patterns<'a>(patterns: &'a [Pattern], task_desc: &str, detected_stack: &[String]) -> Vec<&'a Pattern> {
+pub fn match_patterns<'a>(
+    patterns: &'a [Pattern],
+    task_desc: &str,
+    detected_stack: &[String],
+) -> Vec<&'a Pattern> {
     let scored = keyword_scores(patterns, task_desc, detected_stack);
     let mut result: Vec<(&Pattern, usize)> = scored
         .into_iter()
@@ -183,7 +241,11 @@ pub fn match_patterns<'a>(patterns: &'a [Pattern], task_desc: &str, detected_sta
 
 /// Returns (pattern_index, keyword_score) pairs for all patterns.
 /// Used by the semantic matcher as the keyword baseline for reranking.
-pub fn keyword_scores(patterns: &[Pattern], task_desc: &str, detected_stack: &[String]) -> Vec<(usize, usize)> {
+pub fn keyword_scores(
+    patterns: &[Pattern],
+    task_desc: &str,
+    detected_stack: &[String],
+) -> Vec<(usize, usize)> {
     let desc_lower = task_desc.to_lowercase();
     let desc_words: Vec<&str> = desc_lower.split_whitespace().collect();
 
@@ -222,19 +284,16 @@ pub fn keyword_scores(patterns: &[Pattern], task_desc: &str, detected_stack: &[S
                 score += 1;
             }
 
-            // Usefulness tracking: boost patterns agents actually cite, demote noise.
-            // Inspired by TOIN (Tool Output Intelligence Network) in chopratejas/headroom,
-            // which learns field importance from retrieval rates.
-            // https://github.com/chopratejas/headroom
+            // Star rating: composite score from citation ratio, recency, and frequency.
+            // Replaces the old ad-hoc usefulness tracking with a unified metric.
             if score > 0 {
-                if p.used_count > 0 && p.frequency > 0 {
-                    let ratio = p.used_count as f64 / p.frequency as f64;
-                    if ratio > 0.3 {
-                        score += 2; // high-utility pattern
-                    }
-                }
-                if p.used_count == 0 && p.frequency >= 5 {
-                    score = score.saturating_sub(1); // never-cited noise
+                let rating = p.rating();
+                if rating >= 3.0 {
+                    score += 3; // high-value pattern
+                } else if rating >= 1.5 {
+                    score += 1; // moderate-value pattern
+                } else if p.frequency >= 5 {
+                    score = score.saturating_sub(2); // low-rated despite many appearances = noise
                 }
             }
 
@@ -242,7 +301,9 @@ pub fn keyword_scores(patterns: &[Pattern], task_desc: &str, detected_stack: &[S
             if score > 0 && !detected_stack.is_empty() && !p.tech_stack.is_empty() {
                 let has_match = p.tech_stack.iter().any(|ts| {
                     let ts_lower = ts.to_lowercase();
-                    detected_stack.iter().any(|ds| ds.to_lowercase() == ts_lower)
+                    detected_stack
+                        .iter()
+                        .any(|ds| ds.to_lowercase() == ts_lower)
                 });
                 if !has_match {
                     score = score.saturating_sub(3);
@@ -276,11 +337,12 @@ pub fn format_patterns_for_prompt(
 
     for (i, p) in patterns.iter().enumerate().take(limit) {
         out.push_str(&format!(
-            "### {}. {} [{}] (seen {}x{})\n",
+            "### {}. {} [{}] (seen {}x, rating {}{})  \n",
             i + 1,
             p.title,
             p.pattern_id,
             p.frequency,
+            p.star_display(),
             p.severity
                 .as_deref()
                 .map(|s| format!(", {}", s))
@@ -335,7 +397,9 @@ pub fn scan_citations(text: &str, patterns: &[Pattern]) -> Vec<String> {
         .filter(|p| {
             // Check exact pattern_id word match
             let id_lower = p.pattern_id.to_lowercase();
-            let id_match = text_words.iter().any(|w| w.trim_matches(|c: char| !c.is_alphanumeric() && c != '-') == id_lower);
+            let id_match = text_words
+                .iter()
+                .any(|w| w.trim_matches(|c: char| !c.is_alphanumeric() && c != '-') == id_lower);
             if id_match {
                 return true;
             }
@@ -350,13 +414,15 @@ pub fn scan_citations(text: &str, patterns: &[Pattern]) -> Vec<String> {
         .collect()
 }
 
-/// Increment used_count for cited patterns across all JSON files in a directory.
+/// Increment used_count and stamp last_used_at for cited patterns across all JSON files in a directory.
 /// Mirrors load_patterns() behavior: scans every *.json file, not just common-issues.json.
 /// Returns the total number of patterns updated.
 pub fn update_used_counts(dir: &Path, cited_ids: &[String]) -> Result<usize> {
     if cited_ids.is_empty() {
         return Ok(0);
     }
+
+    let today = Utc::now().format("%Y-%m-%d").to_string();
 
     let entries = match std::fs::read_dir(dir) {
         Ok(e) => e,
@@ -381,6 +447,7 @@ pub fn update_used_counts(dir: &Path, cited_ids: &[String]) -> Result<usize> {
             for p in &mut wrapper.patterns {
                 if cited_ids.contains(&p.pattern_id) {
                     p.used_count += 1;
+                    p.last_used_at = Some(today.clone());
                     file_updated += 1;
                 }
             }
@@ -398,6 +465,7 @@ pub fn update_used_counts(dir: &Path, cited_ids: &[String]) -> Result<usize> {
             for p in &mut patterns {
                 if cited_ids.contains(&p.pattern_id) {
                     p.used_count += 1;
+                    p.last_used_at = Some(today.clone());
                     file_updated += 1;
                 }
             }
@@ -413,6 +481,7 @@ pub fn update_used_counts(dir: &Path, cited_ids: &[String]) -> Result<usize> {
         if let Ok(mut pattern) = serde_json::from_str::<Pattern>(&content) {
             if cited_ids.contains(&pattern.pattern_id) {
                 pattern.used_count += 1;
+                pattern.last_used_at = Some(today.clone());
                 let json = serde_json::to_string_pretty(&pattern)?;
                 atomic_write_file(&path, json.as_bytes())?;
                 total_updated += 1;
@@ -452,15 +521,14 @@ pub fn merge_patterns(dir: &Path, new_patterns: Vec<Pattern>) -> Result<usize> {
         .map(|(i, p)| (p.pattern_id.clone(), i))
         .collect();
 
+    let today = Utc::now().format("%Y-%m-%d").to_string();
     let mut added = 0usize;
 
     for np in new_patterns {
         if let Some(&idx) = by_id.get(&np.pattern_id) {
-            // Update existing: add incoming frequency (at least 1), update last_seen
+            // Update existing: add incoming frequency (at least 1), stamp last_seen with today
             existing[idx].frequency += np.frequency.max(1);
-            if !np.last_seen.is_empty() {
-                existing[idx].last_seen = np.last_seen;
-            }
+            existing[idx].last_seen = today.clone();
             // Graduate to auto_apply after 3+ occurrences
             if existing[idx].frequency >= 3 {
                 existing[idx].auto_apply = true;
@@ -522,6 +590,220 @@ fn extract_json_from_content(content: &str) -> String {
     json_lines.join("\n")
 }
 
+/// Decay stale patterns: disable auto_apply for patterns not used in `decay_days`.
+/// Writes changes back to disk. Returns the number of patterns decayed.
+pub fn decay_stale_patterns(dir: &Path, decay_days: i64) -> usize {
+    let today = Utc::now().date_naive();
+    let mut total_decayed = 0usize;
+
+    let entries = match std::fs::read_dir(dir) {
+        Ok(e) => e,
+        Err(_) => return 0,
+    };
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("json") {
+            continue;
+        }
+        let content = match std::fs::read_to_string(&path) {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+
+        let decay_pattern = |p: &mut Pattern| -> bool {
+            if !p.auto_apply || !p.promoted_to.is_empty() {
+                return false;
+            }
+            match &p.last_used_at {
+                Some(date_str) => {
+                    // Has been cited before -- decay if last citation is old enough
+                    let Ok(last_date) = NaiveDate::parse_from_str(date_str, "%Y-%m-%d") else {
+                        return false;
+                    };
+                    let days_inactive = (today - last_date).num_days();
+                    if days_inactive >= decay_days {
+                        p.auto_apply = false;
+                        return true;
+                    }
+                    false
+                }
+                None => {
+                    // Never cited by any agent. If auto_apply was set purely
+                    // from frequency (merge_patterns promotes at freq >= 3),
+                    // this pattern has been injected but never referenced.
+                    // Decay it -- auto_apply should require proven usefulness.
+                    if p.frequency >= 5 && p.used_count == 0 {
+                        p.auto_apply = false;
+                        return true;
+                    }
+                    false
+                }
+            }
+        };
+
+        // Try wrapper format
+        if let Ok(mut wrapper) = serde_json::from_str::<PatternWrapper>(&content) {
+            let mut file_decayed = 0usize;
+            for p in &mut wrapper.patterns {
+                if decay_pattern(p) {
+                    file_decayed += 1;
+                }
+            }
+            if file_decayed > 0 {
+                if let Ok(json) = serde_json::to_string_pretty(&wrapper) {
+                    let _ = atomic_write_file(&path, json.as_bytes());
+                }
+                total_decayed += file_decayed;
+            }
+            continue;
+        }
+
+        // Plain array
+        if let Ok(mut patterns) = serde_json::from_str::<Vec<Pattern>>(&content) {
+            let mut file_decayed = 0usize;
+            for p in &mut patterns {
+                if decay_pattern(p) {
+                    file_decayed += 1;
+                }
+            }
+            if file_decayed > 0 {
+                if let Ok(json) = serde_json::to_string_pretty(&patterns) {
+                    let _ = atomic_write_file(&path, json.as_bytes());
+                }
+                total_decayed += file_decayed;
+            }
+            continue;
+        }
+
+        // Single pattern
+        if let Ok(mut pattern) = serde_json::from_str::<Pattern>(&content) {
+            if decay_pattern(&mut pattern) {
+                if let Ok(json) = serde_json::to_string_pretty(&pattern) {
+                    let _ = atomic_write_file(&path, json.as_bytes());
+                }
+                total_decayed += 1;
+            }
+        }
+    }
+
+    total_decayed
+}
+
+/// Parse PATTERN_FEEDBACK markers from builder output.
+/// Format: `PATTERN_FEEDBACK: pattern-id | confirmed|stale|wrong | optional reason`
+pub fn parse_pattern_feedback(text: &str) -> Vec<(String, PatternFeedback)> {
+    let mut results = Vec::new();
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if !trimmed.starts_with("PATTERN_FEEDBACK:") {
+            continue;
+        }
+        let rest = trimmed.trim_start_matches("PATTERN_FEEDBACK:").trim();
+        let parts: Vec<&str> = rest.splitn(3, '|').map(|s| s.trim()).collect();
+        if parts.len() < 2 {
+            continue;
+        }
+        let pattern_id = parts[0].to_string();
+        let reason = parts.get(2).unwrap_or(&"").to_string();
+        let feedback = match parts[1].to_lowercase().as_str() {
+            "confirmed" => PatternFeedback::Confirmed(reason),
+            "stale" => PatternFeedback::Stale(reason),
+            "wrong" => PatternFeedback::Wrong(reason),
+            _ => continue,
+        };
+        results.push((pattern_id, feedback));
+    }
+    results
+}
+
+/// Apply feedback to patterns on disk. Confirmed patterns get used_count bumped
+/// and last_used_at stamped. Stale/wrong patterns get auto_apply disabled.
+/// Returns count of patterns modified.
+pub fn apply_feedback(dir: &Path, feedback: &[(String, PatternFeedback)]) -> Result<usize> {
+    if feedback.is_empty() {
+        return Ok(0);
+    }
+
+    let today = Utc::now().format("%Y-%m-%d").to_string();
+
+    let entries = match std::fs::read_dir(dir) {
+        Ok(e) => e,
+        Err(_) => return Ok(0),
+    };
+
+    let mut total = 0usize;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("json") {
+            continue;
+        }
+        let content = match std::fs::read_to_string(&path) {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+
+        let apply_to_pattern = |p: &mut Pattern, today: &str| -> bool {
+            let Some((_, fb)) = feedback.iter().find(|(id, _)| *id == p.pattern_id) else {
+                return false;
+            };
+            match fb {
+                PatternFeedback::Confirmed(_) => {
+                    p.used_count += 1;
+                    p.last_used_at = Some(today.to_string());
+                }
+                PatternFeedback::Stale(_) | PatternFeedback::Wrong(_) => {
+                    p.auto_apply = false;
+                }
+            }
+            true
+        };
+
+        // Try wrapper
+        if let Ok(mut wrapper) = serde_json::from_str::<PatternWrapper>(&content) {
+            let mut changed = 0usize;
+            for p in &mut wrapper.patterns {
+                if apply_to_pattern(p, &today) {
+                    changed += 1;
+                }
+            }
+            if changed > 0 {
+                let json = serde_json::to_string_pretty(&wrapper)?;
+                atomic_write_file(&path, json.as_bytes())?;
+                total += changed;
+            }
+            continue;
+        }
+
+        // Plain array
+        if let Ok(mut patterns) = serde_json::from_str::<Vec<Pattern>>(&content) {
+            let mut changed = 0usize;
+            for p in &mut patterns {
+                if apply_to_pattern(p, &today) {
+                    changed += 1;
+                }
+            }
+            if changed > 0 {
+                let json = serde_json::to_string_pretty(&patterns)?;
+                atomic_write_file(&path, json.as_bytes())?;
+                total += changed;
+            }
+            continue;
+        }
+
+        // Single
+        if let Ok(mut pattern) = serde_json::from_str::<Pattern>(&content) {
+            if apply_to_pattern(&mut pattern, &today) {
+                let json = serde_json::to_string_pretty(&pattern)?;
+                atomic_write_file(&path, json.as_bytes())?;
+                total += 1;
+            }
+        }
+    }
+
+    Ok(total)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -561,6 +843,7 @@ mod tests {
             used_count: 0,
             promoted_to: String::new(),
             promoted_at: String::new(),
+            last_used_at: None,
         };
         let patterns = vec![&pattern];
 
@@ -745,6 +1028,7 @@ mod tests {
                 used_count: 0,
                 promoted_to: String::new(),
                 promoted_at: String::new(),
+                last_used_at: None,
             },
             Pattern {
                 pattern_id: "new-1".to_string(),
@@ -762,6 +1046,7 @@ mod tests {
                 used_count: 0,
                 promoted_to: String::new(),
                 promoted_at: String::new(),
+                last_used_at: None,
             },
         ];
 
@@ -778,7 +1063,12 @@ mod tests {
             .find(|p| p.pattern_id == "existing-1")
             .unwrap();
         assert_eq!(e1.frequency, 3, "existing-1 frequency should be 2 + 1 = 3");
-        assert_eq!(e1.last_seen, "D9.1");
+        // last_seen is now stamped as today's ISO date, not the task_id
+        assert!(!e1.last_seen.is_empty(), "last_seen should be set");
+        assert!(
+            e1.last_seen.contains('-'),
+            "last_seen should be ISO date format"
+        );
         assert!(e1.auto_apply, "frequency 3 should graduate to auto_apply");
 
         let e2 = result
@@ -835,6 +1125,7 @@ mod tests {
             used_count: used,
             promoted_to: String::new(),
             promoted_at: String::new(),
+            last_used_at: None,
         }
     }
 
@@ -851,9 +1142,12 @@ mod tests {
 
     #[test]
     fn test_scan_citations_finds_title() {
-        let patterns = vec![
-            make_test_pattern("sql-inject", "SQL Injection Prevention", 3, 0),
-        ];
+        let patterns = vec![make_test_pattern(
+            "sql-inject",
+            "SQL Injection Prevention",
+            3,
+            0,
+        )];
         let text = "This relates to SQL Injection Prevention as documented.";
         let cited = scan_citations(text, &patterns);
         assert_eq!(cited, vec!["sql-inject"]);
@@ -861,9 +1155,7 @@ mod tests {
 
     #[test]
     fn test_scan_citations_ignores_short_titles() {
-        let patterns = vec![
-            make_test_pattern("short", "Bug Fix", 1, 0),
-        ];
+        let patterns = vec![make_test_pattern("short", "Bug Fix", 1, 0)];
         let text = "This is a bug fix for the handler.";
         let cited = scan_citations(text, &patterns);
         assert!(cited.is_empty(), "short titles (<8 chars) should not match");
@@ -880,15 +1172,24 @@ mod tests {
     fn test_usefulness_boost_high_ratio() {
         let patterns = vec![
             make_test_pattern("high-use", "High Use Pattern", 5, 3), // ratio 0.6
-            make_test_pattern("low-use", "Low Use Pattern", 5, 0),  // ratio 0.0
+            make_test_pattern("low-use", "Low Use Pattern", 5, 0),   // ratio 0.0
         ];
         let scores = keyword_scores(&patterns, "rust project", &[]);
-        let high_score = scores.iter().find(|(i, _)| *i == 0).map(|(_, s)| *s).unwrap_or(0);
-        let low_score = scores.iter().find(|(i, _)| *i == 1).map(|(_, s)| *s).unwrap_or(0);
+        let high_score = scores
+            .iter()
+            .find(|(i, _)| *i == 0)
+            .map(|(_, s)| *s)
+            .unwrap_or(0);
+        let low_score = scores
+            .iter()
+            .find(|(i, _)| *i == 1)
+            .map(|(_, s)| *s)
+            .unwrap_or(0);
         assert!(
             high_score > low_score,
             "high-use pattern (score={}) should outscore never-cited pattern (score={})",
-            high_score, low_score
+            high_score,
+            low_score
         );
     }
 
@@ -1026,6 +1327,7 @@ mod tests {
             used_count: 0,
             promoted_to: String::new(),
             promoted_at: String::new(),
+            last_used_at: None,
         };
         let rust_pattern = Pattern {
             pattern_id: "utf8-byte-slice-panic".to_string(),
@@ -1043,24 +1345,46 @@ mod tests {
             used_count: 0,
             promoted_to: String::new(),
             promoted_at: String::new(),
+            last_used_at: None,
         };
         let patterns = vec![react_pattern, rust_pattern];
         let rust_stack = vec!["rust".to_string()];
 
         // With Rust detected stack, the React pattern should be penalized
-        let scores = keyword_scores(&patterns, "fix css styling in rust string handling", &rust_stack);
-        let react_score = scores.iter().find(|(i, _)| *i == 0).map(|(_, s)| *s).unwrap_or(0);
-        let rust_score = scores.iter().find(|(i, _)| *i == 1).map(|(_, s)| *s).unwrap_or(0);
+        let scores = keyword_scores(
+            &patterns,
+            "fix css styling in rust string handling",
+            &rust_stack,
+        );
+        let react_score = scores
+            .iter()
+            .find(|(i, _)| *i == 0)
+            .map(|(_, s)| *s)
+            .unwrap_or(0);
+        let rust_score = scores
+            .iter()
+            .find(|(i, _)| *i == 1)
+            .map(|(_, s)| *s)
+            .unwrap_or(0);
         assert!(
             rust_score > react_score,
             "rust pattern (score={}) should outscore react pattern (score={}) in a Rust project",
-            rust_score, react_score
+            rust_score,
+            react_score
         );
 
         // With empty detected stack, no penalty applied (stack-agnostic mode)
-        let scores_no_stack = keyword_scores(&patterns, "fix css styling in rust string handling", &[]);
-        let react_score_no_stack = scores_no_stack.iter().find(|(i, _)| *i == 0).map(|(_, s)| *s).unwrap_or(0);
-        assert!(react_score_no_stack > react_score, "no-stack mode should not penalize react pattern");
+        let scores_no_stack =
+            keyword_scores(&patterns, "fix css styling in rust string handling", &[]);
+        let react_score_no_stack = scores_no_stack
+            .iter()
+            .find(|(i, _)| *i == 0)
+            .map(|(_, s)| *s)
+            .unwrap_or(0);
+        assert!(
+            react_score_no_stack > react_score,
+            "no-stack mode should not penalize react pattern"
+        );
     }
 
     #[test]
@@ -1082,14 +1406,26 @@ mod tests {
             used_count: 0,
             promoted_to: String::new(),
             promoted_at: String::new(),
+            last_used_at: None,
         };
         let patterns = vec![agnostic_pattern];
         let rust_stack = vec!["rust".to_string()];
         let scores_with_stack = keyword_scores(&patterns, "rust project", &rust_stack);
         let scores_without_stack = keyword_scores(&patterns, "rust project", &[]);
-        let score_with = scores_with_stack.iter().find(|(i, _)| *i == 0).map(|(_, s)| *s).unwrap_or(0);
-        let score_without = scores_without_stack.iter().find(|(i, _)| *i == 0).map(|(_, s)| *s).unwrap_or(0);
-        assert_eq!(score_with, score_without, "patterns with empty tech_stack should not be penalized");
+        let score_with = scores_with_stack
+            .iter()
+            .find(|(i, _)| *i == 0)
+            .map(|(_, s)| *s)
+            .unwrap_or(0);
+        let score_without = scores_without_stack
+            .iter()
+            .find(|(i, _)| *i == 0)
+            .map(|(_, s)| *s)
+            .unwrap_or(0);
+        assert_eq!(
+            score_with, score_without,
+            "patterns with empty tech_stack should not be penalized"
+        );
     }
 
     #[test]
@@ -1110,6 +1446,7 @@ mod tests {
             used_count: 0,
             promoted_to: String::new(),
             promoted_at: String::new(),
+            last_used_at: None,
         };
         let promoted = Pattern {
             pattern_id: "promoted-pattern".to_string(),
@@ -1127,6 +1464,7 @@ mod tests {
             used_count: 0,
             promoted_to: "extensions/rust/CLAUDE.md".to_string(),
             promoted_at: "2026-04-07".to_string(),
+            last_used_at: None,
         };
         let patterns = vec![active, promoted];
         let matched = match_patterns(&patterns, "rust project", &[]);
@@ -1152,6 +1490,7 @@ mod tests {
             used_count: 0,
             promoted_to: String::new(),
             promoted_at: String::new(),
+            last_used_at: None,
         };
         let promoted = Pattern {
             pattern_id: "promoted-pattern".to_string(),
@@ -1169,12 +1508,19 @@ mod tests {
             used_count: 0,
             promoted_to: "extensions/rust/CLAUDE.md".to_string(),
             promoted_at: "2026-04-07".to_string(),
+            last_used_at: None,
         };
         let patterns = vec![active, promoted];
         let scores = keyword_scores(&patterns, "rust project", &[]);
         let indices: Vec<usize> = scores.iter().map(|(i, _)| *i).collect();
-        assert!(indices.contains(&0), "active pattern index should be present");
-        assert!(!indices.contains(&1), "promoted pattern index should NOT be present");
+        assert!(
+            indices.contains(&0),
+            "active pattern index should be present"
+        );
+        assert!(
+            !indices.contains(&1),
+            "promoted pattern index should NOT be present"
+        );
     }
 
     #[test]
@@ -1186,7 +1532,8 @@ mod tests {
         let patterns_json = serde_json::to_string_pretty(&vec![
             make_test_pattern("src-1", "Source Pattern One", 1, 0),
             make_test_pattern("src-2", "Source Pattern Two", 2, 0),
-        ]).unwrap();
+        ])
+        .unwrap();
         let json_path = dir.join("test-patterns.json");
         std::fs::write(&json_path, &patterns_json).unwrap();
 
@@ -1198,6 +1545,195 @@ mod tests {
         let ids: Vec<&str> = results.iter().map(|(p, _)| p.pattern_id.as_str()).collect();
         assert!(ids.contains(&"src-1"));
         assert!(ids.contains(&"src-2"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_rating_fresh_high_use() {
+        let today = Utc::now().format("%Y-%m-%d").to_string();
+        let mut p = make_test_pattern("rated", "Rated Pattern", 10, 8);
+        p.last_used_at = Some(today);
+        let r = p.rating();
+        assert!(
+            r >= 3.0,
+            "high-use recently-used pattern should rate 3+, got {}",
+            r
+        );
+    }
+
+    #[test]
+    fn test_rating_stale_unused() {
+        let mut p = make_test_pattern("stale", "Stale Pattern", 10, 0);
+        p.last_used_at = Some("2020-01-01".to_string());
+        let r = p.rating();
+        assert!(
+            r < 2.0,
+            "stale never-cited pattern should rate below 2.0, got {}",
+            r
+        );
+        assert_eq!(p.star_display(), format!("{r:.1}/5"));
+    }
+
+    #[test]
+    fn test_rating_no_dates() {
+        let p = make_test_pattern("new", "New Pattern", 1, 0);
+        let r = p.rating();
+        assert!(r >= 0.0 && r <= 5.0, "rating should be in range, got {}", r);
+    }
+
+    #[test]
+    fn test_parse_pattern_feedback() {
+        let text = "some output\nPATTERN_FEEDBACK: sql-inject-001 | confirmed | worked great\nmore output\nPATTERN_FEEDBACK: stale-pattern | stale | no longer relevant\nPATTERN_FEEDBACK: bad-pattern | wrong | caused errors\n";
+        let fb = parse_pattern_feedback(text);
+        assert_eq!(fb.len(), 3);
+        assert_eq!(fb[0].0, "sql-inject-001");
+        assert!(matches!(fb[0].1, PatternFeedback::Confirmed(_)));
+        assert_eq!(fb[1].0, "stale-pattern");
+        assert!(matches!(fb[1].1, PatternFeedback::Stale(_)));
+        assert_eq!(fb[2].0, "bad-pattern");
+        assert!(matches!(fb[2].1, PatternFeedback::Wrong(_)));
+    }
+
+    #[test]
+    fn test_parse_pattern_feedback_empty() {
+        let fb = parse_pattern_feedback("no feedback here");
+        assert!(fb.is_empty());
+    }
+
+    #[test]
+    fn test_decay_stale_patterns() {
+        let dir = std::env::temp_dir().join("foundry_test_decay");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let mut fresh = make_test_pattern("fresh", "Fresh Pattern", 5, 3);
+        fresh.auto_apply = true;
+        fresh.last_used_at = Some(Utc::now().format("%Y-%m-%d").to_string());
+
+        let mut stale = make_test_pattern("stale", "Stale Pattern", 5, 1);
+        stale.auto_apply = true;
+        stale.last_used_at = Some("2020-01-01".to_string());
+
+        let patterns = vec![fresh, stale];
+        let json = serde_json::to_string_pretty(&patterns).unwrap();
+        std::fs::write(dir.join("test.json"), &json).unwrap();
+
+        let decayed = decay_stale_patterns(&dir, 90);
+        assert_eq!(decayed, 1, "only stale pattern should be decayed");
+
+        let content = std::fs::read_to_string(dir.join("test.json")).unwrap();
+        let result: Vec<Pattern> = serde_json::from_str(&content).unwrap();
+        let fresh_p = result.iter().find(|p| p.pattern_id == "fresh").unwrap();
+        assert!(fresh_p.auto_apply, "fresh pattern should keep auto_apply");
+        let stale_p = result.iter().find(|p| p.pattern_id == "stale").unwrap();
+        assert!(!stale_p.auto_apply, "stale pattern should lose auto_apply");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_decay_never_cited_auto_apply_pattern() {
+        // Regression: merge_patterns() can set auto_apply=true at freq>=3
+        // without ever setting last_used_at. These never-cited patterns
+        // must still decay rather than staying auto_apply forever.
+        let dir = std::env::temp_dir().join("foundry_test_decay_never_cited");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let mut never_cited = make_test_pattern("never-cited", "Never Cited Pattern", 5, 0);
+        never_cited.auto_apply = true;
+        // last_used_at is None (never cited by any agent)
+
+        let mut low_freq = make_test_pattern("low-freq", "Low Freq Pattern", 2, 0);
+        low_freq.auto_apply = true;
+        // freq < 5, should not decay via the never-cited path
+
+        let mut mid_freq = make_test_pattern("mid-freq", "Mid Freq Pattern", 4, 0);
+        mid_freq.auto_apply = true;
+        // freq < 5, should not decay via the never-cited path
+
+        let patterns = vec![never_cited, low_freq, mid_freq];
+        let json = serde_json::to_string_pretty(&patterns).unwrap();
+        std::fs::write(dir.join("test.json"), &json).unwrap();
+
+        let decayed = decay_stale_patterns(&dir, 90);
+        assert_eq!(decayed, 1, "only never-cited freq>=5 pattern should decay");
+
+        let content = std::fs::read_to_string(dir.join("test.json")).unwrap();
+        let result: Vec<Pattern> = serde_json::from_str(&content).unwrap();
+        let nc = result
+            .iter()
+            .find(|p| p.pattern_id == "never-cited")
+            .unwrap();
+        assert!(
+            !nc.auto_apply,
+            "never-cited auto_apply pattern should lose auto_apply"
+        );
+        let lf = result.iter().find(|p| p.pattern_id == "low-freq").unwrap();
+        assert!(lf.auto_apply, "low-freq pattern should keep auto_apply");
+        let mf = result.iter().find(|p| p.pattern_id == "mid-freq").unwrap();
+        assert!(mf.auto_apply, "mid-freq pattern should keep auto_apply");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_apply_feedback_keeps_used_count_for_stale_patterns() {
+        let dir = std::env::temp_dir().join("foundry_test_apply_feedback");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let mut stale = make_test_pattern("stale", "Stale Pattern", 6, 4);
+        stale.auto_apply = true;
+        let json = serde_json::to_string_pretty(&vec![stale]).unwrap();
+        std::fs::write(dir.join("test.json"), json).unwrap();
+
+        let changed = apply_feedback(
+            &dir,
+            &[(
+                "stale".to_string(),
+                PatternFeedback::Stale("no longer applies".to_string()),
+            )],
+        )
+        .unwrap();
+        assert_eq!(changed, 1);
+
+        let content = std::fs::read_to_string(dir.join("test.json")).unwrap();
+        let result: Vec<Pattern> = serde_json::from_str(&content).unwrap();
+        let stale = result.iter().find(|p| p.pattern_id == "stale").unwrap();
+        assert!(
+            !stale.auto_apply,
+            "stale feedback should disable auto_apply"
+        );
+        assert_eq!(
+            stale.used_count, 4,
+            "stale feedback should not rewrite historical citation counts"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_update_used_counts_stamps_last_used_at() {
+        let dir = std::env::temp_dir().join("foundry_test_used_counts_date");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let patterns = vec![make_test_pattern("p1", "Pattern One Long", 3, 0)];
+        let json = serde_json::to_string_pretty(&patterns).unwrap();
+        std::fs::write(dir.join("test.json"), &json).unwrap();
+
+        update_used_counts(&dir, &["p1".to_string()]).unwrap();
+
+        let content = std::fs::read_to_string(dir.join("test.json")).unwrap();
+        let result: Vec<Pattern> = serde_json::from_str(&content).unwrap();
+        let p1 = result.iter().find(|p| p.pattern_id == "p1").unwrap();
+        assert!(p1.last_used_at.is_some(), "last_used_at should be set");
+        assert!(
+            p1.last_used_at.as_ref().unwrap().contains('-'),
+            "should be ISO date"
+        );
 
         let _ = std::fs::remove_dir_all(&dir);
     }

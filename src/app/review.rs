@@ -1,12 +1,13 @@
 use std::collections::HashSet;
 use std::path::Path;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
+use tokio::io::AsyncBufReadExt;
 use tokio::sync::mpsc;
 
-use crate::agent::{self, AgentRole};
-use crate::config::Config;
+use crate::agent::{self, AgentOutputEvent, AgentRole};
 use crate::budget;
+use crate::config::Config;
 use crate::isolation;
 use crate::observatory::{self, AgentUsage, ObservatoryEvent};
 use crate::prompts;
@@ -14,6 +15,329 @@ use crate::prompts;
 use super::commands;
 use super::context::RunContext;
 use super::{AppEvent, LoopEvent};
+
+const CODEX_REVIEW_REPORT_RELATIVE_PATH: &str = ".buildloop/review-report.md";
+const CODEX_DEFAULT_MODEL: &str = "default";
+
+fn detect_codex_version() -> String {
+    let output = match std::process::Command::new("codex")
+        .arg("--version")
+        .output()
+    {
+        Ok(o) => o,
+        Err(_) => return "unknown".to_string(),
+    };
+    let raw = String::from_utf8_lossy(&output.stdout);
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return "unknown".to_string();
+    }
+    trimmed
+        .strip_prefix("codex-cli ")
+        .unwrap_or(trimmed)
+        .trim()
+        .to_string()
+}
+
+fn changed_file_sets_differ(before: &[String], after: &[String]) -> bool {
+    let before_set: HashSet<&str> = before.iter().map(String::as_str).collect();
+    let after_set: HashSet<&str> = after.iter().map(String::as_str).collect();
+    before_set != after_set
+}
+
+/// Run a single codex subprocess, streaming stdout/stderr to the TUI.
+/// Returns true if the process exited with code 0.
+async fn run_codex_subprocess(
+    args: &[&str],
+    project_dir: &std::path::Path,
+    stdin_path: Option<&std::path::Path>,
+    timeout_secs: u64,
+    tx: &mpsc::UnboundedSender<AppEvent>,
+) -> bool {
+    let mut cmd = tokio::process::Command::new("codex");
+    cmd.args(args)
+        .current_dir(project_dir)
+        .kill_on_drop(true)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped());
+
+    match stdin_path {
+        Some(path) => match std::fs::File::open(path) {
+            Ok(file) => {
+                cmd.stdin(std::process::Stdio::from(file));
+            }
+            Err(e) => {
+                let _ = tx.send(AppEvent::AgentOutput(AgentOutputEvent::Stderr(format!(
+                    "[codex] failed to open stdin file {}: {e}",
+                    path.display()
+                ))));
+                return false;
+            }
+        },
+        None => {
+            cmd.stdin(std::process::Stdio::null());
+        }
+    }
+
+    let mut child = match cmd.spawn() {
+        Ok(c) => c,
+        Err(e) => {
+            let _ = tx.send(AppEvent::AgentOutput(AgentOutputEvent::Stderr(format!(
+                "[codex] failed to start: {e}"
+            ))));
+            return false;
+        }
+    };
+
+    let stdout = child.stdout.take().expect("stdout piped");
+    let stderr = child.stderr.take().expect("stderr piped");
+
+    let tx1 = tx.clone();
+    let stdout_handle = tokio::spawn(async move {
+        let mut lines = tokio::io::BufReader::new(stdout).lines();
+        while let Ok(Some(line)) = lines.next_line().await {
+            let _ = tx1.send(AppEvent::AgentOutput(AgentOutputEvent::Text(line)));
+        }
+    });
+
+    let tx2 = tx.clone();
+    let stderr_handle = tokio::spawn(async move {
+        let mut lines = tokio::io::BufReader::new(stderr).lines();
+        while let Ok(Some(line)) = lines.next_line().await {
+            let _ = tx2.send(AppEvent::AgentOutput(AgentOutputEvent::Stderr(format!(
+                "[stderr] {line}"
+            ))));
+        }
+    });
+
+    let mut timed_out = false;
+    let status = if timeout_secs == 0 {
+        child.wait().await
+    } else {
+        tokio::select! {
+            status = child.wait() => status,
+            _ = tokio::time::sleep(Duration::from_secs(timeout_secs)) => {
+                timed_out = true;
+                let _ = tx.send(AppEvent::AgentOutput(AgentOutputEvent::Stderr(
+                    format!("[codex] timed out after {}s; terminating subprocess", timeout_secs),
+                )));
+                if let Err(e) = child.kill().await {
+                    let _ = tx.send(AppEvent::AgentOutput(AgentOutputEvent::Stderr(
+                        format!("[codex] failed to terminate timed out subprocess: {e}"),
+                    )));
+                }
+                child.wait().await
+            }
+        }
+    };
+    let _ = tokio::join!(stdout_handle, stderr_handle);
+    !timed_out && status.map(|s| s.success()).unwrap_or(false)
+}
+
+/// Doubt stage via Codex: runs `codex exec` (audit + fix) followed by
+/// `codex review --uncommitted` (independent diff review). Both write
+/// findings to .buildloop/review-report.md. Budget record is always None
+/// because Codex does not expose token usage in the same format.
+async fn run_codex_doubt(
+    task_id: &str,
+    _task_desc: &str,
+    ctx: &RunContext,
+    tx: &mpsc::UnboundedSender<AppEvent>,
+) -> (
+    bool,
+    usize,
+    (usize, usize, usize),
+    Option<budget::PhaseBudgetRecord>,
+) {
+    let codex_version = detect_codex_version();
+    let codex_start = Instant::now();
+    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::AgentStarted(
+        AgentRole::Reviewer,
+        "Codex Doubt".to_string(),
+    )));
+    observatory::log_event(
+        &ctx.session_id,
+        &ctx.project_dir,
+        ObservatoryEvent::AgentStarted {
+            role: format!("{}", AgentRole::Reviewer),
+            provider: "codex".to_string(),
+            model: CODEX_DEFAULT_MODEL.to_string(),
+            cc_version: codex_version,
+        },
+    );
+
+    let _ = std::fs::remove_file(&ctx.review_report);
+    let pre_files = get_changed_files(&ctx.project_dir);
+
+    let claims_path = ctx.buildloop_dir.join("build-claims.md");
+
+    let audit_prompt = format!(
+        "Audit and validate these claims. Find every gap. For each claim in DELTA_MANIFEST \
+         verify it against actual code. Report PASS/FAIL/ISSUE for each CHECK in \
+         VERIFICATION_MATRIX. Fix every HIGH and MEDIUM issue directly in the code. \
+         Write complete findings -- what you checked, what you found, and what you fixed \
+         -- to {CODEX_REVIEW_REPORT_RELATIVE_PATH}."
+    );
+
+    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+        "Codex doubt: running audit + fix pass (codex exec)".to_string(),
+    )));
+
+    let exec_ok = run_codex_subprocess(
+        &[
+            "-a",
+            "never",
+            "exec",
+            "-s",
+            "workspace-write",
+            "-c",
+            "model_reasoning_effort=xhigh",
+            &audit_prompt,
+        ],
+        &ctx.project_dir,
+        Some(&claims_path),
+        ctx.config.agent_timeout_secs,
+        tx,
+    )
+    .await;
+
+    if !exec_ok {
+        let _ = tx.send(AppEvent::AgentDone(false));
+        observatory::log_event(
+            &ctx.session_id,
+            &ctx.project_dir,
+            ObservatoryEvent::AgentDone {
+                role: format!("{}", AgentRole::Reviewer),
+                success: false,
+                duration_secs: codex_start.elapsed().as_secs_f64(),
+                tokens_in: 0,
+                tokens_out: 0,
+                cost_usd: 0.0,
+                context_pct: 0,
+                cache_creation_tokens: 0,
+                cache_read_tokens: 0,
+            },
+        );
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::TaskReviewResult {
+            task_id: task_id.to_string(),
+            fix_passes: 0,
+            passed: false,
+        }));
+        return (false, 0, (0, 0, 0), None);
+    }
+
+    let review_prompt = format!(
+        "Review for correctness, edge cases, and gaps. Cross-reference \
+         .buildloop/build-claims.md for context. Append findings to \
+         {CODEX_REVIEW_REPORT_RELATIVE_PATH}."
+    );
+
+    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+        "Codex doubt: running independent diff review (codex review)".to_string(),
+    )));
+
+    // Non-fatal: if codex review fails the exec pass already wrote findings.
+    let review_ok = run_codex_subprocess(
+        &[
+            "-a",
+            "never",
+            "review",
+            "--uncommitted",
+            "-c",
+            "model_reasoning_effort=xhigh",
+            &review_prompt,
+        ],
+        &ctx.project_dir,
+        None,
+        ctx.config.agent_timeout_secs,
+        tx,
+    )
+    .await;
+    if !review_ok {
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+            "Codex doubt: codex review failed; using findings from codex exec".to_string(),
+        )));
+    }
+
+    let _ = tx.send(AppEvent::AgentDone(true));
+    observatory::log_event(
+        &ctx.session_id,
+        &ctx.project_dir,
+        ObservatoryEvent::AgentDone {
+            role: format!("{}", AgentRole::Reviewer),
+            success: true,
+            duration_secs: codex_start.elapsed().as_secs_f64(),
+            tokens_in: 0,
+            tokens_out: 0,
+            cost_usd: 0.0,
+            context_pct: 0,
+            cache_creation_tokens: 0,
+            cache_read_tokens: 0,
+        },
+    );
+
+    let post_files = get_changed_files(&ctx.project_dir);
+    let made_fixes = changed_file_sets_differ(&pre_files, &post_files);
+    let fix_passes: usize = if made_fixes { 1 } else { 0 };
+    if made_fixes {
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+            "Codex doubt: applied fixes".to_string(),
+        )));
+    }
+
+    let report_has_content = ctx.review_report.exists()
+        && std::fs::metadata(&ctx.review_report)
+            .map(|m| m.len() > 0)
+            .unwrap_or(false);
+
+    if !report_has_content {
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+            "Codex doubt: review-report.md missing or empty -- treating as failure".to_string(),
+        )));
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::TaskReviewResult {
+            task_id: task_id.to_string(),
+            fix_passes,
+            passed: false,
+        }));
+        return (false, fix_passes, (0, 0, 0), None);
+    }
+
+    let verdict_pass = check_review_passed(&ctx.review_report);
+    let (high, medium, low) = parse_audit_findings(&ctx.review_report);
+    {
+        let findings_json = std::fs::read_to_string(&ctx.review_report)
+            .ok()
+            .map(|content| extract_json_from_report(&content))
+            .unwrap_or_default();
+        observatory::log_event(
+            &ctx.session_id,
+            &ctx.project_dir,
+            ObservatoryEvent::ReviewFindings {
+                task_id: task_id.to_string(),
+                high,
+                medium,
+                low,
+                findings_json,
+            },
+        );
+    }
+
+    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+        "Codex doubt: verdict={}, {} high, {} medium findings",
+        if verdict_pass { "PASS" } else { "FAIL" },
+        high,
+        medium,
+    ))));
+
+    let passed = verdict_pass || (high == 0 && medium == 0);
+    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::TaskReviewResult {
+        task_id: task_id.to_string(),
+        fix_passes,
+        passed,
+    }));
+
+    (passed, fix_passes, (high, medium, low), None)
+}
 
 /// Returns `(passed, fix_passes, (high, medium, low), reviewer_budget_record)` so the caller can persist the pipeline progress indicator.
 pub(super) async fn run_review_loop(
@@ -23,7 +347,12 @@ pub(super) async fn run_review_loop(
     pattern_context: &str,
     extension_context: &str,
     tx: &mpsc::UnboundedSender<AppEvent>,
-) -> (bool, usize, (usize, usize, usize), Option<budget::PhaseBudgetRecord>) {
+) -> (
+    bool,
+    usize,
+    (usize, usize, usize),
+    Option<budget::PhaseBudgetRecord>,
+) {
     let cc_version = ctx.cc_version.clone();
     let files_changed = get_changed_files(&ctx.project_dir);
     if files_changed.is_empty() {
@@ -100,9 +429,10 @@ pub(super) async fn run_review_loop(
             )));
         } else {
             let line_count = findings.lines().count().saturating_sub(2); // exclude header/footer
-            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
-                format!("semgrep: {} finding(s) injected into reviewer context", line_count),
-            )));
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                "semgrep: {} finding(s) injected into reviewer context",
+                line_count
+            ))));
         }
         findings
     } else {
@@ -136,7 +466,7 @@ pub(super) async fn run_review_loop(
     // Helper: restore phase isolation with TUI-visible error logging.
     // Called explicitly before every return to avoid relying on Drop's eprintln!.
     let restore_phase_guard = |phase_guard: &mut Option<isolation::PhaseIsolation>,
-                                tx: &mpsc::UnboundedSender<AppEvent>| {
+                               tx: &mpsc::UnboundedSender<AppEvent>| {
         if let Some(mut guard) = phase_guard.take() {
             if let Err(e) = guard.restore() {
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
@@ -146,6 +476,15 @@ pub(super) async fn run_review_loop(
             }
         }
     };
+
+    // Codex doubt engine: launch Codex as an external process instead of a
+    // Claude sub-agent. Configured via doubt_engine = "codex" in .foundry.json
+    // or FOUNDRY_DOUBT_ENGINE / DOUBT_ENGINE env vars.
+    if ctx.config.doubt_engine == "codex" {
+        let result = run_codex_doubt(task_id, task_desc, ctx, tx).await;
+        restore_phase_guard(&mut phase_guard, tx);
+        return result;
+    }
 
     // Multi-pass review: when file count exceeds threshold, run per-file
     // analysis passes followed by a cross-file integration pass.
@@ -158,12 +497,16 @@ pub(super) async fn run_review_loop(
                 &ctx.config.reviewer_model,
             ),
         )));
-        observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::AgentStarted {
-            role: format!("{}", AgentRole::Reviewer),
-            provider: ctx.config.reviewer_provider.clone(),
-            model: ctx.config.reviewer_model.clone(),
-            cc_version: cc_version.clone(),
-        });
+        observatory::log_event(
+            &ctx.session_id,
+            &ctx.project_dir,
+            ObservatoryEvent::AgentStarted {
+                role: format!("{}", AgentRole::Reviewer),
+                provider: ctx.config.reviewer_provider.clone(),
+                model: ctx.config.reviewer_model.clone(),
+                cc_version: cc_version.clone(),
+            },
+        );
         let multipass_start = Instant::now();
         let result = run_multipass_review(
             task_id,
@@ -180,17 +523,21 @@ pub(super) async fn run_review_loop(
         .await;
         let _ = tx.send(AppEvent::AgentDone(result.0));
         let (passed, fixes, findings, multipass_budget, multipass_usage) = result;
-        observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::AgentDone {
-            role: format!("{}", AgentRole::Reviewer),
-            success: passed,
-            duration_secs: multipass_start.elapsed().as_secs_f64(),
-            tokens_in: multipass_usage.tokens_in,
-            tokens_out: multipass_usage.tokens_out,
-            cost_usd: multipass_usage.cost_usd,
-            context_pct: multipass_usage.context_pct,
-            cache_creation_tokens: multipass_usage.cache_creation_tokens,
-            cache_read_tokens: multipass_usage.cache_read_tokens,
-        });
+        observatory::log_event(
+            &ctx.session_id,
+            &ctx.project_dir,
+            ObservatoryEvent::AgentDone {
+                role: format!("{}", AgentRole::Reviewer),
+                success: passed,
+                duration_secs: multipass_start.elapsed().as_secs_f64(),
+                tokens_in: multipass_usage.tokens_in,
+                tokens_out: multipass_usage.tokens_out,
+                cost_usd: multipass_usage.cost_usd,
+                context_pct: multipass_usage.context_pct,
+                cache_creation_tokens: multipass_usage.cache_creation_tokens,
+                cache_read_tokens: multipass_usage.cache_read_tokens,
+            },
+        );
         restore_phase_guard(&mut phase_guard, tx);
         return (passed, fixes, findings, multipass_budget);
     }
@@ -222,12 +569,16 @@ pub(super) async fn run_review_loop(
         AgentRole::Reviewer,
         Config::display_provider_model(&ctx.config.reviewer_provider, &ctx.config.reviewer_model),
     )));
-    observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::AgentStarted {
-        role: format!("{}", AgentRole::Reviewer),
-        provider: ctx.config.reviewer_provider.clone(),
-        model: ctx.config.reviewer_model.clone(),
-        cc_version: cc_version.clone(),
-    });
+    observatory::log_event(
+        &ctx.session_id,
+        &ctx.project_dir,
+        ObservatoryEvent::AgentStarted {
+            role: format!("{}", AgentRole::Reviewer),
+            provider: ctx.config.reviewer_provider.clone(),
+            model: ctx.config.reviewer_model.clone(),
+            cc_version: cc_version.clone(),
+        },
+    );
 
     let prompt = prompts::reviewer_prompt(
         task_id,
@@ -270,17 +621,21 @@ pub(super) async fn run_review_loop(
     let _ = tx.send(AppEvent::AgentDone(
         review_result.as_ref().map(|r| r.success).unwrap_or(false),
     ));
-    observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::AgentDone {
-        role: format!("{}", AgentRole::Reviewer),
-        success: review_result.as_ref().map(|r| r.success).unwrap_or(false),
-        duration_secs: reviewer_start.elapsed().as_secs_f64(),
-        tokens_in: agent_usage.tokens_in,
-        tokens_out: agent_usage.tokens_out,
-        cost_usd: agent_usage.cost_usd,
-        context_pct: agent_usage.context_pct,
-        cache_creation_tokens: agent_usage.cache_creation_tokens,
-        cache_read_tokens: agent_usage.cache_read_tokens,
-    });
+    observatory::log_event(
+        &ctx.session_id,
+        &ctx.project_dir,
+        ObservatoryEvent::AgentDone {
+            role: format!("{}", AgentRole::Reviewer),
+            success: review_result.as_ref().map(|r| r.success).unwrap_or(false),
+            duration_secs: reviewer_start.elapsed().as_secs_f64(),
+            tokens_in: agent_usage.tokens_in,
+            tokens_out: agent_usage.tokens_out,
+            cost_usd: agent_usage.cost_usd,
+            context_pct: agent_usage.context_pct,
+            cache_creation_tokens: agent_usage.cache_creation_tokens,
+            cache_read_tokens: agent_usage.cache_read_tokens,
+        },
+    );
     // Budget telemetry: Reviewer
     let mut reviewer_budget_record: Option<budget::PhaseBudgetRecord> = None;
     if ctx.config.budget_recovery_enabled {
@@ -310,12 +665,17 @@ pub(super) async fn run_review_loop(
             );
             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
                 "Budget overrun: {} used {}% (target {}%), recovery: {} (no subsequent phase)",
-                AgentRole::Reviewer, record.actual_pct, record.target_pct, record.recovery_action,
+                AgentRole::Reviewer,
+                record.actual_pct,
+                record.target_pct,
+                record.recovery_action,
             ))));
         } else if record.overrun {
             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
                 "Budget: {} used {}% (target {}%, within tolerance)",
-                AgentRole::Reviewer, record.actual_pct, record.target_pct,
+                AgentRole::Reviewer,
+                record.actual_pct,
+                record.target_pct,
             ))));
         }
         reviewer_budget_record = Some(record);
@@ -337,8 +697,7 @@ pub(super) async fn run_review_loop(
 
     // Detect whether the reviewer applied fixes by checking for new file changes.
     let post_review_files = get_changed_files(&ctx.project_dir);
-    let reviewer_made_fixes =
-        post_review_files.len() > pre_review_files.len() || post_review_files != pre_review_files;
+    let reviewer_made_fixes = changed_file_sets_differ(&pre_review_files, &post_review_files);
     let fix_passes: usize = if reviewer_made_fixes { 1 } else { 0 };
 
     if reviewer_made_fixes {
@@ -374,13 +733,17 @@ pub(super) async fn run_review_loop(
             .ok()
             .map(|content| extract_json_from_report(&content))
             .unwrap_or_default();
-        observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::ReviewFindings {
-            task_id: task_id.to_string(),
-            high,
-            medium,
-            low,
-            findings_json,
-        });
+        observatory::log_event(
+            &ctx.session_id,
+            &ctx.project_dir,
+            ObservatoryEvent::ReviewFindings {
+                task_id: task_id.to_string(),
+                high,
+                medium,
+                low,
+                findings_json,
+            },
+        );
     }
 
     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
@@ -433,7 +796,12 @@ pub(super) async fn run_review_loop(
         fix_passes,
         passed,
     }));
-    (passed, fix_passes, (high, medium, low), reviewer_budget_record)
+    (
+        passed,
+        fix_passes,
+        (high, medium, low),
+        reviewer_budget_record,
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -448,7 +816,13 @@ async fn run_multipass_review(
     files_list: &str,
     diff_for_review: Option<&str>,
     semgrep_findings: &str,
-) -> (bool, usize, (usize, usize, usize), Option<budget::PhaseBudgetRecord>, AgentUsage) {
+) -> (
+    bool,
+    usize,
+    (usize, usize, usize),
+    Option<budget::PhaseBudgetRecord>,
+    AgentUsage,
+) {
     let cc_version = ctx.cc_version.clone();
     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
         "Multi-pass review: {} files exceed threshold ({}), running per-file analysis",
@@ -470,7 +844,10 @@ async fn run_multipass_review(
         // Remove stale report before each per-file reviewer.
         if let Err(e) = std::fs::remove_file(&ctx.review_report) {
             if e.kind() != std::io::ErrorKind::NotFound {
-                eprintln!("Warning: failed to remove stale review-report.md before per-file review: {}", e);
+                eprintln!(
+                    "Warning: failed to remove stale review-report.md before per-file review: {}",
+                    e
+                );
             }
         }
 
@@ -495,12 +872,16 @@ async fn run_multipass_review(
             usage
         });
 
-        observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::AgentStarted {
-            role: format!("{}", AgentRole::Reviewer),
-            provider: ctx.config.reviewer_provider.clone(),
-            model: ctx.config.reviewer_model.clone(),
-            cc_version: cc_version.clone(),
-        });
+        observatory::log_event(
+            &ctx.session_id,
+            &ctx.project_dir,
+            ObservatoryEvent::AgentStarted {
+                role: format!("{}", AgentRole::Reviewer),
+                provider: ctx.config.reviewer_provider.clone(),
+                model: ctx.config.reviewer_model.clone(),
+                cc_version: cc_version.clone(),
+            },
+        );
         let per_file_start = Instant::now();
         let result = agent::run_agent(
             &AgentRole::Reviewer,
@@ -524,17 +905,21 @@ async fn run_multipass_review(
         total_usage.context_pct = total_usage.context_pct.max(agent_usage.context_pct);
         total_usage.cache_creation_tokens += agent_usage.cache_creation_tokens;
         total_usage.cache_read_tokens += agent_usage.cache_read_tokens;
-        observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::AgentDone {
-            role: format!("{}", AgentRole::Reviewer),
-            success: result.as_ref().map(|r| r.success).unwrap_or(false),
-            duration_secs: per_file_start.elapsed().as_secs_f64(),
-            tokens_in: agent_usage.tokens_in,
-            tokens_out: agent_usage.tokens_out,
-            cost_usd: agent_usage.cost_usd,
-            context_pct: agent_usage.context_pct,
-            cache_creation_tokens: agent_usage.cache_creation_tokens,
-            cache_read_tokens: agent_usage.cache_read_tokens,
-        });
+        observatory::log_event(
+            &ctx.session_id,
+            &ctx.project_dir,
+            ObservatoryEvent::AgentDone {
+                role: format!("{}", AgentRole::Reviewer),
+                success: result.as_ref().map(|r| r.success).unwrap_or(false),
+                duration_secs: per_file_start.elapsed().as_secs_f64(),
+                tokens_in: agent_usage.tokens_in,
+                tokens_out: agent_usage.tokens_out,
+                cost_usd: agent_usage.cost_usd,
+                context_pct: agent_usage.context_pct,
+                cache_creation_tokens: agent_usage.cache_creation_tokens,
+                cache_read_tokens: agent_usage.cache_read_tokens,
+            },
+        );
 
         if result.as_ref().map(|r| r.success).unwrap_or(false) {
             let findings = parse_findings_from_agent_output(&ctx.review_report);
@@ -554,7 +939,10 @@ async fn run_multipass_review(
     // Clean up per-file report before integration pass.
     if let Err(e) = std::fs::remove_file(&ctx.review_report) {
         if e.kind() != std::io::ErrorKind::NotFound {
-            eprintln!("Warning: failed to remove stale review-report.md before integration pass: {}", e);
+            eprintln!(
+                "Warning: failed to remove stale review-report.md before integration pass: {}",
+                e
+            );
         }
     }
 
@@ -615,12 +1003,16 @@ async fn run_multipass_review(
         usage
     });
 
-    observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::AgentStarted {
-        role: format!("{}", AgentRole::Reviewer),
-        provider: ctx.config.reviewer_provider.clone(),
-        model: ctx.config.reviewer_model.clone(),
-        cc_version: cc_version.clone(),
-    });
+    observatory::log_event(
+        &ctx.session_id,
+        &ctx.project_dir,
+        ObservatoryEvent::AgentStarted {
+            role: format!("{}", AgentRole::Reviewer),
+            provider: ctx.config.reviewer_provider.clone(),
+            model: ctx.config.reviewer_model.clone(),
+            cc_version: cc_version.clone(),
+        },
+    );
     let integration_start = Instant::now();
     let review_result = agent::run_agent(
         &AgentRole::Reviewer,
@@ -644,17 +1036,21 @@ async fn run_multipass_review(
     total_usage.context_pct = total_usage.context_pct.max(agent_usage.context_pct);
     total_usage.cache_creation_tokens += agent_usage.cache_creation_tokens;
     total_usage.cache_read_tokens += agent_usage.cache_read_tokens;
-    observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::AgentDone {
-        role: format!("{}", AgentRole::Reviewer),
-        success: review_result.as_ref().map(|r| r.success).unwrap_or(false),
-        duration_secs: integration_start.elapsed().as_secs_f64(),
-        tokens_in: agent_usage.tokens_in,
-        tokens_out: agent_usage.tokens_out,
-        cost_usd: agent_usage.cost_usd,
-        context_pct: agent_usage.context_pct,
-        cache_creation_tokens: agent_usage.cache_creation_tokens,
-        cache_read_tokens: agent_usage.cache_read_tokens,
-    });
+    observatory::log_event(
+        &ctx.session_id,
+        &ctx.project_dir,
+        ObservatoryEvent::AgentDone {
+            role: format!("{}", AgentRole::Reviewer),
+            success: review_result.as_ref().map(|r| r.success).unwrap_or(false),
+            duration_secs: integration_start.elapsed().as_secs_f64(),
+            tokens_in: agent_usage.tokens_in,
+            tokens_out: agent_usage.tokens_out,
+            cost_usd: agent_usage.cost_usd,
+            context_pct: agent_usage.context_pct,
+            cache_creation_tokens: agent_usage.cache_creation_tokens,
+            cache_read_tokens: agent_usage.cache_read_tokens,
+        },
+    );
 
     if !review_result.as_ref().map(|r| r.success).unwrap_or(false) {
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
@@ -720,13 +1116,17 @@ async fn run_multipass_review(
             .ok()
             .map(|content| extract_json_from_report(&content))
             .unwrap_or_default();
-        observatory::log_event(&ctx.session_id, &ctx.project_dir, ObservatoryEvent::ReviewFindings {
-            task_id: task_id.to_string(),
-            high,
-            medium,
-            low,
-            findings_json,
-        });
+        observatory::log_event(
+            &ctx.session_id,
+            &ctx.project_dir,
+            ObservatoryEvent::ReviewFindings {
+                task_id: task_id.to_string(),
+                high,
+                medium,
+                low,
+                findings_json,
+            },
+        );
     }
 
     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
@@ -761,7 +1161,10 @@ async fn run_multipass_review(
     let passed = verdict_pass || (high == 0 && medium == 0);
 
     // Budget telemetry: Reviewer (multipass)
-    let reviewer_budget_record: Option<budget::PhaseBudgetRecord> = if ctx.config.budget_recovery_enabled {
+    let reviewer_budget_record: Option<budget::PhaseBudgetRecord> = if ctx
+        .config
+        .budget_recovery_enabled
+    {
         let record = budget::evaluate_phase(
             &AgentRole::Reviewer,
             &total_usage,
@@ -793,7 +1196,9 @@ async fn run_multipass_review(
         } else if record.overrun {
             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
                 "Budget: {} (multipass) used {}% (target {}%, within tolerance)",
-                AgentRole::Reviewer, record.actual_pct, record.target_pct,
+                AgentRole::Reviewer,
+                record.actual_pct,
+                record.target_pct,
             ))));
         }
         Some(record)
@@ -818,7 +1223,13 @@ async fn run_multipass_review(
         passed,
     }));
 
-    (passed, fix_passes, (high, medium, low), reviewer_budget_record, total_usage)
+    (
+        passed,
+        fix_passes,
+        (high, medium, low),
+        reviewer_budget_record,
+        total_usage,
+    )
 }
 
 fn get_diff_for_review(project_dir: &Path) -> String {
@@ -1185,7 +1596,8 @@ fn check_review_passed(report_path: &Path) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        check_review_passed, extract_json_from_report, get_changed_files, parse_audit_findings,
+        changed_file_sets_differ, check_review_passed, extract_json_from_report, get_changed_files,
+        parse_audit_findings,
     };
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -1302,6 +1714,16 @@ mod tests {
     fn check_review_passed_returns_false_for_missing_file() {
         let path = PathBuf::from("/tmp/nonexistent-review-report-foundry.md");
         assert!(!check_review_passed(&path));
+    }
+
+    #[test]
+    fn changed_file_sets_differ_ignores_order() {
+        let before = vec!["a.rs".to_string(), "b.rs".to_string()];
+        let after = vec!["b.rs".to_string(), "a.rs".to_string()];
+        assert!(
+            !changed_file_sets_differ(&before, &after),
+            "file-order churn should not count as a fix pass"
+        );
     }
 
     #[test]

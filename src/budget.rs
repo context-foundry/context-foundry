@@ -11,11 +11,11 @@ use crate::utils::atomic_write_file;
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(default)]
 pub struct BudgetTargets {
-    pub scout: u8,    // QRPID Q+R phase: 15%
-    pub planner: u8,  // QRPID P phase: 40%
-    pub builder: u8,  // QRPID I phase: 60%
-    pub reviewer: u8,     // QRPID D phase: 50%
-    pub plan_review: u8,  // QRPID P+ phase: 35%
+    pub scout: u8,       // QRPID Q+R phase: 15%
+    pub planner: u8,     // QRPID P phase: 40%
+    pub builder: u8,     // QRPID I phase: 60%
+    pub reviewer: u8,    // QRPID D phase: 50%
+    pub plan_review: u8, // QRPID P+ phase: 35%
 }
 
 impl Default for BudgetTargets {
@@ -341,9 +341,9 @@ mod tests {
             let record = evaluate_phase(role, &usage, &targets, threshold);
             if record.overrun && record.recovery_action != RecoveryAction::Continue {
                 telemetry.any_overrun = true;
-                telemetry.recovery_actions_taken.push(format!(
-                    "{}: {}", record.phase, record.recovery_action
-                ));
+                telemetry
+                    .recovery_actions_taken
+                    .push(format!("{}: {}", record.phase, record.recovery_action));
             }
             telemetry.records.push(record);
         }
@@ -359,7 +359,10 @@ mod tests {
         assert!(phase_names.contains(&"SCOUT"), "Missing SCOUT record");
         assert!(phase_names.contains(&"PLAN"), "Missing PLAN record");
         assert!(phase_names.contains(&"P+"), "Missing P+ record");
-        assert!(phase_names.contains(&"IMPLEMENT"), "Missing IMPLEMENT record");
+        assert!(
+            phase_names.contains(&"IMPLEMENT"),
+            "Missing IMPLEMENT record"
+        );
         assert!(phase_names.contains(&"VERIFY"), "Missing VERIFY record");
     }
 
@@ -478,7 +481,9 @@ mod tests {
         assert_eq!(record.recovery_action, RecoveryAction::Summarize);
         if record.overrun && record.recovery_action != RecoveryAction::Continue {
             telemetry.recovery_actions_taken.push(format!(
-                "{}: {}", AgentRole::Scout, record.recovery_action
+                "{}: {}",
+                AgentRole::Scout,
+                record.recovery_action
             ));
         }
         telemetry.records.push(record);

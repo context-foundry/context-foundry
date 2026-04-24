@@ -200,7 +200,10 @@ fn cache_dir() -> PathBuf {
         PathBuf::from(base).join(".foundry/cache")
     } else {
         let fallback = std::env::temp_dir().join(".foundry").join("cache");
-        eprintln!("warning: HOME not set, using {} for embedding cache", fallback.display());
+        eprintln!(
+            "warning: HOME not set, using {} for embedding cache",
+            fallback.display()
+        );
         fallback
     }
 }
@@ -909,6 +912,7 @@ mod tests {
             used_count: 0,
             promoted_to: String::new(),
             promoted_at: String::new(),
+            last_used_at: None,
         }
     }
 }

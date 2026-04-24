@@ -202,7 +202,10 @@ pub struct ProviderVersions {
 pub fn run_stats(days: u32, project: &Path, output: &str, trend: bool) -> Result<()> {
     match output {
         "table" | "json" => {}
-        other => bail!("invalid output format '{}': expected 'table' or 'json'", other),
+        other => bail!(
+            "invalid output format '{}': expected 'table' or 'json'",
+            other
+        ),
     }
 
     let obs_dir = observatory_dir()?;
@@ -258,12 +261,16 @@ pub fn print_session_summary(session_id: &str, project_dir: &Path) -> Result<()>
     for ev in &session_events {
         match ev.event_type.as_str() {
             "session_ended" => {
-                duration_secs = ev.payload.get("duration_secs")
+                duration_secs = ev
+                    .payload
+                    .get("duration_secs")
                     .and_then(|v| v.as_f64())
                     .unwrap_or(0.0);
             }
             "agent_done" => {
-                let cost = ev.payload.get("cost_usd")
+                let cost = ev
+                    .payload
+                    .get("cost_usd")
                     .and_then(|v| v.as_f64())
                     .unwrap_or(0.0);
                 total_cost += cost;
@@ -283,7 +290,11 @@ pub fn print_session_summary(session_id: &str, project_dir: &Path) -> Result<()>
             "review_findings" => {
                 tasks_reviewed += 1;
                 let high = ev.payload.get("high").and_then(|v| v.as_u64()).unwrap_or(0);
-                let medium = ev.payload.get("medium").and_then(|v| v.as_u64()).unwrap_or(0);
+                let medium = ev
+                    .payload
+                    .get("medium")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
                 if high + medium > 0 {
                     tasks_with_findings += 1;
                 }
@@ -305,7 +316,11 @@ pub fn print_session_summary(session_id: &str, project_dir: &Path) -> Result<()>
 
     // Format duration
     let duration_str = if duration_secs >= 3600.0 {
-        format!("{:.0}h {:.0}m", duration_secs / 3600.0, (duration_secs % 3600.0) / 60.0)
+        format!(
+            "{:.0}h {:.0}m",
+            duration_secs / 3600.0,
+            (duration_secs % 3600.0) / 60.0
+        )
     } else if duration_secs >= 60.0 {
         format!("{:.0}m {:.0}s", duration_secs / 60.0, duration_secs % 60.0)
     } else {
@@ -405,8 +420,8 @@ pub fn load_events(
 
     // Filter by canonicalized project_dir
     if let Some(project_path) = project {
-        let canonical = dunce::canonicalize(project_path)
-            .unwrap_or_else(|_| project_path.to_path_buf());
+        let canonical =
+            dunce::canonicalize(project_path).unwrap_or_else(|_| project_path.to_path_buf());
         let canonical_str = canonical.display().to_string();
         events.retain(|e| e.project_dir == canonical_str);
     }
@@ -453,9 +468,18 @@ fn known_bad_cc_version(version: &str) -> Option<&'static str> {
     if parts.len() != 3 {
         return None;
     }
-    let major: u32 = match parts[0].parse() { Ok(v) => v, Err(_) => return None };
-    let minor: u32 = match parts[1].parse() { Ok(v) => v, Err(_) => return None };
-    let patch: u32 = match parts[2].parse() { Ok(v) => v, Err(_) => return None };
+    let major: u32 = match parts[0].parse() {
+        Ok(v) => v,
+        Err(_) => return None,
+    };
+    let minor: u32 = match parts[1].parse() {
+        Ok(v) => v,
+        Err(_) => return None,
+    };
+    let patch: u32 = match parts[2].parse() {
+        Ok(v) => v,
+        Err(_) => return None,
+    };
 
     // >= 2.1.69: --resume cache miss bug
     if (major, minor, patch) >= (2, 1, 69) && (major, minor) <= (2, 1) {
@@ -555,8 +579,7 @@ pub fn compute_stats(
                     // PR reviews don't emit TaskStarted, but skip if they ever do
                 } else if let Some(task_id) = ev.payload.get("task_id").and_then(|v| v.as_str()) {
                     tasks.insert((ev.session_id.clone(), task_id.to_string()));
-                    if let Some(complexity) =
-                        ev.payload.get("complexity").and_then(|v| v.as_str())
+                    if let Some(complexity) = ev.payload.get("complexity").and_then(|v| v.as_str())
                     {
                         task_complexity.insert(
                             (ev.session_id.clone(), task_id.to_string()),
@@ -596,8 +619,16 @@ pub fn compute_stats(
                             .and_then(|v| v.as_u64())
                             .unwrap_or(0);
 
-                        let cc = ev.payload.get("cache_creation_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
-                        let cr = ev.payload.get("cache_read_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
+                        let cc = ev
+                            .payload
+                            .get("cache_creation_tokens")
+                            .and_then(|v| v.as_u64())
+                            .unwrap_or(0);
+                        let cr = ev
+                            .payload
+                            .get("cache_read_tokens")
+                            .and_then(|v| v.as_u64())
+                            .unwrap_or(0);
                         if cc > 0 || cr > 0 {
                             has_any_cache_data = true;
                         }
@@ -633,8 +664,13 @@ pub fn compute_stats(
             }
             "review_findings" => {
                 if is_pr_review_session(&ev.session_id) {
-                    let high = ev.payload.get("high").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
-                    let medium = ev.payload.get("medium").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+                    let high =
+                        ev.payload.get("high").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+                    let medium = ev
+                        .payload
+                        .get("medium")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0) as usize;
                     let low = ev.payload.get("low").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
                     let cost = pr_review_costs.get(&ev.session_id).copied().unwrap_or(0.0);
                     pr_review_findings.push(PrReviewEntry {
@@ -647,11 +683,7 @@ pub fn compute_stats(
                 } else if let Some(task_id) = ev.payload.get("task_id").and_then(|v| v.as_str()) {
                     let key = (ev.session_id.clone(), task_id.to_string());
                     tasks_reviewed.insert(key.clone());
-                    let high = ev
-                        .payload
-                        .get("high")
-                        .and_then(|v| v.as_u64())
-                        .unwrap_or(0);
+                    let high = ev.payload.get("high").and_then(|v| v.as_u64()).unwrap_or(0);
                     let medium = ev
                         .payload
                         .get("medium")
@@ -685,7 +717,9 @@ pub fn compute_stats(
                         ev.payload.get("pattern_id").and_then(|v| v.as_str()),
                         ev.payload.get("task_id").and_then(|v| v.as_str()),
                     ) {
-                        *pattern_citation_counts.entry(pattern_id.to_string()).or_insert(0) += 1;
+                        *pattern_citation_counts
+                            .entry(pattern_id.to_string())
+                            .or_insert(0) += 1;
                         pattern_cited_tasks
                             .entry(pattern_id.to_string())
                             .or_default()
@@ -696,20 +730,85 @@ pub fn compute_stats(
             "task_completed" => {
                 if !is_pr_review_session(&ev.session_id) {
                     let tc = CompletedTask {
-                        task_id: ev.payload.get("task_id").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-                        verdict: ev.payload.get("verdict").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-                        complexity: ev.payload.get("complexity").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-                        total_cost_usd: ev.payload.get("total_cost_usd").and_then(|v| v.as_f64()).unwrap_or(0.0),
-                        total_duration_secs: ev.payload.get("total_duration_secs").and_then(|v| v.as_f64()).unwrap_or(0.0),
-                        findings_high: ev.payload.get("findings_high").and_then(|v| v.as_u64()).unwrap_or(0) as usize,
-                        findings_medium: ev.payload.get("findings_medium").and_then(|v| v.as_u64()).unwrap_or(0) as usize,
-                        findings_low: ev.payload.get("findings_low").and_then(|v| v.as_u64()).unwrap_or(0) as usize,
-                        phases_run: ev.payload.get("phases_run").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-                        builder_provider: ev.payload.get("builder_provider").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-                        builder_model: ev.payload.get("builder_model").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-                        reviewer_provider: ev.payload.get("reviewer_provider").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-                        reviewer_model: ev.payload.get("reviewer_model").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-                        commit_sha: ev.payload.get("commit_sha").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                        task_id: ev
+                            .payload
+                            .get("task_id")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string(),
+                        verdict: ev
+                            .payload
+                            .get("verdict")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string(),
+                        complexity: ev
+                            .payload
+                            .get("complexity")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string(),
+                        total_cost_usd: ev
+                            .payload
+                            .get("total_cost_usd")
+                            .and_then(|v| v.as_f64())
+                            .unwrap_or(0.0),
+                        total_duration_secs: ev
+                            .payload
+                            .get("total_duration_secs")
+                            .and_then(|v| v.as_f64())
+                            .unwrap_or(0.0),
+                        findings_high: ev
+                            .payload
+                            .get("findings_high")
+                            .and_then(|v| v.as_u64())
+                            .unwrap_or(0) as usize,
+                        findings_medium: ev
+                            .payload
+                            .get("findings_medium")
+                            .and_then(|v| v.as_u64())
+                            .unwrap_or(0) as usize,
+                        findings_low: ev
+                            .payload
+                            .get("findings_low")
+                            .and_then(|v| v.as_u64())
+                            .unwrap_or(0) as usize,
+                        phases_run: ev
+                            .payload
+                            .get("phases_run")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string(),
+                        builder_provider: ev
+                            .payload
+                            .get("builder_provider")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string(),
+                        builder_model: ev
+                            .payload
+                            .get("builder_model")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string(),
+                        reviewer_provider: ev
+                            .payload
+                            .get("reviewer_provider")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string(),
+                        reviewer_model: ev
+                            .payload
+                            .get("reviewer_model")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string(),
+                        commit_sha: ev
+                            .payload
+                            .get("commit_sha")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string(),
                         timestamp: ev.timestamp.clone(),
                         description: String::new(),
                     };
@@ -899,7 +998,10 @@ pub fn compute_stats(
 
     let trust = if !completed_tasks.is_empty() {
         let total_completed = completed_tasks.len();
-        let feat_completed = completed_tasks.iter().filter(|t| t.verdict == "feat").count();
+        let feat_completed = completed_tasks
+            .iter()
+            .filter(|t| t.verdict == "feat")
+            .count();
 
         let acceptance_rate = if total_completed > 0 {
             Some(feat_completed as f64 / total_completed as f64)
@@ -912,7 +1014,10 @@ pub fn compute_stats(
             .iter()
             .filter(|t| t.findings_high + t.findings_medium > 0)
             .collect();
-        let rescued = tasks_with_hi_med.iter().filter(|t| t.verdict == "feat").count();
+        let rescued = tasks_with_hi_med
+            .iter()
+            .filter(|t| t.verdict == "feat")
+            .count();
         let review_rescue_rate = if !tasks_with_hi_med.is_empty() {
             Some(rescued as f64 / tasks_with_hi_med.len() as f64)
         } else {
@@ -951,9 +1056,21 @@ pub fn compute_stats(
                 ModelComparison {
                     model_key: key,
                     task_count: count,
-                    feat_rate: if count > 0 { feats as f64 / count as f64 } else { 0.0 },
-                    avg_cost_per_task: if count > 0 { total_cost / count as f64 } else { 0.0 },
-                    avg_duration_per_task: if count > 0 { total_dur / count as f64 } else { 0.0 },
+                    feat_rate: if count > 0 {
+                        feats as f64 / count as f64
+                    } else {
+                        0.0
+                    },
+                    avg_cost_per_task: if count > 0 {
+                        total_cost / count as f64
+                    } else {
+                        0.0
+                    },
+                    avg_duration_per_task: if count > 0 {
+                        total_dur / count as f64
+                    } else {
+                        0.0
+                    },
                 }
             })
             .collect();
@@ -982,7 +1099,10 @@ pub fn compute_stats(
             let rescued = tasks_with_findings
                 .iter()
                 .filter(|key| {
-                    task_committed.get(*key).map(|ct| ct.to_lowercase() == "feat").unwrap_or(false)
+                    task_committed
+                        .get(*key)
+                        .map(|ct| ct.to_lowercase() == "feat")
+                        .unwrap_or(false)
                 })
                 .count();
             let review_rescue_rate = if !tasks_with_findings.is_empty() {
@@ -1000,7 +1120,11 @@ pub fn compute_stats(
             let mut max_streak = 0usize;
             let mut current_streak = 0usize;
             for ev in &committed_events {
-                let ct = ev.payload.get("commit_type").and_then(|v| v.as_str()).unwrap_or("");
+                let ct = ev
+                    .payload
+                    .get("commit_type")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
                 if ct.to_lowercase() == "feat" {
                     current_streak += 1;
                     if current_streak > max_streak {
@@ -1029,7 +1153,12 @@ pub fn compute_stats(
 
     // ── Trend Data (T24.3) ──
     let trend_data = if trend {
-        Some(compute_trend_data(&completed_tasks, events, days, &task_committed))
+        Some(compute_trend_data(
+            &completed_tasks,
+            events,
+            days,
+            &task_committed,
+        ))
     } else {
         None
     };
@@ -1038,7 +1167,9 @@ pub fn compute_stats(
 
     let pr_reviews = if !pr_review_sessions.is_empty() {
         let total_reviews = pr_review_findings.len();
-        let failed_reviews = pr_review_sessions.len().saturating_sub(pr_review_findings.len());
+        let failed_reviews = pr_review_sessions
+            .len()
+            .saturating_sub(pr_review_findings.len());
         let total_pr_cost: f64 = pr_review_costs.values().sum();
         let total_high: usize = pr_review_findings.iter().map(|r| r.high).sum();
         let total_medium: usize = pr_review_findings.iter().map(|r| r.medium).sum();
@@ -1175,15 +1306,13 @@ pub fn compute_stats(
 
 fn normalize_tokens(text: &str) -> Vec<String> {
     static STOPWORDS: &[&str] = &[
-        "a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for",
-        "of", "with", "by", "from", "is", "are", "was", "were", "be", "been",
-        "being", "have", "has", "had", "do", "does", "did", "will", "would",
-        "could", "should", "may", "might", "shall", "can", "need", "must",
-        "it", "its", "this", "that", "these", "those", "not", "no", "so",
-        "if", "then", "else", "when", "up", "out", "all", "each", "every",
-        "both", "few", "more", "most", "other", "some", "such", "only",
-        "into", "over", "after", "before", "between", "under", "above",
-        "add", "update", "fix", "remove", "change", "make", "set", "get",
+        "a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with", "by",
+        "from", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had", "do",
+        "does", "did", "will", "would", "could", "should", "may", "might", "shall", "can", "need",
+        "must", "it", "its", "this", "that", "these", "those", "not", "no", "so", "if", "then",
+        "else", "when", "up", "out", "all", "each", "every", "both", "few", "more", "most",
+        "other", "some", "such", "only", "into", "over", "after", "before", "between", "under",
+        "above", "add", "update", "fix", "remove", "change", "make", "set", "get",
     ];
     text.to_lowercase()
         .split(|c: char| !c.is_alphanumeric())
@@ -1258,7 +1387,11 @@ fn compute_trend_data(
             .iter()
             .map(|(date, (feats, total, _))| DailyMetric {
                 date: date.clone(),
-                value: if *total > 0 { *feats as f64 / *total as f64 } else { 0.0 },
+                value: if *total > 0 {
+                    *feats as f64 / *total as f64
+                } else {
+                    0.0
+                },
                 count: *total,
             })
             .collect();
@@ -1267,7 +1400,11 @@ fn compute_trend_data(
             .iter()
             .map(|(date, (_, total, cost))| DailyMetric {
                 date: date.clone(),
-                value: if *total > 0 { *cost / *total as f64 } else { 0.0 },
+                value: if *total > 0 {
+                    *cost / *total as f64
+                } else {
+                    0.0
+                },
                 count: *total,
             })
             .collect();
@@ -1300,13 +1437,16 @@ fn compute_trend_data(
                 if let Some(task_id) = ev.payload.get("task_id").and_then(|v| v.as_str()) {
                     let key = (ev.session_id.clone(), task_id.to_string());
                     if task_committed.contains_key(&key) && seen_committed.insert(key) {
-                        let final_ct = &task_committed[&(ev.session_id.clone(), task_id.to_string())];
+                        let final_ct =
+                            &task_committed[&(ev.session_id.clone(), task_id.to_string())];
                         let entry = daily.entry(date_str.clone()).or_insert((0, 0));
                         entry.1 += 1;
                         if final_ct.to_lowercase() == "feat" {
                             entry.0 += 1;
                         }
-                        session_committed_date.entry(ev.session_id.clone()).or_insert(date_str);
+                        session_committed_date
+                            .entry(ev.session_id.clone())
+                            .or_insert(date_str);
                     }
                 }
             }
@@ -1322,7 +1462,11 @@ fn compute_trend_data(
                 continue;
             }
             if let Some(committed_date) = session_committed_date.get(&ev.session_id) {
-                let cost = ev.payload.get("cost_usd").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                let cost = ev
+                    .payload
+                    .get("cost_usd")
+                    .and_then(|v| v.as_f64())
+                    .unwrap_or(0.0);
                 let entry = daily_cost.entry(committed_date.clone()).or_insert((0.0, 0));
                 entry.0 += cost;
                 entry.1 += 1;
@@ -1335,7 +1479,11 @@ fn compute_trend_data(
             .iter()
             .map(|(date, (feats, total))| DailyMetric {
                 date: date.clone(),
-                value: if *total > 0 { *feats as f64 / *total as f64 } else { 0.0 },
+                value: if *total > 0 {
+                    *feats as f64 / *total as f64
+                } else {
+                    0.0
+                },
                 count: *total,
             })
             .collect();
@@ -1347,7 +1495,11 @@ fn compute_trend_data(
                 let total_cost = cost_data.map(|(c, _)| *c).unwrap_or(0.0);
                 DailyMetric {
                     date: date.clone(),
-                    value: if *total > 0 { total_cost / *total as f64 } else { 0.0 },
+                    value: if *total > 0 {
+                        total_cost / *total as f64
+                    } else {
+                        0.0
+                    },
                     count: *total,
                 }
             })
@@ -1513,8 +1665,11 @@ fn print_table(report: &StatsReport) {
             let signal = if pe.low_signal { "LOW" } else { "ok" };
             println!(
                 "  {:<40} {:>8} {:>8} {:>7.1}% {:>10}",
-                pe.pattern_id, pe.injection_count, pe.citation_count,
-                pe.citation_rate * 100.0, signal
+                pe.pattern_id,
+                pe.injection_count,
+                pe.citation_count,
+                pe.citation_rate * 100.0,
+                signal
             );
             if !pe.cited_task_ids.is_empty() {
                 println!("    cited in: {}", pe.cited_task_ids.join(", "));
@@ -1530,14 +1685,18 @@ fn print_table(report: &StatsReport) {
         match trust.acceptance_rate {
             Some(r) => println!(
                 "  Acceptance rate:      {:.1}%  ({} feat / {} completed)",
-                r * 100.0, trust.feat_tasks, trust.completed_tasks
+                r * 100.0,
+                trust.feat_tasks,
+                trust.completed_tasks
             ),
             None => println!("  Acceptance rate:      n/a  (no completed tasks)"),
         }
         match trust.review_rescue_rate {
             Some(r) => println!(
                 "  Review rescue rate:   {:.1}%  ({} rescued / {} with findings)",
-                r * 100.0, trust.rescued_tasks, trust.tasks_with_findings
+                r * 100.0,
+                trust.rescued_tasks,
+                trust.tasks_with_findings
             ),
             None => println!("  Review rescue rate:   n/a  (no tasks with findings)"),
         }
@@ -1553,8 +1712,11 @@ fn print_table(report: &StatsReport) {
             for mc in &trust.model_comparisons {
                 println!(
                     "  {:<30} {:>6} {:>7.1}% {:>9.2} {:>9.1}s",
-                    mc.model_key, mc.task_count, mc.feat_rate * 100.0,
-                    mc.avg_cost_per_task, mc.avg_duration_per_task
+                    mc.model_key,
+                    mc.task_count,
+                    mc.feat_rate * 100.0,
+                    mc.avg_cost_per_task,
+                    mc.avg_duration_per_task
                 );
             }
         }
@@ -1585,7 +1747,12 @@ fn print_table(report: &StatsReport) {
             let last = &trend.daily_pass_rate[trend.daily_pass_rate.len() - 1].date;
             println!("  Pass rate:  {} .. {}  [{}]", first, last, spark);
             for d in &trend.daily_pass_rate {
-                println!("    {}  {:.0}%  ({} tasks)", d.date, d.value * 100.0, d.count);
+                println!(
+                    "    {}  {:.0}%  ({} tasks)",
+                    d.date,
+                    d.value * 100.0,
+                    d.count
+                );
             }
         } else {
             println!("  Pass rate:  (no data)");
@@ -1712,52 +1879,88 @@ mod tests {
         let s = "sess-1";
         vec![
             make_event(
-                "2025-01-15T10:00:00Z", s, p, "session_started",
+                "2025-01-15T10:00:00Z",
+                s,
+                p,
+                "session_started",
                 serde_json::json!({"type": "SessionStarted", "config": {}}),
             ),
             make_event(
-                "2025-01-15T10:01:00Z", s, p, "task_started",
+                "2025-01-15T10:01:00Z",
+                s,
+                p,
+                "task_started",
                 serde_json::json!({"type": "TaskStarted", "task_id": "T1", "description": "Build X", "complexity": "medium"}),
             ),
             make_event(
-                "2025-01-15T10:02:00Z", s, p, "agent_done",
+                "2025-01-15T10:02:00Z",
+                s,
+                p,
+                "agent_done",
                 serde_json::json!({"type": "AgentDone", "role": "planner", "success": true, "duration_secs": 30.0, "tokens_in": 1000, "tokens_out": 500, "cost_usd": 0.05, "context_pct": 10, "cache_creation_tokens": 200, "cache_read_tokens": 800}),
             ),
             make_event(
-                "2025-01-15T10:03:00Z", s, p, "agent_done",
+                "2025-01-15T10:03:00Z",
+                s,
+                p,
+                "agent_done",
                 serde_json::json!({"type": "AgentDone", "role": "builder", "success": true, "duration_secs": 60.0, "tokens_in": 5000, "tokens_out": 2000, "cost_usd": 0.25, "context_pct": 30, "cache_creation_tokens": 1000, "cache_read_tokens": 4000}),
             ),
             make_event(
-                "2025-01-15T10:04:00Z", s, p, "review_findings",
+                "2025-01-15T10:04:00Z",
+                s,
+                p,
+                "review_findings",
                 serde_json::json!({"type": "ReviewFindings", "task_id": "T1", "high": 0, "medium": 0, "low": 1, "findings_json": "[]"}),
             ),
             make_event(
-                "2025-01-15T10:05:00Z", s, p, "pattern_injected",
+                "2025-01-15T10:05:00Z",
+                s,
+                p,
+                "pattern_injected",
                 serde_json::json!({"type": "PatternInjected", "task_id": "T1", "pattern_ids": ["pat-a", "pat-b"], "count": 2}),
             ),
             make_event(
-                "2025-01-15T10:06:00Z", s, p, "committed",
+                "2025-01-15T10:06:00Z",
+                s,
+                p,
+                "committed",
                 serde_json::json!({"type": "Committed", "task_id": "T1", "sha": "abc123", "commit_type": "feat"}),
             ),
             // Second task in same session
             make_event(
-                "2025-01-15T10:10:00Z", s, p, "task_started",
+                "2025-01-15T10:10:00Z",
+                s,
+                p,
+                "task_started",
                 serde_json::json!({"type": "TaskStarted", "task_id": "T2", "description": "Fix Y", "complexity": "simple"}),
             ),
             make_event(
-                "2025-01-15T10:11:00Z", s, p, "agent_done",
+                "2025-01-15T10:11:00Z",
+                s,
+                p,
+                "agent_done",
                 serde_json::json!({"type": "AgentDone", "role": "builder", "success": true, "duration_secs": 45.0, "tokens_in": 3000, "tokens_out": 1000, "cost_usd": 0.15, "context_pct": 20, "cache_creation_tokens": 500, "cache_read_tokens": 2500}),
             ),
             make_event(
-                "2025-01-15T10:12:00Z", s, p, "review_findings",
+                "2025-01-15T10:12:00Z",
+                s,
+                p,
+                "review_findings",
                 serde_json::json!({"type": "ReviewFindings", "task_id": "T2", "high": 1, "medium": 0, "low": 0, "findings_json": "[]"}),
             ),
             make_event(
-                "2025-01-15T10:13:00Z", s, p, "committed",
+                "2025-01-15T10:13:00Z",
+                s,
+                p,
+                "committed",
                 serde_json::json!({"type": "Committed", "task_id": "T2", "sha": "def456", "commit_type": "WIP"}),
             ),
             make_event(
-                "2025-01-15T10:20:00Z", s, p, "session_ended",
+                "2025-01-15T10:20:00Z",
+                s,
+                p,
+                "session_ended",
                 serde_json::json!({"type": "SessionEnded", "total_tasks": 2, "feat_count": 1, "wip_count": 1, "total_cost_usd": 0.45, "duration_secs": 1200.0}),
             ),
         ]
@@ -1901,15 +2104,24 @@ mod tests {
         let s = "sess-1";
         let events = vec![
             make_event(
-                "2025-01-15T10:00:00Z", s, p, "agent_done",
+                "2025-01-15T10:00:00Z",
+                s,
+                p,
+                "agent_done",
                 serde_json::json!({"role": "builder", "cost_usd": 0.10, "tokens_in": 100, "tokens_out": 50}),
             ),
             make_event(
-                "2025-01-15T10:01:00Z", s, p, "agent_done",
+                "2025-01-15T10:01:00Z",
+                s,
+                p,
+                "agent_done",
                 serde_json::json!({"role": "reviewer", "cost_usd": 0.05, "tokens_in": 50, "tokens_out": 25}),
             ),
             make_event(
-                "2025-01-15T10:02:00Z", s, p, "budget_overrun",
+                "2025-01-15T10:02:00Z",
+                s,
+                p,
+                "budget_overrun",
                 serde_json::json!({"task_id": "T1", "phase": "builder", "target_pct": 80, "actual_pct": 95, "recovery_action": "skip_doubt"}),
             ),
         ];
@@ -1992,12 +2204,13 @@ mod tests {
     fn test_feat_wip_ratio_no_wip() {
         let p = "/test/project";
         let s = "sess-1";
-        let events = vec![
-            make_event(
-                "2025-01-15T10:00:00Z", s, p, "committed",
-                serde_json::json!({"task_id": "T1", "sha": "abc", "commit_type": "feat"}),
-            ),
-        ];
+        let events = vec![make_event(
+            "2025-01-15T10:00:00Z",
+            s,
+            p,
+            "committed",
+            serde_json::json!({"task_id": "T1", "sha": "abc", "commit_type": "feat"}),
+        )];
         let report = compute_stats(&events, 0, 7, None, false);
         // No WIP commits -> ratio is None
         assert!(report.summary.feat_wip_ratio.is_none());
@@ -2011,36 +2224,59 @@ mod tests {
         let s = "sess-1";
         let events = vec![
             make_event(
-                "2025-01-15T10:00:00Z", s, p, "pattern_injected",
+                "2025-01-15T10:00:00Z",
+                s,
+                p,
+                "pattern_injected",
                 serde_json::json!({"type": "PatternInjected", "task_id": "T1", "pattern_ids": ["pat-a", "pat-b", "pat-c"], "count": 3}),
             ),
             make_event(
-                "2025-01-15T10:01:00Z", s, p, "pattern_injected",
+                "2025-01-15T10:01:00Z",
+                s,
+                p,
+                "pattern_injected",
                 serde_json::json!({"type": "PatternInjected", "task_id": "T2", "pattern_ids": ["pat-a", "pat-b"], "count": 2}),
             ),
             make_event(
-                "2025-01-15T10:02:00Z", s, p, "pattern_injected",
+                "2025-01-15T10:02:00Z",
+                s,
+                p,
+                "pattern_injected",
                 serde_json::json!({"type": "PatternInjected", "task_id": "T3", "pattern_ids": ["pat-a"], "count": 1}),
             ),
             // pat-a cited in T1 and T2
             make_event(
-                "2025-01-15T10:03:00Z", s, p, "pattern_cited",
+                "2025-01-15T10:03:00Z",
+                s,
+                p,
+                "pattern_cited",
                 serde_json::json!({"type": "PatternCited", "task_id": "T1", "role": "Planner", "artifact": "current-plan.md", "pattern_id": "pat-a"}),
             ),
             make_event(
-                "2025-01-15T10:04:00Z", s, p, "pattern_cited",
+                "2025-01-15T10:04:00Z",
+                s,
+                p,
+                "pattern_cited",
                 serde_json::json!({"type": "PatternCited", "task_id": "T2", "role": "Reviewer", "artifact": "review-report.md", "pattern_id": "pat-a"}),
             ),
             // pat-b cited in T1 only
             make_event(
-                "2025-01-15T10:05:00Z", s, p, "pattern_cited",
+                "2025-01-15T10:05:00Z",
+                s,
+                p,
+                "pattern_cited",
                 serde_json::json!({"type": "PatternCited", "task_id": "T1", "role": "Planner", "artifact": "current-plan.md", "pattern_id": "pat-b"}),
             ),
         ];
         let report = compute_stats(&events, 0, 7, None, false);
 
         // pat-a: injected 3 times, cited 2 times
-        let pat_a = report.patterns.effectiveness.iter().find(|e| e.pattern_id == "pat-a").unwrap();
+        let pat_a = report
+            .patterns
+            .effectiveness
+            .iter()
+            .find(|e| e.pattern_id == "pat-a")
+            .unwrap();
         assert_eq!(pat_a.injection_count, 3);
         assert_eq!(pat_a.citation_count, 2);
         assert!((pat_a.citation_rate - 2.0 / 3.0).abs() < 0.001);
@@ -2049,10 +2285,20 @@ mod tests {
         assert!(pat_a.cited_task_ids.contains(&"T2".to_string()));
 
         // pat-b: injected 2 times (below threshold of 3) -- should NOT appear in effectiveness
-        assert!(report.patterns.effectiveness.iter().find(|e| e.pattern_id == "pat-b").is_none());
+        assert!(report
+            .patterns
+            .effectiveness
+            .iter()
+            .find(|e| e.pattern_id == "pat-b")
+            .is_none());
 
         // pat-c: injected 1 time -- should NOT appear in effectiveness
-        assert!(report.patterns.effectiveness.iter().find(|e| e.pattern_id == "pat-c").is_none());
+        assert!(report
+            .patterns
+            .effectiveness
+            .iter()
+            .find(|e| e.pattern_id == "pat-c")
+            .is_none());
     }
 
     #[test]
@@ -2069,10 +2315,18 @@ mod tests {
         }
         let report = compute_stats(&events, 0, 7, None, false);
 
-        let pat_x = report.patterns.effectiveness.iter().find(|e| e.pattern_id == "pat-x").unwrap();
+        let pat_x = report
+            .patterns
+            .effectiveness
+            .iter()
+            .find(|e| e.pattern_id == "pat-x")
+            .unwrap();
         assert_eq!(pat_x.injection_count, 5);
         assert_eq!(pat_x.citation_count, 0);
-        assert!(pat_x.low_signal, "pattern injected 5+ times with 0 citations should be low_signal=true");
+        assert!(
+            pat_x.low_signal,
+            "pattern injected 5+ times with 0 citations should be low_signal=true"
+        );
         assert!(pat_x.cited_task_ids.is_empty());
         assert!((pat_x.citation_rate).abs() < 0.001);
     }
@@ -2084,40 +2338,68 @@ mod tests {
         let events = vec![
             // Inject pat-a and pat-b into 3 tasks each
             make_event(
-                "2025-01-15T10:00:00Z", s, p, "pattern_injected",
+                "2025-01-15T10:00:00Z",
+                s,
+                p,
+                "pattern_injected",
                 serde_json::json!({"type": "PatternInjected", "task_id": "T1", "pattern_ids": ["pat-a", "pat-b"], "count": 2}),
             ),
             make_event(
-                "2025-01-15T10:01:00Z", s, p, "pattern_injected",
+                "2025-01-15T10:01:00Z",
+                s,
+                p,
+                "pattern_injected",
                 serde_json::json!({"type": "PatternInjected", "task_id": "T2", "pattern_ids": ["pat-a", "pat-b"], "count": 2}),
             ),
             make_event(
-                "2025-01-15T10:02:00Z", s, p, "pattern_injected",
+                "2025-01-15T10:02:00Z",
+                s,
+                p,
+                "pattern_injected",
                 serde_json::json!({"type": "PatternInjected", "task_id": "T3", "pattern_ids": ["pat-a", "pat-b"], "count": 2}),
             ),
             // Only pat-a is cited; pat-b is never cited
             make_event(
-                "2025-01-15T10:03:00Z", s, p, "pattern_cited",
+                "2025-01-15T10:03:00Z",
+                s,
+                p,
+                "pattern_cited",
                 serde_json::json!({"type": "PatternCited", "task_id": "T1", "role": "Planner", "artifact": "current-plan.md", "pattern_id": "pat-a"}),
             ),
             // PatternApplied only contains cited subset (pat-a only)
             make_event(
-                "2025-01-15T10:04:00Z", s, p, "pattern_applied",
+                "2025-01-15T10:04:00Z",
+                s,
+                p,
+                "pattern_applied",
                 serde_json::json!({"type": "PatternApplied", "task_id": "T1", "pattern_ids": ["pat-a"], "count": 1}),
             ),
         ];
         let report = compute_stats(&events, 0, 7, None, false);
 
         // pat-a: injected 3, cited 1
-        let pat_a = report.patterns.effectiveness.iter().find(|e| e.pattern_id == "pat-a").unwrap();
+        let pat_a = report
+            .patterns
+            .effectiveness
+            .iter()
+            .find(|e| e.pattern_id == "pat-a")
+            .unwrap();
         assert_eq!(pat_a.citation_count, 1);
         assert!(!pat_a.low_signal);
 
         // pat-b: injected 3, cited 0 -- effectiveness shows it with low_signal=false (needs 5+ for low_signal)
-        let pat_b = report.patterns.effectiveness.iter().find(|e| e.pattern_id == "pat-b").unwrap();
+        let pat_b = report
+            .patterns
+            .effectiveness
+            .iter()
+            .find(|e| e.pattern_id == "pat-b")
+            .unwrap();
         assert_eq!(pat_b.injection_count, 3);
         assert_eq!(pat_b.citation_count, 0);
-        assert!(!pat_b.low_signal, "low_signal only triggers at injection_count >= 5");
+        assert!(
+            !pat_b.low_signal,
+            "low_signal only triggers at injection_count >= 5"
+        );
         assert!(pat_b.cited_task_ids.is_empty());
     }
 
@@ -2127,11 +2409,17 @@ mod tests {
         let s = "sess-1";
         let events = vec![
             make_event(
-                "2025-01-15T10:00:00Z", s, p, "pattern_injected",
+                "2025-01-15T10:00:00Z",
+                s,
+                p,
+                "pattern_injected",
                 serde_json::json!({"type": "PatternInjected", "task_id": "T1", "pattern_ids": ["pat-a"], "count": 1}),
             ),
             make_event(
-                "2025-01-15T10:01:00Z", s, p, "pattern_injected",
+                "2025-01-15T10:01:00Z",
+                s,
+                p,
+                "pattern_injected",
                 serde_json::json!({"type": "PatternInjected", "task_id": "T2", "pattern_ids": ["pat-a"], "count": 1}),
             ),
         ];
@@ -2147,15 +2435,24 @@ mod tests {
         let s = "sess-1";
         let events = vec![
             make_event(
-                "2025-01-15T10:00:00Z", s, p, "session_started",
+                "2025-01-15T10:00:00Z",
+                s,
+                p,
+                "session_started",
                 serde_json::json!({"type": "SessionStarted", "config": {}}),
             ),
             make_event(
-                "2025-01-15T10:01:00Z", s, p, "task_started",
+                "2025-01-15T10:01:00Z",
+                s,
+                p,
+                "task_started",
                 serde_json::json!({"type": "TaskStarted", "task_id": "T1", "description": "Build feature X", "complexity": "Medium"}),
             ),
             make_event(
-                "2025-01-15T10:05:00Z", s, p, "task_completed",
+                "2025-01-15T10:05:00Z",
+                s,
+                p,
+                "task_completed",
                 serde_json::json!({
                     "type": "TaskCompleted",
                     "task_id": "T1", "verdict": "feat", "complexity": "Medium",
@@ -2167,11 +2464,17 @@ mod tests {
                 }),
             ),
             make_event(
-                "2025-01-15T10:10:00Z", s, p, "task_started",
+                "2025-01-15T10:10:00Z",
+                s,
+                p,
+                "task_started",
                 serde_json::json!({"type": "TaskStarted", "task_id": "T2", "description": "Fix bug Y", "complexity": "Simple"}),
             ),
             make_event(
-                "2025-01-15T10:15:00Z", s, p, "task_completed",
+                "2025-01-15T10:15:00Z",
+                s,
+                p,
+                "task_completed",
                 serde_json::json!({
                     "type": "TaskCompleted",
                     "task_id": "T2", "verdict": "wip", "complexity": "Simple",
@@ -2183,7 +2486,10 @@ mod tests {
                 }),
             ),
             make_event(
-                "2025-01-15T10:20:00Z", s, p, "task_completed",
+                "2025-01-15T10:20:00Z",
+                s,
+                p,
+                "task_completed",
                 serde_json::json!({
                     "type": "TaskCompleted",
                     "task_id": "T3", "verdict": "feat", "complexity": "Medium",
@@ -2214,7 +2520,11 @@ mod tests {
 
         // Model comparison: claude:opus (2 tasks), codex: (1 task)
         assert_eq!(trust.model_comparisons.len(), 2);
-        let claude_opus = trust.model_comparisons.iter().find(|m| m.model_key == "claude:opus").unwrap();
+        let claude_opus = trust
+            .model_comparisons
+            .iter()
+            .find(|m| m.model_key == "claude:opus")
+            .unwrap();
         assert_eq!(claude_opus.task_count, 2);
         assert!((claude_opus.feat_rate - 0.5).abs() < 0.001);
         assert!((claude_opus.avg_cost_per_task - 0.40).abs() < 0.001);
@@ -2249,7 +2559,10 @@ mod tests {
         let s = "sess-1";
         let events = vec![
             make_event(
-                "2025-01-15T10:00:00Z", s, p, "task_completed",
+                "2025-01-15T10:00:00Z",
+                s,
+                p,
+                "task_completed",
                 serde_json::json!({
                     "type": "TaskCompleted",
                     "task_id": "T1", "verdict": "feat", "complexity": "Medium",
@@ -2261,7 +2574,10 @@ mod tests {
                 }),
             ),
             make_event(
-                "2025-01-15T11:00:00Z", s, p, "task_completed",
+                "2025-01-15T11:00:00Z",
+                s,
+                p,
+                "task_completed",
                 serde_json::json!({
                     "type": "TaskCompleted",
                     "task_id": "T2", "verdict": "wip", "complexity": "Simple",
@@ -2273,7 +2589,10 @@ mod tests {
                 }),
             ),
             make_event(
-                "2025-01-16T09:00:00Z", s, p, "task_completed",
+                "2025-01-16T09:00:00Z",
+                s,
+                p,
+                "task_completed",
                 serde_json::json!({
                     "type": "TaskCompleted",
                     "task_id": "T3", "verdict": "feat", "complexity": "Medium",
@@ -2311,11 +2630,17 @@ mod tests {
         let s = "sess-1";
         let events = vec![
             make_event(
-                "2025-01-15T10:00:00Z", s, p, "task_started",
+                "2025-01-15T10:00:00Z",
+                s,
+                p,
+                "task_started",
                 serde_json::json!({"type": "TaskStarted", "task_id": "T1.1", "description": "Implement authentication middleware", "complexity": "Complex"}),
             ),
             make_event(
-                "2025-01-15T10:05:00Z", s, p, "task_completed",
+                "2025-01-15T10:05:00Z",
+                s,
+                p,
+                "task_completed",
                 serde_json::json!({
                     "type": "TaskCompleted",
                     "task_id": "T1.1", "verdict": "feat", "complexity": "Complex",
@@ -2327,11 +2652,17 @@ mod tests {
                 }),
             ),
             make_event(
-                "2025-01-16T10:00:00Z", s, p, "task_started",
+                "2025-01-16T10:00:00Z",
+                s,
+                p,
+                "task_started",
                 serde_json::json!({"type": "TaskStarted", "task_id": "D1.1", "description": "Authentication middleware returns wrong status code", "complexity": "Simple"}),
             ),
             make_event(
-                "2025-01-16T10:05:00Z", s, p, "task_completed",
+                "2025-01-16T10:05:00Z",
+                s,
+                p,
+                "task_completed",
                 serde_json::json!({
                     "type": "TaskCompleted",
                     "task_id": "D1.1", "verdict": "feat", "complexity": "Simple",
@@ -2350,8 +2681,12 @@ mod tests {
         assert_eq!(trust.regression_proxies.len(), 1);
         assert_eq!(trust.regression_proxies[0].discovery_task_id, "D1.1");
         assert_eq!(trust.regression_proxies[0].prior_feat_task_id, "T1.1");
-        assert!(trust.regression_proxies[0].shared_tokens.contains(&"authentication".to_string()));
-        assert!(trust.regression_proxies[0].shared_tokens.contains(&"middleware".to_string()));
+        assert!(trust.regression_proxies[0]
+            .shared_tokens
+            .contains(&"authentication".to_string()));
+        assert!(trust.regression_proxies[0]
+            .shared_tokens
+            .contains(&"middleware".to_string()));
     }
 
     #[test]
@@ -2393,7 +2728,9 @@ mod tests {
         assert!(is_pr_review_session("pr-review-alice-org--repo-10"));
         assert!(!is_pr_review_session("build-sess-1"));
         assert!(!is_pr_review_session(""));
-        assert!(!is_pr_review_session("af20d11b-1234-5678-9abc-def012345678"));
+        assert!(!is_pr_review_session(
+            "af20d11b-1234-5678-9abc-def012345678"
+        ));
     }
 
     #[test]
@@ -2402,44 +2739,74 @@ mod tests {
         let events = vec![
             // Build-loop session
             make_event(
-                "2025-01-15T10:00:00Z", "build-sess-1", p, "session_started",
+                "2025-01-15T10:00:00Z",
+                "build-sess-1",
+                p,
+                "session_started",
                 serde_json::json!({"type": "SessionStarted", "config": {}}),
             ),
             make_event(
-                "2025-01-15T10:01:00Z", "build-sess-1", p, "task_started",
+                "2025-01-15T10:01:00Z",
+                "build-sess-1",
+                p,
+                "task_started",
                 serde_json::json!({"type": "TaskStarted", "task_id": "T1", "description": "task", "complexity": "medium"}),
             ),
             make_event(
-                "2025-01-15T10:02:00Z", "build-sess-1", p, "agent_done",
+                "2025-01-15T10:02:00Z",
+                "build-sess-1",
+                p,
+                "agent_done",
                 serde_json::json!({"type": "AgentDone", "role": "Builder", "success": true, "duration_secs": 30.0, "tokens_in": 1000, "tokens_out": 500, "cost_usd": 0.10, "context_pct": 10}),
             ),
             make_event(
-                "2025-01-15T10:03:00Z", "build-sess-1", p, "review_findings",
+                "2025-01-15T10:03:00Z",
+                "build-sess-1",
+                p,
+                "review_findings",
                 serde_json::json!({"type": "ReviewFindings", "task_id": "T1", "high": 1, "medium": 0, "low": 0, "findings_json": "[]"}),
             ),
             make_event(
-                "2025-01-15T10:04:00Z", "build-sess-1", p, "committed",
+                "2025-01-15T10:04:00Z",
+                "build-sess-1",
+                p,
+                "committed",
                 serde_json::json!({"type": "Committed", "task_id": "T1", "sha": "abc", "commit_type": "feat"}),
             ),
             make_event(
-                "2025-01-15T10:05:00Z", "build-sess-1", p, "session_ended",
+                "2025-01-15T10:05:00Z",
+                "build-sess-1",
+                p,
+                "session_ended",
                 serde_json::json!({"type": "SessionEnded", "total_tasks": 1, "feat_count": 1, "wip_count": 0, "total_cost_usd": 0.10, "duration_secs": 300.0}),
             ),
             // PR review session -- should be excluded from build stats
             make_event(
-                "2025-01-15T11:00:00Z", "pr-review-owner--repo-42", p, "session_started",
+                "2025-01-15T11:00:00Z",
+                "pr-review-owner--repo-42",
+                p,
+                "session_started",
                 serde_json::json!({"type": "SessionStarted", "config": {"pr_number": 42}}),
             ),
             make_event(
-                "2025-01-15T11:01:00Z", "pr-review-owner--repo-42", p, "agent_done",
+                "2025-01-15T11:01:00Z",
+                "pr-review-owner--repo-42",
+                p,
+                "agent_done",
                 serde_json::json!({"type": "AgentDone", "role": "Reviewer", "success": true, "duration_secs": 60.0, "tokens_in": 5000, "tokens_out": 2000, "cost_usd": 0.50, "context_pct": 40}),
             ),
             make_event(
-                "2025-01-15T11:02:00Z", "pr-review-owner--repo-42", p, "review_findings",
+                "2025-01-15T11:02:00Z",
+                "pr-review-owner--repo-42",
+                p,
+                "review_findings",
                 serde_json::json!({"type": "ReviewFindings", "task_id": "pr-review-owner--repo-42", "high": 2, "medium": 1, "low": 3, "findings_json": "[]"}),
             ),
             make_event(
-                "2025-01-15T11:03:00Z", "pr-review-owner--repo-42", p, "session_ended",
+                "2025-01-15T11:03:00Z",
+                "pr-review-owner--repo-42",
+                p,
+                "session_ended",
                 serde_json::json!({"type": "SessionEnded", "total_tasks": 0, "feat_count": 0, "wip_count": 0, "total_cost_usd": 0.50, "duration_secs": 180.0}),
             ),
         ];
@@ -2447,23 +2814,41 @@ mod tests {
         let report = compute_stats(&events, 0, 7, None, false);
 
         // Build-loop metrics should only reflect the build session
-        assert_eq!(report.summary.total_sessions, 1, "PR review session should not inflate total_sessions");
+        assert_eq!(
+            report.summary.total_sessions, 1,
+            "PR review session should not inflate total_sessions"
+        );
         assert_eq!(report.summary.total_tasks, 1);
         assert_eq!(report.summary.feat_count, 1);
-        assert!((report.summary.total_cost_usd - 0.10).abs() < 0.001, "PR review cost should not inflate total_cost");
+        assert!(
+            (report.summary.total_cost_usd - 0.10).abs() < 0.001,
+            "PR review cost should not inflate total_cost"
+        );
 
         // Phase costs should only have Builder from build session, not Reviewer from PR review
         let reviewer_phase = report.phase_costs.iter().find(|p| p.role == "Reviewer");
-        assert!(reviewer_phase.is_none(), "PR review Reviewer cost should not appear in phase_costs");
+        assert!(
+            reviewer_phase.is_none(),
+            "PR review Reviewer cost should not appear in phase_costs"
+        );
 
         // Quality metrics should only reflect build-loop review_findings
-        assert_eq!(report.quality.tasks_reviewed, 1, "PR review findings should not inflate tasks_reviewed");
+        assert_eq!(
+            report.quality.tasks_reviewed, 1,
+            "PR review findings should not inflate tasks_reviewed"
+        );
         assert_eq!(report.quality.tasks_with_findings, 1);
 
         // PR review stats should be present and accurate
-        let pr = report.pr_reviews.as_ref().expect("pr_reviews should be Some");
+        let pr = report
+            .pr_reviews
+            .as_ref()
+            .expect("pr_reviews should be Some");
         assert_eq!(pr.total_reviews, 1);
-        assert_eq!(pr.failed_reviews, 0, "completed review should not be counted as failed");
+        assert_eq!(
+            pr.failed_reviews, 0,
+            "completed review should not be counted as failed"
+        );
         assert!((pr.total_cost_usd - 0.50).abs() < 0.001);
         assert_eq!(pr.findings_high, 2);
         assert_eq!(pr.findings_medium, 1);
@@ -2476,28 +2861,46 @@ mod tests {
         let p = "/test/project";
         let events = vec![
             make_event(
-                "2025-01-15T11:00:00Z", "pr-review-org--repo-7", p, "session_started",
+                "2025-01-15T11:00:00Z",
+                "pr-review-org--repo-7",
+                p,
+                "session_started",
                 serde_json::json!({"type": "SessionStarted", "config": {"pr_number": 7}}),
             ),
             make_event(
-                "2025-01-15T11:01:00Z", "pr-review-org--repo-7", p, "agent_done",
+                "2025-01-15T11:01:00Z",
+                "pr-review-org--repo-7",
+                p,
+                "agent_done",
                 serde_json::json!({"type": "AgentDone", "role": "Reviewer", "success": true, "duration_secs": 20.0, "tokens_in": 1000, "tokens_out": 500, "cost_usd": 0.05, "context_pct": 10}),
             ),
             make_event(
-                "2025-01-15T11:02:00Z", "pr-review-org--repo-7", p, "session_ended",
+                "2025-01-15T11:02:00Z",
+                "pr-review-org--repo-7",
+                p,
+                "session_ended",
                 serde_json::json!({"type": "SessionEnded", "total_tasks": 0, "feat_count": 0, "wip_count": 0, "total_cost_usd": 0.05, "duration_secs": 60.0}),
             ),
         ];
 
         let report = compute_stats(&events, 0, 7, None, false);
 
-        assert_eq!(report.summary.total_sessions, 0, "PR review-only should yield 0 build sessions");
+        assert_eq!(
+            report.summary.total_sessions, 0,
+            "PR review-only should yield 0 build sessions"
+        );
         assert_eq!(report.summary.total_cost_usd, 0.0);
         assert!(report.phase_costs.is_empty());
 
-        let pr = report.pr_reviews.as_ref().expect("pr_reviews should be Some");
+        let pr = report
+            .pr_reviews
+            .as_ref()
+            .expect("pr_reviews should be Some");
         assert_eq!(pr.total_reviews, 0);
-        assert_eq!(pr.failed_reviews, 1, "session with no review_findings counts as failed");
+        assert_eq!(
+            pr.failed_reviews, 1,
+            "session with no review_findings counts as failed"
+        );
         assert!((pr.total_cost_usd - 0.05).abs() < 0.001);
     }
 
@@ -2508,25 +2911,46 @@ mod tests {
         let p = "/test/project";
         let events = vec![
             make_event(
-                "2025-01-15T11:00:00Z", "pr-review-owner--repo-99", p, "session_started",
+                "2025-01-15T11:00:00Z",
+                "pr-review-owner--repo-99",
+                p,
+                "session_started",
                 serde_json::json!({"type": "SessionStarted", "config": {"pr_number": 99}}),
             ),
             make_event(
-                "2025-01-15T11:01:00Z", "pr-review-owner--repo-99", p, "agent_done",
+                "2025-01-15T11:01:00Z",
+                "pr-review-owner--repo-99",
+                p,
+                "agent_done",
                 serde_json::json!({"type": "AgentDone", "role": "Reviewer", "success": false, "duration_secs": 45.0, "tokens_in": 3000, "tokens_out": 100, "cost_usd": 0.25, "context_pct": 20}),
             ),
             make_event(
-                "2025-01-15T11:02:00Z", "pr-review-owner--repo-99", p, "session_ended",
+                "2025-01-15T11:02:00Z",
+                "pr-review-owner--repo-99",
+                p,
+                "session_ended",
                 serde_json::json!({"type": "SessionEnded", "total_tasks": 0, "feat_count": 0, "wip_count": 0, "total_cost_usd": 0.25, "duration_secs": 120.0}),
             ),
         ];
 
         let report = compute_stats(&events, 0, 7, None, false);
 
-        let pr = report.pr_reviews.as_ref().expect("pr_reviews should be Some (session existed)");
-        assert_eq!(pr.total_reviews, 0, "orphaned session (no review_findings) should not count as a completed review");
-        assert_eq!(pr.failed_reviews, 1, "orphaned session should count as failed review");
-        assert!((pr.total_cost_usd - 0.25).abs() < 0.001, "cost should still be tracked even for failed reviews");
+        let pr = report
+            .pr_reviews
+            .as_ref()
+            .expect("pr_reviews should be Some (session existed)");
+        assert_eq!(
+            pr.total_reviews, 0,
+            "orphaned session (no review_findings) should not count as a completed review"
+        );
+        assert_eq!(
+            pr.failed_reviews, 1,
+            "orphaned session should count as failed review"
+        );
+        assert!(
+            (pr.total_cost_usd - 0.25).abs() < 0.001,
+            "cost should still be tracked even for failed reviews"
+        );
         assert_eq!(pr.findings_high, 0);
         assert_eq!(pr.findings_medium, 0);
         assert_eq!(pr.findings_low, 0);
@@ -2541,34 +2965,61 @@ mod tests {
         let events = vec![
             // Completed review
             make_event(
-                "2025-01-15T11:00:00Z", "pr-review-owner--repo-42", p, "session_started",
+                "2025-01-15T11:00:00Z",
+                "pr-review-owner--repo-42",
+                p,
+                "session_started",
                 serde_json::json!({"type": "SessionStarted", "config": {"pr_number": 42}}),
             ),
             make_event(
-                "2025-01-15T11:01:00Z", "pr-review-owner--repo-42", p, "agent_done",
+                "2025-01-15T11:01:00Z",
+                "pr-review-owner--repo-42",
+                p,
+                "agent_done",
                 serde_json::json!({"type": "AgentDone", "role": "Reviewer", "success": true, "duration_secs": 60.0, "tokens_in": 5000, "tokens_out": 2000, "cost_usd": 0.50, "context_pct": 40}),
             ),
             make_event(
-                "2025-01-15T11:02:00Z", "pr-review-owner--repo-42", p, "review_findings",
+                "2025-01-15T11:02:00Z",
+                "pr-review-owner--repo-42",
+                p,
+                "review_findings",
                 serde_json::json!({"type": "ReviewFindings", "task_id": "pr-review-owner--repo-42", "high": 1, "medium": 0, "low": 2, "findings_json": "[]"}),
             ),
             // Orphaned review (crashed, no review_findings)
             make_event(
-                "2025-01-15T12:00:00Z", "pr-review-owner--repo-55", p, "session_started",
+                "2025-01-15T12:00:00Z",
+                "pr-review-owner--repo-55",
+                p,
+                "session_started",
                 serde_json::json!({"type": "SessionStarted", "config": {"pr_number": 55}}),
             ),
             make_event(
-                "2025-01-15T12:01:00Z", "pr-review-owner--repo-55", p, "agent_done",
+                "2025-01-15T12:01:00Z",
+                "pr-review-owner--repo-55",
+                p,
+                "agent_done",
                 serde_json::json!({"type": "AgentDone", "role": "Reviewer", "success": false, "duration_secs": 30.0, "tokens_in": 2000, "tokens_out": 50, "cost_usd": 0.15, "context_pct": 10}),
             ),
         ];
 
         let report = compute_stats(&events, 0, 7, None, false);
 
-        let pr = report.pr_reviews.as_ref().expect("pr_reviews should be Some");
-        assert_eq!(pr.total_reviews, 1, "only the completed review should count");
-        assert_eq!(pr.failed_reviews, 1, "orphaned session should count as failed review");
-        assert!((pr.total_cost_usd - 0.65).abs() < 0.001, "total cost should include both sessions ($0.50 + $0.15)");
+        let pr = report
+            .pr_reviews
+            .as_ref()
+            .expect("pr_reviews should be Some");
+        assert_eq!(
+            pr.total_reviews, 1,
+            "only the completed review should count"
+        );
+        assert_eq!(
+            pr.failed_reviews, 1,
+            "orphaned session should count as failed review"
+        );
+        assert!(
+            (pr.total_cost_usd - 0.65).abs() < 0.001,
+            "total cost should include both sessions ($0.50 + $0.15)"
+        );
         assert_eq!(pr.findings_high, 1);
         assert_eq!(pr.findings_low, 2);
         assert_eq!(pr.reviews.len(), 1);
@@ -2582,32 +3033,56 @@ mod tests {
         let s = "sess-1";
         let events = vec![
             make_event(
-                "2025-01-15T10:00:00Z", s, p, "session_started",
+                "2025-01-15T10:00:00Z",
+                s,
+                p,
+                "session_started",
                 serde_json::json!({"type": "SessionStarted", "config": {}}),
             ),
             make_event(
-                "2025-01-15T10:01:00Z", s, p, "task_started",
+                "2025-01-15T10:01:00Z",
+                s,
+                p,
+                "task_started",
                 serde_json::json!({"type": "TaskStarted", "task_id": "T1", "description": "Build X", "complexity": "medium"}),
             ),
             // First attempt: committed as WIP
             make_event(
-                "2025-01-15T10:05:00Z", s, p, "committed",
+                "2025-01-15T10:05:00Z",
+                s,
+                p,
+                "committed",
                 serde_json::json!({"type": "Committed", "task_id": "T1", "sha": "aaa111", "commit_type": "WIP"}),
             ),
             // Retry: same task committed as feat
             make_event(
-                "2025-01-15T10:10:00Z", s, p, "committed",
+                "2025-01-15T10:10:00Z",
+                s,
+                p,
+                "committed",
                 serde_json::json!({"type": "Committed", "task_id": "T1", "sha": "bbb222", "commit_type": "feat"}),
             ),
             make_event(
-                "2025-01-15T10:15:00Z", s, p, "session_ended",
+                "2025-01-15T10:15:00Z",
+                s,
+                p,
+                "session_ended",
                 serde_json::json!({"type": "SessionEnded", "total_tasks": 1, "feat_count": 1, "wip_count": 0, "total_cost_usd": 0.10, "duration_secs": 900.0}),
             ),
         ];
         let report = compute_stats(&events, 0, 7, None, false);
-        assert_eq!(report.summary.feat_count, 1, "feat_count should be 1 (last commit wins)");
-        assert_eq!(report.summary.wip_count, 0, "wip_count should be 0 (WIP overwritten by feat)");
-        assert!(report.summary.feat_wip_ratio.is_none(), "no WIP means ratio is None");
+        assert_eq!(
+            report.summary.feat_count, 1,
+            "feat_count should be 1 (last commit wins)"
+        );
+        assert_eq!(
+            report.summary.wip_count, 0,
+            "wip_count should be 0 (WIP overwritten by feat)"
+        );
+        assert!(
+            report.summary.feat_wip_ratio.is_none(),
+            "no WIP means ratio is None"
+        );
 
         // Verify the fallback trust dashboard also uses deduplicated counts
         if let Some(ref trust) = report.trust {
@@ -2623,7 +3098,10 @@ mod tests {
         let events = synthetic_session();
         let report = compute_stats(&events, 0, 7, None, false);
 
-        let ce = report.cache_efficiency.as_ref().expect("cache_efficiency should be present");
+        let ce = report
+            .cache_efficiency
+            .as_ref()
+            .expect("cache_efficiency should be present");
         // planner: 200 creation, 800 read; builder: 1000+500=1500 creation, 4000+2500=6500 read
         assert_eq!(ce.total_cache_creation, 1700);
         assert_eq!(ce.total_cache_read, 7300);
@@ -2640,16 +3118,25 @@ mod tests {
         let s = "sess-old";
         let events = vec![
             make_event(
-                "2025-01-15T10:00:00Z", s, p, "session_started",
+                "2025-01-15T10:00:00Z",
+                s,
+                p,
+                "session_started",
                 serde_json::json!({"type": "SessionStarted", "config": {}}),
             ),
             make_event(
-                "2025-01-15T10:02:00Z", s, p, "agent_done",
+                "2025-01-15T10:02:00Z",
+                s,
+                p,
+                "agent_done",
                 serde_json::json!({"type": "AgentDone", "role": "builder", "success": true, "duration_secs": 30.0, "tokens_in": 1000, "tokens_out": 500, "cost_usd": 0.05, "context_pct": 10}),
             ),
         ];
         let report = compute_stats(&events, 0, 7, None, false);
-        assert!(report.cache_efficiency.is_none(), "old events without cache fields should not produce cache_efficiency");
+        assert!(
+            report.cache_efficiency.is_none(),
+            "old events without cache fields should not produce cache_efficiency"
+        );
     }
 
     #[test]
@@ -2658,16 +3145,25 @@ mod tests {
         let s = "sess-anomaly";
         let events = vec![
             make_event(
-                "2025-01-15T10:00:00Z", s, p, "session_started",
+                "2025-01-15T10:00:00Z",
+                s,
+                p,
+                "session_started",
                 serde_json::json!({"type": "SessionStarted", "config": {}}),
             ),
             make_event(
-                "2025-01-15T10:02:00Z", s, p, "agent_done",
+                "2025-01-15T10:02:00Z",
+                s,
+                p,
+                "agent_done",
                 serde_json::json!({"type": "AgentDone", "role": "builder", "success": true, "duration_secs": 60.0, "tokens_in": 80000, "tokens_out": 5000, "cost_usd": 0.50, "context_pct": 40, "cache_creation_tokens": 80000, "cache_read_tokens": 0}),
             ),
         ];
         let report = compute_stats(&events, 0, 7, None, false);
-        let ce = report.cache_efficiency.as_ref().expect("cache_efficiency should be present");
+        let ce = report
+            .cache_efficiency
+            .as_ref()
+            .expect("cache_efficiency should be present");
         assert_eq!(ce.anomalies.len(), 1);
         assert_eq!(ce.anomalies[0].role, "builder");
         assert_eq!(ce.anomalies[0].cache_creation, 80000);
@@ -2679,20 +3175,32 @@ mod tests {
         let s = "sess-1";
         let events = vec![
             make_event(
-                "2025-01-15T10:00:00Z", s, p, "session_started",
+                "2025-01-15T10:00:00Z",
+                s,
+                p,
+                "session_started",
                 serde_json::json!({"type": "SessionStarted", "config": {}, "cc_version": "1.0.20"}),
             ),
             make_event(
-                "2025-01-15T10:01:00Z", s, p, "agent_started",
+                "2025-01-15T10:01:00Z",
+                s,
+                p,
+                "agent_started",
                 serde_json::json!({"type": "AgentStarted", "role": "planner", "provider": "claude", "model": "opus", "cc_version": "1.0.20"}),
             ),
             make_event(
-                "2025-01-15T10:05:00Z", s, p, "agent_done",
+                "2025-01-15T10:05:00Z",
+                s,
+                p,
+                "agent_done",
                 serde_json::json!({"type": "AgentDone", "role": "planner", "success": true, "duration_secs": 30.0, "tokens_in": 1000, "tokens_out": 500, "cost_usd": 0.05, "context_pct": 10}),
             ),
         ];
         let report = compute_stats(&events, 0, 7, None, false);
-        let pv = report.provider_versions.as_ref().expect("provider_versions should be present");
+        let pv = report
+            .provider_versions
+            .as_ref()
+            .expect("provider_versions should be present");
         assert_eq!(pv.versions, vec!["1.0.20"]);
         assert!(pv.warnings.is_empty());
     }
@@ -2702,32 +3210,48 @@ mod tests {
         let p = "/test/project";
         let events = vec![
             make_event(
-                "2025-01-15T10:00:00Z", "sess-1", p, "session_started",
+                "2025-01-15T10:00:00Z",
+                "sess-1",
+                p,
+                "session_started",
                 serde_json::json!({"type": "SessionStarted", "config": {}, "cc_version": "1.0.20"}),
             ),
             make_event(
-                "2025-01-15T11:00:00Z", "sess-2", p, "session_started",
+                "2025-01-15T11:00:00Z",
+                "sess-2",
+                p,
+                "session_started",
                 serde_json::json!({"type": "SessionStarted", "config": {}, "cc_version": "1.0.21"}),
             ),
         ];
         let report = compute_stats(&events, 0, 7, None, false);
-        let pv = report.provider_versions.as_ref().expect("provider_versions should be present");
+        let pv = report
+            .provider_versions
+            .as_ref()
+            .expect("provider_versions should be present");
         assert_eq!(pv.versions.len(), 2);
-        assert!(pv.warnings.iter().any(|w| w.contains("2 CC versions detected")));
+        assert!(pv
+            .warnings
+            .iter()
+            .any(|w| w.contains("2 CC versions detected")));
     }
 
     #[test]
     fn test_provider_versions_absent_for_old_events() {
         let p = "/test/project";
         let s = "sess-old";
-        let events = vec![
-            make_event(
-                "2025-01-15T10:00:00Z", s, p, "session_started",
-                serde_json::json!({"type": "SessionStarted", "config": {}}),
-            ),
-        ];
+        let events = vec![make_event(
+            "2025-01-15T10:00:00Z",
+            s,
+            p,
+            "session_started",
+            serde_json::json!({"type": "SessionStarted", "config": {}}),
+        )];
         let report = compute_stats(&events, 0, 7, None, false);
-        assert!(report.provider_versions.is_none(), "old events without cc_version should not produce provider_versions");
+        assert!(
+            report.provider_versions.is_none(),
+            "old events without cc_version should not produce provider_versions"
+        );
     }
 
     #[test]
@@ -2756,10 +3280,8 @@ mod tests {
         // scoped to a single session.
         let events = synthetic_session();
         // Filter to session "sess-1" (all events are from this session)
-        let session_events: Vec<&EventEnvelope> = events
-            .iter()
-            .filter(|e| e.session_id == "sess-1")
-            .collect();
+        let session_events: Vec<&EventEnvelope> =
+            events.iter().filter(|e| e.session_id == "sess-1").collect();
 
         // Verify we have the expected event types
         let committed_count = session_events
@@ -2784,7 +3306,12 @@ mod tests {
         let total_cost: f64 = session_events
             .iter()
             .filter(|e| e.event_type == "agent_done")
-            .map(|e| e.payload.get("cost_usd").and_then(|v| v.as_f64()).unwrap_or(0.0))
+            .map(|e| {
+                e.payload
+                    .get("cost_usd")
+                    .and_then(|v| v.as_f64())
+                    .unwrap_or(0.0)
+            })
             .sum();
         assert!((total_cost - 0.45).abs() < 0.001);
     }

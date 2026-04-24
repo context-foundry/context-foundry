@@ -36,6 +36,10 @@ fn dual_mode_badge_label(state: &AppState) -> Option<String> {
             .builder_model_specs
             .get(1)
             .map(|spec| Config::display_model_spec(spec)),
+        crate::app::DualSelection::Third => state
+            .builder_model_specs
+            .get(2)
+            .map(|spec| Config::display_model_spec(spec)),
         crate::app::DualSelection::Both => Some("Dual Pipeline".to_string()),
     }
 }
@@ -63,6 +67,17 @@ fn dual_toggle_label(state: &AppState) -> (Color, String) {
                 state
                     .builder_model_specs
                     .get(1)
+                    .map(|spec| short_model_spec(spec))
+                    .unwrap_or_default()
+            ),
+        ),
+        DualSelection::Third => (
+            state.tui_theme.accent,
+            format!(
+                " {}",
+                state
+                    .builder_model_specs
+                    .get(2)
                     .map(|spec| short_model_spec(spec))
                     .unwrap_or_default()
             ),
@@ -197,7 +212,10 @@ pub(super) fn render_header(frame: &mut Frame, area: Rect, state: &AppState) {
                     } else if matches!(state.phase, AppPhase::Planning) || state.dual_arena_ready()
                     {
                         Color::Magenta
-                    } else if state.stop_after_task || state.awaiting_review || state.awaiting_commit_approval {
+                    } else if state.stop_after_task
+                        || state.awaiting_review
+                        || state.awaiting_commit_approval
+                    {
                         Color::Yellow
                     } else {
                         Color::Green
@@ -296,12 +314,11 @@ pub(super) fn render_header(frame: &mut Frame, area: Rect, state: &AppState) {
             header_text.push(Line::from(vec![
                 Span::styled(
                     format!("  Commit {} as {}? ", tid, ptype),
-                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD),
                 ),
-                Span::styled(
-                    "[y] approve  [n] deny",
-                    Style::default().fg(Color::White),
-                ),
+                Span::styled("[y] approve  [n] deny", Style::default().fg(Color::White)),
             ]));
         }
     } else if state.awaiting_review {
@@ -982,16 +999,12 @@ pub(super) fn render_status_bar(frame: &mut Frame, area: Rect, state: &AppState)
     if state.awaiting_commit_approval {
         spans.push(Span::styled(
             "  y ",
-            Style::default()
-                .fg(Color::Black)
-                .bg(Color::Yellow),
+            Style::default().fg(Color::Black).bg(Color::Yellow),
         ));
         spans.push(Span::styled(" approve  ", Style::default().fg(Color::Gray)));
         spans.push(Span::styled(
             "  n ",
-            Style::default()
-                .fg(Color::Black)
-                .bg(Color::Yellow),
+            Style::default().fg(Color::Black).bg(Color::Yellow),
         ));
         spans.push(Span::styled(" deny  ", Style::default().fg(Color::Gray)));
     } else if state.awaiting_review {

@@ -561,7 +561,11 @@ pub fn commit_task_pr(
 
             if add_ok {
                 let commit_ok = Command::new("git")
-                    .args(["commit", "-m", &format!("annotate TASKS.md with PR #{} for {}", pr_num, task_id)])
+                    .args([
+                        "commit",
+                        "-m",
+                        &format!("annotate TASKS.md with PR #{} for {}", pr_num, task_id),
+                    ])
                     .current_dir(project_dir)
                     .output()
                     .map(|o| o.status.success())
@@ -674,7 +678,10 @@ pub fn commit_task_pr(
                         );
                     }
                 } else if let Err(e) = &add_result {
-                    eprintln!("[foundry] WARNING: git add TASKS.md on base branch failed: {}", e);
+                    eprintln!(
+                        "[foundry] WARNING: git add TASKS.md on base branch failed: {}",
+                        e
+                    );
                 }
                 let base_msg = format!("mark {} done on base branch", task_id);
                 let commit_result = Command::new("git")
@@ -689,7 +696,10 @@ pub fn commit_task_pr(
                         );
                     }
                 } else if let Err(e) = &commit_result {
-                    eprintln!("[foundry] WARNING: commit TASKS.md on base branch failed: {}", e);
+                    eprintln!(
+                        "[foundry] WARNING: commit TASKS.md on base branch failed: {}",
+                        e
+                    );
                 }
                 if let Err(e) = maybe_push_commit(project_dir, config.auto_push_remote.as_deref()) {
                     eprintln!("[foundry] WARNING: push base branch failed: {}", e);
@@ -1025,7 +1035,10 @@ mod tests {
             false,
         );
         let (committed, pr) = result.expect("should not error on push failure");
-        assert!(!committed, "committed should be false when push fails (no remote)");
+        assert!(
+            !committed,
+            "committed should be false when push fails (no remote)"
+        );
         assert!(pr.is_none(), "pr_number should be None when push fails");
 
         // After the call, we should be back on the base branch
@@ -1311,7 +1324,10 @@ mod tests {
         );
 
         let (committed, pr) = result.expect("should not error on push failure");
-        assert!(!committed, "committed should be false when push fails (no remote)");
+        assert!(
+            !committed,
+            "committed should be false when push fails (no remote)"
+        );
         assert!(pr.is_none(), "pr should be None when push fails");
 
         // After the call, we should be back on the base branch

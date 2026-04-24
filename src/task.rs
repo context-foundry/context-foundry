@@ -336,10 +336,7 @@ pub fn archive_completed_phases(
     for (i, line) in lines.iter().enumerate() {
         // If this line IS a fully-archived header, replace with a summary line
         if fully_archived_set.contains(&i) {
-            if let Some(&(_, archived, _)) = archive_annotations
-                .iter()
-                .find(|(h, _, _)| *h == i)
-            {
+            if let Some(&(_, archived, _)) = archive_annotations.iter().find(|(h, _, _)| *h == i) {
                 let header_text = line.trim_start_matches("## ").to_string();
                 new_lines.push(format!(
                     "- {} ({} tasks archived to TASKS-ARCHIVE.md)",
@@ -364,27 +361,33 @@ pub fn archive_completed_phases(
         }
         if archived_set.contains(&i) {
             // Check if this is the first archived line in its phase -- insert marker
-            let is_first_in_phase = !archived_set.contains(&(i.saturating_sub(1)))
-                || i == 0;
+            let is_first_in_phase = !archived_set.contains(&(i.saturating_sub(1))) || i == 0;
             if is_first_in_phase {
-                let count = archived_set.iter().filter(|&&idx| {
-                    // Count archived lines in the same phase
-                    let phase = phases.iter().find(|(_, tasks)| tasks.contains(&idx));
-                    let this_phase = phases.iter().find(|(_, tasks)| tasks.contains(&i));
-                    phase.map(|p| p.0) == this_phase.map(|p| p.0)
-                }).count();
-                new_lines.push(format!("  ... ({} tasks archived to TASKS-ARCHIVE.md)", count));
+                let count = archived_set
+                    .iter()
+                    .filter(|&&idx| {
+                        // Count archived lines in the same phase
+                        let phase = phases.iter().find(|(_, tasks)| tasks.contains(&idx));
+                        let this_phase = phases.iter().find(|(_, tasks)| tasks.contains(&i));
+                        phase.map(|p| p.0) == this_phase.map(|p| p.0)
+                    })
+                    .count();
+                new_lines.push(format!(
+                    "  ... ({} tasks archived to TASKS-ARCHIVE.md)",
+                    count
+                ));
             }
             continue;
         }
         // Annotate phase headers with archive counts (large sections only)
-        if let Some(&(_, archived, retained)) = archive_annotations
-            .iter()
-            .find(|(h, _, _)| *h == i)
+        if let Some(&(_, archived, retained)) = archive_annotations.iter().find(|(h, _, _)| *h == i)
         {
             if retained > 0 {
                 let header = line.to_string();
-                new_lines.push(format!("{} ({} archived, {} retained)", header, archived, retained));
+                new_lines.push(format!(
+                    "{} ({} archived, {} retained)",
+                    header, archived, retained
+                ));
             } else {
                 new_lines.push(line.to_string());
             }
@@ -553,10 +556,7 @@ pub fn extract_query_context(tasks_content: &str) -> String {
                     .iter()
                     .filter(|l| !l.trim().is_empty())
                     .count();
-                output.push(format!(
-                    "({} archive references omitted)",
-                    ref_count
-                ));
+                output.push(format!("({} archive references omitted)", ref_count));
                 output.push(String::new());
             } else {
                 for &line in section_lines {
@@ -658,7 +658,8 @@ mod tests {
 
     #[test]
     fn test_extract_query_context_only_pending() {
-        let input = "# Tasks\n\n## Phase 1\n- [ ] T1.1: Do first thing\n- [ ] T1.2: Do second thing\n";
+        let input =
+            "# Tasks\n\n## Phase 1\n- [ ] T1.1: Do first thing\n- [ ] T1.2: Do second thing\n";
         let result = extract_query_context(input);
         assert!(result.contains("- [ ] T1.1: Do first thing"));
         assert!(result.contains("- [ ] T1.2: Do second thing"));

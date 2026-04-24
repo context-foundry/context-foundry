@@ -125,22 +125,14 @@ impl SandboxConfig {
                     if creds_path.exists() {
                         continue;
                     }
-                    extract_keychain_credential(
-                        "Claude Code-credentials",
-                        &user,
-                        &creds_path,
-                    );
+                    extract_keychain_credential("Claude Code-credentials", &user, &creds_path);
                 }
                 ".copilot" => {
                     let config_path = home_path.join(".copilot").join("config.json");
                     if config_path.exists() {
                         continue;
                     }
-                    extract_keychain_credential(
-                        "copilot-cli",
-                        &user,
-                        &config_path,
-                    );
+                    extract_keychain_credential("copilot-cli", &user, &config_path);
                 }
                 _ => {
                     // Custom auth dirs: no automatic credential extraction.
@@ -176,9 +168,7 @@ impl SandboxConfig {
         // Mount configured auth directories from $HOME into the container.
         // Each dir is mounted read-write at /home/node/<dir> so CLIs can
         // write session data and debug logs.
-        if let Some(home) = std::env::var_os("HOME")
-            .or_else(|| std::env::var_os("USERPROFILE"))
-        {
+        if let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) {
             let home_path = Path::new(&home);
             for auth_dir in &self.auth_dirs {
                 let host_dir = home_path.join(auth_dir);
@@ -268,10 +258,8 @@ fn extract_keychain_credential(service: &str, account: &str, dest: &Path) {
                     #[cfg(unix)]
                     {
                         use std::os::unix::fs::PermissionsExt;
-                        let _ = std::fs::set_permissions(
-                            dest,
-                            std::fs::Permissions::from_mode(0o600),
-                        );
+                        let _ =
+                            std::fs::set_permissions(dest, std::fs::Permissions::from_mode(0o600));
                     }
                 }
             }
@@ -363,7 +351,10 @@ mod tests {
 
     #[test]
     fn test_translate_windows_path_drive_letter() {
-        assert_eq!(translate_windows_path(r"C:\Users\name\project"), "/c/Users/name/project");
+        assert_eq!(
+            translate_windows_path(r"C:\Users\name\project"),
+            "/c/Users/name/project"
+        );
         assert_eq!(translate_windows_path(r"D:\work\repo"), "/d/work/repo");
     }
 
@@ -374,8 +365,14 @@ mod tests {
 
     #[test]
     fn test_translate_windows_path_unix_passthrough() {
-        assert_eq!(translate_windows_path("/home/user/project"), "/home/user/project");
-        assert_eq!(translate_windows_path("/Users/name/homelab"), "/Users/name/homelab");
+        assert_eq!(
+            translate_windows_path("/home/user/project"),
+            "/home/user/project"
+        );
+        assert_eq!(
+            translate_windows_path("/Users/name/homelab"),
+            "/Users/name/homelab"
+        );
     }
 
     #[test]
@@ -396,7 +393,11 @@ mod tests {
         };
         let cmd = config.wrap_command_builder(
             "claude",
-            &["-p".into(), "hello".into(), "--dangerously-skip-permissions".into()],
+            &[
+                "-p".into(),
+                "hello".into(),
+                "--dangerously-skip-permissions".into(),
+            ],
             Path::new("/Users/name/project"),
             &[("CLAUDECODE", "")],
         );
@@ -428,8 +429,14 @@ mod tests {
     #[test]
     fn test_sandbox_status_display() {
         assert_eq!(format!("{}", SandboxStatus::Active), "active");
-        assert_eq!(format!("{}", SandboxStatus::DockerNotFound), "docker not found");
-        assert_eq!(format!("{}", SandboxStatus::ImageNotFound), "image not found");
+        assert_eq!(
+            format!("{}", SandboxStatus::DockerNotFound),
+            "docker not found"
+        );
+        assert_eq!(
+            format!("{}", SandboxStatus::ImageNotFound),
+            "image not found"
+        );
         assert_eq!(format!("{}", SandboxStatus::Disabled), "disabled");
     }
 }

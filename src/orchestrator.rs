@@ -522,15 +522,23 @@ pub async fn run_plan_review(
         task_id, task_desc, plan_text
     );
 
-    let outcome = orchestrate(&intent, config, project_dir, log_dir, on_event, event_tx, shutdown).await?;
+    let outcome = orchestrate(
+        &intent,
+        config,
+        project_dir,
+        log_dir,
+        on_event,
+        event_tx,
+        shutdown,
+    )
+    .await?;
 
-    let final_plan_text = if outcome.artifact.artifact_type == "plan"
-        && !outcome.artifact.artifact_text.is_empty()
-    {
-        outcome.artifact.artifact_text.clone()
-    } else {
-        plan_text.to_string()
-    };
+    let final_plan_text =
+        if outcome.artifact.artifact_type == "plan" && !outcome.artifact.artifact_text.is_empty() {
+            outcome.artifact.artifact_text.clone()
+        } else {
+            plan_text.to_string()
+        };
 
     let unresolved_findings = if !outcome.accepted {
         outcome.final_review.findings.clone()
@@ -685,7 +693,10 @@ pub async fn run_design_command(project_dir: &Path, intent: &str) -> Result<()> 
             eprintln!("Sandbox: Docker not found (unsandboxed)");
         }
         crate::sandbox::SandboxStatus::ImageNotFound => {
-            eprintln!("Sandbox: image '{}' not found (unsandboxed)", sandbox_cfg.image);
+            eprintln!(
+                "Sandbox: image '{}' not found (unsandboxed)",
+                sandbox_cfg.image
+            );
         }
         crate::sandbox::SandboxStatus::Disabled => {
             eprintln!("Sandbox: disabled");
@@ -1073,8 +1084,7 @@ mod tests {
 
     #[test]
     fn extract_json_skips_braces_inside_string_values() {
-        let input =
-            r#"{"artifact_type":"code","artifact_text":"x } y","rationale":"test","design_assertions":[]}"#;
+        let input = r#"{"artifact_type":"code","artifact_text":"x } y","rationale":"test","design_assertions":[]}"#;
         let result = extract_json::<ProposerOutput>(input);
         assert!(result.is_some());
         let parsed = result.unwrap();

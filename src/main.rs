@@ -4,29 +4,30 @@ use std::path::PathBuf;
 
 mod agent;
 mod app;
+mod budget;
 mod complexity;
 mod config;
+mod dashboard;
 mod doubt_confidence;
 mod embeddings;
 mod extensions;
 mod git;
+mod history;
 mod isolation;
 mod mcp;
 mod observatory;
 mod orchestrator;
-mod tmux;
+mod patterns;
+mod prompts;
+mod review_pr;
 mod sandbox;
 mod stats;
 mod sync_flag;
-mod review_pr;
-mod budget;
-mod patterns;
-mod prompts;
 mod task;
+mod tmux;
 mod tui;
 mod update;
 mod utils;
-mod dashboard;
 
 #[derive(Parser)]
 #[command(
@@ -191,7 +192,14 @@ async fn main() -> Result<()> {
             output,
             ignore_project_config,
         } => {
-            review_pr::run(&project_dir, pr_number, repo, &output, ignore_project_config).await?;
+            review_pr::run(
+                &project_dir,
+                pr_number,
+                repo,
+                &output,
+                ignore_project_config,
+            )
+            .await?;
         }
         Commands::Patterns { action } => match action {
             PatternAction::Prune { yes } => {

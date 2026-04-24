@@ -362,6 +362,25 @@ fn render_startup_summary(frame: &mut Frame, area: Rect, state: &AppState) {
                             .add_modifier(Modifier::BOLD),
                     )
                 }
+                crate::app::DualSelection::Third => {
+                    let (p, m) = crate::config::Config::parse_model_spec(
+                        state
+                            .builder_model_specs
+                            .get(2)
+                            .map(|s| s.as_str())
+                            .unwrap_or(""),
+                    );
+                    Span::styled(
+                        format!(
+                            "  {} ",
+                            crate::config::Config::display_provider_model(&p, &m)
+                        ),
+                        Style::default()
+                            .fg(Color::Black)
+                            .bg(state.tui_theme.accent)
+                            .add_modifier(Modifier::BOLD),
+                    )
+                }
                 crate::app::DualSelection::Both => Span::styled(
                     "  Dual Pipeline ",
                     Style::default()
@@ -1066,6 +1085,14 @@ pub(super) fn render_startup_status_bar(frame: &mut Frame, area: Rect, state: &A
                 let s = state
                     .builder_model_specs
                     .get(1)
+                    .map(|s| short(s))
+                    .unwrap_or_default();
+                (state.tui_theme.accent, format!(" {s}"))
+            }
+            DualSelection::Third => {
+                let s = state
+                    .builder_model_specs
+                    .get(2)
                     .map(|s| short(s))
                     .unwrap_or_default();
                 (state.tui_theme.accent, format!(" {s}"))

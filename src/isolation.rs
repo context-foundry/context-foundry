@@ -18,7 +18,11 @@ pub struct PhaseIsolation {
 /// Hides TASKS.md, UPDATED_SPECS.md, and checkpoint.json to enforce phase isolation --
 /// Research answers questions based on codebase investigation, not task context.
 /// checkpoint.json contains the full task_desc which would defeat isolation.
-pub fn research_restricted_paths(tasks_path: &Path, updated_specs_path: &Path, buildloop_dir: &Path) -> Vec<PathBuf> {
+pub fn research_restricted_paths(
+    tasks_path: &Path,
+    updated_specs_path: &Path,
+    buildloop_dir: &Path,
+) -> Vec<PathBuf> {
     let mut paths = Vec::new();
     if tasks_path.exists() {
         paths.push(tasks_path.to_path_buf());
@@ -57,8 +61,8 @@ impl PhaseIsolation {
     pub fn activate(restricted_paths: &[PathBuf]) -> Result<Self> {
         static COUNTER: AtomicU64 = AtomicU64::new(0);
         let seq = COUNTER.fetch_add(1, Ordering::Relaxed);
-        let staging_dir = std::env::temp_dir()
-            .join(format!(".foundry-isolation-{}-{}", std::process::id(), seq));
+        let staging_dir =
+            std::env::temp_dir().join(format!(".foundry-isolation-{}-{}", std::process::id(), seq));
         std::fs::create_dir_all(&staging_dir)
             .with_context(|| format!("failed to create staging dir {}", staging_dir.display()))?;
 
@@ -75,7 +79,10 @@ impl PhaseIsolation {
                 .to_os_string();
             let mut temp_name = base_name.clone();
             // Handle collisions from different directories with same filename
-            while hidden.values().any(|v: &PathBuf| v.file_name() == Some(&temp_name)) {
+            while hidden
+                .values()
+                .any(|v: &PathBuf| v.file_name() == Some(&temp_name))
+            {
                 counter += 1;
                 let name_str = base_name.to_string_lossy();
                 temp_name = std::ffi::OsString::from(format!("{}_{}", name_str, counter));
@@ -214,10 +221,10 @@ fn move_file(src: &Path, dst: &Path) -> std::io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
     use std::fs;
     #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
-    use serial_test::serial;
 
     fn setup_temp_files(names: &[&str]) -> (tempfile::TempDir, Vec<PathBuf>) {
         let dir = tempfile::tempdir().unwrap();
@@ -394,11 +401,7 @@ mod tests {
 
         let plan_content = "# Plan\n## Step 1: Create src/isolation.rs\n## Step 2: Modify config";
         fs::write(buildloop.join("current-plan.md"), plan_content).unwrap();
-        fs::write(
-            buildloop.join("questions.md"),
-            "# Questions\nQ1: What?",
-        )
-        .unwrap();
+        fs::write(buildloop.join("questions.md"), "# Questions\nQ1: What?").unwrap();
 
         let restricted = doubt_restricted_paths(&buildloop);
         assert_eq!(restricted.len(), 2);
@@ -460,7 +463,10 @@ mod tests {
 
         // restore() should return Err because it can't restore file_b
         let result = guard2.restore();
-        assert!(result.is_err(), "restore should fail when a destination parent is gone");
+        assert!(
+            result.is_err(),
+            "restore should fail when a destination parent is gone"
+        );
 
         // The key assertion: after a failed restore(), Drop still runs recovery.
         // Since restored is still false, Drop will attempt to move files back.
@@ -470,7 +476,10 @@ mod tests {
         drop(guard2);
 
         // file_a should exist (either restore() got it before the error, or Drop recovered it)
-        assert!(file_a.exists(), "file_a should be recovered after partial failure");
+        assert!(
+            file_a.exists(),
+            "file_a should be recovered after partial failure"
+        );
     }
 
     #[test]
@@ -551,23 +560,36 @@ mod tests {
         let pid = std::process::id();
         let tmp = std::env::temp_dir();
         let prefix = format!(".foundry-isolation-{}-", pid);
-        let collect_staging_dirs = |tmp: &Path, prefix: &str| -> std::collections::HashSet<std::ffi::OsString> {
-            fs::read_dir(tmp)
-                .unwrap()
-                .filter_map(|e| e.ok())
-                .filter(|e| e.file_name().to_string_lossy().starts_with(prefix))
-                .map(|e| e.file_name())
-                .collect()
-        };
+        let collect_staging_dirs =
+            |tmp: &Path, prefix: &str| -> std::collections::HashSet<std::ffi::OsString> {
+                fs::read_dir(tmp)
+                    .unwrap()
+                    .filter_map(|e| e.ok())
+                    .filter(|e| e.file_name().to_string_lossy().starts_with(prefix))
+                    .map(|e| e.file_name())
+                    .collect()
+            };
         let before_dirs = collect_staging_dirs(&tmp, &prefix);
 
         let result = PhaseIsolation::activate(&[file1.clone(), file2.clone(), file3.clone()]);
-        assert!(result.is_err(), "activate should fail when move_file fails for file3");
+        assert!(
+            result.is_err(),
+            "activate should fail when move_file fails for file3"
+        );
 
         // All files should exist at their original locations
-        assert!(file1.exists(), "file1 should be rolled back to original location");
-        assert!(file2.exists(), "file2 should be rolled back to original location");
-        assert!(file3.exists(), "file3 should still exist (move failed before removal)");
+        assert!(
+            file1.exists(),
+            "file1 should be rolled back to original location"
+        );
+        assert!(
+            file2.exists(),
+            "file2 should be rolled back to original location"
+        );
+        assert!(
+            file3.exists(),
+            "file3 should still exist (move failed before removal)"
+        );
         assert_eq!(fs::read_to_string(&file1).unwrap(), "content-1");
         assert_eq!(fs::read_to_string(&file2).unwrap(), "content-2");
 
@@ -606,7 +628,10 @@ mod tests {
 
         // restore() should succeed (Ok), not return Err
         let result = guard.restore();
-        assert!(result.is_ok(), "restore() should return Ok even when temp files are missing");
+        assert!(
+            result.is_ok(),
+            "restore() should return Ok even when temp files are missing"
+        );
 
         // Staging dir must be preserved (not deleted) because a file was missing
         assert!(
@@ -636,8 +661,10 @@ mod tests {
         // filesystem state change possible).
 
         // Set up a staging dir with two files (simulating already-moved files)
-        let staging_dir = std::env::temp_dir()
-            .join(format!(".foundry-isolation-test-rollback-{}", std::process::id()));
+        let staging_dir = std::env::temp_dir().join(format!(
+            ".foundry-isolation-test-rollback-{}",
+            std::process::id()
+        ));
         fs::create_dir_all(&staging_dir).unwrap();
         let temp_a = staging_dir.join("a.md");
         let temp_b = staging_dir.join("b.md");

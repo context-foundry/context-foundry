@@ -82,6 +82,7 @@ pub fn bootstrap_scout_prompt(
     updated_specs: Option<&str>,
     spec_file: &str,
     tasks_file: &str,
+    history_context: Option<&str>,
 ) -> String {
     let intent_block = user_intent
         .filter(|s| !s.trim().is_empty())
@@ -93,9 +94,14 @@ pub fn bootstrap_scout_prompt(
         .map(|specs| format!("\nUPDATED SPECS (user's latest enhancement request):\n{specs}\n"))
         .unwrap_or_default();
 
+    let history_block = history_context
+        .filter(|s| !s.trim().is_empty())
+        .map(|h| format!("\n{h}\n"))
+        .unwrap_or_default();
+
     format!(
         r#"You are the SCOUT agent. Investigate this project and create a task queue.
-{intent_block}{updated_specs_block}
+{intent_block}{updated_specs_block}{history_block}
 YOUR JOB:
 1. Read {spec_file} and UPDATED_SPECS.md if they exist
 2. Detect the tech stack (Cargo.toml, package.json, pyproject.toml, etc.)
@@ -541,7 +547,19 @@ RULES:
 - Do NOT modify {spec_file}, CLAUDE.md, or {tasks_file}
 - Do NOT read files in .buildloop/logs/
 - If a verification step fails, fix it before moving on
-- The claims file is your handoff to the auditor -- be specific, not vague"#
+- The claims file is your handoff to the auditor -- be specific, not vague
+
+PATTERN FEEDBACK:
+If any injected patterns (shown in "Known Patterns" above) helped your work,
+were outdated, or were wrong/misleading, add feedback lines to build-claims.md:
+
+```
+PATTERN_FEEDBACK: pattern-id | confirmed | reason it helped
+PATTERN_FEEDBACK: pattern-id | stale | why it's outdated
+PATTERN_FEEDBACK: pattern-id | wrong | what was incorrect
+```
+
+This is optional -- only add lines for patterns you have a clear opinion about."#
     )
 }
 
@@ -593,7 +611,19 @@ RULES:
 - Do NOT modify {spec_file}, CLAUDE.md, or {tasks_file}
 - Do NOT read files in .buildloop/logs/
 - If a verification step fails on YOUR files, fix it before moving on
-- The claims file is your handoff to the auditor -- be specific, not vague"#
+- The claims file is your handoff to the auditor -- be specific, not vague
+
+PATTERN FEEDBACK:
+If any injected patterns (shown in "Known Patterns" above) helped your work,
+were outdated, or were wrong/misleading, add feedback lines to build-claims.md:
+
+```
+PATTERN_FEEDBACK: pattern-id | confirmed | reason it helped
+PATTERN_FEEDBACK: pattern-id | stale | why it's outdated
+PATTERN_FEEDBACK: pattern-id | wrong | what was incorrect
+```
+
+This is optional -- only add lines for patterns you have a clear opinion about."#
     )
 }
 
@@ -642,7 +672,19 @@ IMPORTANT:
 - Implement exactly what the task description says — do not add unrequested features
 - Do NOT modify {spec_file}, CLAUDE.md, or {tasks_file}
 - If a verification step fails, fix the issue before moving on
-- The claims file is your handoff to an auditor agent -- be specific, not vague"#
+- The claims file is your handoff to an auditor agent -- be specific, not vague
+
+PATTERN FEEDBACK:
+If any injected patterns (shown in "Known Patterns" above) helped your work,
+were outdated, or were wrong/misleading, add feedback lines to build-claims.md:
+
+```
+PATTERN_FEEDBACK: pattern-id | confirmed | reason it helped
+PATTERN_FEEDBACK: pattern-id | stale | why it's outdated
+PATTERN_FEEDBACK: pattern-id | wrong | what was incorrect
+```
+
+This is optional -- only add lines for patterns you have a clear opinion about."#
     )
 }
 
@@ -2126,7 +2168,9 @@ mod tests {
         let needle = "source_evidence";
         let provenance_rule = "PROVENANCE RULES";
 
-        let main = reviewer_prompt("T1", "test", "file.rs", 1, "", None, "SPEC.md", "TASKS.md", "");
+        let main = reviewer_prompt(
+            "T1", "test", "file.rs", 1, "", None, "SPEC.md", "TASKS.md", "",
+        );
         assert!(
             main.contains(needle),
             "reviewer_prompt missing source_evidence in schema"
@@ -2168,7 +2212,9 @@ mod tests {
         let needle_3 = "Borderline 3: unwrap() on user input vs unwrap() on hardcoded constant";
 
         // Main reviewer prompt
-        let main = reviewer_prompt("T1", "test", "file.rs", 1, "", None, "SPEC.md", "TASKS.md", "");
+        let main = reviewer_prompt(
+            "T1", "test", "file.rs", 1, "", None, "SPEC.md", "TASKS.md", "",
+        );
         assert!(
             main.contains(needle_header),
             "reviewer_prompt missing BORDERLINE CASES header"
@@ -2237,7 +2283,14 @@ mod tests {
 
         // Main pr_review_prompt (single-pass)
         let main = pr_review_prompt(
-            1, "test", "body", "feat", "main", "diff", "file.rs", "/tmp/report.md",
+            1,
+            "test",
+            "body",
+            "feat",
+            "main",
+            "diff",
+            "file.rs",
+            "/tmp/report.md",
         );
         assert!(
             main.contains(needle_header),
@@ -2257,9 +2310,7 @@ mod tests {
         );
 
         // Per-file pr_review prompt (multipass)
-        let per_file = pr_review_per_file_prompt(
-            1, "test", "src/foo.rs", "diff", "/tmp/report.md",
-        );
+        let per_file = pr_review_per_file_prompt(1, "test", "src/foo.rs", "diff", "/tmp/report.md");
         assert!(
             per_file.contains(needle_header),
             "pr_review_per_file_prompt missing BORDERLINE CASES header"
@@ -2279,7 +2330,14 @@ mod tests {
 
         // Integration pr_review prompt (multipass)
         let integration = pr_review_integration_prompt(
-            1, "test", "body", "feat", "main", "file.rs", "{}", "/tmp/report.md",
+            1,
+            "test",
+            "body",
+            "feat",
+            "main",
+            "file.rs",
+            "{}",
+            "/tmp/report.md",
         );
         assert!(
             integration.contains(needle_header),
@@ -2304,7 +2362,9 @@ mod tests {
         let needle = "\"confidence\":";
         let scoring_section = "CONFIDENCE SCORING";
 
-        let main = reviewer_prompt("T1", "test", "file.rs", 1, "", None, "SPEC.md", "TASKS.md", "");
+        let main = reviewer_prompt(
+            "T1", "test", "file.rs", 1, "", None, "SPEC.md", "TASKS.md", "",
+        );
         assert!(
             main.contains(needle),
             "reviewer_prompt missing confidence in schema"
@@ -2382,7 +2442,10 @@ mod tests {
 
         let value = parsed.unwrap();
         assert!(value.get("high").is_some(), "JSON must contain 'high' key");
-        assert!(value.get("medium").is_some(), "JSON must contain 'medium' key");
+        assert!(
+            value.get("medium").is_some(),
+            "JSON must contain 'medium' key"
+        );
         assert!(value.get("low").is_some(), "JSON must contain 'low' key");
     }
 
@@ -2395,7 +2458,9 @@ mod tests {
         let prompts: Vec<(&str, String)> = vec![
             (
                 "reviewer_prompt",
-                reviewer_prompt("T1", "test", "file.rs", 1, "", None, "SPEC.md", "TASKS.md", ""),
+                reviewer_prompt(
+                    "T1", "test", "file.rs", 1, "", None, "SPEC.md", "TASKS.md", "",
+                ),
             ),
             (
                 "reviewer_per_file_prompt",
@@ -2409,7 +2474,16 @@ mod tests {
             ),
             (
                 "pr_review_prompt",
-                pr_review_prompt(1, "test", "body", "feat", "main", "diff", "file.rs", "/tmp/report.md"),
+                pr_review_prompt(
+                    1,
+                    "test",
+                    "body",
+                    "feat",
+                    "main",
+                    "diff",
+                    "file.rs",
+                    "/tmp/report.md",
+                ),
             ),
             (
                 "pr_review_per_file_prompt",
@@ -2418,7 +2492,14 @@ mod tests {
             (
                 "pr_review_integration_prompt",
                 pr_review_integration_prompt(
-                    1, "test", "body", "feat", "main", "file.rs", "{}", "/tmp/report.md",
+                    1,
+                    "test",
+                    "body",
+                    "feat",
+                    "main",
+                    "file.rs",
+                    "{}",
+                    "/tmp/report.md",
                 ),
             ),
         ];
@@ -2445,7 +2526,14 @@ mod tests {
         let skip_needle = "WHAT TO SKIP (do not report at all):";
 
         let main = pr_review_prompt(
-            1, "test", "body", "feat", "main", "diff", "file.rs", "/tmp/report.md",
+            1,
+            "test",
+            "body",
+            "feat",
+            "main",
+            "diff",
+            "file.rs",
+            "/tmp/report.md",
         );
         assert!(
             main.contains(report_needle),
@@ -2456,9 +2544,7 @@ mod tests {
             "pr_review_prompt missing WHAT TO SKIP section"
         );
 
-        let per_file = pr_review_per_file_prompt(
-            1, "test", "src/foo.rs", "diff", "/tmp/report.md",
-        );
+        let per_file = pr_review_per_file_prompt(1, "test", "src/foo.rs", "diff", "/tmp/report.md");
         assert!(
             per_file.contains(report_needle),
             "pr_review_per_file_prompt missing WHAT TO REPORT section"
@@ -2469,7 +2555,14 @@ mod tests {
         );
 
         let integration = pr_review_integration_prompt(
-            1, "test", "body", "feat", "main", "file.rs", "{}", "/tmp/report.md",
+            1,
+            "test",
+            "body",
+            "feat",
+            "main",
+            "file.rs",
+            "{}",
+            "/tmp/report.md",
         );
         assert!(
             integration.contains(report_needle),
@@ -2489,7 +2582,9 @@ mod tests {
         let prompts: Vec<(&str, String)> = vec![
             (
                 "reviewer_prompt",
-                reviewer_prompt("T1", "test", "file.rs", 1, "", None, "SPEC.md", "TASKS.md", ""),
+                reviewer_prompt(
+                    "T1", "test", "file.rs", 1, "", None, "SPEC.md", "TASKS.md", "",
+                ),
             ),
             (
                 "reviewer_per_file_prompt",
@@ -2503,7 +2598,16 @@ mod tests {
             ),
             (
                 "pr_review_prompt",
-                pr_review_prompt(1, "test", "body", "feat", "main", "diff", "file.rs", "/tmp/report.md"),
+                pr_review_prompt(
+                    1,
+                    "test",
+                    "body",
+                    "feat",
+                    "main",
+                    "diff",
+                    "file.rs",
+                    "/tmp/report.md",
+                ),
             ),
             (
                 "pr_review_per_file_prompt",
@@ -2512,7 +2616,14 @@ mod tests {
             (
                 "pr_review_integration_prompt",
                 pr_review_integration_prompt(
-                    1, "test", "body", "feat", "main", "file.rs", "{}", "/tmp/report.md",
+                    1,
+                    "test",
+                    "body",
+                    "feat",
+                    "main",
+                    "file.rs",
+                    "{}",
+                    "/tmp/report.md",
                 ),
             ),
         ];

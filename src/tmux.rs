@@ -17,12 +17,7 @@ impl TmuxSession {
         project_dir: &Path,
         log_dir: &Path,
     ) -> Result<Self> {
-        let name = format!(
-            "{}-{}-{}",
-            prefix,
-            role_slug,
-            Uuid::new_v4().as_simple()
-        );
+        let name = format!("{}-{}-{}", prefix, role_slug, Uuid::new_v4().as_simple());
         let log_file = log_dir.join(format!("{}.pipe", name));
 
         assert!(
@@ -64,17 +59,17 @@ impl TmuxSession {
                 .args(["kill-session", "-t", &name])
                 .status()
             {
-                eprintln!("Warning: failed to kill tmux session '{}' during cleanup: {}", name, e);
+                eprintln!(
+                    "Warning: failed to kill tmux session '{}' during cleanup: {}",
+                    name, e
+                );
             }
             anyhow::bail!("tmux pipe-pane failed");
         }
 
         std::thread::sleep(std::time::Duration::from_millis(50));
 
-        Ok(TmuxSession {
-            name,
-            log_file,
-        })
+        Ok(TmuxSession { name, log_file })
     }
 
     pub fn send_keys(&self, command: &str) -> Result<()> {
@@ -108,7 +103,10 @@ impl TmuxSession {
             .status()
             .context("tmux kill-session failed")?;
         if !status.success() {
-            eprintln!("Warning: tmux kill-session for '{}' exited with {}", self.name, status);
+            eprintln!(
+                "Warning: tmux kill-session for '{}' exited with {}",
+                self.name, status
+            );
         }
         Ok(())
     }
@@ -191,7 +189,10 @@ pub fn cleanup_stale_sessions(prefix: &str) -> Vec<String> {
             .args(["kill-session", "-t", name])
             .status()
         {
-            eprintln!("Warning: failed to kill stale tmux session '{}': {}", name, e);
+            eprintln!(
+                "Warning: failed to kill stale tmux session '{}': {}",
+                name, e
+            );
         }
     }
     sessions
@@ -227,8 +228,13 @@ mod tests {
 
     #[test]
     fn test_build_cli_command_basic() {
-        let result =
-            TmuxSession::build_cli_command("claude", "do something", "opus", &["Read", "Glob", "Grep", "Bash"], false);
+        let result = TmuxSession::build_cli_command(
+            "claude",
+            "do something",
+            "opus",
+            &["Read", "Glob", "Grep", "Bash"],
+            false,
+        );
         assert!(result.contains("claude"));
         assert!(result.contains("-p"));
         assert!(result.contains("'do something'"));
@@ -249,13 +255,8 @@ mod tests {
 
     #[test]
     fn test_build_cli_command_with_tools() {
-        let result = TmuxSession::build_cli_command(
-            "claude",
-            "prompt",
-            "opus",
-            &["Read", "Write"],
-            false,
-        );
+        let result =
+            TmuxSession::build_cli_command("claude", "prompt", "opus", &["Read", "Write"], false);
         assert!(result.contains("--tools"));
         assert!(result.contains("Read,Write"));
     }
@@ -268,7 +269,8 @@ mod tests {
 
     #[test]
     fn test_build_cli_command_enforce_rbac() {
-        let result = TmuxSession::build_cli_command("claude", "prompt", "opus", &["Read", "Glob"], true);
+        let result =
+            TmuxSession::build_cli_command("claude", "prompt", "opus", &["Read", "Glob"], true);
         assert!(result.contains("--allowedTools"));
         assert!(result.contains("Read,Glob"));
         assert!(!result.contains("--dangerously-skip-permissions"));
@@ -287,9 +289,7 @@ mod tests {
 
         assert!(session.is_alive());
 
-        session
-            .send_keys("echo hello")
-            .expect("should send keys");
+        session.send_keys("echo hello").expect("should send keys");
 
         std::thread::sleep(std::time::Duration::from_millis(200));
 

@@ -643,7 +643,9 @@ fn render_stats_overlay_content(frame: &mut Frame, area: Rect, state: &AppState)
                 display_lines.push(Line::from(Span::styled(
                     format!(
                         "  Acceptance rate: {:.1}% ({} feat / {} completed)",
-                        r * 100.0, trust.feat_tasks, trust.completed_tasks,
+                        r * 100.0,
+                        trust.feat_tasks,
+                        trust.completed_tasks,
                     ),
                     Style::default().fg(theme.text),
                 )));
@@ -660,7 +662,9 @@ fn render_stats_overlay_content(frame: &mut Frame, area: Rect, state: &AppState)
                 display_lines.push(Line::from(Span::styled(
                     format!(
                         "  Review rescue rate: {:.1}% ({} rescued / {} with findings)",
-                        r * 100.0, trust.rescued_tasks, trust.tasks_with_findings,
+                        r * 100.0,
+                        trust.rescued_tasks,
+                        trust.tasks_with_findings,
                     ),
                     Style::default().fg(theme.text),
                 )));
@@ -718,11 +722,17 @@ fn render_stats_overlay_content(frame: &mut Frame, area: Rect, state: &AppState)
         )));
         display_lines.push(Line::from(""));
         display_lines.push(Line::from(Span::styled(
-            format!("  Cache read tokens: {}", fmt_overlay_tokens(cache.total_cache_read)),
+            format!(
+                "  Cache read tokens: {}",
+                fmt_overlay_tokens(cache.total_cache_read)
+            ),
             Style::default().fg(theme.text),
         )));
         display_lines.push(Line::from(Span::styled(
-            format!("  Cache creation tokens: {}", fmt_overlay_tokens(cache.total_cache_creation)),
+            format!(
+                "  Cache creation tokens: {}",
+                fmt_overlay_tokens(cache.total_cache_creation)
+            ),
             Style::default().fg(theme.text),
         )));
         let hit_str = match cache.cache_hit_ratio {

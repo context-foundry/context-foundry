@@ -44,8 +44,12 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
     let config = Config::load(project_dir);
     commands::ensure_required_providers_available(&config, commands::ProviderCommandMode::Run)?;
     let buildloop_dir = project_dir.join(".buildloop");
-    std::fs::create_dir_all(&buildloop_dir)
-        .with_context(|| format!("Failed to create .buildloop directory: {}", buildloop_dir.display()))?;
+    std::fs::create_dir_all(&buildloop_dir).with_context(|| {
+        format!(
+            "Failed to create .buildloop directory: {}",
+            buildloop_dir.display()
+        )
+    })?;
     if let Err(e) = std::fs::remove_file(buildloop_dir.join("stop")) {
         if e.kind() != std::io::ErrorKind::NotFound {
             eprintln!("Warning: failed to remove stale stop file: {}", e);
@@ -79,7 +83,10 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
             ));
         }
         crate::sandbox::SandboxStatus::DockerNotFound => {
-            state.log("Warning: sandbox enabled but Docker not found; agents will run unsandboxed".to_string());
+            state.log(
+                "Warning: sandbox enabled but Docker not found; agents will run unsandboxed"
+                    .to_string(),
+            );
         }
         crate::sandbox::SandboxStatus::ImageNotFound => {
             state.log(format!(
@@ -88,7 +95,10 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
             ));
         }
         crate::sandbox::SandboxStatus::Disabled => {
-            state.log("Warning: sandbox disabled by config override -- agents will run unsandboxed".to_string());
+            state.log(
+                "Warning: sandbox disabled by config override -- agents will run unsandboxed"
+                    .to_string(),
+            );
         }
     }
 
@@ -100,7 +110,10 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
                 state.log(format!("Cleaned up stale tmux session: {}", name));
             }
         } else {
-            state.log("Warning: tmux backend configured but tmux binary not found; falling back to PTY".to_string());
+            state.log(
+                "Warning: tmux backend configured but tmux binary not found; falling back to PTY"
+                    .to_string(),
+            );
         }
     }
 
@@ -253,8 +266,8 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
     tui::restore_terminal(&mut terminal)?;
 
     if let Some(ref sid) = state.observatory_session_id {
-        let project_dir_canonical = dunce::canonicalize(project_dir)
-            .unwrap_or_else(|_| project_dir.to_path_buf());
+        let project_dir_canonical =
+            dunce::canonicalize(project_dir).unwrap_or_else(|_| project_dir.to_path_buf());
         if let Err(e) = crate::stats::print_session_summary(sid, &project_dir_canonical) {
             eprintln!("Warning: could not print session summary: {}", e);
         }
@@ -912,7 +925,12 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                 state.pattern_inject_count += titles.len();
                 state.active_pattern_keywords = keywords_by_title.clone();
             }
-            LoopEvent::BudgetOverrun { phase, target_pct, actual_pct, recovery } => {
+            LoopEvent::BudgetOverrun {
+                phase,
+                target_pct,
+                actual_pct,
+                recovery,
+            } => {
                 state.log(format!(
                     "BUDGET OVERRUN: {} used {}% (target {}%) -- recovery: {}",
                     phase, actual_pct, target_pct, recovery,
@@ -1021,7 +1039,11 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                 history.passed_review = passed;
                 state.cap_task_history();
             }
-            LoopEvent::WaitingForReview { pr_num, ref session_id, ref gate } => {
+            LoopEvent::WaitingForReview {
+                pr_num,
+                ref session_id,
+                ref gate,
+            } => {
                 state.review_gates.insert(session_id.clone(), gate.clone());
                 if !state.awaiting_review {
                     state.awaiting_review = true;
@@ -1037,14 +1059,19 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                         state.log("Awaiting review -- press Enter or 'c' to continue");
                     }
                 } else {
-                    state.pending_reviews.push_back((session_id.clone(), pr_num));
+                    state
+                        .pending_reviews
+                        .push_back((session_id.clone(), pr_num));
                     state.log(format!(
                         "Review queued for session {} (another review in progress)",
                         session_id
                     ));
                 }
             }
-            LoopEvent::PrApproved { pr_num, ref session_id } => {
+            LoopEvent::PrApproved {
+                pr_num,
+                ref session_id,
+            } => {
                 // Clear the gate for the specific session that was approved
                 if let Some(gate) = state.review_gates.remove(session_id) {
                     gate.clear();
@@ -1059,7 +1086,10 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                         state.awaiting_pr = next_pr;
                         state.pr_poll_last_check = None;
                         if let Some(num) = next_pr {
-                            state.log(format!("PR #{} approved -- now reviewing PR #{}", pr_num, num));
+                            state.log(format!(
+                                "PR #{} approved -- now reviewing PR #{}",
+                                pr_num, num
+                            ));
                         } else {
                             state.log(format!("PR #{} approved -- next review ready, press Enter or 'c' to continue", pr_num));
                         }
@@ -1073,7 +1103,10 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                     state.log(format!("PR #{} approved (session {})", pr_num, session_id));
                 }
             }
-            LoopEvent::PrClosed { pr_num, ref session_id } => {
+            LoopEvent::PrClosed {
+                pr_num,
+                ref session_id,
+            } => {
                 // Clear the gate for the specific session whose PR was closed
                 if let Some(gate) = state.review_gates.remove(session_id) {
                     gate.clear();
@@ -1102,9 +1135,19 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                     pr_num
                 ));
             }
-            LoopEvent::AwaitCommitApproval { ref task_id, ref proposed_commit_type, ref session_id, ref gate, ref result } => {
-                state.commit_approval_gates.insert(session_id.clone(), gate.clone());
-                state.commit_approval_results.insert(session_id.clone(), result.clone());
+            LoopEvent::AwaitCommitApproval {
+                ref task_id,
+                ref proposed_commit_type,
+                ref session_id,
+                ref gate,
+                ref result,
+            } => {
+                state
+                    .commit_approval_gates
+                    .insert(session_id.clone(), gate.clone());
+                state
+                    .commit_approval_results
+                    .insert(session_id.clone(), result.clone());
                 if !state.awaiting_commit_approval {
                     // No prompt currently showing -- display this one immediately.
                     state.awaiting_commit_approval = true;
@@ -1146,7 +1189,10 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                 } else {
                     Some((total, done))
                 };
-                state.log(format!("Parallel builder: {}/{} slots complete", done, total));
+                state.log(format!(
+                    "Parallel builder: {}/{} slots complete",
+                    done, total
+                ));
             }
             LoopEvent::TmuxSessionStarted(name) => {
                 state.tmux_session_names.push(name);
@@ -1225,7 +1271,9 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                         state.commit_approval_results.remove(&sid);
                     }
                     // Advance to next queued approval if one arrived while this was pending.
-                    if let Some((next_sid, next_tid, next_ptype)) = state.pending_approvals.pop_front() {
+                    if let Some((next_sid, next_tid, next_ptype)) =
+                        state.pending_approvals.pop_front()
+                    {
                         state.approval_session_id = Some(next_sid);
                         state.approval_task_id = Some(next_tid.clone());
                         state.approval_proposed_type = Some(next_ptype.clone());
@@ -1242,7 +1290,8 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                         state.log("Denied -- committing as WIP".to_string());
                     }
                 // Review gate: Enter/c clears the review pause (must be before other handlers)
-                } else if state.awaiting_review && matches!(key.code, KeyCode::Enter | KeyCode::Char('c'))
+                } else if state.awaiting_review
+                    && matches!(key.code, KeyCode::Enter | KeyCode::Char('c'))
                 {
                     if let Some(ref sid) = state.review_session_id.take() {
                         if let Some(gate) = state.review_gates.remove(sid) {
@@ -1342,7 +1391,9 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                         state.commit_approval_results.remove(&sid);
                     }
                     // Advance to next queued approval if one arrived while this was pending.
-                    if let Some((next_sid, next_tid, next_ptype)) = state.pending_approvals.pop_front() {
+                    if let Some((next_sid, next_tid, next_ptype)) =
+                        state.pending_approvals.pop_front()
+                    {
                         state.approval_session_id = Some(next_sid);
                         state.approval_task_id = Some(next_tid.clone());
                         state.approval_proposed_type = Some(next_ptype.clone());
@@ -1359,7 +1410,8 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                         state.log("Denied -- committing as WIP".to_string());
                     }
                 // Review gate: Enter/c clears the review pause (must be before other handlers)
-                } else if state.awaiting_review && matches!(key.code, KeyCode::Enter | KeyCode::Char('c'))
+                } else if state.awaiting_review
+                    && matches!(key.code, KeyCode::Enter | KeyCode::Char('c'))
                 {
                     if let Some(ref sid) = state.review_session_id.take() {
                         if let Some(gate) = state.review_gates.remove(sid) {
@@ -1445,7 +1497,10 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                         }
                         // Sandbox toggle removed -- config-only override for implementers.
                         KeyCode::Char('s') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                            state.log("Sandbox toggle disabled -- override via .foundry.json only".to_string());
+                            state.log(
+                                "Sandbox toggle disabled -- override via .foundry.json only"
+                                    .to_string(),
+                            );
                         }
                         KeyCode::Char('i') => {
                             state.inject_input = Some(String::new());
@@ -1467,7 +1522,8 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                         }
                         KeyCode::Up => {
                             if state.show_stats_overlay {
-                                state.stats_overlay_scroll = state.stats_overlay_scroll.saturating_sub(3);
+                                state.stats_overlay_scroll =
+                                    state.stats_overlay_scroll.saturating_sub(3);
                             } else if state.show_findings {
                                 state.findings_scroll = state.findings_scroll.saturating_sub(3);
                             } else if state.show_patterns {
@@ -1480,7 +1536,8 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                         }
                         KeyCode::Down => {
                             if state.show_stats_overlay {
-                                state.stats_overlay_scroll = state.stats_overlay_scroll.saturating_add(3);
+                                state.stats_overlay_scroll =
+                                    state.stats_overlay_scroll.saturating_add(3);
                             } else if state.show_findings {
                                 state.findings_scroll = state.findings_scroll.saturating_add(3);
                             } else if state.show_patterns {
@@ -1556,7 +1613,8 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                 match mouse.kind {
                     MouseEventKind::ScrollUp => {
                         if state.show_stats_overlay {
-                            state.stats_overlay_scroll = state.stats_overlay_scroll.saturating_sub(3);
+                            state.stats_overlay_scroll =
+                                state.stats_overlay_scroll.saturating_sub(3);
                         } else if state.show_patterns {
                             state.patterns_scroll = state.patterns_scroll.saturating_sub(3);
                         } else if state.show_findings {
@@ -1592,7 +1650,8 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                     }
                     MouseEventKind::ScrollDown => {
                         if state.show_stats_overlay {
-                            state.stats_overlay_scroll = state.stats_overlay_scroll.saturating_add(3);
+                            state.stats_overlay_scroll =
+                                state.stats_overlay_scroll.saturating_add(3);
                         } else if state.show_patterns {
                             state.patterns_scroll = state.patterns_scroll.saturating_add(3);
                         } else if state.show_findings {
@@ -1825,16 +1884,13 @@ fn compute_and_show_stats_overlay(state: &mut AppState) {
                 Ok(d) => d,
                 Err(_) => return None,
             };
-            let project_dir = buildloop_dir
-                .parent()
-                .unwrap_or(std::path::Path::new("."));
+            let project_dir = buildloop_dir.parent().unwrap_or(std::path::Path::new("."));
             let canonical =
                 dunce::canonicalize(project_dir).unwrap_or_else(|_| project_dir.to_path_buf());
-            let (events, skipped) =
-                match crate::stats::load_events(&obs_dir, 1, Some(&canonical)) {
-                    Ok(r) => r,
-                    Err(_) => return None,
-                };
+            let (events, skipped) = match crate::stats::load_events(&obs_dir, 1, Some(&canonical)) {
+                Ok(r) => r,
+                Err(_) => return None,
+            };
             Some(crate::stats::compute_stats(
                 &events,
                 skipped,
@@ -2281,7 +2337,11 @@ fn spawn_design_loop(
         let buildloop_dir = project_dir.join(".buildloop");
         let log_dir = buildloop_dir.join("logs");
         if let Err(e) = std::fs::create_dir_all(&log_dir) {
-            eprintln!("Warning: failed to create log directory {}: {}", log_dir.display(), e);
+            eprintln!(
+                "Warning: failed to create log directory {}: {}",
+                log_dir.display(),
+                e
+            );
         }
 
         let tx = event_tx.clone();

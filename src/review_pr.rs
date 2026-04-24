@@ -1,8 +1,8 @@
 use anyhow::{anyhow, Context as _, Result};
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::time::Instant;
 use std::sync::Arc;
+use std::time::Instant;
 use tokio::sync::mpsc;
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
@@ -125,7 +125,10 @@ fn parse_output_mode(s: &str) -> Result<ReviewPrOutput> {
         "stdout" => Ok(ReviewPrOutput::Stdout),
         "json" => Ok(ReviewPrOutput::Json),
         "comment" => Ok(ReviewPrOutput::Comment),
-        _ => Err(anyhow!("Invalid output mode '{}'. Expected: stdout, json, comment", s)),
+        _ => Err(anyhow!(
+            "Invalid output mode '{}'. Expected: stdout, json, comment",
+            s
+        )),
     }
 }
 
@@ -137,7 +140,9 @@ fn detect_repo_from_git_remote(project_dir: &Path) -> Result<String> {
         .context("Failed to run 'git remote get-url origin'")?;
 
     if !output.status.success() {
-        return Err(anyhow!("Could not detect git remote origin. Use --repo OWNER/REPO."));
+        return Err(anyhow!(
+            "Could not detect git remote origin. Use --repo OWNER/REPO."
+        ));
     }
 
     let url = String::from_utf8_lossy(&output.stdout).trim().to_string();
@@ -149,7 +154,11 @@ fn detect_repo_from_git_remote(project_dir: &Path) -> Result<String> {
         let stripped = normalized.strip_suffix(".git").unwrap_or(&normalized);
         let parts: Vec<&str> = stripped.split('/').collect();
         if parts.len() >= 3 {
-            return Ok(format!("{}/{}", parts[parts.len() - 2], parts[parts.len() - 1]));
+            return Ok(format!(
+                "{}/{}",
+                parts[parts.len() - 2],
+                parts[parts.len() - 1]
+            ));
         }
     }
 
@@ -164,7 +173,10 @@ fn detect_repo_from_git_remote(project_dir: &Path) -> Result<String> {
         }
     }
 
-    Err(anyhow!("Could not parse OWNER/REPO from remote URL: {}", url))
+    Err(anyhow!(
+        "Could not parse OWNER/REPO from remote URL: {}",
+        url
+    ))
 }
 
 async fn fetch_pr_diff(pr_number: u32, repo: &str) -> Result<String> {
@@ -193,10 +205,13 @@ async fn fetch_pr_metadata(pr_number: u32, repo: &str) -> Result<PrMetadata> {
         Duration::from_secs(60),
         tokio::process::Command::new("gh")
             .args([
-                "pr", "view",
+                "pr",
+                "view",
                 &pr_number.to_string(),
-                "--repo", repo,
-                "--json", "title,body,headRefName,baseRefName,files",
+                "--repo",
+                repo,
+                "--json",
+                "title,body,headRefName,baseRefName,files",
             ])
             .output(),
     )
@@ -238,7 +253,11 @@ async fn fetch_pr_metadata(pr_number: u32, repo: &str) -> Result<PrMetadata> {
 }
 
 fn setup_temp_buildloop(project_dir: &Path, pr_number: u32, repo: &str) -> Result<PathBuf> {
-    let pr_review_dir = project_dir.join(format!(".buildloop/pr-review-{}-{}", repo.replace('/', "--"), pr_number));
+    let pr_review_dir = project_dir.join(format!(
+        ".buildloop/pr-review-{}-{}",
+        repo.replace('/', "--"),
+        pr_number
+    ));
     let log_dir = pr_review_dir.join("logs");
     std::fs::create_dir_all(&log_dir).context("Failed to create PR review buildloop directory")?;
     Ok(pr_review_dir)
@@ -366,8 +385,8 @@ fn parse_findings_json(report_content: &str) -> Result<serde_json::Value> {
         }
         if in_json_block && line.trim().starts_with("```") {
             let json_str = json_lines.join("\n");
-            let value: serde_json::Value = serde_json::from_str(&json_str)
-                .context("Failed to parse JSON findings block")?;
+            let value: serde_json::Value =
+                serde_json::from_str(&json_str).context("Failed to parse JSON findings block")?;
             return Ok(value);
         }
         if in_json_block {
@@ -375,13 +394,27 @@ fn parse_findings_json(report_content: &str) -> Result<serde_json::Value> {
         }
     }
 
-    Err(anyhow!("No valid JSON findings block found in review report"))
+    Err(anyhow!(
+        "No valid JSON findings block found in review report"
+    ))
 }
 
 fn count_findings(findings: &serde_json::Value) -> (usize, usize, usize) {
-    let high = findings.get("high").and_then(|v| v.as_array()).map(|a| a.len()).unwrap_or(0);
-    let medium = findings.get("medium").and_then(|v| v.as_array()).map(|a| a.len()).unwrap_or(0);
-    let low = findings.get("low").and_then(|v| v.as_array()).map(|a| a.len()).unwrap_or(0);
+    let high = findings
+        .get("high")
+        .and_then(|v| v.as_array())
+        .map(|a| a.len())
+        .unwrap_or(0);
+    let medium = findings
+        .get("medium")
+        .and_then(|v| v.as_array())
+        .map(|a| a.len())
+        .unwrap_or(0);
+    let low = findings
+        .get("low")
+        .and_then(|v| v.as_array())
+        .map(|a| a.len())
+        .unwrap_or(0);
     (high, medium, low)
 }
 
@@ -477,10 +510,13 @@ async fn post_pr_comment(pr_number: u32, repo: &str, body: &str) -> Result<()> {
         Duration::from_secs(30),
         tokio::process::Command::new("gh")
             .args([
-                "pr", "comment",
+                "pr",
+                "comment",
                 &pr_number.to_string(),
-                "--repo", repo,
-                "--body", body,
+                "--repo",
+                repo,
+                "--body",
+                body,
             ])
             .output(),
     )
@@ -505,7 +541,11 @@ fn build_per_file_fallback_report(
     findings: &serde_json::Value,
 ) -> String {
     let (high, medium, low) = count_findings(findings);
-    let verdict = if high + medium > 0 { "CONCERNS" } else { "PASS" };
+    let verdict = if high + medium > 0 {
+        "CONCERNS"
+    } else {
+        "PASS"
+    };
     let findings_json = serde_json::to_string_pretty(findings).unwrap_or_default();
     format!(
         "# Foundry PR Review: #{pr_number}\n\n\
@@ -552,8 +592,8 @@ async fn run_multipass_pr_review(
                 false
             }
             Some(diff_content) => {
-                let is_binary_diff = diff_content.contains("Binary files ")
-                    && diff_content.contains(" differ");
+                let is_binary_diff =
+                    diff_content.contains("Binary files ") && diff_content.contains(" differ");
                 if diff_content.trim().is_empty() || is_binary_diff {
                     eprintln!("Skipping {} (binary or empty diff)", file);
                     false
@@ -585,7 +625,11 @@ async fn run_multipass_pr_review(
     for (i, file) in reviewable_files.iter().enumerate() {
         let sem = semaphore.clone();
         let file_name = (*file).clone();
-        let file_diff = diff_map.get(file.as_str()).copied().unwrap_or("").to_string();
+        let file_diff = diff_map
+            .get(file.as_str())
+            .copied()
+            .unwrap_or("")
+            .to_string();
         let pr_title = metadata.title.clone();
         let pr_provider_owned = pr_provider.to_string();
         let pr_model_owned = pr_model.to_string();
@@ -610,7 +654,8 @@ async fn run_multipass_pr_review(
                     // Semaphore closed -- should not happen in normal operation
                     eprintln!(
                         "Semaphore closed while waiting for permit for file {}/{}",
-                        i + 1, total
+                        i + 1,
+                        total
                     );
                     return (i, file_name, None, AgentUsage::default(), false);
                 }
@@ -629,7 +674,10 @@ async fn run_multipass_pr_review(
             let per_file_report = buildloop_dir_owned.join(format!("review-per-file-{}.md", i));
             if let Err(e) = std::fs::remove_file(&per_file_report) {
                 if e.kind() != std::io::ErrorKind::NotFound {
-                    eprintln!("Warning: failed to remove stale review-per-file-{}.md: {}", i, e);
+                    eprintln!(
+                        "Warning: failed to remove stale review-per-file-{}.md: {}",
+                        i, e
+                    );
                 }
             }
             let per_file_report_relative =
@@ -707,9 +755,7 @@ async fn run_multipass_pr_review(
                 std::fs::read_to_string(&per_file_report)
                     .ok()
                     .and_then(|content| parse_findings_json(&content).ok())
-                    .unwrap_or_else(|| {
-                        serde_json::json!({"high": [], "medium": [], "low": []})
-                    })
+                    .unwrap_or_else(|| serde_json::json!({"high": [], "medium": [], "low": []}))
             } else {
                 serde_json::json!({"high": [], "medium": [], "low": []})
             };
@@ -752,16 +798,23 @@ async fn run_multipass_pr_review(
 
     // Clean up per-file temp reports
     for i in 0..total_files {
-        if let Err(e) = std::fs::remove_file(buildloop_dir.join(format!("review-per-file-{}.md", i))) {
+        if let Err(e) =
+            std::fs::remove_file(buildloop_dir.join(format!("review-per-file-{}.md", i)))
+        {
             if e.kind() != std::io::ErrorKind::NotFound {
-                eprintln!("Warning: failed to remove stale review-per-file-{}.md: {}", i, e);
+                eprintln!(
+                    "Warning: failed to remove stale review-per-file-{}.md: {}",
+                    i, e
+                );
             }
         }
     }
 
     if reviewable_files.is_empty() {
         return (
-            Err(anyhow!("No reviewable files in PR (all files were binary, submodule, or empty-diff)")),
+            Err(anyhow!(
+                "No reviewable files in PR (all files were binary, submodule, or empty-diff)"
+            )),
             total_usage,
             serde_json::Value::Null,
             0,
@@ -783,13 +836,15 @@ async fn run_multipass_pr_review(
     // Clean up before integration pass
     if let Err(e) = std::fs::remove_file(review_report) {
         if e.kind() != std::io::ErrorKind::NotFound {
-            eprintln!("Warning: failed to remove stale review-report.md before integration pass: {}", e);
+            eprintln!(
+                "Warning: failed to remove stale review-report.md before integration pass: {}",
+                e
+            );
         }
     }
 
     let merged_findings = merge_pr_findings(&all_per_file_findings);
-    let per_file_findings_json =
-        serde_json::to_string_pretty(&merged_findings).unwrap_or_default();
+    let per_file_findings_json = serde_json::to_string_pretty(&merged_findings).unwrap_or_default();
     let (pf_high, pf_medium, _pf_low) = count_findings(&merged_findings);
     eprintln!(
         "Per-file analysis complete. Found {} high, {} medium findings. Running integration review...",
@@ -874,7 +929,12 @@ async fn run_multipass_pr_review(
     );
 
     match integration_result {
-        Ok(agent_res) => (Ok(agent_res), total_usage, merged_findings, reviewable_files.len()),
+        Ok(agent_res) => (
+            Ok(agent_res),
+            total_usage,
+            merged_findings,
+            reviewable_files.len(),
+        ),
         Err(e) => (
             Err(anyhow!("PR review integration agent failed: {}", e)),
             total_usage,
@@ -983,9 +1043,14 @@ pub async fn run(
     );
 
     let changed_files_str = metadata.changed_files.join("\n");
-    let review_report_relative = format!(".buildloop/pr-review-{}-{}/review-report.md", repo.replace('/', "--"), pr_number);
+    let review_report_relative = format!(
+        ".buildloop/pr-review-{}-{}/review-report.md",
+        repo.replace('/', "--"),
+        pr_number
+    );
 
-    let use_multipass = multipass_threshold > 0 && metadata.changed_files.len() > multipass_threshold;
+    let use_multipass =
+        multipass_threshold > 0 && metadata.changed_files.len() > multipass_threshold;
 
     let (agent_result, usage, per_file_findings, reviewable_file_count) = if use_multipass {
         let (res, usg, pf, reviewable_count) = run_multipass_pr_review(
@@ -1100,30 +1165,23 @@ pub async fn run(
 
             let total_duration_secs = session_start.elapsed().as_secs_f64();
 
-            let report_content = build_per_file_fallback_report(
-                pr_number,
-                reviewable_file_count,
-                &pf_findings,
-            );
+            let report_content =
+                build_per_file_fallback_report(pr_number, reviewable_file_count, &pf_findings);
 
             let output_result = match output_mode {
                 ReviewPrOutput::Stdout => {
                     println!("{}", report_content);
                     Ok(())
                 }
-                ReviewPrOutput::Json => {
-                    build_json_output(
-                        pr_number,
-                        reviewable_file_count,
-                        &pf_findings,
-                        usage.cost_usd,
-                        total_duration_secs,
-                    )
-                    .map(|s| println!("{}", s))
-                }
-                ReviewPrOutput::Comment => {
-                    post_pr_comment(pr_number, &repo, &report_content).await
-                }
+                ReviewPrOutput::Json => build_json_output(
+                    pr_number,
+                    reviewable_file_count,
+                    &pf_findings,
+                    usage.cost_usd,
+                    total_duration_secs,
+                )
+                .map(|s| println!("{}", s)),
+                ReviewPrOutput::Comment => post_pr_comment(pr_number, &repo, &report_content).await,
             };
 
             observatory::log_event(
@@ -1183,27 +1241,22 @@ pub async fn run(
 
                 let total_duration_secs = session_start.elapsed().as_secs_f64();
 
-                let report_content = build_per_file_fallback_report(
-                    pr_number,
-                    reviewable_file_count,
-                    &pf_findings,
-                );
+                let report_content =
+                    build_per_file_fallback_report(pr_number, reviewable_file_count, &pf_findings);
 
                 let output_result = match output_mode {
                     ReviewPrOutput::Stdout => {
                         println!("{}", report_content);
                         Ok(())
                     }
-                    ReviewPrOutput::Json => {
-                        build_json_output(
-                            pr_number,
-                            reviewable_file_count,
-                            &pf_findings,
-                            usage.cost_usd,
-                            total_duration_secs,
-                        )
-                        .map(|s| println!("{}", s))
-                    }
+                    ReviewPrOutput::Json => build_json_output(
+                        pr_number,
+                        reviewable_file_count,
+                        &pf_findings,
+                        usage.cost_usd,
+                        total_duration_secs,
+                    )
+                    .map(|s| println!("{}", s)),
                     ReviewPrOutput::Comment => {
                         post_pr_comment(pr_number, &repo, &report_content).await
                     }
@@ -1244,9 +1297,8 @@ pub async fn run(
     };
 
     // Parse findings for observatory and JSON output
-    let integration_findings = parse_findings_json(&report_content).unwrap_or_else(|_| {
-        serde_json::json!({"high": [], "medium": [], "low": []})
-    });
+    let integration_findings = parse_findings_json(&report_content)
+        .unwrap_or_else(|_| serde_json::json!({"high": [], "medium": [], "low": []}));
 
     // Merge per-file and integration findings (multipass only)
     let is_multipass = per_file_findings.is_some();
@@ -1288,19 +1340,15 @@ pub async fn run(
             println!("{}", report_content);
             Ok(())
         }
-        ReviewPrOutput::Json => {
-            build_json_output(
-                pr_number,
-                reviewable_file_count,
-                &findings,
-                usage.cost_usd,
-                total_duration_secs,
-            )
-            .map(|s| println!("{}", s))
-        }
-        ReviewPrOutput::Comment => {
-            post_pr_comment(pr_number, &repo, &report_content).await
-        }
+        ReviewPrOutput::Json => build_json_output(
+            pr_number,
+            reviewable_file_count,
+            &findings,
+            usage.cost_usd,
+            total_duration_secs,
+        )
+        .map(|s| println!("{}", s)),
+        ReviewPrOutput::Comment => post_pr_comment(pr_number, &repo, &report_content).await,
     };
 
     // Observatory: session ended (always runs, even if output failed)
@@ -1327,10 +1375,22 @@ mod tests {
 
     #[test]
     fn test_parse_output_mode_valid() {
-        assert!(matches!(parse_output_mode("stdout").unwrap(), ReviewPrOutput::Stdout));
-        assert!(matches!(parse_output_mode("json").unwrap(), ReviewPrOutput::Json));
-        assert!(matches!(parse_output_mode("comment").unwrap(), ReviewPrOutput::Comment));
-        assert!(matches!(parse_output_mode("JSON").unwrap(), ReviewPrOutput::Json));
+        assert!(matches!(
+            parse_output_mode("stdout").unwrap(),
+            ReviewPrOutput::Stdout
+        ));
+        assert!(matches!(
+            parse_output_mode("json").unwrap(),
+            ReviewPrOutput::Json
+        ));
+        assert!(matches!(
+            parse_output_mode("comment").unwrap(),
+            ReviewPrOutput::Comment
+        ));
+        assert!(matches!(
+            parse_output_mode("JSON").unwrap(),
+            ReviewPrOutput::Json
+        ));
     }
 
     #[test]
@@ -1358,7 +1418,10 @@ mod tests {
     fn test_parse_findings_json_extracts_json_fence() {
         let content = "# Review\n\n```json\n{\"high\":[],\"medium\":[],\"low\":[]}\n```\n";
         let result = parse_findings_json(content).unwrap();
-        assert_eq!(result, serde_json::json!({"high": [], "medium": [], "low": []}));
+        assert_eq!(
+            result,
+            serde_json::json!({"high": [], "medium": [], "low": []})
+        );
     }
 
     #[test]
@@ -1652,7 +1715,10 @@ mod tests {
         let final_report = rewrite_verdict_line(&after_replace, high, medium);
 
         // Verdict should now be CONCERNS
-        assert!(final_report.contains("## Verdict: CONCERNS"), "verdict should be CONCERNS after merging per-file HIGH finding");
+        assert!(
+            final_report.contains("## Verdict: CONCERNS"),
+            "verdict should be CONCERNS after merging per-file HIGH finding"
+        );
         assert!(!final_report.contains("## Verdict: PASS"));
         // JSON block should contain the per-file finding
         let parsed = parse_findings_json(&final_report).unwrap();
@@ -1785,7 +1851,10 @@ mod tests {
 
     #[test]
     fn test_extract_path_from_diff_header_normal() {
-        let lines = vec!["diff --git a/src/main.rs b/src/main.rs", "index abc..def 100644"];
+        let lines = vec![
+            "diff --git a/src/main.rs b/src/main.rs",
+            "index abc..def 100644",
+        ];
         let result = extract_path_from_diff_header(&lines);
         assert_eq!(result, "src/main.rs");
     }

@@ -133,7 +133,11 @@ pub(crate) fn semgrep_is_available() -> bool {
 
 /// Run semgrep against changed files and return findings as a string.
 /// Returns empty string if semgrep is not available or produces no output.
-pub(crate) fn run_semgrep(project_dir: &Path, rulesets: &[String], changed_files: &[String]) -> String {
+pub(crate) fn run_semgrep(
+    project_dir: &Path,
+    rulesets: &[String],
+    changed_files: &[String],
+) -> String {
     if changed_files.is_empty() || !semgrep_is_available() {
         return String::new();
     }
@@ -174,17 +178,23 @@ pub(crate) fn run_semgrep(project_dir: &Path, rulesets: &[String], changed_files
 
     let mut summary = String::from("SEMGREP STATIC ANALYSIS FINDINGS:\n");
     for result in results {
-        let check_id = result.get("check_id").and_then(|v| v.as_str()).unwrap_or("unknown");
-        let message = result.get("extra")
+        let check_id = result
+            .get("check_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown");
+        let message = result
+            .get("extra")
             .and_then(|e| e.get("message"))
             .and_then(|v| v.as_str())
             .unwrap_or("");
-        let severity = result.get("extra")
+        let severity = result
+            .get("extra")
             .and_then(|e| e.get("severity"))
             .and_then(|v| v.as_str())
             .unwrap_or("INFO");
         let path = result.get("path").and_then(|v| v.as_str()).unwrap_or("");
-        let start_line = result.get("start")
+        let start_line = result
+            .get("start")
             .and_then(|s| s.get("line"))
             .and_then(|v| v.as_u64())
             .unwrap_or(0);
@@ -237,7 +247,6 @@ fn required_providers(
             let mut v = vec![
                 ("scout", Config::parse_provider(&config.scout_provider)),
                 ("planner", Config::parse_provider(&config.planner_provider)),
-                ("builder", Config::parse_provider(&config.builder_provider)),
                 (
                     "discovery",
                     Config::parse_provider(&config.discovery_provider),
@@ -253,8 +262,34 @@ fn required_providers(
                     Config::parse_provider(&config.orchestrator_reviewer_provider),
                 ));
             }
-            if config.builder_models.len() >= 2 {
-                for spec in config.builder_models.iter().take(2) {
+            // Only validate providers that dual_selection will actually invoke.
+            // "both" demands both; single-selection modes demand only their one model.
+            // This mirrors the routing logic in Config::selected_pipeline_configs().
+            if config.builder_models.is_empty() {
+                v.push(("builder", Config::parse_provider(&config.builder_provider)));
+            } else {
+                let specs_to_check: Vec<&str> = match config.dual_selection.as_str() {
+                    "first" => config
+                        .builder_models
+                        .first()
+                        .map(|spec| vec![spec.as_str()])
+                        .unwrap_or_default(),
+                    "second" if config.builder_models.len() >= 2 => {
+                        vec![config.builder_models[1].as_str()]
+                    }
+                    "third" if config.builder_models.len() >= 3 => {
+                        vec![config.builder_models[2].as_str()]
+                    }
+                    "both" if config.builder_models.len() >= 2 => vec![
+                        config.builder_models[0].as_str(),
+                        config.builder_models[1].as_str(),
+                    ],
+                    _ => {
+                        v.push(("builder", Config::parse_provider(&config.builder_provider)));
+                        Vec::new()
+                    }
+                };
+                for spec in specs_to_check {
                     let (provider_str, _model) = Config::parse_model_spec(spec);
                     v.push(("builder (dual)", Config::parse_provider(&provider_str)));
                 }
@@ -333,7 +368,9 @@ pub(super) async fn run_headless(project_dir: &Path, output_format: Option<Strin
             eprintln!("[foundry] sandbox active: image={}", sandbox_cfg.image);
         }
         crate::sandbox::SandboxStatus::DockerNotFound => {
-            eprintln!("[foundry] warning: sandbox enabled but Docker not found; agents unsandboxed");
+            eprintln!(
+                "[foundry] warning: sandbox enabled but Docker not found; agents unsandboxed"
+            );
         }
         crate::sandbox::SandboxStatus::ImageNotFound => {
             eprintln!(
@@ -485,7 +522,12 @@ pub(super) async fn run_headless(project_dir: &Path, output_format: Option<Strin
                 LoopEvent::PrClosed { pr_num, .. } => {
                     eprintln!("[log] PR #{} was closed without merge -- stopping", pr_num);
                 }
-                LoopEvent::AwaitCommitApproval { ref task_id, ref gate, ref result, .. } => {
+                LoopEvent::AwaitCommitApproval {
+                    ref task_id,
+                    ref gate,
+                    ref result,
+                    ..
+                } => {
                     eprintln!(
                         "[foundry] WARNING: require_human_approval is TUI-only -- auto-approving {} in headless mode",
                         task_id
@@ -543,8 +585,8 @@ pub(super) async fn run_headless(project_dir: &Path, output_format: Option<Strin
 
     if !json_output {
         if let Some(ref sid) = observatory_session_id {
-            let project_dir_canonical = dunce::canonicalize(project_dir)
-                .unwrap_or_else(|_| project_dir.to_path_buf());
+            let project_dir_canonical =
+                dunce::canonicalize(project_dir).unwrap_or_else(|_| project_dir.to_path_buf());
             if let Err(e) = crate::stats::print_session_summary(sid, &project_dir_canonical) {
                 eprintln!("[warn] could not print session summary: {}", e);
             }
@@ -648,7 +690,9 @@ pub(super) fn run_patterns_prune(yes: bool) -> Result<()> {
         .collect();
 
     if prune_candidates.is_empty() {
-        println!("No patterns qualify for pruning (need injection_count >= 10 and citation_count == 0).");
+        println!(
+            "No patterns qualify for pruning (need injection_count >= 10 and citation_count == 0)."
+        );
         return Ok(());
     }
 
@@ -692,8 +736,7 @@ pub(super) fn run_patterns_prune(yes: bool) -> Result<()> {
     let actionable: Vec<String> = prune_candidates
         .into_iter()
         .filter(|id| {
-            source_map.contains_key(id)
-                && !archived_dir.join(format!("{}.json", id)).exists()
+            source_map.contains_key(id) && !archived_dir.join(format!("{}.json", id)).exists()
         })
         .collect();
 
@@ -911,7 +954,9 @@ pub(super) fn run_patterns_promote(apply: bool, days: u32) -> Result<()> {
     let promotable: Vec<&String> = qualifying_ids
         .iter()
         .filter(|id| {
-            pattern_map.get(*id).is_some_and(|(p, _)| p.promoted_to.is_empty())
+            pattern_map
+                .get(*id)
+                .is_some_and(|(p, _)| p.promoted_to.is_empty())
         })
         .collect();
 
@@ -927,7 +972,9 @@ pub(super) fn run_patterns_promote(apply: bool, days: u32) -> Result<()> {
     let mut by_extension: BTreeMap<String, Vec<&String>> = BTreeMap::new();
     for id in &promotable {
         let (pattern, _) = &pattern_map[*id];
-        let ext_name = pattern.tech_stack.first()
+        let ext_name = pattern
+            .tech_stack
+            .first()
             .map(|s| s.to_lowercase())
             .unwrap_or_else(|| "general".to_string());
         by_extension.entry(ext_name).or_default().push(id);
@@ -959,7 +1006,11 @@ pub(super) fn run_patterns_promote(apply: bool, days: u32) -> Result<()> {
             let (pattern, _) = &pattern_map[*id];
             let inj = injection_counts.get(*id).copied().unwrap_or(0);
             let cit = citation_counts.get(*id).copied().unwrap_or(0);
-            let rate = if inj > 0 { cit as f64 / inj as f64 } else { 0.0 };
+            let rate = if inj > 0 {
+                cit as f64 / inj as f64
+            } else {
+                0.0
+            };
 
             let block = generate_prose_block(pattern, inj, cit, rate);
             prose_blocks.push_str(&block);
@@ -977,7 +1028,11 @@ pub(super) fn run_patterns_promote(apply: bool, days: u32) -> Result<()> {
                 if existing_content.contains("## Promoted Patterns") {
                     format!("{}\n{}", existing_content.trim_end(), prose_blocks)
                 } else {
-                    format!("{}\n\n## Promoted Patterns\n\n{}", existing_content.trim_end(), prose_blocks)
+                    format!(
+                        "{}\n\n## Promoted Patterns\n\n{}",
+                        existing_content.trim_end(),
+                        prose_blocks
+                    )
                 }
             } else {
                 let title = {
@@ -990,7 +1045,10 @@ pub(super) fn run_patterns_promote(apply: bool, days: u32) -> Result<()> {
                         None => String::new(),
                     }
                 };
-                format!("# Context Foundry - {} Extension\n\n## Promoted Patterns\n\n{}", title, prose_blocks)
+                format!(
+                    "# Context Foundry - {} Extension\n\n## Promoted Patterns\n\n{}",
+                    title, prose_blocks
+                )
             };
 
             atomic_write_file(&target_claude_md, content.as_bytes())?;
@@ -1005,9 +1063,15 @@ pub(super) fn run_patterns_promote(apply: bool, days: u32) -> Result<()> {
                 let (pattern, _) = &pattern_map[*id];
                 let inj = injection_counts.get(*id).copied().unwrap_or(0);
                 let cit = citation_counts.get(*id).copied().unwrap_or(0);
-                let rate = if inj > 0 { cit as f64 / inj as f64 * 100.0 } else { 0.0 };
-                println!("  {} - \"{}\" (injected {}x, cited {}x, {:.0}% citation rate)",
-                    id, pattern.title, inj, cit, rate);
+                let rate = if inj > 0 {
+                    cit as f64 / inj as f64 * 100.0
+                } else {
+                    0.0
+                };
+                println!(
+                    "  {} - \"{}\" (injected {}x, cited {}x, {:.0}% citation rate)",
+                    id, pattern.title, inj, cit, rate
+                );
             }
             let block_preview = &prose_blocks;
             println!("\n  Generated prose:\n");
@@ -1023,10 +1087,11 @@ pub(super) fn run_patterns_promote(apply: bool, days: u32) -> Result<()> {
         let mut by_source: HashMap<PathBuf, Vec<(String, String, String)>> = HashMap::new();
         for (pattern_id, _ext_name, rel_path) in &promotion_log {
             let (_, source_path) = &pattern_map[pattern_id];
-            by_source
-                .entry(source_path.clone())
-                .or_default()
-                .push((pattern_id.clone(), rel_path.clone(), today.clone()));
+            by_source.entry(source_path.clone()).or_default().push((
+                pattern_id.clone(),
+                rel_path.clone(),
+                today.clone(),
+            ));
         }
 
         for (source_path, promotions) in &by_source {
@@ -1050,8 +1115,14 @@ pub(super) fn run_patterns_promote(apply: bool, days: u32) -> Result<()> {
                     if let Some(id) = val.get("pattern_id").and_then(|v| v.as_str()) {
                         if let Some((path, date)) = promoted_ids.get(id) {
                             if let Some(obj) = val.as_object_mut() {
-                                obj.insert("promoted_to".to_string(), serde_json::Value::String(path.to_string()));
-                                obj.insert("promoted_at".to_string(), serde_json::Value::String(date.to_string()));
+                                obj.insert(
+                                    "promoted_to".to_string(),
+                                    serde_json::Value::String(path.to_string()),
+                                );
+                                obj.insert(
+                                    "promoted_at".to_string(),
+                                    serde_json::Value::String(date.to_string()),
+                                );
                             }
                             modified = true;
                         }
@@ -1072,8 +1143,14 @@ pub(super) fn run_patterns_promote(apply: bool, days: u32) -> Result<()> {
                         if let Some(id) = pv.get("pattern_id").and_then(|v| v.as_str()) {
                             if let Some((path, date)) = promoted_ids.get(id) {
                                 if let Some(obj) = pv.as_object_mut() {
-                                    obj.insert("promoted_to".to_string(), serde_json::Value::String(path.to_string()));
-                                    obj.insert("promoted_at".to_string(), serde_json::Value::String(date.to_string()));
+                                    obj.insert(
+                                        "promoted_to".to_string(),
+                                        serde_json::Value::String(path.to_string()),
+                                    );
+                                    obj.insert(
+                                        "promoted_at".to_string(),
+                                        serde_json::Value::String(date.to_string()),
+                                    );
                                 }
                                 modified = true;
                             }
@@ -1092,8 +1169,14 @@ pub(super) fn run_patterns_promote(apply: bool, days: u32) -> Result<()> {
                 if let Some(id) = val.get("pattern_id").and_then(|v| v.as_str()) {
                     if let Some((path, date)) = promoted_ids.get(id) {
                         if let Some(obj) = val.as_object_mut() {
-                            obj.insert("promoted_to".to_string(), serde_json::Value::String(path.to_string()));
-                            obj.insert("promoted_at".to_string(), serde_json::Value::String(date.to_string()));
+                            obj.insert(
+                                "promoted_to".to_string(),
+                                serde_json::Value::String(path.to_string()),
+                            );
+                            obj.insert(
+                                "promoted_at".to_string(),
+                                serde_json::Value::String(date.to_string()),
+                            );
                         }
                         let json = serde_json::to_string_pretty(&val)?;
                         atomic_write_file(source_path, json.as_bytes())?;
@@ -1105,7 +1188,10 @@ pub(super) fn run_patterns_promote(apply: bool, days: u32) -> Result<()> {
         // Build summary from promotion_log (only newly-promoted patterns)
         let mut promoted_by_ext: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
         for (pattern_id, ext_name, _) in &promotion_log {
-            promoted_by_ext.entry(ext_name.as_str()).or_default().push(pattern_id.as_str());
+            promoted_by_ext
+                .entry(ext_name.as_str())
+                .or_default()
+                .push(pattern_id.as_str());
         }
         println!(
             "Promoted {} pattern(s) to {} extension(s).",
@@ -1125,7 +1211,12 @@ pub(super) fn run_patterns_promote(apply: bool, days: u32) -> Result<()> {
     Ok(())
 }
 
-fn generate_prose_block(pattern: &Pattern, injection_count: usize, citation_count: usize, citation_rate: f64) -> String {
+fn generate_prose_block(
+    pattern: &Pattern,
+    injection_count: usize,
+    citation_count: usize,
+    citation_rate: f64,
+) -> String {
     let mut out = String::new();
 
     out.push_str(&format!("### {}\n\n", pattern.title));
@@ -1365,7 +1456,9 @@ mod tests {
 
     #[test]
     fn sandbox_image_exists_returns_false_for_nonexistent() {
-        assert!(!super::sandbox_image_exists("foundry-nonexistent-image-abc123:latest"));
+        assert!(!super::sandbox_image_exists(
+            "foundry-nonexistent-image-abc123:latest"
+        ));
     }
 
     #[test]
@@ -1380,10 +1473,7 @@ mod tests {
             provider == ModelProvider::Claude
         });
 
-        assert!(missing
-            .values()
-            .flatten()
-            .any(|role| *role == "scout"));
+        assert!(missing.values().flatten().any(|role| *role == "scout"));
     }
 
     #[test]
@@ -1432,5 +1522,164 @@ mod tests {
             .values()
             .flatten()
             .any(|role| *role == "orchestrator-reviewer"));
+    }
+
+    // dual_selection provider validation tests
+
+    #[test]
+    fn dual_first_only_validates_first_builder_model_provider() {
+        // "first" selected, second entry uses codex (not installed) -- should not appear
+        let config = Config {
+            builder_models: vec!["claude:opus".into(), "codex:".into()],
+            dual_selection: "first".into(),
+            backpressure_only: true,
+            ..Config::default()
+        };
+
+        let missing = missing_provider_commands(&config, ProviderCommandMode::Run, |provider| {
+            provider == ModelProvider::Claude
+        });
+
+        assert!(
+            !missing
+                .values()
+                .flatten()
+                .any(|role| *role == "builder (dual)"),
+            "codex (second slot) should not be required when dual_selection=first"
+        );
+    }
+
+    #[test]
+    fn dual_second_only_validates_second_builder_model_provider() {
+        // "second" selected, first entry uses claude (available) -- should not flag it
+        // second entry uses codex (not installed) -- should appear
+        let config = Config {
+            builder_models: vec!["claude:opus".into(), "codex:".into()],
+            dual_selection: "second".into(),
+            backpressure_only: true,
+            ..Config::default()
+        };
+
+        let missing = missing_provider_commands(&config, ProviderCommandMode::Run, |provider| {
+            provider == ModelProvider::Claude
+        });
+
+        assert!(
+            missing
+                .values()
+                .flatten()
+                .any(|role| *role == "builder (dual)"),
+            "codex (second slot) should be required when dual_selection=second"
+        );
+    }
+
+    #[test]
+    fn dual_third_only_validates_third_builder_model_provider() {
+        let config = Config {
+            builder_models: vec![
+                "claude:opus".into(),
+                "claude:sonnet".into(),
+                "codex:".into(),
+            ],
+            dual_selection: "third".into(),
+            backpressure_only: true,
+            ..Config::default()
+        };
+
+        let missing = missing_provider_commands(&config, ProviderCommandMode::Run, |provider| {
+            provider == ModelProvider::Claude
+        });
+
+        assert!(
+            missing
+                .values()
+                .flatten()
+                .any(|role| *role == "builder (dual)"),
+            "codex (third slot) should be required when dual_selection=third"
+        );
+    }
+
+    #[test]
+    fn dual_both_validates_both_builder_model_providers() {
+        let config = Config {
+            builder_models: vec!["claude:opus".into(), "codex:".into()],
+            dual_selection: "both".into(),
+            backpressure_only: true,
+            ..Config::default()
+        };
+
+        let missing = missing_provider_commands(&config, ProviderCommandMode::Run, |provider| {
+            provider == ModelProvider::Claude
+        });
+
+        assert!(
+            missing
+                .values()
+                .flatten()
+                .any(|role| *role == "builder (dual)"),
+            "codex should be required when dual_selection=both"
+        );
+    }
+
+    #[test]
+    fn dual_unknown_selection_validates_no_builder_model_providers() {
+        let config = Config {
+            builder_models: vec!["codex:".into(), "codex:".into()],
+            dual_selection: "off".into(),
+            backpressure_only: true,
+            ..Config::default()
+        };
+
+        let missing = missing_provider_commands(&config, ProviderCommandMode::Run, |provider| {
+            provider == ModelProvider::Claude
+        });
+
+        assert!(
+            !missing
+                .values()
+                .flatten()
+                .any(|role| *role == "builder (dual)"),
+            "unknown dual_selection should not validate any builder_models entries"
+        );
+    }
+
+    #[test]
+    fn dual_first_ignores_base_builder_provider_when_unused() {
+        let config = Config {
+            builder_provider: "codex".into(),
+            builder_models: vec!["claude:opus".into(), "claude:sonnet".into()],
+            dual_selection: "first".into(),
+            backpressure_only: true,
+            ..Config::default()
+        };
+
+        let missing = missing_provider_commands(&config, ProviderCommandMode::Run, |provider| {
+            provider == ModelProvider::Claude
+        });
+
+        assert!(
+            !missing.values().flatten().any(|role| *role == "builder"),
+            "base builder_provider should not be required when dual_selection=first uses builder_models[0]"
+        );
+    }
+
+    #[test]
+    fn dual_both_ignores_base_builder_provider_when_unused() {
+        let config = Config {
+            builder_provider: "codex".into(),
+            builder_models: vec!["claude:opus".into(), "claude:sonnet".into()],
+            dual_selection: "both".into(),
+            backpressure_only: true,
+            ..Config::default()
+        };
+
+        let missing = missing_provider_commands(&config, ProviderCommandMode::Run, |provider| {
+            provider == ModelProvider::Claude
+        });
+
+        assert!(
+            !missing.values().flatten().any(|role| *role == "builder"),
+            "base builder_provider should not be required when dual_selection=both uses only builder_models"
+        );
     }
 }

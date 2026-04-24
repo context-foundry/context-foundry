@@ -13,7 +13,9 @@ use super::{
 };
 use crate::agent::{AgentOutputEvent, AgentRole};
 use crate::config::Config;
-use crate::orchestrator::{Finding, OrchestratorOutcome, PlanReviewOutcome, ProposerOutput, ReviewerOutput};
+use crate::orchestrator::{
+    Finding, OrchestratorOutcome, PlanReviewOutcome, ProposerOutput, ReviewerOutput,
+};
 use crate::task::Task;
 use crossterm::event::{self, KeyCode, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use std::collections::HashMap;
@@ -2125,7 +2127,7 @@ fn test_parallel_builder_usage_events_update_session_cost() {
     assert_eq!(state.session_output_tokens, 300);
     assert_eq!(
         state.session_cost_millicents.load(Ordering::Relaxed),
-        125_000  // (0.50 + 0.75) * 100_000
+        125_000 // (0.50 + 0.75) * 100_000
     );
 }
 
@@ -2141,7 +2143,10 @@ fn test_buildloop_dir_creation_fails_on_readonly_parent() {
 
     let buildloop_dir = tmp.join(".buildloop");
     let result = std::fs::create_dir_all(&buildloop_dir);
-    assert!(result.is_err(), "create_dir_all should fail when parent is read-only");
+    assert!(
+        result.is_err(),
+        "create_dir_all should fail when parent is read-only"
+    );
 
     std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o755)).unwrap();
     let _ = std::fs::remove_dir_all(&tmp);

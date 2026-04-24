@@ -57,7 +57,9 @@ fn history_path() -> PathBuf {
     if let Some(base) = base {
         PathBuf::from(base).join(".foundry/doubt-history.json")
     } else {
-        std::env::temp_dir().join(".foundry").join("doubt-history.json")
+        std::env::temp_dir()
+            .join(".foundry")
+            .join("doubt-history.json")
     }
 }
 
@@ -308,8 +310,7 @@ pub async fn record_doubt_result(
             } else {
                 cluster.fails += 1;
                 cluster.consecutive_passes = 0;
-                cluster.last_fail =
-                    Some(chrono::Utc::now().format("%Y-%m-%d").to_string());
+                cluster.last_fail = Some(chrono::Utc::now().format("%Y-%m-%d").to_string());
             }
             if let Some(ref emb) = embedding {
                 cluster.centroid =

@@ -139,7 +139,11 @@ impl RunContext {
 
     pub(super) fn ensure_runtime_dirs(&self) {
         if let Err(e) = std::fs::create_dir_all(&self.log_dir) {
-            eprintln!("Warning: failed to create log directory {}: {}", self.log_dir.display(), e);
+            eprintln!(
+                "Warning: failed to create log directory {}: {}",
+                self.log_dir.display(),
+                e
+            );
         }
     }
 
@@ -248,10 +252,18 @@ mod tests {
         let child = parent.derive(Config::default());
         assert_eq!(child.session_id, "sess-abc-123");
         // Must share the same Arc, not a copy
-        assert!(Arc::ptr_eq(&child.session_cost_millicents, &parent.session_cost_millicents));
+        assert!(Arc::ptr_eq(
+            &child.session_cost_millicents,
+            &parent.session_cost_millicents
+        ));
         // Mutating one is visible in the other
-        child.session_cost_millicents.fetch_add(1000, Ordering::Relaxed);
-        assert_eq!(parent.session_cost_millicents.load(Ordering::Relaxed), 43_000);
+        child
+            .session_cost_millicents
+            .fetch_add(1000, Ordering::Relaxed);
+        assert_eq!(
+            parent.session_cost_millicents.load(Ordering::Relaxed),
+            43_000
+        );
 
         let _ = std::fs::remove_dir_all(dir);
     }
@@ -287,7 +299,10 @@ mod tests {
         let child = parent.derive_sub_session(Config::default(), &child_dir, "pipeline-0");
         assert_eq!(child.session_id, "sess-xyz-789/pipeline-0");
         assert_eq!(child.project_dir, child_dir);
-        assert!(Arc::ptr_eq(&child.session_cost_millicents, &parent.session_cost_millicents));
+        assert!(Arc::ptr_eq(
+            &child.session_cost_millicents,
+            &parent.session_cost_millicents
+        ));
 
         let _ = std::fs::remove_dir_all(parent_dir);
         let _ = std::fs::remove_dir_all(child_dir);
@@ -314,8 +329,14 @@ mod tests {
         let child = parent.derive(Config::default());
 
         // Gate/result must NOT be shared with parent
-        assert!(!Arc::ptr_eq(&child.commit_approval_gate, &parent.commit_approval_gate));
-        assert!(!Arc::ptr_eq(&child.commit_approval_result, &parent.commit_approval_result));
+        assert!(!Arc::ptr_eq(
+            &child.commit_approval_gate,
+            &parent.commit_approval_gate
+        ));
+        assert!(!Arc::ptr_eq(
+            &child.commit_approval_result,
+            &parent.commit_approval_result
+        ));
 
         let _ = std::fs::remove_dir_all(dir);
     }
@@ -367,12 +388,21 @@ mod tests {
         }
 
         // Verify cost updates from any slot are visible in parent and all other slots
-        slot_contexts[0].1.session_cost_millicents.fetch_add(10_000, Ordering::Relaxed);
-        slot_contexts[1].1.session_cost_millicents.fetch_add(20_000, Ordering::Relaxed);
-        slot_contexts[2].1.session_cost_millicents.fetch_add(15_000, Ordering::Relaxed);
+        slot_contexts[0]
+            .1
+            .session_cost_millicents
+            .fetch_add(10_000, Ordering::Relaxed);
+        slot_contexts[1]
+            .1
+            .session_cost_millicents
+            .fetch_add(20_000, Ordering::Relaxed);
+        slot_contexts[2]
+            .1
+            .session_cost_millicents
+            .fetch_add(15_000, Ordering::Relaxed);
         assert_eq!(
             parent.session_cost_millicents.load(Ordering::Relaxed),
-            50_000  // 5_000 initial + 10_000 + 20_000 + 15_000
+            50_000 // 5_000 initial + 10_000 + 20_000 + 15_000
         );
 
         let _ = std::fs::remove_dir_all(parent_dir);
@@ -404,10 +434,22 @@ mod tests {
         let child1 = parent.derive_sub_session(Config::default(), &child_dir_1, "pipeline-1");
 
         // Gate/result must NOT be shared between sub-sessions
-        assert!(!Arc::ptr_eq(&child0.commit_approval_gate, &child1.commit_approval_gate));
-        assert!(!Arc::ptr_eq(&child0.commit_approval_result, &child1.commit_approval_result));
-        assert!(!Arc::ptr_eq(&child0.commit_approval_gate, &parent.commit_approval_gate));
-        assert!(!Arc::ptr_eq(&child0.commit_approval_result, &parent.commit_approval_result));
+        assert!(!Arc::ptr_eq(
+            &child0.commit_approval_gate,
+            &child1.commit_approval_gate
+        ));
+        assert!(!Arc::ptr_eq(
+            &child0.commit_approval_result,
+            &child1.commit_approval_result
+        ));
+        assert!(!Arc::ptr_eq(
+            &child0.commit_approval_gate,
+            &parent.commit_approval_gate
+        ));
+        assert!(!Arc::ptr_eq(
+            &child0.commit_approval_result,
+            &parent.commit_approval_result
+        ));
 
         // Setting one pipeline's gate should not affect the other
         child0.commit_approval_gate.set();
