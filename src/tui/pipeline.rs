@@ -347,5 +347,7 @@ pub(super) fn render_pipeline_map(
                 Style::default().fg(theme.info).add_modifier(Modifier::BOLD),
             )),
     );
+    // Clear the area first to prevent stale glyphs from a previous, wider render bleeding in.
+    frame.render_widget(ratatui::widgets::Clear, area);
     frame.render_widget(pipeline, area);
 }

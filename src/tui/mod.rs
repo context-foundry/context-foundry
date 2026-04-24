@@ -91,8 +91,8 @@ pub fn running_layout(area: Rect, has_extensions: bool) -> RunningPaneRects {
         .constraints([
             Constraint::Length(5),
             Constraint::Length(7),
-            Constraint::Min(10),
-            Constraint::Length(6),
+            Constraint::Min(8),
+            Constraint::Length(8),
             Constraint::Length(1),
         ])
         .split(area);
@@ -137,8 +137,8 @@ pub fn render(frame: &mut Frame, state: &AppState, config: &Config) {
         .constraints([
             Constraint::Length(5), // Header
             Constraint::Length(7), // Pipeline map (3 lines inside box + borders)
-            Constraint::Min(10),   // Middle: agent output + task queue
-            Constraint::Length(6), // Bottom: stats (progress bar + 3 content rows + borders)
+            Constraint::Min(8),    // Middle: agent output + task queue
+            Constraint::Length(8), // Bottom: stats (progress bar + 5 content rows + borders)
             Constraint::Length(1), // Status bar
         ])
         .split(frame.area());
@@ -267,8 +267,8 @@ pub fn render_running_explorer(frame: &mut Frame, state: &AppState, config: &Con
         .constraints([
             Constraint::Length(5),
             Constraint::Length(7),
-            Constraint::Min(10),
-            Constraint::Length(6),
+            Constraint::Min(8),
+            Constraint::Length(8),
             Constraint::Length(1),
         ])
         .split(frame.area());

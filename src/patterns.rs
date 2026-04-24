@@ -34,7 +34,7 @@ pub struct Pattern {
     pub tech_stack: Vec<String>,
     #[serde(default)]
     pub issue: Option<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_pattern_solution")]
     pub solution: Option<PatternSolution>,
     #[serde(default)]
     pub auto_apply: bool,
@@ -100,6 +100,30 @@ impl Pattern {
     /// Return a star display string (e.g. "3.2" rendered as context for prompts).
     pub fn star_display(&self) -> String {
         format!("{:.1}/5", self.rating())
+    }
+}
+
+// ─── Solution deserializer ───────────────────────────────
+fn deserialize_pattern_solution<'de, D>(deserializer: D) -> Result<Option<PatternSolution>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de::Error;
+    let value = serde_json::Value::deserialize(deserializer)?;
+    match value {
+        serde_json::Value::Null => Ok(None),
+        serde_json::Value::String(s) => Ok(Some(PatternSolution {
+            planner: s.clone(),
+            reviewer: s,
+        })),
+        serde_json::Value::Object(_) => {
+            let sol: PatternSolution = serde_json::from_value(value).map_err(Error::custom)?;
+            Ok(Some(sol))
+        }
+        other => Err(Error::custom(format!(
+            "expected solution to be a string, object, or null, got: {}",
+            other
+        ))),
     }
 }
 
@@ -1710,6 +1734,50 @@ mod tests {
             stale.used_count, 4,
             "stale feedback should not rewrite historical citation counts"
         );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_pattern_deserializes_string_solution() {
+        let json = r#"{"pattern_id":"flowise-credential-must-be-uuid","title":"x","severity":"high","keywords":["credential"],"issue":"i","solution":"set credential to the UUID"}"#;
+        let p: Pattern = serde_json::from_str(json).unwrap();
+        let sol = p.solution.expect("solution should deserialize");
+        assert_eq!(sol.planner, "set credential to the UUID");
+        assert_eq!(sol.reviewer, "set credential to the UUID");
+    }
+
+    #[test]
+    fn test_pattern_deserializes_object_solution() {
+        let json = r#"{"pattern_id":"x","title":"y","solution":{"planner":"P","reviewer":"R"}}"#;
+        let p: Pattern = serde_json::from_str(json).unwrap();
+        let sol = p.solution.unwrap();
+        assert_eq!(sol.planner, "P");
+        assert_eq!(sol.reviewer, "R");
+    }
+
+    #[test]
+    fn test_load_patterns_single_object_with_string_solution() {
+        let dir = std::env::temp_dir().join("foundry_test_single_string_solution");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let json_literal = r#"{
+  "pattern_id": "flowise-credential-must-be-uuid",
+  "title": "Model config credential field must be the credential UUID",
+  "severity": "high",
+  "keywords": ["credential", "FLOWISE_CREDENTIAL_ID"],
+  "issue": "Setting modelConfig.credential to a display name causes the dropdown to show blank.",
+  "solution": "Set modelConfig.credential to the credential UUID."
+}"#;
+        std::fs::write(dir.join("flowise-credential.json"), json_literal).unwrap();
+
+        let patterns = load_patterns(&dir);
+        assert_eq!(patterns.len(), 1);
+        assert_eq!(patterns[0].pattern_id, "flowise-credential-must-be-uuid");
+        let sol = patterns[0].solution.as_ref().unwrap();
+        assert!(sol.planner.contains("UUID"));
+        assert!(sol.reviewer.contains("UUID"));
 
         let _ = std::fs::remove_dir_all(&dir);
     }
