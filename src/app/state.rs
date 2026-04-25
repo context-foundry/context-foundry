@@ -590,6 +590,14 @@ impl AppState {
             && self.current_task.is_some()
             && self.current_agent.is_none()
     }
+
+    pub fn selected_extension_names(&self) -> Vec<String> {
+        self.available_extensions
+            .iter()
+            .filter(|e| e.selected)
+            .map(|e| e.name.clone())
+            .collect()
+    }
 }
 
 // ─── Task Pipeline History ────────────────────────────────────
@@ -702,4 +710,90 @@ pub(super) enum LoopEvent {
     StatsLoadFailed,
     SessionIdAssigned(String),
     Finished,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    #[test]
+    fn test_selected_extension_names_filters_by_selected_flag() {
+        let mut state = AppState::new(PathBuf::from("/tmp/foundry-test-p261-1"));
+        state.available_extensions = vec![
+            ExtensionDisplayInfo {
+                name: "rust".to_string(),
+                selected: true,
+                description: String::new(),
+                pattern_count: 0,
+            },
+            ExtensionDisplayInfo {
+                name: "python".to_string(),
+                selected: false,
+                description: String::new(),
+                pattern_count: 0,
+            },
+            ExtensionDisplayInfo {
+                name: "roblox".to_string(),
+                selected: true,
+                description: String::new(),
+                pattern_count: 0,
+            },
+            ExtensionDisplayInfo {
+                name: "extend".to_string(),
+                selected: false,
+                description: String::new(),
+                pattern_count: 0,
+            },
+        ];
+        let names = state.selected_extension_names();
+        assert_eq!(names, vec!["rust".to_string(), "roblox".to_string()]);
+    }
+
+    #[test]
+    fn test_selected_extension_names_returns_empty_when_none_selected() {
+        let mut state = AppState::new(PathBuf::from("/tmp/foundry-test-p261-2"));
+        state.available_extensions = vec![ExtensionDisplayInfo {
+            name: "rust".to_string(),
+            selected: false,
+            description: String::new(),
+            pattern_count: 0,
+        }];
+        assert!(state.selected_extension_names().is_empty());
+    }
+
+    #[test]
+    fn test_selected_extension_names_returns_empty_when_no_extensions() {
+        let state = AppState::new(PathBuf::from("/tmp/foundry-test-p261-3"));
+        assert!(state.selected_extension_names().is_empty());
+    }
+
+    #[test]
+    fn test_selected_extension_names_preserves_order() {
+        let mut state = AppState::new(PathBuf::from("/tmp/foundry-test-p261-4"));
+        state.available_extensions = vec![
+            ExtensionDisplayInfo {
+                name: "alpha".to_string(),
+                selected: true,
+                description: String::new(),
+                pattern_count: 0,
+            },
+            ExtensionDisplayInfo {
+                name: "beta".to_string(),
+                selected: false,
+                description: String::new(),
+                pattern_count: 0,
+            },
+            ExtensionDisplayInfo {
+                name: "gamma".to_string(),
+                selected: true,
+                description: String::new(),
+                pattern_count: 0,
+            },
+        ];
+        assert_eq!(
+            state.selected_extension_names(),
+            vec!["alpha".to_string(), "gamma".to_string()]
+        );
+    }
 }

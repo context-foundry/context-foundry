@@ -462,11 +462,12 @@ fn spawn_build_loop(
         task::count_pending(&tasks)
     ));
 
-    // Apply runtime toggles (user may have toggled mode/dual-build on startup screen)
+    // Apply runtime toggles (user may have toggled mode/dual-build/extensions on startup screen)
     let mut loop_config = config.clone();
     loop_config.run_mode = state.run_mode.clone();
     loop_config.dual_selection = state.dual_selection.as_str().to_string();
     loop_config.builder_models = state.builder_model_specs.clone();
+    loop_config.extensions = state.selected_extension_names();
 
     state.review_gates.clear();
     state.review_session_id = None;
