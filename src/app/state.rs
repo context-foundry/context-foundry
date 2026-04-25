@@ -341,6 +341,9 @@ pub struct AppState {
     pub show_stats_overlay: bool,
     pub show_settings_overlay: bool,
     pub settings_overlay_cursor: usize,
+    pub local_models: Vec<String>,       // discovered models (LM Studio + Ollama merged)
+    pub local_model_cursor: usize,       // index into local_models for current selection
+    pub selected_local_model: String,    // persisted selection, from config or cycling
     pub stats_overlay_report: Option<StatsReport>,
     pub stats_overlay_scroll: usize,
     pub findings_scroll: usize,
@@ -461,6 +464,9 @@ impl AppState {
             show_stats_overlay: false,
             show_settings_overlay: false,
             settings_overlay_cursor: 0,
+            local_models: Vec::new(),
+            local_model_cursor: 0,
+            selected_local_model: String::new(),
             stats_overlay_report: None,
             stats_overlay_scroll: 0,
             findings_scroll: 0,
@@ -629,6 +635,8 @@ pub(super) enum AppEvent {
     Tick,
     UpdateAvailable(String),
     OllamaStatus(bool), // true = connected, false = unreachable
+    /// Discovered local models from LM Studio + Ollama (merged, deduped, LM Studio first).
+    LocalModels(Vec<String>),
 }
 
 pub(super) enum LoopEvent {

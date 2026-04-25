@@ -554,6 +554,7 @@ pub(super) async fn run_headless(project_dir: &Path, output_format: Option<Strin
             | AppEvent::Mouse(_)
             | AppEvent::Paste(_)
             | AppEvent::OllamaStatus(_)
+            | AppEvent::LocalModels(_)
             | AppEvent::Tick => {}
         }
     }

@@ -860,7 +860,7 @@ fn centered_rect(width: u16, height: u16, area: Rect) -> Rect {
 /// Render a floating settings overlay on top of whatever is already drawn.
 pub(super) fn render_settings_overlay(frame: &mut Frame, state: &AppState) {
     let theme = &state.tui_theme;
-    let modal = centered_rect(50, 14, frame.area());
+    let modal = centered_rect(50, 16, frame.area());
 
     // Shadow: 1 col right + 1 row down
     let shadow = Rect {
@@ -916,10 +916,13 @@ pub(super) fn render_settings_overlay(frame: &mut Frame, state: &AppState) {
     };
 
     let run_mode_val = &state.run_mode;
-    let dual_val = state.dual_selection.as_str();
-    let dual_val = if dual_val.is_empty() { "off" } else { dual_val };
     let theme_val = crate::tui::theme::current_name(&state.tui_theme);
     let sandbox_val = &state.sandbox_status_label;
+    let local_model_val: &str = if state.selected_local_model.is_empty() {
+        "(none)"
+    } else {
+        &state.selected_local_model
+    };
 
     // Rows indexed within inner area
     // 0: spacer
@@ -936,15 +939,15 @@ pub(super) fn render_settings_overlay(frame: &mut Frame, state: &AppState) {
     // 11: hint bar
 
     let rows: &[(usize, bool, &str, &str)] = &[
-        (1, true,  "Run Mode",     run_mode_val),
-        (3, true,  "Dual Builder", dual_val),
-        (5, true,  "Theme",        theme_val),
+        (1, true,  "Run Mode",      run_mode_val),
+        (3, true,  "Builder Arena", local_model_val),
+        (5, true,  "Theme",         theme_val),
     ];
 
     for (row_y, interactive, label, val) in rows {
         let cursor_idx = match *label {
             "Run Mode"     => 0,
-            "Dual Builder" => 1,
+            "Builder Arena" => 1,
             _              => 2,
         };
         let focused = *interactive && state.settings_overlay_cursor == cursor_idx;
@@ -1023,6 +1026,20 @@ pub(super) fn render_settings_overlay(frame: &mut Frame, state: &AppState) {
         Rect {
             x: inner.x,
             y: inner.y + 11,
+            width: inner.width,
+            height: 1,
+        },
+    );
+
+    // Left/Right hint (row 13)
+    frame.render_widget(
+        Paragraph::new(Line::from(Span::styled(
+            "  \u{2190}\u{2192} cycle selection on focused row",
+            Style::default().fg(theme.muted),
+        ))),
+        Rect {
+            x: inner.x,
+            y: inner.y + 13,
             width: inner.width,
             height: 1,
         },

@@ -219,6 +219,23 @@ pub fn cycle_next(current: &TuiTheme) -> (TuiTheme, &'static str) {
     (adapt_theme(themes[next_idx].1.clone()), themes[next_idx].0)
 }
 
+/// Cycle to the previous built-in theme. Returns (new theme, theme name).
+pub fn cycle_prev(current: &TuiTheme) -> (TuiTheme, &'static str) {
+    let themes = builtin_themes();
+    // Compare against adapted themes so cycling works regardless of color mode
+    let adapted: Vec<_> = themes
+        .iter()
+        .map(|(n, t)| (*n, adapt_theme(t.clone())))
+        .collect();
+    let current_idx = adapted.iter().position(|(_, t)| t == current).unwrap_or(0);
+    let prev_idx = if current_idx == 0 {
+        themes.len() - 1
+    } else {
+        current_idx - 1
+    };
+    (adapt_theme(themes[prev_idx].1.clone()), themes[prev_idx].0)
+}
+
 /// Return the name of the currently active theme.
 pub fn current_name(current: &TuiTheme) -> &'static str {
     let themes = builtin_themes();

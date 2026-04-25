@@ -234,6 +234,15 @@ pub(super) fn handle_startup_event(state: &mut AppState, event: AppEvent, config
                 .to_string(),
             );
         }
+        AppEvent::LocalModels(models) => {
+            let prev = state.selected_local_model.clone();
+            state.local_models = models;
+            if let Some(idx) = state.local_models.iter().position(|m| m == &prev) {
+                state.local_model_cursor = idx;
+            } else {
+                state.local_model_cursor = 0;
+            }
+        }
         _ => {}
     }
 }
@@ -247,7 +256,7 @@ fn handle_startup_paste(state: &mut AppState, text: String) {
     }
 }
 
-pub(super) fn handle_startup_key(state: &mut AppState, key: event::KeyEvent, _config: &Config) {
+pub(super) fn handle_startup_key(state: &mut AppState, key: event::KeyEvent, config: &Config) {
     let Some(_startup) = state.startup.as_ref() else {
         return;
     };
@@ -330,8 +339,18 @@ pub(super) fn handle_startup_key(state: &mut AppState, key: event::KeyEvent, _co
     // Settings overlay intercept -- must be before is_typing_key so '?' is not
     // consumed as intent input and Up/Down/Enter/Space navigate the overlay.
     if key.code == KeyCode::Char('?') && !key.modifiers.contains(KeyModifiers::CONTROL) {
+        let was_open = state.show_settings_overlay;
         state.show_settings_overlay = !state.show_settings_overlay;
         state.settings_overlay_cursor = 0;
+        if !was_open {
+            if let Some(tx) = state.event_tx.clone() {
+                let ollama_url = config.ollama_url.clone();
+                tokio::spawn(async move {
+                    let models = super::fetch_local_models(ollama_url).await;
+                    let _ = tx.send(AppEvent::LocalModels(models));
+                });
+            }
+        }
         return;
     }
     if state.show_settings_overlay {
@@ -352,6 +371,14 @@ pub(super) fn handle_startup_key(state: &mut AppState, key: event::KeyEvent, _co
             }
             KeyCode::Enter | KeyCode::Char(' ') => {
                 super::cycle_settings_cursor_startup(state);
+                return;
+            }
+            KeyCode::Left => {
+                super::cycle_settings_left_startup(state);
+                return;
+            }
+            KeyCode::Right => {
+                super::cycle_settings_right_startup(state);
                 return;
             }
             _ => {

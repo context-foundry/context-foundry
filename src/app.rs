@@ -40,6 +40,64 @@ use crate::utils::{atomic_write_file, truncate_str};
 
 // ─── TUI Mode ────────────────────────────────────────────────
 
+/// Ping LM Studio and Ollama for available model names.
+/// Returns merged, deduped list with LM Studio models first.
+pub(super) async fn fetch_local_models(ollama_url: String) -> Vec<String> {
+    tokio::task::spawn_blocking(move || {
+        let mut models: Vec<String> = Vec::new();
+
+        // LM Studio: GET http://127.0.0.1:1234/v1/models
+        let lm_out = std::process::Command::new("curl")
+            .args(["-s", "--max-time", "2", "http://127.0.0.1:1234/v1/models"])
+            .output();
+        if let Ok(out) = lm_out {
+            if let Ok(text) = std::str::from_utf8(&out.stdout) {
+                if let Ok(val) = serde_json::from_str::<serde_json::Value>(text) {
+                    if let Some(arr) = val.get("data").and_then(|d| d.as_array()) {
+                        for item in arr {
+                            if let Some(id) = item.get("id").and_then(|v| v.as_str()) {
+                                if !id.is_empty() {
+                                    models.push(id.to_string());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Ollama: GET {ollama_url}/api/tags
+        let ollama_out = std::process::Command::new("curl")
+            .args([
+                "-s",
+                "--max-time",
+                "2",
+                &format!("{}/api/tags", ollama_url),
+            ])
+            .output();
+        if let Ok(out) = ollama_out {
+            if let Ok(text) = std::str::from_utf8(&out.stdout) {
+                if let Ok(val) = serde_json::from_str::<serde_json::Value>(text) {
+                    if let Some(arr) = val.get("models").and_then(|m| m.as_array()) {
+                        for item in arr {
+                            if let Some(name) = item.get("name").and_then(|v| v.as_str()) {
+                                let s = name.to_string();
+                                if !s.is_empty() && !models.contains(&s) {
+                                    models.push(s);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        models
+    })
+    .await
+    .unwrap_or_default()
+}
+
 pub async fn run_tui(project_dir: &Path) -> Result<()> {
     let config = Config::load(project_dir);
     commands::ensure_required_providers_available(&config, commands::ProviderCommandMode::Run)?;
@@ -58,6 +116,7 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
     let shutdown = Arc::new(AtomicBool::new(false));
     let mut state = AppState::new(buildloop_dir);
     state.run_mode = config.run_mode.clone();
+    state.selected_local_model = config.local_model.clone();
     state.builder_model_specs = config.builder_models.clone();
     if config.builder_models.len() >= 2 {
         state.dual_selection = state::DualSelection::from_str(&config.dual_selection);
@@ -704,6 +763,15 @@ fn handle_planning_event(state: &mut AppState, event: AppEvent, config: &Config)
                 .to_string(),
             );
         }
+        AppEvent::LocalModels(models) => {
+            let prev = state.selected_local_model.clone();
+            state.local_models = models;
+            if let Some(idx) = state.local_models.iter().position(|m| m == &prev) {
+                state.local_model_cursor = idx;
+            } else {
+                state.local_model_cursor = 0;
+            }
+        }
         AppEvent::LoopEvent(LoopEvent::StatsReady(report)) => {
             if state.stats_loading {
                 state.stats_overlay_report = Some(*report);
@@ -771,11 +839,27 @@ fn handle_planning_key(state: &mut AppState, key: event::KeyEvent, config: &Conf
             state.log(format!("Theme: {}", name));
         }
         KeyCode::Char('?') => {
+            let was_open = state.show_settings_overlay;
             state.show_settings_overlay = !state.show_settings_overlay;
             state.settings_overlay_cursor = 0;
+            if !was_open {
+                if let Some(tx) = state.event_tx.clone() {
+                    let ollama_url = config.ollama_url.clone();
+                    tokio::spawn(async move {
+                        let models = fetch_local_models(ollama_url).await;
+                        let _ = tx.send(AppEvent::LocalModels(models));
+                    });
+                }
+            }
         }
         KeyCode::Enter | KeyCode::Char(' ') if state.show_settings_overlay => {
             cycle_settings_cursor(state, config);
+        }
+        KeyCode::Left if state.show_settings_overlay => {
+            cycle_settings_left(state, config);
+        }
+        KeyCode::Right if state.show_settings_overlay => {
+            cycle_settings_right(state, config);
         }
         KeyCode::Up => {
             if state.show_settings_overlay {
@@ -1341,11 +1425,27 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                 } else {
                     match key.code {
                         KeyCode::Char('?') => {
+                            let was_open = state.show_settings_overlay;
                             state.show_settings_overlay = !state.show_settings_overlay;
                             state.settings_overlay_cursor = 0;
+                            if !was_open {
+                                if let Some(tx) = state.event_tx.clone() {
+                                    let ollama_url = config.ollama_url.clone();
+                                    tokio::spawn(async move {
+                                        let models = fetch_local_models(ollama_url).await;
+                                        let _ = tx.send(AppEvent::LocalModels(models));
+                                    });
+                                }
+                            }
                         }
                         KeyCode::Enter | KeyCode::Char(' ') if state.show_settings_overlay => {
                             cycle_settings_cursor(state, config);
+                        }
+                        KeyCode::Left if state.show_settings_overlay => {
+                            cycle_settings_left(state, config);
+                        }
+                        KeyCode::Right if state.show_settings_overlay => {
+                            cycle_settings_right(state, config);
                         }
                         KeyCode::Esc => {
                             if state.show_settings_overlay {
@@ -1483,11 +1583,27 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                 } else {
                     match key.code {
                         KeyCode::Char('?') => {
+                            let was_open = state.show_settings_overlay;
                             state.show_settings_overlay = !state.show_settings_overlay;
                             state.settings_overlay_cursor = 0;
+                            if !was_open {
+                                if let Some(tx) = state.event_tx.clone() {
+                                    let ollama_url = config.ollama_url.clone();
+                                    tokio::spawn(async move {
+                                        let models = fetch_local_models(ollama_url).await;
+                                        let _ = tx.send(AppEvent::LocalModels(models));
+                                    });
+                                }
+                            }
                         }
                         KeyCode::Enter | KeyCode::Char(' ') if state.show_settings_overlay => {
                             cycle_settings_cursor(state, config);
+                        }
+                        KeyCode::Left if state.show_settings_overlay => {
+                            cycle_settings_left(state, config);
+                        }
+                        KeyCode::Right if state.show_settings_overlay => {
+                            cycle_settings_right(state, config);
                         }
                         KeyCode::Char('q') => {
                             if state.show_settings_overlay {
@@ -1669,6 +1785,15 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                 }
                 .to_string(),
             );
+        }
+        AppEvent::LocalModels(models) => {
+            let prev = state.selected_local_model.clone();
+            state.local_models = models;
+            if let Some(idx) = state.local_models.iter().position(|m| m == &prev) {
+                state.local_model_cursor = idx;
+            } else {
+                state.local_model_cursor = 0;
+            }
         }
         AppEvent::Mouse(mouse) => {
             use crossterm::event::{MouseButton, MouseEventKind};
@@ -1947,11 +2072,13 @@ fn cycle_settings_cursor(state: &mut AppState, _config: &Config) {
             Config::save_run_mode(project_dir, &state.run_mode);
         }
         1 => {
-            if state.builder_model_specs.len() >= 2 {
-                let specs_len = state.builder_model_specs.len();
-                let next = state.dual_selection.next_for(specs_len);
-                state.dual_selection = next;
-                Config::save_dual_selection(project_dir, next.as_str());
+            // Cycle local model forward (same as Right arrow)
+            if !state.local_models.is_empty() {
+                state.local_model_cursor =
+                    (state.local_model_cursor + 1) % state.local_models.len();
+                state.selected_local_model =
+                    state.local_models[state.local_model_cursor].clone();
+                Config::save_local_model(project_dir, &state.selected_local_model);
             }
         }
         2 => {
@@ -1980,11 +2107,146 @@ pub(super) fn cycle_settings_cursor_startup(state: &mut AppState) {
             Config::save_run_mode(project_dir, &state.run_mode);
         }
         1 => {
-            if state.builder_model_specs.len() >= 2 {
-                let specs_len = state.builder_model_specs.len();
-                let next = state.dual_selection.next_for(specs_len);
-                state.dual_selection = next;
-                Config::save_dual_selection(project_dir, next.as_str());
+            if !state.local_models.is_empty() {
+                state.local_model_cursor =
+                    (state.local_model_cursor + 1) % state.local_models.len();
+                state.selected_local_model =
+                    state.local_models[state.local_model_cursor].clone();
+                Config::save_local_model(project_dir, &state.selected_local_model);
+            }
+        }
+        2 => {
+            let (new_theme, name) = crate::tui::theme::cycle_next(&state.tui_theme);
+            state.tui_theme = new_theme;
+            Config::save_theme(project_dir, name);
+        }
+        _ => {}
+    }
+}
+
+fn cycle_settings_left(state: &mut AppState, _config: &Config) {
+    let project_dir = state
+        .buildloop_dir
+        .parent()
+        .unwrap_or(std::path::Path::new("."));
+    match state.settings_overlay_cursor {
+        0 => {
+            state.run_mode = match state.run_mode.as_str() {
+                "auto"   => "review".into(),
+                "sprint" => "auto".into(),
+                _        => "sprint".into(),
+            };
+            Config::save_run_mode(project_dir, &state.run_mode);
+        }
+        1 => {
+            if !state.local_models.is_empty() {
+                state.local_model_cursor = if state.local_model_cursor == 0 {
+                    state.local_models.len() - 1
+                } else {
+                    state.local_model_cursor - 1
+                };
+                state.selected_local_model =
+                    state.local_models[state.local_model_cursor].clone();
+                Config::save_local_model(project_dir, &state.selected_local_model);
+            }
+        }
+        2 => {
+            let (new_theme, name) = crate::tui::theme::cycle_prev(&state.tui_theme);
+            state.tui_theme = new_theme;
+            Config::save_theme(project_dir, name);
+        }
+        _ => {}
+    }
+}
+
+fn cycle_settings_right(state: &mut AppState, _config: &Config) {
+    let project_dir = state
+        .buildloop_dir
+        .parent()
+        .unwrap_or(std::path::Path::new("."));
+    match state.settings_overlay_cursor {
+        0 => {
+            state.run_mode = match state.run_mode.as_str() {
+                "auto"   => "sprint".into(),
+                "sprint" => "review".into(),
+                _        => "auto".into(),
+            };
+            Config::save_run_mode(project_dir, &state.run_mode);
+        }
+        1 => {
+            if !state.local_models.is_empty() {
+                state.local_model_cursor =
+                    (state.local_model_cursor + 1) % state.local_models.len();
+                state.selected_local_model =
+                    state.local_models[state.local_model_cursor].clone();
+                Config::save_local_model(project_dir, &state.selected_local_model);
+            }
+        }
+        2 => {
+            let (new_theme, name) = crate::tui::theme::cycle_next(&state.tui_theme);
+            state.tui_theme = new_theme;
+            Config::save_theme(project_dir, name);
+        }
+        _ => {}
+    }
+}
+
+pub(super) fn cycle_settings_left_startup(state: &mut AppState) {
+    let project_dir = state
+        .buildloop_dir
+        .parent()
+        .unwrap_or(std::path::Path::new("."));
+    match state.settings_overlay_cursor {
+        0 => {
+            state.run_mode = match state.run_mode.as_str() {
+                "auto"   => "review".into(),
+                "sprint" => "auto".into(),
+                _        => "sprint".into(),
+            };
+            Config::save_run_mode(project_dir, &state.run_mode);
+        }
+        1 => {
+            if !state.local_models.is_empty() {
+                state.local_model_cursor = if state.local_model_cursor == 0 {
+                    state.local_models.len() - 1
+                } else {
+                    state.local_model_cursor - 1
+                };
+                state.selected_local_model =
+                    state.local_models[state.local_model_cursor].clone();
+                Config::save_local_model(project_dir, &state.selected_local_model);
+            }
+        }
+        2 => {
+            let (new_theme, name) = crate::tui::theme::cycle_prev(&state.tui_theme);
+            state.tui_theme = new_theme;
+            Config::save_theme(project_dir, name);
+        }
+        _ => {}
+    }
+}
+
+pub(super) fn cycle_settings_right_startup(state: &mut AppState) {
+    let project_dir = state
+        .buildloop_dir
+        .parent()
+        .unwrap_or(std::path::Path::new("."));
+    match state.settings_overlay_cursor {
+        0 => {
+            state.run_mode = match state.run_mode.as_str() {
+                "auto"   => "sprint".into(),
+                "sprint" => "review".into(),
+                _        => "auto".into(),
+            };
+            Config::save_run_mode(project_dir, &state.run_mode);
+        }
+        1 => {
+            if !state.local_models.is_empty() {
+                state.local_model_cursor =
+                    (state.local_model_cursor + 1) % state.local_models.len();
+                state.selected_local_model =
+                    state.local_models[state.local_model_cursor].clone();
+                Config::save_local_model(project_dir, &state.selected_local_model);
             }
         }
         2 => {

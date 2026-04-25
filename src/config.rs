@@ -157,6 +157,11 @@ pub struct Config {
     /// Ollama API base URL for embeddings (default: http://127.0.0.1:11434).
     pub ollama_url: String,
 
+    /// Selected local model (LM Studio or Ollama). Empty = none selected.
+    /// Written by Settings overlay Left/Right on Builder Arena row.
+    #[serde(default)]
+    pub local_model: String,
+
     /// Timeout for Ollama embedding requests (in milliseconds, rounded to whole seconds for curl).
     pub embedding_timeout_ms: u64,
 
@@ -455,6 +460,7 @@ impl Default for Config {
             semantic_match_enabled: true,
             embedding_model: "nomic-embed-text".into(),
             ollama_url: "http://127.0.0.1:11434".into(),
+            local_model: String::new(),
             embedding_timeout_ms: 2000,
             orchestrator_proposer_provider: "claude".into(),
             orchestrator_proposer_model: "opus".into(),
@@ -934,6 +940,27 @@ impl Config {
         if let Err(e) = crate::utils::atomic_write_file(&config_path, json.as_bytes()) {
             eprintln!(
                 "warning: failed to save theme to {} -- change will not persist across restarts: {e}",
+                config_path.display(),
+            );
+        }
+    }
+
+    /// Persist the selected local model to .foundry.json without overwriting other fields.
+    pub fn save_local_model(project_dir: &Path, model: &str) {
+        let config_path = project_dir.join(".foundry.json");
+        let content = std::fs::read_to_string(&config_path).unwrap_or_else(|_| "{}".to_string());
+        let mut value: serde_json::Value = serde_json::from_str(&content).unwrap_or_else(|e| {
+            eprintln!(
+                "warning: {} contains invalid JSON ({e}) -- existing settings will be lost",
+                config_path.display(),
+            );
+            serde_json::json!({})
+        });
+        value["local_model"] = serde_json::json!(model);
+        let json = serde_json::to_string_pretty(&value).unwrap_or_default();
+        if let Err(e) = crate::utils::atomic_write_file(&config_path, json.as_bytes()) {
+            eprintln!(
+                "warning: failed to save local_model to {} -- change will not persist across restarts: {e}",
                 config_path.display(),
             );
         }
