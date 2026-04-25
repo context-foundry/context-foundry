@@ -155,7 +155,9 @@ RULES:
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn query_prompt(
+    stage_label: &str,
     task_id: &str,
     task_desc: &str,
     task_complexity: &str,
@@ -180,7 +182,7 @@ pub fn query_prompt(
         .unwrap_or_else(|| "\n(No TASKS.md found)\n".to_string());
 
     format!(
-        r#"You are the QUERY agent for an autonomous build loop.
+        r#"You are the {stage_label} agent for an autonomous build loop.
 
 Task ID: {task_id}
 Task Description: {task_desc}
@@ -231,8 +233,9 @@ RULES:
     )
 }
 
-pub fn research_prompt() -> String {
-    r#"You are the RESEARCH agent for an autonomous build loop.
+pub fn research_prompt(stage_label: &str) -> String {
+    format!(
+        r#"You are the {stage_label} agent for an autonomous build loop.
 
 YOUR JOB: Read .buildloop/questions.md and answer every question by investigating the codebase.
 You have full access to the project's source code, build system, and file structure.
@@ -270,10 +273,11 @@ RULES:
 - Cite specific file paths and line numbers for every claim
 - Include short code snippets (3-10 lines) as evidence when relevant
 - Do NOT speculate about what should be built -- only report what exists"#
-        .to_string()
+    )
 }
 
 pub fn planner_prompt(
+    stage_label: &str,
     task_id: &str,
     task_desc: &str,
     pattern_context: &str,
@@ -293,7 +297,7 @@ pub fn planner_prompt(
     };
 
     format!(
-        r#"You are the PLANNER agent for an autonomous build loop.
+        r#"You are the {stage_label} agent for an autonomous build loop.
 
 YOUR TASK: Create a detailed implementation plan for:
 
@@ -396,7 +400,9 @@ IMPORTANT:
 /// Variant of `planner_prompt` for look-ahead planning.
 /// Writes to a task-specific plan file instead of `current-plan.md` so it
 /// does not interfere with the currently running task.
+#[allow(clippy::too_many_arguments)]
 pub fn planner_lookahead_prompt(
+    stage_label: &str,
     task_id: &str,
     task_desc: &str,
     pattern_context: &str,
@@ -417,7 +423,7 @@ pub fn planner_lookahead_prompt(
     };
 
     format!(
-        r#"You are the PLANNER agent for an autonomous build loop.
+        r#"You are the {stage_label} agent for an autonomous build loop.
 
 YOUR TASK: Create a detailed implementation plan for:
 
@@ -498,9 +504,15 @@ IMPORTANT:
     )
 }
 
-pub fn builder_prompt(task_id: &str, task_desc: &str, spec_file: &str, tasks_file: &str) -> String {
+pub fn builder_prompt(
+    stage_label: &str,
+    task_id: &str,
+    task_desc: &str,
+    spec_file: &str,
+    tasks_file: &str,
+) -> String {
     format!(
-        r#"You are the BUILDER agent for an autonomous build loop.
+        r#"You are the {stage_label} agent for an autonomous build loop.
 
 YOUR TASK: Implement the plan written in .buildloop/current-plan.md
 
@@ -564,6 +576,7 @@ This is optional -- only add lines for patterns you have a clear opinion about."
 }
 
 pub fn parallel_builder_prompt(
+    stage_label: &str,
     task_id: &str,
     task_desc: &str,
     assigned_file_ops: &str,
@@ -571,7 +584,7 @@ pub fn parallel_builder_prompt(
     tasks_file: &str,
 ) -> String {
     format!(
-        r#"You are a PARALLEL BUILDER agent for an autonomous build loop.
+        r#"You are a PARALLEL {stage_label} agent for an autonomous build loop.
 
 YOUR TASK: Implement ONLY the file operations assigned to you below.
 
@@ -628,13 +641,14 @@ This is optional -- only add lines for patterns you have a clear opinion about."
 }
 
 pub fn builder_direct_prompt(
+    stage_label: &str,
     task_id: &str,
     task_desc: &str,
     spec_file: &str,
     tasks_file: &str,
 ) -> String {
     format!(
-        r#"You are the BUILDER agent for an autonomous build loop.
+        r#"You are the {stage_label} agent for an autonomous build loop.
 
 YOUR TASK: Implement the following task directly (no separate plan file exists for this task).
 
@@ -2005,7 +2019,7 @@ mod tests {
     #[test]
     fn test_pattern_context_wrapped_in_reference_block() {
         let patterns = "Some pattern advice here";
-        let planner = planner_prompt("T1", "test task", patterns, "SPEC.md", "TASKS.md");
+        let planner = planner_prompt("PLAN", "T1", "test task", patterns, "SPEC.md", "TASKS.md");
         assert!(
             planner.contains("--- BEGIN REFERENCE DATA (non-authoritative"),
             "planner prompt must wrap pattern context in reference data block"
@@ -2038,7 +2052,7 @@ mod tests {
 
     #[test]
     fn test_empty_pattern_context_has_no_reference_block() {
-        let planner = planner_prompt("T1", "test task", "", "SPEC.md", "TASKS.md");
+        let planner = planner_prompt("PLAN", "T1", "test task", "", "SPEC.md", "TASKS.md");
         assert!(
             !planner.contains("BEGIN REFERENCE DATA"),
             "empty pattern context should not produce a reference block"
@@ -2076,7 +2090,7 @@ mod tests {
 
     #[test]
     fn prompts_use_actual_file_names_not_hardcoded() {
-        let planner = planner_prompt("T1", "task", "", "ARCHITECTURE.md", "IMPL_PLAN.md");
+        let planner = planner_prompt("PLAN", "T1", "task", "", "ARCHITECTURE.md", "IMPL_PLAN.md");
         assert!(planner.contains("ARCHITECTURE.md"));
         assert!(planner.contains("IMPL_PLAN.md"));
         assert!(!planner.contains("SPEC.md"));

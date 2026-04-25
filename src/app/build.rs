@@ -215,6 +215,7 @@ fn spawn_lookahead_planner(
             patterns::format_patterns_for_prompt(&matched, "planner", lookahead_pattern_count);
 
         let prompt = prompts::planner_lookahead_prompt(
+            &ctx.config.pipeline_stage_label("plan"),
             &task_id,
             &task_desc,
             &pattern_context,
@@ -792,6 +793,7 @@ async fn run_parallel_builder(
             .join("\n\n");
 
         let prompt = prompts::parallel_builder_prompt(
+            &ctx.config.pipeline_stage_label("implement"),
             task_id,
             task_desc,
             &joined_blocks,
@@ -2617,10 +2619,12 @@ async fn process_task(
     );
     let skip_query = skip_scout
         || checkpoint_skip_query
-        || (ctx.config.skip_scout_for_simple && task_complexity == TaskComplexity::Simple);
+        || (ctx.config.skip_scout_for_simple && task_complexity == TaskComplexity::Simple)
+        || !ctx.config.pipeline_stage_enabled("query");
     let skip_research = skip_scout
         || (checkpoint_skip_query && checkpoint_skip_research)
-        || (ctx.config.skip_scout_for_simple && task_complexity == TaskComplexity::Simple);
+        || (ctx.config.skip_scout_for_simple && task_complexity == TaskComplexity::Simple)
+        || !ctx.config.pipeline_stage_enabled("research");
     let build_claims = ctx.buildloop_dir.join("build-claims.md");
     let mut query_failed = false;
     let mut eff_task_builder_provider = ctx.config.builder_provider.clone();
@@ -2777,7 +2781,9 @@ async fn process_task(
     let skip_planner = checkpoint_skip_planner
         || (ctx.config.skip_planner_for_simple
             && (task_complexity == TaskComplexity::Simple
-                || (task_complexity == TaskComplexity::Medium && task_desc.len() >= 80)));
+                || (task_complexity == TaskComplexity::Medium && task_desc.len() >= 80)))
+        || !ctx.config.pipeline_stage_enabled("plan");
+    let stage_skip_builder = !ctx.config.pipeline_stage_enabled("implement");
 
     // Track rate limiting across agents; starts false when planner is skipped.
     #[allow(unused_assignments)]
@@ -2857,6 +2863,7 @@ async fn process_task(
                     .map(|s| crate::task::extract_query_context(&s));
 
                 let query_prompt_text = prompts::query_prompt(
+                    &ctx.config.pipeline_stage_label("query"),
                     task_id,
                     task_desc,
                     complexity_str,
@@ -3009,7 +3016,12 @@ async fn process_task(
             }
         } // end if !skip_query else block
 
-        if !query_failed {
+        if skip_research {
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                "Pipeline: research stage disabled in config -- skipping research for {}",
+                task_id
+            ))));
+        } else if !query_failed {
             // ─── Research Phase (with phase isolation) ───────────────
             {
                 // Phase isolation: hide TASKS.md and UPDATED_SPECS.md from Research
@@ -3061,7 +3073,8 @@ async fn process_task(
                     },
                 );
 
-                let research_prompt_text = prompts::research_prompt();
+                let research_prompt_text =
+                    prompts::research_prompt(&ctx.config.pipeline_stage_label("research"));
                 let research_start = Instant::now();
                 let research_result = agent::run_agent(
                     &AgentRole::Research,
@@ -3407,6 +3420,7 @@ async fn process_task(
             );
 
             let mut prompt = prompts::planner_prompt(
+                &ctx.config.pipeline_stage_label("plan"),
                 task_id,
                 task_desc,
                 &pattern_context,
@@ -3711,6 +3725,7 @@ async fn process_task(
 
             let failed_output = std::fs::read_to_string(&ctx.current_plan).unwrap_or_default();
             let mut base_prompt = prompts::planner_prompt(
+                &ctx.config.pipeline_stage_label("plan"),
                 task_id,
                 task_desc,
                 &pattern_context,
@@ -4271,24 +4286,35 @@ async fn process_task(
 
     // ─── Run Builder ────────────────────────────────────────
     let build_ok: bool;
-    if checkpoint_skip_builder {
-        // Builder already completed in a previous run -- populate results and skip.
-        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-            "Checkpoint: skipping builder for {} -- resuming at doubt/review",
-            task_id,
-        ))));
+    if checkpoint_skip_builder || stage_skip_builder {
+        // Builder skipped -- either completed in a previous run (checkpoint) or
+        // disabled for this session via pipeline_stages[implement].enabled = false.
+        let log_msg = if checkpoint_skip_builder {
+            format!(
+                "Checkpoint: skipping builder for {} -- resuming at doubt/review",
+                task_id
+            )
+        } else {
+            format!(
+                "Pipeline: implement stage disabled in config -- skipping builder for {}",
+                task_id
+            )
+        };
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(log_msg)));
         {
-            let mut result = StageResult::success(
-                "Builder",
-                &format!("Implement changes for {} (checkpoint)", task_id),
-            );
+            let action = if checkpoint_skip_builder {
+                format!("Implement changes for {} (checkpoint)", task_id)
+            } else {
+                format!("Implement changes for {} (stage disabled)", task_id)
+            };
+            let mut result = StageResult::success("Builder", &action);
             if ctx.buildloop_dir.join("build-claims.md").exists() {
                 result.partial_results.push("build-claims.md".to_string());
             }
             stage_results.push(result);
         }
         build_ok = true;
-        // last_rate_limited stays false for the resumed session.
+        // last_rate_limited stays false for the skipped session.
     } else {
         emit_extension_injections(
             tx,
@@ -4435,6 +4461,7 @@ async fn process_task(
 
             let prompt = if skip_planner {
                 prompts::builder_direct_prompt(
+                    &ctx.config.pipeline_stage_label("implement"),
                     task_id,
                     task_desc,
                     &ctx.spec_file_prompt_path(),
@@ -4442,6 +4469,7 @@ async fn process_task(
                 )
             } else {
                 prompts::builder_prompt(
+                    &ctx.config.pipeline_stage_label("implement"),
                     task_id,
                     task_desc,
                     &ctx.spec_file_prompt_path(),
@@ -4781,7 +4809,9 @@ async fn process_task(
     let skip_doubt_simple =
         ctx.config.skip_doubt_for_simple && task_complexity == TaskComplexity::Simple && build_ok;
     let skip_doubt_confidence = doubt_confidence.should_skip && build_ok;
-    let skip_verify = skip_doubt_simple || skip_for_batch || skip_doubt_confidence;
+    let stage_skip_doubt = !ctx.config.pipeline_stage_enabled("doubt");
+    let skip_verify =
+        skip_doubt_simple || skip_for_batch || skip_doubt_confidence || stage_skip_doubt;
 
     let (validated, _fix_passes, review_findings, reviewer_budget_record) =
         if ctx.config.backpressure_only {
@@ -4806,6 +4836,11 @@ async fn process_task(
                 "Learned confidence -- skipping doubt ({})",
                 doubt_confidence.log_message
             ))));
+            (true, 0usize, (0, 0, 0), None)
+        } else if stage_skip_doubt {
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+                "Pipeline: doubt stage disabled in config -- skipping audit".to_string(),
+            )));
             (true, 0usize, (0, 0, 0), None)
         } else {
             // ─── Gate: Reviewer Prerequisites ─────────────────────

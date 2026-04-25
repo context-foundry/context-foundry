@@ -510,6 +510,26 @@ impl Config {
         }
     }
 
+    /// Return the configured label for a pipeline stage by id.
+    /// Falls back to `id.to_ascii_uppercase()` if the stage is not present.
+    pub fn pipeline_stage_label(&self, id: &str) -> String {
+        self.pipeline_stages
+            .iter()
+            .find(|s| s.id == id)
+            .map(|s| s.label.clone())
+            .unwrap_or_else(|| id.to_ascii_uppercase())
+    }
+
+    /// Return whether a pipeline stage is present and enabled.
+    /// A stage missing from `pipeline_stages` is treated as disabled.
+    pub fn pipeline_stage_enabled(&self, id: &str) -> bool {
+        self.pipeline_stages
+            .iter()
+            .find(|s| s.id == id)
+            .map(|s| s.enabled)
+            .unwrap_or(false)
+    }
+
     /// Read a JSON config file and return its content as a serde_json::Value.
     /// Returns None if the file doesn't exist or can't be read/parsed.
     fn read_json_file(path: &Path) -> Option<serde_json::Value> {
@@ -1728,5 +1748,47 @@ mod tests {
         let stage: crate::config::PipelineStageConfig =
             serde_json::from_str(r#"{"id":"plan","label":"PLAN","enabled":false}"#).unwrap();
         assert!(!stage.enabled);
+    }
+
+    #[test]
+    fn pipeline_stage_label_returns_configured_label() {
+        let config: Config =
+            serde_json::from_str(r#"{"pipeline_stages":[{"id":"implement","label":"BUILD"}]}"#)
+                .unwrap();
+        assert_eq!(config.pipeline_stage_label("implement"), "BUILD");
+    }
+
+    #[test]
+    fn pipeline_stage_label_falls_back_to_uppercase_id() {
+        let config: Config =
+            serde_json::from_str(r#"{"pipeline_stages":[{"id":"plan","label":"PLAN"}]}"#).unwrap();
+        assert_eq!(config.pipeline_stage_label("doubt"), "DOUBT");
+    }
+
+    #[test]
+    fn pipeline_stage_enabled_returns_configured_value() {
+        let config: Config = serde_json::from_str(
+            r#"{"pipeline_stages":[{"id":"query","label":"QUERY","enabled":false},{"id":"plan","label":"PLAN","enabled":true}]}"#,
+        )
+        .unwrap();
+        assert!(!config.pipeline_stage_enabled("query"));
+        assert!(config.pipeline_stage_enabled("plan"));
+    }
+
+    #[test]
+    fn pipeline_stage_enabled_missing_stage_is_disabled() {
+        let config: Config =
+            serde_json::from_str(r#"{"pipeline_stages":[{"id":"plan","label":"PLAN"}]}"#).unwrap();
+        assert!(!config.pipeline_stage_enabled("doubt"));
+    }
+
+    #[test]
+    fn default_config_all_stages_enabled() {
+        let c = Config::default();
+        assert!(c.pipeline_stage_enabled("query"));
+        assert!(c.pipeline_stage_enabled("research"));
+        assert!(c.pipeline_stage_enabled("plan"));
+        assert!(c.pipeline_stage_enabled("implement"));
+        assert!(c.pipeline_stage_enabled("doubt"));
     }
 }
