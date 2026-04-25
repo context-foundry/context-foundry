@@ -397,6 +397,71 @@ Optional:
 
 Legacy projects that still use `ARCHITECTURE.md` and `IMPL_PLAN.md` continue to work. Foundry prefers `SPEC.md` and `TASKS.md` when both are present.
 
+## Hooks
+
+Foundry can run a shell command after each task commit. Set `on_task_complete` in `.foundry.json`:
+
+```json
+{
+  "on_task_complete": "osascript -e 'display notification \"Task done\" with title \"Foundry\"'"
+}
+```
+
+The hook also works for HTTP webhooks:
+
+```json
+{
+  "on_task_complete": "curl -fsS -X POST -H 'Content-Type: application/json' -d \"{\\\"task\\\":\\\"$FOUNDRY_TASK_ID\\\",\\\"status\\\":\\\"$FOUNDRY_TASK_STATUS\\\",\\\"sha\\\":\\\"$FOUNDRY_COMMIT_SHA\\\",\\\"desc\\\":\\\"$FOUNDRY_TASK_DESC\\\"}\" https://example.com/foundry-webhook"
+}
+```
+
+The command is executed via `sh -c` with `cwd` set to the project directory. Four environment variables are exported:
+
+| Variable | Value |
+|----------|-------|
+| `FOUNDRY_TASK_ID` | Task ID from TASKS.md (e.g., `T1.1`) |
+| `FOUNDRY_TASK_STATUS` | `feat` if doubt passed, `WIP` if doubt failed |
+| `FOUNDRY_TASK_DESC` | Task description, truncated to 100 characters |
+| `FOUNDRY_COMMIT_SHA` | Commit SHA produced for the task (empty string if no commit was created) |
+
+The hook is **fire-and-forget**: foundry spawns it via `tokio::spawn` and continues to the next task without waiting for it to finish. A non-zero exit code is logged as a background warning (`on_task_complete hook exited non-zero (...)`) but never blocks the pipeline. `stdout` and `stderr` are discarded -- log to a file from inside your hook if you need output.
+
+The hook fires for **every** committed task in **every** run mode (`auto`, `sprint`, `review`) -- both successful (`feat(T1.1):`) and failed (`WIP(T1.1):`) commits trigger it. Use `FOUNDRY_TASK_STATUS` inside the hook if you want to branch on success vs failure.
+
+Implementation: `src/config.rs:403-409` (config field), `src/app/build.rs:5937-5981` (`spawn_completion_hook`).
+
+## Pipeline Stages
+
+Foundry's RPID pipeline is configured via the `pipeline_stages` field in `.foundry.json`. The default expands to:
+
+```json
+{
+  "pipeline_stages": [
+    { "id": "query",     "label": "QUERY",     "enabled": true },
+    { "id": "research",  "label": "RESEARCH",  "enabled": true },
+    { "id": "plan",      "label": "PLAN",      "enabled": true },
+    { "id": "implement", "label": "IMPLEMENT", "enabled": true },
+    { "id": "doubt",     "label": "DOUBT",     "enabled": true }
+  ]
+}
+```
+
+The five valid stage IDs are: **`query`**, **`research`**, **`plan`**, **`implement`**, **`doubt`**. Any other ID is currently unrecognized by the build loop -- adding `{"id":"security", ...}` will appear in the TUI list but will not run an agent. Custom stages are tracked under Phase 29 (composable cards).
+
+Setting `enabled: false` on a stage cleanly skips it in the build loop. The skip is real, not cosmetic:
+
+- `implement` disabled: builder agent is not spawned. The build loop logs `Pipeline: implement stage disabled in config -- skipping builder for <task>` and continues to doubt with a synthetic `StageResult::success("Builder", ...)`. See `src/app/build.rs:4612-4626`.
+- `doubt` disabled: the audit/review loop is bypassed. The build loop logs `Pipeline: doubt stage disabled in config -- skipping audit` and treats the task as validated. See `src/app/build.rs:5158-5160` and `src/app/build.rs:5186-5190`.
+- `query`, `research`, `plan` follow the same `pipeline_stage_enabled(id)` pattern -- the corresponding agent is not spawned when `enabled: false`.
+
+Stage label text is purely cosmetic and only affects the TUI pipeline strip and the `STAGE` header in agent prompts.
+
+**Reordering is display-only.** Putting `doubt` before `implement` in `pipeline_stages` reorders the TUI strip but does NOT change execution order -- the build loop still runs query -> research -> plan -> implement -> doubt internally. True reordering and custom stage handlers are tracked under Phase 29 (composable pipeline cards) -- see `TASKS.md`.
+
+The shorter key `"stages"` is accepted as an alias for `"pipeline_stages"`.
+
+Implementation: `src/config.rs:18-74` (`PipelineStageConfig` and `default_pipeline_stages`), `src/config.rs:530-548` (`pipeline_stage_label` / `pipeline_stage_enabled`).
+
 ### CLAUDE.md and foundry agents
 
 Every agent foundry spawns is a Claude Code CLI invocation with `cwd` set to the project directory. Claude Code's normal CLAUDE.md loading applies -- your global `~/.claude/CLAUDE.md`, the project's `CLAUDE.md`, and any `.claude/rules/*.md` files are all loaded into the agent's context.

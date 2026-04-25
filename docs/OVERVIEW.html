@@ -960,7 +960,7 @@ zones, with the middle zone split 60/40 horizontally.
 <h2>Configuration Reference</h2>
 
 <details>
-  <summary>Configuration Reference (.foundry.json) -- 55 fields</summary>
+  <summary>Configuration Reference (.foundry.json) -- 57 fields</summary>
   <table>
     <tr>
       <th>Field</th>
@@ -1291,6 +1291,18 @@ zones, with the middle zone split 60/40 horizontally.
       <td>String</td>
       <td><code>"dark"</code></td>
       <td>TUI color theme: "dark", "catppuccin", or "solarized"</td>
+    </tr>
+    <tr>
+      <td><code>pipeline_stages</code></td>
+      <td>Vec&lt;PipelineStageConfig&gt;</td>
+      <td>5-stage RPID default</td>
+      <td>RPID pipeline stage list. Each entry has <code>id</code>, <code>label</code>, <code>enabled</code>. Default: query, research, plan, implement, doubt (all enabled). <code>enabled: false</code> skips the stage in the build loop. Reorder is display-only. Accepts alias <code>"stages"</code>.</td>
+    </tr>
+    <tr>
+      <td><code>on_task_complete</code></td>
+      <td>Option&lt;String&gt;</td>
+      <td><code>null</code></td>
+      <td>Shell command run after each task commit via <code>sh -c</code>. Receives <code>FOUNDRY_TASK_ID</code>, <code>FOUNDRY_TASK_STATUS</code> (<code>feat</code>|<code>WIP</code>), <code>FOUNDRY_TASK_DESC</code> (truncated to 100 chars), <code>FOUNDRY_COMMIT_SHA</code> as env vars. Fire-and-forget; non-zero exit logs a warning.</td>
     </tr>
   </table>
 </details>
