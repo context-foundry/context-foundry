@@ -2,7 +2,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph},
+    widgets::{Block, Borders, Clear, Paragraph},
     Frame,
 };
 
@@ -841,4 +841,190 @@ fn fmt_overlay_tokens(n: u64) -> String {
     } else {
         format!("{}", n)
     }
+}
+
+// ─── Settings Overlay ────────────────────────────────────────
+
+/// Compute a fixed-size Rect centered within `area`.
+fn centered_rect(width: u16, height: u16, area: Rect) -> Rect {
+    let x = area.x + area.width.saturating_sub(width) / 2;
+    let y = area.y + area.height.saturating_sub(height) / 2;
+    Rect {
+        x,
+        y,
+        width: width.min(area.width),
+        height: height.min(area.height),
+    }
+}
+
+/// Render a floating settings overlay on top of whatever is already drawn.
+pub(super) fn render_settings_overlay(frame: &mut Frame, state: &AppState) {
+    let theme = &state.tui_theme;
+    let modal = centered_rect(50, 14, frame.area());
+
+    // Shadow: 1 col right + 1 row down
+    let shadow = Rect {
+        x: modal.x + 1,
+        y: modal.y + 1,
+        width: modal.width.min(
+            frame
+                .area()
+                .width
+                .saturating_sub(modal.x + 1),
+        ),
+        height: modal.height.min(
+            frame
+                .area()
+                .height
+                .saturating_sub(modal.y + 1),
+        ),
+    };
+    frame.render_widget(Clear, shadow);
+    frame.render_widget(
+        Paragraph::new("").style(Style::default().bg(Color::DarkGray)),
+        shadow,
+    );
+
+    // Clear modal area and draw border
+    frame.render_widget(Clear, modal);
+    frame.render_widget(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(theme.accent))
+            .title(Span::styled(
+                " Settings ",
+                Style::default()
+                    .fg(theme.accent)
+                    .add_modifier(Modifier::BOLD),
+            )),
+        modal,
+    );
+
+    // Inner content area (inside the border)
+    let inner = Rect {
+        x: modal.x + 1,
+        y: modal.y + 1,
+        width: modal.width.saturating_sub(2),
+        height: modal.height.saturating_sub(2),
+    };
+
+    // Helper: highlight style for focused row
+    let highlight_bg = if theme.surface == Color::Reset {
+        Color::DarkGray
+    } else {
+        theme.surface
+    };
+
+    let run_mode_val = &state.run_mode;
+    let dual_val = state.dual_selection.as_str();
+    let dual_val = if dual_val.is_empty() { "off" } else { dual_val };
+    let theme_val = crate::tui::theme::current_name(&state.tui_theme);
+    let sandbox_val = &state.sandbox_status_label;
+
+    // Rows indexed within inner area
+    // 0: spacer
+    // 1: run_mode (cursor 0)
+    // 2: spacer
+    // 3: dual_selection (cursor 1)
+    // 4: spacer
+    // 5: theme (cursor 2)
+    // 6: spacer
+    // 7: sandbox read-only
+    // 8: spacer
+    // 9: horizontal rule
+    // 10: spacer
+    // 11: hint bar
+
+    let rows: &[(usize, bool, &str, &str)] = &[
+        (1, true,  "Run Mode",     run_mode_val),
+        (3, true,  "Dual Builder", dual_val),
+        (5, true,  "Theme",        theme_val),
+    ];
+
+    for (row_y, interactive, label, val) in rows {
+        let cursor_idx = match *label {
+            "Run Mode"     => 0,
+            "Dual Builder" => 1,
+            _              => 2,
+        };
+        let focused = *interactive && state.settings_overlay_cursor == cursor_idx;
+        let cursor_str = if focused { "> " } else { "  " };
+        let cursor_style = if focused {
+            Style::default()
+                .fg(theme.accent)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(theme.muted)
+        };
+        let row_bg = if focused {
+            Style::default().bg(highlight_bg)
+        } else {
+            Style::default()
+        };
+        // pad label to 15 chars
+        let label_padded = format!("{:<15}", label);
+        let line = Line::from(vec![
+            Span::styled(cursor_str.to_string(), cursor_style),
+            Span::styled(
+                format!("{}  {}", label_padded, val),
+                row_bg,
+            ),
+        ]);
+        frame.render_widget(
+            Paragraph::new(line),
+            Rect {
+                x: inner.x,
+                y: inner.y + *row_y as u16,
+                width: inner.width,
+                height: 1,
+            },
+        );
+    }
+
+    // Sandbox row (read-only, no cursor, row 7)
+    let sandbox_line = Line::from(vec![
+        Span::styled("  ", Style::default()),
+        Span::styled(
+            format!("{:<15}  {} (read-only)", "Sandbox", sandbox_val),
+            Style::default().fg(theme.muted),
+        ),
+    ]);
+    frame.render_widget(
+        Paragraph::new(sandbox_line),
+        Rect {
+            x: inner.x,
+            y: inner.y + 7,
+            width: inner.width,
+            height: 1,
+        },
+    );
+
+    // Horizontal rule (row 9)
+    let rule = "-".repeat(inner.width.saturating_sub(2) as usize);
+    frame.render_widget(
+        Paragraph::new(Line::from(Span::styled(
+            rule,
+            Style::default().fg(theme.muted),
+        ))),
+        Rect {
+            x: inner.x + 1,
+            y: inner.y + 9,
+            width: inner.width.saturating_sub(2),
+            height: 1,
+        },
+    );
+
+    // Hint bar (row 11)
+    frame.render_widget(
+        Paragraph::new(Line::from(Span::styled(
+            "  \u{2191}\u{2193} move   Enter/Space cycle   Esc close",
+            Style::default().fg(theme.muted),
+        ))),
+        Rect {
+            x: inner.x,
+            y: inner.y + 11,
+            width: inner.width,
+            height: 1,
+        },
+    );
 }

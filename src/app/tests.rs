@@ -185,6 +185,7 @@ fn startup_empty_input_on_needs_queue_sets_planning_transition() {
     handle_startup_key(
         &mut state,
         event::KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+        &Config::default(),
     );
 
     // Empty input Enter now triggers explorer action (open file / toggle dir)
@@ -230,12 +231,14 @@ fn startup_empty_project_describe_work_seeds_spec_before_task_creation() {
         handle_startup_key(
             &mut state,
             event::KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE),
+            &Config::default(),
         );
     }
 
     handle_startup_key(
         &mut state,
         event::KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+        &Config::default(),
     );
 
     // EmptyProject with text now writes SPEC.md and returns to startup for review.
@@ -372,6 +375,7 @@ fn startup_arrow_keys_navigate_file_explorer() {
     handle_startup_key(
         &mut state,
         event::KeyEvent::new(KeyCode::Up, KeyModifiers::NONE),
+        &Config::default(),
     );
     let after_up = state.startup.as_ref().unwrap().explorer_selected;
     assert!(
@@ -383,6 +387,7 @@ fn startup_arrow_keys_navigate_file_explorer() {
     handle_startup_key(
         &mut state,
         event::KeyEvent::new(KeyCode::Down, KeyModifiers::NONE),
+        &Config::default(),
     );
     let after_down = state.startup.as_ref().unwrap().explorer_selected;
     assert!(after_down >= after_up, "Down should move selection later");
@@ -448,6 +453,7 @@ fn startup_enter_empty_on_queue_ready_starts_build() {
     handle_startup_key(
         &mut state,
         event::KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+        &Config::default(),
     );
 
     assert!(matches!(
@@ -478,10 +484,12 @@ fn startup_intent_input_accepts_digits_and_q_without_triggering_shortcuts() {
     handle_startup_key(
         &mut state,
         event::KeyEvent::new(KeyCode::Char('1'), KeyModifiers::NONE),
+        &Config::default(),
     );
     handle_startup_key(
         &mut state,
         event::KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE),
+        &Config::default(),
     );
 
     assert_eq!(
@@ -509,7 +517,7 @@ fn startup_intent_input_accepts_paste_events() {
     ));
 
     // Input is always active -- paste directly
-    handle_startup_event(&mut state, AppEvent::Paste("fix login timeout".to_string()));
+    handle_startup_event(&mut state, AppEvent::Paste("fix login timeout".to_string()), &Config::default());
 
     assert_eq!(
         state
@@ -813,6 +821,7 @@ fn startup_typing_and_enter_queues_append_transition() {
         handle_startup_key(
             &mut state,
             event::KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE),
+            &Config::default(),
         );
     }
 
@@ -820,6 +829,7 @@ fn startup_typing_and_enter_queues_append_transition() {
     handle_startup_key(
         &mut state,
         event::KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+        &Config::default(),
     );
 
     assert!(matches!(
@@ -850,6 +860,7 @@ fn startup_empty_input_on_needs_queue_starts_build() {
     handle_startup_key(
         &mut state,
         event::KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+        &Config::default(),
     );
 
     // Empty input Enter now triggers explorer action (open file / toggle dir)
@@ -882,12 +893,14 @@ fn startup_text_input_on_needs_queue_starts_build() {
         handle_startup_key(
             &mut state,
             event::KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE),
+            &Config::default(),
         );
     }
 
     handle_startup_key(
         &mut state,
         event::KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+        &Config::default(),
     );
 
     // NeedsQueue with text treats input as a task description (AppendTasks),

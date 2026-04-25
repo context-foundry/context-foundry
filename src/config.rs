@@ -918,6 +918,27 @@ impl Config {
         }
     }
 
+    /// Persist the theme to .foundry.json without overwriting other config fields.
+    pub fn save_theme(project_dir: &Path, theme_name: &str) {
+        let config_path = project_dir.join(".foundry.json");
+        let content = std::fs::read_to_string(&config_path).unwrap_or_else(|_| "{}".to_string());
+        let mut value: serde_json::Value = serde_json::from_str(&content).unwrap_or_else(|e| {
+            eprintln!(
+                "warning: {} contains invalid JSON ({e}) -- existing settings will be lost",
+                config_path.display(),
+            );
+            serde_json::json!({})
+        });
+        value["theme"] = serde_json::json!(theme_name);
+        let json = serde_json::to_string_pretty(&value).unwrap_or_default();
+        if let Err(e) = crate::utils::atomic_write_file(&config_path, json.as_bytes()) {
+            eprintln!(
+                "warning: failed to save theme to {} -- change will not persist across restarts: {e}",
+                config_path.display(),
+            );
+        }
+    }
+
     fn model_provider_hint(model: &str) -> Option<ModelProvider> {
         let lower = model.trim().to_ascii_lowercase();
         if lower.is_empty() {

@@ -219,6 +219,20 @@ pub fn cycle_next(current: &TuiTheme) -> (TuiTheme, &'static str) {
     (adapt_theme(themes[next_idx].1.clone()), themes[next_idx].0)
 }
 
+/// Return the name of the currently active theme.
+pub fn current_name(current: &TuiTheme) -> &'static str {
+    let themes = builtin_themes();
+    let adapted: Vec<_> = themes
+        .iter()
+        .map(|(n, t)| (*n, adapt_theme(t.clone())))
+        .collect();
+    adapted
+        .iter()
+        .find(|(_, t)| t == current)
+        .map(|(n, _)| *n)
+        .unwrap_or("dark")
+}
+
 impl Default for TuiTheme {
     fn default() -> Self {
         from_name("dark")

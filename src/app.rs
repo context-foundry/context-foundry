@@ -188,30 +188,36 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
     // Main render loop
     loop {
         // Draw based on phase
-        terminal.draw(|frame| match state.phase {
-            AppPhase::Startup => {
-                if state.show_stats_overlay {
-                    tui::render_stats_overlay(frame, &state);
-                } else if state.show_findings {
-                    tui::render_findings(frame, &state);
-                } else if state.show_run_view {
-                    tui::render(frame, &state, &config);
-                } else {
-                    tui::render_startup(frame, &state);
+        terminal.draw(|frame| {
+            match state.phase {
+                AppPhase::Startup => {
+                    if state.show_stats_overlay {
+                        tui::render_stats_overlay(frame, &state);
+                    } else if state.show_findings {
+                        tui::render_findings(frame, &state);
+                    } else if state.show_run_view {
+                        tui::render(frame, &state, &config);
+                    } else {
+                        tui::render_startup(frame, &state);
+                    }
+                }
+                AppPhase::Planning | AppPhase::Running => {
+                    if state.show_stats_overlay {
+                        tui::render_stats_overlay(frame, &state);
+                    } else if state.show_findings {
+                        tui::render_findings(frame, &state);
+                    } else if state.show_patterns {
+                        tui::render_patterns(frame, &state, &config);
+                    } else if state.show_running_explorer && matches!(state.phase, AppPhase::Running) {
+                        tui::render_running_explorer(frame, &state, &config);
+                    } else {
+                        tui::render(frame, &state, &config);
+                    }
                 }
             }
-            AppPhase::Planning | AppPhase::Running => {
-                if state.show_stats_overlay {
-                    tui::render_stats_overlay(frame, &state);
-                } else if state.show_findings {
-                    tui::render_findings(frame, &state);
-                } else if state.show_patterns {
-                    tui::render_patterns(frame, &state, &config);
-                } else if state.show_running_explorer && matches!(state.phase, AppPhase::Running) {
-                    tui::render_running_explorer(frame, &state, &config);
-                } else {
-                    tui::render(frame, &state, &config);
-                }
+            // Settings overlay floats on top -- render after base view
+            if state.show_settings_overlay {
+                tui::render_settings_overlay(frame, &state);
             }
         })?;
 
@@ -312,7 +318,7 @@ fn spawn_terminal_event_reader(
 
 fn dispatch_event(state: &mut AppState, event: AppEvent, config: &Config) {
     match state.phase {
-        AppPhase::Startup => handle_startup_event(state, event),
+        AppPhase::Startup => handle_startup_event(state, event, config),
         AppPhase::Planning => handle_planning_event(state, event, config),
         AppPhase::Running => handle_event(state, event, config),
     }
@@ -717,6 +723,10 @@ fn handle_planning_event(state: &mut AppState, event: AppEvent, config: &Config)
 fn handle_planning_key(state: &mut AppState, key: event::KeyEvent, config: &Config) {
     match key.code {
         KeyCode::Char('q') | KeyCode::Esc => {
+            if state.show_settings_overlay {
+                state.show_settings_overlay = false;
+                return;
+            }
             if state.show_stats_overlay {
                 state.show_stats_overlay = false;
                 state.stats_loading = false;
@@ -760,7 +770,19 @@ fn handle_planning_key(state: &mut AppState, key: event::KeyEvent, config: &Conf
             state.tui_theme = new_theme;
             state.log(format!("Theme: {}", name));
         }
+        KeyCode::Char('?') => {
+            state.show_settings_overlay = !state.show_settings_overlay;
+            state.settings_overlay_cursor = 0;
+        }
+        KeyCode::Enter | KeyCode::Char(' ') if state.show_settings_overlay => {
+            cycle_settings_cursor(state, config);
+        }
         KeyCode::Up => {
+            if state.show_settings_overlay {
+                state.settings_overlay_cursor =
+                    state.settings_overlay_cursor.saturating_sub(1);
+                return;
+            }
             if state.show_stats_overlay {
                 state.stats_overlay_scroll = state.stats_overlay_scroll.saturating_sub(3);
             } else if state.show_findings {
@@ -774,6 +796,11 @@ fn handle_planning_key(state: &mut AppState, key: event::KeyEvent, config: &Conf
             }
         }
         KeyCode::Down => {
+            if state.show_settings_overlay {
+                state.settings_overlay_cursor =
+                    (state.settings_overlay_cursor + 1).min(2);
+                return;
+            }
             if state.show_stats_overlay {
                 state.stats_overlay_scroll = state.stats_overlay_scroll.saturating_add(3);
             } else if state.show_findings {
@@ -1313,8 +1340,30 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                     }
                 } else {
                     match key.code {
+                        KeyCode::Char('?') => {
+                            state.show_settings_overlay = !state.show_settings_overlay;
+                            state.settings_overlay_cursor = 0;
+                        }
+                        KeyCode::Enter | KeyCode::Char(' ') if state.show_settings_overlay => {
+                            cycle_settings_cursor(state, config);
+                        }
+                        KeyCode::Esc => {
+                            if state.show_settings_overlay {
+                                state.show_settings_overlay = false;
+                            }
+                        }
+                        KeyCode::Up if state.show_settings_overlay => {
+                            state.settings_overlay_cursor =
+                                state.settings_overlay_cursor.saturating_sub(1);
+                        }
+                        KeyCode::Down if state.show_settings_overlay => {
+                            state.settings_overlay_cursor =
+                                (state.settings_overlay_cursor + 1).min(2);
+                        }
                         KeyCode::Char('q') => {
-                            if state.stop_after_task {
+                            if state.show_settings_overlay {
+                                state.show_settings_overlay = false;
+                            } else if state.stop_after_task {
                                 state.stop_after_task = false;
                                 state.remove_stop_file();
                                 state.log("Stop cancelled -- resuming build");
@@ -1433,8 +1482,17 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                     }
                 } else {
                     match key.code {
+                        KeyCode::Char('?') => {
+                            state.show_settings_overlay = !state.show_settings_overlay;
+                            state.settings_overlay_cursor = 0;
+                        }
+                        KeyCode::Enter | KeyCode::Char(' ') if state.show_settings_overlay => {
+                            cycle_settings_cursor(state, config);
+                        }
                         KeyCode::Char('q') => {
-                            if state.show_stats_overlay {
+                            if state.show_settings_overlay {
+                                state.show_settings_overlay = false;
+                            } else if state.show_stats_overlay {
                                 state.show_stats_overlay = false;
                                 state.stats_loading = false;
                                 state.stats_overlay_report = None;
@@ -1452,7 +1510,9 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                             }
                         }
                         KeyCode::Esc => {
-                            if state.show_stats_overlay {
+                            if state.show_settings_overlay {
+                                state.show_settings_overlay = false;
+                            } else if state.show_stats_overlay {
                                 state.show_stats_overlay = false;
                                 state.stats_loading = false;
                                 state.stats_overlay_report = None;
@@ -1522,7 +1582,10 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                             }
                         }
                         KeyCode::Up => {
-                            if state.show_stats_overlay {
+                            if state.show_settings_overlay {
+                                state.settings_overlay_cursor =
+                                    state.settings_overlay_cursor.saturating_sub(1);
+                            } else if state.show_stats_overlay {
                                 state.stats_overlay_scroll =
                                     state.stats_overlay_scroll.saturating_sub(3);
                             } else if state.show_findings {
@@ -1536,7 +1599,10 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                             }
                         }
                         KeyCode::Down => {
-                            if state.show_stats_overlay {
+                            if state.show_settings_overlay {
+                                state.settings_overlay_cursor =
+                                    (state.settings_overlay_cursor + 1).min(2);
+                            } else if state.show_stats_overlay {
                                 state.stats_overlay_scroll =
                                     state.stats_overlay_scroll.saturating_add(3);
                             } else if state.show_findings {
@@ -1865,6 +1931,70 @@ fn commit_inject_task(state: &mut AppState, description: &str, run_next: bool) {
 }
 
 const AGENT_OUTPUT_CAP: usize = 2000;
+
+fn cycle_settings_cursor(state: &mut AppState, _config: &Config) {
+    let project_dir = state
+        .buildloop_dir
+        .parent()
+        .unwrap_or(std::path::Path::new("."));
+    match state.settings_overlay_cursor {
+        0 => {
+            state.run_mode = match state.run_mode.as_str() {
+                "auto" => "sprint".into(),
+                "sprint" => "review".into(),
+                _ => "auto".into(),
+            };
+            Config::save_run_mode(project_dir, &state.run_mode);
+        }
+        1 => {
+            if state.builder_model_specs.len() >= 2 {
+                let specs_len = state.builder_model_specs.len();
+                let next = state.dual_selection.next_for(specs_len);
+                state.dual_selection = next;
+                Config::save_dual_selection(project_dir, next.as_str());
+            }
+        }
+        2 => {
+            let (new_theme, name) = crate::tui::theme::cycle_next(&state.tui_theme);
+            state.tui_theme = new_theme;
+            Config::save_theme(project_dir, name);
+        }
+        _ => {}
+    }
+}
+
+/// Same logic as cycle_settings_cursor but callable from the startup module where
+/// Config is not threaded through the key handler chain.
+pub(super) fn cycle_settings_cursor_startup(state: &mut AppState) {
+    let project_dir = state
+        .buildloop_dir
+        .parent()
+        .unwrap_or(std::path::Path::new("."));
+    match state.settings_overlay_cursor {
+        0 => {
+            state.run_mode = match state.run_mode.as_str() {
+                "auto" => "sprint".into(),
+                "sprint" => "review".into(),
+                _ => "auto".into(),
+            };
+            Config::save_run_mode(project_dir, &state.run_mode);
+        }
+        1 => {
+            if state.builder_model_specs.len() >= 2 {
+                let specs_len = state.builder_model_specs.len();
+                let next = state.dual_selection.next_for(specs_len);
+                state.dual_selection = next;
+                Config::save_dual_selection(project_dir, next.as_str());
+            }
+        }
+        2 => {
+            let (new_theme, name) = crate::tui::theme::cycle_next(&state.tui_theme);
+            state.tui_theme = new_theme;
+            Config::save_theme(project_dir, name);
+        }
+        _ => {}
+    }
+}
 
 fn compute_and_show_stats_overlay(state: &mut AppState) {
     if state.stats_loading {

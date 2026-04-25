@@ -984,6 +984,14 @@ pub(super) fn render_status_bar(frame: &mut Frame, area: Rect, state: &AppState)
                 .add_modifier(Modifier::BOLD),
         ),
         Span::raw(" theme"),
+        Span::styled(
+            "  ? ",
+            Style::default()
+                .fg(Color::Black)
+                .bg(state.tui_theme.muted)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(" settings"),
     ];
 
     let (dual_bg, dual_label) = dual_toggle_label(state);

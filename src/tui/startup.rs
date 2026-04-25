@@ -1128,6 +1128,14 @@ pub(super) fn render_startup_status_bar(frame: &mut Frame, area: Rect, state: &A
             .add_modifier(Modifier::BOLD),
     ));
     spans.push(Span::raw(" theme"));
+    spans.push(Span::styled(
+        "  ? ",
+        Style::default()
+            .fg(Color::Black)
+            .bg(state.tui_theme.muted)
+            .add_modifier(Modifier::BOLD),
+    ));
+    spans.push(Span::raw(" settings"));
 
     if state.last_orchestrator_outcome.is_some() {
         spans.push(Span::styled(

@@ -208,9 +208,9 @@ fn load_file_preview(path: &Path) -> Vec<String> {
 
 // ─── Event Handling ──────────────────────────────────────────
 
-pub(super) fn handle_startup_event(state: &mut AppState, event: AppEvent) {
+pub(super) fn handle_startup_event(state: &mut AppState, event: AppEvent, config: &Config) {
     match event {
-        AppEvent::Key(key) => handle_startup_key(state, key),
+        AppEvent::Key(key) => handle_startup_key(state, key, config),
         AppEvent::Mouse(mouse) => handle_startup_mouse(state, mouse),
         AppEvent::Paste(text) => handle_startup_paste(state, text),
         AppEvent::Tick => {
@@ -247,7 +247,7 @@ fn handle_startup_paste(state: &mut AppState, text: String) {
     }
 }
 
-pub(super) fn handle_startup_key(state: &mut AppState, key: event::KeyEvent) {
+pub(super) fn handle_startup_key(state: &mut AppState, key: event::KeyEvent, _config: &Config) {
     let Some(_startup) = state.startup.as_ref() else {
         return;
     };
@@ -323,6 +323,40 @@ pub(super) fn handle_startup_key(state: &mut AppState, key: event::KeyEvent) {
             }
             _ => {
                 // Fall through to normal key handling
+            }
+        }
+    }
+
+    // Settings overlay intercept -- must be before is_typing_key so '?' is not
+    // consumed as intent input and Up/Down/Enter/Space navigate the overlay.
+    if key.code == KeyCode::Char('?') && !key.modifiers.contains(KeyModifiers::CONTROL) {
+        state.show_settings_overlay = !state.show_settings_overlay;
+        state.settings_overlay_cursor = 0;
+        return;
+    }
+    if state.show_settings_overlay {
+        match key.code {
+            KeyCode::Esc | KeyCode::Char('q') => {
+                state.show_settings_overlay = false;
+                return;
+            }
+            KeyCode::Up => {
+                state.settings_overlay_cursor =
+                    state.settings_overlay_cursor.saturating_sub(1);
+                return;
+            }
+            KeyCode::Down => {
+                state.settings_overlay_cursor =
+                    (state.settings_overlay_cursor + 1).min(2);
+                return;
+            }
+            KeyCode::Enter | KeyCode::Char(' ') => {
+                super::cycle_settings_cursor_startup(state);
+                return;
+            }
+            _ => {
+                // All other keys are swallowed while overlay is open.
+                return;
             }
         }
     }

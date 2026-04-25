@@ -261,6 +261,10 @@ pub fn render_stats_overlay(frame: &mut Frame, state: &AppState) {
     overlays::render_stats_overlay(frame, state);
 }
 
+pub fn render_settings_overlay(frame: &mut Frame, state: &AppState) {
+    overlays::render_settings_overlay(frame, state);
+}
+
 pub fn render_running_explorer(frame: &mut Frame, state: &AppState, config: &Config) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
