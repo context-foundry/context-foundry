@@ -156,6 +156,51 @@ pub fn gather_git_context(project_dir: &Path) -> Option<GitContext> {
     })
 }
 
+/// Returns true if the working tree contains any change outside the foundry
+/// scratch dirs. Hallucination breaker: when an agent claims success but the
+/// working tree shows only `.buildloop/` metadata (or just a TASKS.md tick),
+/// no real work was done and the run should commit as WIP.
+///
+/// Returns true on git error so we err on the side of trusting the reviewer
+/// rather than silently marking real work as fake.
+pub fn has_real_changes(project_dir: &Path) -> bool {
+    let output = Command::new("git")
+        .args(["status", "--porcelain"])
+        .current_dir(project_dir)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .output();
+    let Ok(output) = output else { return true };
+    if !output.status.success() {
+        return true;
+    }
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .any(|line| line_changes_real_file(line))
+}
+
+fn line_changes_real_file(line: &str) -> bool {
+    if line.len() < 4 {
+        return false;
+    }
+    let path = &line[3..];
+    let path = match path.split_once(" -> ") {
+        Some((_, new_path)) => new_path,
+        None => path,
+    };
+    let path = path.trim_matches('"').trim();
+    if path.is_empty() {
+        return false;
+    }
+    if path == "TASKS.md" {
+        return false;
+    }
+    if path.starts_with(".buildloop/") || path.starts_with(".buildloop\\") {
+        return false;
+    }
+    true
+}
+
 /// Ensure the project directory is a git repo with at least one commit.
 /// Silently initializes if needed — idempotent.
 fn ensure_git_initialized(project_dir: &Path) {
@@ -1410,5 +1455,46 @@ mod tests {
         let _ = fs::remove_dir_all(repo_dir);
         let _ = fs::remove_dir_all(remote_dir);
         let _ = fs::remove_dir_all(repo_dir2);
+    }
+
+    #[test]
+    fn line_changes_real_file_classifies_paths() {
+        use super::line_changes_real_file as lc;
+        // Real source files outside the scratch dirs.
+        assert!(lc(" M src/app.rs"));
+        assert!(lc("?? new_file.txt"));
+        assert!(lc("A  src/new.rs"));
+        // Buildloop scratch + bare TASKS.md tick are NOT real changes.
+        assert!(!lc(" M .buildloop/build-claims.md"));
+        assert!(!lc(" M .buildloop/research-report.md"));
+        assert!(!lc(" M TASKS.md"));
+        // Renames must use the destination path.
+        assert!(lc("R  old.rs -> new.rs"));
+        assert!(!lc("R  src.md -> .buildloop/x.md"));
+        // Quoted paths (git porcelain quotes paths with special chars).
+        assert!(lc(" M \"src/weird name.rs\""));
+        // Empty / malformed lines are not real changes.
+        assert!(!lc(""));
+        assert!(!lc("XX"));
+    }
+
+    #[test]
+    fn has_real_changes_detects_buildloop_only_state() {
+        let dir = temp_dir("has-real-changes");
+        init_repo(&dir);
+        // Clean tree: no real changes.
+        assert!(!super::has_real_changes(&dir));
+        // .buildloop/ scratch only -> still no real changes.
+        fs::create_dir_all(dir.join(".buildloop")).unwrap();
+        fs::write(dir.join(".buildloop/build-claims.md"), "claims\n").unwrap();
+        assert!(!super::has_real_changes(&dir));
+        // Adding a TASKS.md tick alone -> still no real changes.
+        fs::write(dir.join("TASKS.md"), "- [x] T1.1\n").unwrap();
+        assert!(!super::has_real_changes(&dir));
+        // A real source file flips it to true.
+        fs::create_dir_all(dir.join("src")).unwrap();
+        fs::write(dir.join("src/main.rs"), "fn main() {}\n").unwrap();
+        assert!(super::has_real_changes(&dir));
+        let _ = fs::remove_dir_all(&dir);
     }
 }

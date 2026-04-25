@@ -5278,6 +5278,25 @@ async fn process_task(
         ));
     }
 
+    // ─── File-Existence Gate ────────────────────────────────────
+    // Hallucination breaker: an agent (especially a small local model) can
+    // emit a clean "I'm done" message and pass the reviewer without ever
+    // having written a real file. Verify the working tree carries at least
+    // one change outside `.buildloop/` and `TASKS.md` before honoring the
+    // PASS verdict. If not, downgrade to WIP so Discovery doesn't re-spawn
+    // the same task forever.
+    let validated = if validated && !crate::git::has_real_changes(&ctx.project_dir) {
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+            "File-existence gate: {} passed review but working tree has no \
+             source-file changes outside .buildloop/ and TASKS.md. \
+             Downgrading to WIP to avoid hallucination loops.",
+            task_id
+        ))));
+        false
+    } else {
+        validated
+    };
+
     // ─── Pre-Commit Approval Gate ───────────────────────────────
     // When require_human_approval is enabled and the task passed validation,
     // pause and ask the human to confirm before committing as feat.
