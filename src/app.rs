@@ -246,10 +246,17 @@ fn apply_builder_selection(state: &mut AppState, value: &str) {
         Config::save_local_model(&dir, value);
         Config::save_builder_routing(&dir, "opencode", &model_path);
         // After persisting the new local-model routing, re-validate that the
-        // newly required provider CLI(s) are available. Surface the result via
-        // state.log so the user finds out before pressing Run, not at first
-        // agent invocation.
+        // newly required provider CLI(s) are available AND mirror the disk
+        // state into the in-memory AppState fields the TUI reads (D2.1: the
+        // pipeline cards / Dual Pipeline panel / Cost label all read from
+        // state.builder_model_specs and state.dual_selection -- without this
+        // refresh they keep showing the previous config until the user fully
+        // restarts foundry). Surface provider validation via state.log so
+        // the user finds out before pressing Run, not at first agent
+        // invocation.
         let reloaded = Config::load(&dir);
+        state.builder_model_specs = reloaded.builder_models.clone();
+        state.dual_selection = DualSelection::from_str(&reloaded.dual_selection);
         match commands::ensure_required_providers_available(
             &reloaded,
             commands::ProviderCommandMode::Run,
