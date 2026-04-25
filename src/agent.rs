@@ -1702,9 +1702,44 @@ fn read_provider_output(
                         }
                     }
                     ModelProvider::OpenCode => {
-                        // TODO: parse OpenCode JSON events (--format json).
-                        // For now fall through to raw stderr passthrough so
-                        // output is still visible in the TUI.
+                        if let Some(event) = parse_opencode_event(line, model_name) {
+                            note_provider_event(provider, &event, progress);
+                            if tx.send(event).is_err() {
+                                return;
+                            }
+                            // Drain any token/cost data captured by parse_opencode_event
+                            // and emit it as a separate Usage event (mirrors the Claude
+                            // and Codex patterns elsewhere in this file).
+                            LAST_RESULT_USAGE.with(|cell| {
+                                if let Some(usage) = cell.take() {
+                                    let _ = tx.send(AgentOutputEvent::Usage {
+                                        cost_usd: usage.cost_usd,
+                                        input_tokens: usage.input_tokens,
+                                        output_tokens: usage.output_tokens,
+                                        context_window: usage.context_window,
+                                        cache_creation_tokens: usage.cache_creation_tokens,
+                                        cache_read_tokens: usage.cache_read_tokens,
+                                    });
+                                }
+                            });
+                            continue;
+                        }
+                        // parse_opencode_event returned None -> the line is not parseable
+                        // JSON, OR is a known but suppressed lifecycle event. In either case
+                        // we still want to drain Usage if it was captured before the early
+                        // return inside the parser.
+                        LAST_RESULT_USAGE.with(|cell| {
+                            if let Some(usage) = cell.take() {
+                                let _ = tx.send(AgentOutputEvent::Usage {
+                                    cost_usd: usage.cost_usd,
+                                    input_tokens: usage.input_tokens,
+                                    output_tokens: usage.output_tokens,
+                                    context_window: usage.context_window,
+                                    cache_creation_tokens: usage.cache_creation_tokens,
+                                    cache_read_tokens: usage.cache_read_tokens,
+                                });
+                            }
+                        });
                     }
                 }
 
@@ -2230,6 +2265,204 @@ fn parse_codex_event(line: &str, model_name: &str) -> Option<AgentOutputEvent> {
     }
 
     None
+}
+
+fn parse_opencode_event(line: &str, model_name: &str) -> Option<AgentOutputEvent> {
+    let v: Value = serde_json::from_str(line).ok()?;
+    let kind = v
+        .get("type")
+        .and_then(|x| x.as_str())
+        .or_else(|| v.get("event").and_then(|x| x.as_str()))
+        .unwrap_or("");
+
+    record_opencode_usage_if_present(&v);
+
+    let is_tool_use = kind == "tool.use"
+        || kind == "tool_use"
+        || (kind.contains("tool") && kind.contains("use"))
+        || kind.contains("tool_call");
+    if is_tool_use {
+        let tool = extract_string_by_keys(&v, &["tool", "tool_name", "name"])
+            .unwrap_or_else(|| "unknown".to_string());
+        let input_preview = extract_string_by_keys(
+            &v,
+            &[
+                "input",
+                "arguments",
+                "command",
+                "cmd",
+                "preview",
+                "description",
+                "path",
+            ],
+        )
+        .unwrap_or_default();
+        return Some(AgentOutputEvent::ToolUse {
+            tool,
+            input_preview: truncate_for_preview(&input_preview, 120),
+        });
+    }
+
+    let is_tool_result = kind == "tool.result"
+        || kind == "tool_result"
+        || kind.contains("tool_output")
+        || (kind.contains("tool") && kind.contains("result"));
+    if is_tool_result {
+        let output = extract_string_by_keys(
+            &v,
+            &[
+                "output", "result", "content", "stdout", "message", "text", "summary",
+            ],
+        )
+        .unwrap_or_default();
+        if output.is_empty() {
+            return None;
+        }
+        return Some(AgentOutputEvent::ToolResult {
+            output_preview: truncate_for_preview(&output, 200),
+        });
+    }
+
+    let is_error = kind == "error"
+        || kind.contains("error")
+        || kind.contains("failed")
+        || kind == "session.error";
+    if is_error {
+        let text = extract_string_by_keys(&v, &["message", "error", "text", "detail", "summary"])
+            .unwrap_or_else(|| line.to_string());
+        return Some(AgentOutputEvent::Stderr(text));
+    }
+
+    let is_complete = kind == "complete"
+        || kind == "completed"
+        || kind == "result"
+        || kind == "final"
+        || kind == "session.complete"
+        || kind == "session.idle"
+        || kind.contains("complete");
+    if is_complete {
+        let text = extract_string_by_keys(
+            &v,
+            &["output", "result", "message", "content", "text", "summary"],
+        )
+        .unwrap_or_default();
+        if text.is_empty() {
+            return None;
+        }
+        return Some(AgentOutputEvent::Result(text));
+    }
+
+    let is_text = kind == "text"
+        || kind == "text.delta"
+        || kind == "message"
+        || kind == "message.delta"
+        || kind == "assistant"
+        || kind == "delta"
+        || kind.starts_with("text")
+        || kind.starts_with("message")
+        || kind.starts_with("assistant")
+        || kind.starts_with("content")
+        || kind.starts_with("response");
+    if is_text {
+        let text = extract_string_by_keys(
+            &v,
+            &["text", "delta", "content", "message", "value", "output"],
+        )
+        .unwrap_or_default();
+        if text.is_empty() {
+            return None;
+        }
+        return Some(AgentOutputEvent::Text(text));
+    }
+
+    if kind == "session.start"
+        || kind == "session.started"
+        || kind == "step.start"
+        || kind == "installation.updated"
+    {
+        return None;
+    }
+
+    if kind.is_empty() {
+        return None;
+    }
+
+    Some(AgentOutputEvent::Text(format!("[{}:{}]", model_name, kind)))
+}
+
+fn record_opencode_usage_if_present(v: &Value) {
+    fn read_u64(obj: Option<&Value>, keys: &[&str]) -> u64 {
+        let Some(obj) = obj else {
+            return 0;
+        };
+        for k in keys {
+            if let Some(n) = obj.get(*k).and_then(|x| x.as_u64()) {
+                return n;
+            }
+        }
+        0
+    }
+
+    let tokens_obj: Option<&Value> = v
+        .get("tokens")
+        .or_else(|| v.get("usage"))
+        .or_else(|| v.get("metrics").and_then(|m| m.get("tokens")));
+
+    let input_tokens = read_u64(
+        tokens_obj,
+        &["input", "input_tokens", "prompt_tokens", "promptTokens"],
+    );
+    let output_tokens = read_u64(
+        tokens_obj,
+        &[
+            "output",
+            "output_tokens",
+            "completion_tokens",
+            "completionTokens",
+        ],
+    );
+    let cache_creation = read_u64(
+        tokens_obj,
+        &[
+            "cache_creation",
+            "cache_creation_input_tokens",
+            "cacheCreation",
+        ],
+    );
+    let cache_read = read_u64(
+        tokens_obj,
+        &["cache_read", "cache_read_input_tokens", "cacheRead"],
+    );
+
+    let cost_usd = v
+        .get("cost")
+        .or_else(|| v.get("total_cost_usd"))
+        .or_else(|| v.get("cost_usd"))
+        .and_then(|c| c.as_f64())
+        .unwrap_or(0.0);
+
+    let context_window = v
+        .get("context_window")
+        .or_else(|| v.get("contextWindow"))
+        .or_else(|| v.get("context").and_then(|c| c.get("window")))
+        .and_then(|c| c.as_u64())
+        .unwrap_or(0);
+
+    let has_any = input_tokens > 0 || output_tokens > 0 || cost_usd > 0.0;
+    if !has_any {
+        return;
+    }
+
+    LAST_RESULT_USAGE.with(|cell| {
+        cell.set(Some(ResultUsage {
+            cost_usd,
+            input_tokens,
+            output_tokens,
+            context_window,
+            cache_creation_tokens: cache_creation,
+            cache_read_tokens: cache_read,
+        }));
+    });
 }
 
 fn extract_string_by_keys(value: &Value, keys: &[&str]) -> Option<String> {
@@ -3476,5 +3709,159 @@ mod tests {
     fn agent_role_from_str_returns_none_for_unknown() {
         assert_eq!(AgentRole::from_str("bogus"), None);
         assert_eq!(AgentRole::from_str(""), None);
+    }
+
+    #[test]
+    fn opencode_event_parser_text() {
+        LAST_RESULT_USAGE.with(|c| c.set(None));
+        let line = r#"{"type":"text","text":"Hello, I will read the file now."}"#;
+        let event = parse_opencode_event(line, "lmstudio/qwen3.6-35b-a3b");
+        match event {
+            Some(AgentOutputEvent::Text(t)) => assert_eq!(t, "Hello, I will read the file now."),
+            other => panic!("expected Text, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn opencode_event_parser_tool_use() {
+        LAST_RESULT_USAGE.with(|c| c.set(None));
+        let line = r#"{"type":"tool.use","tool":"read","input":{"path":"/tmp/demo.rs"}}"#;
+        let event = parse_opencode_event(line, "lmstudio/qwen3.6-35b-a3b");
+        match event {
+            Some(AgentOutputEvent::ToolUse { tool, input_preview }) => {
+                assert_eq!(tool, "read");
+                assert!(
+                    input_preview.contains("/tmp/demo.rs"),
+                    "got: {}",
+                    input_preview
+                );
+            }
+            other => panic!("expected ToolUse, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn opencode_event_parser_tool_result() {
+        LAST_RESULT_USAGE.with(|c| c.set(None));
+        let line = r#"{"type":"tool.result","tool":"read","output":"fn main() { println!(\"hi\"); }"}"#;
+        let event = parse_opencode_event(line, "lmstudio/qwen3.6-35b-a3b");
+        match event {
+            Some(AgentOutputEvent::ToolResult { output_preview }) => {
+                assert!(output_preview.contains("fn main"));
+            }
+            other => panic!("expected ToolResult, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn opencode_event_parser_error() {
+        LAST_RESULT_USAGE.with(|c| c.set(None));
+        let line = r#"{"type":"error","message":"context window exceeded"}"#;
+        let event = parse_opencode_event(line, "lmstudio/qwen3.6-35b-a3b");
+        match event {
+            Some(AgentOutputEvent::Stderr(text)) => {
+                assert!(text.contains("context window exceeded"))
+            }
+            other => panic!("expected Stderr, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn opencode_event_parser_complete_emits_usage() {
+        LAST_RESULT_USAGE.with(|c| c.set(None));
+        let line = r#"{"type":"complete","output":"Task complete: read demo.rs.","tokens":{"input":1234,"output":56},"cost":0.0042}"#;
+        let event = parse_opencode_event(line, "lmstudio/qwen3.6-35b-a3b");
+        match event {
+            Some(AgentOutputEvent::Result(text)) => assert!(text.contains("Task complete")),
+            other => panic!("expected Result, got {:?}", other),
+        }
+        let usage = LAST_RESULT_USAGE.with(|c| c.take());
+        assert!(
+            usage.is_some(),
+            "LAST_RESULT_USAGE should be populated by complete event"
+        );
+        let usage = usage.unwrap();
+        assert_eq!(usage.input_tokens, 1234);
+        assert_eq!(usage.output_tokens, 56);
+        assert!((usage.cost_usd - 0.0042).abs() < 1e-9);
+    }
+
+    #[test]
+    fn opencode_event_parser_unknown_kind_falls_back_to_text() {
+        LAST_RESULT_USAGE.with(|c| c.set(None));
+        let line = r#"{"type":"unknown.kind","stage":"experimental","detail":"future event variant"}"#;
+        let event = parse_opencode_event(line, "lmstudio/qwen3.6-35b-a3b");
+        match event {
+            Some(AgentOutputEvent::Text(text)) => {
+                assert!(
+                    text.contains("[lmstudio/qwen3.6-35b-a3b:unknown.kind]"),
+                    "got: {}",
+                    text
+                );
+            }
+            other => panic!("expected labeled Text fallback, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn opencode_event_parser_invalid_json_returns_none() {
+        LAST_RESULT_USAGE.with(|c| c.set(None));
+        let line = "this is not json";
+        let event = parse_opencode_event(line, "lmstudio/qwen3.6-35b-a3b");
+        assert!(
+            event.is_none(),
+            "non-JSON input must return None so caller falls through to stderr"
+        );
+    }
+
+    #[test]
+    fn opencode_event_parser_fixture_smoke() {
+        LAST_RESULT_USAGE.with(|c| c.set(None));
+        let fixture = include_str!("../tests/fixtures/opencode-events.jsonl");
+        let mut text_count = 0;
+        let mut tool_use_count = 0;
+        let mut tool_result_count = 0;
+        let mut stderr_count = 0;
+        let mut result_count = 0;
+        let mut text_label_fallback_count = 0;
+        for line in fixture.lines() {
+            if line.trim().is_empty() {
+                continue;
+            }
+            match parse_opencode_event(line, "lmstudio/qwen3.6-35b-a3b") {
+                Some(AgentOutputEvent::Text(t)) => {
+                    if t.starts_with("[lmstudio/qwen3.6-35b-a3b:") {
+                        text_label_fallback_count += 1;
+                    } else {
+                        text_count += 1;
+                    }
+                }
+                Some(AgentOutputEvent::ToolUse { .. }) => tool_use_count += 1,
+                Some(AgentOutputEvent::ToolResult { .. }) => tool_result_count += 1,
+                Some(AgentOutputEvent::Stderr(_)) => stderr_count += 1,
+                Some(AgentOutputEvent::Result(_)) => result_count += 1,
+                Some(AgentOutputEvent::Usage { .. }) => {
+                    panic!("Usage is emitted via thread-local, not as a returned event")
+                }
+                None => {} // session.start is suppressed -> None
+            }
+        }
+        assert_eq!(text_count, 2, "two plain text events expected");
+        assert_eq!(tool_use_count, 1);
+        assert_eq!(tool_result_count, 1);
+        assert_eq!(stderr_count, 1);
+        assert_eq!(result_count, 1);
+        assert_eq!(
+            text_label_fallback_count, 1,
+            "unknown.kind line must fall back to labeled Text"
+        );
+        let usage = LAST_RESULT_USAGE.with(|c| c.take());
+        assert!(
+            usage.is_some(),
+            "complete line must populate LAST_RESULT_USAGE"
+        );
+        let u = usage.unwrap();
+        assert_eq!(u.input_tokens, 1234);
+        assert_eq!(u.output_tokens, 56);
     }
 }
