@@ -2562,11 +2562,29 @@ fn parse_opencode_line(line: &str, model_name: &str) -> OpenCodeParseOutcome {
         return OpenCodeParseOutcome::Event(AgentOutputEvent::Text(text));
     }
 
-    if kind == "session.start"
-        || kind == "session.started"
-        || kind == "step.start"
-        || kind == "installation.updated"
-    {
+    // Suppress lifecycle/scaffold events that opencode emits but carry no
+    // agent-visible state. The step_start / step_finish pair fires around
+    // every model turn -- if a local model gets stuck in an empty turn loop
+    // (D2.8), forwarding these as Text events resets foundry's idle-progress
+    // timer (note_provider_event records each parsed Event) and the run
+    // hangs until the hard agent_timeout_secs deadline. Suppress every
+    // observed casing so the idle-timeout heuristic in run_agent_pty's
+    // monitor loop fires within timeout_secs of the last real tool/text
+    // event.
+    if matches!(
+        kind,
+        "session.start"
+            | "session.started"
+            | "session_start"
+            | "session_started"
+            | "step.start"
+            | "step.finish"
+            | "step_start"
+            | "step_finish"
+            | "step-start"
+            | "step-finish"
+            | "installation.updated"
+    ) {
         return OpenCodeParseOutcome::Suppressed;
     }
 
@@ -3917,6 +3935,33 @@ mod tests {
         match event {
             Some(AgentOutputEvent::Text(t)) => assert_eq!(t, "Hello, I will read the file now."),
             other => panic!("expected Text, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn opencode_event_parser_suppresses_step_loop_events() {
+        // D2.8: empty step_start/step_finish pairs from a stalled local
+        // model must not be parsed as Text events -- otherwise they reset
+        // the idle-progress timer and the run hangs until hard timeout.
+        let cases = [
+            r#"{"type":"step_start","sessionID":"ses_1"}"#,
+            r#"{"type":"step_finish","sessionID":"ses_1"}"#,
+            r#"{"type":"step-start","sessionID":"ses_1"}"#,
+            r#"{"type":"step-finish","sessionID":"ses_1"}"#,
+            r#"{"type":"step.start","sessionID":"ses_1"}"#,
+            r#"{"type":"step.finish","sessionID":"ses_1"}"#,
+            r#"{"type":"session_start","sessionID":"ses_1"}"#,
+            r#"{"type":"session_started","sessionID":"ses_1"}"#,
+        ];
+        for line in cases {
+            LAST_RESULT_USAGE.with(|c| c.set(None));
+            let event = parse_opencode_event(line, "lmstudio/qwen3-coder-30b");
+            assert!(
+                event.is_none(),
+                "expected step lifecycle event {} to be suppressed, got {:?}",
+                line,
+                event
+            );
         }
     }
 
