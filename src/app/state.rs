@@ -343,6 +343,7 @@ pub struct AppState {
     pub settings_overlay_cursor: usize,
     pub local_models: Vec<String>,       // discovered models (LM Studio + Ollama merged)
     pub lmstudio_models: Vec<String>,    // discovered LM Studio model IDs (raw /v1/models ids)
+    pub lmstudio_id_to_opencode_path: HashMap<String, String>, // suffix-after-last-slash -> canonical opencode path (e.g. "qwen3-coder-30b" -> "lmstudio/qwen/qwen3-coder-30b")
     pub ollama_models: Vec<String>,      // discovered Ollama model names (raw /api/tags names)
     pub local_model_cursor: usize,       // index into local_models for current selection
     pub selected_local_model: String,    // persisted selection, from config or cycling
@@ -475,6 +476,7 @@ impl AppState {
             settings_overlay_cursor: 0,
             local_models: Vec::new(),
             lmstudio_models: Vec::new(),
+            lmstudio_id_to_opencode_path: HashMap::new(),
             ollama_models: Vec::new(),
             local_model_cursor: 0,
             selected_local_model: String::new(),
@@ -688,9 +690,15 @@ pub(super) enum AppEvent {
     OllamaStatus(bool), // true = connected, false = unreachable
     /// Discovered local models, split by source so the selection handler can prefix
     /// `lmstudio/` vs `ollama/` correctly when persisting builder routing.
+    /// `lmstudio_opencode_map` maps the LM Studio short-id (suffix after the last `/`)
+    /// to the canonical opencode model path emitted by `opencode models lmstudio`.
+    /// `opencode_warning` is `Some(msg)` when `opencode models lmstudio` failed or
+    /// returned an empty list while LM Studio itself reported models.
     LocalModels {
         lmstudio: Vec<String>,
         ollama: Vec<String>,
+        lmstudio_opencode_map: HashMap<String, String>,
+        opencode_warning: Option<String>,
     },
 }
 

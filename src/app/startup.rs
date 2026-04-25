@@ -234,7 +234,12 @@ pub(super) fn handle_startup_event(state: &mut AppState, event: AppEvent, config
                 .to_string(),
             );
         }
-        AppEvent::LocalModels { lmstudio, ollama } => {
+        AppEvent::LocalModels {
+            lmstudio,
+            ollama,
+            lmstudio_opencode_map,
+            opencode_warning,
+        } => {
             let prev = state.selected_local_model.clone();
             let mut merged: Vec<String> = Vec::with_capacity(lmstudio.len() + ollama.len());
             for m in lmstudio.iter().chain(ollama.iter()) {
@@ -245,6 +250,10 @@ pub(super) fn handle_startup_event(state: &mut AppState, event: AppEvent, config
             state.lmstudio_models = lmstudio;
             state.ollama_models = ollama;
             state.local_models = merged;
+            state.lmstudio_id_to_opencode_path = lmstudio_opencode_map;
+            if let Some(msg) = opencode_warning {
+                state.log(msg);
+            }
             if let Some(idx) = state.local_models.iter().position(|m| m == &prev) {
                 state.local_model_cursor = idx;
             } else {
@@ -354,8 +363,13 @@ pub(super) fn handle_startup_key(state: &mut AppState, key: event::KeyEvent, con
             if let Some(tx) = state.event_tx.clone() {
                 let ollama_url = config.ollama_url.clone();
                 tokio::spawn(async move {
-                    let (lmstudio, ollama) = super::fetch_local_models(ollama_url).await;
-                    let _ = tx.send(AppEvent::LocalModels { lmstudio, ollama });
+                    let discovery = super::fetch_local_models(ollama_url).await;
+                    let _ = tx.send(AppEvent::LocalModels {
+                        lmstudio: discovery.lmstudio,
+                        ollama: discovery.ollama,
+                        lmstudio_opencode_map: discovery.lmstudio_opencode_map,
+                        opencode_warning: discovery.opencode_warning,
+                    });
                 });
             }
         }

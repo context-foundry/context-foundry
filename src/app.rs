@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use crossterm::event::{self, Event, KeyCode, KeyModifiers};
 use futures::StreamExt;
 use std::path::Path;
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -40,12 +41,27 @@ use crate::utils::{atomic_write_file, truncate_str};
 
 // ─── TUI Mode ────────────────────────────────────────────────
 
+/// Result of probing LM Studio + Ollama + opencode for local model availability.
+/// `lmstudio_opencode_map` keys are LM Studio short ids (suffix after the last `/`
+/// in the `/v1/models` id) and values are the canonical opencode model paths
+/// emitted by `opencode models lmstudio` (e.g. `lmstudio/qwen/qwen3-coder-30b`).
+/// `opencode_warning` is `Some(msg)` if `opencode models lmstudio` failed or
+/// returned an empty list while LM Studio itself reported models.
+pub(super) struct LocalModelsDiscovery {
+    pub lmstudio: Vec<String>,
+    pub ollama: Vec<String>,
+    pub lmstudio_opencode_map: HashMap<String, String>,
+    pub opencode_warning: Option<String>,
+}
+
 /// Ping LM Studio and Ollama for available model names.
-/// Returns `(lmstudio_models, ollama_models)` so callers can prefix correctly.
-pub(super) async fn fetch_local_models(ollama_url: String) -> (Vec<String>, Vec<String>) {
+/// Also shells out to `opencode models lmstudio` to build a canonical short-id ->
+/// opencode path map so namespaced LM Studio IDs route correctly.
+pub(super) async fn fetch_local_models(ollama_url: String) -> LocalModelsDiscovery {
     tokio::task::spawn_blocking(move || {
         let mut lmstudio: Vec<String> = Vec::new();
         let mut ollama: Vec<String> = Vec::new();
+        let mut opencode_warning: Option<String> = None;
 
         // LM Studio: GET http://127.0.0.1:1234/v1/models
         let lm_out = std::process::Command::new("curl")
@@ -93,10 +109,58 @@ pub(super) async fn fetch_local_models(ollama_url: String) -> (Vec<String>, Vec<
             }
         }
 
-        (lmstudio, ollama)
+        // opencode: shell out to `opencode models lmstudio` and parse the canonical paths.
+        let oc_out = std::process::Command::new("opencode")
+            .args(["models", "lmstudio"])
+            .output();
+        let oc_text: String = match oc_out {
+            Ok(out) if out.status.success() => {
+                String::from_utf8_lossy(&out.stdout).to_string()
+            }
+            _ => String::new(),
+        };
+        let lmstudio_opencode_map = build_lmstudio_canonical_map(&oc_text);
+        if !lmstudio.is_empty() && lmstudio_opencode_map.is_empty() {
+            opencode_warning = Some(
+                "Warning: `opencode models lmstudio` returned no results; LM Studio model routing may use raw IDs and miss namespaces.".to_string()
+            );
+        }
+
+        LocalModelsDiscovery {
+            lmstudio,
+            ollama,
+            lmstudio_opencode_map,
+            opencode_warning,
+        }
     })
     .await
-    .unwrap_or_default()
+    .unwrap_or_else(|_| LocalModelsDiscovery {
+        lmstudio: vec![],
+        ollama: vec![],
+        lmstudio_opencode_map: HashMap::new(),
+        opencode_warning: None,
+    })
+}
+
+/// Pure parser: convert newline-delimited output of `opencode models lmstudio` into a
+/// `{short_id -> canonical_path}` HashMap. The short id is the segment after the last
+/// `/` (or the whole line if there is no `/`). The value is the original line as-is so
+/// the canonical `lmstudio/...` prefix is preserved for `Config::save_builder_routing`.
+fn build_lmstudio_canonical_map(opencode_stdout: &str) -> HashMap<String, String> {
+    let mut map: HashMap<String, String> = HashMap::new();
+    for raw_line in opencode_stdout.lines() {
+        let line = raw_line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let after_prefix = line.strip_prefix("lmstudio/").unwrap_or(line);
+        let suffix = after_prefix.rsplit('/').next().unwrap_or(after_prefix);
+        if suffix.is_empty() {
+            continue;
+        }
+        map.insert(suffix.to_string(), line.to_string());
+    }
+    map
 }
 
 /// Returns how many lines to scroll per wheel tick based on inter-event timing.
@@ -163,12 +227,17 @@ fn apply_builder_selection(state: &mut AppState, value: &str) {
     // Local model: derive prefix from source list (LM Studio takes precedence
     // if a name appears in both) and route via opencode for both.
     if state.local_models.contains(&value.to_string()) {
-        let prefix = if state.lmstudio_models.iter().any(|m| m == value) {
-            "lmstudio"
+        let model_path = if state.lmstudio_models.iter().any(|m| m == value) {
+            // Suffix after the last '/' of the LM Studio /v1/models id
+            let suffix = value.rsplit('/').next().unwrap_or(value);
+            state
+                .lmstudio_id_to_opencode_path
+                .get(suffix)
+                .cloned()
+                .unwrap_or_else(|| format!("lmstudio/{}", value))
         } else {
-            "ollama"
+            format!("ollama/{}", value)
         };
-        let model_path = format!("{}/{}", prefix, value);
         state.selected_local_model = value.to_string();
         Config::save_local_model(&dir, value);
         Config::save_builder_routing(&dir, "opencode", &model_path);
@@ -876,7 +945,12 @@ fn handle_planning_event(state: &mut AppState, event: AppEvent, config: &Config)
                 .to_string(),
             );
         }
-        AppEvent::LocalModels { lmstudio, ollama } => {
+        AppEvent::LocalModels {
+            lmstudio,
+            ollama,
+            lmstudio_opencode_map,
+            opencode_warning,
+        } => {
             let mut merged: Vec<String> = Vec::with_capacity(lmstudio.len() + ollama.len());
             for m in lmstudio.iter().chain(ollama.iter()) {
                 if !merged.contains(m) {
@@ -886,6 +960,10 @@ fn handle_planning_event(state: &mut AppState, event: AppEvent, config: &Config)
             state.lmstudio_models = lmstudio;
             state.ollama_models = ollama;
             state.local_models = merged;
+            state.lmstudio_id_to_opencode_path = lmstudio_opencode_map;
+            if let Some(msg) = opencode_warning {
+                state.log(msg);
+            }
             init_builder_cursor(state);
         }
         AppEvent::LoopEvent(LoopEvent::StatsReady(report)) => {
@@ -962,8 +1040,13 @@ fn handle_planning_key(state: &mut AppState, key: event::KeyEvent, config: &Conf
                 if let Some(tx) = state.event_tx.clone() {
                     let ollama_url = config.ollama_url.clone();
                     tokio::spawn(async move {
-                        let (lmstudio, ollama) = fetch_local_models(ollama_url).await;
-                        let _ = tx.send(AppEvent::LocalModels { lmstudio, ollama });
+                        let discovery = fetch_local_models(ollama_url).await;
+                        let _ = tx.send(AppEvent::LocalModels {
+                            lmstudio: discovery.lmstudio,
+                            ollama: discovery.ollama,
+                            lmstudio_opencode_map: discovery.lmstudio_opencode_map,
+                            opencode_warning: discovery.opencode_warning,
+                        });
                     });
                 }
             }
@@ -1548,8 +1631,13 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                                 if let Some(tx) = state.event_tx.clone() {
                                     let ollama_url = config.ollama_url.clone();
                                     tokio::spawn(async move {
-                                        let (lmstudio, ollama) = fetch_local_models(ollama_url).await;
-                                        let _ = tx.send(AppEvent::LocalModels { lmstudio, ollama });
+                                        let discovery = fetch_local_models(ollama_url).await;
+                                        let _ = tx.send(AppEvent::LocalModels {
+                                            lmstudio: discovery.lmstudio,
+                                            ollama: discovery.ollama,
+                                            lmstudio_opencode_map: discovery.lmstudio_opencode_map,
+                                            opencode_warning: discovery.opencode_warning,
+                                        });
                                     });
                                 }
                             }
@@ -1706,8 +1794,13 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                                 if let Some(tx) = state.event_tx.clone() {
                                     let ollama_url = config.ollama_url.clone();
                                     tokio::spawn(async move {
-                                        let (lmstudio, ollama) = fetch_local_models(ollama_url).await;
-                                        let _ = tx.send(AppEvent::LocalModels { lmstudio, ollama });
+                                        let discovery = fetch_local_models(ollama_url).await;
+                                        let _ = tx.send(AppEvent::LocalModels {
+                                            lmstudio: discovery.lmstudio,
+                                            ollama: discovery.ollama,
+                                            lmstudio_opencode_map: discovery.lmstudio_opencode_map,
+                                            opencode_warning: discovery.opencode_warning,
+                                        });
                                     });
                                 }
                             }
@@ -1902,7 +1995,12 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                 .to_string(),
             );
         }
-        AppEvent::LocalModels { lmstudio, ollama } => {
+        AppEvent::LocalModels {
+            lmstudio,
+            ollama,
+            lmstudio_opencode_map,
+            opencode_warning,
+        } => {
             let mut merged: Vec<String> = Vec::with_capacity(lmstudio.len() + ollama.len());
             for m in lmstudio.iter().chain(ollama.iter()) {
                 if !merged.contains(m) {
@@ -1912,6 +2010,10 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
             state.lmstudio_models = lmstudio;
             state.ollama_models = ollama;
             state.local_models = merged;
+            state.lmstudio_id_to_opencode_path = lmstudio_opencode_map;
+            if let Some(msg) = opencode_warning {
+                state.log(msg);
+            }
             init_builder_cursor(state);
         }
         AppEvent::Mouse(mouse) => {

@@ -2164,3 +2164,53 @@ fn test_buildloop_dir_creation_fails_on_readonly_parent() {
     std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o755)).unwrap();
     let _ = std::fs::remove_dir_all(&tmp);
 }
+
+#[test]
+fn lmstudio_canonical_id_maps_namespaced_and_bare_ids() {
+    let stdout = "\
+lmstudio/openai/gpt-oss-20b
+lmstudio/qwen/qwen3-coder-30b
+lmstudio/qwen3.6-27b
+lmstudio/mlx-community/qwen3.6-35b-a3b
+";
+    let map = super::build_lmstudio_canonical_map(stdout);
+    assert_eq!(
+        map.get("gpt-oss-20b").map(String::as_str),
+        Some("lmstudio/openai/gpt-oss-20b")
+    );
+    assert_eq!(
+        map.get("qwen3-coder-30b").map(String::as_str),
+        Some("lmstudio/qwen/qwen3-coder-30b")
+    );
+    assert_eq!(
+        map.get("qwen3.6-27b").map(String::as_str),
+        Some("lmstudio/qwen3.6-27b")
+    );
+    assert_eq!(
+        map.get("qwen3.6-35b-a3b").map(String::as_str),
+        Some("lmstudio/mlx-community/qwen3.6-35b-a3b")
+    );
+    assert_eq!(map.len(), 4);
+}
+
+#[test]
+fn lmstudio_canonical_id_handles_empty_and_whitespace() {
+    let map = super::build_lmstudio_canonical_map("");
+    assert!(map.is_empty());
+
+    let map2 = super::build_lmstudio_canonical_map("\n   \n\t\n");
+    assert!(map2.is_empty());
+}
+
+#[test]
+fn lmstudio_canonical_id_skips_lines_without_lmstudio_prefix() {
+    // If a line lacks the "lmstudio/" prefix, the parser still emits it
+    // as a key based on the last path segment so the route is recoverable.
+    let stdout = "openai/gpt-4\nlmstudio/qwen3.6-27b\n";
+    let map = super::build_lmstudio_canonical_map(stdout);
+    assert_eq!(map.get("gpt-4").map(String::as_str), Some("openai/gpt-4"));
+    assert_eq!(
+        map.get("qwen3.6-27b").map(String::as_str),
+        Some("lmstudio/qwen3.6-27b")
+    );
+}
