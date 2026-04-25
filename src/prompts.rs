@@ -158,6 +158,7 @@ RULES:
 #[allow(clippy::too_many_arguments)]
 pub fn query_prompt(
     stage_label: &str,
+    prompt_override: Option<&str>,
     task_id: &str,
     task_desc: &str,
     task_complexity: &str,
@@ -166,6 +167,9 @@ pub fn query_prompt(
     spec_content: Option<&str>,
     tasks_content: Option<&str>,
 ) -> String {
+    if let Some(s) = prompt_override.filter(|s| !s.trim().is_empty()) {
+        return s.to_string();
+    }
     let updated_specs_block = updated_specs
         .filter(|s| !s.trim().is_empty())
         .map(|specs| format!("\nUPDATED SPECS (user's latest enhancement request):\n{specs}\n"))
@@ -233,7 +237,10 @@ RULES:
     )
 }
 
-pub fn research_prompt(stage_label: &str) -> String {
+pub fn research_prompt(stage_label: &str, prompt_override: Option<&str>) -> String {
+    if let Some(s) = prompt_override.filter(|s| !s.trim().is_empty()) {
+        return s.to_string();
+    }
     format!(
         r#"You are the {stage_label} agent for an autonomous build loop.
 
@@ -276,14 +283,19 @@ RULES:
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn planner_prompt(
     stage_label: &str,
+    prompt_override: Option<&str>,
     task_id: &str,
     task_desc: &str,
     pattern_context: &str,
     spec_file: &str,
     tasks_file: &str,
 ) -> String {
+    if let Some(s) = prompt_override.filter(|s| !s.trim().is_empty()) {
+        return s.to_string();
+    }
     let patterns_block = if pattern_context.is_empty() {
         String::new()
     } else {
@@ -403,6 +415,7 @@ IMPORTANT:
 #[allow(clippy::too_many_arguments)]
 pub fn planner_lookahead_prompt(
     stage_label: &str,
+    prompt_override: Option<&str>,
     task_id: &str,
     task_desc: &str,
     pattern_context: &str,
@@ -410,6 +423,9 @@ pub fn planner_lookahead_prompt(
     tasks_file: &str,
     plan_filename: &str,
 ) -> String {
+    if let Some(s) = prompt_override.filter(|s| !s.trim().is_empty()) {
+        return s.to_string();
+    }
     let patterns_block = if pattern_context.is_empty() {
         String::new()
     } else {
@@ -506,11 +522,15 @@ IMPORTANT:
 
 pub fn builder_prompt(
     stage_label: &str,
+    prompt_override: Option<&str>,
     task_id: &str,
     task_desc: &str,
     spec_file: &str,
     tasks_file: &str,
 ) -> String {
+    if let Some(s) = prompt_override.filter(|s| !s.trim().is_empty()) {
+        return s.to_string();
+    }
     format!(
         r#"You are the {stage_label} agent for an autonomous build loop.
 
@@ -575,14 +595,19 @@ This is optional -- only add lines for patterns you have a clear opinion about."
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn parallel_builder_prompt(
     stage_label: &str,
+    prompt_override: Option<&str>,
     task_id: &str,
     task_desc: &str,
     assigned_file_ops: &str,
     spec_file: &str,
     tasks_file: &str,
 ) -> String {
+    if let Some(s) = prompt_override.filter(|s| !s.trim().is_empty()) {
+        return s.to_string();
+    }
     format!(
         r#"You are a PARALLEL {stage_label} agent for an autonomous build loop.
 
@@ -642,11 +667,15 @@ This is optional -- only add lines for patterns you have a clear opinion about."
 
 pub fn builder_direct_prompt(
     stage_label: &str,
+    prompt_override: Option<&str>,
     task_id: &str,
     task_desc: &str,
     spec_file: &str,
     tasks_file: &str,
 ) -> String {
+    if let Some(s) = prompt_override.filter(|s| !s.trim().is_empty()) {
+        return s.to_string();
+    }
     format!(
         r#"You are the {stage_label} agent for an autonomous build loop.
 
@@ -2019,7 +2048,7 @@ mod tests {
     #[test]
     fn test_pattern_context_wrapped_in_reference_block() {
         let patterns = "Some pattern advice here";
-        let planner = planner_prompt("PLAN", "T1", "test task", patterns, "SPEC.md", "TASKS.md");
+        let planner = planner_prompt("PLAN", None, "T1", "test task", patterns, "SPEC.md", "TASKS.md");
         assert!(
             planner.contains("--- BEGIN REFERENCE DATA (non-authoritative"),
             "planner prompt must wrap pattern context in reference data block"
@@ -2052,7 +2081,7 @@ mod tests {
 
     #[test]
     fn test_empty_pattern_context_has_no_reference_block() {
-        let planner = planner_prompt("PLAN", "T1", "test task", "", "SPEC.md", "TASKS.md");
+        let planner = planner_prompt("PLAN", None, "T1", "test task", "", "SPEC.md", "TASKS.md");
         assert!(
             !planner.contains("BEGIN REFERENCE DATA"),
             "empty pattern context should not produce a reference block"
@@ -2090,7 +2119,7 @@ mod tests {
 
     #[test]
     fn prompts_use_actual_file_names_not_hardcoded() {
-        let planner = planner_prompt("PLAN", "T1", "task", "", "ARCHITECTURE.md", "IMPL_PLAN.md");
+        let planner = planner_prompt("PLAN", None, "T1", "task", "", "ARCHITECTURE.md", "IMPL_PLAN.md");
         assert!(planner.contains("ARCHITECTURE.md"));
         assert!(planner.contains("IMPL_PLAN.md"));
         assert!(!planner.contains("SPEC.md"));
@@ -2652,5 +2681,68 @@ mod tests {
                 "{name} borderline examples missing 'category: logic'"
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod prompt_override_tests {
+    use super::*;
+
+    #[test]
+    fn query_prompt_returns_override_when_some_non_empty() {
+        let out = query_prompt(
+            "QUERY",
+            Some("CUSTOM PROMPT BODY"),
+            "T1.1",
+            "desc",
+            "Simple",
+            5,
+            None,
+            None,
+            None,
+        );
+        assert_eq!(out, "CUSTOM PROMPT BODY");
+    }
+
+    #[test]
+    fn query_prompt_uses_default_when_override_none() {
+        let out = query_prompt("QUERY", None, "T1.1", "desc", "Simple", 5, None, None, None);
+        assert!(out.contains("Task ID: T1.1"));
+        assert!(out.contains("YOUR JOB"));
+    }
+
+    #[test]
+    fn query_prompt_uses_default_when_override_empty_or_whitespace() {
+        let out = query_prompt(
+            "QUERY",
+            Some("   \n\t  "),
+            "T1.1",
+            "desc",
+            "Simple",
+            5,
+            None,
+            None,
+            None,
+        );
+        assert!(out.contains("Task ID: T1.1"));
+    }
+
+    #[test]
+    fn builder_prompt_returns_override_when_some_non_empty() {
+        let out = builder_prompt(
+            "IMPLEMENT",
+            Some("BUILD ANYTHING"),
+            "T1.1",
+            "desc",
+            "SPEC.md",
+            "TASKS.md",
+        );
+        assert_eq!(out, "BUILD ANYTHING");
+    }
+
+    #[test]
+    fn research_prompt_returns_override_when_some_non_empty() {
+        let out = research_prompt("RESEARCH", Some("CUSTOM RESEARCH"));
+        assert_eq!(out, "CUSTOM RESEARCH");
     }
 }

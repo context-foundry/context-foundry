@@ -37,32 +37,128 @@ use crate::utils::atomic_write_file;
 struct Checkpoint {
     task_id: String,
     task_desc: String,
-    completed_stage: String, // "scout", "planner", "builder", "done"
+    /// Index into `Config::pipeline_stages` of the most-recently-completed card.
+    /// New format. Older checkpoints used `completed_stage: String` and are
+    /// migrated by `read_checkpoint` (see legacy block).
+    completed_card_index: usize,
     timestamp: String,
 }
 
-fn write_checkpoint(buildloop_dir: &std::path::Path, task_id: &str, task_desc: &str, stage: &str) {
+fn write_checkpoint(
+    buildloop_dir: &std::path::Path,
+    task_id: &str,
+    task_desc: &str,
+    card_idx: usize,
+) {
     let checkpoint = Checkpoint {
         task_id: task_id.to_string(),
         task_desc: task_desc.to_string(),
-        completed_stage: stage.to_string(),
+        completed_card_index: card_idx,
         timestamp: chrono::Utc::now().to_rfc3339(),
     };
     let path = buildloop_dir.join("checkpoint.json");
     if let Ok(json) = serde_json::to_string_pretty(&checkpoint) {
         if let Err(e) = atomic_write_file(&path, json.as_bytes()) {
             eprintln!(
-                "Warning: failed to write checkpoint to {}: {} -- crash recovery may not resume from this stage",
-                path.display(), e
+                "Warning: failed to write checkpoint to {}: {} -- crash recovery may not resume from card_idx {}",
+                path.display(), e, card_idx
             );
         }
     }
 }
 
-fn read_checkpoint(buildloop_dir: &std::path::Path) -> Option<Checkpoint> {
+fn read_checkpoint(
+    buildloop_dir: &std::path::Path,
+    pipeline_stages: &[crate::config::PipelineStageConfig],
+) -> Option<Checkpoint> {
     let path = buildloop_dir.join("checkpoint.json");
     let content = std::fs::read_to_string(&path).ok()?;
-    serde_json::from_str(&content).ok()
+    if let Ok(cp) = serde_json::from_str::<Checkpoint>(&content) {
+        return Some(cp);
+    }
+    #[derive(serde::Deserialize)]
+    struct LegacyCheckpoint {
+        task_id: String,
+        task_desc: String,
+        completed_stage: String,
+        timestamp: String,
+    }
+    let legacy: LegacyCheckpoint = serde_json::from_str(&content).ok()?;
+    let slug = match legacy.completed_stage.as_str() {
+        "query" => "query",
+        "research" => "research",
+        "planner" => "plan",
+        "plan_review" => "plan",
+        "builder" => "implement",
+        "scout" => "research",
+        _ => return None,
+    };
+    let idx = pipeline_stages.iter().position(|s| s.id == slug)?;
+    Some(Checkpoint {
+        task_id: legacy.task_id,
+        task_desc: legacy.task_desc,
+        completed_card_index: idx,
+        timestamp: legacy.timestamp,
+    })
+}
+
+fn artifact_for_stage(stage_id: &str, ctx: &RunContext) -> Option<PathBuf> {
+    match stage_id {
+        "query" => Some(ctx.buildloop_dir.join("questions.md")),
+        "research" => Some(ctx.buildloop_dir.join("research-report.md")),
+        "plan" => Some(ctx.current_plan.clone()),
+        "implement" => Some(ctx.buildloop_dir.join("build-claims.md")),
+        "doubt" => Some(ctx.review_report.clone()),
+        _ => None,
+    }
+}
+
+/// Read the checkpoint and figure out the card index from which to resume.
+/// Verifies that all artifacts up to and including completed_card_index actually
+/// exist; if any are missing, fall back to the earliest missing index. Returns
+/// 0 if no valid checkpoint applies.
+fn compute_resume_card_index(
+    buildloop_dir: &std::path::Path,
+    pipeline_stages: &[crate::config::PipelineStageConfig],
+    task_id: &str,
+    ctx: &RunContext,
+    tx: &mpsc::UnboundedSender<AppEvent>,
+) -> usize {
+    let cp = match read_checkpoint(buildloop_dir, pipeline_stages) {
+        Some(c) if c.task_id == task_id => c,
+        _ => return 0,
+    };
+    if pipeline_stages.is_empty() {
+        return 0;
+    }
+    let completed = cp
+        .completed_card_index
+        .min(pipeline_stages.len().saturating_sub(1));
+    for (i, stage) in pipeline_stages.iter().enumerate().take(completed + 1) {
+        if let Some(path) = artifact_for_stage(&stage.id, ctx) {
+            if !path.exists() {
+                let basename = path
+                    .file_name()
+                    .map(|s| s.to_string_lossy().to_string())
+                    .unwrap_or_else(|| path.display().to_string());
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                    "Checkpoint says '{}' completed but {} missing -- re-running from card {} ({})",
+                    stage.id, basename, i, stage.id
+                ))));
+                return i;
+            }
+        }
+    }
+    let next = completed + 1;
+    let next_id = pipeline_stages
+        .get(next)
+        .map(|s| s.id.as_str())
+        .unwrap_or("end");
+    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+        "Checkpoint recovery: resuming at card {} ({})",
+        next, next_id
+    ))));
+    next
 }
 
 fn clear_checkpoint(buildloop_dir: &std::path::Path) {
@@ -71,6 +167,220 @@ fn clear_checkpoint(buildloop_dir: &std::path::Path) {
             eprintln!("Warning: failed to remove checkpoint.json: {}", e);
         }
     }
+}
+
+/// Slugs that are recognized as known pipeline stages with hardcoded handlers.
+fn is_known_stage_slug(slug: &str) -> bool {
+    matches!(slug, "query" | "research" | "plan" | "implement" | "doubt")
+}
+
+/// Run a single custom (unknown-slug) card as a Builder-role agent using the
+/// configured `prompt_override`. Returns `true` if the agent succeeded or the
+/// card was skipped (no override). Returns `false` if the agent failed.
+#[allow(clippy::too_many_arguments)]
+async fn run_custom_card(
+    card_idx: usize,
+    stage: &crate::config::PipelineStageConfig,
+    task_info: &Task,
+    ctx: &RunContext,
+    tx: &mpsc::UnboundedSender<AppEvent>,
+    extension_context: &str,
+    last_rate_limited: &mut bool,
+) -> bool {
+    let task_id = &task_info.id;
+    let task_desc = &task_info.description;
+    let cc_version = ctx.cc_version.clone();
+
+    let override_text = stage
+        .prompt_override
+        .as_deref()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+    if override_text.is_none() {
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+            "Custom card '{}' has no prompt_override -- skipping",
+            stage.id
+        ))));
+        return true;
+    }
+
+    let prompt = prompts::builder_prompt(
+        &ctx.config.pipeline_stage_label(&stage.id),
+        override_text.as_deref(),
+        task_id,
+        task_desc,
+        &ctx.spec_file_prompt_path(),
+        &ctx.tasks_file_prompt_path(),
+    );
+    let prompt = prompts::wrap_with_extensions(&prompt, extension_context);
+
+    let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
+    let fwd_tx = tx.clone();
+    let fwd_handle = tokio::spawn(async move {
+        let mut usage = AgentUsage::default();
+        while let Some(evt) = agent_rx.recv().await {
+            usage.accumulate(&evt);
+            let _ = fwd_tx.send(AppEvent::AgentOutput(evt));
+        }
+        usage
+    });
+
+    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::AgentStarted(
+        AgentRole::Builder,
+        Config::display_provider_model(&ctx.config.builder_provider, &ctx.config.builder_model),
+    )));
+    observatory::log_event(
+        &ctx.session_id,
+        &ctx.project_dir,
+        ObservatoryEvent::AgentStarted {
+            role: format!("Builder({})", stage.id),
+            provider: ctx.config.builder_provider.clone(),
+            model: ctx.config.builder_model.clone(),
+            cc_version: cc_version.clone(),
+        },
+    );
+
+    let start = Instant::now();
+    let result = agent::run_agent(
+        &AgentRole::Builder,
+        Config::parse_provider(&ctx.config.builder_provider),
+        &ctx.config.builder_model,
+        &prompt,
+        &ctx.project_dir,
+        agent_tx,
+        &ctx.log_dir,
+        None,
+        ctx.config.agent_timeout_secs,
+        Some(ctx.shutdown.clone()),
+        Some(&ctx.config),
+    )
+    .await;
+
+    let agent_usage = fwd_handle.await.unwrap_or_default();
+    *last_rate_limited = was_rate_limited(&result);
+    let ok = result.as_ref().map(|r| r.success).unwrap_or(false);
+    let _ = tx.send(AppEvent::AgentDone(ok));
+    observatory::log_event(
+        &ctx.session_id,
+        &ctx.project_dir,
+        ObservatoryEvent::AgentDone {
+            role: format!("Builder({})", stage.id),
+            success: ok,
+            duration_secs: start.elapsed().as_secs_f64(),
+            tokens_in: agent_usage.tokens_in,
+            tokens_out: agent_usage.tokens_out,
+            cost_usd: agent_usage.cost_usd,
+            context_pct: agent_usage.context_pct,
+            cache_creation_tokens: agent_usage.cache_creation_tokens,
+            cache_read_tokens: agent_usage.cache_read_tokens,
+        },
+    );
+    adaptive_sleep(
+        &ctx.config,
+        *last_rate_limited,
+        ctx.config.pause_between_agents_secs,
+    )
+    .await;
+    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+        "Custom card '{}' (idx {}) finished: {}",
+        stage.id,
+        card_idx,
+        if ok { "ok" } else { "failed" }
+    ))));
+    ok
+}
+
+/// Run any custom (unknown-slug) cards that appear in pipeline_stages between
+/// `prev_known_card_idx` (exclusive) and `next_known_card_idx` (exclusive).
+/// Used at each known-stage boundary inside `process_task` to honour custom
+/// card insertion at configured positions. A card whose index is below
+/// `resume_at_card_index` is skipped (already completed in a prior session).
+#[allow(clippy::too_many_arguments)]
+async fn run_custom_cards_in_range(
+    prev_known_card_idx: Option<usize>,
+    next_known_card_idx: Option<usize>,
+    resume_at_card_index: usize,
+    task_info: &Task,
+    ctx: &RunContext,
+    tx: &mpsc::UnboundedSender<AppEvent>,
+    extension_context: &str,
+    last_rate_limited: &mut bool,
+) {
+    let start = prev_known_card_idx.map(|i| i + 1).unwrap_or(0);
+    let end = next_known_card_idx.unwrap_or(ctx.config.pipeline_stages.len());
+    if start >= end {
+        return;
+    }
+    // Clone the slice to avoid borrow conflicts with mutable state in caller.
+    let cards: Vec<crate::config::PipelineStageConfig> =
+        ctx.config.pipeline_stages[start..end].to_vec();
+    for (offset, stage) in cards.iter().enumerate() {
+        if is_known_stage_slug(&stage.id) {
+            // Defensive: known slugs should be handled by their own paths,
+            // not as custom cards. Log and skip.
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                "Pipeline: known stage '{}' encountered out of canonical position -- skipping in custom-card range",
+                stage.id
+            ))));
+            continue;
+        }
+        let card_idx = start + offset;
+        if !stage.enabled {
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                "Pipeline: card '{}' (idx {}) disabled in config -- skipping",
+                stage.id, card_idx
+            ))));
+            continue;
+        }
+        if card_idx < resume_at_card_index {
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                "Pipeline: card '{}' (idx {}) skipped -- already completed in checkpoint",
+                stage.id, card_idx
+            ))));
+            continue;
+        }
+        let _ok = run_custom_card(
+            card_idx,
+            stage,
+            task_info,
+            ctx,
+            tx,
+            extension_context,
+            last_rate_limited,
+        )
+        .await;
+        // Always write a checkpoint after the custom card finishes, so resume
+        // jumps over it next time. Per spec: custom cards have no enforced
+        // artifact, but we still record progress.
+        write_checkpoint(
+            &ctx.buildloop_dir,
+            &task_info.id,
+            &task_info.description,
+            card_idx,
+        );
+    }
+}
+
+/// Check whether the configured pipeline_stages preserves the canonical order
+/// of the 5 known stages (query, research, plan, implement, doubt). Custom
+/// cards may be interspersed at any position, but reordering known stages is
+/// not supported and triggers an error log.
+fn known_stages_in_canonical_order(
+    pipeline_stages: &[crate::config::PipelineStageConfig],
+) -> bool {
+    let canonical = ["query", "research", "plan", "implement", "doubt"];
+    let known_positions: Vec<usize> = pipeline_stages
+        .iter()
+        .enumerate()
+        .filter_map(|(i, s)| {
+            canonical
+                .iter()
+                .position(|c| *c == s.id.as_str())
+                .map(|c| (i, c))
+        })
+        .map(|(_, c)| c)
+        .collect();
+    known_positions.windows(2).all(|w| w[0] < w[1])
 }
 
 /// Write accumulated budget telemetry to disk. Called before early returns
@@ -216,6 +526,7 @@ fn spawn_lookahead_planner(
 
         let prompt = prompts::planner_lookahead_prompt(
             &ctx.config.pipeline_stage_label("plan"),
+            None,
             &task_id,
             &task_desc,
             &pattern_context,
@@ -794,6 +1105,7 @@ async fn run_parallel_builder(
 
         let prompt = prompts::parallel_builder_prompt(
             &ctx.config.pipeline_stage_label("implement"),
+            None,
             task_id,
             task_desc,
             &joined_blocks,
@@ -2494,107 +2806,45 @@ async fn process_task(
     // ─── Checkpoint Resumption ───────────────────────────────────
     // If a previous run crashed mid-task, detect the checkpoint and
     // skip completed stages instead of re-running from scratch.
-    let resume_stage: Option<&str> = read_checkpoint(&ctx.buildloop_dir)
-        .filter(|cp| cp.task_id == task_info.id)
-        .and_then(|cp| {
-            let stage = match cp.completed_stage.as_str() {
-                "query" => Some("research"),
-                "research" => Some("planner"),
-                "planner" => Some("plan_review"),
-                "plan_review" => Some("builder"),
-                "builder" => Some("doubt"),
-                // Legacy: treat old "scout" checkpoints as "research" complete
-                "scout" => Some("planner"),
-                _ => None,
-            };
-            if let Some(s) = stage {
-                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                    "Checkpoint recovery: {} completed '{}' stage at {} -- resuming at {}",
-                    cp.task_id, cp.completed_stage, cp.timestamp, s,
-                ))));
-            }
-            stage
-        });
+    let resume_at_card_index = compute_resume_card_index(
+        &ctx.buildloop_dir,
+        &ctx.config.pipeline_stages,
+        &task_info.id,
+        ctx,
+        tx,
+    );
 
-    // Determine which stages to skip based on checkpoint, verifying artifacts exist.
-    // resume_stage tells us the NEXT stage to run. Stages before it were completed.
-    // checkpoint_skip_query: query completed if we're resuming at research or later
-    let checkpoint_skip_query = match resume_stage {
-        Some("research" | "planner" | "plan_review" | "builder" | "doubt") => {
-            if ctx.buildloop_dir.join("questions.md").exists() {
-                true
-            } else {
-                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
-                    "Checkpoint says query completed but questions.md missing -- re-running query"
-                        .to_string(),
-                )));
-                false
-            }
-        }
-        _ => false,
+    let card_idx_for = |slug: &str| -> Option<usize> {
+        ctx.config.pipeline_stages.iter().position(|s| s.id == slug)
     };
+    let query_card_idx = card_idx_for("query");
+    let research_card_idx = card_idx_for("research");
+    let plan_card_idx = card_idx_for("plan");
+    let implement_card_idx = card_idx_for("implement");
+    let _doubt_card_idx = card_idx_for("doubt");
 
-    // checkpoint_skip_research: research completed if we're resuming at planner or later
-    let checkpoint_skip_research = match resume_stage {
-        Some("planner" | "plan_review" | "builder" | "doubt") if checkpoint_skip_query => {
-            if ctx.buildloop_dir.join("research-report.md").exists() {
-                true
-            } else {
-                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
-                    "Checkpoint says research completed but research-report.md missing -- re-running from research".to_string(),
-                )));
-                false
-            }
-        }
-        Some("planner" | "plan_review" | "builder" | "doubt") if !checkpoint_skip_query => {
-            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
-                "Checkpoint says research completed but questions.md missing -- re-running from query (cascading)".to_string(),
-            )));
-            false
-        }
-        _ => false,
-    };
-
-    let checkpoint_skip_planner = match resume_stage {
-        Some("plan_review" | "builder" | "doubt") if checkpoint_skip_research => {
-            if ctx.current_plan.exists() {
-                true
-            } else {
-                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
-                    "Checkpoint says planner completed but current-plan.md missing -- re-running from planner".to_string(),
-                )));
-                false
-            }
-        }
-        Some("plan_review" | "builder" | "doubt") if !checkpoint_skip_research => {
-            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
-                "Checkpoint says planner completed but research-report.md missing -- re-running from research (cascading)".to_string(),
-            )));
-            false
-        }
-        _ => false,
-    };
-    let checkpoint_skip_builder = match resume_stage {
-        Some("doubt") if checkpoint_skip_planner => {
-            if ctx.buildloop_dir.join("build-claims.md").exists() {
-                true
-            } else {
-                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
-                    "Checkpoint says builder completed but build-claims.md missing -- re-running from builder".to_string(),
-                )));
-                false
-            }
-        }
-        Some("doubt") if !checkpoint_skip_planner => {
-            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
-                "Checkpoint says builder completed but current-plan.md missing -- re-running from planner (cascading)".to_string(),
-            )));
-            false
-        }
-        _ => false,
-    };
+    // Compatibility shims so the existing per-stage code blocks compile unchanged.
+    // Each `checkpoint_skip_*` flag is true iff the stage's card index is below
+    // the resume index (meaning it already ran in a prior session).
+    let checkpoint_skip_query = query_card_idx.is_some_and(|i| i < resume_at_card_index);
+    let checkpoint_skip_research =
+        research_card_idx.is_some_and(|i| i < resume_at_card_index);
+    let checkpoint_skip_planner = plan_card_idx.is_some_and(|i| i < resume_at_card_index);
     let checkpoint_skip_plan_review =
-        matches!(resume_stage, Some("builder" | "doubt") if checkpoint_skip_planner);
+        plan_card_idx.is_some_and(|i| i < resume_at_card_index);
+    let checkpoint_skip_builder =
+        implement_card_idx.is_some_and(|i| i < resume_at_card_index);
+
+    // Validate that known stages (query, research, plan, implement, doubt) appear
+    // in canonical order in pipeline_stages. Reordering them is not supported and
+    // would break the gates and shared mutable state in process_task. Custom
+    // cards interspersed between known stages ARE supported.
+    if !known_stages_in_canonical_order(&ctx.config.pipeline_stages) {
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+            "ERROR: pipeline_stages reorders known stages (query/research/plan/implement/doubt) out of canonical order. Known stages have hard dependencies (gates, artifacts, shared state) and must appear in canonical order. Custom card slugs may be interspersed at any position. Refusing to run.".to_string(),
+        )));
+        return (false, false, false);
+    }
 
     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::TaskStarted(
         task_info.clone(),
@@ -2789,6 +3039,19 @@ async fn process_task(
     #[allow(unused_assignments)]
     let mut last_rate_limited = false;
 
+    // ─── Custom Cards: before query ───
+    run_custom_cards_in_range(
+        None,
+        query_card_idx,
+        resume_at_card_index,
+        task_info,
+        ctx,
+        tx,
+        extension_context,
+        &mut last_rate_limited,
+    )
+    .await;
+
     // ─── Run Query + Research (skip if recent report exists and codebase hasn't changed much) ───
     if skip_query && skip_research {
         let msg = if checkpoint_skip_query && checkpoint_skip_research {
@@ -2864,6 +3127,9 @@ async fn process_task(
 
                 let query_prompt_text = prompts::query_prompt(
                     &ctx.config.pipeline_stage_label("query"),
+                    query_card_idx
+                        .and_then(|i| ctx.config.pipeline_stages.get(i))
+                        .and_then(|s| s.prompt_override.as_deref()),
                     task_id,
                     task_desc,
                     complexity_str,
@@ -3012,9 +3278,24 @@ async fn process_task(
 
             // Checkpoint: query completed
             if !query_failed {
-                write_checkpoint(&ctx.buildloop_dir, task_id, task_desc, "query");
+                if let Some(idx) = query_card_idx {
+                    write_checkpoint(&ctx.buildloop_dir, task_id, task_desc, idx);
+                }
             }
         } // end if !skip_query else block
+
+        // ─── Custom Cards: between query and research ───
+        run_custom_cards_in_range(
+            query_card_idx,
+            research_card_idx,
+            resume_at_card_index,
+            task_info,
+            ctx,
+            tx,
+            extension_context,
+            &mut last_rate_limited,
+        )
+        .await;
 
         if skip_research {
             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
@@ -3073,8 +3354,12 @@ async fn process_task(
                     },
                 );
 
-                let research_prompt_text =
-                    prompts::research_prompt(&ctx.config.pipeline_stage_label("research"));
+                let research_prompt_text = prompts::research_prompt(
+                    &ctx.config.pipeline_stage_label("research"),
+                    research_card_idx
+                        .and_then(|i| ctx.config.pipeline_stages.get(i))
+                        .and_then(|s| s.prompt_override.as_deref()),
+                );
                 let research_start = Instant::now();
                 let research_result = agent::run_agent(
                     &AgentRole::Research,
@@ -3314,8 +3599,23 @@ async fn process_task(
 
     // Checkpoint: research completed
     if !checkpoint_skip_research && !skip_research && !query_failed {
-        write_checkpoint(&ctx.buildloop_dir, task_id, task_desc, "research");
+        if let Some(idx) = research_card_idx {
+            write_checkpoint(&ctx.buildloop_dir, task_id, task_desc, idx);
+        }
     }
+
+    // ─── Custom Cards: between research and plan ───
+    run_custom_cards_in_range(
+        research_card_idx,
+        plan_card_idx,
+        resume_at_card_index,
+        task_info,
+        ctx,
+        tx,
+        extension_context,
+        &mut last_rate_limited,
+    )
+    .await;
 
     // Gate: research-report.md must exist before planner proceeds (unless Q+R was skipped)
     if !skip_research && !query_failed && !research_report.exists() {
@@ -3421,6 +3721,9 @@ async fn process_task(
 
             let mut prompt = prompts::planner_prompt(
                 &ctx.config.pipeline_stage_label("plan"),
+                plan_card_idx
+                    .and_then(|i| ctx.config.pipeline_stages.get(i))
+                    .and_then(|s| s.prompt_override.as_deref()),
                 task_id,
                 task_desc,
                 &pattern_context,
@@ -3726,6 +4029,9 @@ async fn process_task(
             let failed_output = std::fs::read_to_string(&ctx.current_plan).unwrap_or_default();
             let mut base_prompt = prompts::planner_prompt(
                 &ctx.config.pipeline_stage_label("plan"),
+                plan_card_idx
+                    .and_then(|i| ctx.config.pipeline_stages.get(i))
+                    .and_then(|s| s.prompt_override.as_deref()),
                 task_id,
                 task_desc,
                 &pattern_context,
@@ -3931,7 +4237,9 @@ async fn process_task(
 
     // Checkpoint: planner completed (after extension + builder gates pass)
     if !checkpoint_skip_planner {
-        write_checkpoint(&ctx.buildloop_dir, task_id, task_desc, "planner");
+        if let Some(idx) = plan_card_idx {
+            write_checkpoint(&ctx.buildloop_dir, task_id, task_desc, idx);
+        }
     }
 
     // ─── P+ Subphase: Plan Review via Orchestrator ────────────
@@ -4276,13 +4584,28 @@ async fn process_task(
             }
 
             // Checkpoint: P+ completed
-            write_checkpoint(&ctx.buildloop_dir, task_id, task_desc, "plan_review");
+            if let Some(idx) = plan_card_idx {
+                write_checkpoint(&ctx.buildloop_dir, task_id, task_desc, idx);
+            }
         } else {
             plan_review_char = "-";
         }
     } else {
         plan_review_char = "-";
     }
+
+    // ─── Custom Cards: between plan and implement ───
+    run_custom_cards_in_range(
+        plan_card_idx,
+        implement_card_idx,
+        resume_at_card_index,
+        task_info,
+        ctx,
+        tx,
+        extension_context,
+        &mut last_rate_limited,
+    )
+    .await;
 
     // ─── Run Builder ────────────────────────────────────────
     let build_ok: bool;
@@ -4462,6 +4785,9 @@ async fn process_task(
             let prompt = if skip_planner {
                 prompts::builder_direct_prompt(
                     &ctx.config.pipeline_stage_label("implement"),
+                    implement_card_idx
+                        .and_then(|i| ctx.config.pipeline_stages.get(i))
+                        .and_then(|s| s.prompt_override.as_deref()),
                     task_id,
                     task_desc,
                     &ctx.spec_file_prompt_path(),
@@ -4470,6 +4796,9 @@ async fn process_task(
             } else {
                 prompts::builder_prompt(
                     &ctx.config.pipeline_stage_label("implement"),
+                    implement_card_idx
+                        .and_then(|i| ctx.config.pipeline_stages.get(i))
+                        .and_then(|s| s.prompt_override.as_deref()),
                     task_id,
                     task_desc,
                     &ctx.spec_file_prompt_path(),
@@ -4735,12 +5064,16 @@ async fn process_task(
                         "Build gate passed".to_string(),
                     )));
                     // Only write checkpoint when build gate actually passed
-                    write_checkpoint(&ctx.buildloop_dir, task_id, task_desc, "builder");
+                    if let Some(idx) = implement_card_idx {
+                        write_checkpoint(&ctx.buildloop_dir, task_id, task_desc, idx);
+                    }
                 }
             }
         } else {
             // No build_command configured -- write checkpoint unconditionally
-            write_checkpoint(&ctx.buildloop_dir, task_id, task_desc, "builder");
+            if let Some(idx) = implement_card_idx {
+                write_checkpoint(&ctx.buildloop_dir, task_id, task_desc, idx);
+            }
         }
 
         // ─── Trim Verbose Build Output ──────────────────────────────
@@ -4751,6 +5084,19 @@ async fn process_task(
             ))));
         }
     } // end !checkpoint_skip_builder
+
+    // ─── Custom Cards: between implement and doubt ───
+    run_custom_cards_in_range(
+        implement_card_idx,
+        _doubt_card_idx,
+        resume_at_card_index,
+        task_info,
+        ctx,
+        tx,
+        extension_context,
+        &mut last_rate_limited,
+    )
+    .await;
 
     adaptive_sleep(
         &ctx.config,
@@ -4880,6 +5226,19 @@ async fn process_task(
     if let Some(record) = reviewer_budget_record {
         budget_telemetry.records.push(record);
     }
+
+    // ─── Custom Cards: after doubt ───
+    run_custom_cards_in_range(
+        _doubt_card_idx,
+        None,
+        resume_at_card_index,
+        task_info,
+        ctx,
+        tx,
+        extension_context,
+        &mut last_rate_limited,
+    )
+    .await;
 
     // Record doubt result for learned confidence (only when doubt actually ran)
     if !skip_verify && !ctx.config.backpressure_only {
@@ -5650,11 +6009,47 @@ mod tests {
     use crate::app::context::RunContext;
     use crate::app::state::{AppEvent, LoopEvent};
     use crate::budget;
-    use crate::config::Config;
+    use crate::config::{Config, PipelineStageConfig};
     use std::path::PathBuf;
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::{Arc, Mutex};
     use tokio::sync::mpsc;
+
+    /// Default canonical pipeline stages for checkpoint tests (5 stages, all enabled).
+    fn default_test_stages() -> Vec<PipelineStageConfig> {
+        vec![
+            PipelineStageConfig {
+                id: "query".into(),
+                label: "QUERY".into(),
+                enabled: true,
+                prompt_override: None,
+            },
+            PipelineStageConfig {
+                id: "research".into(),
+                label: "RESEARCH".into(),
+                enabled: true,
+                prompt_override: None,
+            },
+            PipelineStageConfig {
+                id: "plan".into(),
+                label: "PLAN".into(),
+                enabled: true,
+                prompt_override: None,
+            },
+            PipelineStageConfig {
+                id: "implement".into(),
+                label: "IMPLEMENT".into(),
+                enabled: true,
+                prompt_override: None,
+            },
+            PipelineStageConfig {
+                id: "doubt".into(),
+                label: "DOUBT".into(),
+                enabled: true,
+                prompt_override: None,
+            },
+        ]
+    }
 
     #[test]
     fn should_restart_docker_matches_expected_keywords() {
@@ -6052,32 +6447,17 @@ mod tests {
         ));
         std::fs::create_dir_all(&dir).unwrap();
 
-        // Simulate: builder completed, checkpoint written
-        write_checkpoint(&dir, "D38.1", "test task", "builder");
-        let cp = read_checkpoint(&dir);
+        let stages = default_test_stages();
+        // Simulate: builder completed, checkpoint written (implement = idx 3)
+        write_checkpoint(&dir, "D38.1", "test task", 3);
+        let cp = read_checkpoint(&dir, &stages);
         assert!(cp.is_some(), "checkpoint should exist after write");
-        assert_eq!(cp.unwrap().completed_stage, "builder");
+        assert_eq!(cp.unwrap().completed_card_index, 3);
 
         // Simulate: build gate fails, so we clear the checkpoint
-        // (In the real code, the fix is that the checkpoint is never written
-        // before the gate. This test verifies the checkpoint functions work
-        // correctly and that after clear_checkpoint, no stale state remains.)
         clear_checkpoint(&dir);
-        let cp_after = read_checkpoint(&dir);
+        let cp_after = read_checkpoint(&dir, &stages);
         assert!(cp_after.is_none(), "checkpoint must not exist after clear");
-
-        // Verify the critical invariant: if checkpoint.json does not exist,
-        // checkpoint_skip_builder evaluates to false (builder will re-run).
-        // This mirrors the logic at build.rs:2038-2051.
-        let resume_stage: Option<&str> = cp_after.as_ref().map(|c| c.completed_stage.as_str());
-        let checkpoint_skip_builder = match resume_stage {
-            Some("doubt") => true,
-            _ => false,
-        };
-        assert!(
-            !checkpoint_skip_builder,
-            "with no checkpoint, builder must NOT be skipped"
-        );
 
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -6096,29 +6476,22 @@ mod tests {
         ));
         std::fs::create_dir_all(&dir).unwrap();
 
+        let stages = default_test_stages();
         // Simulate: builder completed AND build gate passed, checkpoint written
-        write_checkpoint(&dir, "D38.1", "test task", "builder");
+        write_checkpoint(&dir, "D38.1", "test task", 3);
 
-        // On next iteration, read_checkpoint returns the builder stage
-        let cp = read_checkpoint(&dir).unwrap();
-        assert_eq!(cp.completed_stage, "builder");
+        let cp = read_checkpoint(&dir, &stages).unwrap();
+        assert_eq!(cp.completed_card_index, 3);
 
-        // resume_stage would be derived from completed_stage "builder" -> next stage
-        // checkpoint_skip_builder triggers when resume_stage is "doubt"
-        // (i.e., completed_stage="builder" means resume at doubt)
-        // The mapping: completed_stage="builder" produces resume_stage="doubt"
-        // at build.rs:2038-2051
-        let resume_stage = match cp.completed_stage.as_str() {
-            "builder" => Some("doubt"),
-            _ => None,
-        };
-        let checkpoint_skip_builder = match resume_stage {
-            Some("doubt") => true,
-            _ => false,
-        };
+        // builder skip is true when implement card index < resume_at_card_index
+        // resume_at_card_index = completed + 1 = 4 (if all artifacts exist)
+        // implement is at idx 3, so 3 < 4 = true (builder skipped)
+        let implement_idx = 3usize;
+        let resume_at = cp.completed_card_index + 1;
+        let checkpoint_skip_builder = implement_idx < resume_at;
         assert!(
             checkpoint_skip_builder,
-            "with builder checkpoint present, builder should be skipped (resume at doubt)"
+            "with builder checkpoint present, builder should be skipped"
         );
 
         let _ = std::fs::remove_dir_all(&dir);
@@ -6140,25 +6513,20 @@ mod tests {
         ));
         std::fs::create_dir_all(&dir).unwrap();
 
+        let stages = default_test_stages();
         // Before gates: no checkpoint should exist
-        let cp = read_checkpoint(&dir);
+        let cp = read_checkpoint(&dir, &stages);
         assert!(cp.is_none(), "no checkpoint should exist before gates pass");
 
-        // Simulate: gates pass, checkpoint written
-        write_checkpoint(&dir, "D41.1", "test task", "planner");
-        let cp = read_checkpoint(&dir).unwrap();
-        assert_eq!(cp.completed_stage, "planner");
+        // Simulate: gates pass, checkpoint written for plan card (idx 2)
+        write_checkpoint(&dir, "D41.1", "test task", 2);
+        let cp = read_checkpoint(&dir, &stages).unwrap();
+        assert_eq!(cp.completed_card_index, 2);
 
-        // On resume: completed_stage="planner" -> resume_stage="plan_review"
-        // checkpoint_skip_planner matches "plan_review"
-        let resume_stage = match cp.completed_stage.as_str() {
-            "planner" => Some("plan_review"),
-            _ => None,
-        };
-        let checkpoint_skip_planner = match resume_stage {
-            Some("plan_review" | "builder" | "doubt") => true,
-            _ => false,
-        };
+        // plan idx 2 < resume_at = 3 -> planner skip true
+        let plan_idx = 2usize;
+        let resume_at = cp.completed_card_index + 1;
+        let checkpoint_skip_planner = plan_idx < resume_at;
         assert!(
             checkpoint_skip_planner,
             "with planner checkpoint present, planner should be skipped"
@@ -6166,21 +6534,10 @@ mod tests {
 
         // Simulate: gate failed, checkpoint never written (cleared to simulate)
         clear_checkpoint(&dir);
-        let cp_after = read_checkpoint(&dir);
+        let cp_after = read_checkpoint(&dir, &stages);
         assert!(
             cp_after.is_none(),
             "checkpoint must not exist after gate failure path"
-        );
-
-        // Verify: no checkpoint -> planner re-runs
-        let resume_stage: Option<&str> = cp_after.as_ref().map(|c| c.completed_stage.as_str());
-        let checkpoint_skip_planner = match resume_stage {
-            Some("plan_review" | "builder" | "doubt") => true,
-            _ => false,
-        };
-        assert!(
-            !checkpoint_skip_planner,
-            "with no checkpoint, planner must NOT be skipped"
         );
 
         let _ = std::fs::remove_dir_all(&dir);
@@ -6411,10 +6768,10 @@ mod tests {
 
     #[test]
     fn test_checkpoint_cascade_when_plan_missing() {
-        // Bug D42.1(a): When resume_stage="builder" or "doubt" but current-plan.md
-        // is missing, checkpoint_skip_planner becomes false. checkpoint_skip_plan_review
-        // and checkpoint_skip_builder must also become false so the new plan gets
-        // reviewed and implemented, not skipped.
+        // Bug D42.1(a): when an upstream artifact is missing, downstream skip
+        // flags must also be false so the new plan gets reviewed and implemented.
+        // In the new card-index system, compute_resume_card_index walks artifacts
+        // up to completed_card_index and returns the earliest missing card.
 
         let dir = std::env::temp_dir().join(format!(
             "foundry-checkpoint-cascade-{}",
@@ -6425,88 +6782,43 @@ mod tests {
         ));
         std::fs::create_dir_all(&dir).unwrap();
 
-        // Scenario: checkpoint says builder completed (resume_stage="doubt"),
-        // but current-plan.md is missing.
-        write_checkpoint(&dir, "D42.1", "test task", "builder");
+        let stages = default_test_stages();
+        // Scenario: checkpoint says implement (idx 3) completed, but current-plan.md
+        // is missing (crash mid-pipeline).
+        write_checkpoint(&dir, "D42.1", "test task", 3);
 
-        // Read checkpoint to get resume_stage
-        let cp = read_checkpoint(&dir).unwrap();
-        let resume_stage: Option<&str> = match cp.completed_stage.as_str() {
-            "builder" => Some("doubt"),
-            _ => None,
-        };
-        assert_eq!(resume_stage, Some("doubt"));
+        let cp = read_checkpoint(&dir, &stages).unwrap();
+        assert_eq!(cp.completed_card_index, 3);
 
-        // Simulate: current-plan.md does NOT exist (file system error during crash)
+        // current-plan.md does NOT exist
         let current_plan = dir.join("current-plan.md");
         assert!(!current_plan.exists());
 
-        // checkpoint_skip_planner: plan_review/builder/doubt but plan missing -> false
-        let checkpoint_skip_planner = match resume_stage {
-            Some("plan_review" | "builder" | "doubt") => {
-                current_plan.exists() // false because file is missing
+        // Manually replicate compute_resume_card_index logic without the tx channel:
+        // Walk 0..=3 artifacts; first missing is at idx 2 (plan -> current-plan.md).
+        let questions = dir.join("questions.md");
+        std::fs::write(&questions, "Q").unwrap();
+        let research = dir.join("research-report.md");
+        std::fs::write(&research, "R").unwrap();
+        // current_plan does not exist -> resume should be at 2
+
+        // Build a minimal RunContext-like check: for each stage 0..=3 verify artifact exists
+        let artifact_paths = [
+            ("query", questions.clone()),
+            ("research", research.clone()),
+            ("plan", current_plan.clone()),
+            ("implement", dir.join("build-claims.md")),
+        ];
+        let mut resume_at = (cp.completed_card_index + 1) as i64;
+        for (i, (_id, p)) in artifact_paths.iter().enumerate() {
+            if !p.exists() {
+                resume_at = i as i64;
+                break;
             }
-            _ => false,
-        };
-        assert!(
-            !checkpoint_skip_planner,
-            "planner skip must be false when current-plan.md is missing"
-        );
-
-        // checkpoint_skip_plan_review: depends on checkpoint_skip_planner (the fix)
-        let checkpoint_skip_plan_review = match resume_stage {
-            Some("builder" | "doubt") if checkpoint_skip_planner => true,
-            _ => false,
-        };
-        assert!(
-            !checkpoint_skip_plan_review,
-            "plan_review skip must be false when checkpoint_skip_planner is false (cascading)"
-        );
-
-        // checkpoint_skip_builder: depends on checkpoint_skip_planner (the fix)
-        let checkpoint_skip_builder = match resume_stage {
-            Some("doubt") if checkpoint_skip_planner => dir.join("build-claims.md").exists(),
-            _ => false,
-        };
-        assert!(
-            !checkpoint_skip_builder,
-            "builder skip must be false when checkpoint_skip_planner is false (cascading)"
-        );
-
-        // Verify: when current-plan.md EXISTS, the old behavior is preserved
-        std::fs::write(
-            &current_plan,
-            "# Plan\n## File Operations\n## Verification\n",
-        )
-        .unwrap();
-        let build_claims = dir.join("build-claims.md");
-        std::fs::write(&build_claims, "# Build Claims").unwrap();
-
-        let checkpoint_skip_planner_ok = match resume_stage {
-            Some("plan_review" | "builder" | "doubt") => current_plan.exists(),
-            _ => false,
-        };
-        assert!(
-            checkpoint_skip_planner_ok,
-            "planner skip should be true when plan exists"
-        );
-
-        let checkpoint_skip_plan_review_ok = match resume_stage {
-            Some("builder" | "doubt") if checkpoint_skip_planner_ok => true,
-            _ => false,
-        };
-        assert!(
-            checkpoint_skip_plan_review_ok,
-            "plan_review skip should be true when planner skip is true"
-        );
-
-        let checkpoint_skip_builder_ok = match resume_stage {
-            Some("doubt") if checkpoint_skip_planner_ok => build_claims.exists(),
-            _ => false,
-        };
-        assert!(
-            checkpoint_skip_builder_ok,
-            "builder skip should be true when planner skip is true and build-claims.md exists"
+        }
+        assert_eq!(
+            resume_at, 2,
+            "resume should be at plan card (idx 2) since current-plan.md is missing"
         );
 
         let _ = std::fs::remove_dir_all(&dir);
@@ -6514,9 +6826,9 @@ mod tests {
 
     #[test]
     fn test_checkpoint_cascade_when_questions_missing() {
-        // When resume_stage="doubt" but questions.md is missing,
-        // checkpoint_skip_query becomes false. All downstream skips must also
-        // become false (cascading).
+        // When checkpoint says implement done but questions.md is missing,
+        // resume_at_card_index should be 0 (re-run from query) so all
+        // downstream skips also reset.
 
         let dir = std::env::temp_dir().join(format!(
             "foundry-checkpoint-qr-cascade-{}",
@@ -6527,146 +6839,37 @@ mod tests {
         ));
         std::fs::create_dir_all(&dir).unwrap();
 
-        // Scenario: checkpoint says builder completed (resume_stage="doubt"),
-        // but questions.md is missing.
-        write_checkpoint(&dir, "D43.1", "test task", "builder");
+        let stages = default_test_stages();
+        // Scenario: checkpoint says implement (idx 3) completed
+        write_checkpoint(&dir, "D43.1", "test task", 3);
 
-        let cp = read_checkpoint(&dir).unwrap();
-        let resume_stage: Option<&str> = match cp.completed_stage.as_str() {
-            "query" => Some("research"),
-            "research" => Some("planner"),
-            "planner" => Some("plan_review"),
-            "plan_review" => Some("builder"),
-            "builder" => Some("doubt"),
-            "scout" => Some("planner"),
-            _ => None,
-        };
-        assert_eq!(resume_stage, Some("doubt"));
+        let cp = read_checkpoint(&dir, &stages).unwrap();
+        assert_eq!(cp.completed_card_index, 3);
 
-        // questions.md does NOT exist (simulates missing query artifact)
+        // questions.md does NOT exist; the rest exist
         let questions_file = dir.join("questions.md");
         assert!(!questions_file.exists());
+        std::fs::write(dir.join("research-report.md"), "R").unwrap();
+        std::fs::write(dir.join("current-plan.md"), "# Plan\n## File Operations\n## Verification\n").unwrap();
+        std::fs::write(dir.join("build-claims.md"), "BC").unwrap();
 
-        // research-report.md, current-plan.md and build-claims.md DO exist (stale artifacts)
-        let research_report = dir.join("research-report.md");
-        std::fs::write(&research_report, "# Research Report").unwrap();
-        let current_plan = dir.join("current-plan.md");
-        std::fs::write(
-            &current_plan,
-            "# Plan\n## File Operations\n## Verification\n",
-        )
-        .unwrap();
-        let build_claims = dir.join("build-claims.md");
-        std::fs::write(&build_claims, "# Build Claims").unwrap();
-
-        // checkpoint_skip_query: questions.md missing -> false
-        let checkpoint_skip_query = match resume_stage {
-            Some("research" | "planner" | "plan_review" | "builder" | "doubt") => {
-                questions_file.exists()
+        // Walk artifacts; first missing at idx 0 (query)
+        let artifact_paths = [
+            ("query", questions_file.clone()),
+            ("research", dir.join("research-report.md")),
+            ("plan", dir.join("current-plan.md")),
+            ("implement", dir.join("build-claims.md")),
+        ];
+        let mut resume_at = (cp.completed_card_index + 1) as i64;
+        for (i, (_id, p)) in artifact_paths.iter().enumerate() {
+            if !p.exists() {
+                resume_at = i as i64;
+                break;
             }
-            _ => false,
-        };
-        assert!(
-            !checkpoint_skip_query,
-            "query skip must be false when questions.md is missing"
-        );
-
-        // checkpoint_skip_research: must be false because checkpoint_skip_query is false (cascading)
-        let checkpoint_skip_research = match resume_stage {
-            Some("planner" | "plan_review" | "builder" | "doubt") if checkpoint_skip_query => {
-                research_report.exists()
-            }
-            _ => false,
-        };
-        assert!(
-            !checkpoint_skip_research,
-            "research skip must be false when checkpoint_skip_query is false (cascading)"
-        );
-
-        // checkpoint_skip_planner: must be false because checkpoint_skip_research is false
-        let checkpoint_skip_planner = match resume_stage {
-            Some("plan_review" | "builder" | "doubt") if checkpoint_skip_research => {
-                current_plan.exists()
-            }
-            _ => false,
-        };
-        assert!(
-            !checkpoint_skip_planner,
-            "planner skip must be false when checkpoint_skip_research is false (cascading)"
-        );
-
-        // checkpoint_skip_plan_review: depends on checkpoint_skip_planner
-        let checkpoint_skip_plan_review = matches!(
-            resume_stage,
-            Some("builder" | "doubt") if checkpoint_skip_planner
-        );
-        assert!(
-            !checkpoint_skip_plan_review,
-            "plan_review skip must be false when checkpoint_skip_planner is false (cascading)"
-        );
-
-        // checkpoint_skip_builder: depends on checkpoint_skip_planner
-        let checkpoint_skip_builder = match resume_stage {
-            Some("doubt") if checkpoint_skip_planner => build_claims.exists(),
-            _ => false,
-        };
-        assert!(
-            !checkpoint_skip_builder,
-            "builder skip must be false when checkpoint_skip_planner is false (cascading)"
-        );
-
-        // Positive case: when questions.md and research-report.md EXIST, cascade does not trigger
-        std::fs::write(&questions_file, "# Questions").unwrap();
-
-        let checkpoint_skip_query_ok = match resume_stage {
-            Some("research" | "planner" | "plan_review" | "builder" | "doubt") => {
-                questions_file.exists()
-            }
-            _ => false,
-        };
-        assert!(
-            checkpoint_skip_query_ok,
-            "query skip should be true when questions.md exists"
-        );
-
-        let checkpoint_skip_research_ok = match resume_stage {
-            Some("planner" | "plan_review" | "builder" | "doubt") if checkpoint_skip_query_ok => {
-                research_report.exists()
-            }
-            _ => false,
-        };
-        assert!(
-            checkpoint_skip_research_ok,
-            "research skip should be true when query skip is true and research-report.md exists"
-        );
-
-        let checkpoint_skip_planner_ok = match resume_stage {
-            Some("plan_review" | "builder" | "doubt") if checkpoint_skip_research_ok => {
-                current_plan.exists()
-            }
-            _ => false,
-        };
-        assert!(
-            checkpoint_skip_planner_ok,
-            "planner skip should be true when research skip is true and plan exists"
-        );
-
-        let checkpoint_skip_plan_review_ok = matches!(
-            resume_stage,
-            Some("builder" | "doubt") if checkpoint_skip_planner_ok
-        );
-        assert!(
-            checkpoint_skip_plan_review_ok,
-            "plan_review skip should be true when planner skip is true"
-        );
-
-        let checkpoint_skip_builder_ok = match resume_stage {
-            Some("doubt") if checkpoint_skip_planner_ok => build_claims.exists(),
-            _ => false,
-        };
-        assert!(
-            checkpoint_skip_builder_ok,
-            "builder skip should be true when planner skip is true and build-claims.md exists"
+        }
+        assert_eq!(
+            resume_at, 0,
+            "resume should reset to query (idx 0) when questions.md is missing"
         );
 
         let _ = std::fs::remove_dir_all(&dir);
@@ -6674,10 +6877,8 @@ mod tests {
 
     #[test]
     fn test_checkpoint_query_done_research_not_done_does_not_skip_research() {
-        // Bug D86.1(a): When checkpoint completed_stage="query", questions.md exists
-        // but research-report.md does NOT exist, Research must still run.
-        // The old skip_qr flag was true (checkpoint_skip_query was true), which
-        // caused both Q+R to be skipped. The fix splits into skip_query/skip_research.
+        // When checkpoint completed_card_index=0 (query done), research card (idx 1)
+        // must still run because resume_at_card_index = 0 + 1 = 1.
 
         let dir = std::env::temp_dir().join(format!(
             "foundry-checkpoint-qr-split-{}",
@@ -6688,85 +6889,34 @@ mod tests {
         ));
         std::fs::create_dir_all(&dir).unwrap();
 
-        // Checkpoint: query completed (crash during research)
-        write_checkpoint(&dir, "D86.1", "test task", "query");
+        let stages = default_test_stages();
+        // Checkpoint: query completed (crash during research) -> idx 0
+        write_checkpoint(&dir, "D86.1", "test task", 0);
 
-        let cp = read_checkpoint(&dir).unwrap();
-        let resume_stage: Option<&str> = match cp.completed_stage.as_str() {
-            "query" => Some("research"),
-            "research" => Some("planner"),
-            "planner" => Some("plan_review"),
-            "plan_review" => Some("builder"),
-            "builder" => Some("doubt"),
-            "scout" => Some("planner"),
-            _ => None,
-        };
-        assert_eq!(resume_stage, Some("research"));
+        let cp = read_checkpoint(&dir, &stages).unwrap();
+        assert_eq!(cp.completed_card_index, 0);
 
         // questions.md EXISTS (query completed successfully)
         let questions_file = dir.join("questions.md");
-        std::fs::write(
-            &questions_file,
-            "# Questions\n1. What modules are involved?",
-        )
-        .unwrap();
+        std::fs::write(&questions_file, "# Questions\n1. What modules?").unwrap();
 
         // research-report.md does NOT exist (research never ran)
         let research_report = dir.join("research-report.md");
         assert!(!research_report.exists());
 
-        // Compute checkpoint skip flags (same logic as process_task)
-        let checkpoint_skip_query = match resume_stage {
-            Some("research" | "planner" | "plan_review" | "builder" | "doubt") => {
-                questions_file.exists()
-            }
-            _ => false,
-        };
-        assert!(
-            checkpoint_skip_query,
-            "query skip should be true (questions.md exists)"
-        );
+        // resume_at_card_index = 1 (next is research)
+        // checkpoint_skip_query = (0 < 1) = true
+        // checkpoint_skip_research = (1 < 1) = false
+        let resume_at = cp.completed_card_index + 1;
+        let query_idx = 0usize;
+        let research_idx = 1usize;
+        let checkpoint_skip_query = query_idx < resume_at;
+        let checkpoint_skip_research = research_idx < resume_at;
 
-        let checkpoint_skip_research = match resume_stage {
-            Some("planner" | "plan_review" | "builder" | "doubt") if checkpoint_skip_query => {
-                research_report.exists()
-            }
-            _ => false,
-        };
+        assert!(checkpoint_skip_query, "query skip should be true");
         assert!(
             !checkpoint_skip_research,
-            "research skip must be false (resume_stage is 'research', not planner/builder/doubt)"
-        );
-
-        // Compute skip_query and skip_research with skip_scout=false, simple_task=false
-        let skip_scout = false;
-        let simple_task = false;
-        let skip_query = skip_scout || checkpoint_skip_query || simple_task;
-        let skip_research =
-            skip_scout || (checkpoint_skip_query && checkpoint_skip_research) || simple_task;
-
-        assert!(
-            skip_query,
-            "Query should be skipped (checkpoint_skip_query is true)"
-        );
-        assert!(
-            !skip_research,
-            "Research must NOT be skipped (checkpoint_skip_research is false)"
-        );
-
-        // The outer Q+R block should NOT be fully skipped
-        let both_skipped = skip_query && skip_research;
-        assert!(
-            !both_skipped,
-            "Q+R block must not be fully skipped when only Query was checkpointed"
-        );
-
-        // Stale artifact cleanup: research-report.md should be cleaned when
-        // skip_research=false and checkpoint_skip_research=false
-        let should_clean_research = !skip_research && !checkpoint_skip_research;
-        assert!(
-            should_clean_research,
-            "stale research-report.md should be cleaned when Research will re-run"
+            "research skip must be false (research is the next card to run)"
         );
 
         let _ = std::fs::remove_dir_all(&dir);
@@ -8140,5 +8290,214 @@ mod tests {
         let _ = std::fs::remove_dir_all(&main_dir);
         let _ = std::fs::remove_dir_all(&wt_a);
         let _ = std::fs::remove_dir_all(&wt_b);
+    }
+}
+
+#[cfg(test)]
+mod card_loop_tests {
+    use super::{known_stages_in_canonical_order, read_checkpoint, write_checkpoint};
+    use crate::config::PipelineStageConfig;
+
+    fn stage(id: &str) -> PipelineStageConfig {
+        PipelineStageConfig {
+            id: id.into(),
+            label: id.to_uppercase(),
+            enabled: true,
+            prompt_override: None,
+        }
+    }
+
+    fn unique_dir(name: &str) -> std::path::PathBuf {
+        std::env::temp_dir().join(format!(
+            "foundry-cl-{}-{}-{}",
+            name,
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ))
+    }
+
+    #[test]
+    fn read_checkpoint_new_format_round_trip() {
+        let dir = unique_dir("new");
+        std::fs::create_dir_all(&dir).unwrap();
+        write_checkpoint(&dir, "T1.1", "desc", 2);
+        let stages = vec![
+            stage("query"),
+            stage("research"),
+            stage("plan"),
+            stage("implement"),
+            stage("doubt"),
+        ];
+        let cp = read_checkpoint(&dir, &stages).expect("checkpoint should be readable");
+        assert_eq!(cp.task_id, "T1.1");
+        assert_eq!(cp.completed_card_index, 2);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn read_checkpoint_legacy_known_stage_maps_to_index() {
+        let dir = unique_dir("legacy-known");
+        std::fs::create_dir_all(&dir).unwrap();
+        let legacy_json = r#"{
+            "task_id": "T1.1",
+            "task_desc": "desc",
+            "completed_stage": "planner",
+            "timestamp": "2026-01-01T00:00:00+00:00"
+        }"#;
+        std::fs::write(dir.join("checkpoint.json"), legacy_json).unwrap();
+        let stages = vec![
+            stage("query"),
+            stage("research"),
+            stage("plan"),
+            stage("implement"),
+            stage("doubt"),
+        ];
+        let cp = read_checkpoint(&dir, &stages).expect("legacy checkpoint should map");
+        assert_eq!(cp.completed_card_index, 2);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn read_checkpoint_legacy_plan_review_maps_to_plan() {
+        let dir = unique_dir("legacy-plan-review");
+        std::fs::create_dir_all(&dir).unwrap();
+        let legacy_json = r#"{
+            "task_id": "T1.1",
+            "task_desc": "desc",
+            "completed_stage": "plan_review",
+            "timestamp": "2026-01-01T00:00:00+00:00"
+        }"#;
+        std::fs::write(dir.join("checkpoint.json"), legacy_json).unwrap();
+        let stages = vec![
+            stage("query"),
+            stage("research"),
+            stage("plan"),
+            stage("implement"),
+            stage("doubt"),
+        ];
+        let cp = read_checkpoint(&dir, &stages).expect("legacy plan_review should map");
+        assert_eq!(cp.completed_card_index, 2);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn read_checkpoint_legacy_unknown_stage_returns_none() {
+        let dir = unique_dir("legacy-unknown");
+        std::fs::create_dir_all(&dir).unwrap();
+        let legacy_json = r#"{
+            "task_id": "T1.1",
+            "task_desc": "desc",
+            "completed_stage": "fictional_stage",
+            "timestamp": "2026-01-01T00:00:00+00:00"
+        }"#;
+        std::fs::write(dir.join("checkpoint.json"), legacy_json).unwrap();
+        let stages = vec![
+            stage("query"),
+            stage("research"),
+            stage("plan"),
+            stage("implement"),
+            stage("doubt"),
+        ];
+        assert!(read_checkpoint(&dir, &stages).is_none());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn read_checkpoint_legacy_stage_missing_from_pipeline_returns_none() {
+        let dir = unique_dir("legacy-missing");
+        std::fs::create_dir_all(&dir).unwrap();
+        let legacy_json = r#"{
+            "task_id": "T1.1",
+            "task_desc": "desc",
+            "completed_stage": "planner",
+            "timestamp": "2026-01-01T00:00:00+00:00"
+        }"#;
+        std::fs::write(dir.join("checkpoint.json"), legacy_json).unwrap();
+        // Pipeline that does NOT include "plan"
+        let stages = vec![stage("implement"), stage("doubt")];
+        assert!(read_checkpoint(&dir, &stages).is_none());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn known_stages_canonical_order_with_custom_card_inserted() {
+        let stages = vec![
+            stage("query"),
+            stage("research"),
+            stage("plan"),
+            stage("implement"),
+            stage("security"),
+            stage("doubt"),
+        ];
+        assert!(known_stages_in_canonical_order(&stages));
+    }
+
+    #[test]
+    fn known_stages_canonical_order_with_no_custom_cards() {
+        let stages = vec![
+            stage("query"),
+            stage("research"),
+            stage("plan"),
+            stage("implement"),
+            stage("doubt"),
+        ];
+        assert!(known_stages_in_canonical_order(&stages));
+    }
+
+    #[test]
+    fn known_stages_canonical_order_rejects_reordered_pipeline() {
+        // Spec: "[implement, doubt, plan]" should be rejected.
+        let stages = vec![stage("implement"), stage("doubt"), stage("plan")];
+        assert!(!known_stages_in_canonical_order(&stages));
+    }
+
+    #[test]
+    fn known_stages_canonical_order_subset_is_ok() {
+        // Subset with canonical order preserved is OK.
+        let stages = vec![stage("plan"), stage("implement")];
+        assert!(known_stages_in_canonical_order(&stages));
+    }
+
+    #[test]
+    fn read_checkpoint_resume_index_resets_on_missing_artifact() {
+        // When checkpoint claims completed_card_index=3 but earlier artifacts
+        // are missing, compute_resume_card_index should reset to the missing idx.
+        // We simulate the artifact walk directly here without spawning a tx channel.
+        let dir = unique_dir("resume-reset");
+        std::fs::create_dir_all(&dir).unwrap();
+        write_checkpoint(&dir, "T1.1", "desc", 3);
+        let stages = vec![
+            stage("query"),
+            stage("research"),
+            stage("plan"),
+            stage("implement"),
+            stage("doubt"),
+        ];
+        let cp = read_checkpoint(&dir, &stages).unwrap();
+        assert_eq!(cp.completed_card_index, 3);
+
+        // questions.md does NOT exist (artifact missing for stage 0)
+        let questions = dir.join("questions.md");
+        assert!(!questions.exists());
+        // Walk artifacts manually to mimic compute_resume_card_index logic:
+        let artifacts = [
+            ("query", questions.clone()),
+            ("research", dir.join("research-report.md")),
+            ("plan", dir.join("current-plan.md")),
+            ("implement", dir.join("build-claims.md")),
+        ];
+        let mut resume = (cp.completed_card_index + 1) as i64;
+        for (i, (_id, p)) in artifacts.iter().enumerate() {
+            if !p.exists() {
+                resume = i as i64;
+                break;
+            }
+        }
+        assert_eq!(resume, 0, "resume must reset to 0 when query artifact missing");
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

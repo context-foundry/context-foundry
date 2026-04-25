@@ -48,7 +48,7 @@ fn stage_model_label(configs: &[Config], stage_id: &str) -> String {
         "discover" => {
             Config::display_provider_model(&config.discovery_provider, &config.discovery_model)
         }
-        _ => String::new(),
+        _ => Config::display_provider_model(&config.builder_provider, &config.builder_model),
     }))
 }
 
@@ -61,7 +61,7 @@ fn stage_kind_label(stage_id: &str) -> &'static str {
         "implement" => "build-claims",
         "doubt" => "fresh context",
         "discover" => "TASKS.md",
-        _ => "",
+        _ => "custom",
     }
 }
 

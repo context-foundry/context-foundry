@@ -23,6 +23,8 @@ pub struct PipelineStageConfig {
     pub label: String,
     #[serde(default = "default_true")]
     pub enabled: bool,
+    #[serde(default)]
+    pub prompt_override: Option<String>,
 }
 
 impl Default for PipelineStageConfig {
@@ -31,6 +33,7 @@ impl Default for PipelineStageConfig {
             id: String::new(),
             label: String::new(),
             enabled: true,
+            prompt_override: None,
         }
     }
 }
@@ -41,26 +44,31 @@ fn default_pipeline_stages() -> Vec<PipelineStageConfig> {
             id: "query".into(),
             label: "QUERY".into(),
             enabled: true,
+            prompt_override: None,
         },
         PipelineStageConfig {
             id: "research".into(),
             label: "RESEARCH".into(),
             enabled: true,
+            prompt_override: None,
         },
         PipelineStageConfig {
             id: "plan".into(),
             label: "PLAN".into(),
             enabled: true,
+            prompt_override: None,
         },
         PipelineStageConfig {
             id: "implement".into(),
             label: "IMPLEMENT".into(),
             enabled: true,
+            prompt_override: None,
         },
         PipelineStageConfig {
             id: "doubt".into(),
             label: "DOUBT".into(),
             enabled: true,
+            prompt_override: None,
         },
     ]
 }
@@ -1799,6 +1807,81 @@ mod tests {
         assert!(c.pipeline_stage_enabled("plan"));
         assert!(c.pipeline_stage_enabled("implement"));
         assert!(c.pipeline_stage_enabled("doubt"));
+    }
+
+    #[test]
+    fn pipeline_stage_config_prompt_override_defaults_to_none() {
+        let stage: crate::config::PipelineStageConfig =
+            serde_json::from_str(r#"{"id":"plan","label":"PLAN"}"#).unwrap();
+        assert_eq!(stage.prompt_override, None);
+    }
+
+    #[test]
+    fn pipeline_stage_config_explicit_prompt_override() {
+        let stage: crate::config::PipelineStageConfig = serde_json::from_str(
+            r#"{"id":"security","label":"SECURITY","prompt_override":"Audit for OWASP Top 10."}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            stage.prompt_override.as_deref(),
+            Some("Audit for OWASP Top 10.")
+        );
+    }
+
+    #[test]
+    fn pipeline_stage_config_empty_prompt_override_preserved() {
+        let stage: crate::config::PipelineStageConfig =
+            serde_json::from_str(r#"{"id":"plan","label":"PLAN","prompt_override":""}"#).unwrap();
+        assert_eq!(stage.prompt_override.as_deref(), Some(""));
+    }
+
+    #[test]
+    fn default_config_pipeline_stages_have_no_prompt_override() {
+        let stages = Config::default().pipeline_stages;
+        for stage in &stages {
+            assert!(
+                stage.prompt_override.is_none(),
+                "stage {} should have no prompt_override by default",
+                stage.id
+            );
+        }
+    }
+
+    #[test]
+    fn config_deserializes_pipeline_stages_with_custom_card_and_override() {
+        let json = r#"{
+            "pipeline_stages": [
+                {"id":"query","label":"QUERY"},
+                {"id":"research","label":"RESEARCH"},
+                {"id":"plan","label":"PLAN"},
+                {"id":"implement","label":"IMPLEMENT"},
+                {"id":"security","label":"SECURITY","prompt_override":"Audit for OWASP Top 10."},
+                {"id":"doubt","label":"DOUBT"}
+            ]
+        }"#;
+        let config: Config = serde_json::from_str(json).unwrap();
+        assert_eq!(config.pipeline_stages.len(), 6);
+        assert_eq!(config.pipeline_stages[4].id, "security");
+        assert_eq!(
+            config.pipeline_stages[4].prompt_override.as_deref(),
+            Some("Audit for OWASP Top 10.")
+        );
+    }
+
+    #[test]
+    fn config_deserializes_reordered_pipeline_stages_preserves_order() {
+        let json = r#"{
+            "pipeline_stages": [
+                {"id":"implement","label":"IMPLEMENT"},
+                {"id":"doubt","label":"DOUBT"},
+                {"id":"plan","label":"PLAN"}
+            ]
+        }"#;
+        let config: Config = serde_json::from_str(json).unwrap();
+        assert_eq!(config.pipeline_stages.len(), 3);
+        assert_eq!(config.pipeline_stages[0].id, "implement");
+        assert_eq!(config.pipeline_stages[1].id, "doubt");
+        assert_eq!(config.pipeline_stages[2].id, "plan");
     }
 
     #[test]
