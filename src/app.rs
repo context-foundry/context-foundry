@@ -213,6 +213,7 @@ fn apply_builder_selection(state: &mut AppState, value: &str) {
     // Match against readable spec labels for each configured spec
     for (i, spec) in state.builder_model_specs.clone().iter().enumerate() {
         if Config::readable_spec(spec) == value {
+            Config::clear_builder_routing(&dir);
             state.dual_selection = match i {
                 0 => DualSelection::First,
                 1 => DualSelection::Second,
@@ -244,6 +245,7 @@ fn apply_builder_selection(state: &mut AppState, value: &str) {
         return;
     }
     // Combined entry (specs joined with "/") -- set to Both
+    Config::clear_builder_routing(&dir);
     state.dual_selection = DualSelection::Both;
     state.selected_local_model = String::new();
     Config::save_dual_selection(&dir, "both");

@@ -88,6 +88,20 @@ pub struct Config {
     /// Dual-build selection: "first", "second", "both", or empty (off).
     /// Ctrl+D cycles through model[0]-only, model[1]-only, both pipelines.
     pub dual_selection: String,
+    /// Snapshot of `builder_models` taken when a local model was selected via
+    /// `save_builder_routing`. Restored by `clear_builder_routing` so picking
+    /// a local model and then switching back to a configured spec does not
+    /// lose the user's prior dual-pipeline configuration. Read/written through
+    /// raw JSON manipulation in `save_builder_routing`/`clear_builder_routing`.
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub prev_builder_models: Vec<String>,
+    /// Snapshot of `dual_selection` taken when a local model was selected via
+    /// `save_builder_routing`. Restored by `clear_builder_routing`. Read/written
+    /// through raw JSON manipulation in `save_builder_routing`/`clear_builder_routing`.
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub prev_dual_selection: String,
     pub reviewer_model: String,
     pub fixer_model: String,
     pub discovery_model: String,
@@ -424,6 +438,8 @@ impl Default for Config {
             builder_model: "opus".into(),
             builder_models: Vec::new(),
             dual_selection: "first".into(),
+            prev_builder_models: Vec::new(),
+            prev_dual_selection: String::new(),
             reviewer_model: "sonnet".into(),
             fixer_model: "sonnet".into(),
             discovery_model: "opus".into(),
@@ -993,7 +1009,12 @@ impl Config {
     }
 
     /// Persist `builder_provider` and `builder_model` to .foundry.json without
-    /// overwriting any other config fields.
+    /// overwriting any other config fields. Also writes `builder_models` and
+    /// `dual_selection` so `selected_pipeline_configs("first")` routes the
+    /// pipeline through `for_pipeline("opencode:<model>")` and overrides every
+    /// stage provider. The pre-local `builder_models`/`dual_selection` is
+    /// snapshotted into `prev_builder_models`/`prev_dual_selection` so
+    /// `clear_builder_routing` can restore it.
     pub fn save_builder_routing(project_dir: &Path, provider: &str, model: &str) {
         let config_path = project_dir.join(".foundry.json");
         let content = std::fs::read_to_string(&config_path).unwrap_or_else(|_| "{}".to_string());
@@ -1004,8 +1025,97 @@ impl Config {
             );
             serde_json::json!({})
         });
+        let new_spec = format!("{}:{}", provider, model);
+        let current_models: Vec<String> = value
+            .get("builder_models")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|e| e.as_str().map(String::from))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let current_selection: String = value
+            .get("dual_selection")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let prev_models: Vec<String> = value
+            .get("prev_builder_models")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|e| e.as_str().map(String::from))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let current_is_local = current_models.len() == 1
+            && current_models
+                .first()
+                .map(|s| s.starts_with("opencode:"))
+                .unwrap_or(false);
+        let prev_already_recorded = !prev_models.is_empty();
+        if !current_is_local && !prev_already_recorded {
+            value["prev_builder_models"] = serde_json::json!(current_models);
+            value["prev_dual_selection"] = serde_json::json!(current_selection);
+        }
+        value["builder_models"] = serde_json::json!(vec![new_spec.clone()]);
+        value["dual_selection"] = serde_json::json!("first");
         value["builder_provider"] = serde_json::json!(provider);
         value["builder_model"] = serde_json::json!(model);
+        let json = serde_json::to_string_pretty(&value).unwrap_or_default();
+        if let Err(e) = crate::utils::atomic_write_file(&config_path, json.as_bytes()) {
+            eprintln!(
+                "warning: failed to save builder_routing to {} -- change will not persist across restarts: {e}",
+                config_path.display(),
+            );
+        }
+    }
+
+    /// Undo a `save_builder_routing` call: restore the snapshotted
+    /// `builder_models`/`dual_selection` and reset `builder_provider`/
+    /// `builder_model` to defaults so the user returns cleanly to their
+    /// pre-local dual config.
+    pub fn clear_builder_routing(project_dir: &Path) {
+        let config_path = project_dir.join(".foundry.json");
+        let content = std::fs::read_to_string(&config_path).unwrap_or_else(|_| "{}".to_string());
+        let mut value: serde_json::Value = serde_json::from_str(&content).unwrap_or_else(|e| {
+            eprintln!(
+                "warning: {} contains invalid JSON ({e}) -- existing settings will be lost",
+                config_path.display(),
+            );
+            serde_json::json!({})
+        });
+        let prev_models: Vec<String> = value
+            .get("prev_builder_models")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|e| e.as_str().map(String::from))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let prev_selection: String = value
+            .get("prev_dual_selection")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        if prev_models.is_empty() {
+            value["builder_models"] = serde_json::json!(Vec::<String>::new());
+        } else {
+            value["builder_models"] = serde_json::json!(prev_models);
+        }
+        if prev_selection.is_empty() {
+            value["dual_selection"] = serde_json::json!("first");
+        } else {
+            value["dual_selection"] = serde_json::json!(prev_selection);
+        }
+        if let Some(obj) = value.as_object_mut() {
+            obj.remove("prev_builder_models");
+            obj.remove("prev_dual_selection");
+        }
+        value["builder_provider"] = serde_json::json!("claude");
+        value["builder_model"] = serde_json::json!("opus");
         let json = serde_json::to_string_pretty(&value).unwrap_or_default();
         if let Err(e) = crate::utils::atomic_write_file(&config_path, json.as_bytes()) {
             eprintln!(
@@ -1070,18 +1180,32 @@ impl Config {
         config.reviewer_provider = provider.clone();
         config.fixer_provider = provider.clone();
         config.discovery_provider = provider.clone();
-        config.scout_model = Self::normalize_model_for_provider(provider_kind, &self.scout_model);
-        config.query_model = Self::normalize_model_for_provider(provider_kind, &self.query_model);
-        config.research_model =
-            Self::normalize_model_for_provider(provider_kind, &self.research_model);
-        config.planner_model =
-            Self::normalize_model_for_provider(provider_kind, &self.planner_model);
-        config.builder_model = model;
-        config.reviewer_model =
-            Self::normalize_model_for_provider(provider_kind, &self.reviewer_model);
-        config.fixer_model = Self::normalize_model_for_provider(provider_kind, &self.fixer_model);
-        config.discovery_model =
-            Self::normalize_model_for_provider(provider_kind, &self.discovery_model);
+        if provider_kind == ModelProvider::OpenCode {
+            config.scout_model = model.clone();
+            config.query_model = model.clone();
+            config.research_model = model.clone();
+            config.planner_model = model.clone();
+            config.builder_model = model.clone();
+            config.reviewer_model = model.clone();
+            config.fixer_model = model.clone();
+            config.discovery_model = model.clone();
+        } else {
+            config.scout_model =
+                Self::normalize_model_for_provider(provider_kind, &self.scout_model);
+            config.query_model =
+                Self::normalize_model_for_provider(provider_kind, &self.query_model);
+            config.research_model =
+                Self::normalize_model_for_provider(provider_kind, &self.research_model);
+            config.planner_model =
+                Self::normalize_model_for_provider(provider_kind, &self.planner_model);
+            config.builder_model = model;
+            config.reviewer_model =
+                Self::normalize_model_for_provider(provider_kind, &self.reviewer_model);
+            config.fixer_model =
+                Self::normalize_model_for_provider(provider_kind, &self.fixer_model);
+            config.discovery_model =
+                Self::normalize_model_for_provider(provider_kind, &self.discovery_model);
+        }
         // Disable dual in the forked config so process_task runs single-pipeline
         config.builder_models.clear();
         config.dual_selection.clear();
@@ -1163,6 +1287,181 @@ mod tests {
         assert_eq!(value["run_mode"], "sprint");
         assert_eq!(value["builder_provider"], "opencode");
         assert_eq!(value["builder_model"], "ollama/llama3.2");
+    }
+
+    #[test]
+    fn save_builder_routing_sets_builder_models_and_dual_selection_to_first() {
+        let dir = tempfile::tempdir().unwrap();
+        Config::save_builder_routing(dir.path(), "opencode", "lmstudio/qwen3.6-35b-a3b");
+        let content = std::fs::read_to_string(dir.path().join(".foundry.json")).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&content).unwrap();
+        assert_eq!(value["builder_provider"], "opencode");
+        assert_eq!(value["builder_model"], "lmstudio/qwen3.6-35b-a3b");
+        assert_eq!(value["dual_selection"], "first");
+        let arr = value["builder_models"]
+            .as_array()
+            .expect("builder_models should be an array");
+        assert_eq!(arr.len(), 1);
+        assert_eq!(arr[0], "opencode:lmstudio/qwen3.6-35b-a3b");
+    }
+
+    #[test]
+    fn save_builder_routing_snapshots_prev_builder_models_when_switching_to_local() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join(".foundry.json"),
+            r#"{"builder_models":["claude:opus","codex:"],"dual_selection":"both"}"#,
+        )
+        .unwrap();
+        Config::save_builder_routing(dir.path(), "opencode", "lmstudio/qwen3.6-35b-a3b");
+        let content = std::fs::read_to_string(dir.path().join(".foundry.json")).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&content).unwrap();
+        let prev = value["prev_builder_models"]
+            .as_array()
+            .expect("prev_builder_models should be an array");
+        assert_eq!(prev.len(), 2);
+        assert_eq!(prev[0], "claude:opus");
+        assert_eq!(prev[1], "codex:");
+        assert_eq!(value["prev_dual_selection"], "both");
+        let new_models = value["builder_models"]
+            .as_array()
+            .expect("builder_models should be an array");
+        assert_eq!(new_models.len(), 1);
+        assert_eq!(new_models[0], "opencode:lmstudio/qwen3.6-35b-a3b");
+        assert_eq!(value["dual_selection"], "first");
+    }
+
+    #[test]
+    fn save_builder_routing_does_not_overwrite_existing_snapshot_when_switching_between_local_models()
+     {
+        let dir = tempfile::tempdir().unwrap();
+        Config::save_builder_routing(dir.path(), "opencode", "lmstudio/foo");
+        // Pre-populate a snapshot as if the user already had specs before going local.
+        let content = std::fs::read_to_string(dir.path().join(".foundry.json")).unwrap();
+        let mut value: serde_json::Value = serde_json::from_str(&content).unwrap();
+        value["prev_builder_models"] = serde_json::json!(["claude:opus", "codex:"]);
+        value["prev_dual_selection"] = serde_json::json!("both");
+        std::fs::write(
+            dir.path().join(".foundry.json"),
+            serde_json::to_string_pretty(&value).unwrap(),
+        )
+        .unwrap();
+        Config::save_builder_routing(dir.path(), "opencode", "ollama/llama3.2");
+        let content = std::fs::read_to_string(dir.path().join(".foundry.json")).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&content).unwrap();
+        let prev = value["prev_builder_models"]
+            .as_array()
+            .expect("prev_builder_models should remain");
+        assert_eq!(prev.len(), 2);
+        assert_eq!(prev[0], "claude:opus");
+        assert_eq!(prev[1], "codex:");
+        assert_eq!(value["prev_dual_selection"], "both");
+        let new_models = value["builder_models"]
+            .as_array()
+            .expect("builder_models should be an array");
+        assert_eq!(new_models[0], "opencode:ollama/llama3.2");
+    }
+
+    #[test]
+    fn clear_builder_routing_restores_prev_builder_models_and_dual_selection() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join(".foundry.json"),
+            r#"{
+                "builder_models":["opencode:lmstudio/qwen3.6-35b-a3b"],
+                "dual_selection":"first",
+                "builder_provider":"opencode",
+                "builder_model":"lmstudio/qwen3.6-35b-a3b",
+                "prev_builder_models":["claude:opus","codex:"],
+                "prev_dual_selection":"both"
+            }"#,
+        )
+        .unwrap();
+        Config::clear_builder_routing(dir.path());
+        let content = std::fs::read_to_string(dir.path().join(".foundry.json")).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&content).unwrap();
+        let restored = value["builder_models"]
+            .as_array()
+            .expect("builder_models should be an array");
+        assert_eq!(restored.len(), 2);
+        assert_eq!(restored[0], "claude:opus");
+        assert_eq!(restored[1], "codex:");
+        assert_eq!(value["dual_selection"], "both");
+        assert_eq!(value["builder_provider"], "claude");
+        assert_eq!(value["builder_model"], "opus");
+        assert!(value.get("prev_builder_models").is_none());
+        assert!(value.get("prev_dual_selection").is_none());
+    }
+
+    #[test]
+    fn clear_builder_routing_with_no_snapshot_resets_to_empty_first_default() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join(".foundry.json"),
+            r#"{
+                "builder_models":["opencode:lmstudio/qwen3.6-35b-a3b"],
+                "dual_selection":"first",
+                "builder_provider":"opencode",
+                "builder_model":"lmstudio/qwen3.6-35b-a3b"
+            }"#,
+        )
+        .unwrap();
+        Config::clear_builder_routing(dir.path());
+        let content = std::fs::read_to_string(dir.path().join(".foundry.json")).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&content).unwrap();
+        let arr = value["builder_models"]
+            .as_array()
+            .expect("builder_models should be an array");
+        assert!(arr.is_empty());
+        assert_eq!(value["dual_selection"], "first");
+        assert_eq!(value["builder_provider"], "claude");
+        assert_eq!(value["builder_model"], "opus");
+    }
+
+    #[test]
+    fn for_pipeline_with_opencode_routes_all_eight_stages_to_opencode_and_propagates_model() {
+        let mut config = Config::default();
+        config.scout_model = "sonnet".into();
+        config.query_model = "haiku".into();
+        config.research_model = "sonnet".into();
+        config.planner_model = "opus".into();
+        config.builder_model = "opus".into();
+        config.reviewer_model = "sonnet".into();
+        config.fixer_model = "sonnet".into();
+        config.discovery_model = "opus".into();
+
+        let pipeline = config.for_pipeline("opencode:lmstudio/qwen3.6-35b-a3b");
+
+        assert_eq!(pipeline.scout_provider, "opencode");
+        assert_eq!(pipeline.query_provider, "opencode");
+        assert_eq!(pipeline.research_provider, "opencode");
+        assert_eq!(pipeline.planner_provider, "opencode");
+        assert_eq!(pipeline.builder_provider, "opencode");
+        assert_eq!(pipeline.reviewer_provider, "opencode");
+        assert_eq!(pipeline.fixer_provider, "opencode");
+        assert_eq!(pipeline.discovery_provider, "opencode");
+
+        assert_eq!(pipeline.scout_model, "lmstudio/qwen3.6-35b-a3b");
+        assert_eq!(pipeline.query_model, "lmstudio/qwen3.6-35b-a3b");
+        assert_eq!(pipeline.research_model, "lmstudio/qwen3.6-35b-a3b");
+        assert_eq!(pipeline.planner_model, "lmstudio/qwen3.6-35b-a3b");
+        assert_eq!(pipeline.builder_model, "lmstudio/qwen3.6-35b-a3b");
+        assert_eq!(pipeline.reviewer_model, "lmstudio/qwen3.6-35b-a3b");
+        assert_eq!(pipeline.fixer_model, "lmstudio/qwen3.6-35b-a3b");
+        assert_eq!(pipeline.discovery_model, "lmstudio/qwen3.6-35b-a3b");
+
+        // Selected_pipeline_configs sanity: when the in-memory config has the
+        // saved local-mode builder_models, "first" must produce the OpenCode pipeline.
+        let mut local_cfg = Config::default();
+        local_cfg.builder_models = vec!["opencode:lmstudio/qwen3.6-35b-a3b".into()];
+        local_cfg.dual_selection = "first".into();
+        let selected = local_cfg.selected_pipeline_configs(&local_cfg.dual_selection);
+        assert_eq!(selected.len(), 1);
+        assert_eq!(selected[0].scout_provider, "opencode");
+        assert_eq!(selected[0].planner_provider, "opencode");
+        assert_eq!(selected[0].discovery_provider, "opencode");
+        assert_eq!(selected[0].scout_model, "lmstudio/qwen3.6-35b-a3b");
+        assert_eq!(selected[0].discovery_model, "lmstudio/qwen3.6-35b-a3b");
     }
 
     #[test]
