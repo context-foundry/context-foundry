@@ -23,6 +23,7 @@ use crate::app::{AppPhase, AppState, TuiPane};
 use crate::config::Config;
 use crate::utils::truncate_str_from_end;
 
+pub use pipeline::{pipeline_click, view_tab_click, PipelineClick, ViewTab};
 pub use startup::StartupMouseTarget;
 
 pub type Tui = Terminal<ratatui::backend::CrosstermBackend<io::Stdout>>;

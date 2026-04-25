@@ -1888,6 +1888,61 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
         }
         AppEvent::Mouse(mouse) => {
             use crossterm::event::{MouseButton, MouseEventKind};
+            // Pipeline stage clicks and view tab clicks work in BOTH Dashboard and Explore views.
+            if matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
+                let terminal_size = crossterm::terminal::size().unwrap_or((120, 40));
+                let full_area = ratatui::layout::Rect::new(0, 0, terminal_size.0, terminal_size.1);
+                let layout_chunks = ratatui::layout::Layout::default()
+                    .direction(ratatui::layout::Direction::Vertical)
+                    .constraints([
+                        ratatui::layout::Constraint::Length(5),
+                        ratatui::layout::Constraint::Length(7),
+                        ratatui::layout::Constraint::Min(8),
+                        ratatui::layout::Constraint::Length(8),
+                        ratatui::layout::Constraint::Length(1),
+                    ])
+                    .split(full_area);
+                let pipeline_area = layout_chunks[1];
+                // Tab bar click (top row of pipeline area)
+                if let Some(tab) = tui::view_tab_click(pipeline_area, mouse.column, mouse.row) {
+                    match tab {
+                        tui::ViewTab::Dashboard => {
+                            state.show_running_explorer = false;
+                        }
+                        tui::ViewTab::Explore => {
+                            if state.running_explorer.is_none() {
+                                let project_dir = state
+                                    .buildloop_dir
+                                    .parent()
+                                    .unwrap_or(std::path::Path::new("."));
+                                let scenario = detect_startup_scenario(project_dir);
+                                let plan_status = classify_plan_status(
+                                    &self::contract::ContractPaths::resolve(project_dir)
+                                        .tasks_path,
+                                );
+                                state.running_explorer =
+                                    Some(StartupState::new(project_dir, scenario, plan_status, None));
+                            }
+                            state.show_running_explorer = true;
+                            state.focused_pane = state::TuiPane::Explorer;
+                        }
+                    }
+                }
+                // Pipeline stage click (box rows)
+                let n_connected = config.pipeline_stages.iter().filter(|s| s.enabled).count();
+                if let Some(click) =
+                    tui::pipeline_click(pipeline_area, mouse.column, mouse.row, n_connected)
+                {
+                    let project_dir = state
+                        .buildloop_dir
+                        .parent()
+                        .unwrap_or(std::path::Path::new("."))
+                        .to_path_buf();
+                    if let Some(target) = pipeline_click_artifact(click, &project_dir, config) {
+                        navigate_explorer_to_file(state, &project_dir, &target);
+                    }
+                }
+            }
             if state.show_running_explorer {
                 // Delegate to running explorer mouse handler
                 let terminal_size = crossterm::terminal::size().unwrap_or((120, 40));
@@ -2989,6 +3044,74 @@ pub fn run_patterns_promote(apply: bool, days: u32) -> Result<()> {
 }
 
 // ─── Running Explorer Helpers ─────────────────────────────────
+
+/// Map a pipeline click to the artifact file path for that stage.
+fn pipeline_click_artifact(
+    click: tui::PipelineClick,
+    project_dir: &std::path::Path,
+    config: &Config,
+) -> Option<std::path::PathBuf> {
+    let buildloop = project_dir.join(".buildloop");
+    let enabled_stages: Vec<&crate::config::PipelineStageConfig> =
+        config.pipeline_stages.iter().filter(|s| s.enabled).collect();
+    match click {
+        tui::PipelineClick::ConnectedStage(i) => {
+            let stage_id = enabled_stages.get(i).map(|s| s.id.as_str()).unwrap_or("");
+            let file = match stage_id {
+                "scout"     => buildloop.join("scout-report.md"),
+                "query"     => buildloop.join("questions.md"),
+                "research"  => buildloop.join("research-report.md"),
+                "plan"      => buildloop.join("current-plan.md"),
+                "implement" => buildloop.join("build-claims.md"),
+                "doubt"     => buildloop.join("review-report.md"),
+                _           => return None,
+            };
+            Some(file)
+        }
+        tui::PipelineClick::Discover => Some(project_dir.join("TASKS.md")),
+        tui::PipelineClick::Ship | tui::PipelineClick::Patterns => None,
+    }
+}
+
+/// Open the running explorer and navigate directly to `target_path`.
+/// Expands parent directories as needed and loads the file preview.
+fn navigate_explorer_to_file(
+    state: &mut AppState,
+    project_dir: &std::path::Path,
+    target_path: &std::path::Path,
+) {
+    if state.running_explorer.is_none() {
+        let scenario = detect_startup_scenario(project_dir);
+        let plan_status = classify_plan_status(
+            &self::contract::ContractPaths::resolve(project_dir).tasks_path,
+        );
+        state.running_explorer = Some(StartupState::new(project_dir, scenario, plan_status, None));
+    }
+    let Some(explorer) = state.running_explorer.as_mut() else { return; };
+
+    // Expand all ancestor directories containing the target file.
+    for entry in explorer.file_tree.iter_mut() {
+        if entry.is_dir && target_path.starts_with(&entry.path) {
+            entry.expanded = true;
+        }
+    }
+
+    // Find the file in the (now-expanded) tree.
+    let idx = explorer.file_tree.iter().position(|e| e.path == target_path);
+    if let Some(idx) = idx {
+        explorer.explorer_selected = idx;
+        let path = explorer.file_tree[idx].path.clone();
+        explorer.file_preview_content = load_file_preview_for_running(&path);
+        explorer.file_preview_scroll = 0;
+        // Scroll the tree so the selection is visible.
+        let vis = explorer.visible_indices();
+        let vis_pos = vis.iter().position(|&i| i == idx).unwrap_or(0);
+        explorer.explorer_scroll = vis_pos.saturating_sub(5);
+    }
+
+    state.show_running_explorer = true;
+    state.focused_pane = state::TuiPane::Preview;
+}
 
 fn move_running_explorer_selection(state: &mut AppState, delta: isize) {
     let Some(explorer) = state.running_explorer.as_mut() else {

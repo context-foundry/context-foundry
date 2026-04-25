@@ -6,6 +6,86 @@ use ratatui::{
     Frame,
 };
 
+/// Which view tab was clicked in the pipeline tab bar.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ViewTab {
+    Dashboard,
+    Explore,
+}
+
+/// Which box was clicked in the pipeline map.
+#[derive(Debug, Clone)]
+pub enum PipelineClick {
+    /// Index into the ordered list of enabled connected stages.
+    ConnectedStage(usize),
+    Ship,
+    Discover,
+    Patterns,
+}
+
+// Tab bar geometry constants (cols relative to area.x).
+const TAB_DASHBOARD_X: u16 = 1;
+const TAB_DASHBOARD_W: u16 = 13; // "[ Dashboard ]"
+const TAB_EXPLORE_X: u16 = 16;   // TAB_DASHBOARD_X + TAB_DASHBOARD_W + 2-char gap
+const TAB_EXPLORE_W: u16 = 11;   // "[  Explore  ]"
+
+/// Hit-test the tab bar row (area.y + 0). Returns which tab was clicked or None.
+pub fn view_tab_click(area: Rect, col: u16, row: u16) -> Option<ViewTab> {
+    if row != area.y {
+        return None;
+    }
+    let x = col.saturating_sub(area.x);
+    if x >= TAB_DASHBOARD_X && x < TAB_DASHBOARD_X + TAB_DASHBOARD_W {
+        Some(ViewTab::Dashboard)
+    } else if x >= TAB_EXPLORE_X && x < TAB_EXPLORE_X + TAB_EXPLORE_W {
+        Some(ViewTab::Explore)
+    } else {
+        None
+    }
+}
+
+/// Hit-test the pipeline map. `area` is the full pipeline area rect (Constraint::Length(7)).
+/// `n_connected` is the number of enabled connected stages currently rendered.
+/// Returns None if the click is outside all boxes.
+pub fn pipeline_click(area: Rect, col: u16, row: u16, n_connected: usize) -> Option<PipelineClick> {
+    // Tab bar is at area.y+0. Box rows: area.y+1 (tops) through area.y+5 (bottoms).
+    // area.y+6 is the Block bottom border.
+    if row < area.y + 1 || row > area.y + 5 {
+        return None;
+    }
+    // Box pitch: 16 chars wide, 20-char pitch (16 + 4-char arrow) for connected stages.
+    // Leading "  " (2 cols) before first box.
+    let box_w: u16 = 16;
+    let pitch: u16 = 20; // box_w + arrow
+    let x0 = area.x + 2; // x of first connected box's left border
+
+    for i in 0..n_connected {
+        let bx = x0 + i as u16 * pitch;
+        if col >= bx && col < bx + box_w {
+            return Some(PipelineClick::ConnectedStage(i));
+        }
+    }
+
+    // Disconnected section starts after connected boxes + 8-char gap.
+    // connected section width (no trailing arrow): n * box_w + (n-1) * 4
+    let connected_w = if n_connected == 0 {
+        0
+    } else {
+        n_connected as u16 * box_w + (n_connected as u16 - 1) * 4
+    };
+    let disc_x0 = x0 + connected_w + 8; // 8-char gap
+    let disc_pitch: u16 = 18; // box_w + 2-char gap
+    let disc_stages = [PipelineClick::Ship, PipelineClick::Discover, PipelineClick::Patterns];
+    for (j, target) in disc_stages.into_iter().enumerate() {
+        let bx = disc_x0 + j as u16 * disc_pitch;
+        if col >= bx && col < bx + box_w {
+            return Some(target);
+        }
+    }
+
+    None
+}
+
 use crate::agent::AgentRole;
 use crate::app::AppState;
 use crate::config::Config;
@@ -329,8 +409,33 @@ pub(super) fn render_pipeline_map(
         }
     }
 
+    // ─── Tab bar (row 0 of content area, replaces the old blank line) ──────
+    let explore_active = state.show_running_explorer;
+    let (dash_fg, dash_bg, dash_mod) = if !explore_active {
+        (Color::Black, theme.accent, Modifier::BOLD)
+    } else {
+        (theme.muted, Color::Reset, Modifier::empty())
+    };
+    let (exp_fg, exp_bg, exp_mod) = if explore_active {
+        (Color::Black, theme.accent, Modifier::BOLD)
+    } else {
+        (theme.muted, Color::Reset, Modifier::empty())
+    };
+    let tab_line = Line::from(vec![
+        Span::raw(" "),
+        Span::styled(
+            "[ Dashboard ]",
+            Style::default().fg(dash_fg).bg(dash_bg).add_modifier(dash_mod),
+        ),
+        Span::raw("  "),
+        Span::styled(
+            "[  Explore  ]",
+            Style::default().fg(exp_fg).bg(exp_bg).add_modifier(exp_mod),
+        ),
+    ]);
+
     let lines = vec![
-        Line::from(""),
+        tab_line,
         Line::from(top_spans),
         Line::from(mid_spans),
         Line::from(model_spans),
