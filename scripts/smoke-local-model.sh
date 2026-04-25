@@ -180,6 +180,10 @@ fi
 python3 - <<'PY'
 import json, sys, os
 data = json.load(open("out.json"))
+schema = data.get("schema_version")
+if schema != 1:
+    print(f"[smoke] FAIL: schema_version == {schema!r} (expected 1) -- headless JSON envelope changed; update scripts/smoke-local-model.sh and docs/local-model-setup.md", file=sys.stderr)
+    sys.exit(1)
 cfg = data.get("config", {})
 provider = cfg.get("builder_provider", "")
 model    = cfg.get("builder_model", "")
@@ -193,7 +197,7 @@ tasks = data.get("tasks") or []
 if not tasks:
     print("[smoke] FAIL: out.json has zero tasks recorded", file=sys.stderr)
     sys.exit(1)
-print(f"[smoke] check 2: builder_provider=opencode builder_model={model} tasks={len(tasks)}")
+print(f"[smoke] check 2: schema_version={schema} builder_provider=opencode builder_model={model} tasks={len(tasks)}")
 PY
 
 # Check 3: at least one .buildloop/logs/*.jsonl was produced

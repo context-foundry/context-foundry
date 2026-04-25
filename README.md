@@ -258,6 +258,53 @@ If you want per-project isolation, set `patterns_dir` in `.foundry.json` to a pr
 
 In Auto mode, when all tasks in `TASKS.md` are complete, foundry doesn't stop. A discovery agent scans the codebase -- reading architecture docs, looking for TODOs/FIXMEs, checking for failed tests, spotting inconsistencies -- and appends new tasks to `TASKS.md`. The loop then works through those. If discovery finds nothing, it backs off with an increasing cooldown (configurable via `discovery_cooldown_minutes`). In Sprint and Review modes, discovery is disabled and the pipeline stops when the queue empties.
 
+## Local models (LM Studio + opencode)
+
+Foundry can route the build pipeline through a local LM Studio (or Ollama)
+model instead of Claude or Codex. Selecting a local model in the settings
+overlay swaps `builder_provider` to `opencode` and routes the spawned agent
+through the [opencode](https://github.com/sst/opencode) CLI, which talks to
+LM Studio's OpenAI-compatible server at `http://127.0.0.1:1234`.
+
+**Selecting a local model.** Press `?` in the TUI to open the settings
+overlay. The "Builder" row lists every Claude / Codex spec plus every model
+discovered from LM Studio's `/v1/models` and Ollama's `/api/tags`. Picking an
+LM Studio entry persists `builder_provider = "opencode"` and
+`builder_model = "lmstudio/<id>"` to `.foundry.json`. The canonical id list
+comes from `opencode models lmstudio` -- run that on the command line to see
+the exact ids opencode will accept.
+
+**Full-pipeline routing.** When the selected builder spec is `opencode:...`,
+`Config::for_pipeline()` (`src/config.rs`) overrides every role provider --
+**all 8 stages**: scout, query, research, planner, builder, reviewer,
+fixer, and discovery -- to opencode and reuses the same model. Local-model
+selection is therefore not "builder only"; the entire pipeline runs through
+the chosen LM Studio model.
+
+**Required `n_ctx`.** Foundry's prompts plus
+`agent_system_directives` regularly push past 4096 tokens. Load the LM Studio
+model with `n_ctx >= 8192`. A smaller window produces an `[error/ContextOverflow]`
+event (defined in `src/agent.rs`, `AgentErrorKind::ContextOverflow`) and the
+agent run aborts. Two other typed errors -- `ProviderUnreachable` (LM Studio
+is not running) and `ModelNotLoaded` (the requested model is not loaded in
+LM Studio) -- surface the same way.
+
+**Smoke gate.** Before relying on the local-model path, run
+`bash scripts/smoke-local-model.sh`. The script spins up a throw-away
+project, runs `foundry run --no-tui --output-format json`, and asserts five
+checks (exit code, JSON envelope shape, log presence, opencode session
+marker, no typed errors). Pass `--keep` to preserve the workspace for
+inspection.
+
+**Headless JSON envelope.** `foundry run --no-tui --output-format json`
+emits a versioned object (`schema_version: 1`) containing `tasks`,
+`session`, and `config` blocks. Field-by-field schema and per-check
+failure interpretation are documented in
+[`docs/local-model-setup.md`](docs/local-model-setup.md).
+
+See [`docs/local-model-setup.md`](docs/local-model-setup.md) for the full
+runbook (prerequisites, command transcript, fail-interpretation guide).
+
 ## Install
 
 ### Pre-built binaries

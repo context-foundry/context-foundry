@@ -22,6 +22,9 @@ use super::context::RunContext;
 use super::contract::ContractPaths;
 use super::{AppEvent, LoopEvent};
 
+/// Schema version of the JSON report emitted by 'foundry run --no-tui --output-format json'. Increment when fields are renamed or removed.
+pub(crate) const HEADLESS_REPORT_SCHEMA_VERSION: u32 = 1;
+
 #[derive(Serialize)]
 struct TaskResult {
     id: String,
@@ -59,6 +62,7 @@ struct ConfigSnapshot {
 
 #[derive(Serialize)]
 struct SessionReport {
+    schema_version: u32,
     tasks: Vec<TaskResult>,
     session: SessionStats,
     config: ConfigSnapshot,
@@ -564,6 +568,7 @@ pub(super) async fn run_headless(project_dir: &Path, output_format: Option<Strin
 
     if json_output {
         let report = SessionReport {
+            schema_version: HEADLESS_REPORT_SCHEMA_VERSION,
             tasks: task_results,
             session: SessionStats {
                 total_duration_secs: session_start.elapsed().as_secs_f64(),

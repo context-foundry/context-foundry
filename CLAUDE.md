@@ -18,6 +18,13 @@ cd ~/some-project && foundry
 
 **IMPORTANT:** The running TUI does NOT hot-reload. You must quit the TUI, rebuild, and restart to pick up changes. If you see errors like `No such tool available: Write`, you are running a stale binary.
 
+## Local Models
+
+LM Studio + opencode is wired into the builder pipeline via Phase 32. Runbook:
+[`docs/local-model-setup.md`](docs/local-model-setup.md). Smoke gate:
+`bash scripts/smoke-local-model.sh` (asserts schema_version, opencode routing,
+and typed-error absence).
+
 ## Global Patterns
 
 Patterns are stored in `~/.foundry/patterns/`. Read them before starting work:
