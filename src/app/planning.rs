@@ -197,6 +197,7 @@ pub(super) async fn run_plan_mode(project_dir: &Path, max_iterations: u64) -> Re
         }
 
         let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
+        let abort_signal = ctx.shutdown.clone();
         tokio::spawn(async move {
             while let Some(evt) = agent_rx.recv().await {
                 match evt {
@@ -217,6 +218,11 @@ pub(super) async fn run_plan_mode(project_dir: &Path, max_iterations: u64) -> Re
                     AgentOutputEvent::Result(text) => println!("{}", text),
                     AgentOutputEvent::Error { kind, raw } => {
                         eprintln!("[error/{:?}] {}", kind, raw);
+                        // D1.3: circuit breaker for `foundry plan` headless. Signal
+                        // the outer iteration loop to break instead of spawning the
+                        // next gap-analysis iteration that would hit the same
+                        // condition.
+                        abort_signal.store(true, Ordering::Release);
                     }
                     AgentOutputEvent::Usage { .. } => {}
                 }

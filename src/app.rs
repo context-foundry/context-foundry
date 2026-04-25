@@ -1818,6 +1818,32 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                     }
                 } else {
                     match key.code {
+                        KeyCode::Char('r') | KeyCode::Char('R')
+                            if state.typed_error_can_retry =>
+                        {
+                            // D1.3: ContextOverflow retry. User confirmed they
+                            // fixed LM Studio's n_ctx; re-spawn the build loop.
+                            // The main TUI loop will store(false) on shutdown
+                            // next iteration because stop_after_task is now
+                            // false; apply_pending_transition then spawns a
+                            // fresh build_loop with the same shared Arc.
+                            state.typed_error_toast = None;
+                            state.typed_error_can_retry = false;
+                            state.last_typed_error = None;
+                            state.stop_after_task = false;
+                            state.remove_stop_file();
+                            state.log("Retrying after ContextOverflow -- restarting build loop");
+                            state.pending_transition = Some(PendingTransition::StartBuild);
+                        }
+                        KeyCode::Esc if state.typed_error_toast.is_some() => {
+                            // D1.3: dismiss the typed-error toast without
+                            // retrying. The build loop has already been
+                            // signaled to stop; this just clears the visible
+                            // toast. typed_error_can_retry is also reset so a
+                            // stale 'R' press cannot fire a phantom retry.
+                            state.typed_error_toast = None;
+                            state.typed_error_can_retry = false;
+                        }
                         KeyCode::Char('?') => {
                             let was_open = state.show_settings_overlay;
                             state.show_settings_overlay = !state.show_settings_overlay;
@@ -2813,7 +2839,26 @@ fn handle_agent_output(state: &mut AppState, output: AgentOutputEvent) {
             state.agent_output.push(format!("[error] {}", display));
             state.agent_output.push(format!("[error/raw] {}", raw));
             state.log(format!("Agent error: {}", display));
-            state.status_summary = display;
+            state.status_summary = display.clone();
+            // ─── Circuit breaker (D1.3) ──────────────────────────────
+            // Stop the run on the first typed agent error so subsequent
+            // pipeline stages don't re-emit the same failure. The main
+            // TUI loop pumps state.stop_after_task -> shutdown.store(true)
+            // on the next iteration.
+            state.last_typed_error = Some(kind.clone());
+            let can_retry = matches!(kind, AgentErrorKind::ContextOverflow { .. });
+            let toast = if can_retry {
+                format!(
+                    "{} -- open LM Studio, increase n_ctx, then press R to retry (Esc to dismiss)",
+                    display
+                )
+            } else {
+                format!("{} -- run aborted (Esc to dismiss)", display)
+            };
+            state.typed_error_toast = Some(toast);
+            state.typed_error_can_retry = can_retry;
+            state.stop_after_task = true;
+            state.write_stop_file();
         }
     }
     if state.agent_output.len() > AGENT_OUTPUT_CAP {
@@ -2904,6 +2949,23 @@ fn handle_dual_build_output(state: &mut AppState, idx: usize, output: AgentOutpu
             let display = format_agent_error(kind);
             state.dual_build.streams[idx].push(format!("[error] {}", display));
             state.dual_build.streams[idx].push(format!("[error/raw] {}", raw));
+            // ─── Circuit breaker (D1.3) ──────────────────────────────
+            // Same logic as handle_agent_output: stop both pipelines on
+            // the first typed error from either side.
+            state.last_typed_error = Some(kind.clone());
+            let can_retry = matches!(kind, AgentErrorKind::ContextOverflow { .. });
+            let toast = if can_retry {
+                format!(
+                    "{} -- open LM Studio, increase n_ctx, then press R to retry (Esc to dismiss)",
+                    display
+                )
+            } else {
+                format!("{} -- run aborted (Esc to dismiss)", display)
+            };
+            state.typed_error_toast = Some(toast);
+            state.typed_error_can_retry = can_retry;
+            state.stop_after_task = true;
+            state.write_stop_file();
         }
     }
 

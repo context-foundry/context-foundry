@@ -186,8 +186,8 @@ python3 - <<'PY'
 import json, sys, os
 data = json.load(open("out.json"))
 schema = data.get("schema_version")
-if schema != 1:
-    print(f"[smoke] FAIL: schema_version == {schema!r} (expected 1) -- headless JSON envelope changed; update scripts/smoke-local-model.sh and docs/local-model-setup.md", file=sys.stderr)
+if schema != 2:
+    print(f"[smoke] FAIL: schema_version == {schema!r} (expected 2) -- headless JSON envelope changed; bump HEADLESS_REPORT_SCHEMA_VERSION in src/app/commands.rs and update this assertion + docs/local-model-setup.md", file=sys.stderr)
     sys.exit(1)
 cfg = data.get("config", {})
 provider = cfg.get("builder_provider", "")

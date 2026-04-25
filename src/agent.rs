@@ -1732,44 +1732,68 @@ fn read_provider_output(
                         }
                     }
                     ModelProvider::OpenCode => {
-                        if let Some(event) = parse_opencode_event(line, model_name) {
-                            note_provider_event(provider, &event, progress);
-                            if tx.send(event).is_err() {
-                                return;
-                            }
-                            // Drain any token/cost data captured by parse_opencode_event
-                            // and emit it as a separate Usage event (mirrors the Claude
-                            // and Codex patterns elsewhere in this file).
-                            LAST_RESULT_USAGE.with(|cell| {
-                                if let Some(usage) = cell.take() {
-                                    let _ = tx.send(AgentOutputEvent::Usage {
-                                        cost_usd: usage.cost_usd,
-                                        input_tokens: usage.input_tokens,
-                                        output_tokens: usage.output_tokens,
-                                        context_window: usage.context_window,
-                                        cache_creation_tokens: usage.cache_creation_tokens,
-                                        cache_read_tokens: usage.cache_read_tokens,
-                                    });
+                        match parse_opencode_line(line, model_name) {
+                            OpenCodeParseOutcome::Event(event) => {
+                                note_provider_event(provider, &event, progress);
+                                if tx.send(event).is_err() {
+                                    return;
                                 }
-                            });
-                            continue;
-                        }
-                        // parse_opencode_event returned None -> the line is not parseable
-                        // JSON, OR is a known but suppressed lifecycle event. In either case
-                        // we still want to drain Usage if it was captured before the early
-                        // return inside the parser.
-                        LAST_RESULT_USAGE.with(|cell| {
-                            if let Some(usage) = cell.take() {
-                                let _ = tx.send(AgentOutputEvent::Usage {
-                                    cost_usd: usage.cost_usd,
-                                    input_tokens: usage.input_tokens,
-                                    output_tokens: usage.output_tokens,
-                                    context_window: usage.context_window,
-                                    cache_creation_tokens: usage.cache_creation_tokens,
-                                    cache_read_tokens: usage.cache_read_tokens,
+                                LAST_RESULT_USAGE.with(|cell| {
+                                    if let Some(usage) = cell.take() {
+                                        let _ = tx.send(AgentOutputEvent::Usage {
+                                            cost_usd: usage.cost_usd,
+                                            input_tokens: usage.input_tokens,
+                                            output_tokens: usage.output_tokens,
+                                            context_window: usage.context_window,
+                                            cache_creation_tokens: usage.cache_creation_tokens,
+                                            cache_read_tokens: usage.cache_read_tokens,
+                                        });
+                                    }
                                 });
+                                continue;
                             }
-                        });
+                            OpenCodeParseOutcome::Suppressed => {
+                                // Valid JSON, parser intentionally produced no event. Do
+                                // NOT fall through to the strip_ansi/Stderr passthrough --
+                                // otherwise the user sees `[stderr] {"type":"session.start",
+                                // "sessionID":"..."}` clutter for every suppressed
+                                // lifecycle event. Drain Usage in case the suppressed
+                                // line carried token/cost data.
+                                LAST_RESULT_USAGE.with(|cell| {
+                                    if let Some(usage) = cell.take() {
+                                        let _ = tx.send(AgentOutputEvent::Usage {
+                                            cost_usd: usage.cost_usd,
+                                            input_tokens: usage.input_tokens,
+                                            output_tokens: usage.output_tokens,
+                                            context_window: usage.context_window,
+                                            cache_creation_tokens: usage.cache_creation_tokens,
+                                            cache_read_tokens: usage.cache_read_tokens,
+                                        });
+                                    }
+                                });
+                                continue;
+                            }
+                            OpenCodeParseOutcome::Unparsed => {
+                                // Drain Usage in case parse_opencode_line set it before
+                                // the unparsed verdict (defensive: today the JSON-failure
+                                // early-exit happens before record_opencode_usage_if_present,
+                                // so this is a no-op, but keep it to mirror the Event arm).
+                                LAST_RESULT_USAGE.with(|cell| {
+                                    if let Some(usage) = cell.take() {
+                                        let _ = tx.send(AgentOutputEvent::Usage {
+                                            cost_usd: usage.cost_usd,
+                                            input_tokens: usage.input_tokens,
+                                            output_tokens: usage.output_tokens,
+                                            context_window: usage.context_window,
+                                            cache_creation_tokens: usage.cache_creation_tokens,
+                                            cache_read_tokens: usage.cache_read_tokens,
+                                        });
+                                    }
+                                });
+                                // Falls through to the strip_ansi / Stderr /
+                                // classify_agent_error block below.
+                            }
+                        }
                     }
                 }
 
@@ -2407,8 +2431,25 @@ fn classify_agent_error(text: &str, model_name: &str) -> Option<AgentErrorKind> 
 // live capture is available (LM Studio model with n_ctx >= 8192 loaded), the
 // fixture should be replaced with that capture verbatim and this comment block
 // updated to reflect the observed taxonomy.
-fn parse_opencode_event(line: &str, model_name: &str) -> Option<AgentOutputEvent> {
-    let v: Value = serde_json::from_str(line).ok()?;
+
+/// Result of parsing one opencode --format json line. Distinguishes a
+/// deliberately-suppressed lifecycle event (`Suppressed` -- valid JSON,
+/// no event to emit) from raw output that was not parseable as JSON
+/// (`Unparsed` -- caller should fall through to the strip_ansi/Stderr
+/// passthrough). The `Event` variant carries the AgentOutputEvent to
+/// forward to the TUI.
+#[derive(Debug)]
+enum OpenCodeParseOutcome {
+    Event(AgentOutputEvent),
+    Suppressed,
+    Unparsed,
+}
+
+fn parse_opencode_line(line: &str, model_name: &str) -> OpenCodeParseOutcome {
+    let v: Value = match serde_json::from_str(line) {
+        Ok(v) => v,
+        Err(_) => return OpenCodeParseOutcome::Unparsed,
+    };
     let kind = v
         .get("type")
         .and_then(|x| x.as_str())
@@ -2437,7 +2478,7 @@ fn parse_opencode_event(line: &str, model_name: &str) -> Option<AgentOutputEvent
             ],
         )
         .unwrap_or_default();
-        return Some(AgentOutputEvent::ToolUse {
+        return OpenCodeParseOutcome::Event(AgentOutputEvent::ToolUse {
             tool,
             input_preview: truncate_for_preview(&input_preview, 120),
         });
@@ -2456,9 +2497,9 @@ fn parse_opencode_event(line: &str, model_name: &str) -> Option<AgentOutputEvent
         )
         .unwrap_or_default();
         if output.is_empty() {
-            return None;
+            return OpenCodeParseOutcome::Suppressed;
         }
-        return Some(AgentOutputEvent::ToolResult {
+        return OpenCodeParseOutcome::Event(AgentOutputEvent::ToolResult {
             output_preview: truncate_for_preview(&output, 200),
         });
     }
@@ -2471,12 +2512,12 @@ fn parse_opencode_event(line: &str, model_name: &str) -> Option<AgentOutputEvent
         let text = extract_string_by_keys(&v, &["message", "error", "text", "detail", "summary"])
             .unwrap_or_else(|| line.to_string());
         if let Some(error_kind) = classify_agent_error(&text, model_name) {
-            return Some(AgentOutputEvent::Error {
+            return OpenCodeParseOutcome::Event(AgentOutputEvent::Error {
                 kind: error_kind,
                 raw: text,
             });
         }
-        return Some(AgentOutputEvent::Stderr(text));
+        return OpenCodeParseOutcome::Event(AgentOutputEvent::Stderr(text));
     }
 
     let is_complete = kind == "complete"
@@ -2493,9 +2534,9 @@ fn parse_opencode_event(line: &str, model_name: &str) -> Option<AgentOutputEvent
         )
         .unwrap_or_default();
         if text.is_empty() {
-            return None;
+            return OpenCodeParseOutcome::Suppressed;
         }
-        return Some(AgentOutputEvent::Result(text));
+        return OpenCodeParseOutcome::Event(AgentOutputEvent::Result(text));
     }
 
     let is_text = kind == "text"
@@ -2516,9 +2557,9 @@ fn parse_opencode_event(line: &str, model_name: &str) -> Option<AgentOutputEvent
         )
         .unwrap_or_default();
         if text.is_empty() {
-            return None;
+            return OpenCodeParseOutcome::Suppressed;
         }
-        return Some(AgentOutputEvent::Text(text));
+        return OpenCodeParseOutcome::Event(AgentOutputEvent::Text(text));
     }
 
     if kind == "session.start"
@@ -2526,14 +2567,25 @@ fn parse_opencode_event(line: &str, model_name: &str) -> Option<AgentOutputEvent
         || kind == "step.start"
         || kind == "installation.updated"
     {
-        return None;
+        return OpenCodeParseOutcome::Suppressed;
     }
 
     if kind.is_empty() {
-        return None;
+        return OpenCodeParseOutcome::Suppressed;
     }
 
-    Some(AgentOutputEvent::Text(format!("[{}:{}]", model_name, kind)))
+    OpenCodeParseOutcome::Event(AgentOutputEvent::Text(format!(
+        "[{}:{}]",
+        model_name, kind
+    )))
+}
+
+#[cfg(test)]
+fn parse_opencode_event(line: &str, model_name: &str) -> Option<AgentOutputEvent> {
+    match parse_opencode_line(line, model_name) {
+        OpenCodeParseOutcome::Event(e) => Some(e),
+        OpenCodeParseOutcome::Suppressed | OpenCodeParseOutcome::Unparsed => None,
+    }
 }
 
 fn record_opencode_usage_if_present(v: &Value) {
@@ -4187,6 +4239,47 @@ mod tests {
                 assert!(raw.contains("exceeds the available context size"));
             }
             other => panic!("expected typed Error::ContextOverflow, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn opencode_parse_outcome_unparsed_for_non_json() {
+        LAST_RESULT_USAGE.with(|c| c.set(None));
+        let outcome = parse_opencode_line("not valid json at all", "lmstudio/test");
+        assert!(
+            matches!(outcome, OpenCodeParseOutcome::Unparsed),
+            "non-JSON line must be Unparsed, got {:?}",
+            outcome
+        );
+    }
+
+    #[test]
+    fn opencode_parse_outcome_suppressed_for_lifecycle() {
+        for k in [
+            "session.start",
+            "session.started",
+            "step.start",
+            "installation.updated",
+        ] {
+            LAST_RESULT_USAGE.with(|c| c.set(None));
+            let line = format!(r#"{{"type":"{}","sessionID":"s_x"}}"#, k);
+            let outcome = parse_opencode_line(&line, "lmstudio/test");
+            assert!(
+                matches!(outcome, OpenCodeParseOutcome::Suppressed),
+                "kind {} must be Suppressed, got {:?}",
+                k,
+                outcome
+            );
+        }
+    }
+
+    #[test]
+    fn opencode_parse_outcome_event_for_text() {
+        LAST_RESULT_USAGE.with(|c| c.set(None));
+        let outcome = parse_opencode_line(r#"{"type":"text","text":"hi"}"#, "lmstudio/test");
+        match outcome {
+            OpenCodeParseOutcome::Event(AgentOutputEvent::Text(t)) => assert_eq!(t, "hi"),
+            other => panic!("expected Event(Text), got {:?}", other),
         }
     }
 }

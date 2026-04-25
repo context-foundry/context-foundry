@@ -9,7 +9,7 @@ use chrono::Utc;
 use serde::Serialize;
 use tokio::sync::mpsc;
 
-use crate::agent::{AgentOutputEvent, ModelProvider};
+use crate::agent::{AgentErrorKind, AgentOutputEvent, ModelProvider};
 use crate::config::Config;
 use crate::patterns;
 use crate::patterns::Pattern;
@@ -22,8 +22,10 @@ use super::context::RunContext;
 use super::contract::ContractPaths;
 use super::{AppEvent, LoopEvent};
 
-/// Schema version of the JSON report emitted by 'foundry run --no-tui --output-format json'. Increment when fields are renamed or removed.
-pub(crate) const HEADLESS_REPORT_SCHEMA_VERSION: u32 = 1;
+/// Schema version of the JSON report emitted by 'foundry run --no-tui --output-format json'.
+/// Increment when fields are renamed, removed, or when a new top-level field is added.
+/// v2 (D1.3): added `typed_error` top-level field of type Option<TypedErrorReport>.
+pub(crate) const HEADLESS_REPORT_SCHEMA_VERSION: u32 = 2;
 
 #[derive(Serialize)]
 struct TaskResult {
@@ -61,11 +63,93 @@ struct ConfigSnapshot {
 }
 
 #[derive(Serialize)]
+struct TypedErrorReport {
+    kind: String,
+    message: String,
+    raw: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tokens: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    ctx_size: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    model: Option<String>,
+}
+
+fn typed_error_report_from(kind: &AgentErrorKind, raw: &str) -> TypedErrorReport {
+    let (kind_str, tokens, ctx_size, url, model) = match kind {
+        AgentErrorKind::ContextOverflow { tokens, ctx_size } => (
+            "ContextOverflow".to_string(),
+            *tokens,
+            *ctx_size,
+            None,
+            None,
+        ),
+        AgentErrorKind::ProviderUnreachable { url } => (
+            "ProviderUnreachable".to_string(),
+            None,
+            None,
+            url.clone(),
+            None,
+        ),
+        AgentErrorKind::ModelNotLoaded { model } => (
+            "ModelNotLoaded".to_string(),
+            None,
+            None,
+            None,
+            model.clone(),
+        ),
+    };
+    let message = format_agent_error_message(kind);
+    TypedErrorReport {
+        kind: kind_str,
+        message,
+        raw: raw.to_string(),
+        tokens,
+        ctx_size,
+        url,
+        model,
+    }
+}
+
+/// Mirror of src/app.rs::format_agent_error -- duplicated here to avoid
+/// pulling app.rs internals into commands.rs. Keep these two functions in
+/// sync if the typed-error catalog grows.
+fn format_agent_error_message(kind: &AgentErrorKind) -> String {
+    match kind {
+        AgentErrorKind::ContextOverflow { tokens, ctx_size } => match (tokens, ctx_size) {
+            (Some(t), Some(c)) => format!(
+                "LM Studio context overflow: prompt was {} tokens but the loaded model has only n_ctx={}. Reload the model in LM Studio with a larger context size.",
+                t, c
+            ),
+            _ => "LM Studio context overflow: the prompt exceeded the loaded model's n_ctx. Reload the model with a larger context size in LM Studio.".to_string(),
+        },
+        AgentErrorKind::ProviderUnreachable { url } => match url {
+            Some(u) => format!(
+                "Provider unreachable at {}. Confirm LM Studio is running and listening on the expected port.",
+                u
+            ),
+            None => "Provider unreachable: failed to connect. Confirm LM Studio is running and listening on the expected port (default 127.0.0.1:1234).".to_string(),
+        },
+        AgentErrorKind::ModelNotLoaded { model } => match model {
+            Some(m) => format!(
+                "Model not loaded: '{}'. Load this model in LM Studio (or pick a different one in foundry settings).",
+                m
+            ),
+            None => "Model not loaded: the requested model is not available in LM Studio. Load it (or pick a different one in foundry settings).".to_string(),
+        },
+    }
+}
+
+#[derive(Serialize)]
 struct SessionReport {
     schema_version: u32,
     tasks: Vec<TaskResult>,
     session: SessionStats,
     config: ConfigSnapshot,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    typed_error: Option<TypedErrorReport>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -351,6 +435,12 @@ pub(super) async fn run_headless(project_dir: &Path, output_format: Option<Strin
         shutdown_signal.store(true, Ordering::Release);
     });
 
+    // D1.3: keep a clone of the shutdown flag inside the event loop so the
+    // typed-error circuit breaker can abort the build before the next stage
+    // spawns. This must be cloned BEFORE run_context is moved into
+    // tokio::spawn(build_loop).
+    let abort_signal = run_context.shutdown.clone();
+
     for message in contract_paths.warnings() {
         eprintln!("[warn] {}", message);
     }
@@ -404,6 +494,8 @@ pub(super) async fn run_headless(project_dir: &Path, output_format: Option<Strin
     });
 
     let mut update_version: Option<String> = None;
+    // D1.3: typed-error capture for the JSON report's `typed_error` field.
+    let mut typed_error_record: Option<TypedErrorReport> = None;
     let json_output = output_format.as_deref() == Some("json");
     let session_start = std::time::Instant::now();
     let mut task_results: Vec<TaskResult> = Vec::new();
@@ -447,6 +539,14 @@ pub(super) async fn run_headless(project_dir: &Path, output_format: Option<Strin
             }
             AppEvent::AgentOutput(AgentOutputEvent::Error { kind, raw }) => {
                 eprintln!("[error/{:?}] {}", kind, raw);
+                // D1.3: circuit breaker. Record the first typed error and signal
+                // the build loop to abort so subsequent stages do not spawn and
+                // re-emit the same failure. Keep the receive loop alive so any
+                // already-queued events drain cleanly before LoopEvent::Finished.
+                if typed_error_record.is_none() {
+                    typed_error_record = Some(typed_error_report_from(&kind, &raw));
+                    abort_signal.store(true, Ordering::Release);
+                }
             }
             AppEvent::AgentOutput(AgentOutputEvent::Usage { cost_usd, .. }) => {
                 eprintln!("[cost] ${:.2}", cost_usd);
@@ -566,6 +666,10 @@ pub(super) async fn run_headless(project_dir: &Path, output_format: Option<Strin
         }
     }
 
+    // D1.3: capture whether the run was aborted before the report literal
+    // moves typed_error_record via .take().
+    let aborted_by_typed_error = typed_error_record.is_some();
+
     if json_output {
         let report = SessionReport {
             schema_version: HEADLESS_REPORT_SCHEMA_VERSION,
@@ -584,6 +688,7 @@ pub(super) async fn run_headless(project_dir: &Path, output_format: Option<Strin
                 reviewer_provider: config_snapshot_data.3.clone(),
                 reviewer_model: config_snapshot_data.4.clone(),
             },
+            typed_error: typed_error_record.take(),
         };
         println!(
             "{}",
@@ -607,6 +712,12 @@ pub(super) async fn run_headless(project_dir: &Path, output_format: Option<Strin
             "\nUpdate available: v{} → v{}. Run `foundry update` to upgrade.",
             update::current_version(),
             version
+        );
+    }
+
+    if aborted_by_typed_error {
+        anyhow::bail!(
+            "run aborted by typed agent error -- see [error/...] line on stderr (or 'typed_error' field in the JSON report)"
         );
     }
 

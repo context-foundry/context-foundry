@@ -7,7 +7,7 @@ use chrono::{DateTime, Utc};
 use crossterm::event::{self, MouseEvent};
 use std::path::PathBuf;
 
-use crate::agent::{AgentOutputEvent, AgentRole};
+use crate::agent::{AgentErrorKind, AgentOutputEvent, AgentRole};
 use crate::git;
 use crate::orchestrator::OrchestratorOutcome;
 use crate::stats::StatsReport;
@@ -322,6 +322,18 @@ pub struct AppState {
     pub should_quit: bool,
     pub observatory_session_id: Option<String>,
     pub stop_after_task: bool,
+    /// Set when handle_agent_output observes a typed AgentErrorKind. The TUI
+    /// renders this as a one-line toast and uses it to gate the R-key retry.
+    /// Cleared on dismiss/retry. None == no toast displayed.
+    pub typed_error_toast: Option<String>,
+    /// True when the last typed error was ContextOverflow -- enables the
+    /// "press R to retry" key handler. False for ProviderUnreachable /
+    /// ModelNotLoaded (no retry; user must restart foundry).
+    pub typed_error_can_retry: bool,
+    /// The most recent AgentErrorKind observed in any pipeline. Used by the
+    /// retry handler and by the headless command path to populate the
+    /// SessionReport.typed_error field. None == no typed error this session.
+    pub last_typed_error: Option<AgentErrorKind>,
     pub events_received: usize,
     pub tick_count: usize,
     pub update_available: Option<String>,
@@ -455,6 +467,9 @@ impl AppState {
             should_quit: false,
             observatory_session_id: None,
             stop_after_task: false,
+            typed_error_toast: None,
+            typed_error_can_retry: false,
+            last_typed_error: None,
             events_received: 0,
             tick_count: 0,
             update_available: None,
