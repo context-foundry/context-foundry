@@ -98,6 +98,106 @@ pub(super) async fn fetch_local_models(ollama_url: String) -> Vec<String> {
     .unwrap_or_default()
 }
 
+/// Returns how many lines to scroll per wheel tick based on inter-event timing.
+/// Fast spins (events arriving <50ms apart) scroll up to 8 lines; a leisurely single
+/// click scrolls 2. This approximates browser-style velocity without physics simulation.
+fn wheel_lines(last: Option<std::time::Instant>) -> usize {
+    match last {
+        Some(t) => {
+            let ms = t.elapsed().as_millis();
+            if ms < 50 { 8 }
+            else if ms < 100 { 5 }
+            else if ms < 200 { 3 }
+            else { 2 }
+        }
+        None => 2,
+    }
+}
+
+/// Build the unified builder list: configured specs + combined-label (if 2+) + local models.
+/// Specs are stored as raw config values (e.g. "claude:opus") but the combined "both" entry
+/// uses readable labels (e.g. "claude:claude-opus-4-7/codex") so it's unambiguous.
+fn build_unified_builders(specs: &[String], local_models: &[String]) -> Vec<String> {
+    let mut list: Vec<String> = specs.iter()
+        .map(|s| Config::readable_spec(s))
+        .collect();
+    if specs.len() >= 2 {
+        let combined = list.iter()
+            .take(specs.len())
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("/");
+        list.push(combined);
+    }
+    for m in local_models {
+        if !list.contains(m) {
+            list.push(m.clone());
+        }
+    }
+    list
+}
+
+/// Apply a unified builder selection to state and persist to .foundry.json.
+/// `value` is a readable spec label (from build_unified_builders), not the raw config string.
+fn apply_builder_selection(state: &mut AppState, value: &str) {
+    let dir = state
+        .buildloop_dir
+        .parent()
+        .unwrap_or(std::path::Path::new("."))
+        .to_path_buf();
+    // Match against readable spec labels for each configured spec
+    for (i, spec) in state.builder_model_specs.clone().iter().enumerate() {
+        if Config::readable_spec(spec) == value {
+            state.dual_selection = match i {
+                0 => DualSelection::First,
+                1 => DualSelection::Second,
+                _ => DualSelection::Third,
+            };
+            state.selected_local_model = String::new();
+            Config::save_dual_selection(&dir, state.dual_selection.as_str());
+            Config::save_local_model(&dir, "");
+            return;
+        }
+    }
+    // Check local models
+    if state.local_models.contains(&value.to_string()) {
+        state.selected_local_model = value.to_string();
+        Config::save_local_model(&dir, value);
+        return;
+    }
+    // Combined entry (specs joined with "/") -- set to Both
+    state.dual_selection = DualSelection::Both;
+    state.selected_local_model = String::new();
+    Config::save_dual_selection(&dir, "both");
+    Config::save_local_model(&dir, "");
+}
+
+/// Compute the initial builder_cursor from current dual_selection / selected_local_model.
+fn init_builder_cursor(state: &mut AppState) {
+    let unified = build_unified_builders(&state.builder_model_specs, &state.local_models);
+    let target = if !state.selected_local_model.is_empty() {
+        state.selected_local_model.clone()
+    } else {
+        let specs = &state.builder_model_specs;
+        match state.dual_selection {
+            DualSelection::Both => {
+                // Combined entry is at index specs.len() in the unified list
+                unified.get(specs.len()).cloned().unwrap_or_default()
+            }
+            DualSelection::First | DualSelection::Off => {
+                specs.first().map(|s| Config::readable_spec(s)).unwrap_or_default()
+            }
+            DualSelection::Second => {
+                specs.get(1).map(|s| Config::readable_spec(s)).unwrap_or_default()
+            }
+            DualSelection::Third => {
+                specs.get(2).map(|s| Config::readable_spec(s)).unwrap_or_default()
+            }
+        }
+    };
+    state.builder_cursor = unified.iter().position(|m| m == &target).unwrap_or(0);
+}
+
 pub async fn run_tui(project_dir: &Path) -> Result<()> {
     let config = Config::load(project_dir);
     commands::ensure_required_providers_available(&config, commands::ProviderCommandMode::Run)?;
@@ -121,6 +221,7 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
     if config.builder_models.len() >= 2 {
         state.dual_selection = state::DualSelection::from_str(&config.dual_selection);
     }
+    init_builder_cursor(&mut state);
     if let Some(tc) = config.truecolor {
         crate::tui::theme::set_truecolor_override(tc);
     }
@@ -764,13 +865,8 @@ fn handle_planning_event(state: &mut AppState, event: AppEvent, config: &Config)
             );
         }
         AppEvent::LocalModels(models) => {
-            let prev = state.selected_local_model.clone();
             state.local_models = models;
-            if let Some(idx) = state.local_models.iter().position(|m| m == &prev) {
-                state.local_model_cursor = idx;
-            } else {
-                state.local_model_cursor = 0;
-            }
+            init_builder_cursor(state);
         }
         AppEvent::LoopEvent(LoopEvent::StatsReady(report)) => {
             if state.stats_loading {
@@ -1787,13 +1883,8 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
             );
         }
         AppEvent::LocalModels(models) => {
-            let prev = state.selected_local_model.clone();
             state.local_models = models;
-            if let Some(idx) = state.local_models.iter().position(|m| m == &prev) {
-                state.local_model_cursor = idx;
-            } else {
-                state.local_model_cursor = 0;
-            }
+            init_builder_cursor(state);
         }
         AppEvent::Mouse(mouse) => {
             use crossterm::event::{MouseButton, MouseEventKind};
@@ -1803,35 +1894,65 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                 handle_startup_mouse_at_for_running(state, mouse, terminal_size);
             } else {
                 match mouse.kind {
+                    MouseEventKind::Moved => {
+                        // Hover instantly switches focused pane -- no click required.
+                        if !state.dragging_split
+                            && !state.show_stats_overlay
+                            && !state.show_patterns
+                            && !state.show_findings
+                            && !state.show_settings_overlay
+                        {
+                            let terminal_size = crossterm::terminal::size().unwrap_or((120, 40));
+                            let area =
+                                ratatui::layout::Rect::new(0, 0, terminal_size.0, terminal_size.1);
+                            let has_ext = state.available_extensions.iter().any(|e| e.selected)
+                                || !state.session_extensions_used.is_empty();
+                            let panes = tui::running_layout(area, has_ext, state.agent_pane_split);
+                            if tui::rect_contains(panes.agent_output, mouse.column, mouse.row) {
+                                state.focused_pane = state::TuiPane::AgentOutput;
+                            } else if tui::rect_contains(panes.task_queue, mouse.column, mouse.row) {
+                                state.focused_pane = state::TuiPane::TaskQueue;
+                            } else if tui::rect_contains(panes.patterns, mouse.column, mouse.row) {
+                                state.focused_pane = state::TuiPane::PatternsLearned;
+                            } else if panes
+                                .extensions_used
+                                .is_some_and(|r| tui::rect_contains(r, mouse.column, mouse.row))
+                            {
+                                state.focused_pane = state::TuiPane::Extensions;
+                            }
+                        }
+                    }
                     MouseEventKind::ScrollUp => {
+                        let lines = wheel_lines(state.last_scroll_at);
+                        state.last_scroll_at = Some(std::time::Instant::now());
                         if state.show_stats_overlay {
                             state.stats_overlay_scroll =
-                                state.stats_overlay_scroll.saturating_sub(3);
+                                state.stats_overlay_scroll.saturating_sub(lines);
                         } else if state.show_patterns {
-                            state.patterns_scroll = state.patterns_scroll.saturating_sub(3);
+                            state.patterns_scroll = state.patterns_scroll.saturating_sub(lines);
                         } else if state.show_findings {
-                            state.findings_scroll = state.findings_scroll.saturating_sub(3);
+                            state.findings_scroll = state.findings_scroll.saturating_sub(lines);
                         } else {
                             let terminal_size = crossterm::terminal::size().unwrap_or((120, 40));
                             let area =
                                 ratatui::layout::Rect::new(0, 0, terminal_size.0, terminal_size.1);
                             let has_ext = state.available_extensions.iter().any(|e| e.selected)
                                 || !state.session_extensions_used.is_empty();
-                            let panes = tui::running_layout(area, has_ext);
+                            let panes = tui::running_layout(area, has_ext, state.agent_pane_split);
                             if tui::rect_contains(panes.agent_output, mouse.column, mouse.row) {
                                 state.focused_pane = state::TuiPane::AgentOutput;
                                 let max = state.agent_output.len().saturating_sub(1);
                                 state.scroll_offset =
-                                    state.scroll_offset.saturating_add(3).min(max);
+                                    state.scroll_offset.saturating_add(lines).min(max);
                             } else if tui::rect_contains(panes.task_queue, mouse.column, mouse.row)
                             {
                                 state.focused_pane = state::TuiPane::TaskQueue;
                                 let max = state.task_queue.len().saturating_sub(1);
                                 state.task_queue_scroll =
-                                    state.task_queue_scroll.saturating_add(3).min(max);
+                                    state.task_queue_scroll.saturating_add(lines).min(max);
                             } else if tui::rect_contains(panes.patterns, mouse.column, mouse.row) {
                                 state.focused_pane = state::TuiPane::PatternsLearned;
-                                state.patterns_scroll = state.patterns_scroll.saturating_sub(3);
+                                state.patterns_scroll = state.patterns_scroll.saturating_sub(lines);
                             } else if panes
                                 .extensions_used
                                 .is_some_and(|r| tui::rect_contains(r, mouse.column, mouse.row))
@@ -1841,30 +1962,33 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                         }
                     }
                     MouseEventKind::ScrollDown => {
+                        let lines = wheel_lines(state.last_scroll_at);
+                        state.last_scroll_at = Some(std::time::Instant::now());
                         if state.show_stats_overlay {
                             state.stats_overlay_scroll =
-                                state.stats_overlay_scroll.saturating_add(3);
+                                state.stats_overlay_scroll.saturating_add(lines);
                         } else if state.show_patterns {
-                            state.patterns_scroll = state.patterns_scroll.saturating_add(3);
+                            state.patterns_scroll = state.patterns_scroll.saturating_add(lines);
                         } else if state.show_findings {
-                            state.findings_scroll = state.findings_scroll.saturating_add(3);
+                            state.findings_scroll = state.findings_scroll.saturating_add(lines);
                         } else {
                             let terminal_size = crossterm::terminal::size().unwrap_or((120, 40));
                             let area =
                                 ratatui::layout::Rect::new(0, 0, terminal_size.0, terminal_size.1);
                             let has_ext = state.available_extensions.iter().any(|e| e.selected)
                                 || !state.session_extensions_used.is_empty();
-                            let panes = tui::running_layout(area, has_ext);
+                            let panes = tui::running_layout(area, has_ext, state.agent_pane_split);
                             if tui::rect_contains(panes.agent_output, mouse.column, mouse.row) {
                                 state.focused_pane = state::TuiPane::AgentOutput;
-                                state.scroll_offset = state.scroll_offset.saturating_sub(3);
+                                state.scroll_offset = state.scroll_offset.saturating_sub(lines);
                             } else if tui::rect_contains(panes.task_queue, mouse.column, mouse.row)
                             {
                                 state.focused_pane = state::TuiPane::TaskQueue;
-                                state.task_queue_scroll = state.task_queue_scroll.saturating_sub(3);
+                                state.task_queue_scroll =
+                                    state.task_queue_scroll.saturating_sub(lines);
                             } else if tui::rect_contains(panes.patterns, mouse.column, mouse.row) {
                                 state.focused_pane = state::TuiPane::PatternsLearned;
-                                state.patterns_scroll = state.patterns_scroll.saturating_add(3);
+                                state.patterns_scroll = state.patterns_scroll.saturating_add(lines);
                             } else if panes
                                 .extensions_used
                                 .is_some_and(|r| tui::rect_contains(r, mouse.column, mouse.row))
@@ -1879,8 +2003,15 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                             ratatui::layout::Rect::new(0, 0, terminal_size.0, terminal_size.1);
                         let has_ext = state.available_extensions.iter().any(|e| e.selected)
                             || !state.session_extensions_used.is_empty();
-                        let panes = tui::running_layout(area, has_ext);
-                        if tui::rect_contains(panes.agent_output, mouse.column, mouse.row) {
+                        let panes = tui::running_layout(area, has_ext, state.agent_pane_split);
+                        // Check if clicking on the vertical separator (±1 column tolerance)
+                        let on_sep = mouse.column == panes.separator_col
+                            || mouse.column + 1 == panes.separator_col;
+                        let in_middle = mouse.row >= panes.agent_output.y
+                            && mouse.row < panes.agent_output.y + panes.agent_output.height;
+                        if on_sep && in_middle {
+                            state.dragging_split = true;
+                        } else if tui::rect_contains(panes.agent_output, mouse.column, mouse.row) {
                             state.focused_pane = state::TuiPane::AgentOutput;
                         } else if tui::rect_contains(panes.task_queue, mouse.column, mouse.row) {
                             state.focused_pane = state::TuiPane::TaskQueue;
@@ -1892,6 +2023,20 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                         {
                             state.focused_pane = state::TuiPane::Extensions;
                         }
+                    }
+                    MouseEventKind::Drag(MouseButton::Left) => {
+                        if state.dragging_split {
+                            let terminal_size = crossterm::terminal::size().unwrap_or((120, 40));
+                            let total_width = terminal_size.0;
+                            if total_width > 0 {
+                                let pct = (mouse.column as u32 * 100 / total_width as u32)
+                                    .clamp(20, 80) as u16;
+                                state.agent_pane_split = pct;
+                            }
+                        }
+                    }
+                    MouseEventKind::Up(MouseButton::Left) => {
+                        state.dragging_split = false;
                     }
                     _ => {}
                 }
@@ -2072,13 +2217,11 @@ fn cycle_settings_cursor(state: &mut AppState, _config: &Config) {
             Config::save_run_mode(project_dir, &state.run_mode);
         }
         1 => {
-            // Cycle local model forward (same as Right arrow)
-            if !state.local_models.is_empty() {
-                state.local_model_cursor =
-                    (state.local_model_cursor + 1) % state.local_models.len();
-                state.selected_local_model =
-                    state.local_models[state.local_model_cursor].clone();
-                Config::save_local_model(project_dir, &state.selected_local_model);
+            let unified = build_unified_builders(&state.builder_model_specs, &state.local_models);
+            if !unified.is_empty() {
+                state.builder_cursor = (state.builder_cursor + 1) % unified.len();
+                let val = unified[state.builder_cursor].clone();
+                apply_builder_selection(state, &val);
             }
         }
         2 => {
@@ -2107,12 +2250,11 @@ pub(super) fn cycle_settings_cursor_startup(state: &mut AppState) {
             Config::save_run_mode(project_dir, &state.run_mode);
         }
         1 => {
-            if !state.local_models.is_empty() {
-                state.local_model_cursor =
-                    (state.local_model_cursor + 1) % state.local_models.len();
-                state.selected_local_model =
-                    state.local_models[state.local_model_cursor].clone();
-                Config::save_local_model(project_dir, &state.selected_local_model);
+            let unified = build_unified_builders(&state.builder_model_specs, &state.local_models);
+            if !unified.is_empty() {
+                state.builder_cursor = (state.builder_cursor + 1) % unified.len();
+                let val = unified[state.builder_cursor].clone();
+                apply_builder_selection(state, &val);
             }
         }
         2 => {
@@ -2139,15 +2281,15 @@ fn cycle_settings_left(state: &mut AppState, _config: &Config) {
             Config::save_run_mode(project_dir, &state.run_mode);
         }
         1 => {
-            if !state.local_models.is_empty() {
-                state.local_model_cursor = if state.local_model_cursor == 0 {
-                    state.local_models.len() - 1
+            let unified = build_unified_builders(&state.builder_model_specs, &state.local_models);
+            if !unified.is_empty() {
+                state.builder_cursor = if state.builder_cursor == 0 {
+                    unified.len() - 1
                 } else {
-                    state.local_model_cursor - 1
+                    state.builder_cursor - 1
                 };
-                state.selected_local_model =
-                    state.local_models[state.local_model_cursor].clone();
-                Config::save_local_model(project_dir, &state.selected_local_model);
+                let val = unified[state.builder_cursor].clone();
+                apply_builder_selection(state, &val);
             }
         }
         2 => {
@@ -2174,12 +2316,11 @@ fn cycle_settings_right(state: &mut AppState, _config: &Config) {
             Config::save_run_mode(project_dir, &state.run_mode);
         }
         1 => {
-            if !state.local_models.is_empty() {
-                state.local_model_cursor =
-                    (state.local_model_cursor + 1) % state.local_models.len();
-                state.selected_local_model =
-                    state.local_models[state.local_model_cursor].clone();
-                Config::save_local_model(project_dir, &state.selected_local_model);
+            let unified = build_unified_builders(&state.builder_model_specs, &state.local_models);
+            if !unified.is_empty() {
+                state.builder_cursor = (state.builder_cursor + 1) % unified.len();
+                let val = unified[state.builder_cursor].clone();
+                apply_builder_selection(state, &val);
             }
         }
         2 => {
@@ -2206,15 +2347,15 @@ pub(super) fn cycle_settings_left_startup(state: &mut AppState) {
             Config::save_run_mode(project_dir, &state.run_mode);
         }
         1 => {
-            if !state.local_models.is_empty() {
-                state.local_model_cursor = if state.local_model_cursor == 0 {
-                    state.local_models.len() - 1
+            let unified = build_unified_builders(&state.builder_model_specs, &state.local_models);
+            if !unified.is_empty() {
+                state.builder_cursor = if state.builder_cursor == 0 {
+                    unified.len() - 1
                 } else {
-                    state.local_model_cursor - 1
+                    state.builder_cursor - 1
                 };
-                state.selected_local_model =
-                    state.local_models[state.local_model_cursor].clone();
-                Config::save_local_model(project_dir, &state.selected_local_model);
+                let val = unified[state.builder_cursor].clone();
+                apply_builder_selection(state, &val);
             }
         }
         2 => {
@@ -2241,12 +2382,11 @@ pub(super) fn cycle_settings_right_startup(state: &mut AppState) {
             Config::save_run_mode(project_dir, &state.run_mode);
         }
         1 => {
-            if !state.local_models.is_empty() {
-                state.local_model_cursor =
-                    (state.local_model_cursor + 1) % state.local_models.len();
-                state.selected_local_model =
-                    state.local_models[state.local_model_cursor].clone();
-                Config::save_local_model(project_dir, &state.selected_local_model);
+            let unified = build_unified_builders(&state.builder_model_specs, &state.local_models);
+            if !unified.is_empty() {
+                state.builder_cursor = (state.builder_cursor + 1) % unified.len();
+                let val = unified[state.builder_cursor].clone();
+                apply_builder_selection(state, &val);
             }
         }
         2 => {

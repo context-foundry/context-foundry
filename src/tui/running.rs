@@ -9,99 +9,19 @@ use ratatui::{
 use super::{pane_border_style, pane_border_type};
 use crate::agent::AgentRole;
 use crate::app::{AppPhase, AppState, ExtensionDisplayInfo, TuiPane};
-use crate::config::Config;
 use crate::utils::truncate_str;
 
-fn short_model_spec(spec: &str) -> String {
-    let (provider, model) = Config::parse_model_spec(spec);
-    if model.is_empty() {
-        provider
-    } else {
-        format!("{provider}:{model}")
-    }
-}
 
-fn dual_mode_badge_label(state: &AppState) -> Option<String> {
-    if state.builder_model_specs.len() < 2 {
-        return None;
-    }
 
-    match state.dual_selection {
-        crate::app::DualSelection::Off => None,
-        crate::app::DualSelection::First => state
-            .builder_model_specs
-            .first()
-            .map(|spec| Config::display_model_spec(spec)),
-        crate::app::DualSelection::Second => state
-            .builder_model_specs
-            .get(1)
-            .map(|spec| Config::display_model_spec(spec)),
-        crate::app::DualSelection::Third => state
-            .builder_model_specs
-            .get(2)
-            .map(|spec| Config::display_model_spec(spec)),
-        crate::app::DualSelection::Both => Some("Dual Pipeline".to_string()),
-    }
-}
-
-fn dual_toggle_label(state: &AppState) -> (Color, String) {
-    use crate::app::DualSelection;
-
-    match state.dual_selection {
-        DualSelection::Off => (state.tui_theme.muted, " dual".to_string()),
-        DualSelection::First => (
-            state.tui_theme.accent,
-            format!(
-                " {}",
-                state
-                    .builder_model_specs
-                    .first()
-                    .map(|spec| short_model_spec(spec))
-                    .unwrap_or_default()
-            ),
-        ),
-        DualSelection::Second => (
-            state.tui_theme.accent,
-            format!(
-                " {}",
-                state
-                    .builder_model_specs
-                    .get(1)
-                    .map(|spec| short_model_spec(spec))
-                    .unwrap_or_default()
-            ),
-        ),
-        DualSelection::Third => (
-            state.tui_theme.accent,
-            format!(
-                " {}",
-                state
-                    .builder_model_specs
-                    .get(2)
-                    .map(|spec| short_model_spec(spec))
-                    .unwrap_or_default()
-            ),
-        ),
-        DualSelection::Both => {
-            let first = state
-                .builder_model_specs
-                .first()
-                .map(|spec| short_model_spec(spec))
-                .unwrap_or_default();
-            let second = state
-                .builder_model_specs
-                .get(1)
-                .map(|spec| short_model_spec(spec))
-                .unwrap_or_default();
-            (state.tui_theme.accent, format!(" {first}+{second}"))
-        }
-    }
-}
 
 pub(super) fn render_header(frame: &mut Frame, area: Rect, state: &AppState) {
-    let desc_width = area.width.saturating_sub(10) as usize;
+    // Label for the "Current Task" table row -- all status lines align after this width.
+    const TASK_LABEL: &str = "  Current Task  ";
+    const NEXT_LABEL: &str = "  Next Task     ";
+    let label_len = TASK_LABEL.len();
+    let desc_width = area.width.saturating_sub(label_len as u16) as usize;
     let task_line = if let Some(ref task) = state.current_task {
-        format!("  {} — {}", task.id, task.short_desc(desc_width))
+        format!("{} — {}", task.id, task.short_desc(desc_width))
     } else if let Some(ref planning) = state.planning {
         if planning.orchestrator_mode {
             let iter_label = if planning.orchestrator_iteration > 0 {
@@ -251,12 +171,20 @@ pub(super) fn render_header(frame: &mut Frame, area: Rect, state: &AppState) {
                     .add_modifier(Modifier::BOLD),
             ),
         ]),
-        Line::from(Span::styled(
-            task_line,
-            Style::default()
-                .fg(state.tui_theme.text)
-                .add_modifier(Modifier::BOLD),
-        )),
+        if state.current_task.is_some() {
+            Line::from(vec![
+                Span::styled(TASK_LABEL, Style::default().fg(state.tui_theme.muted)),
+                Span::styled(
+                    task_line.clone(),
+                    Style::default().fg(state.tui_theme.text).add_modifier(Modifier::BOLD),
+                ),
+            ])
+        } else {
+            Line::from(Span::styled(
+                task_line.clone(),
+                Style::default().fg(state.tui_theme.text).add_modifier(Modifier::BOLD),
+            ))
+        },
         {
             let mut agent_spans = vec![Span::styled(
                 &agent_line,
@@ -278,7 +206,7 @@ pub(super) fn render_header(frame: &mut Frame, area: Rect, state: &AppState) {
         },
     ];
 
-    if let Some(label) = dual_mode_badge_label(state) {
+    if let Some(label) = state.active_builder_label() {
         header_text[0].spans.push(Span::raw("  "));
         header_text[0].spans.push(Span::styled(
             format!(" {label} "),
@@ -347,13 +275,14 @@ pub(super) fn render_header(frame: &mut Frame, area: Rect, state: &AppState) {
     }
 
     if let Some(next_task) = state.next_task_hint.as_ref() {
-        header_text.push(Line::from(Span::styled(
-            format!(
-                "  Next: {}",
-                truncate_str(next_task, area.width.saturating_sub(10) as usize)
+        let content_width = area.width.saturating_sub(label_len as u16) as usize;
+        header_text.push(Line::from(vec![
+            Span::styled(NEXT_LABEL, Style::default().fg(state.tui_theme.muted)),
+            Span::styled(
+                truncate_str(next_task, content_width).to_string(),
+                Style::default().fg(state.tui_theme.info).add_modifier(Modifier::BOLD),
             ),
-            Style::default().fg(state.tui_theme.info),
-        )));
+        ]));
     }
 
     // Log line removed from header -- the agent name + timer on line 3 already
@@ -977,14 +906,6 @@ pub(super) fn render_status_bar(frame: &mut Frame, area: Rect, state: &AppState)
         ),
         Span::raw(" stats  "),
         Span::styled(
-            " ^T ",
-            Style::default()
-                .fg(Color::Black)
-                .bg(state.tui_theme.muted)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::raw(" theme"),
-        Span::styled(
             "  ? ",
             Style::default()
                 .fg(Color::Black)
@@ -993,16 +914,6 @@ pub(super) fn render_status_bar(frame: &mut Frame, area: Rect, state: &AppState)
         ),
         Span::raw(" settings"),
     ];
-
-    let (dual_bg, dual_label) = dual_toggle_label(state);
-    spans.push(Span::styled(
-        "  ^D ",
-        Style::default()
-            .fg(Color::Black)
-            .bg(dual_bg)
-            .add_modifier(Modifier::BOLD),
-    ));
-    spans.push(Span::raw(dual_label));
 
     if state.awaiting_commit_approval {
         spans.push(Span::styled(

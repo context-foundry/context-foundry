@@ -860,7 +860,7 @@ fn centered_rect(width: u16, height: u16, area: Rect) -> Rect {
 /// Render a floating settings overlay on top of whatever is already drawn.
 pub(super) fn render_settings_overlay(frame: &mut Frame, state: &AppState) {
     let theme = &state.tui_theme;
-    let modal = centered_rect(50, 16, frame.area());
+    let modal = centered_rect(50, 14, frame.area());
 
     // Shadow: 1 col right + 1 row down
     let shadow = Rect {
@@ -918,17 +918,38 @@ pub(super) fn render_settings_overlay(frame: &mut Frame, state: &AppState) {
     let run_mode_val = &state.run_mode;
     let theme_val = crate::tui::theme::current_name(&state.tui_theme);
     let sandbox_val = &state.sandbox_status_label;
-    let local_model_val: &str = if state.selected_local_model.is_empty() {
-        "(none)"
-    } else {
-        &state.selected_local_model
+
+    // Unified builder list (mirrors build_unified_builders in app.rs)
+    let unified_builders = {
+        let specs = &state.builder_model_specs;
+        let mut list: Vec<String> = specs.iter()
+            .map(|s| Config::readable_spec(s))
+            .collect();
+        if specs.len() >= 2 {
+            let combined = list.iter()
+                .take(specs.len())
+                .cloned()
+                .collect::<Vec<_>>()
+                .join("/");
+            list.push(combined);
+        }
+        for m in &state.local_models {
+            if !list.contains(m) {
+                list.push(m.clone());
+            }
+        }
+        list
     };
+    let builder_val: &str = unified_builders
+        .get(state.builder_cursor)
+        .map(|s| s.as_str())
+        .unwrap_or("(default)");
 
     // Rows indexed within inner area
     // 0: spacer
     // 1: run_mode (cursor 0)
     // 2: spacer
-    // 3: dual_selection (cursor 1)
+    // 3: builder (cursor 1)
     // 4: spacer
     // 5: theme (cursor 2)
     // 6: spacer
@@ -939,16 +960,16 @@ pub(super) fn render_settings_overlay(frame: &mut Frame, state: &AppState) {
     // 11: hint bar
 
     let rows: &[(usize, bool, &str, &str)] = &[
-        (1, true,  "Run Mode",      run_mode_val),
-        (3, true,  "Builder Arena", local_model_val),
-        (5, true,  "Theme",         theme_val),
+        (1, true, "Run Mode", run_mode_val),
+        (3, true, "Builder",  builder_val),
+        (5, true, "Theme",    theme_val),
     ];
 
     for (row_y, interactive, label, val) in rows {
         let cursor_idx = match *label {
-            "Run Mode"     => 0,
-            "Builder Arena" => 1,
-            _              => 2,
+            "Run Mode" => 0,
+            "Builder"  => 1,
+            _          => 2,
         };
         let focused = *interactive && state.settings_overlay_cursor == cursor_idx;
         let cursor_str = if focused { "> " } else { "  " };
@@ -1020,26 +1041,12 @@ pub(super) fn render_settings_overlay(frame: &mut Frame, state: &AppState) {
     // Hint bar (row 11)
     frame.render_widget(
         Paragraph::new(Line::from(Span::styled(
-            "  \u{2191}\u{2193} move   Enter/Space cycle   Esc close",
+            "  \u{2191}\u{2193} move   \u{2190}\u{2192}/Enter cycle   Esc close",
             Style::default().fg(theme.muted),
         ))),
         Rect {
             x: inner.x,
             y: inner.y + 11,
-            width: inner.width,
-            height: 1,
-        },
-    );
-
-    // Left/Right hint (row 13)
-    frame.render_widget(
-        Paragraph::new(Line::from(Span::styled(
-            "  \u{2190}\u{2192} cycle selection on focused row",
-            Style::default().fg(theme.muted),
-        ))),
-        Rect {
-            x: inner.x,
-            y: inner.y + 13,
             width: inner.width,
             height: 1,
         },

@@ -83,9 +83,11 @@ pub struct RunningPaneRects {
     pub task_queue: Rect,
     pub patterns: Rect,
     pub extensions_used: Option<Rect>,
+    /// Terminal column of the vertical separator between agent and task-queue panes.
+    pub separator_col: u16,
 }
 
-pub fn running_layout(area: Rect, has_extensions: bool) -> RunningPaneRects {
+pub fn running_layout(area: Rect, has_extensions: bool, split_pct: u16) -> RunningPaneRects {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -97,11 +99,14 @@ pub fn running_layout(area: Rect, has_extensions: bool) -> RunningPaneRects {
         ])
         .split(area);
 
+    let left_pct = split_pct.clamp(20, 80);
+    let right_pct = 100 - left_pct;
     let middle_cols = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
+        .constraints([Constraint::Percentage(left_pct), Constraint::Percentage(right_pct)])
         .split(chunks[2]);
 
+    let sep = middle_cols[1].x;
     if has_extensions {
         let right_panel = Layout::default()
             .direction(Direction::Vertical)
@@ -116,6 +121,7 @@ pub fn running_layout(area: Rect, has_extensions: bool) -> RunningPaneRects {
             task_queue: right_panel[0],
             patterns: right_panel[1],
             extensions_used: Some(right_panel[2]),
+            separator_col: sep,
         }
     } else {
         let right_panel = Layout::default()
@@ -127,6 +133,7 @@ pub fn running_layout(area: Rect, has_extensions: bool) -> RunningPaneRects {
             task_queue: right_panel[0],
             patterns: right_panel[1],
             extensions_used: None,
+            separator_col: sep,
         }
     }
 }
@@ -146,10 +153,11 @@ pub fn render(frame: &mut Frame, state: &AppState, config: &Config) {
     running::render_header(frame, chunks[0], state);
     pipeline::render_pipeline_map(frame, chunks[1], state, config);
 
-    // Middle: split horizontally 60/40
+    // Middle: split horizontally per user-adjustable split percentage
+    let left_pct = state.agent_pane_split.clamp(20, 80);
     let middle_cols = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
+        .constraints([Constraint::Percentage(left_pct), Constraint::Percentage(100 - left_pct)])
         .split(chunks[2]);
     running::render_agent_output(frame, middle_cols[0], state, state.focused_pane);
 

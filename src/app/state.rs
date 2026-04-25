@@ -344,6 +344,7 @@ pub struct AppState {
     pub local_models: Vec<String>,       // discovered models (LM Studio + Ollama merged)
     pub local_model_cursor: usize,       // index into local_models for current selection
     pub selected_local_model: String,    // persisted selection, from config or cycling
+    pub builder_cursor: usize,           // index into unified builder list (specs + local)
     pub stats_overlay_report: Option<StatsReport>,
     pub stats_overlay_scroll: usize,
     pub findings_scroll: usize,
@@ -417,6 +418,12 @@ pub struct AppState {
     /// arrived while another approval was already being shown to the user.
     pub(super) pending_approvals: VecDeque<(String, String, String)>,
     pub(super) event_tx: Option<tokio::sync::mpsc::UnboundedSender<AppEvent>>,
+    /// Percentage of the middle row given to the agent output pane (default 60, range 20-80).
+    pub agent_pane_split: u16,
+    /// True while the user is dragging the agent/task-queue vertical separator.
+    pub dragging_split: bool,
+    /// Timestamp of the last scroll event, used to compute velocity multiplier.
+    pub last_scroll_at: Option<std::time::Instant>,
 }
 
 impl AppState {
@@ -467,6 +474,7 @@ impl AppState {
             local_models: Vec::new(),
             local_model_cursor: 0,
             selected_local_model: String::new(),
+            builder_cursor: 0,
             stats_overlay_report: None,
             stats_overlay_scroll: 0,
             findings_scroll: 0,
@@ -528,6 +536,9 @@ impl AppState {
             pending_approvals: VecDeque::new(),
             event_tx: None,
             stats_loading: false,
+            agent_pane_split: 60,
+            dragging_split: false,
+            last_scroll_at: None,
         }
     }
 
@@ -607,6 +618,42 @@ impl AppState {
             .filter(|e| e.selected)
             .map(|e| e.name.clone())
             .collect()
+    }
+
+    /// Returns the human-readable badge label for the currently selected builder.
+    /// Local models are shown with a "~" prefix to distinguish them from active pipeline specs
+    /// (local model routing is not yet wired to the agent pipeline).
+    pub fn active_builder_label(&self) -> Option<String> {
+        use crate::config::Config;
+        let mut list: Vec<String> = self
+            .builder_model_specs
+            .iter()
+            .map(|s| Config::readable_spec(s))
+            .collect();
+        let spec_count = list.len();
+        if spec_count >= 2 {
+            let combined = list
+                .iter()
+                .take(spec_count)
+                .cloned()
+                .collect::<Vec<_>>()
+                .join("/");
+            list.push(combined);
+        }
+        let local_start = list.len();
+        for m in &self.local_models {
+            if !list.contains(m) {
+                list.push(m.clone());
+            }
+        }
+        let cursor = self.builder_cursor.min(list.len().saturating_sub(1));
+        list.into_iter().enumerate().nth(cursor).map(|(i, label)| {
+            if i >= local_start {
+                format!("~{label}")
+            } else {
+                label
+            }
+        })
     }
 }
 

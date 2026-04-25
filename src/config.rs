@@ -482,7 +482,7 @@ impl Default for Config {
             batch_doubt: true,
             extensions: Vec::new(),
             create_issue_on_wip: false,
-            preview_wrap: true,
+            preview_wrap: false,
             pr_poll_interval_secs: 30,
             theme: "dark".into(),
             truecolor: None,
@@ -830,9 +830,35 @@ impl Config {
         }
     }
 
-    pub fn display_model_spec(spec: &str) -> String {
+    /// Expand a short model tier ("opus", "sonnet", "haiku") to its full model ID.
+    /// Returns the input unchanged if it's already a full ID or unrecognized.
+    pub fn expand_model_tier(model: &str) -> &'static str {
+        match model {
+            "opus"   => "claude-opus-4-7",
+            "sonnet" => "claude-sonnet-4-6",
+            "haiku"  => "claude-haiku-4-5",
+            _        => "",
+        }
+    }
+
+    /// Human-readable label for a spec string, expanding tier names to full IDs.
+    /// "claude:opus"           -> "claude-opus-4-7"  (provider prefix dropped, tier expanded)
+    /// "codex:"                -> "codex"
+    /// "claude:claude-opus-4-7" -> "claude-opus-4-7" (already full, provider prefix dropped)
+    pub fn readable_spec(spec: &str) -> String {
         let (provider, model) = Self::parse_model_spec(spec);
-        Self::display_provider_model(&provider, &model)
+        if model.is_empty() {
+            // e.g. "codex:" -> "codex"
+            return provider;
+        }
+        let expanded = Self::expand_model_tier(&model);
+        let effective_model = if expanded.is_empty() { model.as_str() } else { expanded };
+        // Drop the provider prefix when it's redundant (model ID already starts with provider name)
+        if effective_model.starts_with(&provider) || provider == "claude" {
+            effective_model.to_string()
+        } else {
+            format!("{provider}:{effective_model}")
+        }
     }
 
     /// Persist the preview wrap preference to .foundry.json without

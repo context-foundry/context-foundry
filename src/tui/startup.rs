@@ -1,6 +1,6 @@
 use std::time::SystemTime;
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Local};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -322,72 +322,16 @@ fn render_startup_summary(frame: &mut Frame, area: Rect, state: &AppState) {
                     .bg(state.tui_theme.surface)
                     .add_modifier(Modifier::BOLD),
             ),
-            match state.dual_selection {
-                crate::app::DualSelection::Off => Span::raw(""),
-                crate::app::DualSelection::First => {
-                    let (p, m) = crate::config::Config::parse_model_spec(
-                        state
-                            .builder_model_specs
-                            .first()
-                            .map(|s| s.as_str())
-                            .unwrap_or(""),
-                    );
-                    Span::styled(
-                        format!(
-                            "  {} ",
-                            crate::config::Config::display_provider_model(&p, &m)
-                        ),
-                        Style::default()
-                            .fg(Color::Black)
-                            .bg(state.tui_theme.accent)
-                            .add_modifier(Modifier::BOLD),
-                    )
-                }
-                crate::app::DualSelection::Second => {
-                    let (p, m) = crate::config::Config::parse_model_spec(
-                        state
-                            .builder_model_specs
-                            .get(1)
-                            .map(|s| s.as_str())
-                            .unwrap_or(""),
-                    );
-                    Span::styled(
-                        format!(
-                            "  {} ",
-                            crate::config::Config::display_provider_model(&p, &m)
-                        ),
-                        Style::default()
-                            .fg(Color::Black)
-                            .bg(state.tui_theme.accent)
-                            .add_modifier(Modifier::BOLD),
-                    )
-                }
-                crate::app::DualSelection::Third => {
-                    let (p, m) = crate::config::Config::parse_model_spec(
-                        state
-                            .builder_model_specs
-                            .get(2)
-                            .map(|s| s.as_str())
-                            .unwrap_or(""),
-                    );
-                    Span::styled(
-                        format!(
-                            "  {} ",
-                            crate::config::Config::display_provider_model(&p, &m)
-                        ),
-                        Style::default()
-                            .fg(Color::Black)
-                            .bg(state.tui_theme.accent)
-                            .add_modifier(Modifier::BOLD),
-                    )
-                }
-                crate::app::DualSelection::Both => Span::styled(
-                    "  Dual Pipeline ",
+            if let Some(label) = state.active_builder_label() {
+                Span::styled(
+                    format!("  {label} "),
                     Style::default()
                         .fg(Color::Black)
                         .bg(state.tui_theme.accent)
                         .add_modifier(Modifier::BOLD),
-                ),
+                )
+            } else {
+                Span::raw("")
             },
         ]),
         Line::from(Span::styled(
@@ -503,7 +447,7 @@ fn format_file_size(bytes: u64) -> String {
 fn format_modified(t: Option<SystemTime>) -> String {
     match t {
         Some(st) => {
-            let dt: DateTime<Utc> = st.into();
+            let dt: DateTime<Local> = st.into();
             dt.format("%Y-%m-%d").to_string()
         }
         None => String::new(),
@@ -1045,90 +989,6 @@ pub(super) fn render_startup_status_bar(frame: &mut Frame, area: Rect, state: &A
         " dashboard"
     }));
     spans.push(Span::styled(
-        "  ^M ",
-        Style::default()
-            .fg(Color::Black)
-            .bg(match state.run_mode.as_str() {
-                "sprint" => Color::Cyan,
-                "review" => Color::Yellow,
-                _ => Color::Green,
-            })
-            .add_modifier(Modifier::BOLD),
-    ));
-    spans.push(Span::raw(match state.run_mode.as_str() {
-        "auto" => " sprint",
-        "sprint" => " review",
-        _ => " auto",
-    }));
-    // Dual-pipeline toggle
-    {
-        use crate::app::DualSelection;
-        let short = |spec: &str| -> String {
-            let (p, m) = crate::config::Config::parse_model_spec(spec);
-            if m.is_empty() {
-                p
-            } else {
-                format!("{p}:{m}")
-            }
-        };
-        let (bg, label) = match state.dual_selection {
-            DualSelection::Off => (state.tui_theme.muted, " dual".to_string()),
-            DualSelection::First => {
-                let s = state
-                    .builder_model_specs
-                    .first()
-                    .map(|s| short(s))
-                    .unwrap_or_default();
-                (state.tui_theme.accent, format!(" {s}"))
-            }
-            DualSelection::Second => {
-                let s = state
-                    .builder_model_specs
-                    .get(1)
-                    .map(|s| short(s))
-                    .unwrap_or_default();
-                (state.tui_theme.accent, format!(" {s}"))
-            }
-            DualSelection::Third => {
-                let s = state
-                    .builder_model_specs
-                    .get(2)
-                    .map(|s| short(s))
-                    .unwrap_or_default();
-                (state.tui_theme.accent, format!(" {s}"))
-            }
-            DualSelection::Both => {
-                let s0 = state
-                    .builder_model_specs
-                    .first()
-                    .map(|s| short(s))
-                    .unwrap_or_default();
-                let s1 = state
-                    .builder_model_specs
-                    .get(1)
-                    .map(|s| short(s))
-                    .unwrap_or_default();
-                (state.tui_theme.accent, format!(" {s0}+{s1}"))
-            }
-        };
-        spans.push(Span::styled(
-            "  ^D ",
-            Style::default()
-                .fg(Color::Black)
-                .bg(bg)
-                .add_modifier(Modifier::BOLD),
-        ));
-        spans.push(Span::raw(label));
-    }
-    spans.push(Span::styled(
-        "  ^T ",
-        Style::default()
-            .fg(Color::Black)
-            .bg(state.tui_theme.muted)
-            .add_modifier(Modifier::BOLD),
-    ));
-    spans.push(Span::raw(" theme"));
-    spans.push(Span::styled(
         "  ? ",
         Style::default()
             .fg(Color::Black)
@@ -1350,7 +1210,7 @@ mod tests {
             file_preview_content: vec!["content line".to_string()],
             file_preview_scroll: 0,
             placeholder_tick: 0,
-            preview_wrap: true,
+            preview_wrap: false,
         };
         state.startup = Some(startup);
 
