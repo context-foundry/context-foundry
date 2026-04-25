@@ -29,7 +29,7 @@ pub use self::state::{
     AppPhase, AppState, DualSelection, ExtensionDisplayInfo, PatternEventKind, PlanStatus,
     PlanningState, StartupAction, StartupScenario, StartupState, TuiPane,
 };
-use crate::agent::{AgentOutputEvent, AgentRole};
+use crate::agent::{AgentErrorKind, AgentOutputEvent, AgentRole};
 use crate::config::Config;
 use crate::git;
 use crate::orchestrator::{self, OrchestratorConfig, OrchestratorOutcome};
@@ -242,6 +242,28 @@ fn apply_builder_selection(state: &mut AppState, value: &str) {
         state.selected_local_model = value.to_string();
         Config::save_local_model(&dir, value);
         Config::save_builder_routing(&dir, "opencode", &model_path);
+        // After persisting the new local-model routing, re-validate that the
+        // newly required provider CLI(s) are available. Surface the result via
+        // state.log so the user finds out before pressing Run, not at first
+        // agent invocation.
+        let reloaded = Config::load(&dir);
+        match commands::ensure_required_providers_available(
+            &reloaded,
+            commands::ProviderCommandMode::Run,
+        ) {
+            Ok(()) => {
+                state.log(format!(
+                    "Builder set to opencode/{}; required provider CLIs are available.",
+                    model_path
+                ));
+            }
+            Err(e) => {
+                state.log(format!(
+                    "Builder set to opencode/{} but provider validation failed: {}",
+                    model_path, e
+                ));
+            }
+        }
         return;
     }
     // Combined entry (specs joined with "/") -- set to Both
@@ -2646,6 +2668,32 @@ fn refresh_patterns_cache(state: &mut AppState, config: &Config) {
     state.patterns_dir_cache = Some(dir);
 }
 
+fn format_agent_error(kind: &AgentErrorKind) -> String {
+    match kind {
+        AgentErrorKind::ContextOverflow { tokens, ctx_size } => match (tokens, ctx_size) {
+            (Some(t), Some(c)) => format!(
+                "LM Studio context overflow: prompt was {} tokens but the loaded model has only n_ctx={}. Reload the model in LM Studio with a larger context size.",
+                t, c
+            ),
+            _ => "LM Studio context overflow: the prompt exceeded the loaded model's n_ctx. Reload the model with a larger context size in LM Studio.".to_string(),
+        },
+        AgentErrorKind::ProviderUnreachable { url } => match url {
+            Some(u) => format!(
+                "Provider unreachable at {}. Confirm LM Studio is running and listening on the expected port.",
+                u
+            ),
+            None => "Provider unreachable: failed to connect. Confirm LM Studio is running and listening on the expected port (default 127.0.0.1:1234).".to_string(),
+        },
+        AgentErrorKind::ModelNotLoaded { model } => match model {
+            Some(m) => format!(
+                "Model not loaded: '{}'. Load this model in LM Studio (or pick a different one in foundry settings).",
+                m
+            ),
+            None => "Model not loaded: the requested model is not available in LM Studio. Load it (or pick a different one in foundry settings).".to_string(),
+        },
+    }
+}
+
 fn handle_agent_output(state: &mut AppState, output: AgentOutputEvent) {
     state.events_received += 1;
     match output {
@@ -2760,6 +2808,13 @@ fn handle_agent_output(state: &mut AppState, output: AgentOutputEvent) {
                 }
             }
         }
+        AgentOutputEvent::Error { kind, raw } => {
+            let display = format_agent_error(&kind);
+            state.agent_output.push(format!("[error] {}", display));
+            state.agent_output.push(format!("[error/raw] {}", raw));
+            state.log(format!("Agent error: {}", display));
+            state.status_summary = display;
+        }
     }
     if state.agent_output.len() > AGENT_OUTPUT_CAP {
         let excess = state.agent_output.len() - AGENT_OUTPUT_CAP;
@@ -2844,6 +2899,11 @@ fn handle_dual_build_output(state: &mut AppState, idx: usize, output: AgentOutpu
                     state.dual_build.context_pcts[idx][slot] = Some(pct);
                 }
             }
+        }
+        AgentOutputEvent::Error { kind, raw } => {
+            let display = format_agent_error(kind);
+            state.dual_build.streams[idx].push(format!("[error] {}", display));
+            state.dual_build.streams[idx].push(format!("[error/raw] {}", raw));
         }
     }
 

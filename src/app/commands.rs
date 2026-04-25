@@ -441,6 +441,9 @@ pub(super) async fn run_headless(project_dir: &Path, output_format: Option<Strin
                     println!("{}", text);
                 }
             }
+            AppEvent::AgentOutput(AgentOutputEvent::Error { kind, raw }) => {
+                eprintln!("[error/{:?}] {}", kind, raw);
+            }
             AppEvent::AgentOutput(AgentOutputEvent::Usage { cost_usd, .. }) => {
                 eprintln!("[cost] ${:.2}", cost_usd);
             }

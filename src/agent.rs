@@ -13,6 +13,7 @@ use crate::config::Config;
 use crate::prompts::agent_system_directives;
 use crate::tmux::TmuxSession;
 use crate::utils::truncate_str;
+use regex::Regex;
 use tokio::sync::mpsc;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -116,6 +117,31 @@ pub fn allowed_tools_for_role(role: &AgentRole) -> &'static [&'static str] {
     }
 }
 
+/// Typed agent error kinds detected from provider stderr or JSON error events.
+/// Surfaced via AgentOutputEvent::Error so the TUI can show actionable messages
+/// instead of raw stderr blobs that the user cannot diagnose.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AgentErrorKind {
+    /// Prompt exceeded the model's available context window.
+    /// `tokens` is the requested prompt token count if parseable,
+    /// `ctx_size` is the model's configured n_ctx if parseable.
+    ContextOverflow {
+        tokens: Option<u64>,
+        ctx_size: Option<u64>,
+    },
+    /// The provider HTTP endpoint refused the connection (LM Studio not running,
+    /// wrong port, etc.). `url` is best-effort extracted from the error text.
+    ProviderUnreachable {
+        url: Option<String>,
+    },
+    /// The provider responded but reported the requested model is not loaded
+    /// (e.g. LM Studio /v1/models 404 or "model not loaded" in stderr).
+    /// `model` is the model name the agent was invoked with, when known.
+    ModelNotLoaded {
+        model: Option<String>,
+    },
+}
+
 /// Parsed events from claude's stream-json output.
 #[derive(Debug, Clone)]
 pub enum AgentOutputEvent {
@@ -138,6 +164,10 @@ pub enum AgentOutputEvent {
         cache_creation_tokens: u64,
         cache_read_tokens: u64,
     },
+    /// A typed error detected from provider output. Both `kind` and `raw` are
+    /// preserved -- the TUI shows the typed message; `raw` is kept for the log
+    /// panel and for verification.
+    Error { kind: AgentErrorKind, raw: String },
 }
 
 pub struct AgentResult {
@@ -1746,7 +1776,18 @@ fn read_provider_output(
                 let cleaned = strip_ansi(line);
                 if !cleaned.is_empty() && !is_api_noise(&cleaned) {
                     note_provider_stderr_line(provider, &cleaned, progress);
-                    if tx.send(AgentOutputEvent::Stderr(cleaned)).is_err() {
+                    let to_send = if provider == ModelProvider::OpenCode {
+                        match classify_agent_error(&cleaned, model_name) {
+                            Some(kind) => AgentOutputEvent::Error {
+                                kind,
+                                raw: cleaned,
+                            },
+                            None => AgentOutputEvent::Stderr(cleaned),
+                        }
+                    } else {
+                        AgentOutputEvent::Stderr(cleaned)
+                    };
+                    if tx.send(to_send).is_err() {
                         return;
                     }
                 }
@@ -2267,6 +2308,61 @@ fn parse_codex_event(line: &str, model_name: &str) -> Option<AgentOutputEvent> {
     None
 }
 
+/// Scan one line of provider output text and return a typed error kind when the
+/// line matches a known LM Studio / OpenCode failure pattern. Returns `None`
+/// otherwise so callers fall back to the existing Stderr passthrough.
+fn classify_agent_error(text: &str, model_name: &str) -> Option<AgentErrorKind> {
+    let lower = text.to_ascii_lowercase();
+
+    // Priority 1: context overflow with token counts.
+    let overflow_re = Regex::new(
+        r"request\s*\(?\s*(\d+)\s*tokens?\)?\s+exceeds the available context size\s*\(?\s*(\d+)\s*tokens?\)?",
+    )
+    .unwrap();
+    if let Some(caps) = overflow_re.captures(text) {
+        let tokens = caps.get(1).and_then(|m| m.as_str().parse::<u64>().ok());
+        let ctx_size = caps.get(2).and_then(|m| m.as_str().parse::<u64>().ok());
+        return Some(AgentErrorKind::ContextOverflow { tokens, ctx_size });
+    }
+    if lower.contains("exceeds the available context size") || lower.contains("n_ctx_slot") {
+        return Some(AgentErrorKind::ContextOverflow {
+            tokens: None,
+            ctx_size: None,
+        });
+    }
+
+    // Priority 2: provider unreachable.
+    if lower.contains("connection refused")
+        || lower.contains("econnrefused")
+        || lower.contains("failed to connect")
+        || lower.contains("connect: connection refused")
+    {
+        let url_re = Regex::new(r#"https?://[^\s'"<>]+"#).unwrap();
+        let url = url_re.find(text).map(|m| {
+            m.as_str()
+                .trim_end_matches(['.', ',', ';', ')', ']', '}'])
+                .to_string()
+        });
+        return Some(AgentErrorKind::ProviderUnreachable { url });
+    }
+
+    // Priority 3: model not loaded.
+    if lower.contains("model not loaded")
+        || lower.contains("no model loaded")
+        || (lower.contains("404") && lower.contains("/v1/models"))
+        || lower.contains("model_not_found")
+    {
+        let model = if model_name.is_empty() {
+            None
+        } else {
+            Some(model_name.to_string())
+        };
+        return Some(AgentErrorKind::ModelNotLoaded { model });
+    }
+
+    None
+}
+
 fn parse_opencode_event(line: &str, model_name: &str) -> Option<AgentOutputEvent> {
     let v: Value = serde_json::from_str(line).ok()?;
     let kind = v
@@ -2330,6 +2426,12 @@ fn parse_opencode_event(line: &str, model_name: &str) -> Option<AgentOutputEvent
     if is_error {
         let text = extract_string_by_keys(&v, &["message", "error", "text", "detail", "summary"])
             .unwrap_or_else(|| line.to_string());
+        if let Some(error_kind) = classify_agent_error(&text, model_name) {
+            return Some(AgentOutputEvent::Error {
+                kind: error_kind,
+                raw: text,
+            });
+        }
         return Some(AgentOutputEvent::Stderr(text));
     }
 
@@ -3843,6 +3945,9 @@ mod tests {
                 Some(AgentOutputEvent::Usage { .. }) => {
                     panic!("Usage is emitted via thread-local, not as a returned event")
                 }
+                Some(AgentOutputEvent::Error { .. }) => {
+                    panic!("fixture has no typed-error lines")
+                }
                 None => {} // session.start is suppressed -> None
             }
         }
@@ -3863,5 +3968,110 @@ mod tests {
         let u = usage.unwrap();
         assert_eq!(u.input_tokens, 1234);
         assert_eq!(u.output_tokens, 56);
+    }
+
+    #[test]
+    fn error_classification_context_overflow_with_token_counts() {
+        let text =
+            "request (8192 tokens) exceeds the available context size (4096 tokens)";
+        match classify_agent_error(text, "lmstudio/qwen3.6-35b-a3b") {
+            Some(AgentErrorKind::ContextOverflow { tokens, ctx_size }) => {
+                assert_eq!(tokens, Some(8192));
+                assert_eq!(ctx_size, Some(4096));
+            }
+            other => panic!("expected ContextOverflow, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn error_classification_context_overflow_n_ctx_slot_only() {
+        let text = "n_ctx_slot: prompt is too large for slot n_ctx=4096";
+        match classify_agent_error(text, "lmstudio/qwen3.6-35b-a3b") {
+            Some(AgentErrorKind::ContextOverflow { tokens, ctx_size }) => {
+                assert_eq!(tokens, None);
+                assert_eq!(ctx_size, None);
+            }
+            other => panic!("expected ContextOverflow without numbers, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn error_classification_provider_unreachable_econnrefused() {
+        let text = "Error: connect ECONNREFUSED 127.0.0.1:1234 at http://127.0.0.1:1234/v1/chat/completions";
+        match classify_agent_error(text, "lmstudio/qwen3.6-35b-a3b") {
+            Some(AgentErrorKind::ProviderUnreachable { url }) => {
+                assert_eq!(
+                    url.as_deref(),
+                    Some("http://127.0.0.1:1234/v1/chat/completions")
+                );
+            }
+            other => panic!("expected ProviderUnreachable, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn error_classification_provider_unreachable_no_url() {
+        let text = "failed to connect to upstream";
+        match classify_agent_error(text, "lmstudio/qwen3.6-35b-a3b") {
+            Some(AgentErrorKind::ProviderUnreachable { url }) => {
+                assert_eq!(url, None);
+            }
+            other => panic!("expected ProviderUnreachable, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn error_classification_model_not_loaded() {
+        let text = "model not loaded: please load a model in LM Studio";
+        match classify_agent_error(text, "lmstudio/qwen3.6-35b-a3b") {
+            Some(AgentErrorKind::ModelNotLoaded { model }) => {
+                assert_eq!(model.as_deref(), Some("lmstudio/qwen3.6-35b-a3b"));
+            }
+            other => panic!("expected ModelNotLoaded, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn error_classification_404_v1_models() {
+        let text = "GET /v1/models -> 404 not found";
+        match classify_agent_error(text, "lmstudio/foo") {
+            Some(AgentErrorKind::ModelNotLoaded { model }) => {
+                assert_eq!(model.as_deref(), Some("lmstudio/foo"));
+            }
+            other => panic!("expected ModelNotLoaded for 404 /v1/models, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn error_classification_unrelated_text_returns_none() {
+        let text = "Reading file src/main.rs";
+        assert!(classify_agent_error(text, "lmstudio/foo").is_none());
+    }
+
+    #[test]
+    fn error_classification_empty_model_name_yields_none_model() {
+        let text = "no model loaded";
+        match classify_agent_error(text, "") {
+            Some(AgentErrorKind::ModelNotLoaded { model }) => assert_eq!(model, None),
+            other => panic!("expected ModelNotLoaded with None model, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn opencode_event_parser_emits_typed_error_for_context_overflow() {
+        LAST_RESULT_USAGE.with(|c| c.set(None));
+        let line = r#"{"type":"error","message":"request (8192 tokens) exceeds the available context size (4096 tokens)"}"#;
+        let event = parse_opencode_event(line, "lmstudio/qwen3.6-35b-a3b");
+        match event {
+            Some(AgentOutputEvent::Error {
+                kind: AgentErrorKind::ContextOverflow { tokens, ctx_size },
+                raw,
+            }) => {
+                assert_eq!(tokens, Some(8192));
+                assert_eq!(ctx_size, Some(4096));
+                assert!(raw.contains("exceeds the available context size"));
+            }
+            other => panic!("expected typed Error::ContextOverflow, got {:?}", other),
+        }
     }
 }
