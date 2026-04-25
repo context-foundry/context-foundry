@@ -5235,6 +5235,23 @@ async fn process_task(
                 commit_type: commit_type.to_string(),
             },
         );
+        if let Some(hook_cmd) = ctx
+            .config
+            .on_task_complete
+            .as_ref()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+        {
+            spawn_completion_hook(
+                hook_cmd,
+                task_id.to_string(),
+                task_desc.to_string(),
+                validated,
+                commit_sha.clone(),
+                ctx.project_dir.clone(),
+                tx.clone(),
+            );
+        }
     }
 
     // Emit TaskCompleted with aggregated task-level metrics
@@ -5556,6 +5573,52 @@ async fn run_pattern_extraction(
             }
         }
     }
+}
+
+fn spawn_completion_hook(
+    hook_command: String,
+    task_id: String,
+    task_desc: String,
+    validated: bool,
+    commit_sha: Option<String>,
+    project_dir: std::path::PathBuf,
+    tx: tokio::sync::mpsc::UnboundedSender<AppEvent>,
+) {
+    let status_str = if validated { "feat" } else { "WIP" };
+    let truncated_desc = crate::utils::truncate_str(&task_desc, 100).to_string();
+    let sha_str = commit_sha.unwrap_or_default();
+    tokio::spawn(async move {
+        let mut cmd = tokio::process::Command::new("sh");
+        cmd.arg("-c")
+            .arg(&hook_command)
+            .current_dir(&project_dir)
+            .env("FOUNDRY_TASK_ID", &task_id)
+            .env("FOUNDRY_TASK_STATUS", status_str)
+            .env("FOUNDRY_TASK_DESC", &truncated_desc)
+            .env("FOUNDRY_COMMIT_SHA", &sha_str)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null());
+        match cmd.status().await {
+            Ok(status) if status.success() => {}
+            Ok(status) => {
+                let code = status
+                    .code()
+                    .map(|c| c.to_string())
+                    .unwrap_or_else(|| "signal".to_string());
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BackgroundLog(format!(
+                    "on_task_complete hook exited non-zero ({}): {}",
+                    code, hook_command
+                ))));
+            }
+            Err(e) => {
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BackgroundLog(format!(
+                    "on_task_complete hook failed to spawn: {}: {}",
+                    hook_command, e
+                ))));
+            }
+        }
+    });
 }
 
 fn should_restart_docker(task_desc: &str) -> bool {

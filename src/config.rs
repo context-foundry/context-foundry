@@ -391,6 +391,14 @@ pub struct Config {
     /// Accepts either "pipeline_stages" or the shorter "stages" key.
     #[serde(alias = "stages")]
     pub pipeline_stages: Vec<PipelineStageConfig>,
+
+    /// Optional shell command run after each successful task commit.
+    /// Receives FOUNDRY_TASK_ID, FOUNDRY_TASK_STATUS (feat|WIP),
+    /// FOUNDRY_TASK_DESC (first 100 chars), FOUNDRY_COMMIT_SHA via env.
+    /// Runs fire-and-forget; non-zero exit logs a warning but does not block.
+    /// None (default) means no hook is invoked.
+    #[serde(default)]
+    pub on_task_complete: Option<String>,
 }
 
 impl Default for Config {
@@ -497,6 +505,7 @@ impl Default for Config {
             dashboard_port: 9400,
             doubt_engine: "claude".into(),
             pipeline_stages: default_pipeline_stages(),
+            on_task_complete: None,
         }
     }
 }
@@ -1790,5 +1799,28 @@ mod tests {
         assert!(c.pipeline_stage_enabled("plan"));
         assert!(c.pipeline_stage_enabled("implement"));
         assert!(c.pipeline_stage_enabled("doubt"));
+    }
+
+    #[test]
+    fn default_config_has_no_task_completion_hook() {
+        assert_eq!(Config::default().on_task_complete, None);
+    }
+
+    #[test]
+    fn config_deserializes_missing_on_task_complete_as_none() {
+        let config: Config = serde_json::from_str("{}").expect("config should deserialize");
+        assert_eq!(config.on_task_complete, None);
+    }
+
+    #[test]
+    fn config_deserializes_explicit_on_task_complete_string() {
+        let config: Config = serde_json::from_str(
+            r#"{"on_task_complete":"afplay /System/Library/Sounds/Glass.aiff"}"#,
+        )
+        .expect("config should deserialize");
+        assert_eq!(
+            config.on_task_complete.as_deref(),
+            Some("afplay /System/Library/Sounds/Glass.aiff"),
+        );
     }
 }
