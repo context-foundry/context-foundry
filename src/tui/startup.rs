@@ -26,6 +26,19 @@ const PLACEHOLDER_SUGGESTIONS: &[&str] = &[
     "Write comprehensive tests for...",
 ];
 
+/// Format a project directory path for display in the Files pane title.
+/// Replaces the home directory prefix with `~` and keeps the result short.
+pub(super) fn project_dir_label(path: &std::path::Path) -> String {
+    let home = std::env::var("HOME").unwrap_or_default();
+    let s = path.to_string_lossy();
+    let short = if !home.is_empty() && s.starts_with(&home) {
+        format!("~{}", &s[home.len()..])
+    } else {
+        s.into_owned()
+    };
+    short
+}
+
 pub enum StartupMouseTarget {
     FileEntry(usize),
     PreviewLine,
@@ -459,6 +472,8 @@ fn render_file_explorer(frame: &mut Frame, area: Rect, state: &AppState) {
         return;
     };
     let theme = &state.tui_theme;
+    let project_dir = state.buildloop_dir.parent().unwrap_or(std::path::Path::new("."));
+    let dir_label = format!(" {} ", project_dir_label(project_dir));
 
     let visible_height = area.height.saturating_sub(2) as usize;
     let vis = startup.visible_indices();
@@ -580,7 +595,7 @@ fn render_file_explorer(frame: &mut Frame, area: Rect, state: &AppState) {
         ))
         .border_type(pane_border_type(state.focused_pane, TuiPane::Explorer))
         .title(Span::styled(
-            " Files ",
+            dir_label,
             Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
         ));
     if has_dirs {
@@ -693,6 +708,7 @@ pub(super) fn render_file_explorer_from(
     frame: &mut Frame,
     area: Rect,
     startup: &StartupState,
+    dir_label: &str,
     focused: TuiPane,
     theme: &super::theme::TuiTheme,
 ) {
@@ -808,7 +824,7 @@ pub(super) fn render_file_explorer_from(
         .border_style(pane_border_style(focused, TuiPane::Explorer, theme))
         .border_type(pane_border_type(focused, TuiPane::Explorer))
         .title(Span::styled(
-            " Files ",
+            dir_label.to_string(),
             Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
         ));
     if has_dirs {

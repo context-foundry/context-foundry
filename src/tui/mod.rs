@@ -296,10 +296,16 @@ pub fn render_running_explorer(frame: &mut Frame, state: &AppState, config: &Con
         .split(chunks[2]);
 
     if let Some(ref explorer_state) = state.running_explorer {
+        let project_dir = state
+            .buildloop_dir
+            .parent()
+            .unwrap_or(std::path::Path::new("."));
+        let dir_label = format!(" {} ", startup::project_dir_label(project_dir));
         startup::render_file_explorer_from(
             frame,
             middle_cols[0],
             explorer_state,
+            &dir_label,
             state.focused_pane,
             &state.tui_theme,
         );

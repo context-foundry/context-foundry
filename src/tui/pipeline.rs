@@ -23,13 +23,16 @@ pub enum PipelineClick {
     Patterns,
 }
 
-// Tab bar geometry constants (cols relative to area.x).
+// Tab bar geometry: " [ Dashboard ]  [  Explore  ]"
+//  x=1: "[ Dashboard ]" (13 chars)
+//  x=16: "[  Explore  ]" (13 chars)
 const TAB_DASHBOARD_X: u16 = 1;
-const TAB_DASHBOARD_W: u16 = 13; // "[ Dashboard ]"
-const TAB_EXPLORE_X: u16 = 16;   // TAB_DASHBOARD_X + TAB_DASHBOARD_W + 2-char gap
-const TAB_EXPLORE_W: u16 = 11;   // "[  Explore  ]"
+const TAB_DASHBOARD_W: u16 = 13;
+const TAB_EXPLORE_X: u16 = 16; // 1 + 13 + 2-char gap
+const TAB_EXPLORE_W: u16 = 13;
 
-/// Hit-test the tab bar row (area.y + 0). Returns which tab was clicked or None.
+/// Hit-test a 1-row tab bar area (the dedicated row between pipeline and middle content).
+/// Returns which tab was clicked or None.
 pub fn view_tab_click(area: Rect, col: u16, row: u16) -> Option<ViewTab> {
     if row != area.y {
         return None;
