@@ -342,6 +342,8 @@ pub struct AppState {
     pub show_settings_overlay: bool,
     pub settings_overlay_cursor: usize,
     pub local_models: Vec<String>,       // discovered models (LM Studio + Ollama merged)
+    pub lmstudio_models: Vec<String>,    // discovered LM Studio model IDs (raw /v1/models ids)
+    pub ollama_models: Vec<String>,      // discovered Ollama model names (raw /api/tags names)
     pub local_model_cursor: usize,       // index into local_models for current selection
     pub selected_local_model: String,    // persisted selection, from config or cycling
     pub builder_cursor: usize,           // index into unified builder list (specs + local)
@@ -472,6 +474,8 @@ impl AppState {
             show_settings_overlay: false,
             settings_overlay_cursor: 0,
             local_models: Vec::new(),
+            lmstudio_models: Vec::new(),
+            ollama_models: Vec::new(),
             local_model_cursor: 0,
             selected_local_model: String::new(),
             builder_cursor: 0,
@@ -682,8 +686,12 @@ pub(super) enum AppEvent {
     Tick,
     UpdateAvailable(String),
     OllamaStatus(bool), // true = connected, false = unreachable
-    /// Discovered local models from LM Studio + Ollama (merged, deduped, LM Studio first).
-    LocalModels(Vec<String>),
+    /// Discovered local models, split by source so the selection handler can prefix
+    /// `lmstudio/` vs `ollama/` correctly when persisting builder routing.
+    LocalModels {
+        lmstudio: Vec<String>,
+        ollama: Vec<String>,
+    },
 }
 
 pub(super) enum LoopEvent {

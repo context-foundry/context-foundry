@@ -41,10 +41,11 @@ use crate::utils::{atomic_write_file, truncate_str};
 // ─── TUI Mode ────────────────────────────────────────────────
 
 /// Ping LM Studio and Ollama for available model names.
-/// Returns merged, deduped list with LM Studio models first.
-pub(super) async fn fetch_local_models(ollama_url: String) -> Vec<String> {
+/// Returns `(lmstudio_models, ollama_models)` so callers can prefix correctly.
+pub(super) async fn fetch_local_models(ollama_url: String) -> (Vec<String>, Vec<String>) {
     tokio::task::spawn_blocking(move || {
-        let mut models: Vec<String> = Vec::new();
+        let mut lmstudio: Vec<String> = Vec::new();
+        let mut ollama: Vec<String> = Vec::new();
 
         // LM Studio: GET http://127.0.0.1:1234/v1/models
         let lm_out = std::process::Command::new("curl")
@@ -57,7 +58,7 @@ pub(super) async fn fetch_local_models(ollama_url: String) -> Vec<String> {
                         for item in arr {
                             if let Some(id) = item.get("id").and_then(|v| v.as_str()) {
                                 if !id.is_empty() {
-                                    models.push(id.to_string());
+                                    lmstudio.push(id.to_string());
                                 }
                             }
                         }
@@ -82,8 +83,8 @@ pub(super) async fn fetch_local_models(ollama_url: String) -> Vec<String> {
                         for item in arr {
                             if let Some(name) = item.get("name").and_then(|v| v.as_str()) {
                                 let s = name.to_string();
-                                if !s.is_empty() && !models.contains(&s) {
-                                    models.push(s);
+                                if !s.is_empty() {
+                                    ollama.push(s);
                                 }
                             }
                         }
@@ -92,7 +93,7 @@ pub(super) async fn fetch_local_models(ollama_url: String) -> Vec<String> {
             }
         }
 
-        models
+        (lmstudio, ollama)
     })
     .await
     .unwrap_or_default()
@@ -159,10 +160,18 @@ fn apply_builder_selection(state: &mut AppState, value: &str) {
             return;
         }
     }
-    // Check local models
+    // Local model: derive prefix from source list (LM Studio takes precedence
+    // if a name appears in both) and route via opencode for both.
     if state.local_models.contains(&value.to_string()) {
+        let prefix = if state.lmstudio_models.iter().any(|m| m == value) {
+            "lmstudio"
+        } else {
+            "ollama"
+        };
+        let model_path = format!("{}/{}", prefix, value);
         state.selected_local_model = value.to_string();
         Config::save_local_model(&dir, value);
+        Config::save_builder_routing(&dir, "opencode", &model_path);
         return;
     }
     // Combined entry (specs joined with "/") -- set to Both
@@ -603,7 +612,7 @@ fn launch_external_editor(file_path: &Path) -> Result<()> {
 
 fn spawn_build_loop(
     project_dir: &Path,
-    config: &Config,
+    _config: &Config,
     event_tx: &mpsc::UnboundedSender<AppEvent>,
     state: &mut AppState,
     shutdown: &Arc<AtomicBool>,
@@ -628,8 +637,11 @@ fn spawn_build_loop(
         task::count_pending(&tasks)
     ));
 
-    // Apply runtime toggles (user may have toggled mode/dual-build/extensions on startup screen)
-    let mut loop_config = config.clone();
+    // Reload config from disk so settings-overlay writes (builder_provider,
+    // builder_model, local_model, etc.) are honored by the build loop. The
+    // startup-loaded `config` parameter is intentionally ignored here -- only
+    // the four TUI-session toggles below are carried over from AppState.
+    let mut loop_config = Config::load(project_dir);
     loop_config.run_mode = state.run_mode.clone();
     loop_config.dual_selection = state.dual_selection.as_str().to_string();
     loop_config.builder_models = state.builder_model_specs.clone();
@@ -864,8 +876,16 @@ fn handle_planning_event(state: &mut AppState, event: AppEvent, config: &Config)
                 .to_string(),
             );
         }
-        AppEvent::LocalModels(models) => {
-            state.local_models = models;
+        AppEvent::LocalModels { lmstudio, ollama } => {
+            let mut merged: Vec<String> = Vec::with_capacity(lmstudio.len() + ollama.len());
+            for m in lmstudio.iter().chain(ollama.iter()) {
+                if !merged.contains(m) {
+                    merged.push(m.clone());
+                }
+            }
+            state.lmstudio_models = lmstudio;
+            state.ollama_models = ollama;
+            state.local_models = merged;
             init_builder_cursor(state);
         }
         AppEvent::LoopEvent(LoopEvent::StatsReady(report)) => {
@@ -942,8 +962,8 @@ fn handle_planning_key(state: &mut AppState, key: event::KeyEvent, config: &Conf
                 if let Some(tx) = state.event_tx.clone() {
                     let ollama_url = config.ollama_url.clone();
                     tokio::spawn(async move {
-                        let models = fetch_local_models(ollama_url).await;
-                        let _ = tx.send(AppEvent::LocalModels(models));
+                        let (lmstudio, ollama) = fetch_local_models(ollama_url).await;
+                        let _ = tx.send(AppEvent::LocalModels { lmstudio, ollama });
                     });
                 }
             }
@@ -1528,8 +1548,8 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                                 if let Some(tx) = state.event_tx.clone() {
                                     let ollama_url = config.ollama_url.clone();
                                     tokio::spawn(async move {
-                                        let models = fetch_local_models(ollama_url).await;
-                                        let _ = tx.send(AppEvent::LocalModels(models));
+                                        let (lmstudio, ollama) = fetch_local_models(ollama_url).await;
+                                        let _ = tx.send(AppEvent::LocalModels { lmstudio, ollama });
                                     });
                                 }
                             }
@@ -1686,8 +1706,8 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                                 if let Some(tx) = state.event_tx.clone() {
                                     let ollama_url = config.ollama_url.clone();
                                     tokio::spawn(async move {
-                                        let models = fetch_local_models(ollama_url).await;
-                                        let _ = tx.send(AppEvent::LocalModels(models));
+                                        let (lmstudio, ollama) = fetch_local_models(ollama_url).await;
+                                        let _ = tx.send(AppEvent::LocalModels { lmstudio, ollama });
                                     });
                                 }
                             }
@@ -1882,8 +1902,16 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                 .to_string(),
             );
         }
-        AppEvent::LocalModels(models) => {
-            state.local_models = models;
+        AppEvent::LocalModels { lmstudio, ollama } => {
+            let mut merged: Vec<String> = Vec::with_capacity(lmstudio.len() + ollama.len());
+            for m in lmstudio.iter().chain(ollama.iter()) {
+                if !merged.contains(m) {
+                    merged.push(m.clone());
+                }
+            }
+            state.lmstudio_models = lmstudio;
+            state.ollama_models = ollama;
+            state.local_models = merged;
             init_builder_cursor(state);
         }
         AppEvent::Mouse(mouse) => {

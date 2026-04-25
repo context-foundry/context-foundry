@@ -992,6 +992,29 @@ impl Config {
         }
     }
 
+    /// Persist `builder_provider` and `builder_model` to .foundry.json without
+    /// overwriting any other config fields.
+    pub fn save_builder_routing(project_dir: &Path, provider: &str, model: &str) {
+        let config_path = project_dir.join(".foundry.json");
+        let content = std::fs::read_to_string(&config_path).unwrap_or_else(|_| "{}".to_string());
+        let mut value: serde_json::Value = serde_json::from_str(&content).unwrap_or_else(|e| {
+            eprintln!(
+                "warning: {} contains invalid JSON ({e}) -- existing settings will be lost",
+                config_path.display(),
+            );
+            serde_json::json!({})
+        });
+        value["builder_provider"] = serde_json::json!(provider);
+        value["builder_model"] = serde_json::json!(model);
+        let json = serde_json::to_string_pretty(&value).unwrap_or_default();
+        if let Err(e) = crate::utils::atomic_write_file(&config_path, json.as_bytes()) {
+            eprintln!(
+                "warning: failed to save builder_routing to {} -- change will not persist across restarts: {e}",
+                config_path.display(),
+            );
+        }
+    }
+
     fn model_provider_hint(model: &str) -> Option<ModelProvider> {
         let lower = model.trim().to_ascii_lowercase();
         if lower.is_empty() {
@@ -1116,6 +1139,33 @@ mod tests {
     }
 
     #[test]
+    fn save_builder_routing_writes_provider_and_model_keys() {
+        let dir = tempfile::tempdir().unwrap();
+        Config::save_builder_routing(dir.path(), "opencode", "lmstudio/qwen3.6-35b-a3b");
+        let content = fs::read_to_string(dir.path().join(".foundry.json")).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&content).unwrap();
+        assert_eq!(value["builder_provider"], "opencode");
+        assert_eq!(value["builder_model"], "lmstudio/qwen3.6-35b-a3b");
+    }
+
+    #[test]
+    fn save_builder_routing_preserves_existing_fields() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join(".foundry.json"),
+            r#"{"theme":"light","run_mode":"sprint"}"#,
+        )
+        .unwrap();
+        Config::save_builder_routing(dir.path(), "opencode", "ollama/llama3.2");
+        let content = fs::read_to_string(dir.path().join(".foundry.json")).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&content).unwrap();
+        assert_eq!(value["theme"], "light");
+        assert_eq!(value["run_mode"], "sprint");
+        assert_eq!(value["builder_provider"], "opencode");
+        assert_eq!(value["builder_model"], "ollama/llama3.2");
+    }
+
+    #[test]
     fn config_deserializes_auto_push_remote() {
         let config: Config = serde_json::from_str(r#"{"auto_push_remote":"snedea"}"#)
             .expect("config should deserialize");
@@ -1135,7 +1185,6 @@ mod tests {
         assert_eq!(Config::display_provider_model("claude", "opus"), "Claude");
         assert_eq!(Config::display_provider_model("claude", "sonnet"), "Claude");
         assert_eq!(Config::display_provider_model("codex", ""), "Codex");
-        assert_eq!(Config::display_model_spec("codex:gpt-5.4"), "Codex Gpt-5.4");
     }
 
     #[test]

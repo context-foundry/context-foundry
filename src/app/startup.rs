@@ -234,9 +234,17 @@ pub(super) fn handle_startup_event(state: &mut AppState, event: AppEvent, config
                 .to_string(),
             );
         }
-        AppEvent::LocalModels(models) => {
+        AppEvent::LocalModels { lmstudio, ollama } => {
             let prev = state.selected_local_model.clone();
-            state.local_models = models;
+            let mut merged: Vec<String> = Vec::with_capacity(lmstudio.len() + ollama.len());
+            for m in lmstudio.iter().chain(ollama.iter()) {
+                if !merged.contains(m) {
+                    merged.push(m.clone());
+                }
+            }
+            state.lmstudio_models = lmstudio;
+            state.ollama_models = ollama;
+            state.local_models = merged;
             if let Some(idx) = state.local_models.iter().position(|m| m == &prev) {
                 state.local_model_cursor = idx;
             } else {
@@ -346,8 +354,8 @@ pub(super) fn handle_startup_key(state: &mut AppState, key: event::KeyEvent, con
             if let Some(tx) = state.event_tx.clone() {
                 let ollama_url = config.ollama_url.clone();
                 tokio::spawn(async move {
-                    let models = super::fetch_local_models(ollama_url).await;
-                    let _ = tx.send(AppEvent::LocalModels(models));
+                    let (lmstudio, ollama) = super::fetch_local_models(ollama_url).await;
+                    let _ = tx.send(AppEvent::LocalModels { lmstudio, ollama });
                 });
             }
         }
