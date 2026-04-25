@@ -53,6 +53,13 @@ _archive_2025/
 # Test artifacts
 test_flowise_project/
 tests/
+!tests/
+tests/**
+!tests/local_model_quality.rs
+!tests/local_model_smoke.rs
+!tests/fixtures/
+tests/fixtures/**
+!tests/fixtures/*.jsonl
 
 # Tools (dashboard built by Tauri beforeBuildCommand)
 tools/

@@ -1,0 +1,10 @@
+{"type":"session.start","sessionID":"s_real_1","model":"lmstudio/qwen3.6-35b-a3b"}
+{"type":"session.started","session_id":"s_real_2","sessionId":"s_real_2_alt"}
+{"type":"text","text":"Hello, I will read the file now."}
+{"type":"tool.use","tool":"read","input":{"path":"/tmp/demo.rs"}}
+{"type":"tool.result","tool":"read","output":"fn main() { println!(\"hi\"); }"}
+{"type":"text","text":"The file prints \"hi\"."}
+{"type":"error","message":"context window exceeded"}
+{"type":"unknown.kind","stage":"experimental","detail":"future event variant"}
+{"type":"step.start","subtype":"thinking"}
+{"type":"complete","output":"Task complete: read demo.rs.","tokens":{"input":1234,"output":56},"cost":0.0042}

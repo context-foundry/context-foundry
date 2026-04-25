@@ -45,6 +45,8 @@ pub enum StartupMouseTarget {
     ExtensionEntry(usize),
     ExpandAllToggle,
     WrapToggle,
+    DashboardTab,
+    ExploreTab,
 }
 
 fn is_all_expanded(file_tree: &[FileEntry]) -> bool {
@@ -81,6 +83,13 @@ pub(super) fn startup_hit_test(
     let area = Rect::new(0, 0, terminal_size.0, terminal_size.1);
     let ext_count = state.available_extensions.len();
     let layout = startup_layout(area, ext_count);
+
+    // Check Dashboard/Explore tab clicks on the first summary row
+    if row == layout.summary.y {
+        if let Some(target) = summary_tab_hit_test(state, column) {
+            return Some(target);
+        }
+    }
 
     // Check toggle buttons first (they occupy the border row that inner hit-tests skip)
     if let Some(startup) = state.startup.as_ref() {
@@ -145,6 +154,33 @@ pub(super) fn startup_layout(area: Rect, extension_count: usize) -> StartupLayou
         extensions: left_split[1],
         preview: columns[1],
         input: vertical[2],
+    }
+}
+
+fn summary_tab_hit_test(state: &AppState, column: u16) -> Option<StartupMouseTarget> {
+    let project_len = if state.project_name.is_empty() {
+        "  FOUNDRY ".len()
+    } else {
+        state.project_name.len() + 3 // "  {name} "
+    };
+    let mode_len = match state.run_mode.as_str() {
+        "sprint" => " Sprint ".len(),
+        "review" => " Review ".len(),
+        _ => " Auto ".len(),
+    };
+    // project + " " + " STOPPED " + "  " + mode + "  "
+    let tabs_start = project_len + 1 + 9 + 2 + mode_len + 2;
+    let dashboard_start = tabs_start as u16;
+    let dashboard_end = dashboard_start + " Dashboard ".len() as u16;
+    let explore_start = dashboard_end + 1; // " " separator
+    let explore_end = explore_start + " Explore ".len() as u16;
+
+    if column >= dashboard_start && column < dashboard_end {
+        Some(StartupMouseTarget::DashboardTab)
+    } else if column >= explore_start && column < explore_end {
+        Some(StartupMouseTarget::ExploreTab)
+    } else {
+        None
     }
 }
 
@@ -325,15 +361,27 @@ fn render_startup_summary(frame: &mut Frame, area: Rect, state: &AppState) {
             ),
             Span::raw("  "),
             Span::styled(
+                " Dashboard ",
                 if state.show_run_view {
-                    " Dashboard "
+                    Style::default()
+                        .fg(state.tui_theme.text)
+                        .bg(state.tui_theme.surface)
+                        .add_modifier(Modifier::BOLD)
                 } else {
-                    " Explore "
+                    Style::default().fg(state.tui_theme.muted)
                 },
-                Style::default()
-                    .fg(state.tui_theme.text)
-                    .bg(state.tui_theme.surface)
-                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw(" "),
+            Span::styled(
+                " Explore ",
+                if !state.show_run_view {
+                    Style::default()
+                        .fg(state.tui_theme.text)
+                        .bg(state.tui_theme.surface)
+                        .add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default().fg(state.tui_theme.muted)
+                },
             ),
             if let Some(label) = state.active_builder_label() {
                 Span::styled(

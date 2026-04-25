@@ -255,5 +255,26 @@ if grep -E '\[error/(ContextOverflow|ProviderUnreachable|ModelNotLoaded)' stderr
 fi
 echo "[smoke] check 5: no ContextOverflow/ProviderUnreachable/ModelNotLoaded errors"
 
+# Check 6: TASKS.md indicator uses QRPBA convention (B for Build, A for Audit),
+# not the legacy SPID convention (I for Implement, D for Doubt/Verify).
+TASK_LINE="$(grep -E '^\s*- \[x\]' TASKS.md || true)"
+if [[ -z "$TASK_LINE" ]]; then
+  fail "no completed task in TASKS.md -- build loop did not mark T1.1 done"
+fi
+INDICATOR="$(echo "$TASK_LINE" | grep -oE '\[[A-Z!.\-+]{4,7}\]' || true)"
+if [[ -z "$INDICATOR" ]]; then
+  fail "completed task line has no pipeline indicator: $TASK_LINE"
+fi
+if echo "$INDICATOR" | grep -q 'I'; then
+  fail "indicator $INDICATOR contains legacy 'I' (Implement) -- expected 'B' (Build). Sub-fix P33.1 may have regressed."
+fi
+if echo "$INDICATOR" | grep -q 'D'; then
+  fail "indicator $INDICATOR contains legacy 'D' (Doubt/Verify) -- expected 'A' (Audit). Sub-fix P33.1 may have regressed."
+fi
+if ! echo "$INDICATOR" | grep -q 'B'; then
+  fail "indicator $INDICATOR missing 'B' (Build) -- the implement stage did not register in the progress indicator"
+fi
+echo "[smoke] check 6: indicator=$INDICATOR (QRPBA convention, no legacy I/D)"
+
 echo "[smoke] PASS  (workspace: $WORK)"
 exit 0

@@ -228,6 +228,8 @@ pub struct Config {
 
     /// Model for pattern extraction (lightweight JSON output, doesn't need Opus).
     pub pattern_extraction_model: String,
+    /// Provider for pattern extraction. Defaults to "claude".
+    pub pattern_extraction_provider: String,
 
     /// Run mode: "auto" (default) runs forever with discovery.
     /// "sprint" runs all tasks then stops. "review" runs one task at a time with PR per task.
@@ -426,6 +428,13 @@ pub struct Config {
     /// None (default) means no hook is invoked.
     #[serde(default)]
     pub on_task_complete: Option<String>,
+
+    /// Per-stage routing overrides. When a stage id is in this list, that stage
+    /// keeps its own *_provider / *_model fields even when for_pipeline() would
+    /// override them with the global builder selection. Allows mixing providers
+    /// across the pipeline (e.g. Claude for Plan, Codex for Build, Claude for Audit).
+    #[serde(default)]
+    pub stage_overrides: Vec<String>,
 }
 
 impl Default for Config {
@@ -493,6 +502,7 @@ impl Default for Config {
             discovery_cooldown_minutes: 5,
             planner_lookahead: true,
             pattern_extraction_model: "sonnet".into(),
+            pattern_extraction_provider: "claude".into(),
             run_mode: "auto".into(),
             pipeline_mode: "full".into(),
             batch_doubt: true,
@@ -536,11 +546,33 @@ impl Default for Config {
             doubt_engine: "claude".into(),
             pipeline_stages: default_pipeline_stages(),
             on_task_complete: None,
+            stage_overrides: Vec::new(),
         }
     }
 }
 
 impl Config {
+    fn stage_ids_match(lhs: &str, rhs: &str) -> bool {
+        lhs == rhs
+            || matches!(
+                (lhs, rhs),
+                ("build", "implement")
+                    | ("implement", "build")
+                    | ("audit", "doubt")
+                    | ("doubt", "audit")
+                    | ("discovery", "discover")
+                    | ("discover", "discovery")
+                    | ("pattern_extraction", "patterns")
+                    | ("patterns", "pattern_extraction")
+            )
+    }
+
+    fn stage_is_overridden(&self, stage_id: &str) -> bool {
+        self.stage_overrides
+            .iter()
+            .any(|candidate| Self::stage_ids_match(candidate, stage_id))
+    }
+
     fn normalize_doubt_engine_value(value: &str) -> Option<&'static str> {
         match value.trim().to_ascii_lowercase().as_str() {
             "claude" => Some("claude"),
@@ -1181,39 +1213,88 @@ impl Config {
         let (provider, model) = Self::parse_model_spec(spec);
         let provider_kind = Self::parse_provider(&provider);
         let mut config = self.clone();
-        config.scout_provider = provider.clone();
-        config.query_provider = provider.clone();
-        config.research_provider = provider.clone();
-        config.planner_provider = provider.clone();
-        config.builder_provider = provider.clone();
-        config.reviewer_provider = provider.clone();
-        config.fixer_provider = provider.clone();
-        config.discovery_provider = provider.clone();
+        // Only override stages NOT in stage_overrides
+        if !self.stage_is_overridden("scout") {
+            config.scout_provider = provider.clone();
+        }
+        if !self.stage_is_overridden("query") {
+            config.query_provider = provider.clone();
+        }
+        if !self.stage_is_overridden("research") {
+            config.research_provider = provider.clone();
+        }
+        if !self.stage_is_overridden("plan") {
+            config.planner_provider = provider.clone();
+        }
+        if !self.stage_is_overridden("build") {
+            config.builder_provider = provider.clone();
+        }
+        if !self.stage_is_overridden("audit") {
+            config.reviewer_provider = provider.clone();
+        }
+        if !self.stage_is_overridden("fixer") {
+            config.fixer_provider = provider.clone();
+        }
+        if !self.stage_is_overridden("discovery") {
+            config.discovery_provider = provider.clone();
+        }
         if provider_kind == ModelProvider::OpenCode {
-            config.scout_model = model.clone();
-            config.query_model = model.clone();
-            config.research_model = model.clone();
-            config.planner_model = model.clone();
-            config.builder_model = model.clone();
-            config.reviewer_model = model.clone();
-            config.fixer_model = model.clone();
-            config.discovery_model = model.clone();
+            if !self.stage_is_overridden("scout") {
+                config.scout_model = model.clone();
+            }
+            if !self.stage_is_overridden("query") {
+                config.query_model = model.clone();
+            }
+            if !self.stage_is_overridden("research") {
+                config.research_model = model.clone();
+            }
+            if !self.stage_is_overridden("plan") {
+                config.planner_model = model.clone();
+            }
+            if !self.stage_is_overridden("build") {
+                config.builder_model = model.clone();
+            }
+            if !self.stage_is_overridden("audit") {
+                config.reviewer_model = model.clone();
+            }
+            if !self.stage_is_overridden("fixer") {
+                config.fixer_model = model.clone();
+            }
+            if !self.stage_is_overridden("discovery") {
+                config.discovery_model = model.clone();
+            }
         } else {
-            config.scout_model =
-                Self::normalize_model_for_provider(provider_kind, &self.scout_model);
-            config.query_model =
-                Self::normalize_model_for_provider(provider_kind, &self.query_model);
-            config.research_model =
-                Self::normalize_model_for_provider(provider_kind, &self.research_model);
-            config.planner_model =
-                Self::normalize_model_for_provider(provider_kind, &self.planner_model);
-            config.builder_model = model;
-            config.reviewer_model =
-                Self::normalize_model_for_provider(provider_kind, &self.reviewer_model);
-            config.fixer_model =
-                Self::normalize_model_for_provider(provider_kind, &self.fixer_model);
-            config.discovery_model =
-                Self::normalize_model_for_provider(provider_kind, &self.discovery_model);
+            if !self.stage_is_overridden("scout") {
+                config.scout_model =
+                    Self::normalize_model_for_provider(provider_kind, &self.scout_model);
+            }
+            if !self.stage_is_overridden("query") {
+                config.query_model =
+                    Self::normalize_model_for_provider(provider_kind, &self.query_model);
+            }
+            if !self.stage_is_overridden("research") {
+                config.research_model =
+                    Self::normalize_model_for_provider(provider_kind, &self.research_model);
+            }
+            if !self.stage_is_overridden("plan") {
+                config.planner_model =
+                    Self::normalize_model_for_provider(provider_kind, &self.planner_model);
+            }
+            if !self.stage_is_overridden("build") {
+                config.builder_model = model;
+            }
+            if !self.stage_is_overridden("audit") {
+                config.reviewer_model =
+                    Self::normalize_model_for_provider(provider_kind, &self.reviewer_model);
+            }
+            if !self.stage_is_overridden("fixer") {
+                config.fixer_model =
+                    Self::normalize_model_for_provider(provider_kind, &self.fixer_model);
+            }
+            if !self.stage_is_overridden("discovery") {
+                config.discovery_model =
+                    Self::normalize_model_for_provider(provider_kind, &self.discovery_model);
+            }
         }
         // Disable dual in the forked config so process_task runs single-pipeline
         config.builder_models.clear();
@@ -1253,9 +1334,363 @@ impl Config {
             ("Reviewer", &self.reviewer_provider, &self.reviewer_model),
             ("Fixer", &self.fixer_provider, &self.fixer_model),
             ("Discovery", &self.discovery_provider, &self.discovery_model),
-            ("Patterns", "claude", &self.pattern_extraction_model),
+            ("Patterns", &self.pattern_extraction_provider, &self.pattern_extraction_model),
             ("Add Tasks", "claude", "sonnet"),
         ]
+    }
+
+    /// Resolve the effective (provider, model) for a pipeline stage.
+    ///
+    /// Resolution order:
+    /// 1. If stage_id is in stage_overrides, use the stage's own fields.
+    /// 2. Otherwise use the stage's own fields (which may have been overridden
+    ///    by for_pipeline() if a global builder routing is active).
+    ///
+    /// This is the single source of truth. TUI display and agent dispatch
+    /// should both call this rather than reading *_provider / *_model directly.
+    pub fn active_routing_for_stage(&self, stage_id: &str) -> (String, String) {
+        match stage_id {
+            "scout" => (self.scout_provider.clone(), self.scout_model.clone()),
+            "query" => (self.query_provider.clone(), self.query_model.clone()),
+            "research" => (self.research_provider.clone(), self.research_model.clone()),
+            "plan" => (self.planner_provider.clone(), self.planner_model.clone()),
+            "build" | "implement" => (self.builder_provider.clone(), self.builder_model.clone()),
+            "audit" | "doubt" => (self.reviewer_provider.clone(), self.reviewer_model.clone()),
+            "discovery" | "discover" => {
+                (self.discovery_provider.clone(), self.discovery_model.clone())
+            }
+            "pr_review" => {
+                let p = if self.pr_review_provider.is_empty() {
+                    self.reviewer_provider.clone()
+                } else {
+                    self.pr_review_provider.clone()
+                };
+                let m = if self.pr_review_model.is_empty() {
+                    self.reviewer_model.clone()
+                } else {
+                    self.pr_review_model.clone()
+                };
+                (p, m)
+            }
+            "pattern_extraction" | "patterns" => {
+                (self.pattern_extraction_provider.clone(), self.pattern_extraction_model.clone())
+            }
+            "fixer" => (self.fixer_provider.clone(), self.fixer_model.clone()),
+            _ => (self.builder_provider.clone(), self.builder_model.clone()),
+        }
+    }
+
+    /// Write a per-stage routing override to .foundry.json and ensure the stage
+    /// is added to `stage_overrides`.
+    pub fn set_stage_routing(project_dir: &Path, stage_id: &str, provider: &str, model: &str) {
+        let config_path = project_dir.join(".foundry.json");
+        let content = std::fs::read_to_string(&config_path).unwrap_or_else(|_| "{}".to_string());
+        let mut value: serde_json::Value =
+            serde_json::from_str(&content).unwrap_or_else(|_| serde_json::json!({}));
+
+        let (prov_key, model_key) = Self::stage_field_keys(stage_id);
+        value[prov_key] = serde_json::json!(provider);
+        value[model_key] = serde_json::json!(model);
+
+        // Ensure stage_id is in stage_overrides
+        let overrides = value
+            .get_mut("stage_overrides")
+            .and_then(|v| v.as_array_mut());
+        if let Some(arr) = overrides {
+            let sid = serde_json::Value::String(stage_id.to_string());
+            if !arr.iter().any(|value| {
+                value.as_str()
+                    .is_some_and(|candidate| Self::stage_ids_match(candidate, stage_id))
+            }) {
+                arr.push(sid);
+            }
+        } else {
+            value["stage_overrides"] = serde_json::json!([stage_id]);
+        }
+
+        let json = serde_json::to_string_pretty(&value).unwrap_or_default();
+        if let Err(e) = crate::utils::atomic_write_file(&config_path, json.as_bytes()) {
+            eprintln!(
+                "warning: failed to save stage routing to {} -- {e}",
+                config_path.display(),
+            );
+        }
+    }
+
+    /// Remove a per-stage routing override from .foundry.json. The stage's
+    /// *_provider / *_model fields are left as-is so re-toggling works.
+    pub fn clear_stage_routing(project_dir: &Path, stage_id: &str) {
+        let config_path = project_dir.join(".foundry.json");
+        let content = std::fs::read_to_string(&config_path).unwrap_or_else(|_| "{}".to_string());
+        let mut value: serde_json::Value =
+            serde_json::from_str(&content).unwrap_or_else(|_| serde_json::json!({}));
+
+        if let Some(arr) = value.get_mut("stage_overrides").and_then(|v| v.as_array_mut()) {
+            arr.retain(|value| {
+                !value
+                    .as_str()
+                    .is_some_and(|candidate| Self::stage_ids_match(candidate, stage_id))
+            });
+        }
+
+        let json = serde_json::to_string_pretty(&value).unwrap_or_default();
+        if let Err(e) = crate::utils::atomic_write_file(&config_path, json.as_bytes()) {
+            eprintln!(
+                "warning: failed to clear stage routing in {} -- {e}",
+                config_path.display(),
+            );
+        }
+    }
+
+    /// Read the current value of a config field as a display string.
+    pub fn field_value(&self, field_id: &str) -> String {
+        match field_id {
+            "run_mode" => self.run_mode.clone(),
+            "pipeline_mode" => self.pipeline_mode.clone(),
+            "plan_review_enabled" => self.plan_review_enabled.to_string(),
+            "review_mode" => self.review_mode.clone(),
+            "skip_planner_for_simple" => self.skip_planner_for_simple.to_string(),
+            "skip_scout_for_simple" => self.skip_scout_for_simple.to_string(),
+            "skip_doubt_for_simple" => self.skip_doubt_for_simple.to_string(),
+            "batch_doubt" => self.batch_doubt.to_string(),
+            "planner_lookahead" => self.planner_lookahead.to_string(),
+            "planning_iterations" => self.planning_iterations.to_string(),
+            "doubt_engine" => self.doubt_engine.clone(),
+            "confidence_threshold" => format!("{:.1}", self.confidence_threshold),
+            "parallel_builder" => self.parallel_builder.to_string(),
+            "parallel_builder_min_files" => self.parallel_builder_min_files.to_string(),
+            "agent_timeout_secs" => self.agent_timeout_secs.to_string(),
+            "pause_between_tasks_secs" => self.pause_between_tasks_secs.to_string(),
+            "pause_between_agents_secs" => self.pause_between_agents_secs.to_string(),
+            "pause_between_cycles_secs" => self.pause_between_cycles_secs.to_string(),
+            "adaptive_pauses" => self.adaptive_pauses.to_string(),
+            "cost_limit" => format!("{:.2}", self.cost_limit),
+            "budget_overrun_threshold" => self.budget_overrun_threshold.to_string(),
+            "budget_recovery_enabled" => self.budget_recovery_enabled.to_string(),
+            "discovery_cooldown_minutes" => self.discovery_cooldown_minutes.to_string(),
+            "local_model" => self.local_model.clone(),
+            "ollama_url" => self.ollama_url.clone(),
+            "embedding_model" => self.embedding_model.clone(),
+            "embedding_timeout_ms" => self.embedding_timeout_ms.to_string(),
+            "semantic_match_enabled" => self.semantic_match_enabled.to_string(),
+            "sandbox" => self.sandbox.to_string(),
+            "sandbox_image" => self.sandbox_image.clone(),
+            "phase_isolation" => self.phase_isolation.to_string(),
+            "semgrep_enabled" => self.semgrep_enabled.to_string(),
+            "require_human_approval" => self.require_human_approval.to_string(),
+            "enforce_phase_rbac" => self.enforce_phase_rbac.to_string(),
+            "auto_archive_tasks" => self.auto_archive_tasks.to_string(),
+            "archive_keep_first" => self.archive_keep_first.to_string(),
+            "archive_keep_last" => self.archive_keep_last.to_string(),
+            "max_pattern_injection" => self.max_pattern_injection.to_string(),
+            "min_pattern_injection" => self.min_pattern_injection.to_string(),
+            "history_search_results" => self.history_search_results.to_string(),
+            "auto_push_remote" => self.auto_push_remote.clone().unwrap_or_default(),
+            "create_issue_on_wip" => self.create_issue_on_wip.to_string(),
+            "pr_review_concurrency" => self.pr_review_concurrency.to_string(),
+            "pr_poll_interval_secs" => self.pr_poll_interval_secs.to_string(),
+            "dashboard_port" => self.dashboard_port.to_string(),
+            "theme" => self.theme.clone(),
+            "preview_wrap" => self.preview_wrap.to_string(),
+            "extensions" => self.extensions.join(", "),
+            "on_task_complete" => self.on_task_complete.clone().unwrap_or_default(),
+            "build_command" => self.build_command.clone().unwrap_or_default(),
+            "patterns_dir" => self.patterns_dir.clone(),
+            "history_dir" => self.history_dir.clone(),
+            "tmux_session_prefix" => self.tmux_session_prefix.clone(),
+            "tmux_keep_sessions" => self.tmux_keep_sessions.to_string(),
+            "agent_backend" => self.agent_backend.clone(),
+            "backpressure_only" => self.backpressure_only.to_string(),
+            _ => {
+                if let Some(stage_id) = Self::stage_id_from_field(field_id) {
+                    let (p, m) = self.active_routing_for_stage(stage_id);
+                    if p.is_empty() && m.is_empty() {
+                        "(default)".into()
+                    } else {
+                        Self::display_provider_model(&p, &m)
+                    }
+                } else {
+                    String::new()
+                }
+            }
+        }
+    }
+
+    /// Write a single config field to .foundry.json. Returns Err on parse failure.
+    pub fn save_field(project_dir: &Path, field_id: &str, new_value: &str) -> Result<(), String> {
+        let config_path = project_dir.join(".foundry.json");
+        let content =
+            std::fs::read_to_string(&config_path).unwrap_or_else(|_| "{}".to_string());
+        let mut value: serde_json::Value =
+            serde_json::from_str(&content).unwrap_or_else(|_| serde_json::json!({}));
+
+        match field_id {
+            // Bools
+            "plan_review_enabled" | "skip_planner_for_simple" | "skip_scout_for_simple"
+            | "skip_doubt_for_simple" | "batch_doubt" | "planner_lookahead"
+            | "parallel_builder" | "adaptive_pauses" | "budget_recovery_enabled"
+            | "semantic_match_enabled" | "sandbox" | "phase_isolation" | "semgrep_enabled"
+            | "require_human_approval" | "enforce_phase_rbac" | "auto_archive_tasks"
+            | "create_issue_on_wip" | "preview_wrap" | "tmux_keep_sessions"
+            | "backpressure_only" => {
+                let b = new_value.parse::<bool>().map_err(|_| format!("not a bool: {}", new_value))?;
+                value[field_id] = serde_json::json!(b);
+            }
+            // u64 numbers
+            "agent_timeout_secs" | "pause_between_tasks_secs" | "pause_between_agents_secs"
+            | "pause_between_cycles_secs" | "discovery_cooldown_minutes" => {
+                let n = new_value.parse::<u64>().map_err(|_| format!("not a number: {}", new_value))?;
+                value[field_id] = serde_json::json!(n);
+            }
+            // usize numbers
+            "planning_iterations" | "parallel_builder_min_files" | "archive_keep_first"
+            | "archive_keep_last" | "max_pattern_injection" | "min_pattern_injection"
+            | "history_search_results" | "pr_review_concurrency" | "embedding_timeout_ms"
+            | "budget_overrun_threshold" | "pr_poll_interval_secs" => {
+                let n = new_value.parse::<usize>().map_err(|_| format!("not a number: {}", new_value))?;
+                value[field_id] = serde_json::json!(n);
+            }
+            // u16 numbers
+            "dashboard_port" => {
+                let n = new_value.parse::<u16>().map_err(|_| format!("not a port: {}", new_value))?;
+                value[field_id] = serde_json::json!(n);
+            }
+            // f64 numbers
+            "cost_limit" | "confidence_threshold" => {
+                let n = new_value.parse::<f64>().map_err(|_| format!("not a number: {}", new_value))?;
+                value[field_id] = serde_json::json!(n);
+            }
+            // Strings
+            "run_mode" | "pipeline_mode" | "review_mode" | "doubt_engine" | "theme"
+            | "agent_backend" | "ollama_url" | "embedding_model" | "sandbox_image"
+            | "patterns_dir" | "history_dir" | "tmux_session_prefix" => {
+                value[field_id] = serde_json::json!(new_value);
+            }
+            // Optional strings
+            "auto_push_remote" | "on_task_complete" | "build_command" => {
+                if new_value.is_empty() {
+                    value[field_id] = serde_json::Value::Null;
+                } else {
+                    value[field_id] = serde_json::json!(new_value);
+                }
+            }
+            _ => return Err(format!("unknown field: {}", field_id)),
+        }
+
+        let json = serde_json::to_string_pretty(&value).unwrap_or_default();
+        crate::utils::atomic_write_file(&config_path, json.as_bytes())
+            .map_err(|e| format!("write error: {}", e))
+    }
+
+    /// Get the list of valid enum values for cycling.
+    pub fn enum_values(field_id: &str) -> &'static [&'static str] {
+        match field_id {
+            "run_mode" => &["auto", "sprint", "review"],
+            "pipeline_mode" => &["full", "fast", "backpressure"],
+            "review_mode" => &["diff-only", "full-file"],
+            "doubt_engine" => &["claude", "codex"],
+            "agent_backend" => &["pty", "tmux"],
+            _ => &[],
+        }
+    }
+
+    fn stage_field_keys(stage_id: &str) -> (&'static str, &'static str) {
+        match stage_id {
+            "scout" => ("scout_provider", "scout_model"),
+            "query" => ("query_provider", "query_model"),
+            "research" => ("research_provider", "research_model"),
+            "plan" => ("planner_provider", "planner_model"),
+            "build" | "implement" => ("builder_provider", "builder_model"),
+            "audit" | "doubt" => ("reviewer_provider", "reviewer_model"),
+            "discovery" | "discover" => ("discovery_provider", "discovery_model"),
+            "pr_review" => ("pr_review_provider", "pr_review_model"),
+            "pattern_extraction" | "patterns" => ("pattern_extraction_provider", "pattern_extraction_model"),
+            "fixer" => ("fixer_provider", "fixer_model"),
+            _ => ("builder_provider", "builder_model"),
+        }
+    }
+
+    pub fn stage_id_from_field(field_id: &str) -> Option<&str> {
+        match field_id {
+            "stage_query" => Some("query"),
+            "stage_research" => Some("research"),
+            "stage_plan" => Some("plan"),
+            "stage_build" => Some("build"),
+            "stage_audit" => Some("audit"),
+            "stage_discovery" => Some("discovery"),
+            "stage_pr_review" => Some("pr_review"),
+            "stage_patterns" => Some("pattern_extraction"),
+            "stage_fixer" => Some("fixer"),
+            _ => None,
+        }
+    }
+
+    pub fn list_available_models(
+        lmstudio: &[String],
+        ollama: &[String],
+    ) -> Vec<crate::app::ModelEntry> {
+        use crate::app::ModelEntry;
+
+        let mut entries = Vec::new();
+
+        // Claude models
+        for (model, rec) in [
+            ("claude-opus-4-7", true),
+            ("claude-sonnet-4-6", false),
+            ("claude-haiku-4-5", false),
+        ] {
+            entries.push(ModelEntry {
+                provider: "claude".into(),
+                model: model.into(),
+                label: model.into(),
+                recommended: rec,
+                group: "Claude (Anthropic API)".into(),
+            });
+        }
+
+        // Codex models
+        for model in ["gpt-5.4", "gpt-5.4-thinking"] {
+            entries.push(ModelEntry {
+                provider: "codex".into(),
+                model: model.into(),
+                label: model.into(),
+                recommended: false,
+                group: "Codex (OpenAI)".into(),
+            });
+        }
+
+        // LM Studio models
+        for m in lmstudio {
+            entries.push(ModelEntry {
+                provider: "opencode".into(),
+                model: format!("lmstudio/{}", m),
+                label: m.clone(),
+                recommended: false,
+                group: "OpenCode -- LM Studio".into(),
+            });
+        }
+
+        // Ollama models
+        for m in ollama {
+            entries.push(ModelEntry {
+                provider: "opencode".into(),
+                model: format!("ollama/{}", m),
+                label: m.clone(),
+                recommended: false,
+                group: "OpenCode -- Ollama".into(),
+            });
+        }
+
+        // "Use stage default" sentinel
+        entries.push(ModelEntry {
+            provider: String::new(),
+            model: String::new(),
+            label: "Use stage default".into(),
+            recommended: false,
+            group: "Reset".into(),
+        });
+
+        entries
     }
 }
 
@@ -2371,5 +2806,166 @@ mod tests {
             config.on_task_complete.as_deref(),
             Some("afplay /System/Library/Sounds/Glass.aiff"),
         );
+    }
+
+    #[test]
+    fn active_routing_for_stage_returns_field_values() {
+        let config: Config = serde_json::from_str(
+            r#"{"planner_provider":"claude","planner_model":"opus-4-7"}"#,
+        )
+        .unwrap();
+        let (p, m) = config.active_routing_for_stage("plan");
+        assert_eq!(p, "claude");
+        assert_eq!(m, "opus-4-7");
+    }
+
+    #[test]
+    fn active_routing_for_stage_all_stages_default() {
+        let config = Config::default();
+        let (p, _) = config.active_routing_for_stage("scout");
+        assert_eq!(p, "claude");
+        let (p, _) = config.active_routing_for_stage("build");
+        assert_eq!(p, "claude");
+        let (p, _) = config.active_routing_for_stage("audit");
+        assert_eq!(p, "claude");
+        let (p, _) = config.active_routing_for_stage("discover");
+        assert_eq!(p, "claude");
+        let (p, m) = config.active_routing_for_stage("pattern_extraction");
+        assert_eq!(p, "claude");
+        assert_eq!(m, "sonnet");
+    }
+
+    #[test]
+    fn for_pipeline_respects_stage_overrides() {
+        let mut config = Config::default();
+        config.planner_provider = "claude".into();
+        config.planner_model = "opus-4-7".into();
+        config.stage_overrides = vec!["plan".into()];
+        let pipelined = config.for_pipeline("codex:");
+        assert_eq!(pipelined.planner_provider, "claude", "plan is pinned");
+        assert_eq!(pipelined.planner_model, "opus-4-7", "plan model preserved");
+        assert_eq!(pipelined.builder_provider, "codex", "build follows global");
+        assert_eq!(pipelined.reviewer_provider, "codex", "audit follows global");
+        assert_eq!(pipelined.scout_provider, "codex", "scout follows global");
+    }
+
+    #[test]
+    fn for_pipeline_with_no_overrides_overrides_all_stages() {
+        let config = Config::default();
+        let pipelined = config.for_pipeline("codex:");
+        assert_eq!(pipelined.planner_provider, "codex");
+        assert_eq!(pipelined.builder_provider, "codex");
+        assert_eq!(pipelined.reviewer_provider, "codex");
+        assert_eq!(pipelined.scout_provider, "codex");
+        assert_eq!(pipelined.discovery_provider, "codex");
+    }
+
+    #[test]
+    fn for_pipeline_multiple_overrides() {
+        let mut config = Config::default();
+        config.planner_provider = "claude".into();
+        config.planner_model = "opus-4-7".into();
+        config.reviewer_provider = "claude".into();
+        config.reviewer_model = "opus-4-7".into();
+        config.builder_provider = "codex".into();
+        config.builder_model = "gpt-5.4".into();
+        config.stage_overrides = vec!["plan".into(), "build".into(), "audit".into()];
+        let pipelined = config.for_pipeline("opencode:lmstudio/qwen");
+        assert_eq!(pipelined.planner_provider, "claude", "plan pinned");
+        assert_eq!(pipelined.planner_model, "opus-4-7", "plan model pinned");
+        assert_eq!(pipelined.builder_provider, "codex", "build pinned");
+        assert_eq!(pipelined.builder_model, "gpt-5.4", "build model pinned");
+        assert_eq!(pipelined.reviewer_provider, "claude", "audit pinned");
+        assert_eq!(pipelined.reviewer_model, "opus-4-7", "audit model pinned");
+        assert_eq!(pipelined.scout_provider, "opencode", "scout follows global");
+        assert_eq!(pipelined.query_provider, "opencode", "query follows global");
+    }
+
+    #[test]
+    #[serial]
+    fn set_stage_routing_writes_and_clears_round_trip() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join(".foundry.json"), "{}").unwrap();
+
+        Config::set_stage_routing(dir.path(), "plan", "claude", "opus-4-7");
+        let content = std::fs::read_to_string(dir.path().join(".foundry.json")).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&content).unwrap();
+        assert_eq!(value["planner_provider"], "claude");
+        assert_eq!(value["planner_model"], "opus-4-7");
+        let overrides = value["stage_overrides"].as_array().unwrap();
+        assert!(overrides.contains(&serde_json::json!("plan")));
+
+        Config::clear_stage_routing(dir.path(), "plan");
+        let content = std::fs::read_to_string(dir.path().join(".foundry.json")).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&content).unwrap();
+        let overrides = value["stage_overrides"].as_array().unwrap();
+        assert!(!overrides.contains(&serde_json::json!("plan")));
+        assert_eq!(value["planner_provider"], "claude", "field preserved after clear");
+    }
+
+    #[test]
+    fn stage_overrides_deserialization_defaults_to_empty() {
+        let config: Config = serde_json::from_str("{}").unwrap();
+        assert!(config.stage_overrides.is_empty());
+    }
+
+    #[test]
+    fn stage_overrides_deserialization_with_values() {
+        let config: Config = serde_json::from_str(
+            r#"{"stage_overrides":["plan","build","audit"]}"#,
+        )
+        .unwrap();
+        assert_eq!(config.stage_overrides, vec!["plan", "build", "audit"]);
+    }
+
+    #[test]
+    fn list_available_models_includes_static_providers() {
+        let entries = Config::list_available_models(&[], &[]);
+        let providers: Vec<&str> = entries.iter().map(|e| e.provider.as_str()).collect();
+        assert!(providers.contains(&"claude"), "missing claude");
+        assert!(providers.contains(&"codex"), "missing codex");
+        assert!(providers.contains(&""), "missing reset sentinel");
+    }
+
+    #[test]
+    fn list_available_models_includes_lmstudio() {
+        let entries = Config::list_available_models(
+            &["qwen3-coder-30b".to_string()],
+            &[],
+        );
+        let lm = entries.iter().find(|e| e.label == "qwen3-coder-30b");
+        assert!(lm.is_some(), "LM Studio model not in entries");
+        assert_eq!(lm.unwrap().model, "lmstudio/qwen3-coder-30b");
+    }
+
+    #[test]
+    fn list_available_models_includes_ollama() {
+        let entries = Config::list_available_models(
+            &[],
+            &["llama3.2".to_string()],
+        );
+        let ol = entries.iter().find(|e| e.label == "llama3.2");
+        assert!(ol.is_some(), "Ollama model not in entries");
+        assert_eq!(ol.unwrap().model, "ollama/llama3.2");
+    }
+
+    #[test]
+    fn stage_id_from_field_maps_correctly() {
+        assert_eq!(Config::stage_id_from_field("stage_plan"), Some("plan"));
+        assert_eq!(Config::stage_id_from_field("stage_build"), Some("build"));
+        assert_eq!(Config::stage_id_from_field("stage_audit"), Some("audit"));
+        assert_eq!(Config::stage_id_from_field("stage_patterns"), Some("pattern_extraction"));
+        assert_eq!(Config::stage_id_from_field("run_mode"), None);
+    }
+
+    #[test]
+    fn field_value_for_stage_returns_display() {
+        let config: Config = serde_json::from_str(
+            r#"{"planner_provider":"claude","planner_model":"opus-4-7"}"#,
+        )
+        .unwrap();
+        let val = config.field_value("stage_plan");
+        assert!(val.contains("Claude") || val.contains("claude") || val.contains("opus"),
+            "stage_plan field_value should contain provider/model info, got: {val}");
     }
 }

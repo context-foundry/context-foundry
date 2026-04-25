@@ -26,8 +26,9 @@ use self::startup::{
 pub use self::state::FileEntry;
 use self::state::{AppEvent, AppendTasksRequest, LoopEvent, PendingTransition, PlanningOutcome};
 pub use self::state::{
-    AppPhase, AppState, DualSelection, ExtensionDisplayInfo, PatternEventKind, PlanStatus,
-    PlanningState, StartupAction, StartupScenario, StartupState, TuiPane,
+    AppPhase, AppState, DualSelection, ExtensionDisplayInfo, FieldKind, ModelEntry, ModelPicker,
+    PatternEventKind, PickerItem, PlanStatus, PlanningState, StartupAction, StartupScenario,
+    StartupState, TuiPane, settings_sections,
 };
 use crate::agent::{AgentErrorKind, AgentOutputEvent, AgentRole};
 use crate::config::Config;
@@ -490,6 +491,10 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
             // Settings overlay floats on top -- render after base view
             if state.show_settings_overlay {
                 tui::render_settings_overlay(frame, &state);
+            }
+            // Quit confirmation banner on top of everything
+            if state.confirm_quit {
+                tui::render_quit_confirm(frame, &state.tui_theme);
             }
         })?;
 
@@ -1024,11 +1029,539 @@ fn handle_planning_event(state: &mut AppState, event: AppEvent, config: &Config)
     }
 }
 
+/// Close the settings overlay if it is open. Returns true when it consumed
+/// the key (caller should return early). Called as the FIRST check in every
+/// Esc handler so the overlay always wins.
+pub(crate) fn handle_overlay_esc(state: &mut AppState) -> bool {
+    if state.show_settings_overlay {
+        // Three-level Esc: picker → confirm banner → close
+        if let Some(ref mut ov) = state.settings_overlay {
+            if ov.picker.is_some() {
+                ov.picker = None;
+                return true;
+            }
+            if ov.confirm_close {
+                ov.confirm_close = false;
+                return true;
+            }
+            if ov.dirty {
+                ov.confirm_close = true;
+                return true;
+            }
+        }
+        state.show_settings_overlay = false;
+        state.settings_overlay = None;
+        return true;
+    }
+    false
+}
+
+/// Toggle the settings overlay open/closed. Initializes SettingsOverlayState
+/// on open. Returns true when newly opened (caller should fetch local models).
+fn toggle_settings_overlay(state: &mut AppState) -> bool {
+    let was_open = state.show_settings_overlay;
+    state.show_settings_overlay = !state.show_settings_overlay;
+    state.settings_overlay_cursor = 0;
+    if !was_open {
+        let mut ov = state::SettingsOverlayState::new();
+        let project_dir = state.buildloop_dir.parent().unwrap_or(Path::new("."));
+        let config_path = project_dir.join(".foundry.json");
+        ov.original_json = std::fs::read_to_string(&config_path).ok();
+        state.settings_overlay = Some(ov);
+        sync_settings_overlay_view(state);
+        true
+    } else {
+        state.settings_overlay = None;
+        false
+    }
+}
+
+fn mark_settings_dirty(state: &mut AppState) {
+    if let Some(ref mut ov) = state.settings_overlay {
+        ov.dirty = true;
+    }
+}
+
+fn overlay_project_dir(state: &AppState) -> &Path {
+    state.buildloop_dir.parent().unwrap_or(Path::new("."))
+}
+
+fn flush_settings_to_disk(state: &mut AppState) {
+    let project_dir = overlay_project_dir(state).to_path_buf();
+    let config = Config::load(&project_dir);
+
+    // Collect all lmstudio model IDs from current config
+    let mut lmstudio_models: Vec<String> = Vec::new();
+    for spec in &config.builder_models {
+        if let Some(model_part) = spec.strip_prefix("opencode:lmstudio/") {
+            lmstudio_models.push(model_part.to_string());
+        }
+    }
+    if config.builder_model.starts_with("lmstudio/") {
+        lmstudio_models.push(config.builder_model.trim_start_matches("lmstudio/").to_string());
+    }
+    for so in &config.stage_overrides {
+        // Format: "stage:provider:model" e.g. "build:opencode:lmstudio/foo"
+        if let Some((_stage, rest)) = so.split_once(':') {
+            if let Some(model_part) = rest.strip_prefix("opencode:lmstudio/") {
+                lmstudio_models.push(model_part.to_string());
+            }
+        }
+    }
+    lmstudio_models.sort();
+    lmstudio_models.dedup();
+
+    // Compare with original to only load new models
+    let original_models: Vec<String> = state
+        .settings_overlay
+        .as_ref()
+        .and_then(|ov| ov.original_json.as_ref())
+        .and_then(|json| serde_json::from_str::<serde_json::Value>(json).ok())
+        .map(|val| {
+            let mut models = Vec::new();
+            if let Some(bm) = val.get("builder_model").and_then(|v| v.as_str()) {
+                if let Some(m) = bm.strip_prefix("lmstudio/") {
+                    models.push(m.to_string());
+                }
+            }
+            if let Some(arr) = val.get("builder_models").and_then(|v| v.as_array()) {
+                for item in arr {
+                    if let Some(s) = item.as_str() {
+                        if let Some(m) = s.strip_prefix("opencode:lmstudio/") {
+                            models.push(m.to_string());
+                        }
+                    }
+                }
+            }
+            models
+        })
+        .unwrap_or_default();
+
+    for model in &lmstudio_models {
+        if !original_models.contains(model) {
+            trigger_lmstudio_load(model.clone());
+        }
+    }
+}
+
+fn trigger_lmstudio_load(model_id: String) {
+    tokio::spawn(tokio::task::spawn_blocking(move || {
+        let body = serde_json::json!({"model": model_id});
+        let _ = std::process::Command::new("curl")
+            .args([
+                "-s",
+                "--max-time",
+                "10",
+                "-X",
+                "POST",
+                "-H",
+                "Content-Type: application/json",
+                "-d",
+                &body.to_string(),
+                "http://127.0.0.1:1234/v1/models/load",
+            ])
+            .output();
+    }));
+}
+
+fn discard_settings_changes(state: &mut AppState) {
+    let project_dir = overlay_project_dir(state).to_path_buf();
+    if let Some(ref original) = state.settings_overlay.as_ref().and_then(|ov| ov.original_json.clone()) {
+        let config_path = project_dir.join(".foundry.json");
+        let _ = std::fs::write(&config_path, original);
+    }
+    let config = Config::load(&project_dir);
+    state.run_mode = config.run_mode.clone();
+    state.tui_theme = crate::tui::theme::from_name(&config.theme);
+    state.dual_selection = state::DualSelection::from_str(&config.dual_selection);
+}
+
+fn load_settings_config(state: &AppState) -> Config {
+    Config::load(overlay_project_dir(state))
+}
+
+fn settings_field_kind(field_id: &str) -> state::FieldKind {
+    state::settings_sections()
+        .iter()
+        .flat_map(|section| section.fields.iter())
+        .find(|field| field.id == field_id)
+        .map(|field| field.kind)
+        .unwrap_or(state::FieldKind::Readonly)
+}
+
+fn begin_inline_edit(state: &mut AppState, field_id: &str) {
+    let config = load_settings_config(state);
+    if let Some(ref mut ov) = state.settings_overlay {
+        ov.editing = Some(state::InlineEdit {
+            field_id: field_id.to_string(),
+            buffer: config.field_value(field_id),
+            error: None,
+        });
+    }
+}
+
+fn commit_inline_edit(state: &mut AppState) {
+    let (field_id, buffer) = {
+        let Some(ov) = state.settings_overlay.as_ref() else {
+            return;
+        };
+        let Some(editing) = ov.editing.as_ref() else {
+            return;
+        };
+        (editing.field_id.clone(), editing.buffer.clone())
+    };
+
+    match Config::save_field(overlay_project_dir(state), &field_id, &buffer) {
+        Ok(()) => {
+            apply_field_to_state(state, &field_id, &buffer);
+            mark_settings_dirty(state);
+            if let Some(ref mut ov) = state.settings_overlay {
+                ov.editing = None;
+            }
+        }
+        Err(error) => {
+            if let Some(ref mut ov) = state.settings_overlay {
+                if let Some(ref mut editing) = ov.editing {
+                    editing.error = Some(error);
+                }
+            }
+        }
+    }
+}
+
+pub(super) fn sync_settings_overlay_view(state: &mut AppState) {
+    let Some(ov) = state.settings_overlay.as_mut() else {
+        return;
+    };
+    let terminal_size = crossterm::terminal::size().unwrap_or((120, 40));
+    let area = ratatui::layout::Rect::new(0, 0, terminal_size.0, terminal_size.1);
+    let modal = tui::settings_modal_rect(area);
+    let visible_rows = modal.height.saturating_sub(4).max(1) as usize;
+    ov.ensure_focus_visible(visible_rows);
+    if let Some(ref mut picker) = ov.picker {
+        picker.clamp_focus();
+    }
+}
+
+pub(super) fn handle_settings_overlay_key(
+    state: &mut AppState,
+    key: event::KeyEvent,
+) -> bool {
+    if !state.show_settings_overlay {
+        return false;
+    }
+
+    // Confirm-close banner intercepts all keys
+    if state.settings_overlay.as_ref().is_some_and(|ov| ov.confirm_close) {
+        match key.code {
+            KeyCode::Char('y') | KeyCode::Char('Y') => {
+                flush_settings_to_disk(state);
+                state.show_settings_overlay = false;
+                state.settings_overlay = None;
+            }
+            KeyCode::Char('n') | KeyCode::Char('N') => {
+                discard_settings_changes(state);
+                state.show_settings_overlay = false;
+                state.settings_overlay = None;
+            }
+            KeyCode::Esc => {
+                if let Some(ref mut ov) = state.settings_overlay {
+                    ov.confirm_close = false;
+                }
+            }
+            _ => {}
+        }
+        return true;
+    }
+
+    match key.code {
+        KeyCode::Esc | KeyCode::Char('q') => {
+            handle_overlay_esc(state);
+            return true;
+        }
+        _ => {}
+    }
+
+    let is_editing = state
+        .settings_overlay
+        .as_ref()
+        .and_then(|ov| ov.editing.as_ref())
+        .is_some();
+    if is_editing {
+        let field_id = state
+            .settings_overlay
+            .as_ref()
+            .and_then(|ov| ov.editing.as_ref())
+            .map(|editing| editing.field_id.clone())
+            .unwrap_or_default();
+        let field_kind = settings_field_kind(&field_id);
+        match key.code {
+            KeyCode::Enter => commit_inline_edit(state),
+            KeyCode::Backspace => {
+                if let Some(ref mut ov) = state.settings_overlay {
+                    if let Some(ref mut editing) = ov.editing {
+                        editing.buffer.pop();
+                        editing.error = None;
+                    }
+                }
+            }
+            KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                if let Some(ref mut ov) = state.settings_overlay {
+                    if let Some(ref mut editing) = ov.editing {
+                        editing.buffer.clear();
+                        editing.error = None;
+                    }
+                }
+            }
+            KeyCode::Char(c) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
+                let accepts_char = match field_kind {
+                    state::FieldKind::Editor => true,
+                    state::FieldKind::Number => c.is_ascii_digit() || matches!(c, '.' | '-'),
+                    _ => false,
+                };
+                if accepts_char {
+                    if let Some(ref mut ov) = state.settings_overlay {
+                        if let Some(ref mut editing) = ov.editing {
+                            editing.buffer.push(c);
+                            editing.error = None;
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+        return true;
+    }
+
+    match key.code {
+        KeyCode::Enter | KeyCode::Char(' ') => {
+            if state
+                .settings_overlay
+                .as_ref()
+                .is_some_and(|ov| ov.picker.is_some())
+            {
+                handle_picker_select(state);
+            } else {
+                handle_settings_action(state);
+            }
+        }
+        KeyCode::Left => {
+            if state
+                .settings_overlay
+                .as_ref()
+                .is_some_and(|ov| ov.picker.is_none())
+            {
+                handle_settings_left(state);
+            }
+        }
+        KeyCode::Right => {
+            if state
+                .settings_overlay
+                .as_ref()
+                .is_some_and(|ov| ov.picker.is_none())
+            {
+                handle_settings_right(state);
+            }
+        }
+        KeyCode::Char('/')
+            if state
+                .settings_overlay
+                .as_ref()
+                .is_some_and(|ov| ov.picker.is_some()) =>
+        {
+            if let Some(ref mut ov) = state.settings_overlay {
+                if let Some(ref mut picker) = ov.picker {
+                    picker.filtering = true;
+                }
+            }
+        }
+        KeyCode::Char(c)
+            if state.settings_overlay.as_ref().is_some_and(|ov| {
+                ov.picker
+                    .as_ref()
+                    .is_some_and(|picker| picker.filtering)
+            }) =>
+        {
+            if let Some(ref mut ov) = state.settings_overlay {
+                if let Some(ref mut picker) = ov.picker {
+                    picker.filter.push(c);
+                    picker.focus = 0;
+                    picker.clamp_focus();
+                }
+            }
+        }
+        KeyCode::Backspace
+            if state.settings_overlay.as_ref().is_some_and(|ov| {
+                ov.picker
+                    .as_ref()
+                    .is_some_and(|picker| picker.filtering)
+            }) =>
+        {
+            if let Some(ref mut ov) = state.settings_overlay {
+                if let Some(ref mut picker) = ov.picker {
+                    picker.filter.pop();
+                    if picker.filter.is_empty() {
+                        picker.filtering = false;
+                    }
+                    picker.focus = 0;
+                    picker.clamp_focus();
+                }
+            }
+        }
+        KeyCode::Up => {
+            if let Some(ref mut ov) = state.settings_overlay {
+                if let Some(ref mut picker) = ov.picker {
+                    picker.focus = picker.focus.saturating_sub(1);
+                    picker.clamp_focus();
+                } else {
+                    ov.focus = ov.focus.saturating_sub(1);
+                }
+            }
+            sync_settings_overlay_view(state);
+        }
+        KeyCode::Down => {
+            if let Some(ref mut ov) = state.settings_overlay {
+                if let Some(ref mut picker) = ov.picker {
+                    picker.focus = (picker.focus + 1).min(picker.visible_count().saturating_sub(1));
+                    picker.clamp_focus();
+                } else {
+                    ov.focus = (ov.focus + 1).min(ov.visible_row_count().saturating_sub(1));
+                }
+            }
+            sync_settings_overlay_view(state);
+        }
+        _ => {}
+    }
+    true
+}
+
+pub(super) fn handle_settings_overlay_mouse(
+    state: &mut AppState,
+    mouse: crossterm::event::MouseEvent,
+    terminal_size: (u16, u16),
+) -> bool {
+    use crossterm::event::{MouseButton, MouseEventKind};
+
+    if !state.show_settings_overlay {
+        return false;
+    }
+
+    match mouse.kind {
+        MouseEventKind::ScrollUp => {
+            if let Some(ref mut ov) = state.settings_overlay {
+                if let Some(ref mut picker) = ov.picker {
+                    picker.focus = picker.focus.saturating_sub(1);
+                    picker.clamp_focus();
+                } else {
+                    ov.focus = ov.focus.saturating_sub(1);
+                }
+            }
+            sync_settings_overlay_view(state);
+            return true;
+        }
+        MouseEventKind::ScrollDown => {
+            if let Some(ref mut ov) = state.settings_overlay {
+                if let Some(ref mut picker) = ov.picker {
+                    picker.focus = (picker.focus + 1).min(picker.visible_count().saturating_sub(1));
+                    picker.clamp_focus();
+                } else {
+                    ov.focus = (ov.focus + 1).min(ov.visible_row_count().saturating_sub(1));
+                }
+            }
+            sync_settings_overlay_view(state);
+            return true;
+        }
+        MouseEventKind::Down(MouseButton::Left) => {}
+        _ => return true,
+    }
+
+    let area = ratatui::layout::Rect::new(0, 0, terminal_size.0, terminal_size.1);
+    let modal = tui::settings_modal_rect(area);
+    let btn = tui::close_btn_rect(modal);
+    if tui::rect_contains(btn, mouse.column, mouse.row)
+        || !tui::rect_contains(modal, mouse.column, mouse.row)
+    {
+        handle_overlay_esc(state);
+        return true;
+    }
+
+    enum OverlayMouseAction {
+        PickerFilter,
+        PickerItem(usize),
+        Row(usize),
+        None,
+    }
+
+    let action = {
+        let Some(ov) = state.settings_overlay.as_ref() else {
+            return true;
+        };
+        if let Some(ref picker) = ov.picker {
+            match tui::model_picker_hit_test(modal, picker, mouse.column, mouse.row) {
+                Some(tui::ModelPickerMouseTarget::FilterBar) => OverlayMouseAction::PickerFilter,
+                Some(tui::ModelPickerMouseTarget::Item(index)) => {
+                    OverlayMouseAction::PickerItem(index)
+                }
+                None => OverlayMouseAction::None,
+            }
+        } else if let Some(index) =
+            tui::settings_overlay_row_hit_test(modal, ov.scroll_offset, mouse.column, mouse.row)
+        {
+            OverlayMouseAction::Row(index)
+        } else {
+            OverlayMouseAction::None
+        }
+    };
+
+    match action {
+        OverlayMouseAction::PickerFilter => {
+            if let Some(ref mut ov) = state.settings_overlay {
+                if let Some(ref mut picker) = ov.picker {
+                    picker.filtering = true;
+                }
+            }
+        }
+        OverlayMouseAction::PickerItem(index) => {
+            if let Some(ref mut ov) = state.settings_overlay {
+                if let Some(ref mut picker) = ov.picker {
+                    picker.focus = index;
+                    picker.clamp_focus();
+                }
+            }
+            handle_picker_select(state);
+        }
+        OverlayMouseAction::Row(index) => {
+            let row = state
+                .settings_overlay
+                .as_ref()
+                .and_then(|ov| ov.row_at_index(index));
+            if let Some(ref mut ov) = state.settings_overlay {
+                ov.focus = index;
+            }
+            sync_settings_overlay_view(state);
+            if let Some(row) = row {
+                settings_action_for_row(state, &row);
+            }
+            sync_settings_overlay_view(state);
+        }
+        OverlayMouseAction::None => {}
+    }
+
+    true
+}
+
 fn handle_planning_key(state: &mut AppState, key: event::KeyEvent, config: &Config) {
+    if state.confirm_quit {
+        match key.code {
+            KeyCode::Char('y') | KeyCode::Char('Y') => state.should_quit = true,
+            KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => state.confirm_quit = false,
+            _ => {}
+        }
+        return;
+    }
     match key.code {
         KeyCode::Char('q') | KeyCode::Esc => {
-            if state.show_settings_overlay {
-                state.show_settings_overlay = false;
+            if handle_overlay_esc(state) {
                 return;
             }
             if state.show_stats_overlay {
@@ -1037,7 +1570,7 @@ fn handle_planning_key(state: &mut AppState, key: event::KeyEvent, config: &Conf
                 state.stats_overlay_report = None;
                 state.stats_overlay_scroll = 0;
             } else {
-                state.should_quit = true;
+                state.confirm_quit = true;
             }
         }
         KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
@@ -1075,10 +1608,7 @@ fn handle_planning_key(state: &mut AppState, key: event::KeyEvent, config: &Conf
             state.log(format!("Theme: {}", name));
         }
         KeyCode::Char('?') => {
-            let was_open = state.show_settings_overlay;
-            state.show_settings_overlay = !state.show_settings_overlay;
-            state.settings_overlay_cursor = 0;
-            if !was_open {
+            if toggle_settings_overlay(state) {
                 if let Some(tx) = state.event_tx.clone() {
                     let ollama_url = config.ollama_url.clone();
                     tokio::spawn(async move {
@@ -1093,19 +1623,9 @@ fn handle_planning_key(state: &mut AppState, key: event::KeyEvent, config: &Conf
                 }
             }
         }
-        KeyCode::Enter | KeyCode::Char(' ') if state.show_settings_overlay => {
-            cycle_settings_cursor(state, config);
-        }
-        KeyCode::Left if state.show_settings_overlay => {
-            cycle_settings_left(state, config);
-        }
-        KeyCode::Right if state.show_settings_overlay => {
-            cycle_settings_right(state, config);
-        }
+        _ if handle_settings_overlay_key(state, key) => {}
         KeyCode::Up => {
-            if state.show_settings_overlay {
-                state.settings_overlay_cursor =
-                    state.settings_overlay_cursor.saturating_sub(1);
+            if state.settings_overlay.is_some() {
                 return;
             }
             if state.show_stats_overlay {
@@ -1115,15 +1635,12 @@ fn handle_planning_key(state: &mut AppState, key: event::KeyEvent, config: &Conf
             } else if state.show_patterns {
                 state.patterns_scroll = state.patterns_scroll.saturating_sub(3);
             } else {
-                // Cap scroll at total content length so we can't scroll into nothingness
                 let max = state.agent_output.len().saturating_sub(1);
                 state.scroll_offset = state.scroll_offset.saturating_add(3).min(max);
             }
         }
         KeyCode::Down => {
-            if state.show_settings_overlay {
-                state.settings_overlay_cursor =
-                    (state.settings_overlay_cursor + 1).min(2);
+            if state.settings_overlay.is_some() {
                 return;
             }
             if state.show_stats_overlay {
@@ -1666,10 +2183,7 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                 } else {
                     match key.code {
                         KeyCode::Char('?') => {
-                            let was_open = state.show_settings_overlay;
-                            state.show_settings_overlay = !state.show_settings_overlay;
-                            state.settings_overlay_cursor = 0;
-                            if !was_open {
+                            if toggle_settings_overlay(state) {
                                 if let Some(tx) = state.event_tx.clone() {
                                     let ollama_url = config.ollama_url.clone();
                                     tokio::spawn(async move {
@@ -1684,31 +2198,10 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                                 }
                             }
                         }
-                        KeyCode::Enter | KeyCode::Char(' ') if state.show_settings_overlay => {
-                            cycle_settings_cursor(state, config);
-                        }
-                        KeyCode::Left if state.show_settings_overlay => {
-                            cycle_settings_left(state, config);
-                        }
-                        KeyCode::Right if state.show_settings_overlay => {
-                            cycle_settings_right(state, config);
-                        }
-                        KeyCode::Esc => {
-                            if state.show_settings_overlay {
-                                state.show_settings_overlay = false;
-                            }
-                        }
-                        KeyCode::Up if state.show_settings_overlay => {
-                            state.settings_overlay_cursor =
-                                state.settings_overlay_cursor.saturating_sub(1);
-                        }
-                        KeyCode::Down if state.show_settings_overlay => {
-                            state.settings_overlay_cursor =
-                                (state.settings_overlay_cursor + 1).min(2);
-                        }
+                        _ if handle_settings_overlay_key(state, key) => {}
                         KeyCode::Char('q') => {
-                            if state.show_settings_overlay {
-                                state.show_settings_overlay = false;
+                            if handle_overlay_esc(state) {
+                                // overlay closed
                             } else if state.stop_after_task {
                                 state.stop_after_task = false;
                                 state.remove_stop_file();
@@ -1846,19 +2339,11 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                             state.pending_transition = Some(PendingTransition::StartBuild);
                         }
                         KeyCode::Esc if state.typed_error_toast.is_some() => {
-                            // D1.3: dismiss the typed-error toast without
-                            // retrying. The build loop has already been
-                            // signaled to stop; this just clears the visible
-                            // toast. typed_error_can_retry is also reset so a
-                            // stale 'R' press cannot fire a phantom retry.
                             state.typed_error_toast = None;
                             state.typed_error_can_retry = false;
                         }
                         KeyCode::Char('?') => {
-                            let was_open = state.show_settings_overlay;
-                            state.show_settings_overlay = !state.show_settings_overlay;
-                            state.settings_overlay_cursor = 0;
-                            if !was_open {
+                            if toggle_settings_overlay(state) {
                                 if let Some(tx) = state.event_tx.clone() {
                                     let ollama_url = config.ollama_url.clone();
                                     tokio::spawn(async move {
@@ -1873,43 +2358,33 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                                 }
                             }
                         }
-                        KeyCode::Enter | KeyCode::Char(' ') if state.show_settings_overlay => {
-                            cycle_settings_cursor(state, config);
-                        }
-                        KeyCode::Left if state.show_settings_overlay => {
-                            cycle_settings_left(state, config);
-                        }
-                        KeyCode::Right if state.show_settings_overlay => {
-                            cycle_settings_right(state, config);
-                        }
+                        _ if handle_settings_overlay_key(state, key) => {}
                         KeyCode::Char('q') => {
-                            if state.show_settings_overlay {
-                                state.show_settings_overlay = false;
+                            if handle_overlay_esc(state) {
+                                // overlay closed
                             } else if state.show_stats_overlay {
                                 state.show_stats_overlay = false;
                                 state.stats_loading = false;
                                 state.stats_overlay_report = None;
                                 state.stats_overlay_scroll = 0;
                             } else if state.stop_after_task {
-                                // Cancel stop -- resume running
                                 state.stop_after_task = false;
                                 state.remove_stop_file();
                                 state.log("Stop cancelled -- resuming build");
                             } else {
-                                // Request stop after current task
                                 state.stop_after_task = true;
                                 state.write_stop_file();
                                 state.log("Stopping after current task (q again to cancel, Ctrl+C to force quit)");
                             }
                         }
                         KeyCode::Esc => {
-                            if state.show_settings_overlay {
-                                state.show_settings_overlay = false;
-                            } else if state.show_stats_overlay {
-                                state.show_stats_overlay = false;
-                                state.stats_loading = false;
-                                state.stats_overlay_report = None;
-                                state.stats_overlay_scroll = 0;
+                            if !handle_overlay_esc(state) {
+                                if state.show_stats_overlay {
+                                    state.show_stats_overlay = false;
+                                    state.stats_loading = false;
+                                    state.stats_overlay_report = None;
+                                    state.stats_overlay_scroll = 0;
+                                }
                             }
                         }
                         KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
@@ -1975,9 +2450,8 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                             }
                         }
                         KeyCode::Up => {
-                            if state.show_settings_overlay {
-                                state.settings_overlay_cursor =
-                                    state.settings_overlay_cursor.saturating_sub(1);
+                            if let Some(ref mut ov) = state.settings_overlay {
+                                ov.focus = ov.focus.saturating_sub(1);
                             } else if state.show_stats_overlay {
                                 state.stats_overlay_scroll =
                                     state.stats_overlay_scroll.saturating_sub(3);
@@ -1992,9 +2466,9 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                             }
                         }
                         KeyCode::Down => {
-                            if state.show_settings_overlay {
-                                state.settings_overlay_cursor =
-                                    (state.settings_overlay_cursor + 1).min(2);
+                            if let Some(ref mut ov) = state.settings_overlay {
+                                let max = ov.visible_row_count().saturating_sub(1);
+                                ov.focus = (ov.focus + 1).min(max);
                             } else if state.show_stats_overlay {
                                 state.stats_overlay_scroll =
                                     state.stats_overlay_scroll.saturating_add(3);
@@ -2086,43 +2560,48 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
         }
         AppEvent::Mouse(mouse) => {
             use crossterm::event::{MouseButton, MouseEventKind};
+            let terminal_size = crossterm::terminal::size().unwrap_or((120, 40));
+            if handle_settings_overlay_mouse(state, mouse, terminal_size) {
+                return;
+            }
             // Pipeline stage clicks and view tab clicks work in BOTH Dashboard and Explore views.
             if matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
-                let terminal_size = crossterm::terminal::size().unwrap_or((120, 40));
                 let full_area = ratatui::layout::Rect::new(0, 0, terminal_size.0, terminal_size.1);
                 let layout_chunks = ratatui::layout::Layout::default()
                     .direction(ratatui::layout::Direction::Vertical)
                     .constraints([
                         ratatui::layout::Constraint::Length(5),
-                        ratatui::layout::Constraint::Length(7),
+                        ratatui::layout::Constraint::Length(6),
                         ratatui::layout::Constraint::Min(8),
                         ratatui::layout::Constraint::Length(8),
                         ratatui::layout::Constraint::Length(1),
                     ])
                     .split(full_area);
                 let pipeline_area = layout_chunks[1];
-                // Tab bar click (top row of pipeline area)
-                if let Some(tab) = tui::view_tab_click(pipeline_area, mouse.column, mouse.row) {
-                    match tab {
-                        tui::ViewTab::Dashboard => {
-                            state.show_running_explorer = false;
-                        }
-                        tui::ViewTab::Explore => {
-                            if state.running_explorer.is_none() {
-                                let project_dir = state
-                                    .buildloop_dir
-                                    .parent()
-                                    .unwrap_or(std::path::Path::new("."));
-                                let scenario = detect_startup_scenario(project_dir);
-                                let plan_status = classify_plan_status(
-                                    &self::contract::ContractPaths::resolve(project_dir)
-                                        .tasks_path,
-                                );
-                                state.running_explorer =
-                                    Some(StartupState::new(project_dir, scenario, plan_status, None));
+                // Header tab click (Dashboard / Explore tabs on first row)
+                if mouse.row == layout_chunks[0].y {
+                    if let Some(target) = tui::running_header_tab_hit_test(state, mouse.column) {
+                        match target {
+                            tui::RunningHeaderTab::Dashboard => {
+                                state.show_running_explorer = false;
                             }
-                            state.show_running_explorer = true;
-                            state.focused_pane = state::TuiPane::Explorer;
+                            tui::RunningHeaderTab::Explore => {
+                                if state.running_explorer.is_none() {
+                                    let project_dir = state
+                                        .buildloop_dir
+                                        .parent()
+                                        .unwrap_or(std::path::Path::new("."));
+                                    let scenario = detect_startup_scenario(project_dir);
+                                    let plan_status = classify_plan_status(
+                                        &self::contract::ContractPaths::resolve(project_dir)
+                                            .tasks_path,
+                                    );
+                                    state.running_explorer =
+                                        Some(StartupState::new(project_dir, scenario, plan_status, None));
+                                }
+                                state.show_running_explorer = true;
+                                state.focused_pane = state::TuiPane::Explorer;
+                            }
                         }
                     }
                 }
@@ -2330,7 +2809,9 @@ fn handle_inject_key(state: &mut AppState, key: event::KeyEvent) {
             }
         }
         KeyCode::Esc => {
-            state.inject_input = None;
+            if !handle_overlay_esc(state) {
+                state.inject_input = None;
+            }
         }
         KeyCode::Enter => {
             let text = state.inject_input.take().unwrap_or_default();
@@ -2455,6 +2936,7 @@ fn commit_inject_task(state: &mut AppState, description: &str, run_next: bool) {
 
 const AGENT_OUTPUT_CAP: usize = 2000;
 
+#[allow(dead_code)]
 fn cycle_settings_cursor(state: &mut AppState, _config: &Config) {
     let project_dir = state
         .buildloop_dir
@@ -2486,8 +2968,7 @@ fn cycle_settings_cursor(state: &mut AppState, _config: &Config) {
     }
 }
 
-/// Same logic as cycle_settings_cursor but callable from the startup module where
-/// Config is not threaded through the key handler chain.
+#[allow(dead_code)]
 pub(super) fn cycle_settings_cursor_startup(state: &mut AppState) {
     let project_dir = state
         .buildloop_dir
@@ -2519,6 +3000,7 @@ pub(super) fn cycle_settings_cursor_startup(state: &mut AppState) {
     }
 }
 
+#[allow(dead_code)]
 fn cycle_settings_left(state: &mut AppState, _config: &Config) {
     let project_dir = state
         .buildloop_dir
@@ -2554,6 +3036,7 @@ fn cycle_settings_left(state: &mut AppState, _config: &Config) {
     }
 }
 
+#[allow(dead_code)]
 fn cycle_settings_right(state: &mut AppState, _config: &Config) {
     let project_dir = state
         .buildloop_dir
@@ -2585,6 +3068,7 @@ fn cycle_settings_right(state: &mut AppState, _config: &Config) {
     }
 }
 
+#[allow(dead_code)]
 pub(super) fn cycle_settings_left_startup(state: &mut AppState) {
     let project_dir = state
         .buildloop_dir
@@ -2620,6 +3104,7 @@ pub(super) fn cycle_settings_left_startup(state: &mut AppState) {
     }
 }
 
+#[allow(dead_code)]
 pub(super) fn cycle_settings_right_startup(state: &mut AppState) {
     let project_dir = state
         .buildloop_dir
@@ -2646,6 +3131,249 @@ pub(super) fn cycle_settings_right_startup(state: &mut AppState) {
             let (new_theme, name) = crate::tui::theme::cycle_next(&state.tui_theme);
             state.tui_theme = new_theme;
             Config::save_theme(project_dir, name);
+        }
+        _ => {}
+    }
+}
+
+// ─── New Settings Overlay Handlers (section model) ──────────
+
+fn handle_settings_action(state: &mut AppState) {
+    let row = state
+        .settings_overlay
+        .as_ref()
+        .and_then(|ov| ov.row_at_focus());
+    let Some(row) = row else {
+        return;
+    };
+    settings_action_for_row(state, &row);
+    sync_settings_overlay_view(state);
+}
+
+fn settings_action_for_row(state: &mut AppState, row: &state::RowId) {
+    match row {
+        state::RowId::SectionHeader(id) => {
+            if let Some(ref mut ov) = state.settings_overlay {
+                ov.toggle_section(id);
+            }
+        }
+        state::RowId::Field(field_id) => match settings_field_kind(field_id) {
+            state::FieldKind::Bool => {
+                let config = load_settings_config(state);
+                let new_val = if config.field_value(field_id) == "true" {
+                    "false"
+                } else {
+                    "true"
+                };
+                if let Ok(()) = Config::save_field(overlay_project_dir(state), field_id, new_val) {
+                    apply_field_to_state(state, field_id, new_val);
+                }
+            }
+            state::FieldKind::Enum => {
+                cycle_enum_field(state, field_id, 1);
+            }
+            state::FieldKind::Number | state::FieldKind::Editor => {
+                begin_inline_edit(state, field_id);
+            }
+            state::FieldKind::Readonly => {}
+            state::FieldKind::StagePicker => {
+                open_model_picker(state, field_id);
+            }
+        },
+    }
+}
+
+fn handle_settings_left(state: &mut AppState) {
+    let row = state
+        .settings_overlay
+        .as_ref()
+        .and_then(|ov| ov.row_at_focus());
+    let Some(state::RowId::Field(field_id)) = row else {
+        return;
+    };
+    match settings_field_kind(&field_id) {
+        state::FieldKind::Bool => {
+            let config = load_settings_config(state);
+            let new_val = if config.field_value(&field_id) == "true" {
+                "false"
+            } else {
+                "true"
+            };
+            if let Ok(()) = Config::save_field(overlay_project_dir(state), &field_id, new_val) {
+                apply_field_to_state(state, &field_id, new_val);
+            }
+        }
+        state::FieldKind::Enum => {
+            cycle_enum_field(state, &field_id, -1);
+        }
+        _ => {}
+    }
+}
+
+fn handle_settings_right(state: &mut AppState) {
+    let row = state
+        .settings_overlay
+        .as_ref()
+        .and_then(|ov| ov.row_at_focus());
+    let Some(state::RowId::Field(field_id)) = row else {
+        return;
+    };
+    match settings_field_kind(&field_id) {
+        state::FieldKind::Bool => {
+            let config = load_settings_config(state);
+            let new_val = if config.field_value(&field_id) == "true" {
+                "false"
+            } else {
+                "true"
+            };
+            if let Ok(()) = Config::save_field(overlay_project_dir(state), &field_id, new_val) {
+                apply_field_to_state(state, &field_id, new_val);
+            }
+        }
+        state::FieldKind::Enum => {
+            cycle_enum_field(state, &field_id, 1);
+        }
+        _ => {}
+    }
+}
+
+pub(super) fn open_model_picker(state: &mut AppState, field_id: &str) {
+    let stage_id = match Config::stage_id_from_field(field_id) {
+        Some(id) => id,
+        None => return,
+    };
+    let entries = Config::list_available_models(&state.lmstudio_models, &state.ollama_models);
+    let picker = state::ModelPicker::new(stage_id, entries);
+    if let Some(ref mut ov) = state.settings_overlay {
+        ov.picker = Some(picker);
+    }
+    sync_settings_overlay_view(state);
+}
+
+pub(super) fn handle_picker_select(state: &mut AppState) {
+    let (stage, provider, model) = {
+        let ov = match state.settings_overlay.as_ref() {
+            Some(ov) => ov,
+            None => return,
+        };
+        let picker = match ov.picker.as_ref() {
+            Some(p) => p,
+            None => return,
+        };
+        let items = picker.visible_items();
+        let item = match items.get(picker.focus) {
+            Some(i) => i,
+            None => return,
+        };
+        match item {
+            state::PickerItem::GroupHeader(group, _) => {
+                let group = group.clone();
+                if let Some(ref mut ov) = state.settings_overlay {
+                    if let Some(ref mut p) = ov.picker {
+                        if p.groups_open.contains(&group) {
+                            p.groups_open.remove(&group);
+                        } else {
+                            p.groups_open.insert(group);
+                        }
+                    }
+                }
+                return;
+            }
+            state::PickerItem::Entry(entry) => {
+                (picker.stage.clone(), entry.provider.clone(), entry.model.clone())
+            }
+        }
+    };
+
+    let project_dir = overlay_project_dir(state);
+    if provider.is_empty() && model.is_empty() {
+        Config::clear_stage_routing(project_dir, &stage);
+    } else {
+        Config::set_stage_routing(project_dir, &stage, &provider, &model);
+    }
+    mark_settings_dirty(state);
+
+    // Close picker after selection
+    if let Some(ref mut ov) = state.settings_overlay {
+        ov.picker = None;
+    }
+}
+
+fn cycle_enum_field(state: &mut AppState, field_id: &str, direction: i32) {
+    let project_dir = overlay_project_dir(state).to_path_buf();
+    match field_id {
+        "arena" => {
+            let unified = build_unified_builders(&state.builder_model_specs, &state.local_models);
+            if !unified.is_empty() {
+                if direction > 0 {
+                    state.builder_cursor = (state.builder_cursor + 1) % unified.len();
+                } else {
+                    state.builder_cursor = if state.builder_cursor == 0 {
+                        unified.len() - 1
+                    } else {
+                        state.builder_cursor - 1
+                    };
+                }
+                let val = unified[state.builder_cursor].clone();
+                apply_builder_selection(state, &val);
+            }
+        }
+        "builder" => {
+            let unified = build_unified_builders(&state.builder_model_specs, &state.local_models);
+            if !unified.is_empty() {
+                if direction > 0 {
+                    state.builder_cursor = (state.builder_cursor + 1) % unified.len();
+                } else {
+                    state.builder_cursor = if state.builder_cursor == 0 {
+                        unified.len() - 1
+                    } else {
+                        state.builder_cursor - 1
+                    };
+                }
+                let val = unified[state.builder_cursor].clone();
+                apply_builder_selection(state, &val);
+            }
+        }
+        "theme" => {
+            if direction > 0 {
+                let (new_theme, name) = crate::tui::theme::cycle_next(&state.tui_theme);
+                state.tui_theme = new_theme;
+                Config::save_theme(&project_dir, name);
+            } else {
+                let (new_theme, name) = crate::tui::theme::cycle_prev(&state.tui_theme);
+                state.tui_theme = new_theme;
+                Config::save_theme(&project_dir, name);
+            }
+        }
+        _ => {
+            let values = Config::enum_values(field_id);
+            if values.is_empty() { return; }
+            let config = load_settings_config(state);
+            let current = config.field_value(field_id);
+            let idx = values.iter().position(|v| *v == current).unwrap_or(0);
+            let new_idx = if direction > 0 {
+                (idx + 1) % values.len()
+            } else if idx == 0 {
+                values.len() - 1
+            } else {
+                idx - 1
+            };
+            let new_val = values[new_idx];
+            if let Ok(()) = Config::save_field(&project_dir, field_id, new_val) {
+                apply_field_to_state(state, field_id, new_val);
+            }
+        }
+    }
+    mark_settings_dirty(state);
+}
+
+fn apply_field_to_state(state: &mut AppState, field_id: &str, value: &str) {
+    match field_id {
+        "run_mode" => state.run_mode = value.to_string(),
+        "preview_wrap" => {
+            if let Some(ref mut startup) = state.startup {
+                startup.preview_wrap = value == "true";
+            }
         }
         _ => {}
     }
@@ -3458,13 +4186,16 @@ fn handle_startup_mouse_at_for_running(
     terminal_size: (u16, u16),
 ) {
     use crossterm::event::{MouseButton, MouseEventKind};
+    if handle_settings_overlay_mouse(state, mouse, terminal_size) {
+        return;
+    }
     // Running explorer uses the same 36/64 split for the middle section
     let area = ratatui::layout::Rect::new(0, 0, terminal_size.0, terminal_size.1);
     let chunks = ratatui::layout::Layout::default()
         .direction(ratatui::layout::Direction::Vertical)
         .constraints([
             ratatui::layout::Constraint::Length(5),
-            ratatui::layout::Constraint::Length(7),
+            ratatui::layout::Constraint::Length(6),
             ratatui::layout::Constraint::Min(10),
             ratatui::layout::Constraint::Length(6),
             ratatui::layout::Constraint::Length(1),

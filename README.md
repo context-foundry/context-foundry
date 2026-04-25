@@ -291,16 +291,23 @@ LM Studio) -- surface the same way.
 
 **Smoke gate.** Before relying on the local-model path, run
 `bash scripts/smoke-local-model.sh`. The script spins up a throw-away
-project, runs `foundry run --no-tui --output-format json`, and asserts five
+project, runs `foundry run --no-tui --output-format json`, and asserts six
 checks (exit code, JSON envelope shape, log presence, opencode session
-marker, no typed errors). Pass `--keep` to preserve the workspace for
+marker, no typed errors, QRPBA indicator). Pass `--keep` to preserve the workspace for
 inspection.
 
 **Headless JSON envelope.** `foundry run --no-tui --output-format json`
-emits a versioned object (`schema_version: 1`) containing `tasks`,
+emits a versioned object (`schema_version: 2`) containing `tasks`,
 `session`, and `config` blocks. Field-by-field schema and per-check
 failure interpretation are documented in
 [`docs/local-model-setup.md`](docs/local-model-setup.md).
+
+**Empty-diff and idle-timeout.** Local models sometimes produce agent output
+that changes no files or stall mid-generation. Foundry handles both: the
+EmptyDeliverable gate commits as `WIP` instead of `feat`, and the idle timeout
+(`agent_implement_idle_secs`, default 60s) kills stalled subprocesses.
+See the ["Empty-diff WIP and idle-timeout behavior"](docs/local-model-setup.md#empty-diff-wip-and-idle-timeout-behavior)
+section in the local-model runbook.
 
 See [`docs/local-model-setup.md`](docs/local-model-setup.md) for the full
 runbook (prerequisites, command transcript, fail-interpretation guide).

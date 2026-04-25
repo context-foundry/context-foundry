@@ -23,7 +23,12 @@ use crate::app::{AppPhase, AppState, TuiPane};
 use crate::config::Config;
 use crate::utils::truncate_str_from_end;
 
-pub use pipeline::{pipeline_click, view_tab_click, PipelineClick, ViewTab};
+pub use overlays::{
+    close_btn_rect, model_picker_hit_test, render_quit_confirm, settings_modal_rect,
+    settings_overlay_row_hit_test, ModelPickerMouseTarget,
+};
+pub use pipeline::{pipeline_click, PipelineClick};
+pub use running::{running_header_tab_hit_test, RunningHeaderTab};
 pub use startup::StartupMouseTarget;
 
 pub type Tui = Terminal<ratatui::backend::CrosstermBackend<io::Stdout>>;
@@ -93,7 +98,7 @@ pub fn running_layout(area: Rect, has_extensions: bool, split_pct: u16) -> Runni
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(5),
-            Constraint::Length(7),
+            Constraint::Length(6),
             Constraint::Min(8),
             Constraint::Length(8),
             Constraint::Length(1),
@@ -144,7 +149,7 @@ pub fn render(frame: &mut Frame, state: &AppState, config: &Config) {
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(5), // Header
-            Constraint::Length(7), // Pipeline map (3 lines inside box + borders)
+            Constraint::Length(6), // Pipeline map (5 box lines + bottom border)
             Constraint::Min(8),    // Middle: agent output + task queue
             Constraint::Length(8), // Bottom: stats (progress bar + 5 content rows + borders)
             Constraint::Length(1), // Status bar
@@ -279,7 +284,7 @@ pub fn render_running_explorer(frame: &mut Frame, state: &AppState, config: &Con
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(5),
-            Constraint::Length(7),
+            Constraint::Length(6),
             Constraint::Min(8),
             Constraint::Length(8),
             Constraint::Length(1),

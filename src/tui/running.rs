@@ -11,7 +11,55 @@ use crate::agent::AgentRole;
 use crate::app::{AppPhase, AppState, ExtensionDisplayInfo, TuiPane};
 use crate::utils::truncate_str;
 
+pub enum RunningHeaderTab {
+    Dashboard,
+    Explore,
+}
 
+pub fn running_header_tab_hit_test(state: &AppState, column: u16) -> Option<RunningHeaderTab> {
+    let project_len = if state.project_name.is_empty() {
+        "  FOUNDRY ".len()
+    } else {
+        state.project_name.len() + 3
+    };
+    let status_len = if matches!(state.phase, AppPhase::Startup) {
+        " STOPPED ".len()
+    } else if matches!(state.phase, AppPhase::Planning) {
+        " PLANNING ".len()
+    } else if state.dual_arena_ready() {
+        " ARENA READY ".len()
+    } else if state.stop_after_task {
+        " STOPPING ".len()
+    } else if state.awaiting_commit_approval {
+        " APPROVAL ".len()
+    } else if state.awaiting_review {
+        if state.awaiting_pr.is_some() {
+            " POLLING PR ".len()
+        } else {
+            " PAUSED (Review) ".len()
+        }
+    } else {
+        " RUNNING ".len()
+    };
+    let mode_len = match state.run_mode.as_str() {
+        "sprint" => " Sprint ".len(),
+        "review" => " Review ".len(),
+        _ => " Auto ".len(),
+    };
+    // project + " " + status + "  " + mode + "  "
+    let tabs_start = (project_len + 1 + status_len + 2 + mode_len + 2) as u16;
+    let dashboard_end = tabs_start + " Dashboard ".len() as u16;
+    let explore_start = dashboard_end + 1;
+    let explore_end = explore_start + " Explore ".len() as u16;
+
+    if column >= tabs_start && column < dashboard_end {
+        Some(RunningHeaderTab::Dashboard)
+    } else if column >= explore_start && column < explore_end {
+        Some(RunningHeaderTab::Explore)
+    } else {
+        None
+    }
+}
 
 
 pub(super) fn render_header(frame: &mut Frame, area: Rect, state: &AppState) {
@@ -160,15 +208,27 @@ pub(super) fn render_header(frame: &mut Frame, area: Rect, state: &AppState) {
             ),
             Span::raw("  "),
             Span::styled(
-                if state.show_running_explorer {
-                    " Explore "
+                " Dashboard ",
+                if !state.show_running_explorer {
+                    Style::default()
+                        .fg(state.tui_theme.text)
+                        .bg(state.tui_theme.surface)
+                        .add_modifier(Modifier::BOLD)
                 } else {
-                    " Dashboard "
+                    Style::default().fg(state.tui_theme.muted)
                 },
-                Style::default()
-                    .fg(state.tui_theme.text)
-                    .bg(state.tui_theme.surface)
-                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw(" "),
+            Span::styled(
+                " Explore ",
+                if state.show_running_explorer {
+                    Style::default()
+                        .fg(state.tui_theme.text)
+                        .bg(state.tui_theme.surface)
+                        .add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default().fg(state.tui_theme.muted)
+                },
             ),
         ]),
         if state.current_task.is_some() {

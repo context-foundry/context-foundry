@@ -4,12 +4,12 @@ use super::startup::{
 };
 use super::state::{
     AppEvent, AppPhase, AppState, LoopEvent, PendingTransition, PlanStatus, PlanningOutcome,
-    PlanningState, StartupScenario, StartupState,
+    PlanningState, RowId, SettingsOverlayState, StartupScenario, StartupState,
 };
 use super::{
     apply_orchestrator_outcome, apply_pending_transition, apply_planning_outcome,
-    handle_agent_done, handle_event, prepare_append_tasks_start, process_received_event,
-    seed_spec_from_brief,
+    handle_agent_done, handle_event, handle_settings_action, handle_settings_overlay_key,
+    prepare_append_tasks_start, process_received_event, seed_spec_from_brief,
 };
 use crate::agent::{AgentOutputEvent, AgentRole};
 use crate::config::Config;
@@ -39,6 +39,110 @@ fn write_file(path: &Path, content: &str) {
         std::fs::create_dir_all(parent).expect("failed to create parent dir");
     }
     std::fs::write(path, content).expect("failed to write test file");
+}
+
+fn overlay_focus_index(overlay: &SettingsOverlayState, field_id: &str) -> usize {
+    for idx in 0..overlay.visible_row_count() {
+        if matches!(overlay.row_at_index(idx), Some(RowId::Field(id)) if id == field_id) {
+            return idx;
+        }
+    }
+    panic!("missing overlay field: {field_id}");
+}
+
+#[test]
+fn settings_overlay_bool_toggle_reloads_config_each_time() {
+    let dir = temp_project_dir("foundry-settings-bool");
+    write_file(
+        &dir.join(".foundry.json"),
+        r#"{"plan_review_enabled":false}"#,
+    );
+    std::fs::create_dir_all(dir.join(".buildloop")).expect("failed to create .buildloop");
+
+    let mut state = AppState::new(dir.join(".buildloop"));
+    state.show_settings_overlay = true;
+    state.settings_overlay = Some(SettingsOverlayState::new());
+    let focus = overlay_focus_index(
+        state.settings_overlay.as_ref().expect("settings overlay"),
+        "plan_review_enabled",
+    );
+    state.settings_overlay.as_mut().unwrap().focus = focus;
+
+    handle_settings_action(&mut state);
+    let config = Config::load(&dir);
+    assert!(config.plan_review_enabled, "first toggle should enable the flag");
+
+    handle_settings_action(&mut state);
+    let config = Config::load(&dir);
+    assert!(
+        !config.plan_review_enabled,
+        "second toggle should observe the updated config and disable the flag"
+    );
+
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn settings_overlay_number_edit_persists_value() {
+    let dir = temp_project_dir("foundry-settings-number");
+    write_file(
+        &dir.join(".foundry.json"),
+        r#"{"embedding_timeout_ms":1000}"#,
+    );
+    std::fs::create_dir_all(dir.join(".buildloop")).expect("failed to create .buildloop");
+
+    let mut state = AppState::new(dir.join(".buildloop"));
+    state.show_settings_overlay = true;
+    state.settings_overlay = Some(SettingsOverlayState::new());
+    state
+        .settings_overlay
+        .as_mut()
+        .unwrap()
+        .expanded_sections
+        .insert("local_models".into());
+    let focus = overlay_focus_index(
+        state.settings_overlay.as_ref().expect("settings overlay"),
+        "embedding_timeout_ms",
+    );
+    state.settings_overlay.as_mut().unwrap().focus = focus;
+
+    handle_settings_action(&mut state);
+    assert!(
+        state
+            .settings_overlay
+            .as_ref()
+            .and_then(|ov| ov.editing.as_ref())
+            .is_some(),
+        "number field should enter inline edit mode"
+    );
+
+    handle_settings_overlay_key(
+        &mut state,
+        event::KeyEvent::new(KeyCode::Char('u'), KeyModifiers::CONTROL),
+    );
+    for ch in ['2', '5', '0', '0'] {
+        handle_settings_overlay_key(
+            &mut state,
+            event::KeyEvent::new(KeyCode::Char(ch), KeyModifiers::NONE),
+        );
+    }
+    handle_settings_overlay_key(
+        &mut state,
+        event::KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+    );
+
+    let config = Config::load(&dir);
+    assert_eq!(config.embedding_timeout_ms, 2500);
+    assert!(
+        state
+            .settings_overlay
+            .as_ref()
+            .and_then(|ov| ov.editing.as_ref())
+            .is_none(),
+        "successful save should exit inline edit mode"
+    );
+
+    let _ = std::fs::remove_dir_all(dir);
 }
 
 #[test]

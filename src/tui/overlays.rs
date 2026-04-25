@@ -845,39 +845,160 @@ fn fmt_overlay_tokens(n: u64) -> String {
 
 // ─── Settings Overlay ────────────────────────────────────────
 
-/// Compute a fixed-size Rect centered within `area`.
-fn centered_rect(width: u16, height: u16, area: Rect) -> Rect {
-    let x = area.x + area.width.saturating_sub(width) / 2;
-    let y = area.y + area.height.saturating_sub(height) / 2;
+/// Compute the settings overlay modal rect: 90% width x 80% height, centered,
+/// clamped to a minimum of 80x24. Falls back to full-screen if the terminal is
+/// smaller than 80x24.
+pub fn settings_modal_rect(area: Rect) -> Rect {
+    if area.width < 80 || area.height < 24 {
+        return area;
+    }
+    let w = (area.width as u32 * 90 / 100).max(80) as u16;
+    let h = (area.height as u32 * 80 / 100).max(24) as u16;
+    let w = w.min(area.width);
+    let h = h.min(area.height);
+    let x = area.x + (area.width.saturating_sub(w)) / 2;
+    let y = area.y + (area.height.saturating_sub(h)) / 2;
+    Rect { x, y, width: w, height: h }
+}
+
+/// The `[ X ]` close button rect, derived from the modal rect.
+/// Positioned at the top-right of the modal border.
+pub fn close_btn_rect(modal: Rect) -> Rect {
+    Rect {
+        x: modal.x + modal.width.saturating_sub(6),
+        y: modal.y,
+        width: 5,
+        height: 1,
+    }
+}
+
+pub fn settings_overlay_row_hit_test(
+    modal: Rect,
+    scroll_offset: usize,
+    column: u16,
+    row: u16,
+) -> Option<usize> {
+    let inner = Rect {
+        x: modal.x + 1,
+        y: modal.y + 1,
+        width: modal.width.saturating_sub(2),
+        height: modal.height.saturating_sub(2),
+    };
+    let content_height = inner.height.saturating_sub(2);
+    let content_bottom = inner.y.saturating_add(content_height);
+    if column < inner.x
+        || column >= inner.x.saturating_add(inner.width)
+        || row < inner.y
+        || row >= content_bottom
+    {
+        return None;
+    }
+    Some(scroll_offset + (row - inner.y) as usize)
+}
+
+pub fn model_picker_rect(parent: Rect, picker: &crate::app::ModelPicker) -> Rect {
+    let item_count = picker.visible_items().len() as u16;
+    let width = (parent.width * 60 / 100)
+        .max(40)
+        .min(parent.width.saturating_sub(4));
+    let height = (item_count + 4)
+        .min(parent.height.saturating_sub(4))
+        .max(6);
+    let x = parent.x + (parent.width.saturating_sub(width)) / 2;
+    let y = parent.y + (parent.height.saturating_sub(height)) / 2;
     Rect {
         x,
         y,
-        width: width.min(area.width),
-        height: height.min(area.height),
+        width,
+        height,
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ModelPickerMouseTarget {
+    FilterBar,
+    Item(usize),
+}
+
+pub fn model_picker_hit_test(
+    parent: Rect,
+    picker: &crate::app::ModelPicker,
+    column: u16,
+    row: u16,
+) -> Option<ModelPickerMouseTarget> {
+    let popup = model_picker_rect(parent, picker);
+    if column < popup.x
+        || column >= popup.x.saturating_add(popup.width)
+        || row < popup.y
+        || row >= popup.y.saturating_add(popup.height)
+    {
+        return None;
+    }
+
+    let inner = Rect {
+        x: popup.x + 1,
+        y: popup.y + 1,
+        width: popup.width.saturating_sub(2),
+        height: popup.height.saturating_sub(2),
+    };
+
+    let filter_visible = picker.filtering || !picker.filter.is_empty();
+    let mut content_y = inner.y;
+    if filter_visible {
+        if row == content_y
+            && column >= inner.x
+            && column < inner.x.saturating_add(inner.width)
+        {
+            return Some(ModelPickerMouseTarget::FilterBar);
+        }
+        content_y += 1;
+    }
+
+    let content_height = inner
+        .height
+        .saturating_sub(if filter_visible { 1 } else { 0 });
+    let content_bottom = content_y.saturating_add(content_height);
+    if row < content_y || row >= content_bottom {
+        return None;
+    }
+
+    let scroll_offset = if picker.focus as u16 >= content_height {
+        (picker.focus as u16 - content_height + 1) as usize
+    } else {
+        0
+    };
+    let idx = scroll_offset + (row - content_y) as usize;
+    (idx < picker.visible_items().len()).then_some(ModelPickerMouseTarget::Item(idx))
+}
+
+fn stage_ids_match(lhs: &str, rhs: &str) -> bool {
+    lhs == rhs
+        || matches!(
+            (lhs, rhs),
+            ("build", "implement")
+                | ("implement", "build")
+                | ("audit", "doubt")
+                | ("doubt", "audit")
+                | ("discovery", "discover")
+                | ("discover", "discovery")
+                | ("pattern_extraction", "patterns")
+                | ("patterns", "pattern_extraction")
+        )
 }
 
 /// Render a floating settings overlay on top of whatever is already drawn.
 pub(super) fn render_settings_overlay(frame: &mut Frame, state: &AppState) {
+    use crate::app::{DualSelection, FieldKind, settings_sections};
+
     let theme = &state.tui_theme;
-    let modal = centered_rect(50, 14, frame.area());
+    let modal = settings_modal_rect(frame.area());
 
     // Shadow: 1 col right + 1 row down
     let shadow = Rect {
         x: modal.x + 1,
         y: modal.y + 1,
-        width: modal.width.min(
-            frame
-                .area()
-                .width
-                .saturating_sub(modal.x + 1),
-        ),
-        height: modal.height.min(
-            frame
-                .area()
-                .height
-                .saturating_sub(modal.y + 1),
-        ),
+        width: modal.width.min(frame.area().width.saturating_sub(modal.x + 1)),
+        height: modal.height.min(frame.area().height.saturating_sub(modal.y + 1)),
     };
     frame.render_widget(Clear, shadow);
     frame.render_widget(
@@ -885,22 +1006,29 @@ pub(super) fn render_settings_overlay(frame: &mut Frame, state: &AppState) {
         shadow,
     );
 
-    // Clear modal area and draw border
     frame.render_widget(Clear, modal);
     frame.render_widget(
         Block::default()
             .borders(Borders::ALL)
             .border_style(Style::default().fg(theme.accent))
             .title(Span::styled(
-                " Settings ",
-                Style::default()
-                    .fg(theme.accent)
-                    .add_modifier(Modifier::BOLD),
+                " Settings -- Foundry ",
+                Style::default().fg(theme.accent).add_modifier(Modifier::BOLD),
             )),
         modal,
     );
 
-    // Inner content area (inside the border)
+    // Draw [ X ] close button
+    let btn = close_btn_rect(modal);
+    let buf = frame.buffer_mut();
+    let btn_style = Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD);
+    for (i, ch) in "[ X ]".chars().enumerate() {
+        let col = btn.x + i as u16;
+        if col < buf.area().width && btn.y < buf.area().height {
+            buf[(col, btn.y)].set_char(ch).set_style(btn_style);
+        }
+    }
+
     let inner = Rect {
         x: modal.x + 1,
         y: modal.y + 1,
@@ -908,147 +1036,380 @@ pub(super) fn render_settings_overlay(frame: &mut Frame, state: &AppState) {
         height: modal.height.saturating_sub(2),
     };
 
-    // Helper: highlight style for focused row
-    let highlight_bg = if theme.surface == Color::Reset {
-        Color::DarkGray
+    let highlight_bg = if theme.surface == Color::Reset { Color::DarkGray } else { theme.surface };
+
+    let ov = state.settings_overlay.as_ref();
+    let focus = ov.map(|o| o.focus).unwrap_or(0);
+    let expanded = ov.map(|o| &o.expanded_sections);
+    let scroll_offset = ov.map(|o| o.scroll_offset).unwrap_or(0);
+    let editing = ov.and_then(|o| o.editing.as_ref());
+
+    // Build the config snapshot for field values
+    let config_path = state.buildloop_dir.parent().unwrap_or(std::path::Path::new(".")).join(".foundry.json");
+    let config: Config = if let Ok(content) = std::fs::read_to_string(&config_path) {
+        serde_json::from_str(&content).unwrap_or_default()
     } else {
-        theme.surface
+        Config::default()
     };
 
-    let run_mode_val = &state.run_mode;
-    let theme_val = crate::tui::theme::current_name(&state.tui_theme);
-    let sandbox_val = &state.sandbox_status_label;
+    let sections = settings_sections();
+    let content_height = inner.height.saturating_sub(2) as usize; // reserve 2 rows for hint bar
+    let mut row_idx: usize = 0;
+    let mut render_y: u16 = inner.y;
 
-    // Unified builder list (mirrors build_unified_builders in app.rs)
-    let unified_builders = {
-        let specs = &state.builder_model_specs;
-        let mut list: Vec<String> = specs.iter()
-            .map(|s| Config::readable_spec(s))
-            .collect();
-        if specs.len() >= 2 {
-            let combined = list.iter()
-                .take(specs.len())
-                .cloned()
-                .collect::<Vec<_>>()
-                .join("/");
-            list.push(combined);
-        }
-        for m in &state.local_models {
-            if !list.contains(m) {
-                list.push(m.clone());
-            }
-        }
-        list
-    };
-    let builder_val: &str = unified_builders
-        .get(state.builder_cursor)
-        .map(|s| s.as_str())
-        .unwrap_or("(default)");
+    for section in &sections {
+        let is_expanded = expanded.map(|e| e.contains(section.id)).unwrap_or(section.default_expanded);
+        let icon = if is_expanded { "\u{25BC}" } else { "\u{25B6}" };
+        let focused = row_idx == focus;
 
-    // Rows indexed within inner area
-    // 0: spacer
-    // 1: run_mode (cursor 0)
-    // 2: spacer
-    // 3: builder (cursor 1)
-    // 4: spacer
-    // 5: theme (cursor 2)
-    // 6: spacer
-    // 7: sandbox read-only
-    // 8: spacer
-    // 9: horizontal rule
-    // 10: spacer
-    // 11: hint bar
-
-    let rows: &[(usize, bool, &str, &str)] = &[
-        (1, true, "Run Mode", run_mode_val),
-        (3, true, "Builder",  builder_val),
-        (5, true, "Theme",    theme_val),
-    ];
-
-    for (row_y, interactive, label, val) in rows {
-        let cursor_idx = match *label {
-            "Run Mode" => 0,
-            "Builder"  => 1,
-            _          => 2,
-        };
-        let focused = *interactive && state.settings_overlay_cursor == cursor_idx;
-        let cursor_str = if focused { "> " } else { "  " };
-        let cursor_style = if focused {
-            Style::default()
-                .fg(theme.accent)
-                .add_modifier(Modifier::BOLD)
-        } else {
-            Style::default().fg(theme.muted)
-        };
-        let row_bg = if focused {
-            Style::default().bg(highlight_bg)
-        } else {
-            Style::default()
-        };
-        // pad label to 15 chars
-        let label_padded = format!("{:<15}", label);
-        let line = Line::from(vec![
-            Span::styled(cursor_str.to_string(), cursor_style),
-            Span::styled(
-                format!("{}  {}", label_padded, val),
-                row_bg,
-            ),
-        ]);
-        frame.render_widget(
-            Paragraph::new(line),
-            Rect {
+        if row_idx >= scroll_offset && (row_idx - scroll_offset) < content_height {
+            let style = if focused {
+                Style::default().fg(theme.accent).add_modifier(Modifier::BOLD).bg(highlight_bg)
+            } else {
+                Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)
+            };
+            let line = Line::from(Span::styled(
+                format!(" {} {}", icon, section.name),
+                style,
+            ));
+            frame.render_widget(Paragraph::new(line), Rect {
                 x: inner.x,
-                y: inner.y + *row_y as u16,
+                y: render_y,
                 width: inner.width,
                 height: 1,
-            },
-        );
+            });
+            render_y += 1;
+        }
+        row_idx += 1;
+
+        if is_expanded {
+            for field in &section.fields {
+                if row_idx >= scroll_offset && (row_idx - scroll_offset) < content_height {
+                    let field_focused = row_idx == focus;
+
+                    // Get the current value
+                    let value = match field.id {
+                        "arena" => DualSelection::display_label(&state.builder_model_specs),
+                        "builder" => {
+                            let specs = &state.builder_model_specs;
+                            let mut list: Vec<String> = specs.iter()
+                                .map(|s| Config::readable_spec(s))
+                                .collect();
+                            if specs.len() >= 2 {
+                                let combined = list.iter().take(specs.len()).cloned().collect::<Vec<_>>().join("/");
+                                list.push(combined);
+                            }
+                            for m in &state.local_models {
+                                if !list.contains(m) { list.push(m.clone()); }
+                            }
+                            list.get(state.builder_cursor).cloned().unwrap_or_else(|| "(default)".into())
+                        }
+                        "theme" => crate::tui::theme::current_name(&state.tui_theme).to_string(),
+                        _ if editing
+                            .is_some_and(|inline| inline.field_id == field.id) =>
+                        {
+                            editing.unwrap().buffer.clone()
+                        }
+                        _ => config.field_value(field.id),
+                    };
+
+                    let icon_str = match field.kind {
+                        FieldKind::Bool => if value == "true" { "\u{2611}" } else { "\u{2610}" },
+                        _ => " ",
+                    };
+
+                    let row_style = if field_focused {
+                        Style::default().bg(highlight_bg)
+                    } else {
+                        Style::default()
+                    };
+
+                    let label_width = 28usize;
+                    let value_width = 24usize;
+                    let raw_display = if editing.is_some_and(|inline| inline.field_id == field.id) {
+                        format!("{value}_")
+                    } else {
+                        value.clone()
+                    };
+                    let display_val = if raw_display.len() > value_width {
+                        format!("{}...", &raw_display[..value_width - 3])
+                    } else {
+                        raw_display
+                    };
+
+                    let cursor_str = if field_focused { "> " } else { "  " };
+                    let line = Line::from(vec![
+                        Span::styled(cursor_str, if field_focused {
+                            Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)
+                        } else {
+                            Style::default().fg(theme.muted)
+                        }),
+                        Span::styled(format!("{} ", icon_str), Style::default().fg(theme.muted)),
+                        Span::styled(format!("{:<width$}", field.label, width = label_width), row_style),
+                        Span::styled(format!("{:<width$}", display_val, width = value_width), row_style.fg(Color::White)),
+                        Span::styled(
+                            truncate_str(field.hint, inner.width.saturating_sub(label_width as u16 + value_width as u16 + 6) as usize),
+                            Style::default().fg(theme.muted),
+                        ),
+                    ]);
+                    frame.render_widget(Paragraph::new(line), Rect {
+                        x: inner.x,
+                        y: render_y,
+                        width: inner.width,
+                        height: 1,
+                    });
+                    render_y += 1;
+                }
+                row_idx += 1;
+            }
+        }
     }
 
-    // Sandbox row (read-only, no cursor, row 7)
-    let sandbox_line = Line::from(vec![
-        Span::styled("  ", Style::default()),
+    let status_y = inner.y + inner.height.saturating_sub(2);
+    let hint_y = inner.y + inner.height.saturating_sub(1);
+    let has_picker = ov.map_or(false, |o| o.picker.is_some());
+    let status_text = if let Some(editing) = editing {
+        editing
+            .error
+            .as_deref()
+            .map(str::to_string)
+            .unwrap_or_else(|| format!("  editing {} -- Enter save, Ctrl+U clear", editing.field_id))
+    } else if has_picker {
+        "  Click a row to select or toggle a provider group".to_string()
+    } else {
+        "  Click a row to toggle, edit, or open the model picker".to_string()
+    };
+    frame.render_widget(
+        Paragraph::new(Line::from(Span::styled(
+            status_text,
+            if editing.and_then(|inline| inline.error.as_ref()).is_some() {
+                Style::default().fg(Color::Yellow)
+            } else {
+                Style::default().fg(theme.muted)
+            },
+        ))),
+        Rect {
+            x: inner.x,
+            y: status_y,
+            width: inner.width,
+            height: 1,
+        },
+    );
+
+    let hint_text = if has_picker {
+        "  \u{2191}\u{2193} move  Enter select  / filter  Esc close picker"
+    } else if editing.is_some() {
+        "  Type to edit  Enter save  Backspace delete  Esc close"
+    } else {
+        "  \u{2191}\u{2193} move  Enter/Space toggle  \u{2190}\u{2192} cycle  Esc close"
+    };
+    frame.render_widget(
+        Paragraph::new(Line::from(Span::styled(
+            hint_text,
+            Style::default().fg(theme.muted),
+        ))),
+        Rect { x: inner.x, y: hint_y, width: inner.width, height: 1 },
+    );
+
+    // Model picker popup (rendered on top of the settings overlay)
+    if let Some(ref ov_state) = ov {
+        if let Some(ref picker) = ov_state.picker {
+            let stage_overridden = config
+                .stage_overrides
+                .iter()
+                .any(|stage_id| stage_ids_match(stage_id, &picker.stage));
+            let selected_route = stage_overridden
+                .then(|| config.active_routing_for_stage(&picker.stage));
+            render_model_picker(frame, theme, picker, modal, selected_route);
+        }
+    }
+
+    // Confirm-close banner on top of everything
+    if state
+        .settings_overlay
+        .as_ref()
+        .is_some_and(|ov| ov.confirm_close)
+    {
+        render_confirm_banner(
+            frame,
+            modal,
+            theme,
+            "Save changes?",
+            &["[y] save", "[n] discard", "[Esc] back"],
+        );
+    }
+}
+
+fn render_model_picker(
+    frame: &mut Frame,
+    theme: &crate::tui::theme::TuiTheme,
+    picker: &crate::app::ModelPicker,
+    parent: Rect,
+    selected_route: Option<(String, String)>,
+) {
+    use crate::app::PickerItem;
+
+    let items = picker.visible_items();
+    let popup = model_picker_rect(parent, picker);
+
+    frame.render_widget(Clear, popup);
+    let title = format!(" Model for {} ", picker.stage);
+    frame.render_widget(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(theme.accent))
+            .title(Span::styled(title, Style::default().fg(theme.accent).add_modifier(Modifier::BOLD))),
+        popup,
+    );
+
+    let inner = Rect {
+        x: popup.x + 1,
+        y: popup.y + 1,
+        width: popup.width.saturating_sub(2),
+        height: popup.height.saturating_sub(2),
+    };
+
+    // Filter bar
+    let mut content_y = inner.y;
+    if !picker.filter.is_empty() || picker.filtering {
+        let filter_line = Line::from(vec![
+            Span::styled("/ ", Style::default().fg(theme.accent)),
+            Span::styled(&picker.filter, Style::default().fg(Color::White)),
+            if picker.filtering {
+                Span::styled("_", Style::default().fg(Color::White).add_modifier(Modifier::SLOW_BLINK))
+            } else {
+                Span::raw("")
+            },
+        ]);
+        frame.render_widget(
+            Paragraph::new(filter_line),
+            Rect { x: inner.x, y: content_y, width: inner.width, height: 1 },
+        );
+        content_y += 1;
+    }
+
+    let content_height = inner.height.saturating_sub(if picker.filtering || !picker.filter.is_empty() { 1 } else { 0 });
+    let scroll_offset = if picker.focus as u16 >= content_height {
+        (picker.focus as u16 - content_height + 1) as usize
+    } else {
+        0
+    };
+
+    let highlight_bg = if theme.surface == Color::Reset { Color::DarkGray } else { theme.surface };
+
+    for (idx, item) in items.iter().enumerate() {
+        if idx < scroll_offset { continue; }
+        let row_y = content_y + (idx - scroll_offset) as u16;
+        if row_y >= inner.y + inner.height { break; }
+
+        let focused = idx == picker.focus;
+        match item {
+            PickerItem::GroupHeader(name, is_open) => {
+                let icon = if *is_open { "\u{25BC}" } else { "\u{25B6}" };
+                let style = if focused {
+                    Style::default().fg(theme.accent).add_modifier(Modifier::BOLD).bg(highlight_bg)
+                } else {
+                    Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)
+                };
+                let line = Line::from(Span::styled(format!(" {} {}", icon, name), style));
+                frame.render_widget(
+                    Paragraph::new(line),
+                    Rect { x: inner.x, y: row_y, width: inner.width, height: 1 },
+                );
+            }
+            PickerItem::Entry(entry) => {
+                let is_selected = match selected_route.as_ref() {
+                    Some((provider, model)) => {
+                        provider == &entry.provider && model == &entry.model
+                    }
+                    None => entry.provider.is_empty() && entry.model.is_empty(),
+                };
+                let radio = if is_selected { "\u{25C9}" } else { "\u{25CB}" };
+                let rec_hint = if entry.recommended { " (recommended)" } else { "" };
+                let row_style = if focused {
+                    Style::default().bg(highlight_bg)
+                } else {
+                    Style::default()
+                };
+                let line = Line::from(vec![
+                    Span::styled(
+                        if focused { "> " } else { "  " },
+                        if focused { Style::default().fg(theme.accent) } else { Style::default().fg(theme.muted) },
+                    ),
+                    Span::styled(format!("  {} ", radio), Style::default().fg(theme.muted)),
+                    Span::styled(&entry.label, row_style.fg(Color::White)),
+                    Span::styled(rec_hint, Style::default().fg(theme.muted)),
+                ]);
+                frame.render_widget(
+                    Paragraph::new(line),
+                    Rect { x: inner.x, y: row_y, width: inner.width, height: 1 },
+                );
+            }
+        }
+    }
+}
+
+fn render_confirm_banner(
+    frame: &mut Frame,
+    parent: Rect,
+    theme: &crate::tui::theme::TuiTheme,
+    title: &str,
+    actions: &[&str],
+) {
+    let text = format!("  {}  {}  ", title, actions.join("  "));
+    let w = text.len() as u16 + 2;
+    let h: u16 = 3;
+    let x = parent.x + parent.width.saturating_sub(w) / 2;
+    let y = parent.y + parent.height.saturating_sub(h) / 2;
+    let area = Rect { x, y, width: w.min(parent.width), height: h };
+
+    frame.render_widget(Clear, area);
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Yellow))
+        .style(Style::default().bg(theme.surface));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let mut spans = vec![
         Span::styled(
-            format!("{:<15}  {} (read-only)", "Sandbox", sandbox_val),
-            Style::default().fg(theme.muted),
+            format!("  {}  ", title),
+            Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
         ),
+    ];
+    for action in actions {
+        spans.push(Span::styled(
+            format!(" {} ", action),
+            Style::default().fg(theme.text),
+        ));
+    }
+    frame.render_widget(Paragraph::new(Line::from(spans)), inner);
+}
+
+pub fn render_quit_confirm(frame: &mut Frame, theme: &crate::tui::theme::TuiTheme) {
+    let area = frame.area();
+    let text = "  Quit foundry?  [y] quit  [n] cancel  ";
+    let w = text.len() as u16 + 2;
+    let h: u16 = 3;
+    let x = area.width.saturating_sub(w) / 2;
+    let y = area.height.saturating_sub(h) / 2;
+    let banner = Rect { x, y, width: w.min(area.width), height: h };
+
+    frame.render_widget(Clear, banner);
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Yellow))
+        .style(Style::default().bg(theme.surface));
+    let inner = block.inner(banner);
+    frame.render_widget(block, banner);
+
+    let line = Line::from(vec![
+        Span::styled(
+            "  Quit foundry?  ",
+            Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+        ),
+        Span::styled("[y] quit  ", Style::default().fg(theme.text)),
+        Span::styled("[n] cancel  ", Style::default().fg(theme.text)),
     ]);
-    frame.render_widget(
-        Paragraph::new(sandbox_line),
-        Rect {
-            x: inner.x,
-            y: inner.y + 7,
-            width: inner.width,
-            height: 1,
-        },
-    );
-
-    // Horizontal rule (row 9)
-    let rule = "-".repeat(inner.width.saturating_sub(2) as usize);
-    frame.render_widget(
-        Paragraph::new(Line::from(Span::styled(
-            rule,
-            Style::default().fg(theme.muted),
-        ))),
-        Rect {
-            x: inner.x + 1,
-            y: inner.y + 9,
-            width: inner.width.saturating_sub(2),
-            height: 1,
-        },
-    );
-
-    // Hint bar (row 11)
-    frame.render_widget(
-        Paragraph::new(Line::from(Span::styled(
-            "  \u{2191}\u{2193} move   \u{2190}\u{2192}/Enter cycle   Esc close",
-            Style::default().fg(theme.muted),
-        ))),
-        Rect {
-            x: inner.x,
-            y: inner.y + 11,
-            width: inner.width,
-            height: 1,
-        },
-    );
+    frame.render_widget(Paragraph::new(line), inner);
 }

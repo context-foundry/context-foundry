@@ -340,6 +340,9 @@ pub(super) fn handle_startup_key(state: &mut AppState, key: event::KeyEvent, con
                 // Fall through to normal Enter handling
             }
             KeyCode::Esc => {
+                if super::handle_overlay_esc(state) {
+                    return;
+                }
                 state.focused_pane = crate::app::state::TuiPane::Explorer;
                 return;
             }
@@ -356,10 +359,7 @@ pub(super) fn handle_startup_key(state: &mut AppState, key: event::KeyEvent, con
     // Settings overlay intercept -- must be before is_typing_key so '?' is not
     // consumed as intent input and Up/Down/Enter/Space navigate the overlay.
     if key.code == KeyCode::Char('?') && !key.modifiers.contains(KeyModifiers::CONTROL) {
-        let was_open = state.show_settings_overlay;
-        state.show_settings_overlay = !state.show_settings_overlay;
-        state.settings_overlay_cursor = 0;
-        if !was_open {
+        if super::toggle_settings_overlay(state) {
             if let Some(tx) = state.event_tx.clone() {
                 let ollama_url = config.ollama_url.clone();
                 tokio::spawn(async move {
@@ -375,39 +375,17 @@ pub(super) fn handle_startup_key(state: &mut AppState, key: event::KeyEvent, con
         }
         return;
     }
-    if state.show_settings_overlay {
+    if super::handle_settings_overlay_key(state, key) {
+        return;
+    }
+
+    if state.confirm_quit {
         match key.code {
-            KeyCode::Esc | KeyCode::Char('q') => {
-                state.show_settings_overlay = false;
-                return;
-            }
-            KeyCode::Up => {
-                state.settings_overlay_cursor =
-                    state.settings_overlay_cursor.saturating_sub(1);
-                return;
-            }
-            KeyCode::Down => {
-                state.settings_overlay_cursor =
-                    (state.settings_overlay_cursor + 1).min(2);
-                return;
-            }
-            KeyCode::Enter | KeyCode::Char(' ') => {
-                super::cycle_settings_cursor_startup(state);
-                return;
-            }
-            KeyCode::Left => {
-                super::cycle_settings_left_startup(state);
-                return;
-            }
-            KeyCode::Right => {
-                super::cycle_settings_right_startup(state);
-                return;
-            }
-            _ => {
-                // All other keys are swallowed while overlay is open.
-                return;
-            }
+            KeyCode::Char('y') | KeyCode::Char('Y') => state.should_quit = true,
+            KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => state.confirm_quit = false,
+            _ => {}
         }
+        return;
     }
 
     // Check if the intent input should capture this key
@@ -535,7 +513,9 @@ pub(super) fn handle_startup_key(state: &mut AppState, key: event::KeyEvent, con
             state.findings_scroll = 0;
         }
         KeyCode::Esc => {
-            state.should_quit = true;
+            if !super::handle_overlay_esc(state) {
+                state.confirm_quit = true;
+            }
         }
         KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
             state.should_quit = true;
@@ -891,6 +871,9 @@ pub(super) fn handle_startup_mouse_at(
     mouse: MouseEvent,
     terminal_size: (u16, u16),
 ) {
+    if super::handle_settings_overlay_mouse(state, mouse, terminal_size) {
+        return;
+    }
     match mouse.kind {
         MouseEventKind::Down(MouseButton::Left) => {
             state.startup_scroll_debounce_ticks = CLICK_SCROLL_DEBOUNCE_TICKS;
@@ -946,6 +929,12 @@ pub(super) fn handle_startup_mouse_at(
                         if let Some(startup) = state.startup.as_mut() {
                             toggle_preview_wrap(startup, project_dir);
                         }
+                    }
+                    tui::StartupMouseTarget::DashboardTab => {
+                        state.show_run_view = true;
+                    }
+                    tui::StartupMouseTarget::ExploreTab => {
+                        state.show_run_view = false;
                     }
                 }
             } else {

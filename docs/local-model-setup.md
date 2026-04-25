@@ -15,7 +15,7 @@ To run the smoke test, build a release foundry binary (`cargo build --release`)
 then execute `bash scripts/smoke-local-model.sh`. The script creates a throw-
 away project in `$TMPDIR`, points `.foundry.json` at the first model returned
 by `opencode models lmstudio`, runs `foundry run --no-tui --output-format json`,
-and asserts five checks: foundry exits 0, the JSON output reports
+and asserts six checks: foundry exits 0, the JSON output reports
 `config.builder_provider == "opencode"`, at least one log file exists under
 `.buildloop/logs/`, that log carries the opencode `sessionID` marker (and
 zero log files carry Claude's `subtype:"init"` marker), and stderr is free of
@@ -28,7 +28,7 @@ of the test suite.
 ## Headless JSON envelope (`out.json`)
 
 `foundry run --no-tui --output-format json` writes a single JSON object to
-stdout. The envelope is versioned via `schema_version` (currently `1`). The
+stdout. The envelope is versioned via `schema_version` (currently `2`). The
 smoke gate asserts this version and fails loudly when it changes so callers
 know to update their parsers. The schema is defined in
 `src/app/commands.rs` (`HEADLESS_REPORT_SCHEMA_VERSION`, `SessionReport`,
@@ -36,7 +36,7 @@ know to update their parsers. The schema is defined in
 
 ```json
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "tasks": [
     {
       "id": "T1.1",
@@ -66,7 +66,7 @@ know to update their parsers. The schema is defined in
 
 | Field | Type | Notes |
 |-------|------|-------|
-| `schema_version` | integer | Bump when any field below is renamed or removed. Smoke gate asserts this is `1`. |
+| `schema_version` | integer | Bump when any field below is renamed or removed. Smoke gate asserts this is `2`. |
 | `tasks[].status` | string | `"DONE"` (clean pass / `feat` commit) or `"WIP"` (verify failed / `WIP` commit). |
 | `tasks[].commit_sha` | string \| null | `null` when no commit was produced. |
 | `tasks[].findings` | object | Counts of HIGH/MEDIUM/LOW review findings. |
@@ -77,7 +77,7 @@ know to update their parsers. The schema is defined in
 
 ## Interpreting smoke-gate failures
 
-`scripts/smoke-local-model.sh` runs five checks in order. When the script
+`scripts/smoke-local-model.sh` runs six checks in order. When the script
 prints `[smoke] FAIL:`, find the failing check below to triage.
 
 **Check 1 -- foundry exit code.**
@@ -136,3 +136,47 @@ Three kinds are detected:
   Studio's UI before retrying.
 Each kind is defined in `src/agent.rs:120-143` (`AgentErrorKind`) and
 classified by `classify_agent_error` (`src/agent.rs:2314`).
+
+**Check 6 -- QRPBA indicator convention.**
+Failure messages: `indicator ... contains legacy 'I'` or `indicator ... contains legacy 'D'`
+or `indicator ... missing 'B'`. The pipeline progress indicator written to TASKS.md uses
+the QRPBA taxonomy: **Q**uery, **R**esearch, **P**lan, **B**uild, **A**udit. A `-` in
+any slot means that stage was skipped. Legacy indicators used SPID (Scout, Plan,
+Implement, Verify/Doubt) -- the letters `I` and `D` should never appear. If they do,
+the indicator-writing code in `src/app/build.rs` has regressed (see commit `5560b0a`
+for the P33.1 fix).
+
+## Empty-diff WIP and idle-timeout behavior
+
+Local models sometimes produce syntactically valid agent output that does not
+result in any actual file changes -- the model "talks about" the change without
+making it, or produces edits that revert themselves. Two safeguards handle this:
+
+**EmptyDeliverable gate (D2.4).** After the implement stage completes, foundry
+diffs the worktree against the last commit. If no real file changes landed (only
+whitespace or no diff at all), the task is committed as `WIP(<task-id>):
+description` with a typed `EmptyDeliverable` error rather than claiming success
+with a `feat(...)` commit. This prevents the audit stage from reviewing a
+no-op and reporting a false PASS. The gate is implemented in
+`src/app/build.rs` (`commit_as_feat_if_real_changes`).
+
+**Idle timeout (D2.8).** The opencode subprocess is force-killed after
+`agent_implement_idle_secs` seconds (default 60) of silence -- no stdout
+events from the agent. This catches models that stall mid-generation
+(common when `n_ctx` is close to the prompt size). The timeout is
+configurable in `.foundry.json`. When triggered, the task is committed as
+WIP with an idle-timeout reason. The suppression of opencode's own
+lifecycle events (step start/end) ensures the idle timer only resets on
+meaningful output, not on heartbeat noise.
+
+**Reading the indicator.** After a run, TASKS.md shows each completed task
+with a bracketed indicator:
+```
+- [x] T1.1: Create hello.txt [---B-]
+- [x] T1.2: Add tests [QRP+BA]
+- [x] T1.3: Stalled model [---B-!]
+```
+Each character maps to a pipeline stage: Q(uery) R(esearch) P(lan) +(plan
+review) B(uild) A(udit). A `-` means the stage was skipped; `!` at the end
+means the audit reported failures (the commit was `WIP` not `feat`). The
+smoke gate's check 6 asserts `B` is present and no legacy `I`/`D` appears.

@@ -6,13 +6,6 @@ use ratatui::{
     Frame,
 };
 
-/// Which view tab was clicked in the pipeline tab bar.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ViewTab {
-    Dashboard,
-    Explore,
-}
-
 /// Which box was clicked in the pipeline map.
 #[derive(Debug, Clone)]
 pub enum PipelineClick {
@@ -23,37 +16,13 @@ pub enum PipelineClick {
     Patterns,
 }
 
-// Tab bar geometry: " [ Dashboard ]  [  Explore  ]"
-//  x=1: "[ Dashboard ]" (13 chars)
-//  x=16: "[  Explore  ]" (13 chars)
-const TAB_DASHBOARD_X: u16 = 1;
-const TAB_DASHBOARD_W: u16 = 13;
-const TAB_EXPLORE_X: u16 = 16; // 1 + 13 + 2-char gap
-const TAB_EXPLORE_W: u16 = 13;
-
-/// Hit-test a 1-row tab bar area (the dedicated row between pipeline and middle content).
-/// Returns which tab was clicked or None.
-pub fn view_tab_click(area: Rect, col: u16, row: u16) -> Option<ViewTab> {
-    if row != area.y {
-        return None;
-    }
-    let x = col.saturating_sub(area.x);
-    if x >= TAB_DASHBOARD_X && x < TAB_DASHBOARD_X + TAB_DASHBOARD_W {
-        Some(ViewTab::Dashboard)
-    } else if x >= TAB_EXPLORE_X && x < TAB_EXPLORE_X + TAB_EXPLORE_W {
-        Some(ViewTab::Explore)
-    } else {
-        None
-    }
-}
-
-/// Hit-test the pipeline map. `area` is the full pipeline area rect (Constraint::Length(7)).
+/// Hit-test the pipeline map. `area` is the full pipeline area rect (Constraint::Length(6)).
 /// `n_connected` is the number of enabled connected stages currently rendered.
 /// Returns None if the click is outside all boxes.
 pub fn pipeline_click(area: Rect, col: u16, row: u16, n_connected: usize) -> Option<PipelineClick> {
-    // Tab bar is at area.y+0. Box rows: area.y+1 (tops) through area.y+5 (bottoms).
-    // area.y+6 is the Block bottom border.
-    if row < area.y + 1 || row > area.y + 5 {
+    // Box rows: area.y+0 (tops) through area.y+4 (bottoms).
+    // area.y+5 is the Block bottom border.
+    if row < area.y || row > area.y + 4 {
         return None;
     }
     // Box pitch: 16 chars wide, 20-char pitch (16 + 4-char arrow) for connected stages.
@@ -115,23 +84,9 @@ where
 }
 
 fn stage_model_label(configs: &[Config], stage_id: &str) -> String {
-    join_stage_labels(configs.iter().map(|config| match stage_id {
-        "scout" => Config::display_provider_model(&config.scout_provider, &config.scout_model),
-        "query" => Config::display_provider_model(&config.query_provider, &config.query_model),
-        "research" => {
-            Config::display_provider_model(&config.research_provider, &config.research_model)
-        }
-        "plan" => Config::display_provider_model(&config.planner_provider, &config.planner_model),
-        "implement" => {
-            Config::display_provider_model(&config.builder_provider, &config.builder_model)
-        }
-        "doubt" => {
-            Config::display_provider_model(&config.reviewer_provider, &config.reviewer_model)
-        }
-        "discover" => {
-            Config::display_provider_model(&config.discovery_provider, &config.discovery_model)
-        }
-        _ => Config::display_provider_model(&config.builder_provider, &config.builder_model),
+    join_stage_labels(configs.iter().map(|config| {
+        let (prov, model) = config.active_routing_for_stage(stage_id);
+        Config::display_provider_model(&prov, &model)
     }))
 }
 
@@ -222,7 +177,7 @@ pub(super) fn render_pipeline_map(
     let discovery_used = state.is_discovering || state.discovery_round > 0;
     let patterns_used = state.session_patterns_learned > 0;
 
-    let discovery_model = stage_model_label(&pipeline_configs, "discover");
+    let discovery_model = stage_model_label(&pipeline_configs, "discovery");
     let patterns_model = config
         .role_configs()
         .iter()
@@ -412,33 +367,7 @@ pub(super) fn render_pipeline_map(
         }
     }
 
-    // ─── Tab bar (row 0 of content area, replaces the old blank line) ──────
-    let explore_active = state.show_running_explorer;
-    let (dash_fg, dash_bg, dash_mod) = if !explore_active {
-        (Color::Black, theme.accent, Modifier::BOLD)
-    } else {
-        (theme.muted, Color::Reset, Modifier::empty())
-    };
-    let (exp_fg, exp_bg, exp_mod) = if explore_active {
-        (Color::Black, theme.accent, Modifier::BOLD)
-    } else {
-        (theme.muted, Color::Reset, Modifier::empty())
-    };
-    let tab_line = Line::from(vec![
-        Span::raw(" "),
-        Span::styled(
-            "[ Dashboard ]",
-            Style::default().fg(dash_fg).bg(dash_bg).add_modifier(dash_mod),
-        ),
-        Span::raw("  "),
-        Span::styled(
-            "[  Explore  ]",
-            Style::default().fg(exp_fg).bg(exp_bg).add_modifier(exp_mod),
-        ),
-    ]);
-
     let lines = vec![
-        tab_line,
         Line::from(top_spans),
         Line::from(mid_spans),
         Line::from(model_spans),

@@ -280,6 +280,403 @@ impl DualSelection {
         }
         Self::Off
     }
+
+    pub fn display_label(specs: &[String]) -> String {
+        use crate::config::Config;
+        match specs.len() {
+            0 => "Off".to_string(),
+            1 => {
+                let (prov, _model) = Config::parse_model_spec(&specs[0]);
+                let name = match prov.as_str() {
+                    "claude" => "Claude",
+                    "codex" => "Codex",
+                    "opencode" => "OpenCode",
+                    other => return format!("{} Solo", other),
+                };
+                format!("{} Solo", name)
+            }
+            _ => {
+                let names: Vec<&str> = specs
+                    .iter()
+                    .map(|s| {
+                        let (prov, _) = Config::parse_model_spec(s);
+                        match prov.as_str() {
+                            "claude" => "Claude",
+                            "codex" => "Codex",
+                            "opencode" => "OpenCode",
+                            _ => "Other",
+                        }
+                    })
+                    .collect();
+                format!("Dual: {}", names.join("+"))
+            }
+        }
+    }
+}
+
+// ─── Settings Overlay State ──────────────────────────────────
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FieldKind {
+    Bool,
+    Enum,
+    Number,
+    Readonly,
+    Editor,
+    StagePicker,
+}
+
+#[derive(Debug, Clone)]
+pub struct ModelEntry {
+    pub provider: String,
+    pub model: String,
+    pub label: String,
+    pub recommended: bool,
+    pub group: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct ModelPicker {
+    pub stage: String,
+    pub focus: usize,
+    pub entries: Vec<ModelEntry>,
+    pub groups: Vec<String>,
+    pub groups_open: std::collections::BTreeSet<String>,
+    pub filter: String,
+    pub filtering: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct FieldDef {
+    pub id: &'static str,
+    pub label: &'static str,
+    pub hint: &'static str,
+    pub kind: FieldKind,
+}
+
+#[derive(Debug, Clone)]
+pub struct SectionDef {
+    pub id: &'static str,
+    pub name: &'static str,
+    pub default_expanded: bool,
+    pub fields: Vec<FieldDef>,
+}
+
+pub fn settings_sections() -> Vec<SectionDef> {
+    vec![
+        SectionDef {
+            id: "routing",
+            name: "Routing",
+            default_expanded: true,
+            fields: vec![
+                FieldDef { id: "arena", label: "Arena", hint: "Ctrl+D cycle: solo / dual pipeline", kind: FieldKind::Enum },
+                FieldDef { id: "builder", label: "Builder", hint: "Active builder provider:model", kind: FieldKind::Enum },
+                FieldDef { id: "stage_query", label: "  Query", hint: "Enter to pick model", kind: FieldKind::StagePicker },
+                FieldDef { id: "stage_research", label: "  Research", hint: "Enter to pick model", kind: FieldKind::StagePicker },
+                FieldDef { id: "stage_plan", label: "  Plan", hint: "Enter to pick model", kind: FieldKind::StagePicker },
+                FieldDef { id: "stage_build", label: "  Build", hint: "Enter to pick model", kind: FieldKind::StagePicker },
+                FieldDef { id: "stage_audit", label: "  Audit", hint: "Enter to pick model", kind: FieldKind::StagePicker },
+                FieldDef { id: "stage_discovery", label: "  Discovery", hint: "Enter to pick model", kind: FieldKind::StagePicker },
+                FieldDef { id: "stage_pr_review", label: "  PR Review", hint: "Enter to pick model", kind: FieldKind::StagePicker },
+                FieldDef { id: "stage_patterns", label: "  Patterns", hint: "Enter to pick model", kind: FieldKind::StagePicker },
+                FieldDef { id: "stage_fixer", label: "  Fixer", hint: "Enter to pick model", kind: FieldKind::StagePicker },
+            ],
+        },
+        SectionDef {
+            id: "pipeline",
+            name: "Pipeline behavior",
+            default_expanded: true,
+            fields: vec![
+                FieldDef { id: "run_mode", label: "Run Mode", hint: "auto / sprint / review", kind: FieldKind::Enum },
+                FieldDef { id: "pipeline_mode", label: "Pipeline Mode", hint: "full / fast / backpressure", kind: FieldKind::Enum },
+                FieldDef { id: "plan_review_enabled", label: "Plan Review", hint: "Review plan before build", kind: FieldKind::Bool },
+                FieldDef { id: "review_mode", label: "Review Mode", hint: "diff-only / full-file", kind: FieldKind::Enum },
+                FieldDef { id: "skip_planner_for_simple", label: "Skip Planner (simple)", hint: "Simple tasks skip plan stage", kind: FieldKind::Bool },
+                FieldDef { id: "skip_scout_for_simple", label: "Skip Scout (simple)", hint: "Simple tasks skip scout stage", kind: FieldKind::Bool },
+                FieldDef { id: "skip_doubt_for_simple", label: "Skip Doubt (simple)", hint: "Simple tasks skip audit stage", kind: FieldKind::Bool },
+                FieldDef { id: "batch_doubt", label: "Batch Doubt", hint: "Defer audit to end of session", kind: FieldKind::Bool },
+                FieldDef { id: "planner_lookahead", label: "Planner Lookahead", hint: "Pre-plan next task while building", kind: FieldKind::Bool },
+                FieldDef { id: "planning_iterations", label: "Planning Iterations", hint: "0 = single pass", kind: FieldKind::Number },
+                FieldDef { id: "doubt_engine", label: "Doubt Engine", hint: "claude / codex", kind: FieldKind::Enum },
+                FieldDef { id: "confidence_threshold", label: "Confidence Threshold", hint: "0.0-1.0, findings below are logged only", kind: FieldKind::Number },
+                FieldDef { id: "parallel_builder", label: "Parallel Builder", hint: "Fork builder across files", kind: FieldKind::Bool },
+                FieldDef { id: "parallel_builder_min_files", label: "Parallel Min Files", hint: "Min files to trigger parallel build", kind: FieldKind::Number },
+            ],
+        },
+        SectionDef {
+            id: "budgets",
+            name: "Budgets & timeouts",
+            default_expanded: true,
+            fields: vec![
+                FieldDef { id: "agent_timeout_secs", label: "Agent Timeout (secs)", hint: "Idle timeout per agent", kind: FieldKind::Number },
+                FieldDef { id: "pause_between_tasks_secs", label: "Pause Between Tasks", hint: "Seconds between tasks", kind: FieldKind::Number },
+                FieldDef { id: "pause_between_agents_secs", label: "Pause Between Agents", hint: "Seconds between agent spawns", kind: FieldKind::Number },
+                FieldDef { id: "pause_between_cycles_secs", label: "Pause Between Cycles", hint: "Seconds between discovery cycles", kind: FieldKind::Number },
+                FieldDef { id: "adaptive_pauses", label: "Adaptive Pauses", hint: "Auto-adjust pause timing", kind: FieldKind::Bool },
+                FieldDef { id: "cost_limit", label: "Cost Limit (USD)", hint: "0.0 = unlimited", kind: FieldKind::Number },
+                FieldDef { id: "budget_overrun_threshold", label: "Overrun Threshold", hint: "% over budget before warning", kind: FieldKind::Number },
+                FieldDef { id: "budget_recovery_enabled", label: "Budget Recovery", hint: "Auto-recover from overrun", kind: FieldKind::Bool },
+                FieldDef { id: "discovery_cooldown_minutes", label: "Discovery Cooldown", hint: "Minutes between discovery rounds", kind: FieldKind::Number },
+            ],
+        },
+        SectionDef {
+            id: "local_models",
+            name: "Local models",
+            default_expanded: false,
+            fields: vec![
+                FieldDef { id: "local_model", label: "Local Model", hint: "Active local model selection", kind: FieldKind::Readonly },
+                FieldDef { id: "ollama_url", label: "Ollama URL", hint: "Ollama API endpoint", kind: FieldKind::Editor },
+                FieldDef { id: "embedding_model", label: "Embedding Model", hint: "Model for semantic matching", kind: FieldKind::Editor },
+                FieldDef { id: "embedding_timeout_ms", label: "Embedding Timeout (ms)", hint: "Timeout for embedding calls", kind: FieldKind::Number },
+                FieldDef { id: "semantic_match_enabled", label: "Semantic Match", hint: "Use embeddings for pattern matching", kind: FieldKind::Bool },
+            ],
+        },
+        SectionDef {
+            id: "sandbox",
+            name: "Sandbox & security",
+            default_expanded: false,
+            fields: vec![
+                FieldDef { id: "sandbox", label: "Sandbox", hint: "Docker isolation for agents", kind: FieldKind::Bool },
+                FieldDef { id: "sandbox_image", label: "Sandbox Image", hint: "Docker image for sandbox", kind: FieldKind::Editor },
+                FieldDef { id: "phase_isolation", label: "Phase Isolation", hint: "Isolate build phases", kind: FieldKind::Bool },
+                FieldDef { id: "semgrep_enabled", label: "Semgrep", hint: "Static analysis on agent output", kind: FieldKind::Bool },
+                FieldDef { id: "require_human_approval", label: "Human Approval", hint: "Require approval before commit", kind: FieldKind::Bool },
+                FieldDef { id: "enforce_phase_rbac", label: "Phase RBAC", hint: "Enforce role-based access per phase", kind: FieldKind::Bool },
+            ],
+        },
+        SectionDef {
+            id: "discovery",
+            name: "Discovery & patterns",
+            default_expanded: false,
+            fields: vec![
+                FieldDef { id: "auto_archive_tasks", label: "Auto Archive", hint: "Archive completed tasks", kind: FieldKind::Bool },
+                FieldDef { id: "archive_keep_first", label: "Archive Keep First", hint: "Keep N first tasks visible", kind: FieldKind::Number },
+                FieldDef { id: "archive_keep_last", label: "Archive Keep Last", hint: "Keep N last tasks visible", kind: FieldKind::Number },
+                FieldDef { id: "max_pattern_injection", label: "Max Patterns", hint: "Max patterns injected per task", kind: FieldKind::Number },
+                FieldDef { id: "min_pattern_injection", label: "Min Patterns", hint: "Min patterns injected per task", kind: FieldKind::Number },
+                FieldDef { id: "history_search_results", label: "History Results", hint: "Max history entries in scout prompt", kind: FieldKind::Number },
+            ],
+        },
+        SectionDef {
+            id: "git",
+            name: "Git & PR",
+            default_expanded: false,
+            fields: vec![
+                FieldDef { id: "auto_push_remote", label: "Auto Push Remote", hint: "Git remote for auto-push (empty=off)", kind: FieldKind::Editor },
+                FieldDef { id: "create_issue_on_wip", label: "Issue on WIP", hint: "Create GitHub issue on WIP commits", kind: FieldKind::Bool },
+                FieldDef { id: "pr_review_concurrency", label: "PR Review Concurrency", hint: "Parallel file reviews in PR review", kind: FieldKind::Number },
+                FieldDef { id: "pr_poll_interval_secs", label: "PR Poll Interval", hint: "Seconds between PR status checks", kind: FieldKind::Number },
+                FieldDef { id: "dashboard_port", label: "Dashboard Port", hint: "Port for web dashboard", kind: FieldKind::Number },
+            ],
+        },
+        SectionDef {
+            id: "display",
+            name: "Display & theme",
+            default_expanded: false,
+            fields: vec![
+                FieldDef { id: "theme", label: "Theme", hint: "TUI color theme", kind: FieldKind::Enum },
+                FieldDef { id: "preview_wrap", label: "Preview Wrap", hint: "Wrap long lines in file preview", kind: FieldKind::Bool },
+            ],
+        },
+        SectionDef {
+            id: "extensions",
+            name: "Extensions & hooks",
+            default_expanded: false,
+            fields: vec![
+                FieldDef { id: "extensions", label: "Extensions", hint: "Active extension list", kind: FieldKind::Editor },
+                FieldDef { id: "on_task_complete", label: "On Task Complete", hint: "Shell hook after each task commit", kind: FieldKind::Editor },
+                FieldDef { id: "build_command", label: "Build Command", hint: "Custom build/verify command", kind: FieldKind::Editor },
+            ],
+        },
+        SectionDef {
+            id: "advanced",
+            name: "Advanced",
+            default_expanded: false,
+            fields: vec![
+                FieldDef { id: "patterns_dir", label: "Patterns Dir", hint: "Pattern storage directory", kind: FieldKind::Editor },
+                FieldDef { id: "history_dir", label: "History Dir", hint: "Build history directory", kind: FieldKind::Editor },
+                FieldDef { id: "tmux_session_prefix", label: "Tmux Prefix", hint: "Prefix for tmux session names", kind: FieldKind::Editor },
+                FieldDef { id: "tmux_keep_sessions", label: "Tmux Keep Sessions", hint: "Keep tmux sessions after task", kind: FieldKind::Bool },
+                FieldDef { id: "agent_backend", label: "Agent Backend", hint: "pty / tmux", kind: FieldKind::Enum },
+                FieldDef { id: "backpressure_only", label: "Backpressure Only", hint: "Skip LLM review, use tests only", kind: FieldKind::Bool },
+            ],
+        },
+    ]
+}
+
+#[derive(Debug, Clone)]
+pub enum RowId {
+    SectionHeader(String),
+    Field(String),
+}
+
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub struct InlineEdit {
+    pub field_id: String,
+    pub buffer: String,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub struct SettingsOverlayState {
+    pub focus: usize,
+    pub expanded_sections: std::collections::BTreeSet<String>,
+    pub editing: Option<InlineEdit>,
+    pub scroll_offset: usize,
+    pub last_render: Vec<(ratatui::layout::Rect, RowId)>,
+    pub picker: Option<ModelPicker>,
+    pub dirty: bool,
+    pub confirm_close: bool,
+    pub original_json: Option<String>,
+}
+
+impl SettingsOverlayState {
+    pub fn new() -> Self {
+        let sections = settings_sections();
+        let expanded: std::collections::BTreeSet<String> = sections
+            .iter()
+            .filter(|s| s.default_expanded)
+            .map(|s| s.id.to_string())
+            .collect();
+        Self {
+            focus: 0,
+            expanded_sections: expanded,
+            editing: None,
+            scroll_offset: 0,
+            last_render: Vec::new(),
+            picker: None,
+            dirty: false,
+            confirm_close: false,
+            original_json: None,
+        }
+    }
+
+    pub fn visible_row_count(&self) -> usize {
+        let sections = settings_sections();
+        let mut count = 0;
+        for section in &sections {
+            count += 1; // header
+            if self.expanded_sections.contains(section.id) {
+                count += section.fields.len();
+            }
+        }
+        count
+    }
+
+    pub fn toggle_section(&mut self, section_id: &str) {
+        if self.expanded_sections.contains(section_id) {
+            self.expanded_sections.remove(section_id);
+        } else {
+            self.expanded_sections.insert(section_id.to_string());
+        }
+    }
+
+    pub fn clamp_focus(&mut self) {
+        let max = self.visible_row_count().saturating_sub(1);
+        self.focus = self.focus.min(max);
+    }
+
+    pub fn ensure_focus_visible(&mut self, visible_rows: usize) {
+        if visible_rows == 0 {
+            self.scroll_offset = 0;
+            return;
+        }
+        self.clamp_focus();
+        if self.focus < self.scroll_offset {
+            self.scroll_offset = self.focus;
+        } else if self.focus >= self.scroll_offset + visible_rows {
+            self.scroll_offset = self.focus.saturating_sub(visible_rows - 1);
+        }
+    }
+
+    pub fn row_at_index(&self, index: usize) -> Option<RowId> {
+        let sections = settings_sections();
+        let mut idx = 0;
+        for section in &sections {
+            if idx == index {
+                return Some(RowId::SectionHeader(section.id.to_string()));
+            }
+            idx += 1;
+            if self.expanded_sections.contains(section.id) {
+                for field in &section.fields {
+                    if idx == index {
+                        return Some(RowId::Field(field.id.to_string()));
+                    }
+                    idx += 1;
+                }
+            }
+        }
+        None
+    }
+
+    pub fn row_at_focus(&self) -> Option<RowId> {
+        self.row_at_index(self.focus)
+    }
+}
+
+impl ModelPicker {
+    pub fn new(stage: &str, entries: Vec<ModelEntry>) -> Self {
+        let mut groups = Vec::new();
+        let mut groups_open = std::collections::BTreeSet::new();
+        for e in &entries {
+            if !groups.contains(&e.group) {
+                groups.push(e.group.clone());
+                groups_open.insert(e.group.clone());
+            }
+        }
+        Self {
+            stage: stage.to_string(),
+            focus: 0,
+            entries,
+            groups,
+            groups_open,
+            filter: String::new(),
+            filtering: false,
+        }
+    }
+
+    pub fn visible_items(&self) -> Vec<PickerItem> {
+        let mut items = Vec::new();
+        for group in &self.groups {
+            let group_entries: Vec<&ModelEntry> = self.entries.iter()
+                .filter(|e| &e.group == group)
+                .filter(|e| {
+                    if self.filter.is_empty() { return true; }
+                    let needle = self.filter.to_lowercase();
+                    e.label.to_lowercase().contains(&needle)
+                        || e.provider.to_lowercase().contains(&needle)
+                        || e.model.to_lowercase().contains(&needle)
+                })
+                .collect();
+            if group_entries.is_empty() && !self.filter.is_empty() {
+                continue;
+            }
+            let is_open = self.groups_open.contains(group);
+            items.push(PickerItem::GroupHeader(group.clone(), is_open));
+            if is_open {
+                for entry in group_entries {
+                    items.push(PickerItem::Entry(entry.clone()));
+                }
+            }
+        }
+        items
+    }
+
+    pub fn visible_count(&self) -> usize {
+        self.visible_items().len()
+    }
+
+    pub fn clamp_focus(&mut self) {
+        self.focus = self.focus.min(self.visible_count().saturating_sub(1));
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum PickerItem {
+    GroupHeader(String, bool),
+    Entry(ModelEntry),
 }
 
 #[derive(Debug, Clone, Default)]
@@ -320,6 +717,7 @@ pub struct AppState {
     pub discovery_round: usize,
     pub is_discovering: bool,
     pub should_quit: bool,
+    pub confirm_quit: bool,
     pub observatory_session_id: Option<String>,
     pub stop_after_task: bool,
     /// Set when handle_agent_output observes a typed AgentErrorKind. The TUI
@@ -352,7 +750,8 @@ pub struct AppState {
     pub show_findings: bool,
     pub show_stats_overlay: bool,
     pub show_settings_overlay: bool,
-    pub settings_overlay_cursor: usize,
+    pub settings_overlay_cursor: usize, // legacy -- kept for compatibility, driven by settings_overlay.focus
+    pub settings_overlay: Option<SettingsOverlayState>,
     pub local_models: Vec<String>,       // discovered models (LM Studio + Ollama merged)
     pub lmstudio_models: Vec<String>,    // discovered LM Studio model IDs (raw /v1/models ids)
     pub lmstudio_id_to_opencode_path: HashMap<String, String>, // suffix-after-last-slash -> canonical opencode path (e.g. "qwen3-coder-30b" -> "lmstudio/qwen/qwen3-coder-30b")
@@ -465,6 +864,7 @@ impl AppState {
             discovery_round: 0,
             is_discovering: false,
             should_quit: false,
+            confirm_quit: false,
             observatory_session_id: None,
             stop_after_task: false,
             typed_error_toast: None,
@@ -489,6 +889,7 @@ impl AppState {
             show_stats_overlay: false,
             show_settings_overlay: false,
             settings_overlay_cursor: 0,
+            settings_overlay: None,
             local_models: Vec::new(),
             lmstudio_models: Vec::new(),
             lmstudio_id_to_opencode_path: HashMap::new(),
@@ -878,5 +1279,126 @@ mod tests {
             state.selected_extension_names(),
             vec!["alpha".to_string(), "gamma".to_string()]
         );
+    }
+
+    #[test]
+    fn test_dual_selection_display_label_off() {
+        assert_eq!(DualSelection::display_label(&[]), "Off");
+    }
+
+    #[test]
+    fn test_dual_selection_display_label_claude_solo() {
+        assert_eq!(
+            DualSelection::display_label(&["claude:opus".to_string()]),
+            "Claude Solo"
+        );
+    }
+
+    #[test]
+    fn test_dual_selection_display_label_codex_solo() {
+        assert_eq!(
+            DualSelection::display_label(&["codex:".to_string()]),
+            "Codex Solo"
+        );
+    }
+
+    #[test]
+    fn test_dual_selection_display_label_dual() {
+        assert_eq!(
+            DualSelection::display_label(&["claude:opus".to_string(), "codex:".to_string()]),
+            "Dual: Claude+Codex"
+        );
+    }
+
+    #[test]
+    fn test_settings_overlay_state_visible_rows() {
+        let ov = SettingsOverlayState::new();
+        let total = ov.visible_row_count();
+        assert!(total > 10, "should have sections + expanded fields");
+    }
+
+    #[test]
+    fn test_settings_overlay_toggle_section() {
+        let mut ov = SettingsOverlayState::new();
+        let before = ov.visible_row_count();
+        ov.toggle_section("routing");
+        let after = ov.visible_row_count();
+        assert!(after < before, "collapsing a section reduces row count");
+        ov.toggle_section("routing");
+        assert_eq!(ov.visible_row_count(), before, "re-expanding restores count");
+    }
+
+    #[test]
+    fn test_settings_overlay_ensure_focus_visible_scrolls() {
+        let mut ov = SettingsOverlayState::new();
+        ov.focus = 18;
+        ov.ensure_focus_visible(8);
+        assert_eq!(ov.scroll_offset, 11);
+        ov.focus = 2;
+        ov.ensure_focus_visible(8);
+        assert_eq!(ov.scroll_offset, 2);
+    }
+
+    #[test]
+    fn test_model_picker_visible_items_with_groups() {
+        let entries = vec![
+            ModelEntry { provider: "claude".into(), model: "opus-4-7".into(), label: "claude-opus-4-7".into(), recommended: true, group: "Claude".into() },
+            ModelEntry { provider: "codex".into(), model: "gpt-5.4".into(), label: "gpt-5.4".into(), recommended: false, group: "Codex".into() },
+        ];
+        let picker = ModelPicker::new("plan", entries);
+        let items = picker.visible_items();
+        assert_eq!(items.len(), 4); // 2 headers + 2 entries
+    }
+
+    #[test]
+    fn test_model_picker_filter() {
+        let entries = vec![
+            ModelEntry { provider: "claude".into(), model: "opus-4-7".into(), label: "claude-opus-4-7".into(), recommended: true, group: "Claude".into() },
+            ModelEntry { provider: "codex".into(), model: "gpt-5.4".into(), label: "gpt-5.4".into(), recommended: false, group: "Codex".into() },
+        ];
+        let mut picker = ModelPicker::new("plan", entries);
+        picker.filter = "opus".to_string();
+        let items = picker.visible_items();
+        // Claude header + opus entry; Codex group filtered out entirely
+        assert_eq!(items.len(), 2);
+    }
+
+    #[test]
+    fn test_model_picker_collapse_group() {
+        let entries = vec![
+            ModelEntry { provider: "claude".into(), model: "opus-4-7".into(), label: "claude-opus-4-7".into(), recommended: true, group: "Claude".into() },
+            ModelEntry { provider: "claude".into(), model: "sonnet-4-6".into(), label: "claude-sonnet-4-6".into(), recommended: false, group: "Claude".into() },
+        ];
+        let mut picker = ModelPicker::new("plan", entries);
+        assert_eq!(picker.visible_items().len(), 3); // 1 header + 2 entries
+        picker.groups_open.remove("Claude");
+        assert_eq!(picker.visible_items().len(), 1); // 1 header only
+    }
+
+    #[test]
+    fn test_two_level_esc_closes_picker_first() {
+        let mut ov = SettingsOverlayState::new();
+        let entries = vec![
+            ModelEntry { provider: "claude".into(), model: "opus".into(), label: "opus".into(), recommended: false, group: "Claude".into() },
+        ];
+        ov.picker = Some(ModelPicker::new("plan", entries));
+        assert!(ov.picker.is_some());
+        // First Esc: close picker
+        ov.picker = None;
+        assert!(ov.picker.is_none());
+    }
+
+    #[test]
+    fn test_routing_section_has_stage_rows() {
+        let sections = settings_sections();
+        let routing = sections.iter().find(|s| s.id == "routing").unwrap();
+        let stage_fields: Vec<&str> = routing.fields.iter()
+            .filter(|f| f.kind == FieldKind::StagePicker)
+            .map(|f| f.id)
+            .collect();
+        assert!(stage_fields.contains(&"stage_plan"), "missing stage_plan");
+        assert!(stage_fields.contains(&"stage_build"), "missing stage_build");
+        assert!(stage_fields.contains(&"stage_audit"), "missing stage_audit");
+        assert_eq!(stage_fields.len(), 9, "expected 9 stage picker rows");
     }
 }
