@@ -15,9 +15,16 @@ static RE_DISCOVERY_HEADER: LazyLock<Regex> =
 static RE_DISCOVERY_TASK_ID: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"D(\d+)\.\d+").unwrap());
 
-/// Matches a pipeline progress indicator like `[SPID]` or `[SPID!]` (and legacy `[PBRF]`) at the end of a task line.
+/// Matches a pipeline progress indicator at the end of a task line. The
+/// current taxonomy is QRPBA (Query, Research, Plan, Build, Audit) so the
+/// regex must accept the `+` and `-` plan-review sub-slot characters as
+/// well as the `!` failure sentinel. The character class also tolerates
+/// the legacy SPID (Scout, Plan, Implement, Verify) and PBRF
+/// (Planner, Builder, Reviewer, Fixer) letter sets so archived TASKS.md
+/// entries continue to parse without modification. Length range 4..=7
+/// covers `[SPID]` (4) through `[QRP+BA!]` / `[QRP+ID!]` (7).
 static RE_PIPELINE_PROGRESS: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"\s+\[([A-Z!.\-]{4,6})\]\s*$").unwrap());
+    LazyLock::new(|| Regex::new(r"\s+\[([A-Z!.\-+]{4,7})\]\s*$").unwrap());
 
 #[derive(Debug, Clone)]
 pub struct Task {

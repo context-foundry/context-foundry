@@ -5332,11 +5332,11 @@ async fn process_task(
         let doubt_char = if skip_verify || ctx.config.backpressure_only {
             "-"
         } else {
-            "D"
+            "A"
         };
         let fail_char = if !validated { "!" } else { "" };
         let progress = format!(
-            "{}{}{}{}I{}{}",
+            "{}{}{}{}B{}{}",
             query_char, research_char, planner_char, plan_review_char, doubt_char, fail_char
         );
         let _lock = ctx
@@ -5625,11 +5625,11 @@ async fn process_task(
         let doubt_char_tc = if skip_verify || ctx.config.backpressure_only {
             "-"
         } else {
-            "D"
+            "A"
         };
         let fail_char_tc = if !validated { "!" } else { "" };
         let phases_run_str = format!(
-            "{}{}{}{}I{}{}",
+            "{}{}{}{}B{}{}",
             query_char, research_char, planner_char, plan_review_char, doubt_char_tc, fail_char_tc
         );
         observatory::log_event(
