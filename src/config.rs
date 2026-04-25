@@ -1100,11 +1100,20 @@ impl Config {
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_string();
+
+        // D2.9: only restore from snapshot when one actually exists. Without
+        // this guard, calling clear_builder_routing on a tree that's already
+        // a dual config (no local-override snapshot present) would set
+        // builder_models = [] and strand the user with no way back to dual
+        // routing except hand-editing .foundry.json. Callers in
+        // apply_builder_selection invoke this on every non-local selection,
+        // not just when undoing a local override, so the no-snapshot path
+        // must be a true no-op.
         if prev_models.is_empty() {
-            value["builder_models"] = serde_json::json!(Vec::<String>::new());
-        } else {
-            value["builder_models"] = serde_json::json!(prev_models);
+            return;
         }
+
+        value["builder_models"] = serde_json::json!(prev_models);
         if prev_selection.is_empty() {
             value["dual_selection"] = serde_json::json!("first");
         } else {
@@ -1394,28 +1403,63 @@ mod tests {
     }
 
     #[test]
-    fn clear_builder_routing_with_no_snapshot_resets_to_empty_first_default() {
+    fn clear_builder_routing_with_no_snapshot_is_a_noop() {
+        // D2.9: clear_builder_routing must be a no-op when no
+        // prev_builder_models snapshot exists. Previously this path nuked
+        // builder_models to [] which stranded users in a dual config where
+        // every dual-spec selection silently emptied the builder list and
+        // left the TUI cycle showing only LM Studio models.
         let dir = tempfile::tempdir().unwrap();
-        std::fs::write(
-            dir.path().join(".foundry.json"),
-            r#"{
-                "builder_models":["opencode:lmstudio/qwen3.6-35b-a3b"],
-                "dual_selection":"first",
-                "builder_provider":"opencode",
-                "builder_model":"lmstudio/qwen3.6-35b-a3b"
-            }"#,
-        )
-        .unwrap();
+        let initial = r#"{
+            "builder_models":["claude:opus","codex:"],
+            "dual_selection":"both",
+            "builder_provider":"claude",
+            "builder_model":"opus"
+        }"#;
+        std::fs::write(dir.path().join(".foundry.json"), initial).unwrap();
         Config::clear_builder_routing(dir.path());
         let content = std::fs::read_to_string(dir.path().join(".foundry.json")).unwrap();
         let value: serde_json::Value = serde_json::from_str(&content).unwrap();
         let arr = value["builder_models"]
             .as_array()
             .expect("builder_models should be an array");
-        assert!(arr.is_empty());
-        assert_eq!(value["dual_selection"], "first");
+        assert_eq!(
+            arr.len(),
+            2,
+            "no-snapshot clear_builder_routing must preserve dual builder_models"
+        );
+        assert_eq!(arr[0], "claude:opus");
+        assert_eq!(arr[1], "codex:");
+        assert_eq!(value["dual_selection"], "both");
         assert_eq!(value["builder_provider"], "claude");
         assert_eq!(value["builder_model"], "opus");
+    }
+
+    #[test]
+    fn clear_builder_routing_with_no_snapshot_leaves_local_override_alone() {
+        // Defensive: if a caller invokes clear_builder_routing on a tree
+        // that is in local-override mode but has no snapshot recorded,
+        // we'd rather preserve the user's current state than nuke their
+        // builder_models to []. The fix is a no-op rather than a destructive
+        // reset.
+        let dir = tempfile::tempdir().unwrap();
+        let initial = r#"{
+            "builder_models":["opencode:lmstudio/qwen3.6-35b-a3b"],
+            "dual_selection":"first",
+            "builder_provider":"opencode",
+            "builder_model":"lmstudio/qwen3.6-35b-a3b"
+        }"#;
+        std::fs::write(dir.path().join(".foundry.json"), initial).unwrap();
+        Config::clear_builder_routing(dir.path());
+        let content = std::fs::read_to_string(dir.path().join(".foundry.json")).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&content).unwrap();
+        let arr = value["builder_models"]
+            .as_array()
+            .expect("builder_models should be an array");
+        assert_eq!(arr.len(), 1);
+        assert_eq!(arr[0], "opencode:lmstudio/qwen3.6-35b-a3b");
+        assert_eq!(value["builder_provider"], "opencode");
+        assert_eq!(value["builder_model"], "lmstudio/qwen3.6-35b-a3b");
     }
 
     #[test]
