@@ -82,8 +82,8 @@ pub(super) async fn run_append_tasks(
     );
     let result = agent::run_agent(
         &AgentRole::Planner,
-        agent::ModelProvider::Claude,
-        "sonnet",
+        Config::parse_provider(&ctx.config.planner_provider),
+        &ctx.config.planner_model,
         &prompt,
         &ctx.project_dir,
         agent_tx,

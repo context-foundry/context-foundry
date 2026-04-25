@@ -790,6 +790,7 @@ fn spawn_append_tasks(
     request: AppendTasksRequest,
     shutdown: &Arc<AtomicBool>,
 ) {
+    let _ = config;
     if !prepare_append_tasks_start(
         project_dir,
         state,
@@ -815,9 +816,16 @@ fn spawn_append_tasks(
     state.next_task_hint = None;
     state.is_discovering = false;
 
+    let mut working = Config::load(project_dir);
+    let dual_sel = state.dual_selection.as_str().to_string();
+    working.dual_selection = dual_sel.clone();
+    working.builder_models = state.builder_model_specs.clone();
+    let mut pipeline_configs = working.selected_pipeline_configs(&dual_sel);
+    let effective_config = pipeline_configs.drain(..).next().unwrap_or(working);
+
     let run_context = RunContext::new(
         project_dir,
-        config.clone(),
+        effective_config,
         shutdown.clone(),
         state.tasks_file_lock.clone(),
     );

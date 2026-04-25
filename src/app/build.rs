@@ -5761,28 +5761,35 @@ async fn process_task(
     }
 
     if validated && changed_file_count >= 3 {
-        // Fire-and-forget: pattern extraction runs in the background so the
-        // loop can start the next task immediately.  It writes to a separate
-        // patterns directory, not to the source tree, so there is no conflict.
-        let bg_task_id = task_id.to_string();
-        let bg_task_desc = task_desc.to_string();
-        let bg_ctx = ctx.clone();
-        let bg_patterns_dir = patterns_dir.to_path_buf();
-        let bg_patterns_extracted = patterns_extracted.clone();
-        let bg_tx = tx.clone();
-        tokio::spawn(async move {
-            tokio::time::sleep(Duration::from_secs(bg_ctx.config.pause_between_agents_secs)).await;
-            run_pattern_extraction(
-                &bg_task_id,
-                &bg_task_desc,
-                &bg_ctx,
-                &bg_patterns_dir,
-                &bg_patterns_extracted,
-                &bg_tx,
-            )
-            .await;
-            let _ = std::fs::remove_file(&bg_patterns_extracted);
-        });
+        if Config::parse_provider(&eff_task_builder_provider) != agent::ModelProvider::Claude {
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+                "patterns: skipped (local model active)".to_string(),
+            )));
+        } else {
+            // Fire-and-forget: pattern extraction runs in the background so the
+            // loop can start the next task immediately.  It writes to a separate
+            // patterns directory, not to the source tree, so there is no conflict.
+            let bg_task_id = task_id.to_string();
+            let bg_task_desc = task_desc.to_string();
+            let bg_ctx = ctx.clone();
+            let bg_patterns_dir = patterns_dir.to_path_buf();
+            let bg_patterns_extracted = patterns_extracted.clone();
+            let bg_tx = tx.clone();
+            tokio::spawn(async move {
+                tokio::time::sleep(Duration::from_secs(bg_ctx.config.pause_between_agents_secs))
+                    .await;
+                run_pattern_extraction(
+                    &bg_task_id,
+                    &bg_task_desc,
+                    &bg_ctx,
+                    &bg_patterns_dir,
+                    &bg_patterns_extracted,
+                    &bg_tx,
+                )
+                .await;
+                let _ = std::fs::remove_file(&bg_patterns_extracted);
+            });
+        }
     }
 
     if should_restart_docker(task_desc) {
