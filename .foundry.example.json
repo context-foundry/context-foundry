@@ -1,5 +1,5 @@
 {
-  "agent_timeout_secs": 900,
+  "agent_timeout_secs": 180,
   "backpressure_only": false,
   "builder_model": "sonnet",
   "builder_models": ["claude:sonnet"],

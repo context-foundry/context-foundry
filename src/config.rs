@@ -457,7 +457,7 @@ impl Default for Config {
             pause_between_agents_secs: 3,
             pause_between_cycles_secs: 30,
 
-            agent_timeout_secs: 600, // 10 minutes
+            agent_timeout_secs: 180, // 3 minutes idle; hard timeout = 4x = 12 minutes
 
             patterns_dir: "~/.foundry/patterns".into(),
             history_dir: "~/.foundry/history".into(),
