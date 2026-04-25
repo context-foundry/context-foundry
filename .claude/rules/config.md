@@ -35,12 +35,16 @@ Key config groups:
   "auto_push_remote": null,
   "agent_timeout_secs": 600,
   "patterns_dir": "~/.foundry/patterns",
-  "theme": "dark"
+  "theme": "dark",
+  "on_task_complete": null,
+  "pipeline_stages": []
 }
 ```
 All fields optional -- `#[serde(default)]` provides sensible defaults.
 `Config::for_pipeline(spec)` overrides all provider fields for dual-model routing.
 `Config::normalize_model_for_provider()` clears model names incompatible with the target provider.
+
+`on_task_complete` runs a fire-and-forget shell hook after each task commit (envs: `FOUNDRY_TASK_ID`, `FOUNDRY_TASK_STATUS`, `FOUNDRY_TASK_DESC`, `FOUNDRY_COMMIT_SHA`). `pipeline_stages` lists the RPID stages (`query`, `research`, `plan`, `implement`, `doubt`); `enabled: false` cleanly skips a stage in the build loop. See README "Hooks" and "Pipeline Stages" sections.
 
 ## TASKS.md Task Format
 ```markdown
