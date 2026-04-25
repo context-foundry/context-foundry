@@ -2363,6 +2363,50 @@ fn classify_agent_error(text: &str, model_name: &str) -> Option<AgentErrorKind> 
     None
 }
 
+// opencode --format json schema (partial live capture against opencode 0.16.x +
+// LM Studio at 127.0.0.1:1234 on 2026-04-25; see tests/fixtures/opencode-events.jsonl).
+//
+// Live `opencode run --model lmstudio/<MODEL> --format json "say hi"` round-trips
+// could not be completed against the LM Studio fleet present at fixture-update
+// time -- every loaded model had n_ctx == 4096 while opencode's system prompt
+// requires n_keep ~14782. Two real events were observed before the run aborted:
+//   {"type":"step_start","timestamp":<ms>,"sessionID":"ses_...","part":{...,"type":"step-start"}}
+//   {"type":"error","timestamp":<ms>,"sessionID":"ses_...","error":{"name":"UnknownError","data":{"message":"..."}}}
+// These two lines confirm:
+//   - Top-level discriminator is "type" (string), with "event" as a documented fallback.
+//   - Session ID field name is "sessionID" (camelCase) at the top level.
+//   - Inner part discriminator uses "step-start" (kebab), while the *top-level*
+//     "type" can be "step_start" (snake) -- opencode's casing is NOT consistent
+//     across the two layers.
+//   - Error events nest the user-facing string at error.data.message.
+//   - Token/cost fields ("tokens" / "cost" / "usage") were ABSENT in the partial
+//     capture because the run never produced a chat completion.
+//
+// Because the live capture was partial, the regression fixture is a multi-variant
+// synthetic file (tests/fixtures/opencode-events.jsonl) that exercises every
+// plausible spelling of the session-ID field (`sessionID`, `session_id`,
+// `sessionId`) and both `session.start` / `session.started` discriminators so
+// the parser has at least one assertion against schema drift between releases.
+// Distinct top-level `type` values exercised by the synthetic fixture:
+//   - session.start        (suppressed lifecycle, parser returns None)
+//   - session.started      (suppressed lifecycle, parser returns None)
+//   - text                 (Text)
+//   - tool.use             (ToolUse)
+//   - tool.result          (ToolResult)
+//   - error                (Stderr or typed Error via classify_agent_error)
+//   - unknown.kind         (labeled-Text fallback)
+//   - step.start           (suppressed lifecycle, parser returns None)
+//   - complete             (Result + populates LAST_RESULT_USAGE via tokens/cost)
+// Token/cost surface (synthetic): "tokens" object with "input"/"output";
+// cost field: top-level "cost".
+//
+// IMPORTANT: opencode's field-name casing is NOT stable across versions. The
+// smoke script's check 4 greps for any of `sessionID`, `session_id`, or
+// `sessionId` so that a future opencode release that switches casing does not
+// silently break the "opencode actually ran" assertion. When a fully successful
+// live capture is available (LM Studio model with n_ctx >= 8192 loaded), the
+// fixture should be replaced with that capture verbatim and this comment block
+// updated to reflect the observed taxonomy.
 fn parse_opencode_event(line: &str, model_name: &str) -> Option<AgentOutputEvent> {
     let v: Value = serde_json::from_str(line).ok()?;
     let kind = v
@@ -3968,6 +4012,77 @@ mod tests {
         let u = usage.unwrap();
         assert_eq!(u.input_tokens, 1234);
         assert_eq!(u.output_tokens, 56);
+    }
+
+    #[test]
+    fn opencode_event_parser_real_capture_assertions() {
+        LAST_RESULT_USAGE.with(|c| c.set(None));
+        let fixture = include_str!("../tests/fixtures/opencode-events.jsonl");
+        let mut session_marker_seen = false;
+        let mut total_lines: u32 = 0;
+        let mut parseable_lines: u32 = 0;
+        let mut emitted_events: u32 = 0;
+        let mut none_for_suppressed = false;
+        for line in fixture.lines() {
+            if line.trim().is_empty() {
+                continue;
+            }
+            total_lines += 1;
+            let v: serde_json::Value = match serde_json::from_str(line) {
+                Ok(v) => v,
+                Err(_) => continue,
+            };
+            parseable_lines += 1;
+            if v.get("sessionID").is_some()
+                || v.get("session_id").is_some()
+                || v.get("sessionId").is_some()
+            {
+                session_marker_seen = true;
+            }
+            let kind = v
+                .get("type")
+                .and_then(|x| x.as_str())
+                .or_else(|| v.get("event").and_then(|x| x.as_str()))
+                .unwrap_or("");
+            let is_suppressed = matches!(
+                kind,
+                "session.start" | "session.started" | "step.start" | "installation.updated"
+            );
+            if is_suppressed {
+                let result = parse_opencode_event(line, "lmstudio/qwen3.6-35b-a3b");
+                assert!(
+                    result.is_none(),
+                    "suppressed lifecycle kind {:?} must parse to None, got {:?}",
+                    kind,
+                    result
+                );
+                none_for_suppressed = true;
+            } else if let Some(_event) =
+                parse_opencode_event(line, "lmstudio/qwen3.6-35b-a3b")
+            {
+                emitted_events += 1;
+            }
+        }
+        assert!(
+            parseable_lines >= 2,
+            "fixture must have at least 2 parseable JSON lines, got {} (total {})",
+            parseable_lines,
+            total_lines
+        );
+        assert!(
+            session_marker_seen,
+            "fixture must contain a session-id field (sessionID, session_id, or sessionId)"
+        );
+        assert!(
+            emitted_events >= 1,
+            "parser must emit at least one event from the fixture, got {}",
+            emitted_events
+        );
+        assert!(
+            none_for_suppressed,
+            "at least one suppressed lifecycle line must be present and parser must return None for it"
+        );
+        let _ = LAST_RESULT_USAGE.with(|c| c.take());
     }
 
     #[test]

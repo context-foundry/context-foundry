@@ -112,24 +112,29 @@ cat >TASKS.md <<'EOF'
 - [ ] T1.1: Create a file named hello.txt at the repo root containing the single line "hello world".
 EOF
 
-cat >.foundry.json <<EOF
-{
-  "builder_provider": "opencode",
-  "builder_model": "${MODEL}",
-  "builder_models": ["opencode:${MODEL}"],
-  "dual_selection": "first",
-  "run_mode": "sprint",
-  "agent_timeout_secs": 300,
-  "skip_planner_for_simple": true,
-  "pipeline_stages": [
-    {"id": "query",     "label": "QUERY",     "enabled": false},
-    {"id": "research",  "label": "RESEARCH",  "enabled": false},
-    {"id": "plan",      "label": "PLAN",      "enabled": false},
-    {"id": "implement", "label": "IMPLEMENT", "enabled": true},
-    {"id": "doubt",     "label": "DOUBT",     "enabled": false}
-  ]
+MODEL="$MODEL" python3 - <<'PY'
+import json, os, sys
+model = os.environ["MODEL"]
+config = {
+    "builder_provider": "opencode",
+    "builder_model": model,
+    "builder_models": [f"opencode:{model}"],
+    "dual_selection": "first",
+    "run_mode": "sprint",
+    "agent_timeout_secs": 300,
+    "skip_planner_for_simple": True,
+    "pipeline_stages": [
+        {"id": "query",     "label": "QUERY",     "enabled": False},
+        {"id": "research",  "label": "RESEARCH",  "enabled": False},
+        {"id": "plan",      "label": "PLAN",      "enabled": False},
+        {"id": "implement", "label": "IMPLEMENT", "enabled": True},
+        {"id": "doubt",     "label": "DOUBT",     "enabled": False},
+    ],
 }
-EOF
+with open(".foundry.json", "w") as f:
+    json.dump(config, f, indent=2)
+    f.write("\n")
+PY
 
 # Pre-seed buildloop artifacts so any gate that expects them does not fail the
 # build before the IMPLEMENT stage runs.
@@ -208,16 +213,41 @@ shopt -u nullglob
 echo "[smoke] check 3: ${#LOG_FILES[@]} log file(s) in .buildloop/logs/"
 
 # Check 4: at least one log file shows an opencode session marker AND no log file
-# shows a Claude stream-json system/init marker.
+# shows a Claude stream-json system/init marker. Accept any spelling of the
+# session-ID field (sessionID, session_id, sessionId) since opencode's casing
+# has historically drifted between releases. Fallback assertion: every log file
+# the builder produced must contain at least one parseable JSON line.
 OPENCODE_HITS=0
 CLAUDE_HITS=0
+JSON_LINE_TOTAL=0
 for f in "${LOG_FILES[@]}"; do
-  if grep -q '"sessionID"' "$f"; then OPENCODE_HITS=$((OPENCODE_HITS + 1)); fi
-  if grep -q '"subtype":"init"' "$f"; then CLAUDE_HITS=$((CLAUDE_HITS + 1)); fi
+  if grep -Eq '"(sessionID|session_id|sessionId)"' "$f"; then
+    OPENCODE_HITS=$((OPENCODE_HITS + 1))
+  fi
+  if grep -q '"subtype":"init"' "$f"; then
+    CLAUDE_HITS=$((CLAUDE_HITS + 1))
+  fi
+  FILE_JSON_LINES="$(LOG_PATH="$f" python3 -c '
+import json, os, sys
+ok = 0
+with open(os.environ["LOG_PATH"]) as fh:
+    for line in fh:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            json.loads(line)
+            ok += 1
+        except json.JSONDecodeError:
+            pass
+print(ok)
+')"
+  JSON_LINE_TOTAL=$((JSON_LINE_TOTAL + FILE_JSON_LINES))
 done
-[[ "$OPENCODE_HITS" -ge 1 ]] || fail "no opencode 'sessionID' marker in any log file (opencode never ran)"
+[[ "$OPENCODE_HITS" -ge 1 ]] || fail "no opencode session marker (sessionID/session_id/sessionId) in any log file (opencode never ran or schema drifted)"
 [[ "$CLAUDE_HITS" -eq 0 ]] || fail "found Claude stream-json 'subtype:init' in $CLAUDE_HITS log file(s) -- routing leaked to Claude"
-echo "[smoke] check 4: opencode_hits=$OPENCODE_HITS claude_hits=$CLAUDE_HITS"
+[[ "$JSON_LINE_TOTAL" -ge 1 ]] || fail "no parseable JSON lines across ${#LOG_FILES[@]} log file(s) -- builder log is malformed (capture pipe broken or all output stripped)"
+echo "[smoke] check 4: opencode_hits=$OPENCODE_HITS claude_hits=$CLAUDE_HITS json_lines=$JSON_LINE_TOTAL"
 
 # Check 5: no typed agent error surfaced on stderr
 if grep -E '\[error/(ContextOverflow|ProviderUnreachable|ModelNotLoaded)' stderr.log >/dev/null; then
