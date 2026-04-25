@@ -23,9 +23,9 @@ TIMEOUT_SECS=600
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --keep)    KEEP=1;             shift ;;
-    --timeout) TIMEOUT_SECS="$2";  shift 2 ;;
+    --timeout) [[ $# -ge 2 ]] || { echo "[smoke] FAIL: --timeout requires a value" >&2; exit 1; }; TIMEOUT_SECS="$2";  shift 2 ;;
     -h|--help)
-      sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'
+      sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'
       exit 0
       ;;
     *)
