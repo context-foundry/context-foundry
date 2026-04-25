@@ -229,13 +229,16 @@ fn apply_builder_selection(state: &mut AppState, value: &str) {
     // if a name appears in both) and route via opencode for both.
     if state.local_models.contains(&value.to_string()) {
         let model_path = if state.lmstudio_models.iter().any(|m| m == value) {
-            // Suffix after the last '/' of the LM Studio /v1/models id
-            let suffix = value.rsplit('/').next().unwrap_or(value);
-            state
-                .lmstudio_id_to_opencode_path
-                .get(suffix)
-                .cloned()
-                .unwrap_or_else(|| format!("lmstudio/{}", value))
+            // Always use the LM Studio /v1/models id verbatim with the
+            // lmstudio/ provider prefix. opencode's `models lmstudio` output
+            // is inconsistent: it strips vendor namespaces for some models
+            // (e.g. reports "lmstudio/qwen3.6-27b" for LM Studio's
+            // "qwen/qwen3.6-27b") which then routes to a JIT-loaded duplicate
+            // with the default 4K context window. Trusting the LM Studio id
+            // directly preserves the namespace so opencode forwards the
+            // correct model id to LM Studio's API and hits the user's
+            // already-loaded instance.
+            format!("lmstudio/{}", value)
         } else {
             format!("ollama/{}", value)
         };

@@ -642,8 +642,8 @@ impl AppState {
     }
 
     /// Returns the human-readable badge label for the currently selected builder.
-    /// Local models are shown with a "~" prefix to distinguish them from active pipeline specs
-    /// (local model routing is not yet wired to the agent pipeline).
+    /// Local models route through opencode (P32.4); no prefix distinguishes them
+    /// from native Claude/Codex specs anymore.
     pub fn active_builder_label(&self) -> Option<String> {
         use crate::config::Config;
         let mut list: Vec<String> = self
@@ -661,20 +661,13 @@ impl AppState {
                 .join("/");
             list.push(combined);
         }
-        let local_start = list.len();
         for m in &self.local_models {
             if !list.contains(m) {
                 list.push(m.clone());
             }
         }
         let cursor = self.builder_cursor.min(list.len().saturating_sub(1));
-        list.into_iter().enumerate().nth(cursor).map(|(i, label)| {
-            if i >= local_start {
-                format!("~{label}")
-            } else {
-                label
-            }
-        })
+        list.into_iter().nth(cursor)
     }
 }
 
