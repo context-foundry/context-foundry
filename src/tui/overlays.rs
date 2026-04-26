@@ -1213,7 +1213,7 @@ pub(super) fn render_settings_overlay(frame: &mut Frame, state: &AppState) {
     );
 
     // Model picker popup (rendered on top of the settings overlay)
-    if let Some(ref ov_state) = ov {
+    if let Some(ov_state) = ov {
         if let Some(ref picker) = ov_state.picker {
             let stage_overridden = config
                 .stage_overrides
