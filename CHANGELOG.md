@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [4.0.0] - 2026-04-25
+## [3.0.0] - 2026-04-25
 
 ### Added
 - Welcome screen on startup with 3D ASCII "Context Foundry" logo (larry3d font), version, date, provider status, rotating creative messages (30 hardcoded + async Ollama LLM generation), and contextfoundry.dev link
@@ -19,7 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Pipeline tab bar removed from pipeline diagram (tabs moved to view headers)
 - Pipeline height reduced from 7 to 6 rows across all layouts
 - Welcome screen dismisses on Enter, Esc, or Ctrl+C
-- Version aligned to v4.0.0 across Cargo.toml, npm, and GitHub releases
+- Version aligned to v3.0.0 across Cargo.toml, npm, and GitHub releases
 
 ### Fixed
 - macOS code signing: build+install command now includes `codesign -s - --force` to prevent SIGKILL from Apple System Policy
