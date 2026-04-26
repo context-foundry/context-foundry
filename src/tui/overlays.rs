@@ -1,8 +1,8 @@
 use ratatui::{
-    layout::{Constraint, Direction, Layout, Rect},
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, Paragraph},
+    widgets::{Block, BorderType, Borders, Clear, Paragraph},
     Frame,
 };
 
@@ -1011,6 +1011,7 @@ pub(super) fn render_settings_overlay(frame: &mut Frame, state: &AppState) {
         Block::default()
             .borders(Borders::ALL)
             .border_style(Style::default().fg(theme.accent))
+            .style(Style::default().bg(theme.surface))
             .title(Span::styled(
                 " Settings -- Foundry ",
                 Style::default().fg(theme.accent).add_modifier(Modifier::BOLD),
@@ -1366,7 +1367,7 @@ fn render_confirm_banner(
     frame.render_widget(Clear, area);
     let block = Block::default()
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Yellow))
+        .border_style(Style::default().fg(theme.accent))
         .style(Style::default().bg(theme.surface));
     let inner = block.inner(area);
     frame.render_widget(block, area);
@@ -1374,7 +1375,7 @@ fn render_confirm_banner(
     let mut spans = vec![
         Span::styled(
             format!("  {}  ", title),
-            Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+            Style::default().fg(theme.accent).add_modifier(Modifier::BOLD),
         ),
     ];
     for action in actions {
@@ -1388,28 +1389,109 @@ fn render_confirm_banner(
 
 pub fn render_quit_confirm(frame: &mut Frame, theme: &crate::tui::theme::TuiTheme) {
     let area = frame.area();
-    let text = "  Quit foundry?  [y] quit  [n] cancel  ";
-    let w = text.len() as u16 + 2;
-    let h: u16 = 3;
+    let w: u16 = 54.min(area.width.saturating_sub(2));
+    let h: u16 = 9.min(area.height.saturating_sub(2));
+    if w < 20 || h < 5 {
+        // Terminal too small for the full modal -- fall back to a single line.
+        let text = "  Quit foundry?  [y] quit  [n] cancel  ";
+        let fw = (text.len() as u16 + 2).min(area.width);
+        let fx = area.width.saturating_sub(fw) / 2;
+        let fy = area.height.saturating_sub(3) / 2;
+        let banner = Rect { x: fx, y: fy, width: fw, height: 3 };
+        frame.render_widget(Clear, banner);
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(theme.accent))
+            .style(Style::default().bg(theme.surface));
+        let inner = block.inner(banner);
+        frame.render_widget(block, banner);
+        frame.render_widget(
+            Paragraph::new(Line::from(text)).style(Style::default().fg(theme.text)),
+            inner,
+        );
+        return;
+    }
+
     let x = area.width.saturating_sub(w) / 2;
     let y = area.height.saturating_sub(h) / 2;
-    let banner = Rect { x, y, width: w.min(area.width), height: h };
+    let modal = Rect { x, y, width: w, height: h };
 
-    frame.render_widget(Clear, banner);
+    // Drop shadow: offset right 2, down 1, painted in the muted color so the
+    // modal looks lifted off the surface behind it.
+    let sx = modal.x.saturating_add(2);
+    let sy = modal.y.saturating_add(1);
+    let sw = modal.width.min(area.width.saturating_sub(sx));
+    let sh = modal.height.min(area.height.saturating_sub(sy));
+    if sw > 0 && sh > 0 {
+        let shadow = Rect { x: sx, y: sy, width: sw, height: sh };
+        frame.render_widget(Clear, shadow);
+        frame.render_widget(
+            Block::default().style(Style::default().bg(theme.muted)),
+            shadow,
+        );
+    }
+
+    // Main modal -- double border in accent, surface fill.
+    frame.render_widget(Clear, modal);
     let block = Block::default()
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Yellow))
-        .style(Style::default().bg(theme.surface));
-    let inner = block.inner(banner);
-    frame.render_widget(block, banner);
+        .border_type(BorderType::Double)
+        .border_style(
+            Style::default()
+                .fg(theme.accent)
+                .add_modifier(Modifier::BOLD),
+        )
+        .style(Style::default().bg(theme.surface).fg(theme.text));
+    let inner = block.inner(modal);
+    frame.render_widget(block, modal);
 
-    let line = Line::from(vec![
-        Span::styled(
-            "  Quit foundry?  ",
-            Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
-        ),
-        Span::styled("[y] quit  ", Style::default().fg(theme.text)),
-        Span::styled("[n] cancel  ", Style::default().fg(theme.text)),
-    ]);
-    frame.render_widget(Paragraph::new(line), inner);
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(1), // title
+            Constraint::Length(1), // spacer
+            Constraint::Length(1), // message
+            Constraint::Length(1), // spacer
+            Constraint::Length(1), // buttons
+            Constraint::Min(0),
+        ])
+        .split(inner);
+
+    let title = Paragraph::new(Line::from(Span::styled(
+        "Quit foundry?",
+        Style::default()
+            .fg(theme.accent)
+            .add_modifier(Modifier::BOLD),
+    )))
+    .alignment(Alignment::Center);
+    frame.render_widget(title, chunks[0]);
+
+    let msg = Paragraph::new(Line::from(Span::styled(
+        "Any in-flight work will be left as-is.",
+        Style::default().fg(theme.muted),
+    )))
+    .alignment(Alignment::Center);
+    frame.render_widget(msg, chunks[2]);
+
+    let quit_btn = Span::styled(
+        "  [Y] Quit  ",
+        Style::default()
+            .bg(theme.error)
+            .fg(theme.text)
+            .add_modifier(Modifier::BOLD),
+    );
+    let cancel_btn = Span::styled(
+        "  [N] Cancel  ",
+        Style::default()
+            .bg(theme.border)
+            .fg(theme.text)
+            .add_modifier(Modifier::BOLD),
+    );
+    let buttons = Paragraph::new(Line::from(vec![
+        quit_btn,
+        Span::raw("    "),
+        cancel_btn,
+    ]))
+    .alignment(Alignment::Center);
+    frame.render_widget(buttons, chunks[4]);
 }

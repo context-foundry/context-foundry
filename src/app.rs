@@ -458,10 +458,30 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
         }
     });
 
+    // Fetch a fresh welcome message from a local LLM (best-effort, non-blocking)
+    {
+        let welcome_tx = event_tx.clone();
+        let ollama_url = config.ollama_url.clone();
+        tokio::spawn(async move {
+            let msg = tokio::task::spawn_blocking(move || {
+                fetch_welcome_message(&ollama_url)
+            })
+            .await
+            .ok()
+            .flatten();
+            if let Some(text) = msg {
+                let _ = welcome_tx.send(AppEvent::WelcomeMessage(text));
+            }
+        });
+    }
+
     // Main render loop
     loop {
         // Draw based on phase
         terminal.draw(|frame| {
+            if state.show_welcome {
+                tui::render_welcome(frame, &state);
+            } else {
             match state.phase {
                 AppPhase::Startup => {
                     if state.show_stats_overlay {
@@ -496,6 +516,7 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
             if state.confirm_quit {
                 tui::render_quit_confirm(frame, &state.tui_theme);
             }
+            } // close show_welcome else
         })?;
 
         // Process events
@@ -594,6 +615,30 @@ fn spawn_terminal_event_reader(
 }
 
 fn dispatch_event(state: &mut AppState, event: AppEvent, config: &Config) {
+    // Welcome screen: dismiss only on Enter
+    if state.show_welcome {
+        match &event {
+            AppEvent::Key(key) if key.code == crossterm::event::KeyCode::Enter
+                || key.code == crossterm::event::KeyCode::Esc
+                || (key.code == crossterm::event::KeyCode::Char('c')
+                    && key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL)) =>
+            {
+                state.show_welcome = false;
+                return;
+            }
+            AppEvent::Key(_) | AppEvent::Mouse(_) | AppEvent::Paste(_) => {
+                return;
+            }
+            AppEvent::WelcomeMessage(ref msg) => {
+                state.welcome_message = msg.clone();
+                return;
+            }
+            _ => {}
+        }
+    }
+    if matches!(&event, AppEvent::WelcomeMessage(_)) {
+        return; // ignore late arrivals after welcome is dismissed
+    }
     match state.phase {
         AppPhase::Startup => handle_startup_event(state, event, config),
         AppPhase::Planning => handle_planning_event(state, event, config),
@@ -1025,6 +1070,11 @@ fn handle_planning_event(state: &mut AppState, event: AppEvent, config: &Config)
             state.stats_loading = false;
             state.log("Stats: failed to load events".to_string());
         }
+        AppEvent::WelcomeMessage(msg) => {
+            if state.show_welcome {
+                state.welcome_message = msg;
+            }
+        }
         AppEvent::LoopEvent(_) => {}
     }
 }
@@ -1162,6 +1212,48 @@ fn trigger_lmstudio_load(model_id: String) {
             ])
             .output();
     }));
+}
+
+fn fetch_welcome_message(ollama_url: &str) -> Option<String> {
+    let prompt = "Write ONE short creative piece for a CLI tool splash screen. \
+        Pick randomly: a haiku, a riddle, a witty saying, a rhyming couplet, \
+        or a fun programming proverb. Theme: code, building, forging, patterns, \
+        or learning from mistakes. Keep it positive and under 4 lines. \
+        Output ONLY the piece, no labels or explanation.";
+
+    let body = serde_json::json!({
+        "model": "llama3.2",
+        "prompt": prompt,
+        "stream": false,
+        "options": { "temperature": 1.2, "num_predict": 80 }
+    });
+
+    let out = std::process::Command::new("curl")
+        .args([
+            "-s",
+            "--max-time",
+            "5",
+            "-X",
+            "POST",
+            "-H",
+            "Content-Type: application/json",
+            "-d",
+            &body.to_string(),
+            &format!("{}/api/generate", ollama_url),
+        ])
+        .output()
+        .ok()?;
+
+    if !out.status.success() {
+        return None;
+    }
+
+    let val: serde_json::Value = serde_json::from_slice(&out.stdout).ok()?;
+    let response = val.get("response")?.as_str()?.trim().to_string();
+    if response.is_empty() || response.len() > 500 {
+        return None;
+    }
+    Some(response)
 }
 
 fn discard_settings_changes(state: &mut AppState) {
@@ -2793,6 +2885,7 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
         AppEvent::OrchestratorFinished(_) => {
             state.log("Ignoring late orchestrator result while running");
         }
+        AppEvent::WelcomeMessage(_) => {}
     }
 }
 

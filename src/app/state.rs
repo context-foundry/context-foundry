@@ -718,6 +718,8 @@ pub struct AppState {
     pub is_discovering: bool,
     pub should_quit: bool,
     pub confirm_quit: bool,
+    pub show_welcome: bool,
+    pub welcome_message: String,
     pub observatory_session_id: Option<String>,
     pub stop_after_task: bool,
     /// Set when handle_agent_output observes a typed AgentErrorKind. The TUI
@@ -865,6 +867,8 @@ impl AppState {
             is_discovering: false,
             should_quit: false,
             confirm_quit: false,
+            show_welcome: true,
+            welcome_message: crate::tui::random_fallback_message().to_string(),
             observatory_session_id: None,
             stop_after_task: false,
             typed_error_toast: None,
@@ -1097,6 +1101,7 @@ pub(super) enum AppEvent {
     Tick,
     UpdateAvailable(String),
     OllamaStatus(bool), // true = connected, false = unreachable
+    WelcomeMessage(String),
     /// Discovered local models, split by source so the selection handler can prefix
     /// `lmstudio/` vs `ollama/` correctly when persisting builder routing.
     /// `lmstudio_opencode_map` maps the LM Studio short-id (suffix after the last `/`)

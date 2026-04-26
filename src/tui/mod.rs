@@ -4,6 +4,7 @@ mod running;
 mod startup;
 mod stats;
 pub mod theme;
+mod welcome;
 
 use crossterm::{
     event::{DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture},
@@ -30,6 +31,7 @@ pub use overlays::{
 pub use pipeline::{pipeline_click, PipelineClick};
 pub use running::{running_header_tab_hit_test, RunningHeaderTab};
 pub use startup::StartupMouseTarget;
+pub use welcome::{random_fallback_message, render_welcome};
 
 pub type Tui = Terminal<ratatui::backend::CrosstermBackend<io::Stdout>>;
 

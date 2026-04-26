@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.0] - 2026-04-25
+
+### Added
+- Welcome screen on startup with 3D ASCII "Context Foundry" logo (larry3d font), version, date, provider status, rotating creative messages (30 hardcoded + async Ollama LLM generation), and contextfoundry.dev link
+- Dashboard/Explore dual tabs in both startup and running view headers (replaces single toggle label)
+- Settings deferred save with "Save changes? [y] save [n] discard [Esc] back" confirmation banner
+- App quit confirmation banner ("Quit foundry? [y] quit [n] cancel") on Esc in startup/planning views
+- LM Studio model auto-loading when new models are added via settings overlay
+- Consistent popup styling: surface background on settings modal, accent-colored borders on all popups
+
+### Changed
+- Pipeline tab bar removed from pipeline diagram (tabs moved to view headers)
+- Pipeline height reduced from 7 to 6 rows across all layouts
+- Welcome screen dismisses on Enter, Esc, or Ctrl+C
+- Version aligned to v4.0.0 across Cargo.toml, npm, and GitHub releases
+
+### Fixed
+- macOS code signing: build+install command now includes `codesign -s - --force` to prevent SIGKILL from Apple System Policy
+
 ## [0.7.3] - 2026-03-26
 
 ### Added

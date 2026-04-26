@@ -7,7 +7,7 @@ Context Foundry is a pattern-learning system that helps AI agents improve over t
 After any code change, rebuild and install:
 
 ```bash
-cd ~/homelab/context-foundry && cargo build --release && cp target/release/foundry ~/.cargo/bin/
+cd ~/homelab/context-foundry && cargo build --release && cp target/release/foundry ~/.cargo/bin/ && codesign -s - --force ~/.cargo/bin/foundry
 ```
 
 Run from any project directory:

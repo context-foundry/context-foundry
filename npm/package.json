@@ -1,6 +1,6 @@
 {
   "name": "context-foundry",
-  "version": "3.0.8",
+  "version": "4.0.0",
   "description": "Autonomous build loop that plans, builds, reviews, and learns. npm wrapper that installs the Foundry binary.",
   "author": "Context Foundry",
   "license": "MIT",
@@ -8,7 +8,7 @@
     "type": "git",
     "url": "https://github.com/context-foundry/context-foundry"
   },
-  "homepage": "https://github.com/context-foundry/context-foundry",
+  "homepage": "https://contextfoundry.dev",
   "bugs": {
     "url": "https://github.com/context-foundry/context-foundry/issues"
   },
