@@ -12,6 +12,7 @@ mod doubt_confidence;
 mod embeddings;
 mod extensions;
 mod git;
+mod init;
 mod history;
 mod isolation;
 mod mcp;
@@ -111,6 +112,8 @@ enum Commands {
         #[arg(long)]
         trend: bool,
     },
+    /// Initialize foundry in the current project (detect stack, create config)
+    Init,
     /// Start the observatory web dashboard
     Dashboard {
         /// Port to serve on (default: from config or 9400, binds to 127.0.0.1 only)
@@ -217,6 +220,9 @@ async fn main() -> Result<()> {
         } => {
             let stats_project = project.unwrap_or_else(|| project_dir.clone());
             stats::run_stats(days, &stats_project, &output, trend)?;
+        }
+        Commands::Init => {
+            init::run_init(&project_dir)?;
         }
         Commands::Dashboard { port } => {
             let config = config::Config::load(&project_dir);
