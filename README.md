@@ -45,26 +45,27 @@ Foundry's loop is designed around two forms of backpressure:
 
 **Short-term: the verify gate.** After implementation, a verify agent -- in a completely fresh context with no shared history from the builder -- audits the changes by running build checks, tests, and a structured code audit. A model that just wrote the code retains its reasoning and is less likely to question its own decisions. An independent instance, given only the claims and the code, catches bugs the author is blind to. If it finds HIGH or MEDIUM issues, it fixes them and re-runs verification. If everything passes, the task gets a `feat(task-id)` commit. If issues remain, it gets a `WIP(task-id)` commit. The verify gate prevents bad code from silently flowing forward.
 
-**Pipeline tracking (SPID).** Every task carries a 4-character progress indicator that records which pipeline stages ran and whether they succeeded. The indicator is persisted in `TASKS.md` next to each task and committed with the code, so you get a permanent audit trail.
+**Pipeline tracking (QRPBA).** Every task carries a progress indicator that records which pipeline stages ran and whether they succeeded. The indicator is persisted in `TASKS.md` next to each task and committed with the code, so you get a permanent audit trail.
 
 ```
-- [x] T1.1: Set up project scaffolding          [SPID]
-- [x] T1.2: Implement auth flow                 [S-ID]
-- [x] T1.3: Add rate limiting                   [SPID!]
+- [x] T1.1: Set up project scaffolding          [QRPBA]
+- [x] T1.2: Implement auth flow                 [--PBA]
+- [x] T1.3: Add rate limiting                   [QRPBA!]
 - [ ] T1.4: Write integration tests             [....]
 ```
 
 Each character represents a pipeline stage:
 
-| Position | Stage | Meaning |
-|----------|-------|---------|
-| 1 | **S** = Scout ran | **-** = scout skipped |
-| 2 | **P** = Plan ran | **-** = planner skipped (simple task) |
-| 3 | **I** = Implement ran | |
-| 4 | **D** = Doubt ran | **-** = doubt skipped |
-| suffix | **!** = verify did not pass | (absent) = clean pass |
+| Position | Letter | Stage | Meaning |
+|----------|--------|-------|---------|
+| 1 | **Q** | Query | **-** = skipped |
+| 2 | **R** | Research | **-** = skipped |
+| 3 | **P** | Plan | **-** = skipped (simple task) |
+| 4 | **B** | Build | Builder ran |
+| 5 | **A** | Audit | **-** = skipped |
+| suffix | **!** | | Audit did not pass (WIP commit) |
 
-Examples: `SPID` = full pipeline, clean pass. `S-ID` = planner skipped, scouted and implemented and verified. `SPID!` = full pipeline but verify found unfixable issues (WIP commit).
+Examples: `QRPBA` = full pipeline, clean pass. `--PBA` = query and research skipped, planned, built, and audited. `QRPBA!` = full pipeline but audit found unfixable issues (WIP commit). See [`docs/progress-indicators.md`](docs/progress-indicators.md) for the full reference.
 
 The TUI shows these indicators in the task queue with color coding, and they survive across restarts since they're written directly into the task file.
 
@@ -72,7 +73,7 @@ The TUI shows these indicators in the task queue with color coding, and they sur
 
 **Long-term: pattern learning.** After each validated task, a pattern extractor agent scans the build artifacts, review findings, and plan to extract reusable lessons (e.g., "CFrame not Position for moving Roblox parts" or "always validate UTF-8 boundaries before string slicing"). These get saved as structured JSON to `~/.foundry/patterns/`. On the next task — in any project — matched patterns are injected into the planner and reviewer prompts as reference data. Patterns that recur 3+ times get auto-promoted (`auto_apply`), meaning they're scored higher when they match -- but they still require at least one keyword or tech_stack overlap with the task to be included. This is how the system gets better over time: a mistake made once becomes a check applied everywhere.
 
-**Complexity-scaled pipeline.** Not every task needs the full pipeline. A task complexity classifier scores each task as Simple, Medium, or Complex based on description length, keyword signals, and file count hints. Simple tasks skip scout and planner, get fewer patterns (0-2 instead of 10), and can skip the doubt loop entirely -- straight from builder to commit. The SPID indicator reflects this: `--I-` means scout, planner, and doubt were all skipped. Complex tasks always get the full treatment.
+**Complexity-scaled pipeline.** Not every task needs the full pipeline. A task complexity classifier scores each task as Simple, Medium, or Complex based on description length, keyword signals, and file count hints. Simple tasks skip query, research, and planner, get fewer patterns (0-2 instead of 10), and can skip the audit loop entirely -- straight from builder to commit. The QRPBA indicator reflects this: `---B-` means query, research, planner, and audit were all skipped. Complex tasks always get the full treatment.
 
 **Learned doubt confidence.** The doubt loop tracks pass/fail history per task shape using Ollama embeddings for semantic clustering. Task descriptions that consistently pass review (5+ consecutive clean passes) earn "trusted" status and skip doubt automatically. Any failure resets the cluster to zero. This compounds over time -- foundry learns which kinds of changes it reliably gets right and reserves thorough review for where it's needed.
 
@@ -312,6 +313,36 @@ section in the local-model runbook.
 See [`docs/local-model-setup.md`](docs/local-model-setup.md) for the full
 runbook (prerequisites, command transcript, fail-interpretation guide).
 
+## Settings Overlay
+
+Press `?` in the TUI to open the Settings Overlay -- a 90%x80% modal exposing
+~40 user-tunable configuration fields organized into 9 collapsible sections.
+Press `Esc` from any state, click outside the modal, or click the `[ X ]` button
+to close. Changes persist to `.foundry.json` after a save confirmation.
+
+![Settings Overlay v4.0 -- per-stage routing with local models via LM Studio](docs/assets/settings-v4.0.png)
+
+The overlay supports inline editing (Space/Enter for booleans, Left/Right for
+enums, numeric input for numbers, free-form text for strings) and a Model Picker
+dropdown for selecting providers and models per stage.
+
+See [`docs/settings-overlay.md`](docs/settings-overlay.md) for the full reference
+(sections, fields, editing rules, Model Picker behavior).
+
+## Per-stage routing
+
+By default, all pipeline stages route through a single provider selected via
+`Ctrl+D` or the Builder row in the Settings Overlay. Per-stage routing overrides
+let you pin individual stages to different providers -- for example, Claude Opus
+on Plan and Audit while Codex runs Build.
+
+Pin a stage by opening its Model Picker in the Settings Overlay (Routing section)
+and selecting a model. The stage is added to `stage_overrides` in `.foundry.json`
+and will not be affected by global builder cycling.
+
+See [`docs/per-stage-routing.md`](docs/per-stage-routing.md) for the configuration
+JSON shape, runtime resolution, and worked examples.
+
 ## Install
 
 ### Pre-built binaries
@@ -486,7 +517,7 @@ Implementation: `src/config.rs:403-409` (config field), `src/app/build.rs:5937-5
 
 ## Pipeline Stages
 
-Foundry's RPID pipeline is configured via the `pipeline_stages` field in `.foundry.json`. The default expands to:
+Foundry's pipeline is configured via the `pipeline_stages` field in `.foundry.json`. Completed tasks use QRPBA indicators (see [`docs/progress-indicators.md`](docs/progress-indicators.md)), while the internal stage IDs remain `query`, `research`, `plan`, `implement`, `doubt`. The default expands to:
 
 ```json
 {
@@ -520,11 +551,11 @@ Implementation: `src/config.rs:18-74` (`PipelineStageConfig` and `default_pipeli
 
 Every agent foundry spawns is a Claude Code CLI invocation with `cwd` set to the project directory. Claude Code's normal CLAUDE.md loading applies -- your global `~/.claude/CLAUDE.md`, the project's `CLAUDE.md`, and any `.claude/rules/*.md` files are all loaded into the agent's context.
 
-This is mostly beneficial: project conventions (coding style, architecture rules, naming patterns) help agents write better code. However, it can cause problems when your CLAUDE.md contains **meta-workflow instructions** -- things like "run the SPID pipeline," "spawn sub-agents for verification," or "always create an implementation plan before coding." These conflict with foundry's own orchestration, since each agent is already running inside a pipeline stage.
+This is mostly beneficial: project conventions (coding style, architecture rules, naming patterns) help agents write better code. However, it can cause problems when your CLAUDE.md contains **meta-workflow instructions** -- things like "run the QRPBA pipeline," "spawn sub-agents for verification," or "always create an implementation plan before coding." These conflict with foundry's own orchestration, since each agent is already running inside a pipeline stage.
 
 Foundry handles this by appending a system-level override to every agent:
 
-> *You are running as a single stage in Context Foundry's autonomous pipeline. Ignore any CLAUDE.md instructions about orchestration workflows, build pipelines, SPID stages, doubt loops, sub-agent spawning, or multi-step implementation processes. Foundry handles all orchestration. Focus only on your assigned role and task.*
+> *You are running as a single stage in Context Foundry's autonomous pipeline. Ignore any CLAUDE.md instructions about orchestration workflows, build pipelines, QRPBA stages, doubt loops, sub-agent spawning, or multi-step implementation processes. Foundry handles all orchestration. Focus only on your assigned role and task.*
 
 This preserves useful project conventions while neutralizing workflow directives. You do not need to modify your CLAUDE.md to use foundry, but be aware that any instructions about orchestration, pipelines, or sub-agent workflows will be overridden.
 
@@ -651,7 +682,7 @@ The pipeline currently runs every stage for every task. The next step is proport
 
 **What it adapts:** planner depth (skip for simple tasks), whether to run doubt (skip when a task shape has 5+ consecutive clean passes, reset on any failure), whether to use dual mode, pause timing between agents, and when to escalate to human review.
 
-**Concrete example:** a rename task skips scout, skips planner, gets 2 patterns instead of 10, skips doubt, and commits directly -- 30 seconds instead of 10 minutes. An auth system rewrite gets the full SPID pipeline with 10 patterns and mandatory doubt. The complexity classifier (already shipping) drives the coarse split; learned doubt confidence adds a fine-grained layer that improves with every run.
+**Concrete example:** a rename task skips query, research, and planner, gets 2 patterns instead of 10, skips audit, and commits directly -- 30 seconds instead of 10 minutes. An auth system rewrite gets the full QRPBA pipeline with 10 patterns and mandatory audit. The complexity classifier (already shipping) drives the coarse split; learned doubt confidence adds a fine-grained layer that improves with every run.
 
 ### Foundry Observatory
 
