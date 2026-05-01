@@ -125,9 +125,29 @@ When you solve a new problem, save the pattern:
 
 This helps future agents avoid the same issues.
 
+## Settings Overlay
+
+Press `?` in the TUI to open the Settings Overlay -- a modal exposing ~40
+configuration fields in 9 collapsible sections. Esc/click-outside/`[ X ]` to close.
+Full reference: [`docs/settings-overlay.md`](docs/settings-overlay.md).
+
+Per-stage model routing (e.g. Claude Opus on Plan, Codex on Build) is configured
+from the Routing section. See [`docs/per-stage-routing.md`](docs/per-stage-routing.md).
+
+## Progress Indicators (QRPBA)
+
+Completed tasks in `TASKS.md` carry QRPBA indicators: **Q**uery, **R**esearch,
+**P**lan, **B**uild, **A**udit. `-` = skipped, `+` = deferred, `!` = failed audit.
+Full reference: [`docs/progress-indicators.md`](docs/progress-indicators.md).
+
+**Note for agents:** The pipeline stages are internally called `query`, `research`,
+`plan`, `implement`, `doubt` (used in code and prompt instructions). Completed tasks
+use the QRPBA letters in `TASKS.md`. Do NOT "fix" QRPBA indicators back to RPID or
+SPID -- they are the current convention as of P33.1.
+
 ## Doubt Loop
 
-The doubt loop is handled by the DOUBT stage of the RPID pipeline (a fresh-context
+The doubt loop is handled by the AUDIT stage of the pipeline (a fresh-context
 agent that reads build-claims.md and audits with "Audit and validate these claims.
 Find the gaps."). Individual agents (researcher, planner, builder) should NOT self-audit
 or spawn sub-agents for verification -- that wastes time and tokens. Focus on doing

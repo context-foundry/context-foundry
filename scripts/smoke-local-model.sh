@@ -5,6 +5,10 @@
 # asserts the round trip produced opencode invocations and zero claude
 # invocations. Exit code 0 == PASS, anything else == FAIL.
 #
+# Related docs:
+#   docs/local-model-setup.md    -- full runbook, failure interpretation guide
+#   docs/progress-indicators.md  -- QRPBA indicator scheme (check 6 validates this)
+#
 # Usage:
 #   bash scripts/smoke-local-model.sh                # default 600s cap
 #   bash scripts/smoke-local-model.sh --keep         # leave temp dir behind

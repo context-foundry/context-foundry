@@ -169,6 +169,11 @@ WIP with an idle-timeout reason. The suppression of opencode's own
 lifecycle events (step start/end) ensures the idle timer only resets on
 meaningful output, not on heartbeat noise.
 
+**Agent timeout.** The top-level `agent_timeout_secs` (default 180s, tightened
+from 600s in commit `5854172`) controls the idle timeout for all agents. The
+hard timeout is 4x the idle timeout (720s at default). Override in `.foundry.json`
+or in the Settings Overlay under Budgets & timeouts.
+
 **Reading the indicator.** After a run, TASKS.md shows each completed task
 with a bracketed indicator:
 ```
@@ -180,3 +185,5 @@ Each character maps to a pipeline stage: Q(uery) R(esearch) P(lan) +(plan
 review) B(uild) A(udit). A `-` means the stage was skipped; `!` at the end
 means the audit reported failures (the commit was `WIP` not `feat`). The
 smoke gate's check 6 asserts `B` is present and no legacy `I`/`D` appears.
+See [`docs/progress-indicators.md`](progress-indicators.md) for the full
+QRPBA reference and migration notes from the legacy SPID scheme.

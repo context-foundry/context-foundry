@@ -33,18 +33,19 @@ Key config groups:
   "adaptive_pauses": true,
   "create_issue_on_wip": false,
   "auto_push_remote": null,
-  "agent_timeout_secs": 600,
+  "agent_timeout_secs": 180,
   "patterns_dir": "~/.foundry/patterns",
   "theme": "dark",
   "on_task_complete": null,
-  "pipeline_stages": []
+  "pipeline_stages": [],
+  "stage_overrides": []
 }
 ```
 All fields optional -- `#[serde(default)]` provides sensible defaults.
 `Config::for_pipeline(spec)` overrides all provider fields for dual-model routing.
 `Config::normalize_model_for_provider()` clears model names incompatible with the target provider.
 
-`on_task_complete` runs a fire-and-forget shell hook after each task commit (envs: `FOUNDRY_TASK_ID`, `FOUNDRY_TASK_STATUS`, `FOUNDRY_TASK_DESC`, `FOUNDRY_COMMIT_SHA`). `pipeline_stages` lists the RPID stages (`query`, `research`, `plan`, `implement`, `doubt`); `enabled: false` cleanly skips a stage in the build loop. See README "Hooks" and "Pipeline Stages" sections.
+`on_task_complete` runs a fire-and-forget shell hook after each task commit (envs: `FOUNDRY_TASK_ID`, `FOUNDRY_TASK_STATUS`, `FOUNDRY_TASK_DESC`, `FOUNDRY_COMMIT_SHA`). `pipeline_stages` lists the stages (`query`, `research`, `plan`, `implement`, `doubt`); `enabled: false` cleanly skips a stage in the build loop. `stage_overrides` lists stage IDs whose provider/model are pinned and not overridden by `for_pipeline()` (per-stage routing). Completed tasks use QRPBA indicators in TASKS.md (Q=Query, R=Research, P=Plan, B=Build, A=Audit). See README "Hooks", "Pipeline Stages", and `docs/per-stage-routing.md`.
 
 ## TASKS.md Task Format
 ```markdown

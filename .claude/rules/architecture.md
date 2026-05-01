@@ -71,10 +71,22 @@ TUI tab switching (1/2) shows each pipeline's output. No automated winner select
 - `LoopEvent` enum drives the build loop: `TaskStarted`, `AgentStarted`, `TaskCompleted`, `DiscoveryStarted`, etc.
 - 100ms tick interval (10 fps) for TUI rendering.
 
+## Per-Stage Routing
+`stage_overrides` in `.foundry.json` lists stage IDs whose provider/model are pinned.
+`Config::for_pipeline()` skips overridden stages when applying global builder selection.
+`Config::active_routing_for_stage(stage_id)` is the single source of truth for dispatch.
+Stage aliases: build/implement, audit/doubt, discovery/discover, pattern_extraction/patterns.
+See `docs/per-stage-routing.md` for the full reference.
+
+## Progress Indicators
+Completed tasks use QRPBA indicators: Q=Query, R=Research, P=Plan, B=Build, A=Audit.
+`-` = skipped, `+` = deferred, `!` = failed audit. Internal stage IDs remain
+`query`, `research`, `plan`, `implement`, `doubt`. See `docs/progress-indicators.md`.
+
 ## Agent Invocation
 - Claude CLI spawned in PTY (portable-pty) for line-buffered output.
 - `--output-format stream-json` for structured event parsing.
-- 600-second default timeout, configurable via `.foundry.json`.
+- 180-second default idle timeout (`agent_timeout_secs`), configurable via `.foundry.json`.
 - `CLAUDECODE=""` env var prevents nested Claude detection.
 
 ## Review Gate
