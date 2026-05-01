@@ -176,7 +176,7 @@ pub fn has_real_changes(project_dir: &Path) -> bool {
     }
     String::from_utf8_lossy(&output.stdout)
         .lines()
-        .any(|line| line_changes_real_file(line))
+        .any(line_changes_real_file)
 }
 
 fn line_changes_real_file(line: &str) -> bool {

@@ -419,7 +419,7 @@ fn finalize_scores<'a>(
         .filter(|(_, score)| *score > 0)
         .filter_map(|(idx, score)| patterns.get(*idx).map(|p| (p, *score)))
         .collect();
-    result.sort_by(|a, b| b.1.cmp(&a.1));
+    result.sort_by_key(|a| std::cmp::Reverse(a.1));
     result
 }
 

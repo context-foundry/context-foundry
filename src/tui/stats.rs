@@ -35,11 +35,7 @@ pub(super) fn render_dashboard_stats(
     // Progress: [93/96] ████████████░░ 97%
     let completed = state.completed_count;
     let total = state.total_count;
-    let pct = if total > 0 {
-        completed * 100 / total
-    } else {
-        0
-    };
+    let pct = (completed * 100).checked_div(total).unwrap_or(0);
     let left_label = format!(" [{}/{}] ", completed, total);
     let right_label = format!(" {}%", pct);
     let bar_width = (area.width.saturating_sub(4) as usize)

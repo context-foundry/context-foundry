@@ -259,7 +259,7 @@ pub fn match_patterns<'a>(
         .filter(|(_, score)| *score > 0)
         .map(|(idx, score)| (&patterns[idx], score))
         .collect();
-    result.sort_by(|a, b| b.1.cmp(&a.1));
+    result.sort_by_key(|a| std::cmp::Reverse(a.1));
     result.into_iter().map(|(p, _)| p).collect()
 }
 

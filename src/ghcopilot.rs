@@ -801,9 +801,7 @@ async fn call_copilot(
 /// Returns the approximate context window size for the given model slug.
 fn model_context_window(model: &str) -> u64 {
     let lower = model.to_ascii_lowercase();
-    if lower.contains("claude") {
-        200_000
-    } else if lower.starts_with("o1") || lower.starts_with("o3") {
+    if lower.contains("claude") || lower.starts_with("o1") || lower.starts_with("o3") {
         200_000
     } else {
         128_000

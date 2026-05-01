@@ -2434,20 +2434,18 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                             state.typed_error_toast = None;
                             state.typed_error_can_retry = false;
                         }
-                        KeyCode::Char('?') => {
-                            if toggle_settings_overlay(state) {
-                                if let Some(tx) = state.event_tx.clone() {
-                                    let ollama_url = config.ollama_url.clone();
-                                    tokio::spawn(async move {
-                                        let discovery = fetch_local_models(ollama_url).await;
-                                        let _ = tx.send(AppEvent::LocalModels {
-                                            lmstudio: discovery.lmstudio,
-                                            ollama: discovery.ollama,
-                                            lmstudio_opencode_map: discovery.lmstudio_opencode_map,
-                                            opencode_warning: discovery.opencode_warning,
-                                        });
+                        KeyCode::Char('?') if toggle_settings_overlay(state) => {
+                            if let Some(tx) = state.event_tx.clone() {
+                                let ollama_url = config.ollama_url.clone();
+                                tokio::spawn(async move {
+                                    let discovery = fetch_local_models(ollama_url).await;
+                                    let _ = tx.send(AppEvent::LocalModels {
+                                        lmstudio: discovery.lmstudio,
+                                        ollama: discovery.ollama,
+                                        lmstudio_opencode_map: discovery.lmstudio_opencode_map,
+                                        opencode_warning: discovery.opencode_warning,
                                     });
-                                }
+                                });
                             }
                         }
                         _ if handle_settings_overlay_key(state, key) => {}
@@ -2469,16 +2467,13 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                                 state.log("Stopping after current task (q again to cancel, Ctrl+C to force quit)");
                             }
                         }
-                        KeyCode::Esc => {
-                            if !handle_overlay_esc(state) {
-                                if state.show_stats_overlay {
-                                    state.show_stats_overlay = false;
-                                    state.stats_loading = false;
-                                    state.stats_overlay_report = None;
-                                    state.stats_overlay_scroll = 0;
-                                }
-                            }
+                        KeyCode::Esc if !handle_overlay_esc(state) && state.show_stats_overlay => {
+                            state.show_stats_overlay = false;
+                            state.stats_loading = false;
+                            state.stats_overlay_report = None;
+                            state.stats_overlay_scroll = 0;
                         }
+                        KeyCode::Esc => {}
                         KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                             if state.stop_after_task {
                                 // Second Ctrl+C: quit immediately
@@ -2492,11 +2487,9 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                             );
                             }
                         }
-                        KeyCode::Char('f') => {
-                            if state.last_orchestrator_outcome.is_some() {
-                                state.show_findings = !state.show_findings;
-                                state.findings_scroll = 0;
-                            }
+                        KeyCode::Char('f') if state.last_orchestrator_outcome.is_some() => {
+                            state.show_findings = !state.show_findings;
+                            state.findings_scroll = 0;
                         }
                         KeyCode::Char('p') => {
                             if state.show_patterns {
@@ -2531,15 +2524,11 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                             state.tui_theme = new_theme;
                             state.log(format!("Theme: {}", name));
                         }
-                        KeyCode::Char('1') => {
-                            if state.dual_build.active {
-                                state.dual_build.tab = 0;
-                            }
+                        KeyCode::Char('1') if state.dual_build.active => {
+                            state.dual_build.tab = 0;
                         }
-                        KeyCode::Char('2') => {
-                            if state.dual_build.active {
-                                state.dual_build.tab = 1;
-                            }
+                        KeyCode::Char('2') if state.dual_build.active => {
+                            state.dual_build.tab = 1;
                         }
                         KeyCode::Up => {
                             if let Some(ref mut ov) = state.settings_overlay {
@@ -2718,32 +2707,31 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                 handle_startup_mouse_at_for_running(state, mouse, terminal_size);
             } else {
                 match mouse.kind {
-                    MouseEventKind::Moved => {
-                        // Hover instantly switches focused pane -- no click required.
+                    MouseEventKind::Moved
                         if !state.dragging_split
                             && !state.show_stats_overlay
                             && !state.show_patterns
                             && !state.show_findings
-                            && !state.show_settings_overlay
+                            && !state.show_settings_overlay =>
+                    {
+                        // Hover instantly switches focused pane -- no click required.
+                        let terminal_size = crossterm::terminal::size().unwrap_or((120, 40));
+                        let area =
+                            ratatui::layout::Rect::new(0, 0, terminal_size.0, terminal_size.1);
+                        let has_ext = state.available_extensions.iter().any(|e| e.selected)
+                            || !state.session_extensions_used.is_empty();
+                        let panes = tui::running_layout(area, has_ext, state.agent_pane_split);
+                        if tui::rect_contains(panes.agent_output, mouse.column, mouse.row) {
+                            state.focused_pane = state::TuiPane::AgentOutput;
+                        } else if tui::rect_contains(panes.task_queue, mouse.column, mouse.row) {
+                            state.focused_pane = state::TuiPane::TaskQueue;
+                        } else if tui::rect_contains(panes.patterns, mouse.column, mouse.row) {
+                            state.focused_pane = state::TuiPane::PatternsLearned;
+                        } else if panes
+                            .extensions_used
+                            .is_some_and(|r| tui::rect_contains(r, mouse.column, mouse.row))
                         {
-                            let terminal_size = crossterm::terminal::size().unwrap_or((120, 40));
-                            let area =
-                                ratatui::layout::Rect::new(0, 0, terminal_size.0, terminal_size.1);
-                            let has_ext = state.available_extensions.iter().any(|e| e.selected)
-                                || !state.session_extensions_used.is_empty();
-                            let panes = tui::running_layout(area, has_ext, state.agent_pane_split);
-                            if tui::rect_contains(panes.agent_output, mouse.column, mouse.row) {
-                                state.focused_pane = state::TuiPane::AgentOutput;
-                            } else if tui::rect_contains(panes.task_queue, mouse.column, mouse.row) {
-                                state.focused_pane = state::TuiPane::TaskQueue;
-                            } else if tui::rect_contains(panes.patterns, mouse.column, mouse.row) {
-                                state.focused_pane = state::TuiPane::PatternsLearned;
-                            } else if panes
-                                .extensions_used
-                                .is_some_and(|r| tui::rect_contains(r, mouse.column, mouse.row))
-                            {
-                                state.focused_pane = state::TuiPane::Extensions;
-                            }
+                            state.focused_pane = state::TuiPane::Extensions;
                         }
                     }
                     MouseEventKind::ScrollUp => {
@@ -2848,15 +2836,13 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                             state.focused_pane = state::TuiPane::Extensions;
                         }
                     }
-                    MouseEventKind::Drag(MouseButton::Left) => {
-                        if state.dragging_split {
-                            let terminal_size = crossterm::terminal::size().unwrap_or((120, 40));
-                            let total_width = terminal_size.0;
-                            if total_width > 0 {
-                                let pct = (mouse.column as u32 * 100 / total_width as u32)
-                                    .clamp(20, 80) as u16;
-                                state.agent_pane_split = pct;
-                            }
+                    MouseEventKind::Drag(MouseButton::Left) if state.dragging_split => {
+                        let terminal_size = crossterm::terminal::size().unwrap_or((120, 40));
+                        let total_width = terminal_size.0;
+                        if total_width > 0 {
+                            let pct = (mouse.column as u32 * 100 / total_width as u32)
+                                .clamp(20, 80) as u16;
+                            state.agent_pane_split = pct;
                         }
                     }
                     MouseEventKind::Up(MouseButton::Left) => {
@@ -2901,11 +2887,10 @@ fn handle_inject_key(state: &mut AppState, key: event::KeyEvent) {
                 buf.pop();
             }
         }
-        KeyCode::Esc => {
-            if !handle_overlay_esc(state) {
-                state.inject_input = None;
-            }
+        KeyCode::Esc if !handle_overlay_esc(state) => {
+            state.inject_input = None;
         }
+        KeyCode::Esc => {}
         KeyCode::Enter => {
             let text = state.inject_input.take().unwrap_or_default();
             let text = text.trim().to_string();

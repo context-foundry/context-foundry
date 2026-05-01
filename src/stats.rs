@@ -694,126 +694,118 @@ pub fn compute_stats(
                     }
                 }
             }
-            "budget_overrun" => {
-                if !is_pr_review_session(&ev.session_id) {
-                    budget_overruns += 1;
-                }
+            "budget_overrun" if !is_pr_review_session(&ev.session_id) => {
+                budget_overruns += 1;
             }
-            "pattern_injected" => {
-                if !is_pr_review_session(&ev.session_id) {
-                    total_injections += 1;
-                    if let Some(ids) = ev.payload.get("pattern_ids").and_then(|v| v.as_array()) {
-                        for id in ids {
-                            if let Some(s) = id.as_str() {
-                                *pattern_counts.entry(s.to_string()).or_insert(0) += 1;
-                            }
+            "pattern_injected" if !is_pr_review_session(&ev.session_id) => {
+                total_injections += 1;
+                if let Some(ids) = ev.payload.get("pattern_ids").and_then(|v| v.as_array()) {
+                    for id in ids {
+                        if let Some(s) = id.as_str() {
+                            *pattern_counts.entry(s.to_string()).or_insert(0) += 1;
                         }
                     }
                 }
             }
-            "pattern_cited" => {
-                if !is_pr_review_session(&ev.session_id) {
-                    if let (Some(pattern_id), Some(task_id)) = (
-                        ev.payload.get("pattern_id").and_then(|v| v.as_str()),
-                        ev.payload.get("task_id").and_then(|v| v.as_str()),
-                    ) {
-                        *pattern_citation_counts
-                            .entry(pattern_id.to_string())
-                            .or_insert(0) += 1;
-                        pattern_cited_tasks
-                            .entry(pattern_id.to_string())
-                            .or_default()
-                            .insert(task_id.to_string());
-                    }
+            "pattern_cited" if !is_pr_review_session(&ev.session_id) => {
+                if let (Some(pattern_id), Some(task_id)) = (
+                    ev.payload.get("pattern_id").and_then(|v| v.as_str()),
+                    ev.payload.get("task_id").and_then(|v| v.as_str()),
+                ) {
+                    *pattern_citation_counts
+                        .entry(pattern_id.to_string())
+                        .or_insert(0) += 1;
+                    pattern_cited_tasks
+                        .entry(pattern_id.to_string())
+                        .or_default()
+                        .insert(task_id.to_string());
                 }
             }
-            "task_completed" => {
-                if !is_pr_review_session(&ev.session_id) {
-                    let tc = CompletedTask {
-                        task_id: ev
-                            .payload
-                            .get("task_id")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("")
-                            .to_string(),
-                        verdict: ev
-                            .payload
-                            .get("verdict")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("")
-                            .to_string(),
-                        complexity: ev
-                            .payload
-                            .get("complexity")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("")
-                            .to_string(),
-                        total_cost_usd: ev
-                            .payload
-                            .get("total_cost_usd")
-                            .and_then(|v| v.as_f64())
-                            .unwrap_or(0.0),
-                        total_duration_secs: ev
-                            .payload
-                            .get("total_duration_secs")
-                            .and_then(|v| v.as_f64())
-                            .unwrap_or(0.0),
-                        findings_high: ev
-                            .payload
-                            .get("findings_high")
-                            .and_then(|v| v.as_u64())
-                            .unwrap_or(0) as usize,
-                        findings_medium: ev
-                            .payload
-                            .get("findings_medium")
-                            .and_then(|v| v.as_u64())
-                            .unwrap_or(0) as usize,
-                        findings_low: ev
-                            .payload
-                            .get("findings_low")
-                            .and_then(|v| v.as_u64())
-                            .unwrap_or(0) as usize,
-                        phases_run: ev
-                            .payload
-                            .get("phases_run")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("")
-                            .to_string(),
-                        builder_provider: ev
-                            .payload
-                            .get("builder_provider")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("")
-                            .to_string(),
-                        builder_model: ev
-                            .payload
-                            .get("builder_model")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("")
-                            .to_string(),
-                        reviewer_provider: ev
-                            .payload
-                            .get("reviewer_provider")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("")
-                            .to_string(),
-                        reviewer_model: ev
-                            .payload
-                            .get("reviewer_model")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("")
-                            .to_string(),
-                        commit_sha: ev
-                            .payload
-                            .get("commit_sha")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("")
-                            .to_string(),
-                        timestamp: ev.timestamp.clone(),
-                        description: String::new(),
-                    };
-                    completed_tasks.push(tc);
-                }
+            "task_completed" if !is_pr_review_session(&ev.session_id) => {
+                let tc = CompletedTask {
+                    task_id: ev
+                        .payload
+                        .get("task_id")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string(),
+                    verdict: ev
+                        .payload
+                        .get("verdict")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string(),
+                    complexity: ev
+                        .payload
+                        .get("complexity")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string(),
+                    total_cost_usd: ev
+                        .payload
+                        .get("total_cost_usd")
+                        .and_then(|v| v.as_f64())
+                        .unwrap_or(0.0),
+                    total_duration_secs: ev
+                        .payload
+                        .get("total_duration_secs")
+                        .and_then(|v| v.as_f64())
+                        .unwrap_or(0.0),
+                    findings_high: ev
+                        .payload
+                        .get("findings_high")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0) as usize,
+                    findings_medium: ev
+                        .payload
+                        .get("findings_medium")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0) as usize,
+                    findings_low: ev
+                        .payload
+                        .get("findings_low")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0) as usize,
+                    phases_run: ev
+                        .payload
+                        .get("phases_run")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string(),
+                    builder_provider: ev
+                        .payload
+                        .get("builder_provider")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string(),
+                    builder_model: ev
+                        .payload
+                        .get("builder_model")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string(),
+                    reviewer_provider: ev
+                        .payload
+                        .get("reviewer_provider")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string(),
+                    reviewer_model: ev
+                        .payload
+                        .get("reviewer_model")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string(),
+                    commit_sha: ev
+                        .payload
+                        .get("commit_sha")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string(),
+                    timestamp: ev.timestamp.clone(),
+                    description: String::new(),
+                };
+                completed_tasks.push(tc);
             }
             _ => {}
         }
@@ -889,14 +881,12 @@ pub fn compute_stats(
                         .map(|s| s.to_string());
                     current_cost = 0.0;
                 }
-                "agent_done" => {
-                    if current_task.is_some() {
-                        current_cost += evt
-                            .payload
-                            .get("cost_usd")
-                            .and_then(|v| v.as_f64())
-                            .unwrap_or(0.0);
-                    }
+                "agent_done" if current_task.is_some() => {
+                    current_cost += evt
+                        .payload
+                        .get("cost_usd")
+                        .and_then(|v| v.as_f64())
+                        .unwrap_or(0.0);
                 }
                 "session_ended" => {
                     if let Some(tid) = current_task.take() {
@@ -954,7 +944,7 @@ pub fn compute_stats(
             count,
         })
         .collect();
-    top_patterns.sort_by(|a, b| b.count.cmp(&a.count));
+    top_patterns.sort_by_key(|a| std::cmp::Reverse(a.count));
     top_patterns.truncate(10);
 
     // ── Pattern effectiveness (T24.2) ──
@@ -983,7 +973,7 @@ pub fn compute_stats(
             }
         })
         .collect();
-    effectiveness.sort_by(|a, b| b.injection_count.cmp(&a.injection_count));
+    effectiveness.sort_by_key(|a| std::cmp::Reverse(a.injection_count));
 
     // ── Trust Dashboard (T24.3) ──
 
@@ -1074,7 +1064,7 @@ pub fn compute_stats(
                 }
             })
             .collect();
-        model_comparisons.sort_by(|a, b| b.task_count.cmp(&a.task_count));
+        model_comparisons.sort_by_key(|a| std::cmp::Reverse(a.task_count));
 
         // Regression proxy
         let regression_proxies = compute_regression_proxies(&completed_tasks);

@@ -315,8 +315,7 @@ pub fn archive_completed_phases(
         // Find the phase header for this line
         let header = phases
             .iter()
-            .filter(|(h, _)| *h < line_idx)
-            .next_back()
+            .rfind(|(h, _)| *h < line_idx)
             .map(|(h, _)| lines[*h]);
         if let Some(h) = header {
             if current_header.as_deref() != Some(h) {

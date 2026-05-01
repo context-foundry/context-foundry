@@ -77,7 +77,7 @@ pub fn search_history(history_dir: &Path, query: &str, limit: usize) -> Vec<Buil
     let reader = std::io::BufReader::new(file);
     let mut matches: Vec<BuildRecord> = reader
         .lines()
-        .filter_map(|line| line.ok())
+        .map_while(Result::ok)
         .filter_map(|line| serde_json::from_str::<BuildRecord>(&line).ok())
         .filter(|record| {
             let searchable = format!(
@@ -134,6 +134,7 @@ fn sanitize_history_cell(value: &str) -> String {
 }
 
 /// Create a BuildRecord with the current timestamp.
+#[allow(clippy::too_many_arguments)]
 pub fn new_record(
     task_id: &str,
     description: &str,

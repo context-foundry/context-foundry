@@ -1168,7 +1168,7 @@ pub(super) fn render_settings_overlay(frame: &mut Frame, state: &AppState) {
 
     let status_y = inner.y + inner.height.saturating_sub(2);
     let hint_y = inner.y + inner.height.saturating_sub(1);
-    let has_picker = ov.map_or(false, |o| o.picker.is_some());
+    let has_picker = ov.is_some_and(|o| o.picker.is_some());
     let status_text = if let Some(editing) = editing {
         editing
             .error
