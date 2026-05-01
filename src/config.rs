@@ -876,6 +876,14 @@ impl Config {
                     format!("{provider} {tail}")
                 }
             }
+            ModelProvider::GhCopilot => {
+                let model = model.trim();
+                if model.is_empty() {
+                    provider.to_string()
+                } else {
+                    format!("{provider} {model}")
+                }
+            }
         }
     }
 
