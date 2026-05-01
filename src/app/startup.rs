@@ -402,14 +402,15 @@ pub(super) fn handle_startup_key(state: &mut AppState, key: event::KeyEvent, con
     }
 
     match key.code {
-        KeyCode::Char('e') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-            if !state.available_extensions.is_empty() {
-                if state.focused_pane == crate::app::state::TuiPane::Extensions {
-                    state.focused_pane = crate::app::state::TuiPane::Explorer;
-                } else {
-                    state.focused_pane = crate::app::state::TuiPane::Extensions;
-                    state.extensions_cursor = 0;
-                }
+        KeyCode::Char('e')
+            if key.modifiers.contains(KeyModifiers::CONTROL)
+                && !state.available_extensions.is_empty() =>
+        {
+            if state.focused_pane == crate::app::state::TuiPane::Extensions {
+                state.focused_pane = crate::app::state::TuiPane::Explorer;
+            } else {
+                state.focused_pane = crate::app::state::TuiPane::Extensions;
+                state.extensions_cursor = 0;
             }
         }
         KeyCode::Tab | KeyCode::BackTab => {
@@ -512,10 +513,8 @@ pub(super) fn handle_startup_key(state: &mut AppState, key: event::KeyEvent, con
             state.show_findings = !state.show_findings;
             state.findings_scroll = 0;
         }
-        KeyCode::Esc => {
-            if !super::handle_overlay_esc(state) {
-                state.confirm_quit = true;
-            }
+        KeyCode::Esc if !super::handle_overlay_esc(state) => {
+            state.confirm_quit = true;
         }
         KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
             state.should_quit = true;
@@ -943,34 +942,30 @@ pub(super) fn handle_startup_mouse_at(
                 state.focused_pane = crate::app::state::TuiPane::AgentOutput;
             }
         }
-        MouseEventKind::ScrollUp => {
-            if state.startup_scroll_debounce_ticks == 0 {
-                match state.focused_pane {
-                    crate::app::state::TuiPane::Preview => {
-                        if let Some(startup) = state.startup.as_mut() {
-                            startup.file_preview_scroll =
-                                startup.file_preview_scroll.saturating_sub(3);
-                        }
+        MouseEventKind::ScrollUp if state.startup_scroll_debounce_ticks == 0 => {
+            match state.focused_pane {
+                crate::app::state::TuiPane::Preview => {
+                    if let Some(startup) = state.startup.as_mut() {
+                        startup.file_preview_scroll =
+                            startup.file_preview_scroll.saturating_sub(3);
                     }
-                    _ => {
-                        move_explorer_selection(state, -3);
-                    }
+                }
+                _ => {
+                    move_explorer_selection(state, -3);
                 }
             }
         }
-        MouseEventKind::ScrollDown => {
-            if state.startup_scroll_debounce_ticks == 0 {
-                match state.focused_pane {
-                    crate::app::state::TuiPane::Preview => {
-                        if let Some(startup) = state.startup.as_mut() {
-                            let max_scroll = startup.file_preview_content.len().saturating_sub(1);
-                            startup.file_preview_scroll =
-                                (startup.file_preview_scroll + 3).min(max_scroll);
-                        }
+        MouseEventKind::ScrollDown if state.startup_scroll_debounce_ticks == 0 => {
+            match state.focused_pane {
+                crate::app::state::TuiPane::Preview => {
+                    if let Some(startup) = state.startup.as_mut() {
+                        let max_scroll = startup.file_preview_content.len().saturating_sub(1);
+                        startup.file_preview_scroll =
+                            (startup.file_preview_scroll + 3).min(max_scroll);
                     }
-                    _ => {
-                        move_explorer_selection(state, 3);
-                    }
+                }
+                _ => {
+                    move_explorer_selection(state, 3);
                 }
             }
         }

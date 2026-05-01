@@ -1437,23 +1437,21 @@ pub(super) fn handle_settings_overlay_key(
                 handle_settings_action(state);
             }
         }
-        KeyCode::Left => {
+        KeyCode::Left
             if state
                 .settings_overlay
                 .as_ref()
-                .is_some_and(|ov| ov.picker.is_none())
-            {
-                handle_settings_left(state);
-            }
+                .is_some_and(|ov| ov.picker.is_none()) =>
+        {
+            handle_settings_left(state);
         }
-        KeyCode::Right => {
+        KeyCode::Right
             if state
                 .settings_overlay
                 .as_ref()
-                .is_some_and(|ov| ov.picker.is_none())
-            {
-                handle_settings_right(state);
-            }
+                .is_some_and(|ov| ov.picker.is_none()) =>
+        {
+            handle_settings_right(state);
         }
         KeyCode::Char('/')
             if state
@@ -1678,11 +1676,9 @@ fn handle_planning_key(state: &mut AppState, key: event::KeyEvent, config: &Conf
                 compute_and_show_stats_overlay(state);
             }
         }
-        KeyCode::Char('f') => {
-            if state.last_orchestrator_outcome.is_some() {
-                state.show_findings = !state.show_findings;
-                state.findings_scroll = 0;
-            }
+        KeyCode::Char('f') if state.last_orchestrator_outcome.is_some() => {
+            state.show_findings = !state.show_findings;
+            state.findings_scroll = 0;
         }
         KeyCode::Char('p') => {
             state.show_patterns = !state.show_patterns;
