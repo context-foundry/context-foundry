@@ -1668,6 +1668,22 @@ impl Config {
             });
         }
 
+        // GitHub Copilot models (rides existing Copilot subscription via gh CLI)
+        for (model, rec) in [
+            ("gpt-4o", true),
+            ("gpt-4o-mini", false),
+            ("claude-3.7-sonnet-20250219", false),
+            ("o3-mini", false),
+        ] {
+            entries.push(ModelEntry {
+                provider: "ghcopilot".into(),
+                model: model.into(),
+                label: model.into(),
+                recommended: rec,
+                group: "GitHub Copilot (subscription)".into(),
+            });
+        }
+
         // LM Studio models
         for m in lmstudio {
             entries.push(ModelEntry {

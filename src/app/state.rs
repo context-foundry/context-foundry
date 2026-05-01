@@ -291,6 +291,7 @@ impl DualSelection {
                     "claude" => "Claude",
                     "codex" => "Codex",
                     "opencode" => "OpenCode",
+                    "ghcopilot" | "gh-copilot" | "copilot" => "GhCopilot",
                     other => return format!("{} Solo", other),
                 };
                 format!("{} Solo", name)
@@ -304,6 +305,7 @@ impl DualSelection {
                             "claude" => "Claude",
                             "codex" => "Codex",
                             "opencode" => "OpenCode",
+                            "ghcopilot" | "gh-copilot" | "copilot" => "GhCopilot",
                             _ => "Other",
                         }
                     })
