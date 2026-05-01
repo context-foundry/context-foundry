@@ -9,18 +9,14 @@ Your output is production-quality Workday Extend code — JSON pages, scripts, a
 
 ## What You Build
 
-**IMPORTANT: Workday Extend apps use a FLAT file structure. ALL files go in the project root directory - NO subfolders!**
-
 | File Type | Location | Purpose |
 |-----------|----------|---------|
-| AMD | `{appName}.amd` | App structure |
-| SMD | `{appName}.smd` | Site config |
-| PMD Pages | `{pageName}.pmd` | UI definitions (in root, not in Pages/) |
-| Scripts | `{name}.script` | Reusable logic (in root, not in Scripts/) |
-| Cards | `{name}.card` | Card templates (in root, not in Cards/) |
-| Pods | `{name}.pod` | Reusable pods (in root, not in Pods/) |
-
-**DO NOT create subfolders like Pages/, Scripts/, Cards/, Pods/. All files must be flat in the project root.**
+| AMD | `App Metadata.json` or `amd.json` | App structure |
+| SMD | `Site Metadata.json` or `smd.json` | Site config |
+| PMD Pages | `Pages/{pageName}.json` | UI definitions |
+| Scripts | `Scripts/{name}.script` | Reusable logic |
+| Cards | `Cards/{name}.json` | Card templates |
+| Pods | `Pods/{name}.json` | Reusable pods |
 
 ---
 

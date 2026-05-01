@@ -821,12 +821,13 @@ impl Config {
         )
     }
 
-    /// Parse a provider string ("claude", "codex", or "opencode") into a
+    /// Parse a provider string ("claude", "codex", "opencode", or "ghcopilot") into a
     /// ModelProvider. Falls back to Claude for unrecognized values.
     pub fn parse_provider(value: &str) -> ModelProvider {
         match value.trim().to_lowercase().as_str() {
             "codex" => ModelProvider::Codex,
             "opencode" => ModelProvider::OpenCode,
+            "ghcopilot" | "gh-copilot" | "github-copilot" | "copilot" => ModelProvider::GhCopilot,
             _ => ModelProvider::Claude,
         }
     }
@@ -1951,11 +1952,14 @@ mod tests {
     }
 
     #[test]
-    fn parse_provider_supports_codex_and_defaults_to_claude() {
+    fn parse_provider_supports_all_providers_and_defaults_to_claude() {
         assert_eq!(Config::parse_provider("codex"), ModelProvider::Codex);
         assert_eq!(Config::parse_provider("CoDeX"), ModelProvider::Codex);
         assert_eq!(Config::parse_provider("claude"), ModelProvider::Claude);
         assert_eq!(Config::parse_provider("unknown"), ModelProvider::Claude);
+        assert_eq!(Config::parse_provider("ghcopilot"), ModelProvider::GhCopilot);
+        assert_eq!(Config::parse_provider("gh-copilot"), ModelProvider::GhCopilot);
+        assert_eq!(Config::parse_provider("copilot"), ModelProvider::GhCopilot);
     }
 
     #[test]

@@ -204,6 +204,9 @@ pub enum ModelProvider {
     Claude,
     Codex,
     OpenCode,
+    /// Experimental: uses the logged-in `gh` CLI OAuth token to call the
+    /// GitHub Copilot API. Rides the user's existing Copilot subscription.
+    GhCopilot,
 }
 
 impl ModelProvider {
@@ -212,6 +215,7 @@ impl ModelProvider {
             ModelProvider::Claude => "claude",
             ModelProvider::Codex => "codex",
             ModelProvider::OpenCode => "opencode",
+            ModelProvider::GhCopilot => "ghcopilot",
         }
     }
 
@@ -226,9 +230,8 @@ impl ModelProvider {
         let (cmd_name, module) = match self {
             ModelProvider::Claude => ("claude.cmd", "@anthropic-ai/claude-code/cli.js"),
             ModelProvider::Codex => ("codex.cmd", "@anthropic-ai/codex/cli.js"),
-            // OpenCode is not distributed via npm, so it doesn't have a node
-            // cli.js. The caller falls back to plain PATH resolution.
-            ModelProvider::OpenCode => return None,
+            // OpenCode and GhCopilot are not distributed via npm.
+            ModelProvider::OpenCode | ModelProvider::GhCopilot => return None,
         };
 
         // Strategy 1: find .cmd via `where`, look for sibling node_modules
@@ -267,7 +270,14 @@ impl ModelProvider {
     /// Builds a `CommandBuilder` for this provider (for PTY execution).
     /// On Windows, invokes `node <cli.js>` directly to avoid portable_pty's
     /// broken quoting of paths-with-spaces and cmd.exe arg mangling.
+    ///
+    /// `GhCopilot` does not use PTY — calling `command_builder` for it
+    /// is a programming error and will panic.
     pub fn command_builder(self) -> CommandBuilder {
+        assert!(
+            self != ModelProvider::GhCopilot,
+            "GhCopilot does not use PTY — route to run_ghcopilot_session instead"
+        );
         #[cfg(target_os = "windows")]
         {
             if let Some(cli_js) = self.resolve_node_cli() {
@@ -369,6 +379,7 @@ impl std::fmt::Display for ModelProvider {
             ModelProvider::Claude => write!(f, "Claude"),
             ModelProvider::Codex => write!(f, "Codex"),
             ModelProvider::OpenCode => write!(f, "OpenCode"),
+            ModelProvider::GhCopilot => write!(f, "GitHub Copilot"),
         }
     }
 }
@@ -646,6 +657,9 @@ pub async fn run_provider_session(options: ProviderRunOptions<'_>) -> Result<Age
             ));
             cmd
         }
+        ModelProvider::GhCopilot => {
+            unreachable!("GhCopilot does not use PTY sessions — route via run_ghcopilot_session")
+        }
     };
 
     cmd.cwd(options.project_dir);
@@ -716,6 +730,9 @@ pub async fn run_provider_session(options: ProviderRunOptions<'_>) -> Result<Age
                         options.prompt
                     ));
                     (program, args, vec![])
+                }
+                ModelProvider::GhCopilot => {
+                    unreachable!("GhCopilot does not use PTY/sandbox sessions")
                 }
             };
         sandbox_cfg.wrap_command_builder(program, &args, options.project_dir, &env_vars)
@@ -1001,6 +1018,40 @@ pub async fn run_agent(
             skip_git_repo_check: false,
             cancel_flag: shutdown,
             config_override: Some(&config),
+        })
+        .await;
+    }
+
+    // GhCopilot: native async HTTP provider — no PTY, no sandbox.
+    if provider == ModelProvider::GhCopilot {
+        if config.enforce_phase_rbac {
+            let _ = output_tx.send(AgentOutputEvent::Stderr(
+                "[foundry] enforce_phase_rbac: GhCopilot provider does not support tool allowlists; enforcement not applied".to_string(),
+            ));
+        }
+        let sandbox_cfg = config.sandbox_config();
+        if sandbox_cfg.is_active() {
+            let msg = "[foundry] GhCopilot provider is incompatible with sandbox mode. \
+                       Disable sandbox or choose a different provider.";
+            let _ = output_tx.send(AgentOutputEvent::Stderr(msg.to_string()));
+            return Ok(AgentResult {
+                success: false,
+                exit_code: 1,
+                exit_kind: AgentExitKind::Failed,
+                failure_message: Some(msg.to_string()),
+            });
+        }
+        let sys_directives = crate::prompts::agent_system_directives();
+        return crate::ghcopilot::run_ghcopilot_session(crate::ghcopilot::GhCopilotOptions {
+            model,
+            prompt,
+            system_directives: &sys_directives,
+            project_dir,
+            output_tx,
+            log_dir,
+            timeout_secs,
+            allowed_tools: effective_tools,
+            cancel_flag: shutdown,
         })
         .await;
     }
@@ -1794,6 +1845,9 @@ fn read_provider_output(
                                 // classify_agent_error block below.
                             }
                         }
+                    }
+                    ModelProvider::GhCopilot => {
+                        // GhCopilot does not use PTY — this branch is unreachable.
                     }
                 }
 

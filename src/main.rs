@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 mod agent;
 mod app;
+mod ghcopilot;
 mod budget;
 mod complexity;
 mod config;
