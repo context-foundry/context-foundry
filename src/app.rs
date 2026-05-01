@@ -1699,20 +1699,18 @@ fn handle_planning_key(state: &mut AppState, key: event::KeyEvent, config: &Conf
             state.tui_theme = new_theme;
             state.log(format!("Theme: {}", name));
         }
-        KeyCode::Char('?') => {
-            if toggle_settings_overlay(state) {
-                if let Some(tx) = state.event_tx.clone() {
-                    let ollama_url = config.ollama_url.clone();
-                    tokio::spawn(async move {
-                        let discovery = fetch_local_models(ollama_url).await;
-                        let _ = tx.send(AppEvent::LocalModels {
-                            lmstudio: discovery.lmstudio,
-                            ollama: discovery.ollama,
-                            lmstudio_opencode_map: discovery.lmstudio_opencode_map,
-                            opencode_warning: discovery.opencode_warning,
-                        });
+        KeyCode::Char('?') if toggle_settings_overlay(state) => {
+            if let Some(tx) = state.event_tx.clone() {
+                let ollama_url = config.ollama_url.clone();
+                tokio::spawn(async move {
+                    let discovery = fetch_local_models(ollama_url).await;
+                    let _ = tx.send(AppEvent::LocalModels {
+                        lmstudio: discovery.lmstudio,
+                        ollama: discovery.ollama,
+                        lmstudio_opencode_map: discovery.lmstudio_opencode_map,
+                        opencode_warning: discovery.opencode_warning,
                     });
-                }
+                });
             }
         }
         _ if handle_settings_overlay_key(state, key) => {}
@@ -2274,20 +2272,18 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                     }
                 } else {
                     match key.code {
-                        KeyCode::Char('?') => {
-                            if toggle_settings_overlay(state) {
-                                if let Some(tx) = state.event_tx.clone() {
-                                    let ollama_url = config.ollama_url.clone();
-                                    tokio::spawn(async move {
-                                        let discovery = fetch_local_models(ollama_url).await;
-                                        let _ = tx.send(AppEvent::LocalModels {
-                                            lmstudio: discovery.lmstudio,
-                                            ollama: discovery.ollama,
-                                            lmstudio_opencode_map: discovery.lmstudio_opencode_map,
-                                            opencode_warning: discovery.opencode_warning,
-                                        });
+                        KeyCode::Char('?') if toggle_settings_overlay(state) => {
+                            if let Some(tx) = state.event_tx.clone() {
+                                let ollama_url = config.ollama_url.clone();
+                                tokio::spawn(async move {
+                                    let discovery = fetch_local_models(ollama_url).await;
+                                    let _ = tx.send(AppEvent::LocalModels {
+                                        lmstudio: discovery.lmstudio,
+                                        ollama: discovery.ollama,
+                                        lmstudio_opencode_map: discovery.lmstudio_opencode_map,
+                                        opencode_warning: discovery.opencode_warning,
                                     });
-                                }
+                                });
                             }
                         }
                         _ if handle_settings_overlay_key(state, key) => {}
