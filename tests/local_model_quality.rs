@@ -38,11 +38,7 @@ fn setup_workspace(dir: &std::path::Path, model: &str) {
         .status()
         .unwrap();
 
-    fs::write(
-        dir.join("SPEC.md"),
-        "# Test Spec\n\nprint hello world\n",
-    )
-    .unwrap();
+    fs::write(dir.join("SPEC.md"), "# Test Spec\n\nprint hello world\n").unwrap();
     fs::write(
         dir.join("TASKS.md"),
         "## Tasks\n\n- [ ] T1.1: Create a file named hello.txt containing \"hello world\".\n",
@@ -212,7 +208,6 @@ fn quality_empty_deliverable_produces_wip() {
                     .unwrap_or("");
                 if status == "WIP" {
                     // Expected: empty deliverable produces WIP
-                    return;
                 }
                 // DONE is also acceptable if the model actually created the file
             }

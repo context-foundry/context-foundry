@@ -858,7 +858,12 @@ pub fn settings_modal_rect(area: Rect) -> Rect {
     let h = h.min(area.height);
     let x = area.x + (area.width.saturating_sub(w)) / 2;
     let y = area.y + (area.height.saturating_sub(h)) / 2;
-    Rect { x, y, width: w, height: h }
+    Rect {
+        x,
+        y,
+        width: w,
+        height: h,
+    }
 }
 
 /// The `[ X ]` close button rect, derived from the modal rect.
@@ -901,9 +906,7 @@ pub fn model_picker_rect(parent: Rect, picker: &crate::app::ModelPicker) -> Rect
     let width = (parent.width * 60 / 100)
         .max(40)
         .min(parent.width.saturating_sub(4));
-    let height = (item_count + 4)
-        .min(parent.height.saturating_sub(4))
-        .max(6);
+    let height = (item_count + 4).min(parent.height.saturating_sub(4)).max(6);
     let x = parent.x + (parent.width.saturating_sub(width)) / 2;
     let y = parent.y + (parent.height.saturating_sub(height)) / 2;
     Rect {
@@ -945,10 +948,7 @@ pub fn model_picker_hit_test(
     let filter_visible = picker.filtering || !picker.filter.is_empty();
     let mut content_y = inner.y;
     if filter_visible {
-        if row == content_y
-            && column >= inner.x
-            && column < inner.x.saturating_add(inner.width)
-        {
+        if row == content_y && column >= inner.x && column < inner.x.saturating_add(inner.width) {
             return Some(ModelPickerMouseTarget::FilterBar);
         }
         content_y += 1;
@@ -988,7 +988,7 @@ fn stage_ids_match(lhs: &str, rhs: &str) -> bool {
 
 /// Render a floating settings overlay on top of whatever is already drawn.
 pub(super) fn render_settings_overlay(frame: &mut Frame, state: &AppState) {
-    use crate::app::{DualSelection, FieldKind, settings_sections};
+    use crate::app::{settings_sections, DualSelection, FieldKind};
 
     let theme = &state.tui_theme;
     let modal = settings_modal_rect(frame.area());
@@ -997,8 +997,12 @@ pub(super) fn render_settings_overlay(frame: &mut Frame, state: &AppState) {
     let shadow = Rect {
         x: modal.x + 1,
         y: modal.y + 1,
-        width: modal.width.min(frame.area().width.saturating_sub(modal.x + 1)),
-        height: modal.height.min(frame.area().height.saturating_sub(modal.y + 1)),
+        width: modal
+            .width
+            .min(frame.area().width.saturating_sub(modal.x + 1)),
+        height: modal
+            .height
+            .min(frame.area().height.saturating_sub(modal.y + 1)),
     };
     frame.render_widget(Clear, shadow);
     frame.render_widget(
@@ -1014,7 +1018,9 @@ pub(super) fn render_settings_overlay(frame: &mut Frame, state: &AppState) {
             .style(Style::default().bg(theme.surface))
             .title(Span::styled(
                 " Settings -- Foundry ",
-                Style::default().fg(theme.accent).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(theme.accent)
+                    .add_modifier(Modifier::BOLD),
             )),
         modal,
     );
@@ -1022,7 +1028,9 @@ pub(super) fn render_settings_overlay(frame: &mut Frame, state: &AppState) {
     // Draw [ X ] close button
     let btn = close_btn_rect(modal);
     let buf = frame.buffer_mut();
-    let btn_style = Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD);
+    let btn_style = Style::default()
+        .fg(Color::Yellow)
+        .add_modifier(Modifier::BOLD);
     for (i, ch) in "[ X ]".chars().enumerate() {
         let col = btn.x + i as u16;
         if col < buf.area().width && btn.y < buf.area().height {
@@ -1037,7 +1045,11 @@ pub(super) fn render_settings_overlay(frame: &mut Frame, state: &AppState) {
         height: modal.height.saturating_sub(2),
     };
 
-    let highlight_bg = if theme.surface == Color::Reset { Color::DarkGray } else { theme.surface };
+    let highlight_bg = if theme.surface == Color::Reset {
+        Color::DarkGray
+    } else {
+        theme.surface
+    };
 
     let ov = state.settings_overlay.as_ref();
     let focus = ov.map(|o| o.focus).unwrap_or(0);
@@ -1046,7 +1058,11 @@ pub(super) fn render_settings_overlay(frame: &mut Frame, state: &AppState) {
     let editing = ov.and_then(|o| o.editing.as_ref());
 
     // Build the config snapshot for field values
-    let config_path = state.buildloop_dir.parent().unwrap_or(std::path::Path::new(".")).join(".foundry.json");
+    let config_path = state
+        .buildloop_dir
+        .parent()
+        .unwrap_or(std::path::Path::new("."))
+        .join(".foundry.json");
     let config: Config = if let Ok(content) = std::fs::read_to_string(&config_path) {
         serde_json::from_str(&content).unwrap_or_default()
     } else {
@@ -1059,26 +1075,33 @@ pub(super) fn render_settings_overlay(frame: &mut Frame, state: &AppState) {
     let mut render_y: u16 = inner.y;
 
     for section in &sections {
-        let is_expanded = expanded.map(|e| e.contains(section.id)).unwrap_or(section.default_expanded);
+        let is_expanded = expanded
+            .map(|e| e.contains(section.id))
+            .unwrap_or(section.default_expanded);
         let icon = if is_expanded { "\u{25BC}" } else { "\u{25B6}" };
         let focused = row_idx == focus;
 
         if row_idx >= scroll_offset && (row_idx - scroll_offset) < content_height {
             let style = if focused {
-                Style::default().fg(theme.accent).add_modifier(Modifier::BOLD).bg(highlight_bg)
+                Style::default()
+                    .fg(theme.accent)
+                    .add_modifier(Modifier::BOLD)
+                    .bg(highlight_bg)
             } else {
-                Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(theme.accent)
+                    .add_modifier(Modifier::BOLD)
             };
-            let line = Line::from(Span::styled(
-                format!(" {} {}", icon, section.name),
-                style,
-            ));
-            frame.render_widget(Paragraph::new(line), Rect {
-                x: inner.x,
-                y: render_y,
-                width: inner.width,
-                height: 1,
-            });
+            let line = Line::from(Span::styled(format!(" {} {}", icon, section.name), style));
+            frame.render_widget(
+                Paragraph::new(line),
+                Rect {
+                    x: inner.x,
+                    y: render_y,
+                    width: inner.width,
+                    height: 1,
+                },
+            );
             render_y += 1;
         }
         row_idx += 1;
@@ -1093,29 +1116,41 @@ pub(super) fn render_settings_overlay(frame: &mut Frame, state: &AppState) {
                         "arena" => DualSelection::display_label(&state.builder_model_specs),
                         "builder" => {
                             let specs = &state.builder_model_specs;
-                            let mut list: Vec<String> = specs.iter()
-                                .map(|s| Config::readable_spec(s))
-                                .collect();
+                            let mut list: Vec<String> =
+                                specs.iter().map(|s| Config::readable_spec(s)).collect();
                             if specs.len() >= 2 {
-                                let combined = list.iter().take(specs.len()).cloned().collect::<Vec<_>>().join("/");
+                                let combined = list
+                                    .iter()
+                                    .take(specs.len())
+                                    .cloned()
+                                    .collect::<Vec<_>>()
+                                    .join("/");
                                 list.push(combined);
                             }
                             for m in &state.local_models {
-                                if !list.contains(m) { list.push(m.clone()); }
+                                if !list.contains(m) {
+                                    list.push(m.clone());
+                                }
                             }
-                            list.get(state.builder_cursor).cloned().unwrap_or_else(|| "(default)".into())
+                            list.get(state.builder_cursor)
+                                .cloned()
+                                .unwrap_or_else(|| "(default)".into())
                         }
                         "theme" => crate::tui::theme::current_name(&state.tui_theme).to_string(),
-                        _ if editing
-                            .is_some_and(|inline| inline.field_id == field.id) =>
-                        {
+                        _ if editing.is_some_and(|inline| inline.field_id == field.id) => {
                             editing.unwrap().buffer.clone()
                         }
                         _ => config.field_value(field.id),
                     };
 
                     let icon_str = match field.kind {
-                        FieldKind::Bool => if value == "true" { "\u{2611}" } else { "\u{2610}" },
+                        FieldKind::Bool => {
+                            if value == "true" {
+                                "\u{2611}"
+                            } else {
+                                "\u{2610}"
+                            }
+                        }
                         _ => " ",
                     };
 
@@ -1140,25 +1175,45 @@ pub(super) fn render_settings_overlay(frame: &mut Frame, state: &AppState) {
 
                     let cursor_str = if field_focused { "> " } else { "  " };
                     let line = Line::from(vec![
-                        Span::styled(cursor_str, if field_focused {
-                            Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)
-                        } else {
-                            Style::default().fg(theme.muted)
-                        }),
-                        Span::styled(format!("{} ", icon_str), Style::default().fg(theme.muted)),
-                        Span::styled(format!("{:<width$}", field.label, width = label_width), row_style),
-                        Span::styled(format!("{:<width$}", display_val, width = value_width), row_style.fg(Color::White)),
                         Span::styled(
-                            truncate_str(field.hint, inner.width.saturating_sub(label_width as u16 + value_width as u16 + 6) as usize),
+                            cursor_str,
+                            if field_focused {
+                                Style::default()
+                                    .fg(theme.accent)
+                                    .add_modifier(Modifier::BOLD)
+                            } else {
+                                Style::default().fg(theme.muted)
+                            },
+                        ),
+                        Span::styled(format!("{} ", icon_str), Style::default().fg(theme.muted)),
+                        Span::styled(
+                            format!("{:<width$}", field.label, width = label_width),
+                            row_style,
+                        ),
+                        Span::styled(
+                            format!("{:<width$}", display_val, width = value_width),
+                            row_style.fg(Color::White),
+                        ),
+                        Span::styled(
+                            truncate_str(
+                                field.hint,
+                                inner
+                                    .width
+                                    .saturating_sub(label_width as u16 + value_width as u16 + 6)
+                                    as usize,
+                            ),
                             Style::default().fg(theme.muted),
                         ),
                     ]);
-                    frame.render_widget(Paragraph::new(line), Rect {
-                        x: inner.x,
-                        y: render_y,
-                        width: inner.width,
-                        height: 1,
-                    });
+                    frame.render_widget(
+                        Paragraph::new(line),
+                        Rect {
+                            x: inner.x,
+                            y: render_y,
+                            width: inner.width,
+                            height: 1,
+                        },
+                    );
                     render_y += 1;
                 }
                 row_idx += 1;
@@ -1174,7 +1229,9 @@ pub(super) fn render_settings_overlay(frame: &mut Frame, state: &AppState) {
             .error
             .as_deref()
             .map(str::to_string)
-            .unwrap_or_else(|| format!("  editing {} -- Enter save, Ctrl+U clear", editing.field_id))
+            .unwrap_or_else(|| {
+                format!("  editing {} -- Enter save, Ctrl+U clear", editing.field_id)
+            })
     } else if has_picker {
         "  Click a row to select or toggle a provider group".to_string()
     } else {
@@ -1209,7 +1266,12 @@ pub(super) fn render_settings_overlay(frame: &mut Frame, state: &AppState) {
             hint_text,
             Style::default().fg(theme.muted),
         ))),
-        Rect { x: inner.x, y: hint_y, width: inner.width, height: 1 },
+        Rect {
+            x: inner.x,
+            y: hint_y,
+            width: inner.width,
+            height: 1,
+        },
     );
 
     // Model picker popup (rendered on top of the settings overlay)
@@ -1219,8 +1281,8 @@ pub(super) fn render_settings_overlay(frame: &mut Frame, state: &AppState) {
                 .stage_overrides
                 .iter()
                 .any(|stage_id| stage_ids_match(stage_id, &picker.stage));
-            let selected_route = stage_overridden
-                .then(|| config.active_routing_for_stage(&picker.stage));
+            let selected_route =
+                stage_overridden.then(|| config.active_routing_for_stage(&picker.stage));
             render_model_picker(frame, theme, picker, modal, selected_route);
         }
     }
@@ -1259,7 +1321,12 @@ fn render_model_picker(
         Block::default()
             .borders(Borders::ALL)
             .border_style(Style::default().fg(theme.accent))
-            .title(Span::styled(title, Style::default().fg(theme.accent).add_modifier(Modifier::BOLD))),
+            .title(Span::styled(
+                title,
+                Style::default()
+                    .fg(theme.accent)
+                    .add_modifier(Modifier::BOLD),
+            )),
         popup,
     );
 
@@ -1277,56 +1344,93 @@ fn render_model_picker(
             Span::styled("/ ", Style::default().fg(theme.accent)),
             Span::styled(&picker.filter, Style::default().fg(Color::White)),
             if picker.filtering {
-                Span::styled("_", Style::default().fg(Color::White).add_modifier(Modifier::SLOW_BLINK))
+                Span::styled(
+                    "_",
+                    Style::default()
+                        .fg(Color::White)
+                        .add_modifier(Modifier::SLOW_BLINK),
+                )
             } else {
                 Span::raw("")
             },
         ]);
         frame.render_widget(
             Paragraph::new(filter_line),
-            Rect { x: inner.x, y: content_y, width: inner.width, height: 1 },
+            Rect {
+                x: inner.x,
+                y: content_y,
+                width: inner.width,
+                height: 1,
+            },
         );
         content_y += 1;
     }
 
-    let content_height = inner.height.saturating_sub(if picker.filtering || !picker.filter.is_empty() { 1 } else { 0 });
+    let content_height =
+        inner
+            .height
+            .saturating_sub(if picker.filtering || !picker.filter.is_empty() {
+                1
+            } else {
+                0
+            });
     let scroll_offset = if picker.focus as u16 >= content_height {
         (picker.focus as u16 - content_height + 1) as usize
     } else {
         0
     };
 
-    let highlight_bg = if theme.surface == Color::Reset { Color::DarkGray } else { theme.surface };
+    let highlight_bg = if theme.surface == Color::Reset {
+        Color::DarkGray
+    } else {
+        theme.surface
+    };
 
     for (idx, item) in items.iter().enumerate() {
-        if idx < scroll_offset { continue; }
+        if idx < scroll_offset {
+            continue;
+        }
         let row_y = content_y + (idx - scroll_offset) as u16;
-        if row_y >= inner.y + inner.height { break; }
+        if row_y >= inner.y + inner.height {
+            break;
+        }
 
         let focused = idx == picker.focus;
         match item {
             PickerItem::GroupHeader(name, is_open) => {
                 let icon = if *is_open { "\u{25BC}" } else { "\u{25B6}" };
                 let style = if focused {
-                    Style::default().fg(theme.accent).add_modifier(Modifier::BOLD).bg(highlight_bg)
+                    Style::default()
+                        .fg(theme.accent)
+                        .add_modifier(Modifier::BOLD)
+                        .bg(highlight_bg)
                 } else {
-                    Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)
+                    Style::default()
+                        .fg(theme.accent)
+                        .add_modifier(Modifier::BOLD)
                 };
                 let line = Line::from(Span::styled(format!(" {} {}", icon, name), style));
                 frame.render_widget(
                     Paragraph::new(line),
-                    Rect { x: inner.x, y: row_y, width: inner.width, height: 1 },
+                    Rect {
+                        x: inner.x,
+                        y: row_y,
+                        width: inner.width,
+                        height: 1,
+                    },
                 );
             }
             PickerItem::Entry(entry) => {
                 let is_selected = match selected_route.as_ref() {
-                    Some((provider, model)) => {
-                        provider == &entry.provider && model == &entry.model
-                    }
+                    Some((provider, model)) => provider == &entry.provider && model == &entry.model,
                     None => entry.provider.is_empty() && entry.model.is_empty(),
                 };
                 let radio = if is_selected { "\u{25C9}" } else { "\u{25CB}" };
-                let rec_hint = if entry.recommended { " (recommended)" } else { "" };
+                let rec_hint = if entry.recommended {
+                    " (recommended)"
+                } else {
+                    ""
+                };
                 let row_style = if focused {
                     Style::default().bg(highlight_bg)
                 } else {
@@ -1335,7 +1439,11 @@ fn render_model_picker(
                 let line = Line::from(vec![
                     Span::styled(
                         if focused { "> " } else { "  " },
-                        if focused { Style::default().fg(theme.accent) } else { Style::default().fg(theme.muted) },
+                        if focused {
+                            Style::default().fg(theme.accent)
+                        } else {
+                            Style::default().fg(theme.muted)
+                        },
                     ),
                     Span::styled(format!("  {} ", radio), Style::default().fg(theme.muted)),
                     Span::styled(&entry.label, row_style.fg(Color::White)),
@@ -1343,7 +1451,12 @@ fn render_model_picker(
                 ]);
                 frame.render_widget(
                     Paragraph::new(line),
-                    Rect { x: inner.x, y: row_y, width: inner.width, height: 1 },
+                    Rect {
+                        x: inner.x,
+                        y: row_y,
+                        width: inner.width,
+                        height: 1,
+                    },
                 );
             }
         }
@@ -1355,7 +1468,12 @@ fn confirm_banner_rect(parent: Rect) -> Rect {
     let h: u16 = 6;
     let x = parent.x + parent.width.saturating_sub(w) / 2;
     let y = parent.y + parent.height.saturating_sub(h) / 2;
-    Rect { x, y, width: w, height: h }
+    Rect {
+        x,
+        y,
+        width: w,
+        height: h,
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1402,7 +1520,12 @@ fn render_confirm_banner(
     let sw = banner.width.min(area.width.saturating_sub(sx));
     let sh = banner.height.min(area.height.saturating_sub(sy));
     if sw > 0 && sh > 0 {
-        let shadow = Rect { x: sx, y: sy, width: sw, height: sh };
+        let shadow = Rect {
+            x: sx,
+            y: sy,
+            width: sw,
+            height: sh,
+        };
         frame.render_widget(Clear, shadow);
         frame.render_widget(
             Block::default().style(Style::default().bg(theme.muted)),
@@ -1414,7 +1537,11 @@ fn render_confirm_banner(
     let block = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Double)
-        .border_style(Style::default().fg(theme.accent).add_modifier(Modifier::BOLD))
+        .border_style(
+            Style::default()
+                .fg(theme.accent)
+                .add_modifier(Modifier::BOLD),
+        )
         .style(Style::default().bg(theme.surface));
     let inner = block.inner(banner);
     frame.render_widget(block, banner);
@@ -1431,7 +1558,9 @@ fn render_confirm_banner(
 
     let title_line = Paragraph::new(Line::from(Span::styled(
         title,
-        Style::default().fg(theme.accent).add_modifier(Modifier::BOLD),
+        Style::default()
+            .fg(theme.accent)
+            .add_modifier(Modifier::BOLD),
     )))
     .alignment(Alignment::Center);
     frame.render_widget(title_line, chunks[0]);
@@ -1500,7 +1629,12 @@ pub fn render_quit_confirm(frame: &mut Frame, theme: &crate::tui::theme::TuiThem
         let fw = (text.len() as u16 + 2).min(area.width);
         let fx = area.width.saturating_sub(fw) / 2;
         let fy = area.height.saturating_sub(3) / 2;
-        let banner = Rect { x: fx, y: fy, width: fw, height: 3 };
+        let banner = Rect {
+            x: fx,
+            y: fy,
+            width: fw,
+            height: 3,
+        };
         frame.render_widget(Clear, banner);
         let block = Block::default()
             .borders(Borders::ALL)
@@ -1517,7 +1651,12 @@ pub fn render_quit_confirm(frame: &mut Frame, theme: &crate::tui::theme::TuiThem
 
     let x = area.width.saturating_sub(w) / 2;
     let y = area.height.saturating_sub(h) / 2;
-    let modal = Rect { x, y, width: w, height: h };
+    let modal = Rect {
+        x,
+        y,
+        width: w,
+        height: h,
+    };
 
     // Drop shadow: offset right 2, down 1, painted in the muted color so the
     // modal looks lifted off the surface behind it.
@@ -1526,7 +1665,12 @@ pub fn render_quit_confirm(frame: &mut Frame, theme: &crate::tui::theme::TuiThem
     let sw = modal.width.min(area.width.saturating_sub(sx));
     let sh = modal.height.min(area.height.saturating_sub(sy));
     if sw > 0 && sh > 0 {
-        let shadow = Rect { x: sx, y: sy, width: sw, height: sh };
+        let shadow = Rect {
+            x: sx,
+            y: sy,
+            width: sw,
+            height: sh,
+        };
         frame.render_widget(Clear, shadow);
         frame.render_widget(
             Block::default().style(Style::default().bg(theme.muted)),
@@ -1590,11 +1734,115 @@ pub fn render_quit_confirm(frame: &mut Frame, theme: &crate::tui::theme::TuiThem
             .fg(theme.text)
             .add_modifier(Modifier::BOLD),
     );
-    let buttons = Paragraph::new(Line::from(vec![
-        quit_btn,
-        Span::raw("    "),
-        cancel_btn,
-    ]))
+    let buttons = Paragraph::new(Line::from(vec![quit_btn, Span::raw("    "), cancel_btn]))
+        .alignment(Alignment::Center);
+    frame.render_widget(buttons, chunks[4]);
+}
+
+pub fn render_no_tasks_warning(frame: &mut Frame, theme: &crate::tui::theme::TuiTheme) {
+    let area = frame.area();
+    let w: u16 = 58.min(area.width.saturating_sub(2));
+    let h: u16 = 9.min(area.height.saturating_sub(2));
+    if w < 20 || h < 5 {
+        let text = "  No TASKS.md found -- describe work first  [Enter] OK  ";
+        let fw = (text.len() as u16 + 2).min(area.width);
+        let fx = area.width.saturating_sub(fw) / 2;
+        let fy = area.height.saturating_sub(3) / 2;
+        let banner = Rect {
+            x: fx,
+            y: fy,
+            width: fw,
+            height: 3,
+        };
+        frame.render_widget(Clear, banner);
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(theme.warning))
+            .style(Style::default().bg(theme.surface));
+        let inner = block.inner(banner);
+        frame.render_widget(block, banner);
+        frame.render_widget(
+            Paragraph::new(Line::from(text)).style(Style::default().fg(theme.text)),
+            inner,
+        );
+        return;
+    }
+
+    let x = area.width.saturating_sub(w) / 2;
+    let y = area.height.saturating_sub(h) / 2;
+    let modal = Rect {
+        x,
+        y,
+        width: w,
+        height: h,
+    };
+
+    let sx = modal.x.saturating_add(2);
+    let sy = modal.y.saturating_add(1);
+    let sw = modal.width.min(area.width.saturating_sub(sx));
+    let sh = modal.height.min(area.height.saturating_sub(sy));
+    if sw > 0 && sh > 0 {
+        let shadow = Rect {
+            x: sx,
+            y: sy,
+            width: sw,
+            height: sh,
+        };
+        frame.render_widget(Clear, shadow);
+        frame.render_widget(
+            Block::default().style(Style::default().bg(theme.muted)),
+            shadow,
+        );
+    }
+
+    frame.render_widget(Clear, modal);
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Double)
+        .border_style(
+            Style::default()
+                .fg(theme.warning)
+                .add_modifier(Modifier::BOLD),
+        )
+        .style(Style::default().bg(theme.surface).fg(theme.text));
+    let inner = block.inner(modal);
+    frame.render_widget(block, modal);
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(1), // title
+            Constraint::Length(1), // spacer
+            Constraint::Length(1), // message
+            Constraint::Length(1), // spacer
+            Constraint::Length(1), // button
+            Constraint::Min(0),
+        ])
+        .split(inner);
+
+    let title = Paragraph::new(Line::from(Span::styled(
+        "No task queue found",
+        Style::default()
+            .fg(theme.warning)
+            .add_modifier(Modifier::BOLD),
+    )))
     .alignment(Alignment::Center);
+    frame.render_widget(title, chunks[0]);
+
+    let msg = Paragraph::new(Line::from(Span::styled(
+        "Describe work or scan the project to create TASKS.md.",
+        Style::default().fg(theme.muted),
+    )))
+    .alignment(Alignment::Center);
+    frame.render_widget(msg, chunks[2]);
+
+    let ok_btn = Span::styled(
+        "  [Enter] OK  ",
+        Style::default()
+            .bg(theme.accent)
+            .fg(Color::Black)
+            .add_modifier(Modifier::BOLD),
+    );
+    let buttons = Paragraph::new(Line::from(ok_btn)).alignment(Alignment::Center);
     frame.render_widget(buttons, chunks[4]);
 }

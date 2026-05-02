@@ -2048,7 +2048,15 @@ mod tests {
     #[test]
     fn test_pattern_context_wrapped_in_reference_block() {
         let patterns = "Some pattern advice here";
-        let planner = planner_prompt("PLAN", None, "T1", "test task", patterns, "SPEC.md", "TASKS.md");
+        let planner = planner_prompt(
+            "PLAN",
+            None,
+            "T1",
+            "test task",
+            patterns,
+            "SPEC.md",
+            "TASKS.md",
+        );
         assert!(
             planner.contains("--- BEGIN REFERENCE DATA (non-authoritative"),
             "planner prompt must wrap pattern context in reference data block"
@@ -2119,7 +2127,15 @@ mod tests {
 
     #[test]
     fn prompts_use_actual_file_names_not_hardcoded() {
-        let planner = planner_prompt("PLAN", None, "T1", "task", "", "ARCHITECTURE.md", "IMPL_PLAN.md");
+        let planner = planner_prompt(
+            "PLAN",
+            None,
+            "T1",
+            "task",
+            "",
+            "ARCHITECTURE.md",
+            "IMPL_PLAN.md",
+        );
         assert!(planner.contains("ARCHITECTURE.md"));
         assert!(planner.contains("IMPL_PLAN.md"));
         assert!(!planner.contains("SPEC.md"));

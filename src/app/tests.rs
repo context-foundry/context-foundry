@@ -70,7 +70,10 @@ fn settings_overlay_bool_toggle_reloads_config_each_time() {
 
     handle_settings_action(&mut state);
     let config = Config::load(&dir);
-    assert!(config.plan_review_enabled, "first toggle should enable the flag");
+    assert!(
+        config.plan_review_enabled,
+        "first toggle should enable the flag"
+    );
 
     handle_settings_action(&mut state);
     let config = Config::load(&dir);
@@ -195,6 +198,18 @@ fn detect_startup_scenario_for_plan_only_directory() {
     write_file(
         &dir.join("TASKS.md"),
         "# Plan\n\n- [ ] T1.1: Add startup flow\n",
+    );
+
+    assert_eq!(detect_startup_scenario(&dir), StartupScenario::QueueReady);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn detect_startup_scenario_for_lowercase_tasks_file() {
+    let dir = temp_project_dir("foundry-lowercase-tasks");
+    write_file(
+        &dir.join("tasks.md"),
+        "# Plan\n\n- [ ] T1.1: Lowercase task\n",
     );
 
     assert_eq!(detect_startup_scenario(&dir), StartupScenario::QueueReady);
@@ -621,7 +636,11 @@ fn startup_intent_input_accepts_paste_events() {
     ));
 
     // Input is always active -- paste directly
-    handle_startup_event(&mut state, AppEvent::Paste("fix login timeout".to_string()), &Config::default());
+    handle_startup_event(
+        &mut state,
+        AppEvent::Paste("fix login timeout".to_string()),
+        &Config::default(),
+    );
 
     assert_eq!(
         state
@@ -1975,7 +1994,7 @@ fn test_extension_reference_detection_no_match() {
         .agent_output
         .push("Writing unit tests for the parser".to_string());
     handle_agent_done(&mut state, true);
-    assert!(state.extension_reference_count.get("roblox").is_none());
+    assert!(!state.extension_reference_count.contains_key("roblox"));
     let _ = std::fs::remove_dir_all(dir);
 }
 

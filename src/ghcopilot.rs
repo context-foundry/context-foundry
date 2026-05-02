@@ -76,7 +76,9 @@ fn get_github_token() -> Result<String> {
     let output = std::process::Command::new("gh")
         .args(["auth", "token"])
         .output()
-        .context("gh CLI not found. Install with: winget install GitHub.cli (or brew install gh)")?;
+        .context(
+            "gh CLI not found. Install with: winget install GitHub.cli (or brew install gh)",
+        )?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         return Err(anyhow!(
@@ -93,10 +95,7 @@ fn get_github_token() -> Result<String> {
     Ok(token)
 }
 
-async fn fetch_copilot_token(
-    client: &reqwest::Client,
-    github_token: &str,
-) -> Result<CopilotToken> {
+async fn fetch_copilot_token(client: &reqwest::Client, github_token: &str) -> Result<CopilotToken> {
     let resp = client
         .get(COPILOT_TOKEN_URL)
         .header("Authorization", format!("token {}", github_token))
@@ -147,16 +146,13 @@ async fn fetch_copilot_token(
 }
 
 fn parse_iso8601(s: &str) -> Option<SystemTime> {
-    chrono::DateTime::parse_from_rfc3339(s)
-        .ok()
-        .and_then(|dt| {
-            let secs = dt.timestamp();
-            if secs < 0 {
-                return None;
-            }
-            SystemTime::UNIX_EPOCH
-                .checked_add(std::time::Duration::from_secs(secs as u64))
-        })
+    chrono::DateTime::parse_from_rfc3339(s).ok().and_then(|dt| {
+        let secs = dt.timestamp();
+        if secs < 0 {
+            return None;
+        }
+        SystemTime::UNIX_EPOCH.checked_add(std::time::Duration::from_secs(secs as u64))
+    })
 }
 
 // ─── Path safety ────────────────────────────────────────────────────────────
@@ -466,7 +462,13 @@ async fn execute_tool(
                 .unwrap_or_else(|| project_dir.to_path_buf());
             let glob_filter = args["glob"].as_str();
             let case_insensitive = args["case_insensitive"].as_bool().unwrap_or(false);
-            match grep_files(pattern, &search_path, glob_filter, case_insensitive, project_dir) {
+            match grep_files(
+                pattern,
+                &search_path,
+                glob_filter,
+                case_insensitive,
+                project_dir,
+            ) {
                 Ok(results) if results.is_empty() => "No matches found".to_string(),
                 Ok(results) => truncate_output(&results.join("\n")),
                 Err(e) => format!("Error: {}", e),
@@ -481,7 +483,10 @@ async fn execute_tool(
                 Err(e) => format!("Error fetching {}: {}", url, e),
             }
         }
-        _ => format!("Error: tool '{}' is not available in the GhCopilot provider", name),
+        _ => format!(
+            "Error: tool '{}' is not available in the GhCopilot provider",
+            name
+        ),
     }
 }
 
@@ -564,12 +569,7 @@ fn write_file(project_dir: &Path, file_path: &str, content: &str) -> Result<()> 
     std::fs::write(&path, content).with_context(|| format!("Cannot write '{}'", file_path))
 }
 
-fn edit_file(
-    project_dir: &Path,
-    file_path: &str,
-    old_str: &str,
-    new_str: &str,
-) -> Result<()> {
+fn edit_file(project_dir: &Path, file_path: &str, old_str: &str, new_str: &str) -> Result<()> {
     let path = safe_path(project_dir, file_path)?;
     let content = std::fs::read_to_string(&path)
         .with_context(|| format!("Cannot read '{}' for editing", file_path))?;
@@ -643,9 +643,7 @@ fn grep_files(
     .with_context(|| format!("Invalid regex: '{}'", pattern))?;
 
     let glob_pat = glob_filter
-        .map(|g| {
-            glob::Pattern::new(g).with_context(|| format!("Invalid glob filter: '{}'", g))
-        })
+        .map(|g| glob::Pattern::new(g).with_context(|| format!("Invalid glob filter: '{}'", g)))
         .transpose()?;
 
     let proj_normalized = normalize_path(project_dir);
@@ -684,10 +682,7 @@ fn grep_files(
             if re.is_match(line) {
                 results.push(format!("{}:{}: {}", rel, line_no + 1, line));
                 if results.len() >= MAX_GREP_RESULTS {
-                    results.push(format!(
-                        "…[truncated at {} results]",
-                        MAX_GREP_RESULTS
-                    ));
+                    results.push(format!("…[truncated at {} results]", MAX_GREP_RESULTS));
                     break 'outer;
                 }
             }
@@ -1065,8 +1060,7 @@ pub async fn run_ghcopilot_session(options: GhCopilotOptions<'_>) -> Result<Agen
                     let call_id = tc["id"].as_str().unwrap_or("").to_string();
                     let fn_name = tc["function"]["name"].as_str().unwrap_or("unknown");
                     let args_str = tc["function"]["arguments"].as_str().unwrap_or("{}");
-                    let args: Value =
-                        serde_json::from_str(args_str).unwrap_or(json!({}));
+                    let args: Value = serde_json::from_str(args_str).unwrap_or(json!({}));
 
                     let input_preview = args_str.chars().take(120).collect::<String>();
                     let _ = tx.send(AgentOutputEvent::ToolUse {

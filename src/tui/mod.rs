@@ -26,11 +26,14 @@ use crate::utils::truncate_str_from_end;
 
 pub use overlays::{
     close_btn_rect, confirm_banner_hit_test, model_picker_hit_test, quit_confirm_hit_test,
-    render_quit_confirm, settings_modal_rect, settings_overlay_row_hit_test,
-    ConfirmBannerAction, ModelPickerMouseTarget, QuitConfirmAction,
+    render_no_tasks_warning, render_quit_confirm, settings_modal_rect,
+    settings_overlay_row_hit_test, ConfirmBannerAction, ModelPickerMouseTarget, QuitConfirmAction,
 };
 pub use pipeline::{pipeline_click, PipelineClick};
-pub use running::{running_header_tab_hit_test, running_status_bar_hit_test, RunningHeaderTab, RunningStatusBarAction};
+pub use running::{
+    running_header_tab_hit_test, running_status_bar_hit_test, RunningHeaderTab,
+    RunningStatusBarAction,
+};
 pub use startup::{startup_status_bar_hit_test, StartupMouseTarget, StatusBarAction};
 pub use welcome::{random_fallback_message, render_welcome};
 
@@ -112,7 +115,10 @@ pub fn running_layout(area: Rect, has_extensions: bool, split_pct: u16) -> Runni
     let right_pct = 100 - left_pct;
     let middle_cols = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(left_pct), Constraint::Percentage(right_pct)])
+        .constraints([
+            Constraint::Percentage(left_pct),
+            Constraint::Percentage(right_pct),
+        ])
         .split(chunks[2]);
 
     let sep = middle_cols[1].x;
@@ -166,7 +172,10 @@ pub fn render(frame: &mut Frame, state: &AppState, config: &Config) {
     let left_pct = state.agent_pane_split.clamp(20, 80);
     let middle_cols = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(left_pct), Constraint::Percentage(100 - left_pct)])
+        .constraints([
+            Constraint::Percentage(left_pct),
+            Constraint::Percentage(100 - left_pct),
+        ])
         .split(chunks[2]);
     running::render_agent_output(frame, middle_cols[0], state, state.focused_pane);
 

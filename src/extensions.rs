@@ -295,6 +295,22 @@ pub fn extract_keywords(claude_md_path: &Path) -> Vec<String> {
     result
 }
 
+/// Load all pattern JSON files from selected extensions' patterns directories.
+pub fn load_extension_patterns(extensions: &[ExtensionInfo], selected: &[String]) -> Vec<Pattern> {
+    let mut all_patterns = Vec::new();
+    for name in selected {
+        let Some(ext) = extensions.iter().find(|e| e.name == *name) else {
+            continue;
+        };
+        let Some(ref pdir) = ext.patterns_dir else {
+            continue;
+        };
+        let mut ext_patterns = patterns::load_patterns(pdir);
+        all_patterns.append(&mut ext_patterns);
+    }
+    all_patterns
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -345,20 +361,4 @@ mod tests {
         let ext = discovered.iter().find(|e| e.name == "samename").unwrap();
         assert_eq!(ext.source, ExtensionSource::ProjectLocal);
     }
-}
-
-/// Load all pattern JSON files from selected extensions' patterns directories.
-pub fn load_extension_patterns(extensions: &[ExtensionInfo], selected: &[String]) -> Vec<Pattern> {
-    let mut all_patterns = Vec::new();
-    for name in selected {
-        let Some(ext) = extensions.iter().find(|e| e.name == *name) else {
-            continue;
-        };
-        let Some(ref pdir) = ext.patterns_dir else {
-            continue;
-        };
-        let mut ext_patterns = patterns::load_patterns(pdir);
-        all_patterns.append(&mut ext_patterns);
-    }
-    all_patterns
 }

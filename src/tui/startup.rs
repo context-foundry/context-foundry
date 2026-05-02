@@ -22,15 +22,45 @@ pub enum StatusBarAction {
     Findings,
 }
 
-pub fn startup_status_bar_hit_test(area: Rect, col: u16, state: &AppState) -> Option<StatusBarAction> {
+pub fn startup_status_bar_hit_test(
+    area: Rect,
+    col: u16,
+    state: &AppState,
+) -> Option<StatusBarAction> {
     if col < area.x || col >= area.x + area.width {
         return None;
     }
     let mut x = area.x;
+    use crate::app::StartupScenario;
+    let has_input = state
+        .startup
+        .as_ref()
+        .is_some_and(|s| !s.intent_input.trim().is_empty());
+    let start_label = match state.startup.as_ref().map(|s| s.scenario) {
+        Some(StartupScenario::QueueReady) if !has_input => " Start ",
+        Some(StartupScenario::QueueComplete) if !has_input => " Scan ",
+        _ if has_input => " Submit ",
+        _ => " Submit ",
+    };
+    let start_key = " Enter/Return ";
+    let start_w = start_label.chars().count() as u16 + start_key.chars().count() as u16;
+    if col >= x && col < x + start_w {
+        return Some(StatusBarAction::Submit);
+    }
+    x += start_w;
+    // gap
+    x += 2;
     let buttons: &[(&str, &str, StatusBarAction)] = &[
-        (" Enter ", " submit  ", StatusBarAction::Submit),
         (" Esc ", " quit", StatusBarAction::Quit),
-        ("  Tab ", if state.show_run_view { " actions" } else { " dashboard" }, StatusBarAction::ToggleView),
+        (
+            "  Tab ",
+            if state.show_run_view {
+                " actions"
+            } else {
+                " dashboard"
+            },
+            StatusBarAction::ToggleView,
+        ),
         ("  ? ", " settings", StatusBarAction::Settings),
     ];
     for &(key, label, action) in buttons {
@@ -558,7 +588,10 @@ fn render_file_explorer(frame: &mut Frame, area: Rect, state: &AppState) {
         return;
     };
     let theme = &state.tui_theme;
-    let project_dir = state.buildloop_dir.parent().unwrap_or(std::path::Path::new("."));
+    let project_dir = state
+        .buildloop_dir
+        .parent()
+        .unwrap_or(std::path::Path::new("."));
     let dir_label = format!(" {} ", project_dir_label(project_dir));
 
     let visible_height = area.height.saturating_sub(2) as usize;
@@ -1059,15 +1092,37 @@ fn render_input_prompt(frame: &mut Frame, area: Rect, state: &AppState) {
 }
 
 pub(super) fn render_startup_status_bar(frame: &mut Frame, area: Rect, state: &AppState) {
+    use crate::app::StartupScenario;
+    let has_input = state
+        .startup
+        .as_ref()
+        .is_some_and(|s| !s.intent_input.trim().is_empty());
+    let button_label = match state.startup.as_ref().map(|s| s.scenario) {
+        Some(StartupScenario::QueueReady) if !has_input => " Start ",
+        Some(StartupScenario::QueueComplete) if !has_input => " Scan ",
+        _ if has_input => " Submit ",
+        _ => " Submit ",
+    };
+    let button_color = match button_label {
+        " Start " => state.tui_theme.success,
+        _ => state.tui_theme.accent,
+    };
     let mut spans = vec![
         Span::styled(
-            " Enter ",
+            button_label,
+            Style::default()
+                .fg(Color::Black)
+                .bg(button_color)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(
+            " Enter/Return ",
             Style::default()
                 .fg(Color::Black)
                 .bg(state.tui_theme.muted)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::raw(" submit  "),
+        Span::raw("  "),
         Span::styled(
             " Esc ",
             Style::default()

@@ -365,9 +365,7 @@ async fn run_custom_cards_in_range(
 /// of the 5 known stages (query, research, plan, implement, doubt). Custom
 /// cards may be interspersed at any position, but reordering known stages is
 /// not supported and triggers an error log.
-fn known_stages_in_canonical_order(
-    pipeline_stages: &[crate::config::PipelineStageConfig],
-) -> bool {
+fn known_stages_in_canonical_order(pipeline_stages: &[crate::config::PipelineStageConfig]) -> bool {
     let canonical = ["query", "research", "plan", "implement", "doubt"];
     let known_positions: Vec<usize> = pipeline_stages
         .iter()
@@ -2827,13 +2825,10 @@ async fn process_task(
     // Each `checkpoint_skip_*` flag is true iff the stage's card index is below
     // the resume index (meaning it already ran in a prior session).
     let checkpoint_skip_query = query_card_idx.is_some_and(|i| i < resume_at_card_index);
-    let checkpoint_skip_research =
-        research_card_idx.is_some_and(|i| i < resume_at_card_index);
+    let checkpoint_skip_research = research_card_idx.is_some_and(|i| i < resume_at_card_index);
     let checkpoint_skip_planner = plan_card_idx.is_some_and(|i| i < resume_at_card_index);
-    let checkpoint_skip_plan_review =
-        plan_card_idx.is_some_and(|i| i < resume_at_card_index);
-    let checkpoint_skip_builder =
-        implement_card_idx.is_some_and(|i| i < resume_at_card_index);
+    let checkpoint_skip_plan_review = plan_card_idx.is_some_and(|i| i < resume_at_card_index);
+    let checkpoint_skip_builder = implement_card_idx.is_some_and(|i| i < resume_at_card_index);
 
     // Validate that known stages (query, research, plan, implement, doubt) appear
     // in canonical order in pipeline_stages. Reordering them is not supported and
@@ -6294,7 +6289,7 @@ mod tests {
         assert_eq!(restored, 0);
 
         let msgs = drain_events(&mut rx);
-        assert!(msgs.len() >= 1);
+        assert!(!msgs.is_empty());
         assert!(msgs
             .iter()
             .any(|m| m.contains("Warning") && m.contains("TASKS.md")));
@@ -6413,10 +6408,12 @@ mod tests {
         // skip_planner incorporates checkpoint_skip_planner (build.rs:2159)
         let skip_planner = checkpoint_skip_planner; // would also be true from config for simple tasks
 
+        let is_complex = true;
+
         // The fixed guard condition: (!skip_planner || checkpoint_skip_planner)
         let p_plus_should_run = !checkpoint_skip_plan_review
             && plan_review_enabled
-            && true // task_complexity == Complex (simulated)
+            && is_complex
             && (!skip_planner || checkpoint_skip_planner);
         assert!(
             p_plus_should_run,
@@ -6427,9 +6424,10 @@ mod tests {
         // P+ should NOT run
         let checkpoint_skip_planner_simple = false; // no checkpoint recovery
         let skip_planner_simple = true; // skipped because task is simple
-        let p_plus_should_not_run = !false // checkpoint_skip_plan_review = false
-            && true // plan_review_enabled
-            && true // Complex
+        let ckpt_review_false = false;
+        let p_plus_should_not_run = !ckpt_review_false
+            && plan_review_enabled
+            && is_complex
             && (!skip_planner_simple || checkpoint_skip_planner_simple);
         assert!(
             !p_plus_should_not_run,
@@ -6437,20 +6435,23 @@ mod tests {
         );
 
         // Verify: normal case -- planner ran, no checkpoint, Complex task
-        let p_plus_normal = !false  // checkpoint_skip_plan_review = false
-            && true  // plan_review_enabled
-            && true  // Complex
-            && (!false || false); // skip_planner=false, checkpoint_skip_planner=false
+        let skip_planner_no = false;
+        let ckpt_skip_planner_no = false;
+        let p_plus_normal = !ckpt_review_false
+            && plan_review_enabled
+            && is_complex
+            && (!skip_planner_no || ckpt_skip_planner_no);
         assert!(
             p_plus_normal,
             "P+ must run normally for Complex tasks when planner ran"
         );
 
         // Verify: P+ already completed in prior session
-        let p_plus_already_done = !true  // checkpoint_skip_plan_review = true
-            && true
-            && true
-            && (!false || false);
+        let ckpt_review_true = true;
+        let p_plus_already_done = !ckpt_review_true
+            && plan_review_enabled
+            && is_complex
+            && (!skip_planner_no || ckpt_skip_planner_no);
         assert!(
             !p_plus_already_done,
             "P+ must NOT run when checkpoint says it already completed"
@@ -6876,7 +6877,11 @@ mod tests {
         let questions_file = dir.join("questions.md");
         assert!(!questions_file.exists());
         std::fs::write(dir.join("research-report.md"), "R").unwrap();
-        std::fs::write(dir.join("current-plan.md"), "# Plan\n## File Operations\n## Verification\n").unwrap();
+        std::fs::write(
+            dir.join("current-plan.md"),
+            "# Plan\n## File Operations\n## Verification\n",
+        )
+        .unwrap();
         std::fs::write(dir.join("build-claims.md"), "BC").unwrap();
 
         // Walk artifacts; first missing at idx 0 (query)
@@ -8522,7 +8527,10 @@ mod card_loop_tests {
                 break;
             }
         }
-        assert_eq!(resume, 0, "resume must reset to 0 when query artifact missing");
+        assert_eq!(
+            resume, 0,
+            "resume must reset to 0 when query artifact missing"
+        );
 
         let _ = std::fs::remove_dir_all(&dir);
     }

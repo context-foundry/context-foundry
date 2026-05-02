@@ -167,7 +167,12 @@ fn detect_providers() -> ProviderStatus {
         .unwrap_or(false);
 
     let ollama = std::process::Command::new("curl")
-        .args(["-s", "--connect-timeout", "2", "http://127.0.0.1:11434/api/version"])
+        .args([
+            "-s",
+            "--connect-timeout",
+            "2",
+            "http://127.0.0.1:11434/api/version",
+        ])
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .status()
@@ -314,7 +319,9 @@ pub fn run_init(project_dir: &Path) -> Result<()> {
     let gitignore_path = project_dir.join(".gitignore");
     if gitignore_path.exists() {
         let content = std::fs::read_to_string(&gitignore_path).unwrap_or_default();
-        let has_entry = content.lines().any(|l| l.trim() == ".buildloop" || l.trim() == ".buildloop/");
+        let has_entry = content
+            .lines()
+            .any(|l| l.trim() == ".buildloop" || l.trim() == ".buildloop/");
         if !has_entry {
             let mut appended = content;
             if !appended.ends_with('\n') {

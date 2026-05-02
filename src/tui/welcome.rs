@@ -5,8 +5,8 @@ use ratatui::{
     Frame,
 };
 
-use crate::app::AppState;
 use super::theme::TuiTheme;
+use crate::app::AppState;
 
 const LOGO: &[&str] = &[
     r" ____     _____   __  __  ______  ____    __   __   ______",
@@ -93,7 +93,9 @@ pub fn render_welcome(frame: &mut Frame, state: &AppState) {
     for row in LOGO {
         lines.push(Line::from(Span::styled(
             *row,
-            Style::default().fg(theme.accent).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(theme.accent)
+                .add_modifier(Modifier::BOLD),
         )));
     }
 
@@ -162,10 +164,7 @@ pub fn render_welcome(frame: &mut Frame, state: &AppState) {
 
 fn build_provider_line<'a>(state: &AppState, theme: &'a TuiTheme) -> Line<'a> {
     let label = state.active_builder_label();
-    let ollama_ok = state
-        .last_pattern_match_mode
-        .as_deref()
-        == Some("semantic");
+    let ollama_ok = state.last_pattern_match_mode.as_deref() == Some("semantic");
 
     match label {
         Some(ref provider) => {
@@ -173,7 +172,9 @@ fn build_provider_line<'a>(state: &AppState, theme: &'a TuiTheme) -> Line<'a> {
                 Span::styled("   Provider  ", Style::default().fg(theme.muted)),
                 Span::styled(
                     provider.clone(),
-                    Style::default().fg(theme.success).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(theme.success)
+                        .add_modifier(Modifier::BOLD),
                 ),
             ];
             if ollama_ok {
@@ -188,7 +189,9 @@ fn build_provider_line<'a>(state: &AppState, theme: &'a TuiTheme) -> Line<'a> {
             Span::styled("   Provider  ", Style::default().fg(theme.muted)),
             Span::styled(
                 "not configured",
-                Style::default().fg(theme.warning).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(theme.warning)
+                    .add_modifier(Modifier::BOLD),
             ),
             Span::styled(
                 "  -- press ? to open settings",

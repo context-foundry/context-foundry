@@ -606,7 +606,7 @@ mod tests {
 
         // The stale entry should NOT be found under the current model's key
         assert!(
-            loaded.entries.get(&lookup_key).is_none(),
+            !loaded.entries.contains_key(&lookup_key),
             "stale entry under wrong model key must not match current model lookup"
         );
 

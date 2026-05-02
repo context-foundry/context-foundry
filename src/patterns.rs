@@ -104,7 +104,9 @@ impl Pattern {
 }
 
 // ─── Solution deserializer ───────────────────────────────
-fn deserialize_pattern_solution<'de, D>(deserializer: D) -> Result<Option<PatternSolution>, D::Error>
+fn deserialize_pattern_solution<'de, D>(
+    deserializer: D,
+) -> Result<Option<PatternSolution>, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
@@ -1603,7 +1605,11 @@ mod tests {
     fn test_rating_no_dates() {
         let p = make_test_pattern("new", "New Pattern", 1, 0);
         let r = p.rating();
-        assert!(r >= 0.0 && r <= 5.0, "rating should be in range, got {}", r);
+        assert!(
+            (0.0..=5.0).contains(&r),
+            "rating should be in range, got {}",
+            r
+        );
     }
 
     #[test]

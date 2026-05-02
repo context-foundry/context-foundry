@@ -1,8 +1,8 @@
 use anyhow::{Context, Result};
 use crossterm::event::{self, Event, KeyCode, KeyModifiers};
 use futures::StreamExt;
-use std::path::Path;
 use std::collections::HashMap;
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -24,12 +24,12 @@ use self::startup::{
     handle_startup_event, load_pending_task_at,
 };
 pub use self::state::FileEntry;
-use self::state::{AppEvent, AppendTasksRequest, LoopEvent, PendingTransition, PlanningOutcome};
 pub use self::state::{
-    AppPhase, AppState, DualSelection, ExtensionDisplayInfo, FieldKind, ModelEntry, ModelPicker,
-    PatternEventKind, PickerItem, PlanStatus, PlanningState, StartupAction, StartupScenario,
-    StartupState, TuiPane, settings_sections,
+    settings_sections, AppPhase, AppState, DualSelection, ExtensionDisplayInfo, FieldKind,
+    ModelEntry, ModelPicker, PatternEventKind, PickerItem, PlanStatus, PlanningState,
+    StartupAction, StartupScenario, StartupState, TuiPane,
 };
+use self::state::{AppEvent, AppendTasksRequest, LoopEvent, PendingTransition, PlanningOutcome};
 use crate::agent::{AgentErrorKind, AgentOutputEvent, AgentRole};
 use crate::config::Config;
 use crate::git;
@@ -171,10 +171,15 @@ fn wheel_lines(last: Option<std::time::Instant>) -> usize {
     match last {
         Some(t) => {
             let ms = t.elapsed().as_millis();
-            if ms < 50 { 8 }
-            else if ms < 100 { 5 }
-            else if ms < 200 { 3 }
-            else { 2 }
+            if ms < 50 {
+                8
+            } else if ms < 100 {
+                5
+            } else if ms < 200 {
+                3
+            } else {
+                2
+            }
         }
         None => 2,
     }
@@ -184,11 +189,10 @@ fn wheel_lines(last: Option<std::time::Instant>) -> usize {
 /// Specs are stored as raw config values (e.g. "claude:opus") but the combined "both" entry
 /// uses readable labels (e.g. "claude:claude-opus-4-7/codex") so it's unambiguous.
 fn build_unified_builders(specs: &[String], local_models: &[String]) -> Vec<String> {
-    let mut list: Vec<String> = specs.iter()
-        .map(|s| Config::readable_spec(s))
-        .collect();
+    let mut list: Vec<String> = specs.iter().map(|s| Config::readable_spec(s)).collect();
     if specs.len() >= 2 {
-        let combined = list.iter()
+        let combined = list
+            .iter()
             .take(specs.len())
             .cloned()
             .collect::<Vec<_>>()
@@ -297,15 +301,18 @@ fn init_builder_cursor(state: &mut AppState) {
                 // Combined entry is at index specs.len() in the unified list
                 unified.get(specs.len()).cloned().unwrap_or_default()
             }
-            DualSelection::First | DualSelection::Off => {
-                specs.first().map(|s| Config::readable_spec(s)).unwrap_or_default()
-            }
-            DualSelection::Second => {
-                specs.get(1).map(|s| Config::readable_spec(s)).unwrap_or_default()
-            }
-            DualSelection::Third => {
-                specs.get(2).map(|s| Config::readable_spec(s)).unwrap_or_default()
-            }
+            DualSelection::First | DualSelection::Off => specs
+                .first()
+                .map(|s| Config::readable_spec(s))
+                .unwrap_or_default(),
+            DualSelection::Second => specs
+                .get(1)
+                .map(|s| Config::readable_spec(s))
+                .unwrap_or_default(),
+            DualSelection::Third => specs
+                .get(2)
+                .map(|s| Config::readable_spec(s))
+                .unwrap_or_default(),
         }
     };
     state.builder_cursor = unified.iter().position(|m| m == &target).unwrap_or(0);
@@ -463,12 +470,10 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
         let welcome_tx = event_tx.clone();
         let ollama_url = config.ollama_url.clone();
         tokio::spawn(async move {
-            let msg = tokio::task::spawn_blocking(move || {
-                fetch_welcome_message(&ollama_url)
-            })
-            .await
-            .ok()
-            .flatten();
+            let msg = tokio::task::spawn_blocking(move || fetch_welcome_message(&ollama_url))
+                .await
+                .ok()
+                .flatten();
             if let Some(text) = msg {
                 let _ = welcome_tx.send(AppEvent::WelcomeMessage(text));
             }
@@ -482,40 +487,45 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
             if state.show_welcome {
                 tui::render_welcome(frame, &state);
             } else {
-            match state.phase {
-                AppPhase::Startup => {
-                    if state.show_stats_overlay {
-                        tui::render_stats_overlay(frame, &state);
-                    } else if state.show_findings {
-                        tui::render_findings(frame, &state);
-                    } else if state.show_run_view {
-                        tui::render(frame, &state, &config);
-                    } else {
-                        tui::render_startup(frame, &state);
+                match state.phase {
+                    AppPhase::Startup => {
+                        if state.show_stats_overlay {
+                            tui::render_stats_overlay(frame, &state);
+                        } else if state.show_findings {
+                            tui::render_findings(frame, &state);
+                        } else if state.show_run_view {
+                            tui::render(frame, &state, &config);
+                        } else {
+                            tui::render_startup(frame, &state);
+                        }
+                    }
+                    AppPhase::Planning | AppPhase::Running => {
+                        if state.show_stats_overlay {
+                            tui::render_stats_overlay(frame, &state);
+                        } else if state.show_findings {
+                            tui::render_findings(frame, &state);
+                        } else if state.show_patterns {
+                            tui::render_patterns(frame, &state, &config);
+                        } else if state.show_running_explorer
+                            && matches!(state.phase, AppPhase::Running)
+                        {
+                            tui::render_running_explorer(frame, &state, &config);
+                        } else {
+                            tui::render(frame, &state, &config);
+                        }
                     }
                 }
-                AppPhase::Planning | AppPhase::Running => {
-                    if state.show_stats_overlay {
-                        tui::render_stats_overlay(frame, &state);
-                    } else if state.show_findings {
-                        tui::render_findings(frame, &state);
-                    } else if state.show_patterns {
-                        tui::render_patterns(frame, &state, &config);
-                    } else if state.show_running_explorer && matches!(state.phase, AppPhase::Running) {
-                        tui::render_running_explorer(frame, &state, &config);
-                    } else {
-                        tui::render(frame, &state, &config);
-                    }
+                // Settings overlay floats on top -- render after base view
+                if state.show_settings_overlay {
+                    tui::render_settings_overlay(frame, &state);
                 }
-            }
-            // Settings overlay floats on top -- render after base view
-            if state.show_settings_overlay {
-                tui::render_settings_overlay(frame, &state);
-            }
-            // Quit confirmation banner on top of everything
-            if state.confirm_quit {
-                tui::render_quit_confirm(frame, &state.tui_theme);
-            }
+                // Warning/confirmation banners on top of everything
+                if state.show_no_tasks_warning {
+                    tui::render_no_tasks_warning(frame, &state.tui_theme);
+                }
+                if state.confirm_quit {
+                    tui::render_quit_confirm(frame, &state.tui_theme);
+                }
             } // close show_welcome else
         })?;
 
@@ -618,10 +628,13 @@ fn dispatch_event(state: &mut AppState, event: AppEvent, config: &Config) {
     // Welcome screen: dismiss only on Enter
     if state.show_welcome {
         match &event {
-            AppEvent::Key(key) if key.code == crossterm::event::KeyCode::Enter
-                || key.code == crossterm::event::KeyCode::Esc
-                || (key.code == crossterm::event::KeyCode::Char('c')
-                    && key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL)) =>
+            AppEvent::Key(key)
+                if key.code == crossterm::event::KeyCode::Enter
+                    || key.code == crossterm::event::KeyCode::Esc
+                    || (key.code == crossterm::event::KeyCode::Char('c')
+                        && key
+                            .modifiers
+                            .contains(crossterm::event::KeyModifiers::CONTROL)) =>
             {
                 state.show_welcome = false;
                 return;
@@ -772,6 +785,7 @@ fn spawn_build_loop(
 ) -> Result<()> {
     let plan_path = ContractPaths::resolve(project_dir).tasks_path;
     if !plan_path.exists() {
+        state.show_no_tasks_warning = true;
         anyhow::bail!(
             "{} not found — describe work or scan the project from startup first",
             plan_path.file_name().unwrap_or_default().to_string_lossy()
@@ -1026,7 +1040,8 @@ fn handle_planning_event(state: &mut AppState, event: AppEvent, config: &Config)
                 let terminal_size = crossterm::terminal::size().unwrap_or((120, 40));
                 if state.confirm_quit {
                     let area = ratatui::layout::Rect::new(0, 0, terminal_size.0, terminal_size.1);
-                    if let Some(action) = tui::quit_confirm_hit_test(area, mouse.column, mouse.row) {
+                    if let Some(action) = tui::quit_confirm_hit_test(area, mouse.column, mouse.row)
+                    {
                         match action {
                             tui::QuitConfirmAction::Quit => state.should_quit = true,
                             tui::QuitConfirmAction::Cancel => state.confirm_quit = false,
@@ -1050,7 +1065,9 @@ fn handle_planning_event(state: &mut AppState, event: AppEvent, config: &Config)
                     .split(area);
                 let status_bar = chunks[4];
                 if mouse.row == status_bar.y {
-                    if let Some(action) = tui::running_status_bar_hit_test(status_bar, mouse.column, state) {
+                    if let Some(action) =
+                        tui::running_status_bar_hit_test(status_bar, mouse.column, state)
+                    {
                         match action {
                             tui::RunningStatusBarAction::Quit => {
                                 state.confirm_quit = true;
@@ -1198,7 +1215,12 @@ fn flush_settings_to_disk(state: &mut AppState) {
         }
     }
     if config.builder_model.starts_with("lmstudio/") {
-        lmstudio_models.push(config.builder_model.trim_start_matches("lmstudio/").to_string());
+        lmstudio_models.push(
+            config
+                .builder_model
+                .trim_start_matches("lmstudio/")
+                .to_string(),
+        );
     }
     for so in &config.stage_overrides {
         // Format: "stage:provider:model" e.g. "build:opencode:lmstudio/foo"
@@ -1308,7 +1330,11 @@ fn fetch_welcome_message(ollama_url: &str) -> Option<String> {
 
 fn discard_settings_changes(state: &mut AppState) {
     let project_dir = overlay_project_dir(state).to_path_buf();
-    if let Some(ref original) = state.settings_overlay.as_ref().and_then(|ov| ov.original_json.clone()) {
+    if let Some(ref original) = state
+        .settings_overlay
+        .as_ref()
+        .and_then(|ov| ov.original_json.clone())
+    {
         let config_path = project_dir.join(".foundry.json");
         let _ = std::fs::write(&config_path, original);
     }
@@ -1385,16 +1411,17 @@ pub(super) fn sync_settings_overlay_view(state: &mut AppState) {
     }
 }
 
-pub(super) fn handle_settings_overlay_key(
-    state: &mut AppState,
-    key: event::KeyEvent,
-) -> bool {
+pub(super) fn handle_settings_overlay_key(state: &mut AppState, key: event::KeyEvent) -> bool {
     if !state.show_settings_overlay {
         return false;
     }
 
     // Confirm-close banner intercepts all keys
-    if state.settings_overlay.as_ref().is_some_and(|ov| ov.confirm_close) {
+    if state
+        .settings_overlay
+        .as_ref()
+        .is_some_and(|ov| ov.confirm_close)
+    {
         match key.code {
             KeyCode::Char('y') | KeyCode::Char('Y') => {
                 flush_settings_to_disk(state);
@@ -1516,11 +1543,10 @@ pub(super) fn handle_settings_overlay_key(
             }
         }
         KeyCode::Char(c)
-            if state.settings_overlay.as_ref().is_some_and(|ov| {
-                ov.picker
-                    .as_ref()
-                    .is_some_and(|picker| picker.filtering)
-            }) =>
+            if state
+                .settings_overlay
+                .as_ref()
+                .is_some_and(|ov| ov.picker.as_ref().is_some_and(|picker| picker.filtering)) =>
         {
             if let Some(ref mut ov) = state.settings_overlay {
                 if let Some(ref mut picker) = ov.picker {
@@ -1531,11 +1557,10 @@ pub(super) fn handle_settings_overlay_key(
             }
         }
         KeyCode::Backspace
-            if state.settings_overlay.as_ref().is_some_and(|ov| {
-                ov.picker
-                    .as_ref()
-                    .is_some_and(|picker| picker.filtering)
-            }) =>
+            if state
+                .settings_overlay
+                .as_ref()
+                .is_some_and(|ov| ov.picker.as_ref().is_some_and(|picker| picker.filtering)) =>
         {
             if let Some(ref mut ov) = state.settings_overlay {
                 if let Some(ref mut picker) = ov.picker {
@@ -1618,7 +1643,11 @@ pub(super) fn handle_settings_overlay_mouse(
     let area = ratatui::layout::Rect::new(0, 0, terminal_size.0, terminal_size.1);
     let modal = tui::settings_modal_rect(area);
 
-    if state.settings_overlay.as_ref().is_some_and(|ov| ov.confirm_close) {
+    if state
+        .settings_overlay
+        .as_ref()
+        .is_some_and(|ov| ov.confirm_close)
+    {
         if let Some(action) = tui::confirm_banner_hit_test(modal, mouse.column, mouse.row) {
             match action {
                 tui::ConfirmBannerAction::Save => {
@@ -2357,9 +2386,14 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                             }
                         }
                         _ if handle_settings_overlay_key(state, key) => {}
-                        KeyCode::Char('q') => {
+                        KeyCode::Char('q') | KeyCode::Esc => {
                             if handle_overlay_esc(state) {
                                 // overlay closed
+                            } else if state.show_stats_overlay && key.code == KeyCode::Esc {
+                                state.show_stats_overlay = false;
+                                state.stats_loading = false;
+                                state.stats_overlay_report = None;
+                                state.stats_overlay_scroll = 0;
                             } else if state.stop_after_task {
                                 state.stop_after_task = false;
                                 state.remove_stop_file();
@@ -2367,7 +2401,7 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                             } else {
                                 state.stop_after_task = true;
                                 state.write_stop_file();
-                                state.log("Stopping after current task (q again to cancel, Ctrl+C to force quit)");
+                                state.log("Stopping after current task (Esc again to cancel, Ctrl+C to force quit)");
                             }
                         }
                         KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
@@ -2479,9 +2513,7 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                     }
                 } else {
                     match key.code {
-                        KeyCode::Char('r') | KeyCode::Char('R')
-                            if state.typed_error_can_retry =>
-                        {
+                        KeyCode::Char('r') | KeyCode::Char('R') if state.typed_error_can_retry => {
                             // D1.3: ContextOverflow retry. User confirmed they
                             // fixed LM Studio's n_ctx; re-spawn the build loop.
                             // The main TUI loop will store(false) on shutdown
@@ -2538,6 +2570,17 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                             state.stats_loading = false;
                             state.stats_overlay_report = None;
                             state.stats_overlay_scroll = 0;
+                        }
+                        KeyCode::Esc if !handle_overlay_esc(state) => {
+                            if state.stop_after_task {
+                                state.stop_after_task = false;
+                                state.remove_stop_file();
+                                state.log("Stop cancelled -- resuming build");
+                            } else {
+                                state.stop_after_task = true;
+                                state.write_stop_file();
+                                state.log("Stopping after current task (Esc again to cancel, Ctrl+C to force quit)");
+                            }
                         }
                         KeyCode::Esc => {}
                         KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
@@ -2753,8 +2796,12 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                                         &self::contract::ContractPaths::resolve(project_dir)
                                             .tasks_path,
                                     );
-                                    state.running_explorer =
-                                        Some(StartupState::new(project_dir, scenario, plan_status, None));
+                                    state.running_explorer = Some(StartupState::new(
+                                        project_dir,
+                                        scenario,
+                                        plan_status,
+                                        None,
+                                    ));
                                 }
                                 state.show_running_explorer = true;
                                 state.focused_pane = state::TuiPane::Explorer;
@@ -2911,7 +2958,8 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                         {
                             state.focused_pane = state::TuiPane::Extensions;
                         } else {
-                            let full_area = ratatui::layout::Rect::new(0, 0, terminal_size.0, terminal_size.1);
+                            let full_area =
+                                ratatui::layout::Rect::new(0, 0, terminal_size.0, terminal_size.1);
                             let layout_chunks = ratatui::layout::Layout::default()
                                 .direction(ratatui::layout::Direction::Vertical)
                                 .constraints([
@@ -2924,7 +2972,11 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                                 .split(full_area);
                             let status_bar = layout_chunks[4];
                             if mouse.row == status_bar.y {
-                                if let Some(action) = tui::running_status_bar_hit_test(status_bar, mouse.column, state) {
+                                if let Some(action) = tui::running_status_bar_hit_test(
+                                    status_bar,
+                                    mouse.column,
+                                    state,
+                                ) {
                                     match action {
                                         tui::RunningStatusBarAction::Quit => {
                                             if state.dual_arena_ready() {
@@ -2958,12 +3010,21 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                                                         .buildloop_dir
                                                         .parent()
                                                         .unwrap_or(std::path::Path::new("."));
-                                                    let scenario = detect_startup_scenario(project_dir);
+                                                    let scenario =
+                                                        detect_startup_scenario(project_dir);
                                                     let plan_status = classify_plan_status(
-                                                        &self::contract::ContractPaths::resolve(project_dir).tasks_path,
+                                                        &self::contract::ContractPaths::resolve(
+                                                            project_dir,
+                                                        )
+                                                        .tasks_path,
                                                     );
                                                     state.running_explorer =
-                                                        Some(StartupState::new(project_dir, scenario, plan_status, None));
+                                                        Some(StartupState::new(
+                                                            project_dir,
+                                                            scenario,
+                                                            plan_status,
+                                                            None,
+                                                        ));
                                                 }
                                                 state.show_running_explorer = true;
                                                 state.focused_pane = state::TuiPane::Explorer;
@@ -3002,8 +3063,8 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                         let terminal_size = crossterm::terminal::size().unwrap_or((120, 40));
                         let total_width = terminal_size.0;
                         if total_width > 0 {
-                            let pct = (mouse.column as u32 * 100 / total_width as u32)
-                                .clamp(20, 80) as u16;
+                            let pct = (mouse.column as u32 * 100 / total_width as u32).clamp(20, 80)
+                                as u16;
                             state.agent_pane_split = pct;
                         }
                     }
@@ -3249,9 +3310,9 @@ fn cycle_settings_left(state: &mut AppState, _config: &Config) {
     match state.settings_overlay_cursor {
         0 => {
             state.run_mode = match state.run_mode.as_str() {
-                "auto"   => "review".into(),
+                "auto" => "review".into(),
                 "sprint" => "auto".into(),
-                _        => "sprint".into(),
+                _ => "sprint".into(),
             };
             Config::save_run_mode(project_dir, &state.run_mode);
         }
@@ -3285,9 +3346,9 @@ fn cycle_settings_right(state: &mut AppState, _config: &Config) {
     match state.settings_overlay_cursor {
         0 => {
             state.run_mode = match state.run_mode.as_str() {
-                "auto"   => "sprint".into(),
+                "auto" => "sprint".into(),
                 "sprint" => "review".into(),
-                _        => "auto".into(),
+                _ => "auto".into(),
             };
             Config::save_run_mode(project_dir, &state.run_mode);
         }
@@ -3317,9 +3378,9 @@ pub(super) fn cycle_settings_left_startup(state: &mut AppState) {
     match state.settings_overlay_cursor {
         0 => {
             state.run_mode = match state.run_mode.as_str() {
-                "auto"   => "review".into(),
+                "auto" => "review".into(),
                 "sprint" => "auto".into(),
-                _        => "sprint".into(),
+                _ => "sprint".into(),
             };
             Config::save_run_mode(project_dir, &state.run_mode);
         }
@@ -3353,9 +3414,9 @@ pub(super) fn cycle_settings_right_startup(state: &mut AppState) {
     match state.settings_overlay_cursor {
         0 => {
             state.run_mode = match state.run_mode.as_str() {
-                "auto"   => "sprint".into(),
+                "auto" => "sprint".into(),
                 "sprint" => "review".into(),
-                _        => "auto".into(),
+                _ => "auto".into(),
             };
             Config::save_run_mode(project_dir, &state.run_mode);
         }
@@ -3519,9 +3580,11 @@ pub(super) fn handle_picker_select(state: &mut AppState) {
                 }
                 return;
             }
-            state::PickerItem::Entry(entry) => {
-                (picker.stage.clone(), entry.provider.clone(), entry.model.clone())
-            }
+            state::PickerItem::Entry(entry) => (
+                picker.stage.clone(),
+                entry.provider.clone(),
+                entry.model.clone(),
+            ),
         }
     };
 
@@ -3587,7 +3650,9 @@ fn cycle_enum_field(state: &mut AppState, field_id: &str, direction: i32) {
         }
         _ => {
             let values = Config::enum_values(field_id);
-            if values.is_empty() { return; }
+            if values.is_empty() {
+                return;
+            }
             let config = load_settings_config(state);
             let current = config.field_value(field_id);
             let idx = values.iter().position(|v| *v == current).unwrap_or(0);
@@ -4292,23 +4357,26 @@ fn pipeline_click_artifact(
     config: &Config,
 ) -> Option<std::path::PathBuf> {
     let buildloop = project_dir.join(".buildloop");
-    let enabled_stages: Vec<&crate::config::PipelineStageConfig> =
-        config.pipeline_stages.iter().filter(|s| s.enabled).collect();
+    let enabled_stages: Vec<&crate::config::PipelineStageConfig> = config
+        .pipeline_stages
+        .iter()
+        .filter(|s| s.enabled)
+        .collect();
     match click {
         tui::PipelineClick::ConnectedStage(i) => {
             let stage_id = enabled_stages.get(i).map(|s| s.id.as_str()).unwrap_or("");
             let file = match stage_id {
-                "scout"     => buildloop.join("scout-report.md"),
-                "query"     => buildloop.join("questions.md"),
-                "research"  => buildloop.join("research-report.md"),
-                "plan"      => buildloop.join("current-plan.md"),
+                "scout" => buildloop.join("scout-report.md"),
+                "query" => buildloop.join("questions.md"),
+                "research" => buildloop.join("research-report.md"),
+                "plan" => buildloop.join("current-plan.md"),
                 "implement" => buildloop.join("build-claims.md"),
-                "doubt"     => buildloop.join("review-report.md"),
-                _           => return None,
+                "doubt" => buildloop.join("review-report.md"),
+                _ => return None,
             };
             Some(file)
         }
-        tui::PipelineClick::Discover => Some(project_dir.join("TASKS.md")),
+        tui::PipelineClick::Discover => Some(ContractPaths::resolve(project_dir).tasks_path),
         tui::PipelineClick::Ship | tui::PipelineClick::Patterns => None,
     }
 }
@@ -4322,12 +4390,13 @@ fn navigate_explorer_to_file(
 ) {
     if state.running_explorer.is_none() {
         let scenario = detect_startup_scenario(project_dir);
-        let plan_status = classify_plan_status(
-            &self::contract::ContractPaths::resolve(project_dir).tasks_path,
-        );
+        let plan_status =
+            classify_plan_status(&self::contract::ContractPaths::resolve(project_dir).tasks_path);
         state.running_explorer = Some(StartupState::new(project_dir, scenario, plan_status, None));
     }
-    let Some(explorer) = state.running_explorer.as_mut() else { return; };
+    let Some(explorer) = state.running_explorer.as_mut() else {
+        return;
+    };
 
     // Expand all ancestor directories containing the target file.
     for entry in explorer.file_tree.iter_mut() {
@@ -4337,7 +4406,10 @@ fn navigate_explorer_to_file(
     }
 
     // Find the file in the (now-expanded) tree.
-    let idx = explorer.file_tree.iter().position(|e| e.path == target_path);
+    let idx = explorer
+        .file_tree
+        .iter()
+        .position(|e| e.path == target_path);
     if let Some(idx) = idx {
         explorer.explorer_selected = idx;
         let path = explorer.file_tree[idx].path.clone();
@@ -4492,6 +4564,40 @@ fn handle_startup_mouse_at_for_running(
                         .unwrap_or(std::path::Path::new("."));
                     if let Some(ref mut ex) = state.running_explorer {
                         startup::toggle_preview_wrap(ex, project_dir);
+                    }
+                    return;
+                }
+            }
+
+            // Status bar click (bottom row) -- Stop/Startup button
+            let status_bar = chunks[4];
+            if mouse.row == status_bar.y {
+                let stop_label = if state.dual_arena_ready() {
+                    " Startup "
+                } else {
+                    " Stop "
+                };
+                let stop_w = stop_label.chars().count() as u16 + " Esc ".chars().count() as u16;
+                if mouse.column >= status_bar.x && mouse.column < status_bar.x + stop_w {
+                    if state.dual_arena_ready() {
+                        let project_dir = state
+                            .buildloop_dir
+                            .parent()
+                            .unwrap_or(std::path::Path::new("."))
+                            .to_path_buf();
+                        enter_home_surface(
+                            &project_dir,
+                            state,
+                            Some("Arena results preserved in .buildloop/arena/".to_string()),
+                        );
+                    } else if state.stop_after_task {
+                        state.stop_after_task = false;
+                        state.remove_stop_file();
+                        state.log("Stop cancelled -- resuming build");
+                    } else {
+                        state.stop_after_task = true;
+                        state.write_stop_file();
+                        state.log("Stopping after current task (click again to cancel)");
                     }
                     return;
                 }

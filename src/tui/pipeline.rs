@@ -47,7 +47,11 @@ pub fn pipeline_click(area: Rect, col: u16, row: u16, n_connected: usize) -> Opt
     };
     let disc_x0 = x0 + connected_w + 8; // 8-char gap
     let disc_pitch: u16 = 18; // box_w + 2-char gap
-    let disc_stages = [PipelineClick::Ship, PipelineClick::Discover, PipelineClick::Patterns];
+    let disc_stages = [
+        PipelineClick::Ship,
+        PipelineClick::Discover,
+        PipelineClick::Patterns,
+    ];
     for (j, target) in disc_stages.into_iter().enumerate() {
         let bx = disc_x0 + j as u16 * disc_pitch;
         if col >= bx && col < bx + box_w {

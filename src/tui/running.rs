@@ -25,7 +25,11 @@ pub enum RunningStatusBarAction {
     Continue,
 }
 
-pub fn running_status_bar_hit_test(area: Rect, col: u16, state: &AppState) -> Option<RunningStatusBarAction> {
+pub fn running_status_bar_hit_test(
+    area: Rect,
+    col: u16,
+    state: &AppState,
+) -> Option<RunningStatusBarAction> {
     if col < area.x || col >= area.x + area.width {
         return None;
     }
@@ -34,7 +38,11 @@ pub fn running_status_bar_hit_test(area: Rect, col: u16, state: &AppState) -> Op
         let mut x = area.x;
         let buttons: &[(&str, &str, RunningStatusBarAction)] = &[
             (" q ", " quit  ", RunningStatusBarAction::Quit),
-            (" \u{2191}\u{2193} ", " scroll  ", RunningStatusBarAction::Quit), // non-actionable, skip
+            (
+                " \u{2191}\u{2193} ",
+                " scroll  ",
+                RunningStatusBarAction::Quit,
+            ), // non-actionable, skip
             (" p ", " patterns", RunningStatusBarAction::Patterns),
         ];
         for &(key, label, action) in buttons {
@@ -60,9 +68,19 @@ pub fn running_status_bar_hit_test(area: Rect, col: u16, state: &AppState) -> Op
     }
 
     let mut x = area.x;
-    let quit_label = if state.dual_arena_ready() { " startup  " } else { " stop  " };
+    let stop_label = if state.dual_arena_ready() {
+        " Startup "
+    } else {
+        " Stop "
+    };
+    // Stop button: label + Esc key hint are one click target
+    let stop_w = stop_label.chars().count() as u16 + " Esc ".chars().count() as u16;
+    if col >= x && col < x + stop_w {
+        return Some(RunningStatusBarAction::Quit);
+    }
+    x += stop_w;
+    x += 2; // gap
     let base_buttons: Vec<(&str, &str, Option<RunningStatusBarAction>)> = vec![
-        (" q ", quit_label, Some(RunningStatusBarAction::Quit)),
         (" Ctrl+C ", " force quit  ", None),
         (" \u{2191}\u{2193} ", " scroll  ", None),
         (" i ", " inject  ", Some(RunningStatusBarAction::Inject)),
@@ -92,7 +110,14 @@ pub fn running_status_bar_hit_test(area: Rect, col: u16, state: &AppState) -> Op
         }
         x += deny_w;
     } else if state.awaiting_review {
-        let w = "  Enter ".chars().count() as u16 + if state.awaiting_pr.is_some() { " skip wait" } else { " continue" }.chars().count() as u16;
+        let w = "  Enter ".chars().count() as u16
+            + if state.awaiting_pr.is_some() {
+                " skip wait"
+            } else {
+                " continue"
+            }
+            .chars()
+            .count() as u16;
         if col >= x && col < x + w {
             return Some(RunningStatusBarAction::Continue);
         }
@@ -114,7 +139,14 @@ pub fn running_status_bar_hit_test(area: Rect, col: u16, state: &AppState) -> Op
     }
 
     // Tab toggle
-    let tab_w = "  Tab ".chars().count() as u16 + if state.show_running_explorer { " dashboard" } else { " explore" }.chars().count() as u16;
+    let tab_w = "  Tab ".chars().count() as u16
+        + if state.show_running_explorer {
+            " dashboard"
+        } else {
+            " explore"
+        }
+        .chars()
+        .count() as u16;
     if col >= x && col < x + tab_w {
         return Some(RunningStatusBarAction::ToggleView);
     }
@@ -171,7 +203,6 @@ pub fn running_header_tab_hit_test(state: &AppState, column: u16) -> Option<Runn
         None
     }
 }
-
 
 pub(super) fn render_header(frame: &mut Frame, area: Rect, state: &AppState) {
     // Label for the "Current Task" table row -- all status lines align after this width.
@@ -347,13 +378,17 @@ pub(super) fn render_header(frame: &mut Frame, area: Rect, state: &AppState) {
                 Span::styled(TASK_LABEL, Style::default().fg(state.tui_theme.muted)),
                 Span::styled(
                     task_line.clone(),
-                    Style::default().fg(state.tui_theme.text).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(state.tui_theme.text)
+                        .add_modifier(Modifier::BOLD),
                 ),
             ])
         } else {
             Line::from(Span::styled(
                 task_line.clone(),
-                Style::default().fg(state.tui_theme.text).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(state.tui_theme.text)
+                    .add_modifier(Modifier::BOLD),
             ))
         },
         {
@@ -451,7 +486,9 @@ pub(super) fn render_header(frame: &mut Frame, area: Rect, state: &AppState) {
             Span::styled(NEXT_LABEL, Style::default().fg(state.tui_theme.muted)),
             Span::styled(
                 truncate_str(next_task, content_width).to_string(),
-                Style::default().fg(state.tui_theme.info).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(state.tui_theme.info)
+                    .add_modifier(Modifier::BOLD),
             ),
         ]));
     }
@@ -1017,17 +1054,24 @@ pub(super) fn render_status_bar(frame: &mut Frame, area: Rect, state: &AppState)
 
     let mut spans = vec![
         Span::styled(
-            " q ",
+            if state.dual_arena_ready() {
+                " Startup "
+            } else {
+                " Stop "
+            },
+            Style::default()
+                .fg(Color::Black)
+                .bg(state.tui_theme.error)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(
+            " Esc ",
             Style::default()
                 .fg(Color::Black)
                 .bg(state.tui_theme.muted)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::raw(if state.dual_arena_ready() {
-            " startup  "
-        } else {
-            " stop  "
-        }),
+        Span::raw("  "),
         Span::styled(
             " Ctrl+C ",
             Style::default()
@@ -1172,13 +1216,20 @@ pub(super) fn render_status_bar(frame: &mut Frame, area: Rect, state: &AppState)
 pub(super) fn render_planning_status_bar(frame: &mut Frame, area: Rect, state: &AppState) {
     let mut spans = vec![
         Span::styled(
-            " q ",
+            " Stop ",
+            Style::default()
+                .fg(Color::Black)
+                .bg(state.tui_theme.error)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(
+            " Esc ",
             Style::default()
                 .fg(Color::Black)
                 .bg(state.tui_theme.muted)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::raw(" quit  "),
+        Span::raw("  "),
         Span::styled(
             " ↑↓ ",
             Style::default()
@@ -1223,6 +1274,25 @@ pub(super) fn render_planning_status_bar(frame: &mut Frame, area: Rect, state: &
 pub(super) fn render_running_explorer_status_bar(frame: &mut Frame, area: Rect, state: &AppState) {
     let mut spans = vec![
         Span::styled(
+            if state.dual_arena_ready() {
+                " Startup "
+            } else {
+                " Stop "
+            },
+            Style::default()
+                .fg(Color::Black)
+                .bg(state.tui_theme.error)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(
+            " Esc ",
+            Style::default()
+                .fg(Color::Black)
+                .bg(state.tui_theme.muted)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw("  "),
+        Span::styled(
             " \u{2191}\u{2193} ",
             Style::default()
                 .fg(Color::Black)
@@ -1245,15 +1315,7 @@ pub(super) fn render_running_explorer_status_bar(frame: &mut Frame, area: Rect, 
                 .bg(state.tui_theme.accent)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::raw(" dashboard  "),
-        Span::styled(
-            " q ",
-            Style::default()
-                .fg(Color::Black)
-                .bg(state.tui_theme.muted)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::raw(" stop"),
+        Span::raw(" dashboard"),
     ];
 
     // Extensions indicator

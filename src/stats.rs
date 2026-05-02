@@ -2275,20 +2275,18 @@ mod tests {
         assert!(pat_a.cited_task_ids.contains(&"T2".to_string()));
 
         // pat-b: injected 2 times (below threshold of 3) -- should NOT appear in effectiveness
-        assert!(report
+        assert!(!report
             .patterns
             .effectiveness
             .iter()
-            .find(|e| e.pattern_id == "pat-b")
-            .is_none());
+            .any(|e| e.pattern_id == "pat-b"));
 
         // pat-c: injected 1 time -- should NOT appear in effectiveness
-        assert!(report
+        assert!(!report
             .patterns
             .effectiveness
             .iter()
-            .find(|e| e.pattern_id == "pat-c")
-            .is_none());
+            .any(|e| e.pattern_id == "pat-c"));
     }
 
     #[test]

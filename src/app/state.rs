@@ -371,17 +371,72 @@ pub fn settings_sections() -> Vec<SectionDef> {
             name: "Routing",
             default_expanded: true,
             fields: vec![
-                FieldDef { id: "arena", label: "Arena", hint: "Ctrl+D cycle: solo / dual pipeline", kind: FieldKind::Enum },
-                FieldDef { id: "builder", label: "Builder", hint: "Active builder provider:model", kind: FieldKind::Enum },
-                FieldDef { id: "stage_query", label: "  Query", hint: "Enter to pick model", kind: FieldKind::StagePicker },
-                FieldDef { id: "stage_research", label: "  Research", hint: "Enter to pick model", kind: FieldKind::StagePicker },
-                FieldDef { id: "stage_plan", label: "  Plan", hint: "Enter to pick model", kind: FieldKind::StagePicker },
-                FieldDef { id: "stage_build", label: "  Build", hint: "Enter to pick model", kind: FieldKind::StagePicker },
-                FieldDef { id: "stage_audit", label: "  Audit", hint: "Enter to pick model", kind: FieldKind::StagePicker },
-                FieldDef { id: "stage_discovery", label: "  Discovery", hint: "Enter to pick model", kind: FieldKind::StagePicker },
-                FieldDef { id: "stage_pr_review", label: "  PR Review", hint: "Enter to pick model", kind: FieldKind::StagePicker },
-                FieldDef { id: "stage_patterns", label: "  Patterns", hint: "Enter to pick model", kind: FieldKind::StagePicker },
-                FieldDef { id: "stage_fixer", label: "  Fixer", hint: "Enter to pick model", kind: FieldKind::StagePicker },
+                FieldDef {
+                    id: "arena",
+                    label: "Arena",
+                    hint: "Ctrl+D cycle: solo / dual pipeline",
+                    kind: FieldKind::Enum,
+                },
+                FieldDef {
+                    id: "builder",
+                    label: "Builder",
+                    hint: "Active builder provider:model",
+                    kind: FieldKind::Enum,
+                },
+                FieldDef {
+                    id: "stage_query",
+                    label: "  Query",
+                    hint: "Enter to pick model",
+                    kind: FieldKind::StagePicker,
+                },
+                FieldDef {
+                    id: "stage_research",
+                    label: "  Research",
+                    hint: "Enter to pick model",
+                    kind: FieldKind::StagePicker,
+                },
+                FieldDef {
+                    id: "stage_plan",
+                    label: "  Plan",
+                    hint: "Enter to pick model",
+                    kind: FieldKind::StagePicker,
+                },
+                FieldDef {
+                    id: "stage_build",
+                    label: "  Build",
+                    hint: "Enter to pick model",
+                    kind: FieldKind::StagePicker,
+                },
+                FieldDef {
+                    id: "stage_audit",
+                    label: "  Audit",
+                    hint: "Enter to pick model",
+                    kind: FieldKind::StagePicker,
+                },
+                FieldDef {
+                    id: "stage_discovery",
+                    label: "  Discovery",
+                    hint: "Enter to pick model",
+                    kind: FieldKind::StagePicker,
+                },
+                FieldDef {
+                    id: "stage_pr_review",
+                    label: "  PR Review",
+                    hint: "Enter to pick model",
+                    kind: FieldKind::StagePicker,
+                },
+                FieldDef {
+                    id: "stage_patterns",
+                    label: "  Patterns",
+                    hint: "Enter to pick model",
+                    kind: FieldKind::StagePicker,
+                },
+                FieldDef {
+                    id: "stage_fixer",
+                    label: "  Fixer",
+                    hint: "Enter to pick model",
+                    kind: FieldKind::StagePicker,
+                },
             ],
         },
         SectionDef {
@@ -389,20 +444,90 @@ pub fn settings_sections() -> Vec<SectionDef> {
             name: "Pipeline behavior",
             default_expanded: true,
             fields: vec![
-                FieldDef { id: "run_mode", label: "Run Mode", hint: "auto / sprint / review", kind: FieldKind::Enum },
-                FieldDef { id: "pipeline_mode", label: "Pipeline Mode", hint: "full / fast / backpressure", kind: FieldKind::Enum },
-                FieldDef { id: "plan_review_enabled", label: "Plan Review", hint: "Review plan before build", kind: FieldKind::Bool },
-                FieldDef { id: "review_mode", label: "Review Mode", hint: "diff-only / full-file", kind: FieldKind::Enum },
-                FieldDef { id: "skip_planner_for_simple", label: "Skip Planner (simple)", hint: "Simple tasks skip plan stage", kind: FieldKind::Bool },
-                FieldDef { id: "skip_scout_for_simple", label: "Skip Scout (simple)", hint: "Simple tasks skip scout stage", kind: FieldKind::Bool },
-                FieldDef { id: "skip_doubt_for_simple", label: "Skip Doubt (simple)", hint: "Simple tasks skip audit stage", kind: FieldKind::Bool },
-                FieldDef { id: "batch_doubt", label: "Batch Doubt", hint: "Defer audit to end of session", kind: FieldKind::Bool },
-                FieldDef { id: "planner_lookahead", label: "Planner Lookahead", hint: "Pre-plan next task while building", kind: FieldKind::Bool },
-                FieldDef { id: "planning_iterations", label: "Planning Iterations", hint: "0 = single pass", kind: FieldKind::Number },
-                FieldDef { id: "doubt_engine", label: "Doubt Engine", hint: "claude / codex", kind: FieldKind::Enum },
-                FieldDef { id: "confidence_threshold", label: "Confidence Threshold", hint: "0.0-1.0, findings below are logged only", kind: FieldKind::Number },
-                FieldDef { id: "parallel_builder", label: "Parallel Builder", hint: "Fork builder across files", kind: FieldKind::Bool },
-                FieldDef { id: "parallel_builder_min_files", label: "Parallel Min Files", hint: "Min files to trigger parallel build", kind: FieldKind::Number },
+                FieldDef {
+                    id: "run_mode",
+                    label: "Run Mode",
+                    hint: "auto / sprint / review",
+                    kind: FieldKind::Enum,
+                },
+                FieldDef {
+                    id: "pipeline_mode",
+                    label: "Pipeline Mode",
+                    hint: "full / fast / backpressure",
+                    kind: FieldKind::Enum,
+                },
+                FieldDef {
+                    id: "plan_review_enabled",
+                    label: "Plan Review",
+                    hint: "Review plan before build",
+                    kind: FieldKind::Bool,
+                },
+                FieldDef {
+                    id: "review_mode",
+                    label: "Review Mode",
+                    hint: "diff-only / full-file",
+                    kind: FieldKind::Enum,
+                },
+                FieldDef {
+                    id: "skip_planner_for_simple",
+                    label: "Skip Planner (simple)",
+                    hint: "Simple tasks skip plan stage",
+                    kind: FieldKind::Bool,
+                },
+                FieldDef {
+                    id: "skip_scout_for_simple",
+                    label: "Skip Scout (simple)",
+                    hint: "Simple tasks skip scout stage",
+                    kind: FieldKind::Bool,
+                },
+                FieldDef {
+                    id: "skip_doubt_for_simple",
+                    label: "Skip Doubt (simple)",
+                    hint: "Simple tasks skip audit stage",
+                    kind: FieldKind::Bool,
+                },
+                FieldDef {
+                    id: "batch_doubt",
+                    label: "Batch Doubt",
+                    hint: "Defer audit to end of session",
+                    kind: FieldKind::Bool,
+                },
+                FieldDef {
+                    id: "planner_lookahead",
+                    label: "Planner Lookahead",
+                    hint: "Pre-plan next task while building",
+                    kind: FieldKind::Bool,
+                },
+                FieldDef {
+                    id: "planning_iterations",
+                    label: "Planning Iterations",
+                    hint: "0 = single pass",
+                    kind: FieldKind::Number,
+                },
+                FieldDef {
+                    id: "doubt_engine",
+                    label: "Doubt Engine",
+                    hint: "claude / codex",
+                    kind: FieldKind::Enum,
+                },
+                FieldDef {
+                    id: "confidence_threshold",
+                    label: "Confidence Threshold",
+                    hint: "0.0-1.0, findings below are logged only",
+                    kind: FieldKind::Number,
+                },
+                FieldDef {
+                    id: "parallel_builder",
+                    label: "Parallel Builder",
+                    hint: "Fork builder across files",
+                    kind: FieldKind::Bool,
+                },
+                FieldDef {
+                    id: "parallel_builder_min_files",
+                    label: "Parallel Min Files",
+                    hint: "Min files to trigger parallel build",
+                    kind: FieldKind::Number,
+                },
             ],
         },
         SectionDef {
@@ -410,15 +535,60 @@ pub fn settings_sections() -> Vec<SectionDef> {
             name: "Budgets & timeouts",
             default_expanded: true,
             fields: vec![
-                FieldDef { id: "agent_timeout_secs", label: "Agent Timeout (secs)", hint: "Idle timeout per agent", kind: FieldKind::Number },
-                FieldDef { id: "pause_between_tasks_secs", label: "Pause Between Tasks", hint: "Seconds between tasks", kind: FieldKind::Number },
-                FieldDef { id: "pause_between_agents_secs", label: "Pause Between Agents", hint: "Seconds between agent spawns", kind: FieldKind::Number },
-                FieldDef { id: "pause_between_cycles_secs", label: "Pause Between Cycles", hint: "Seconds between discovery cycles", kind: FieldKind::Number },
-                FieldDef { id: "adaptive_pauses", label: "Adaptive Pauses", hint: "Auto-adjust pause timing", kind: FieldKind::Bool },
-                FieldDef { id: "cost_limit", label: "Cost Limit (USD)", hint: "0.0 = unlimited", kind: FieldKind::Number },
-                FieldDef { id: "budget_overrun_threshold", label: "Overrun Threshold", hint: "% over budget before warning", kind: FieldKind::Number },
-                FieldDef { id: "budget_recovery_enabled", label: "Budget Recovery", hint: "Auto-recover from overrun", kind: FieldKind::Bool },
-                FieldDef { id: "discovery_cooldown_minutes", label: "Discovery Cooldown", hint: "Minutes between discovery rounds", kind: FieldKind::Number },
+                FieldDef {
+                    id: "agent_timeout_secs",
+                    label: "Agent Timeout (secs)",
+                    hint: "Idle timeout per agent",
+                    kind: FieldKind::Number,
+                },
+                FieldDef {
+                    id: "pause_between_tasks_secs",
+                    label: "Pause Between Tasks",
+                    hint: "Seconds between tasks",
+                    kind: FieldKind::Number,
+                },
+                FieldDef {
+                    id: "pause_between_agents_secs",
+                    label: "Pause Between Agents",
+                    hint: "Seconds between agent spawns",
+                    kind: FieldKind::Number,
+                },
+                FieldDef {
+                    id: "pause_between_cycles_secs",
+                    label: "Pause Between Cycles",
+                    hint: "Seconds between discovery cycles",
+                    kind: FieldKind::Number,
+                },
+                FieldDef {
+                    id: "adaptive_pauses",
+                    label: "Adaptive Pauses",
+                    hint: "Auto-adjust pause timing",
+                    kind: FieldKind::Bool,
+                },
+                FieldDef {
+                    id: "cost_limit",
+                    label: "Cost Limit (USD)",
+                    hint: "0.0 = unlimited",
+                    kind: FieldKind::Number,
+                },
+                FieldDef {
+                    id: "budget_overrun_threshold",
+                    label: "Overrun Threshold",
+                    hint: "% over budget before warning",
+                    kind: FieldKind::Number,
+                },
+                FieldDef {
+                    id: "budget_recovery_enabled",
+                    label: "Budget Recovery",
+                    hint: "Auto-recover from overrun",
+                    kind: FieldKind::Bool,
+                },
+                FieldDef {
+                    id: "discovery_cooldown_minutes",
+                    label: "Discovery Cooldown",
+                    hint: "Minutes between discovery rounds",
+                    kind: FieldKind::Number,
+                },
             ],
         },
         SectionDef {
@@ -426,11 +596,36 @@ pub fn settings_sections() -> Vec<SectionDef> {
             name: "Local models",
             default_expanded: false,
             fields: vec![
-                FieldDef { id: "local_model", label: "Local Model", hint: "Active local model selection", kind: FieldKind::Readonly },
-                FieldDef { id: "ollama_url", label: "Ollama URL", hint: "Ollama API endpoint", kind: FieldKind::Editor },
-                FieldDef { id: "embedding_model", label: "Embedding Model", hint: "Model for semantic matching", kind: FieldKind::Editor },
-                FieldDef { id: "embedding_timeout_ms", label: "Embedding Timeout (ms)", hint: "Timeout for embedding calls", kind: FieldKind::Number },
-                FieldDef { id: "semantic_match_enabled", label: "Semantic Match", hint: "Use embeddings for pattern matching", kind: FieldKind::Bool },
+                FieldDef {
+                    id: "local_model",
+                    label: "Local Model",
+                    hint: "Active local model selection",
+                    kind: FieldKind::Readonly,
+                },
+                FieldDef {
+                    id: "ollama_url",
+                    label: "Ollama URL",
+                    hint: "Ollama API endpoint",
+                    kind: FieldKind::Editor,
+                },
+                FieldDef {
+                    id: "embedding_model",
+                    label: "Embedding Model",
+                    hint: "Model for semantic matching",
+                    kind: FieldKind::Editor,
+                },
+                FieldDef {
+                    id: "embedding_timeout_ms",
+                    label: "Embedding Timeout (ms)",
+                    hint: "Timeout for embedding calls",
+                    kind: FieldKind::Number,
+                },
+                FieldDef {
+                    id: "semantic_match_enabled",
+                    label: "Semantic Match",
+                    hint: "Use embeddings for pattern matching",
+                    kind: FieldKind::Bool,
+                },
             ],
         },
         SectionDef {
@@ -438,12 +633,42 @@ pub fn settings_sections() -> Vec<SectionDef> {
             name: "Sandbox & security",
             default_expanded: false,
             fields: vec![
-                FieldDef { id: "sandbox", label: "Sandbox", hint: "Docker isolation for agents", kind: FieldKind::Bool },
-                FieldDef { id: "sandbox_image", label: "Sandbox Image", hint: "Docker image for sandbox", kind: FieldKind::Editor },
-                FieldDef { id: "phase_isolation", label: "Phase Isolation", hint: "Isolate build phases", kind: FieldKind::Bool },
-                FieldDef { id: "semgrep_enabled", label: "Semgrep", hint: "Static analysis on agent output", kind: FieldKind::Bool },
-                FieldDef { id: "require_human_approval", label: "Human Approval", hint: "Require approval before commit", kind: FieldKind::Bool },
-                FieldDef { id: "enforce_phase_rbac", label: "Phase RBAC", hint: "Enforce role-based access per phase", kind: FieldKind::Bool },
+                FieldDef {
+                    id: "sandbox",
+                    label: "Sandbox",
+                    hint: "Docker isolation for agents",
+                    kind: FieldKind::Bool,
+                },
+                FieldDef {
+                    id: "sandbox_image",
+                    label: "Sandbox Image",
+                    hint: "Docker image for sandbox",
+                    kind: FieldKind::Editor,
+                },
+                FieldDef {
+                    id: "phase_isolation",
+                    label: "Phase Isolation",
+                    hint: "Isolate build phases",
+                    kind: FieldKind::Bool,
+                },
+                FieldDef {
+                    id: "semgrep_enabled",
+                    label: "Semgrep",
+                    hint: "Static analysis on agent output",
+                    kind: FieldKind::Bool,
+                },
+                FieldDef {
+                    id: "require_human_approval",
+                    label: "Human Approval",
+                    hint: "Require approval before commit",
+                    kind: FieldKind::Bool,
+                },
+                FieldDef {
+                    id: "enforce_phase_rbac",
+                    label: "Phase RBAC",
+                    hint: "Enforce role-based access per phase",
+                    kind: FieldKind::Bool,
+                },
             ],
         },
         SectionDef {
@@ -451,12 +676,42 @@ pub fn settings_sections() -> Vec<SectionDef> {
             name: "Discovery & patterns",
             default_expanded: false,
             fields: vec![
-                FieldDef { id: "auto_archive_tasks", label: "Auto Archive", hint: "Archive completed tasks", kind: FieldKind::Bool },
-                FieldDef { id: "archive_keep_first", label: "Archive Keep First", hint: "Keep N first tasks visible", kind: FieldKind::Number },
-                FieldDef { id: "archive_keep_last", label: "Archive Keep Last", hint: "Keep N last tasks visible", kind: FieldKind::Number },
-                FieldDef { id: "max_pattern_injection", label: "Max Patterns", hint: "Max patterns injected per task", kind: FieldKind::Number },
-                FieldDef { id: "min_pattern_injection", label: "Min Patterns", hint: "Min patterns injected per task", kind: FieldKind::Number },
-                FieldDef { id: "history_search_results", label: "History Results", hint: "Max history entries in scout prompt", kind: FieldKind::Number },
+                FieldDef {
+                    id: "auto_archive_tasks",
+                    label: "Auto Archive",
+                    hint: "Archive completed tasks",
+                    kind: FieldKind::Bool,
+                },
+                FieldDef {
+                    id: "archive_keep_first",
+                    label: "Archive Keep First",
+                    hint: "Keep N first tasks visible",
+                    kind: FieldKind::Number,
+                },
+                FieldDef {
+                    id: "archive_keep_last",
+                    label: "Archive Keep Last",
+                    hint: "Keep N last tasks visible",
+                    kind: FieldKind::Number,
+                },
+                FieldDef {
+                    id: "max_pattern_injection",
+                    label: "Max Patterns",
+                    hint: "Max patterns injected per task",
+                    kind: FieldKind::Number,
+                },
+                FieldDef {
+                    id: "min_pattern_injection",
+                    label: "Min Patterns",
+                    hint: "Min patterns injected per task",
+                    kind: FieldKind::Number,
+                },
+                FieldDef {
+                    id: "history_search_results",
+                    label: "History Results",
+                    hint: "Max history entries in scout prompt",
+                    kind: FieldKind::Number,
+                },
             ],
         },
         SectionDef {
@@ -464,11 +719,36 @@ pub fn settings_sections() -> Vec<SectionDef> {
             name: "Git & PR",
             default_expanded: false,
             fields: vec![
-                FieldDef { id: "auto_push_remote", label: "Auto Push Remote", hint: "Git remote for auto-push (empty=off)", kind: FieldKind::Editor },
-                FieldDef { id: "create_issue_on_wip", label: "Issue on WIP", hint: "Create GitHub issue on WIP commits", kind: FieldKind::Bool },
-                FieldDef { id: "pr_review_concurrency", label: "PR Review Concurrency", hint: "Parallel file reviews in PR review", kind: FieldKind::Number },
-                FieldDef { id: "pr_poll_interval_secs", label: "PR Poll Interval", hint: "Seconds between PR status checks", kind: FieldKind::Number },
-                FieldDef { id: "dashboard_port", label: "Dashboard Port", hint: "Port for web dashboard", kind: FieldKind::Number },
+                FieldDef {
+                    id: "auto_push_remote",
+                    label: "Auto Push Remote",
+                    hint: "Git remote for auto-push (empty=off)",
+                    kind: FieldKind::Editor,
+                },
+                FieldDef {
+                    id: "create_issue_on_wip",
+                    label: "Issue on WIP",
+                    hint: "Create GitHub issue on WIP commits",
+                    kind: FieldKind::Bool,
+                },
+                FieldDef {
+                    id: "pr_review_concurrency",
+                    label: "PR Review Concurrency",
+                    hint: "Parallel file reviews in PR review",
+                    kind: FieldKind::Number,
+                },
+                FieldDef {
+                    id: "pr_poll_interval_secs",
+                    label: "PR Poll Interval",
+                    hint: "Seconds between PR status checks",
+                    kind: FieldKind::Number,
+                },
+                FieldDef {
+                    id: "dashboard_port",
+                    label: "Dashboard Port",
+                    hint: "Port for web dashboard",
+                    kind: FieldKind::Number,
+                },
             ],
         },
         SectionDef {
@@ -476,8 +756,18 @@ pub fn settings_sections() -> Vec<SectionDef> {
             name: "Display & theme",
             default_expanded: false,
             fields: vec![
-                FieldDef { id: "theme", label: "Theme", hint: "TUI color theme", kind: FieldKind::Enum },
-                FieldDef { id: "preview_wrap", label: "Preview Wrap", hint: "Wrap long lines in file preview", kind: FieldKind::Bool },
+                FieldDef {
+                    id: "theme",
+                    label: "Theme",
+                    hint: "TUI color theme",
+                    kind: FieldKind::Enum,
+                },
+                FieldDef {
+                    id: "preview_wrap",
+                    label: "Preview Wrap",
+                    hint: "Wrap long lines in file preview",
+                    kind: FieldKind::Bool,
+                },
             ],
         },
         SectionDef {
@@ -485,9 +775,24 @@ pub fn settings_sections() -> Vec<SectionDef> {
             name: "Extensions & hooks",
             default_expanded: false,
             fields: vec![
-                FieldDef { id: "extensions", label: "Extensions", hint: "Active extension list", kind: FieldKind::Editor },
-                FieldDef { id: "on_task_complete", label: "On Task Complete", hint: "Shell hook after each task commit", kind: FieldKind::Editor },
-                FieldDef { id: "build_command", label: "Build Command", hint: "Custom build/verify command", kind: FieldKind::Editor },
+                FieldDef {
+                    id: "extensions",
+                    label: "Extensions",
+                    hint: "Active extension list",
+                    kind: FieldKind::Editor,
+                },
+                FieldDef {
+                    id: "on_task_complete",
+                    label: "On Task Complete",
+                    hint: "Shell hook after each task commit",
+                    kind: FieldKind::Editor,
+                },
+                FieldDef {
+                    id: "build_command",
+                    label: "Build Command",
+                    hint: "Custom build/verify command",
+                    kind: FieldKind::Editor,
+                },
             ],
         },
         SectionDef {
@@ -495,12 +800,42 @@ pub fn settings_sections() -> Vec<SectionDef> {
             name: "Advanced",
             default_expanded: false,
             fields: vec![
-                FieldDef { id: "patterns_dir", label: "Patterns Dir", hint: "Pattern storage directory", kind: FieldKind::Editor },
-                FieldDef { id: "history_dir", label: "History Dir", hint: "Build history directory", kind: FieldKind::Editor },
-                FieldDef { id: "tmux_session_prefix", label: "Tmux Prefix", hint: "Prefix for tmux session names", kind: FieldKind::Editor },
-                FieldDef { id: "tmux_keep_sessions", label: "Tmux Keep Sessions", hint: "Keep tmux sessions after task", kind: FieldKind::Bool },
-                FieldDef { id: "agent_backend", label: "Agent Backend", hint: "pty / tmux", kind: FieldKind::Enum },
-                FieldDef { id: "backpressure_only", label: "Backpressure Only", hint: "Skip LLM review, use tests only", kind: FieldKind::Bool },
+                FieldDef {
+                    id: "patterns_dir",
+                    label: "Patterns Dir",
+                    hint: "Pattern storage directory",
+                    kind: FieldKind::Editor,
+                },
+                FieldDef {
+                    id: "history_dir",
+                    label: "History Dir",
+                    hint: "Build history directory",
+                    kind: FieldKind::Editor,
+                },
+                FieldDef {
+                    id: "tmux_session_prefix",
+                    label: "Tmux Prefix",
+                    hint: "Prefix for tmux session names",
+                    kind: FieldKind::Editor,
+                },
+                FieldDef {
+                    id: "tmux_keep_sessions",
+                    label: "Tmux Keep Sessions",
+                    hint: "Keep tmux sessions after task",
+                    kind: FieldKind::Bool,
+                },
+                FieldDef {
+                    id: "agent_backend",
+                    label: "Agent Backend",
+                    hint: "pty / tmux",
+                    kind: FieldKind::Enum,
+                },
+                FieldDef {
+                    id: "backpressure_only",
+                    label: "Backpressure Only",
+                    hint: "Skip LLM review, use tests only",
+                    kind: FieldKind::Bool,
+                },
             ],
         },
     ]
@@ -642,10 +977,14 @@ impl ModelPicker {
     pub fn visible_items(&self) -> Vec<PickerItem> {
         let mut items = Vec::new();
         for group in &self.groups {
-            let group_entries: Vec<&ModelEntry> = self.entries.iter()
+            let group_entries: Vec<&ModelEntry> = self
+                .entries
+                .iter()
                 .filter(|e| &e.group == group)
                 .filter(|e| {
-                    if self.filter.is_empty() { return true; }
+                    if self.filter.is_empty() {
+                        return true;
+                    }
                     let needle = self.filter.to_lowercase();
                     e.label.to_lowercase().contains(&needle)
                         || e.provider.to_lowercase().contains(&needle)
@@ -720,6 +1059,7 @@ pub struct AppState {
     pub is_discovering: bool,
     pub should_quit: bool,
     pub confirm_quit: bool,
+    pub show_no_tasks_warning: bool,
     pub show_welcome: bool,
     pub welcome_message: String,
     pub observatory_session_id: Option<String>,
@@ -756,13 +1096,13 @@ pub struct AppState {
     pub show_settings_overlay: bool,
     pub settings_overlay_cursor: usize, // legacy -- kept for compatibility, driven by settings_overlay.focus
     pub settings_overlay: Option<SettingsOverlayState>,
-    pub local_models: Vec<String>,       // discovered models (LM Studio + Ollama merged)
-    pub lmstudio_models: Vec<String>,    // discovered LM Studio model IDs (raw /v1/models ids)
+    pub local_models: Vec<String>, // discovered models (LM Studio + Ollama merged)
+    pub lmstudio_models: Vec<String>, // discovered LM Studio model IDs (raw /v1/models ids)
     pub lmstudio_id_to_opencode_path: HashMap<String, String>, // suffix-after-last-slash -> canonical opencode path (e.g. "qwen3-coder-30b" -> "lmstudio/qwen/qwen3-coder-30b")
-    pub ollama_models: Vec<String>,      // discovered Ollama model names (raw /api/tags names)
-    pub local_model_cursor: usize,       // index into local_models for current selection
-    pub selected_local_model: String,    // persisted selection, from config or cycling
-    pub builder_cursor: usize,           // index into unified builder list (specs + local)
+    pub ollama_models: Vec<String>, // discovered Ollama model names (raw /api/tags names)
+    pub local_model_cursor: usize,  // index into local_models for current selection
+    pub selected_local_model: String, // persisted selection, from config or cycling
+    pub builder_cursor: usize,      // index into unified builder list (specs + local)
     pub stats_overlay_report: Option<StatsReport>,
     pub stats_overlay_scroll: usize,
     pub findings_scroll: usize,
@@ -869,6 +1209,7 @@ impl AppState {
             is_discovering: false,
             should_quit: false,
             confirm_quit: false,
+            show_no_tasks_warning: false,
             show_welcome: true,
             welcome_message: crate::tui::random_fallback_message().to_string(),
             observatory_session_id: None,
@@ -1332,7 +1673,11 @@ mod tests {
         let after = ov.visible_row_count();
         assert!(after < before, "collapsing a section reduces row count");
         ov.toggle_section("routing");
-        assert_eq!(ov.visible_row_count(), before, "re-expanding restores count");
+        assert_eq!(
+            ov.visible_row_count(),
+            before,
+            "re-expanding restores count"
+        );
     }
 
     #[test]
@@ -1349,8 +1694,20 @@ mod tests {
     #[test]
     fn test_model_picker_visible_items_with_groups() {
         let entries = vec![
-            ModelEntry { provider: "claude".into(), model: "opus-4-7".into(), label: "claude-opus-4-7".into(), recommended: true, group: "Claude".into() },
-            ModelEntry { provider: "codex".into(), model: "gpt-5.4".into(), label: "gpt-5.4".into(), recommended: false, group: "Codex".into() },
+            ModelEntry {
+                provider: "claude".into(),
+                model: "opus-4-7".into(),
+                label: "claude-opus-4-7".into(),
+                recommended: true,
+                group: "Claude".into(),
+            },
+            ModelEntry {
+                provider: "codex".into(),
+                model: "gpt-5.4".into(),
+                label: "gpt-5.4".into(),
+                recommended: false,
+                group: "Codex".into(),
+            },
         ];
         let picker = ModelPicker::new("plan", entries);
         let items = picker.visible_items();
@@ -1360,8 +1717,20 @@ mod tests {
     #[test]
     fn test_model_picker_filter() {
         let entries = vec![
-            ModelEntry { provider: "claude".into(), model: "opus-4-7".into(), label: "claude-opus-4-7".into(), recommended: true, group: "Claude".into() },
-            ModelEntry { provider: "codex".into(), model: "gpt-5.4".into(), label: "gpt-5.4".into(), recommended: false, group: "Codex".into() },
+            ModelEntry {
+                provider: "claude".into(),
+                model: "opus-4-7".into(),
+                label: "claude-opus-4-7".into(),
+                recommended: true,
+                group: "Claude".into(),
+            },
+            ModelEntry {
+                provider: "codex".into(),
+                model: "gpt-5.4".into(),
+                label: "gpt-5.4".into(),
+                recommended: false,
+                group: "Codex".into(),
+            },
         ];
         let mut picker = ModelPicker::new("plan", entries);
         picker.filter = "opus".to_string();
@@ -1373,8 +1742,20 @@ mod tests {
     #[test]
     fn test_model_picker_collapse_group() {
         let entries = vec![
-            ModelEntry { provider: "claude".into(), model: "opus-4-7".into(), label: "claude-opus-4-7".into(), recommended: true, group: "Claude".into() },
-            ModelEntry { provider: "claude".into(), model: "sonnet-4-6".into(), label: "claude-sonnet-4-6".into(), recommended: false, group: "Claude".into() },
+            ModelEntry {
+                provider: "claude".into(),
+                model: "opus-4-7".into(),
+                label: "claude-opus-4-7".into(),
+                recommended: true,
+                group: "Claude".into(),
+            },
+            ModelEntry {
+                provider: "claude".into(),
+                model: "sonnet-4-6".into(),
+                label: "claude-sonnet-4-6".into(),
+                recommended: false,
+                group: "Claude".into(),
+            },
         ];
         let mut picker = ModelPicker::new("plan", entries);
         assert_eq!(picker.visible_items().len(), 3); // 1 header + 2 entries
@@ -1385,9 +1766,13 @@ mod tests {
     #[test]
     fn test_two_level_esc_closes_picker_first() {
         let mut ov = SettingsOverlayState::new();
-        let entries = vec![
-            ModelEntry { provider: "claude".into(), model: "opus".into(), label: "opus".into(), recommended: false, group: "Claude".into() },
-        ];
+        let entries = vec![ModelEntry {
+            provider: "claude".into(),
+            model: "opus".into(),
+            label: "opus".into(),
+            recommended: false,
+            group: "Claude".into(),
+        }];
         ov.picker = Some(ModelPicker::new("plan", entries));
         assert!(ov.picker.is_some());
         // First Esc: close picker
@@ -1399,7 +1784,9 @@ mod tests {
     fn test_routing_section_has_stage_rows() {
         let sections = settings_sections();
         let routing = sections.iter().find(|s| s.id == "routing").unwrap();
-        let stage_fields: Vec<&str> = routing.fields.iter()
+        let stage_fields: Vec<&str> = routing
+            .fields
+            .iter()
             .filter(|f| f.kind == FieldKind::StagePicker)
             .map(|f| f.id)
             .collect();

@@ -70,8 +70,29 @@ fn select_contract_path(project_dir: &Path, preferred: &str, legacy: &str) -> (P
         (true, true) => (preferred_path, true),
         (true, false) => (preferred_path, false),
         (false, true) => (legacy_path, false),
-        (false, false) => (preferred_path, false),
+        (false, false) => {
+            // Neither exact name exists -- try a case-insensitive directory scan
+            // so that e.g. "tasks.md" is found when we look for "TASKS.md".
+            if let Some(found) = find_case_insensitive(project_dir, preferred) {
+                (found, false)
+            } else if let Some(found) = find_case_insensitive(project_dir, legacy) {
+                (found, false)
+            } else {
+                (preferred_path, false)
+            }
+        }
     }
+}
+
+fn find_case_insensitive(dir: &Path, name: &str) -> Option<PathBuf> {
+    let lower = name.to_lowercase();
+    let entries = std::fs::read_dir(dir).ok()?;
+    for entry in entries.flatten() {
+        if entry.file_name().to_string_lossy().to_lowercase() == lower {
+            return Some(entry.path());
+        }
+    }
+    None
 }
 
 fn file_name(path: &Path) -> String {
@@ -141,6 +162,23 @@ mod tests {
         assert_eq!(paths.spec_file_name(), SPEC_FILE_NAME);
         assert_eq!(paths.tasks_file_name(), TASKS_FILE_NAME);
         assert_eq!(paths.warnings().len(), 2);
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn resolve_finds_lowercase_tasks_file() {
+        let dir = temp_project_dir("foundry-contract-lower");
+        std::fs::write(dir.join("tasks.md"), "- [ ] T1.1: Lowercase task\n")
+            .expect("write lowercase tasks");
+
+        let paths = ContractPaths::resolve(&dir);
+        // On case-insensitive FS (macOS), join("TASKS.md").exists() matches
+        // "tasks.md" so we get the preferred name. On case-sensitive FS (Linux),
+        // the fallback scan finds the lowercase file.
+        let name = paths.tasks_file_name().to_lowercase();
+        assert_eq!(name, "tasks.md");
+        assert!(paths.tasks_path.exists());
 
         let _ = std::fs::remove_dir_all(dir);
     }

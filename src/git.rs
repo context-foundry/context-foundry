@@ -192,7 +192,7 @@ fn line_changes_real_file(line: &str) -> bool {
     if path.is_empty() {
         return false;
     }
-    if path == "TASKS.md" {
+    if path.eq_ignore_ascii_case("TASKS.md") {
         return false;
     }
     if path.starts_with(".buildloop/") || path.starts_with(".buildloop\\") {
@@ -1038,9 +1038,8 @@ mod tests {
             "commit_and_push should return Ok even when push fails: {:?}",
             result.err()
         );
-        assert_eq!(
+        assert!(
             result.unwrap(),
-            true,
             "should return true because the local commit succeeded"
         );
 

@@ -131,15 +131,11 @@ pub enum AgentErrorKind {
     },
     /// The provider HTTP endpoint refused the connection (LM Studio not running,
     /// wrong port, etc.). `url` is best-effort extracted from the error text.
-    ProviderUnreachable {
-        url: Option<String>,
-    },
+    ProviderUnreachable { url: Option<String> },
     /// The provider responded but reported the requested model is not loaded
     /// (e.g. LM Studio /v1/models 404 or "model not loaded" in stderr).
     /// `model` is the model name the agent was invoked with, when known.
-    ModelNotLoaded {
-        model: Option<String>,
-    },
+    ModelNotLoaded { model: Option<String> },
 }
 
 /// Parsed events from claude's stream-json output.
@@ -1856,10 +1852,7 @@ fn read_provider_output(
                     note_provider_stderr_line(provider, &cleaned, progress);
                     let to_send = if provider == ModelProvider::OpenCode {
                         match classify_agent_error(&cleaned, model_name) {
-                            Some(kind) => AgentOutputEvent::Error {
-                                kind,
-                                raw: cleaned,
-                            },
+                            Some(kind) => AgentOutputEvent::Error { kind, raw: cleaned },
                             None => AgentOutputEvent::Stderr(cleaned),
                         }
                     } else {
@@ -2646,10 +2639,7 @@ fn parse_opencode_line(line: &str, model_name: &str) -> OpenCodeParseOutcome {
         return OpenCodeParseOutcome::Suppressed;
     }
 
-    OpenCodeParseOutcome::Event(AgentOutputEvent::Text(format!(
-        "[{}:{}]",
-        model_name, kind
-    )))
+    OpenCodeParseOutcome::Event(AgentOutputEvent::Text(format!("[{}:{}]", model_name, kind)))
 }
 
 #[cfg(test)]
@@ -2957,9 +2947,8 @@ mod tests {
     fn parse_claude_line_clean_json_fast_path() {
         // Clean JSON without ANSI should still work (fast path)
         let line = r#"{"type":"system","subtype":"init","session_id":"x"}"#;
-        match parse_claude_provider_line(line, "opus") {
-            ParsedClaudeLine::Unparsed => panic!("clean JSON should parse"),
-            _ => {}
+        if let ParsedClaudeLine::Unparsed = parse_claude_provider_line(line, "opus") {
+            panic!("clean JSON should parse")
         }
     }
 
@@ -4025,7 +4014,10 @@ mod tests {
         let line = r#"{"type":"tool.use","tool":"read","input":{"path":"/tmp/demo.rs"}}"#;
         let event = parse_opencode_event(line, "lmstudio/qwen3.6-35b-a3b");
         match event {
-            Some(AgentOutputEvent::ToolUse { tool, input_preview }) => {
+            Some(AgentOutputEvent::ToolUse {
+                tool,
+                input_preview,
+            }) => {
                 assert_eq!(tool, "read");
                 assert!(
                     input_preview.contains("/tmp/demo.rs"),
@@ -4040,7 +4032,8 @@ mod tests {
     #[test]
     fn opencode_event_parser_tool_result() {
         LAST_RESULT_USAGE.with(|c| c.set(None));
-        let line = r#"{"type":"tool.result","tool":"read","output":"fn main() { println!(\"hi\"); }"}"#;
+        let line =
+            r#"{"type":"tool.result","tool":"read","output":"fn main() { println!(\"hi\"); }"}"#;
         let event = parse_opencode_event(line, "lmstudio/qwen3.6-35b-a3b");
         match event {
             Some(AgentOutputEvent::ToolResult { output_preview }) => {
@@ -4086,7 +4079,8 @@ mod tests {
     #[test]
     fn opencode_event_parser_unknown_kind_falls_back_to_text() {
         LAST_RESULT_USAGE.with(|c| c.set(None));
-        let line = r#"{"type":"unknown.kind","stage":"experimental","detail":"future event variant"}"#;
+        let line =
+            r#"{"type":"unknown.kind","stage":"experimental","detail":"future event variant"}"#;
         let event = parse_opencode_event(line, "lmstudio/qwen3.6-35b-a3b");
         match event {
             Some(AgentOutputEvent::Text(text)) => {
@@ -4208,9 +4202,7 @@ mod tests {
                     result
                 );
                 none_for_suppressed = true;
-            } else if let Some(_event) =
-                parse_opencode_event(line, "lmstudio/qwen3.6-35b-a3b")
-            {
+            } else if let Some(_event) = parse_opencode_event(line, "lmstudio/qwen3.6-35b-a3b") {
                 emitted_events += 1;
             }
         }
@@ -4238,8 +4230,7 @@ mod tests {
 
     #[test]
     fn error_classification_context_overflow_with_token_counts() {
-        let text =
-            "request (8192 tokens) exceeds the available context size (4096 tokens)";
+        let text = "request (8192 tokens) exceeds the available context size (4096 tokens)";
         match classify_agent_error(text, "lmstudio/qwen3.6-35b-a3b") {
             Some(AgentErrorKind::ContextOverflow { tokens, ctx_size }) => {
                 assert_eq!(tokens, Some(8192));
@@ -4304,7 +4295,10 @@ mod tests {
             Some(AgentErrorKind::ModelNotLoaded { model }) => {
                 assert_eq!(model.as_deref(), Some("lmstudio/foo"));
             }
-            other => panic!("expected ModelNotLoaded for 404 /v1/models, got {:?}", other),
+            other => panic!(
+                "expected ModelNotLoaded for 404 /v1/models, got {:?}",
+                other
+            ),
         }
     }
 

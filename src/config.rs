@@ -891,10 +891,10 @@ impl Config {
     /// Returns the input unchanged if it's already a full ID or unrecognized.
     pub fn expand_model_tier(model: &str) -> &'static str {
         match model {
-            "opus"   => "claude-opus-4-7",
+            "opus" => "claude-opus-4-7",
             "sonnet" => "claude-sonnet-4-6",
-            "haiku"  => "claude-haiku-4-5",
-            _        => "",
+            "haiku" => "claude-haiku-4-5",
+            _ => "",
         }
     }
 
@@ -909,7 +909,11 @@ impl Config {
             return provider;
         }
         let expanded = Self::expand_model_tier(&model);
-        let effective_model = if expanded.is_empty() { model.as_str() } else { expanded };
+        let effective_model = if expanded.is_empty() {
+            model.as_str()
+        } else {
+            expanded
+        };
         // Drop the provider prefix when it's redundant (model ID already starts with provider name)
         if effective_model.starts_with(&provider) || provider == "claude" {
             effective_model.to_string()
@@ -1343,7 +1347,11 @@ impl Config {
             ("Reviewer", &self.reviewer_provider, &self.reviewer_model),
             ("Fixer", &self.fixer_provider, &self.fixer_model),
             ("Discovery", &self.discovery_provider, &self.discovery_model),
-            ("Patterns", &self.pattern_extraction_provider, &self.pattern_extraction_model),
+            (
+                "Patterns",
+                &self.pattern_extraction_provider,
+                &self.pattern_extraction_model,
+            ),
             ("Add Tasks", "claude", "sonnet"),
         ]
     }
@@ -1365,9 +1373,10 @@ impl Config {
             "plan" => (self.planner_provider.clone(), self.planner_model.clone()),
             "build" | "implement" => (self.builder_provider.clone(), self.builder_model.clone()),
             "audit" | "doubt" => (self.reviewer_provider.clone(), self.reviewer_model.clone()),
-            "discovery" | "discover" => {
-                (self.discovery_provider.clone(), self.discovery_model.clone())
-            }
+            "discovery" | "discover" => (
+                self.discovery_provider.clone(),
+                self.discovery_model.clone(),
+            ),
             "pr_review" => {
                 let p = if self.pr_review_provider.is_empty() {
                     self.reviewer_provider.clone()
@@ -1381,9 +1390,10 @@ impl Config {
                 };
                 (p, m)
             }
-            "pattern_extraction" | "patterns" => {
-                (self.pattern_extraction_provider.clone(), self.pattern_extraction_model.clone())
-            }
+            "pattern_extraction" | "patterns" => (
+                self.pattern_extraction_provider.clone(),
+                self.pattern_extraction_model.clone(),
+            ),
             "fixer" => (self.fixer_provider.clone(), self.fixer_model.clone()),
             _ => (self.builder_provider.clone(), self.builder_model.clone()),
         }
@@ -1408,7 +1418,8 @@ impl Config {
         if let Some(arr) = overrides {
             let sid = serde_json::Value::String(stage_id.to_string());
             if !arr.iter().any(|value| {
-                value.as_str()
+                value
+                    .as_str()
                     .is_some_and(|candidate| Self::stage_ids_match(candidate, stage_id))
             }) {
                 arr.push(sid);
@@ -1434,7 +1445,10 @@ impl Config {
         let mut value: serde_json::Value =
             serde_json::from_str(&content).unwrap_or_else(|_| serde_json::json!({}));
 
-        if let Some(arr) = value.get_mut("stage_overrides").and_then(|v| v.as_array_mut()) {
+        if let Some(arr) = value
+            .get_mut("stage_overrides")
+            .and_then(|v| v.as_array_mut())
+        {
             arr.retain(|value| {
                 !value
                     .as_str()
@@ -1528,51 +1542,92 @@ impl Config {
     /// Write a single config field to .foundry.json. Returns Err on parse failure.
     pub fn save_field(project_dir: &Path, field_id: &str, new_value: &str) -> Result<(), String> {
         let config_path = project_dir.join(".foundry.json");
-        let content =
-            std::fs::read_to_string(&config_path).unwrap_or_else(|_| "{}".to_string());
+        let content = std::fs::read_to_string(&config_path).unwrap_or_else(|_| "{}".to_string());
         let mut value: serde_json::Value =
             serde_json::from_str(&content).unwrap_or_else(|_| serde_json::json!({}));
 
         match field_id {
             // Bools
-            "plan_review_enabled" | "skip_planner_for_simple" | "skip_scout_for_simple"
-            | "skip_doubt_for_simple" | "batch_doubt" | "planner_lookahead"
-            | "parallel_builder" | "adaptive_pauses" | "budget_recovery_enabled"
-            | "semantic_match_enabled" | "sandbox" | "phase_isolation" | "semgrep_enabled"
-            | "require_human_approval" | "enforce_phase_rbac" | "auto_archive_tasks"
-            | "create_issue_on_wip" | "preview_wrap" | "tmux_keep_sessions"
+            "plan_review_enabled"
+            | "skip_planner_for_simple"
+            | "skip_scout_for_simple"
+            | "skip_doubt_for_simple"
+            | "batch_doubt"
+            | "planner_lookahead"
+            | "parallel_builder"
+            | "adaptive_pauses"
+            | "budget_recovery_enabled"
+            | "semantic_match_enabled"
+            | "sandbox"
+            | "phase_isolation"
+            | "semgrep_enabled"
+            | "require_human_approval"
+            | "enforce_phase_rbac"
+            | "auto_archive_tasks"
+            | "create_issue_on_wip"
+            | "preview_wrap"
+            | "tmux_keep_sessions"
             | "backpressure_only" => {
-                let b = new_value.parse::<bool>().map_err(|_| format!("not a bool: {}", new_value))?;
+                let b = new_value
+                    .parse::<bool>()
+                    .map_err(|_| format!("not a bool: {}", new_value))?;
                 value[field_id] = serde_json::json!(b);
             }
             // u64 numbers
-            "agent_timeout_secs" | "pause_between_tasks_secs" | "pause_between_agents_secs"
-            | "pause_between_cycles_secs" | "discovery_cooldown_minutes" => {
-                let n = new_value.parse::<u64>().map_err(|_| format!("not a number: {}", new_value))?;
+            "agent_timeout_secs"
+            | "pause_between_tasks_secs"
+            | "pause_between_agents_secs"
+            | "pause_between_cycles_secs"
+            | "discovery_cooldown_minutes" => {
+                let n = new_value
+                    .parse::<u64>()
+                    .map_err(|_| format!("not a number: {}", new_value))?;
                 value[field_id] = serde_json::json!(n);
             }
             // usize numbers
-            "planning_iterations" | "parallel_builder_min_files" | "archive_keep_first"
-            | "archive_keep_last" | "max_pattern_injection" | "min_pattern_injection"
-            | "history_search_results" | "pr_review_concurrency" | "embedding_timeout_ms"
-            | "budget_overrun_threshold" | "pr_poll_interval_secs" => {
-                let n = new_value.parse::<usize>().map_err(|_| format!("not a number: {}", new_value))?;
+            "planning_iterations"
+            | "parallel_builder_min_files"
+            | "archive_keep_first"
+            | "archive_keep_last"
+            | "max_pattern_injection"
+            | "min_pattern_injection"
+            | "history_search_results"
+            | "pr_review_concurrency"
+            | "embedding_timeout_ms"
+            | "budget_overrun_threshold"
+            | "pr_poll_interval_secs" => {
+                let n = new_value
+                    .parse::<usize>()
+                    .map_err(|_| format!("not a number: {}", new_value))?;
                 value[field_id] = serde_json::json!(n);
             }
             // u16 numbers
             "dashboard_port" => {
-                let n = new_value.parse::<u16>().map_err(|_| format!("not a port: {}", new_value))?;
+                let n = new_value
+                    .parse::<u16>()
+                    .map_err(|_| format!("not a port: {}", new_value))?;
                 value[field_id] = serde_json::json!(n);
             }
             // f64 numbers
             "cost_limit" | "confidence_threshold" => {
-                let n = new_value.parse::<f64>().map_err(|_| format!("not a number: {}", new_value))?;
+                let n = new_value
+                    .parse::<f64>()
+                    .map_err(|_| format!("not a number: {}", new_value))?;
                 value[field_id] = serde_json::json!(n);
             }
             // Strings
-            "run_mode" | "pipeline_mode" | "review_mode" | "doubt_engine" | "theme"
-            | "agent_backend" | "ollama_url" | "embedding_model" | "sandbox_image"
-            | "patterns_dir" | "history_dir" | "tmux_session_prefix" => {
+            "run_mode"
+            | "pipeline_mode"
+            | "review_mode"
+            | "doubt_engine"
+            | "theme"
+            | "agent_backend"
+            | "ollama_url"
+            | "embedding_model"
+            | "sandbox_image"
+            | "patterns_dir"
+            | "history_dir"
+            | "tmux_session_prefix" => {
                 value[field_id] = serde_json::json!(new_value);
             }
             // Optional strings
@@ -1613,7 +1668,9 @@ impl Config {
             "audit" | "doubt" => ("reviewer_provider", "reviewer_model"),
             "discovery" | "discover" => ("discovery_provider", "discovery_model"),
             "pr_review" => ("pr_review_provider", "pr_review_model"),
-            "pattern_extraction" | "patterns" => ("pattern_extraction_provider", "pattern_extraction_model"),
+            "pattern_extraction" | "patterns" => {
+                ("pattern_extraction_provider", "pattern_extraction_model")
+            }
             "fixer" => ("fixer_provider", "fixer_model"),
             _ => ("builder_provider", "builder_model"),
         }
@@ -1720,6 +1777,7 @@ impl Config {
 }
 
 #[cfg(test)]
+#[allow(clippy::field_reassign_with_default)]
 mod tests {
     use super::Config;
     use crate::agent::ModelProvider;
@@ -1801,8 +1859,8 @@ mod tests {
     }
 
     #[test]
-    fn save_builder_routing_does_not_overwrite_existing_snapshot_when_switching_between_local_models()
-     {
+    fn save_builder_routing_does_not_overwrite_existing_snapshot_when_switching_between_local_models(
+    ) {
         let dir = tempfile::tempdir().unwrap();
         Config::save_builder_routing(dir.path(), "opencode", "lmstudio/foo");
         // Pre-populate a snapshot as if the user already had specs before going local.
@@ -1981,8 +2039,14 @@ mod tests {
         assert_eq!(Config::parse_provider("CoDeX"), ModelProvider::Codex);
         assert_eq!(Config::parse_provider("claude"), ModelProvider::Claude);
         assert_eq!(Config::parse_provider("unknown"), ModelProvider::Claude);
-        assert_eq!(Config::parse_provider("ghcopilot"), ModelProvider::GhCopilot);
-        assert_eq!(Config::parse_provider("gh-copilot"), ModelProvider::GhCopilot);
+        assert_eq!(
+            Config::parse_provider("ghcopilot"),
+            ModelProvider::GhCopilot
+        );
+        assert_eq!(
+            Config::parse_provider("gh-copilot"),
+            ModelProvider::GhCopilot
+        );
         assert_eq!(Config::parse_provider("copilot"), ModelProvider::GhCopilot);
     }
 
@@ -2838,10 +2902,9 @@ mod tests {
 
     #[test]
     fn active_routing_for_stage_returns_field_values() {
-        let config: Config = serde_json::from_str(
-            r#"{"planner_provider":"claude","planner_model":"opus-4-7"}"#,
-        )
-        .unwrap();
+        let config: Config =
+            serde_json::from_str(r#"{"planner_provider":"claude","planner_model":"opus-4-7"}"#)
+                .unwrap();
         let (p, m) = config.active_routing_for_stage("plan");
         assert_eq!(p, "claude");
         assert_eq!(m, "opus-4-7");
@@ -2928,7 +2991,10 @@ mod tests {
         let value: serde_json::Value = serde_json::from_str(&content).unwrap();
         let overrides = value["stage_overrides"].as_array().unwrap();
         assert!(!overrides.contains(&serde_json::json!("plan")));
-        assert_eq!(value["planner_provider"], "claude", "field preserved after clear");
+        assert_eq!(
+            value["planner_provider"], "claude",
+            "field preserved after clear"
+        );
     }
 
     #[test]
@@ -2939,10 +3005,8 @@ mod tests {
 
     #[test]
     fn stage_overrides_deserialization_with_values() {
-        let config: Config = serde_json::from_str(
-            r#"{"stage_overrides":["plan","build","audit"]}"#,
-        )
-        .unwrap();
+        let config: Config =
+            serde_json::from_str(r#"{"stage_overrides":["plan","build","audit"]}"#).unwrap();
         assert_eq!(config.stage_overrides, vec!["plan", "build", "audit"]);
     }
 
@@ -2957,10 +3021,7 @@ mod tests {
 
     #[test]
     fn list_available_models_includes_lmstudio() {
-        let entries = Config::list_available_models(
-            &["qwen3-coder-30b".to_string()],
-            &[],
-        );
+        let entries = Config::list_available_models(&["qwen3-coder-30b".to_string()], &[]);
         let lm = entries.iter().find(|e| e.label == "qwen3-coder-30b");
         assert!(lm.is_some(), "LM Studio model not in entries");
         assert_eq!(lm.unwrap().model, "lmstudio/qwen3-coder-30b");
@@ -2968,10 +3029,7 @@ mod tests {
 
     #[test]
     fn list_available_models_includes_ollama() {
-        let entries = Config::list_available_models(
-            &[],
-            &["llama3.2".to_string()],
-        );
+        let entries = Config::list_available_models(&[], &["llama3.2".to_string()]);
         let ol = entries.iter().find(|e| e.label == "llama3.2");
         assert!(ol.is_some(), "Ollama model not in entries");
         assert_eq!(ol.unwrap().model, "ollama/llama3.2");
@@ -2982,18 +3040,22 @@ mod tests {
         assert_eq!(Config::stage_id_from_field("stage_plan"), Some("plan"));
         assert_eq!(Config::stage_id_from_field("stage_build"), Some("build"));
         assert_eq!(Config::stage_id_from_field("stage_audit"), Some("audit"));
-        assert_eq!(Config::stage_id_from_field("stage_patterns"), Some("pattern_extraction"));
+        assert_eq!(
+            Config::stage_id_from_field("stage_patterns"),
+            Some("pattern_extraction")
+        );
         assert_eq!(Config::stage_id_from_field("run_mode"), None);
     }
 
     #[test]
     fn field_value_for_stage_returns_display() {
-        let config: Config = serde_json::from_str(
-            r#"{"planner_provider":"claude","planner_model":"opus-4-7"}"#,
-        )
-        .unwrap();
+        let config: Config =
+            serde_json::from_str(r#"{"planner_provider":"claude","planner_model":"opus-4-7"}"#)
+                .unwrap();
         let val = config.field_value("stage_plan");
-        assert!(val.contains("Claude") || val.contains("claude") || val.contains("opus"),
-            "stage_plan field_value should contain provider/model info, got: {val}");
+        assert!(
+            val.contains("Claude") || val.contains("claude") || val.contains("opus"),
+            "stage_plan field_value should contain provider/model info, got: {val}"
+        );
     }
 }

@@ -30,13 +30,13 @@ impl StartupState {
         let file_tree = build_file_tree(project_dir);
 
         // Auto-select the most relevant CF file: TASKS.md > SPEC.md > UPDATED_SPECS.md > CLAUDE.md
-        let priority_files = ["TASKS.md", "SPEC.md", "UPDATED_SPECS.md", "CLAUDE.md"];
+        let priority_files = ["TASKS.MD", "SPEC.MD", "UPDATED_SPECS.MD", "CLAUDE.MD"];
         let initial_selected = priority_files
             .iter()
             .find_map(|name| {
                 file_tree
                     .iter()
-                    .position(|e| e.name == *name && e.is_cf_highlight)
+                    .position(|e| e.name.to_uppercase() == *name && e.is_cf_highlight)
             })
             .unwrap_or(0);
 
@@ -186,9 +186,10 @@ fn build_file_tree_recursive(
 }
 
 fn is_context_foundry_file(name: &str, path: &Path, base_dir: &Path) -> bool {
+    let upper = name.to_uppercase();
     if matches!(
-        name,
-        "TASKS.md" | "SPEC.md" | "UPDATED_SPECS.md" | "CLAUDE.md"
+        upper.as_str(),
+        "TASKS.MD" | "SPEC.MD" | "UPDATED_SPECS.MD" | "CLAUDE.MD"
     ) {
         return true;
     }
@@ -383,6 +384,14 @@ pub(super) fn handle_startup_key(state: &mut AppState, key: event::KeyEvent, con
         match key.code {
             KeyCode::Char('y') | KeyCode::Char('Y') => state.should_quit = true,
             KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => state.confirm_quit = false,
+            _ => {}
+        }
+        return;
+    }
+
+    if state.show_no_tasks_warning {
+        match key.code {
+            KeyCode::Enter | KeyCode::Esc => state.show_no_tasks_warning = false,
             _ => {}
         }
         return;
@@ -870,6 +879,11 @@ pub(super) fn handle_startup_mouse_at(
     mouse: MouseEvent,
     terminal_size: (u16, u16),
 ) {
+    if state.show_no_tasks_warning && matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left))
+    {
+        state.show_no_tasks_warning = false;
+        return;
+    }
     if state.confirm_quit && matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
         let area = ratatui::layout::Rect::new(0, 0, terminal_size.0, terminal_size.1);
         if let Some(action) = tui::quit_confirm_hit_test(area, mouse.column, mouse.row) {
@@ -948,10 +962,15 @@ pub(super) fn handle_startup_mouse_at(
                 }
             } else {
                 let status_bar = ratatui::layout::Rect::new(
-                    0, terminal_size.1.saturating_sub(1), terminal_size.0, 1,
+                    0,
+                    terminal_size.1.saturating_sub(1),
+                    terminal_size.0,
+                    1,
                 );
                 if mouse.row == status_bar.y {
-                    if let Some(action) = tui::startup_status_bar_hit_test(status_bar, mouse.column, state) {
+                    if let Some(action) =
+                        tui::startup_status_bar_hit_test(status_bar, mouse.column, state)
+                    {
                         match action {
                             tui::StatusBarAction::Submit => {
                                 handle_startup_submit(state);
@@ -981,8 +1000,7 @@ pub(super) fn handle_startup_mouse_at(
             match state.focused_pane {
                 crate::app::state::TuiPane::Preview => {
                     if let Some(startup) = state.startup.as_mut() {
-                        startup.file_preview_scroll =
-                            startup.file_preview_scroll.saturating_sub(3);
+                        startup.file_preview_scroll = startup.file_preview_scroll.saturating_sub(3);
                     }
                 }
                 _ => {
@@ -1320,11 +1338,13 @@ pub(crate) fn classify_plan_status(plan_path: &Path) -> PlanStatus {
 }
 
 pub(crate) fn detect_startup_scenario(project_dir: &Path) -> StartupScenario {
-    if !has_meaningful_project_files(project_dir) {
+    let contract = ContractPaths::resolve(project_dir);
+    let tasks_path = contract.tasks_path;
+    if !has_meaningful_project_files(project_dir) && !tasks_path.exists() {
         return StartupScenario::EmptyProject;
     }
 
-    match classify_plan_status(&ContractPaths::resolve(project_dir).tasks_path) {
+    match classify_plan_status(&tasks_path) {
         PlanStatus::Pending(_) => StartupScenario::QueueReady,
         PlanStatus::Complete => StartupScenario::QueueComplete,
         PlanStatus::Missing | PlanStatus::Invalid | PlanStatus::Empty => {
@@ -1407,9 +1427,10 @@ fn should_skip_dir_in_context(name: &str, parent_dir: &Path) -> bool {
 }
 
 fn is_meaningful_project_file(name: &str) -> bool {
+    let upper = name.to_uppercase();
     if matches!(
-        name,
-        "SPEC.md" | "TASKS.md" | "ARCHITECTURE.md" | "IMPL_PLAN.md"
+        upper.as_str(),
+        "SPEC.MD" | "TASKS.MD" | "ARCHITECTURE.MD" | "IMPL_PLAN.MD"
     ) {
         return true;
     }
