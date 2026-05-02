@@ -917,8 +917,22 @@ pub fn model_picker_rect(parent: Rect, picker: &crate::app::ModelPicker) -> Rect
     }
 }
 
+pub fn picker_close_btn_rect(popup: Rect) -> Rect {
+    Rect {
+        x: popup.x + popup.width.saturating_sub(6),
+        y: popup.y,
+        width: 5,
+        height: 1,
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ModelPickerMouseTarget {
+    /// User clicked the [X] button in the picker header.
+    CloseBtn,
+    /// User clicked outside the popup. Both this and CloseBtn should dismiss
+    /// the picker; kept distinct so callers/tests can tell them apart.
+    OutsideClick,
     FilterBar,
     Item(usize),
 }
@@ -930,12 +944,18 @@ pub fn model_picker_hit_test(
     row: u16,
 ) -> Option<ModelPickerMouseTarget> {
     let popup = model_picker_rect(parent, picker);
+
+    let btn = picker_close_btn_rect(popup);
+    if column >= btn.x && column < btn.x.saturating_add(btn.width) && row == btn.y {
+        return Some(ModelPickerMouseTarget::CloseBtn);
+    }
+
     if column < popup.x
         || column >= popup.x.saturating_add(popup.width)
         || row < popup.y
         || row >= popup.y.saturating_add(popup.height)
     {
-        return None;
+        return Some(ModelPickerMouseTarget::OutsideClick);
     }
 
     let inner = Rect {
@@ -988,7 +1008,7 @@ fn stage_ids_match(lhs: &str, rhs: &str) -> bool {
 
 /// Render a floating settings overlay on top of whatever is already drawn.
 pub(super) fn render_settings_overlay(frame: &mut Frame, state: &AppState) {
-    use crate::app::{settings_sections, DualSelection, FieldKind};
+    use crate::app::{settings_sections, FieldKind};
 
     let theme = &state.tui_theme;
     let modal = settings_modal_rect(frame.area());
@@ -1069,7 +1089,11 @@ pub(super) fn render_settings_overlay(frame: &mut Frame, state: &AppState) {
         Config::default()
     };
 
-    let sections = settings_sections();
+    let dual_mode = state
+        .settings_overlay
+        .as_ref()
+        .is_some_and(|ov| ov.dual_mode);
+    let sections = settings_sections(dual_mode);
     let content_height = inner.height.saturating_sub(2) as usize; // reserve 2 rows for hint bar
     let mut row_idx: usize = 0;
     let mut render_y: u16 = inner.y;
@@ -1113,7 +1137,9 @@ pub(super) fn render_settings_overlay(frame: &mut Frame, state: &AppState) {
 
                     // Get the current value
                     let value = match field.id {
-                        "arena" => DualSelection::display_label(&state.builder_model_specs),
+                        "arena" => {
+                            if state.arena_mode == "dual" { "Dual".to_string() } else { "Solo".to_string() }
+                        }
                         "builder" => {
                             let specs = &state.builder_model_specs;
                             let mut list: Vec<String> =
@@ -1277,12 +1303,16 @@ pub(super) fn render_settings_overlay(frame: &mut Frame, state: &AppState) {
     // Model picker popup (rendered on top of the settings overlay)
     if let Some(ov_state) = ov {
         if let Some(ref picker) = ov_state.picker {
-            let stage_overridden = config
-                .stage_overrides
-                .iter()
-                .any(|stage_id| stage_ids_match(stage_id, &picker.stage));
-            let selected_route =
-                stage_overridden.then(|| config.active_routing_for_stage(&picker.stage));
+            let selected_route = if picker.pipeline_b {
+                let (p, m) = config.active_routing_for_stage_b(&picker.stage);
+                if p.is_empty() && m.is_empty() { None } else { Some((p, m)) }
+            } else {
+                let stage_overridden = config
+                    .stage_overrides
+                    .iter()
+                    .any(|stage_id| stage_ids_match(stage_id, &picker.stage));
+                stage_overridden.then(|| config.active_routing_for_stage(&picker.stage))
+            };
             render_model_picker(frame, theme, picker, modal, selected_route);
         }
     }
@@ -1316,7 +1346,11 @@ fn render_model_picker(
     let popup = model_picker_rect(parent, picker);
 
     frame.render_widget(Clear, popup);
-    let title = format!(" Model for {} ", picker.stage);
+    let title = if picker.pipeline_b {
+        format!(" Model for {} (B) ", picker.stage)
+    } else {
+        format!(" Model for {} ", picker.stage)
+    };
     frame.render_widget(
         Block::default()
             .borders(Borders::ALL)
@@ -1329,6 +1363,19 @@ fn render_model_picker(
             )),
         popup,
     );
+
+    // Draw [ X ] close button
+    let btn = picker_close_btn_rect(popup);
+    let buf = frame.buffer_mut();
+    let btn_style = Style::default()
+        .fg(Color::Yellow)
+        .add_modifier(Modifier::BOLD);
+    for (i, ch) in "[ X ]".chars().enumerate() {
+        let col = btn.x + i as u16;
+        if col < buf.area().width && btn.y < buf.area().height {
+            buf[(col, btn.y)].set_char(ch).set_style(btn_style);
+        }
+    }
 
     let inner = Rect {
         x: popup.x + 1,
@@ -1625,7 +1672,7 @@ pub fn render_quit_confirm(frame: &mut Frame, theme: &crate::tui::theme::TuiThem
     let h: u16 = 9.min(area.height.saturating_sub(2));
     if w < 20 || h < 5 {
         // Terminal too small for the full modal -- fall back to a single line.
-        let text = "  Quit foundry?  [y] quit  [n] cancel  ";
+        let text = "  Quit foundry?  [Y/Enter] quit  [N] cancel  ";
         let fw = (text.len() as u16 + 2).min(area.width);
         let fx = area.width.saturating_sub(fw) / 2;
         let fy = area.height.saturating_sub(3) / 2;
@@ -1721,7 +1768,7 @@ pub fn render_quit_confirm(frame: &mut Frame, theme: &crate::tui::theme::TuiThem
     frame.render_widget(msg, chunks[2]);
 
     let quit_btn = Span::styled(
-        "  [Y] Quit  ",
+        "  [Y/Enter] Quit  ",
         Style::default()
             .bg(theme.error)
             .fg(theme.text)
@@ -1845,4 +1892,336 @@ pub fn render_no_tasks_warning(frame: &mut Frame, theme: &crate::tui::theme::Tui
     );
     let buttons = Paragraph::new(Line::from(ok_btn)).alignment(Alignment::Center);
     frame.render_widget(buttons, chunks[4]);
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GitInitOfferAction {
+    Github,
+    Local,
+    Skip,
+}
+
+pub fn git_init_offer_hit_test(
+    area: Rect,
+    gh_available: bool,
+    col: u16,
+    row: u16,
+) -> Option<GitInitOfferAction> {
+    let w: u16 = 56.min(area.width.saturating_sub(2));
+    let h: u16 = if gh_available { 11 } else { 9 }.min(area.height.saturating_sub(2));
+    if w < 20 || h < 5 {
+        let text = if gh_available {
+            "  No git repo  [G] GitHub  [L/Enter] Local  [S] Skip  "
+        } else {
+            "  No git repo  [L/Enter] Init  [S] Skip  "
+        };
+        let fw = (text.len() as u16 + 2).min(area.width);
+        let fx = area.width.saturating_sub(fw) / 2;
+        let fy = area.height.saturating_sub(3) / 2;
+        let inner_x = fx.saturating_add(1);
+        let inner_w = fw.saturating_sub(2);
+        if row != fy.saturating_add(1) || col < inner_x || col >= inner_x.saturating_add(inner_w) {
+            return None;
+        }
+        if gh_available {
+            let third = inner_w / 3;
+            if col < inner_x.saturating_add(third) {
+                Some(GitInitOfferAction::Github)
+            } else if col < inner_x.saturating_add(third.saturating_mul(2)) {
+                Some(GitInitOfferAction::Local)
+            } else {
+                Some(GitInitOfferAction::Skip)
+            }
+        } else {
+            let mid = inner_x.saturating_add(inner_w / 2);
+            if col < mid {
+                Some(GitInitOfferAction::Local)
+            } else {
+                Some(GitInitOfferAction::Skip)
+            }
+        }
+    } else {
+        let x = area.width.saturating_sub(w) / 2;
+        let y = area.height.saturating_sub(h) / 2;
+        let inner_x = x.saturating_add(1);
+        let inner_y = y.saturating_add(1);
+        let inner_w = w.saturating_sub(2);
+        if col < inner_x || col >= inner_x.saturating_add(inner_w) {
+            return None;
+        }
+
+        if gh_available {
+            match row {
+                r if r == inner_y.saturating_add(4) => Some(GitInitOfferAction::Github),
+                r if r == inner_y.saturating_add(5) => Some(GitInitOfferAction::Local),
+                r if r == inner_y.saturating_add(6) => Some(GitInitOfferAction::Skip),
+                _ => None,
+            }
+        } else if row == inner_y.saturating_add(4) {
+            let mid = inner_x.saturating_add(inner_w / 2);
+            if col < mid {
+                Some(GitInitOfferAction::Local)
+            } else {
+                Some(GitInitOfferAction::Skip)
+            }
+        } else {
+            None
+        }
+    }
+}
+
+pub fn render_git_init_offer(
+    frame: &mut Frame,
+    theme: &crate::tui::theme::TuiTheme,
+    gh_available: bool,
+) {
+    let area = frame.area();
+    let w: u16 = 56.min(area.width.saturating_sub(2));
+    let h: u16 = if gh_available { 11 } else { 9 }.min(area.height.saturating_sub(2));
+    if w < 20 || h < 5 {
+        let text = if gh_available {
+            "  No git repo  [G] GitHub  [L/Enter] Local  [S] Skip  "
+        } else {
+            "  No git repo  [L/Enter] Init  [S] Skip  "
+        };
+        let fw = (text.len() as u16 + 2).min(area.width);
+        let fx = area.width.saturating_sub(fw) / 2;
+        let fy = area.height.saturating_sub(3) / 2;
+        let banner = Rect {
+            x: fx,
+            y: fy,
+            width: fw,
+            height: 3,
+        };
+        frame.render_widget(Clear, banner);
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(theme.accent))
+            .style(Style::default().bg(theme.surface));
+        let inner = block.inner(banner);
+        frame.render_widget(block, banner);
+        frame.render_widget(
+            Paragraph::new(Line::from(text)).style(Style::default().fg(theme.text)),
+            inner,
+        );
+        return;
+    }
+
+    let x = area.width.saturating_sub(w) / 2;
+    let y = area.height.saturating_sub(h) / 2;
+    let modal = Rect {
+        x,
+        y,
+        width: w,
+        height: h,
+    };
+
+    let sx = modal.x.saturating_add(2);
+    let sy = modal.y.saturating_add(1);
+    let sw = modal.width.min(area.width.saturating_sub(sx));
+    let sh = modal.height.min(area.height.saturating_sub(sy));
+    if sw > 0 && sh > 0 {
+        let shadow = Rect {
+            x: sx,
+            y: sy,
+            width: sw,
+            height: sh,
+        };
+        frame.render_widget(Clear, shadow);
+        frame.render_widget(
+            Block::default().style(Style::default().bg(theme.muted)),
+            shadow,
+        );
+    }
+
+    frame.render_widget(Clear, modal);
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Double)
+        .border_style(
+            Style::default()
+                .fg(theme.accent)
+                .add_modifier(Modifier::BOLD),
+        )
+        .style(Style::default().bg(theme.surface).fg(theme.text));
+    let inner = block.inner(modal);
+    frame.render_widget(block, modal);
+
+    if gh_available {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(1), // title
+                Constraint::Length(1), // spacer
+                Constraint::Length(1), // message
+                Constraint::Length(1), // spacer
+                Constraint::Length(1), // GitHub button
+                Constraint::Length(1), // local button
+                Constraint::Length(1), // skip button
+                Constraint::Min(0),
+            ])
+            .split(inner);
+
+        let title = Paragraph::new(Line::from(Span::styled(
+            "No git repository",
+            Style::default()
+                .fg(theme.accent)
+                .add_modifier(Modifier::BOLD),
+        )))
+        .alignment(Alignment::Center);
+        frame.render_widget(title, chunks[0]);
+
+        let msg = Paragraph::new(Line::from(Span::styled(
+            "Initialize a repository for this project?",
+            Style::default().fg(theme.muted),
+        )))
+        .alignment(Alignment::Center);
+        frame.render_widget(msg, chunks[2]);
+
+        let gh_btn = Span::styled(
+            "  [G] Create GitHub repo (private)  ",
+            Style::default()
+                .bg(theme.accent)
+                .fg(Color::Black)
+                .add_modifier(Modifier::BOLD),
+        );
+        frame.render_widget(
+            Paragraph::new(Line::from(gh_btn)).alignment(Alignment::Center),
+            chunks[4],
+        );
+
+        let local_btn = Span::styled(
+            "  [L/Enter] Local git init  ",
+            Style::default()
+                .bg(theme.border)
+                .fg(theme.text)
+                .add_modifier(Modifier::BOLD),
+        );
+        frame.render_widget(
+            Paragraph::new(Line::from(local_btn)).alignment(Alignment::Center),
+            chunks[5],
+        );
+
+        let skip_btn = Span::styled("  [S/Esc] Skip  ", Style::default().fg(theme.muted));
+        frame.render_widget(
+            Paragraph::new(Line::from(skip_btn)).alignment(Alignment::Center),
+            chunks[6],
+        );
+    } else {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(1), // title
+                Constraint::Length(1), // spacer
+                Constraint::Length(1), // message
+                Constraint::Length(1), // spacer
+                Constraint::Length(1), // buttons
+                Constraint::Min(0),
+            ])
+            .split(inner);
+
+        let title = Paragraph::new(Line::from(Span::styled(
+            "No git repository",
+            Style::default()
+                .fg(theme.accent)
+                .add_modifier(Modifier::BOLD),
+        )))
+        .alignment(Alignment::Center);
+        frame.render_widget(title, chunks[0]);
+
+        let msg = Paragraph::new(Line::from(Span::styled(
+            "Initialize a local git repository?",
+            Style::default().fg(theme.muted),
+        )))
+        .alignment(Alignment::Center);
+        frame.render_widget(msg, chunks[2]);
+
+        let init_btn = Span::styled(
+            "  [L/Enter] Init  ",
+            Style::default()
+                .bg(theme.accent)
+                .fg(Color::Black)
+                .add_modifier(Modifier::BOLD),
+        );
+        let skip_btn = Span::styled(
+            "  [S/Esc] Skip  ",
+            Style::default()
+                .bg(theme.border)
+                .fg(theme.text)
+                .add_modifier(Modifier::BOLD),
+        );
+        let buttons = Paragraph::new(Line::from(vec![init_btn, Span::raw("    "), skip_btn]))
+            .alignment(Alignment::Center);
+        frame.render_widget(buttons, chunks[4]);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app::{ModelEntry, ModelPicker};
+
+    #[test]
+    fn git_init_offer_hit_test_maps_modal_rows() {
+        let area = Rect::new(0, 0, 120, 40);
+
+        assert_eq!(
+            git_init_offer_hit_test(area, true, 60, 19),
+            Some(GitInitOfferAction::Github)
+        );
+        assert_eq!(
+            git_init_offer_hit_test(area, true, 60, 20),
+            Some(GitInitOfferAction::Local)
+        );
+        assert_eq!(
+            git_init_offer_hit_test(area, true, 60, 21),
+            Some(GitInitOfferAction::Skip)
+        );
+        assert_eq!(git_init_offer_hit_test(area, true, 60, 18), None);
+    }
+
+    #[test]
+    fn git_init_offer_hit_test_splits_local_and_skip_without_gh() {
+        let area = Rect::new(0, 0, 120, 40);
+
+        assert_eq!(
+            git_init_offer_hit_test(area, false, 40, 20),
+            Some(GitInitOfferAction::Local)
+        );
+        assert_eq!(
+            git_init_offer_hit_test(area, false, 70, 20),
+            Some(GitInitOfferAction::Skip)
+        );
+        assert_eq!(git_init_offer_hit_test(area, false, 40, 19), None);
+    }
+
+    #[test]
+    fn model_picker_hit_test_closes_only_on_close_or_outside() {
+        let parent = Rect::new(0, 0, 100, 30);
+        let picker = ModelPicker::new(
+            "plan",
+            vec![ModelEntry {
+                provider: "test".to_string(),
+                model: "model".to_string(),
+                label: "Model".to_string(),
+                recommended: false,
+                group: "Test".to_string(),
+            }],
+        );
+        let popup = model_picker_rect(parent, &picker);
+        let close = picker_close_btn_rect(popup);
+
+        assert_eq!(
+            model_picker_hit_test(parent, &picker, close.x, close.y),
+            Some(ModelPickerMouseTarget::CloseBtn)
+        );
+        assert_eq!(
+            model_picker_hit_test(parent, &picker, 0, 0),
+            Some(ModelPickerMouseTarget::OutsideClick)
+        );
+        assert_eq!(
+            model_picker_hit_test(parent, &picker, popup.x + 1, popup.y + 3),
+            None
+        );
+    }
 }

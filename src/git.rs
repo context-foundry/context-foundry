@@ -24,62 +24,132 @@ pub fn is_gh_authenticated() -> bool {
         .unwrap_or(false)
 }
 
-/// Check git and gh readiness, returning advisory log messages.
-/// Auto-initializes a git repo if the project isn't one yet.
-pub fn check_git_readiness(project_dir: &Path) -> Vec<String> {
-    let mut messages = Vec::new();
-
-    // 1. Check if project_dir is a git repo; auto-init if not
-    let is_git = Command::new("git")
+pub fn is_git_repo(project_dir: &Path) -> bool {
+    Command::new("git")
         .args(["rev-parse", "--is-inside-work-tree"])
         .current_dir(project_dir)
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()
         .map(|s| s.success())
-        .unwrap_or(false);
+        .unwrap_or(false)
+}
 
-    if !is_git {
-        let init_result = Command::new("git")
-            .arg("init")
-            .current_dir(project_dir)
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status();
-        match init_result {
-            Ok(s) if s.success() => {
-                messages.push("Initialized git repo".into());
-                // Create an initial empty commit so HEAD exists.
-                // Without this, git operations fail in repos with no commits.
-                let _ = Command::new("git")
-                    .args(["commit", "--allow-empty", "-m", "Initial commit"])
-                    .current_dir(project_dir)
-                    .stdout(Stdio::null())
-                    .stderr(Stdio::null())
-                    .status();
-            }
-            Ok(s) => messages.push(format!("git init failed (exit {})", s)),
-            Err(e) => messages.push(format!("git init failed: {}", e)),
-        }
-    }
-
-    // 2. Check gh auth status (advisory)
-    match Command::new("gh")
-        .args(["auth", "status"])
+/// Check whether the `gh` binary is on PATH and runnable. Does NOT require auth.
+/// Auth-aware checks should call `is_gh_authenticated()` separately. The git-init
+/// offer uses this so a user who has gh installed but isn't logged in can still
+/// pick the GitHub option and get a clear `gh auth login` error from
+/// `init_git_github` rather than have the option silently hidden.
+pub fn is_gh_cli_available() -> bool {
+    Command::new("gh")
+        .arg("--version")
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()
-    {
-        Err(_) => {
-            messages
-                .push("gh: not installed -- install GitHub CLI to enable GitHub features".into());
+        .map(|s| s.success())
+        .unwrap_or(false)
+}
+
+pub fn init_git_local(project_dir: &Path) -> Result<String> {
+    let status = Command::new("git")
+        .arg("init")
+        .current_dir(project_dir)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()?;
+    if !status.success() {
+        anyhow::bail!("git init failed (exit {})", status);
+    }
+    // Capture stderr so a failure (e.g. missing user.email/user.name) doesn't
+    // pass silently and leave HEAD unborn -- later commit_and_push calls would
+    // then fail with a confusing error far from the root cause.
+    let commit = Command::new("git")
+        .args(["commit", "--allow-empty", "-m", "Initial commit"])
+        .current_dir(project_dir)
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .output();
+    match commit {
+        Ok(out) if out.status.success() => Ok("Initialized local git repo".into()),
+        Ok(out) => {
+            let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
+            Ok(format!(
+                "Initialized local git repo (initial commit failed: {} -- run `git config user.email` and `git config user.name`, then commit manually)",
+                if stderr.is_empty() { "unknown error".to_string() } else { stderr }
+            ))
         }
-        Ok(s) if !s.success() => {
-            messages.push(
-                "gh auth: not logged in -- run 'gh auth login' to enable GitHub features".into(),
-            );
+        Err(e) => Ok(format!(
+            "Initialized local git repo (initial commit could not run: {})",
+            e
+        )),
+    }
+}
+
+pub fn init_git_github(project_dir: &Path) -> Result<String> {
+    let dir_name = project_dir
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("project");
+
+    // git init + initial commit first
+    init_git_local(project_dir)?;
+
+    // Create private GitHub repo from existing source
+    let output = Command::new("gh")
+        .args([
+            "repo",
+            "create",
+            dir_name,
+            "--private",
+            "--source",
+            ".",
+            "--push",
+        ])
+        .current_dir(project_dir)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()?;
+
+    if output.status.success() {
+        let url = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        Ok(format!("Created GitHub repo: {}", url))
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        anyhow::bail!("gh repo create failed: {}", stderr)
+    }
+}
+
+/// Check git and gh readiness, returning advisory log messages.
+/// Does NOT auto-initialize -- caller should check is_git_repo() first
+/// and show the interactive init offer if needed.
+pub fn check_git_readiness(project_dir: &Path) -> Vec<String> {
+    let mut messages = Vec::new();
+
+    if !is_git_repo(project_dir) {
+        messages.push("No git repository detected".into());
+        return messages;
+    }
+
+    // Check gh auth status (advisory)
+    if !is_gh_authenticated() {
+        match Command::new("gh")
+            .args(["--version"])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+        {
+            Err(_) => {
+                messages.push(
+                    "gh: not installed -- install GitHub CLI to enable GitHub features".into(),
+                );
+            }
+            Ok(_) => {
+                messages.push(
+                    "gh auth: not logged in -- run 'gh auth login' to enable GitHub features"
+                        .into(),
+                );
+            }
         }
-        Ok(_) => {} // authenticated, no noise
     }
 
     messages
@@ -202,11 +272,12 @@ fn line_changes_real_file(line: &str) -> bool {
 }
 
 /// Ensure the project directory is a git repo with at least one commit.
-/// Silently initializes if needed — idempotent.
+/// Called by commit_and_push as a safety net -- the build loop requires git
+/// to function, so this initializes even if the user skipped the startup offer.
 fn ensure_git_initialized(project_dir: &Path) {
-    // Check for .git directory
     let has_git = project_dir.join(".git").exists();
     if !has_git {
+        eprintln!("foundry: auto-initializing git repo (required for commits)");
         let _ = Command::new("git")
             .arg("init")
             .current_dir(project_dir)

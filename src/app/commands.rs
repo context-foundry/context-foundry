@@ -350,10 +350,11 @@ fn required_providers(
                     Config::parse_provider(&config.orchestrator_reviewer_provider),
                 ));
             }
-            // Only validate providers that dual_selection will actually invoke.
-            // "both" demands both; single-selection modes demand only their one model.
-            // This mirrors the routing logic in Config::selected_pipeline_configs().
-            if config.builder_models.is_empty() {
+            // Arena dual mode clears legacy builder_models at runtime, so skip
+            // that validation path entirely when arena_mode == "dual".
+            if config.arena_mode == "dual" {
+                v.push(("builder", Config::parse_provider(&config.builder_provider)));
+            } else if config.builder_models.is_empty() {
                 v.push(("builder", Config::parse_provider(&config.builder_provider)));
             } else {
                 let specs_to_check: Vec<&str> = match config.dual_selection.as_str() {
@@ -402,6 +403,26 @@ fn required_providers(
             Config::parse_provider(&config.reviewer_provider),
         ));
         providers.push(("fixer", Config::parse_provider(&config.fixer_provider)));
+    }
+
+    if matches!(mode, ProviderCommandMode::Run) && config.arena_mode == "dual" {
+        // Only validate B providers for per-pipeline stages.
+        // Excluded: scout (outer loop), discovery (outer loop), fixer (unused),
+        // pr_review (not in build loop), patterns (hardcodes Claude).
+        let mut b_providers: Vec<(&str, &str)> = vec![
+            ("query (B)", &config.b_query_provider),
+            ("research (B)", &config.b_research_provider),
+            ("planner (B)", &config.b_planner_provider),
+            ("builder (B)", &config.b_builder_provider),
+        ];
+        if !config.backpressure_only {
+            b_providers.push(("reviewer (B)", &config.b_reviewer_provider));
+        }
+        for (role, prov) in b_providers {
+            if !prov.is_empty() {
+                providers.push((role, Config::parse_provider(prov)));
+            }
+        }
     }
 
     providers

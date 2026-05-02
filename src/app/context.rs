@@ -187,7 +187,9 @@ impl RunContext {
 
     /// Create a derived RunContext that inherits session_id and
     /// session_cost_millicents from self, but uses a new Config.
-    /// Used by DualSelection::First/Second where only one pipeline runs.
+    /// Test helper: previously used by the legacy DualSelection::First/Second
+    /// override path which was removed when arena_mode took over routing.
+    #[cfg(test)]
     pub(super) fn derive(&self, config: Config) -> Self {
         let mut ctx = RunContext::new(
             &self.project_dir,

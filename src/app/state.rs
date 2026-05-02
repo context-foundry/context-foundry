@@ -281,6 +281,7 @@ impl DualSelection {
         Self::Off
     }
 
+    #[cfg(test)]
     pub fn display_label(specs: &[String]) -> String {
         use crate::config::Config;
         match specs.len() {
@@ -340,6 +341,7 @@ pub struct ModelEntry {
 #[derive(Debug, Clone)]
 pub struct ModelPicker {
     pub stage: String,
+    pub pipeline_b: bool,
     pub focus: usize,
     pub entries: Vec<ModelEntry>,
     pub groups: Vec<String>,
@@ -364,80 +366,54 @@ pub struct SectionDef {
     pub fields: Vec<FieldDef>,
 }
 
-pub fn settings_sections() -> Vec<SectionDef> {
+pub fn settings_sections(dual_mode: bool) -> Vec<SectionDef> {
+    // (field_id_a, field_id_b, label_solo, label_a_dual, label_b, has_b_row)
+    // has_b_row=false for stages where B routing is not meaningful at runtime:
+    //   - Discovery: runs in outer loop, not per-pipeline
+    //   - PR Review: not part of the build loop
+    //   - Patterns: hardcodes Claude provider, B provider ignored
+    //   - Fixer: AgentRole::Fixer has no runtime invocations
+    let stage_defs: &[(&str, &str, &str, &str, &str, bool)] = &[
+        ("stage_query", "stage_query_b", "  Query", "  Query (A)", "  Query (B)", true),
+        ("stage_research", "stage_research_b", "  Research", "  Research (A)", "  Research (B)", true),
+        ("stage_plan", "stage_plan_b", "  Plan", "  Plan (A)", "  Plan (B)", true),
+        ("stage_build", "stage_build_b", "  Build", "  Build (A)", "  Build (B)", true),
+        ("stage_audit", "stage_audit_b", "  Audit", "  Audit (A)", "  Audit (B)", true),
+        ("stage_discovery", "stage_discovery_b", "  Discovery", "  Discovery (A)", "  Discovery (B)", false),
+        ("stage_pr_review", "stage_pr_review_b", "  PR Review", "  PR Review (A)", "  PR Review (B)", false),
+        ("stage_patterns", "stage_patterns_b", "  Patterns", "  Patterns (A)", "  Patterns (B)", false),
+        ("stage_fixer", "stage_fixer_b", "  Fixer", "  Fixer (A)", "  Fixer (B)", false),
+    ];
+    let mut routing_fields = vec![FieldDef {
+        id: "arena",
+        label: "Arena",
+        hint: "Enter to toggle: Solo / Dual",
+        kind: FieldKind::Enum,
+    }];
+    for &(id_a, id_b, label_solo, label_a_dual, label_b, has_b) in stage_defs {
+        let show_b = dual_mode && has_b;
+        let label_a = if show_b { label_a_dual } else { label_solo };
+        routing_fields.push(FieldDef {
+            id: id_a,
+            label: label_a,
+            hint: "Enter to pick model",
+            kind: FieldKind::StagePicker,
+        });
+        if show_b {
+            routing_fields.push(FieldDef {
+                id: id_b,
+                label: label_b,
+                hint: "Enter to pick model",
+                kind: FieldKind::StagePicker,
+            });
+        }
+    }
     vec![
         SectionDef {
             id: "routing",
             name: "Routing",
             default_expanded: true,
-            fields: vec![
-                FieldDef {
-                    id: "arena",
-                    label: "Arena",
-                    hint: "Ctrl+D cycle: solo / dual pipeline",
-                    kind: FieldKind::Enum,
-                },
-                FieldDef {
-                    id: "builder",
-                    label: "Builder",
-                    hint: "Active builder provider:model",
-                    kind: FieldKind::Enum,
-                },
-                FieldDef {
-                    id: "stage_query",
-                    label: "  Query",
-                    hint: "Enter to pick model",
-                    kind: FieldKind::StagePicker,
-                },
-                FieldDef {
-                    id: "stage_research",
-                    label: "  Research",
-                    hint: "Enter to pick model",
-                    kind: FieldKind::StagePicker,
-                },
-                FieldDef {
-                    id: "stage_plan",
-                    label: "  Plan",
-                    hint: "Enter to pick model",
-                    kind: FieldKind::StagePicker,
-                },
-                FieldDef {
-                    id: "stage_build",
-                    label: "  Build",
-                    hint: "Enter to pick model",
-                    kind: FieldKind::StagePicker,
-                },
-                FieldDef {
-                    id: "stage_audit",
-                    label: "  Audit",
-                    hint: "Enter to pick model",
-                    kind: FieldKind::StagePicker,
-                },
-                FieldDef {
-                    id: "stage_discovery",
-                    label: "  Discovery",
-                    hint: "Enter to pick model",
-                    kind: FieldKind::StagePicker,
-                },
-                FieldDef {
-                    id: "stage_pr_review",
-                    label: "  PR Review",
-                    hint: "Enter to pick model",
-                    kind: FieldKind::StagePicker,
-                },
-                FieldDef {
-                    id: "stage_patterns",
-                    label: "  Patterns",
-                    hint: "Enter to pick model",
-                    kind: FieldKind::StagePicker,
-                },
-                FieldDef {
-                    id: "stage_fixer",
-                    label: "  Fixer",
-                    hint: "Enter to pick model",
-                    kind: FieldKind::StagePicker,
-                },
-            ],
+            fields: routing_fields,
         },
         SectionDef {
             id: "pipeline",
@@ -867,12 +843,17 @@ pub struct SettingsOverlayState {
     pub dirty: bool,
     pub confirm_close: bool,
     pub original_json: Option<String>,
+    pub dual_mode: bool,
 }
 
 impl SettingsOverlayState {
+    #[cfg(test)]
     pub fn new() -> Self {
-        let sections = settings_sections();
-        let expanded: std::collections::BTreeSet<String> = sections
+        Self::with_dual_mode(false)
+    }
+
+    pub fn with_dual_mode(dual_mode: bool) -> Self {
+        let expanded = settings_sections(dual_mode)
             .iter()
             .filter(|s| s.default_expanded)
             .map(|s| s.id.to_string())
@@ -887,11 +868,12 @@ impl SettingsOverlayState {
             dirty: false,
             confirm_close: false,
             original_json: None,
+            dual_mode,
         }
     }
 
     pub fn visible_row_count(&self) -> usize {
-        let sections = settings_sections();
+        let sections = settings_sections(self.dual_mode);
         let mut count = 0;
         for section in &sections {
             count += 1; // header
@@ -929,7 +911,7 @@ impl SettingsOverlayState {
     }
 
     pub fn row_at_index(&self, index: usize) -> Option<RowId> {
-        let sections = settings_sections();
+        let sections = settings_sections(self.dual_mode);
         let mut idx = 0;
         for section in &sections {
             if idx == index {
@@ -954,7 +936,12 @@ impl SettingsOverlayState {
 }
 
 impl ModelPicker {
+    #[cfg(test)]
     pub fn new(stage: &str, entries: Vec<ModelEntry>) -> Self {
+        Self::with_pipeline(stage, false, entries)
+    }
+
+    pub fn with_pipeline(stage: &str, pipeline_b: bool, entries: Vec<ModelEntry>) -> Self {
         let mut groups = Vec::new();
         let mut groups_open = std::collections::BTreeSet::new();
         for e in &entries {
@@ -965,6 +952,7 @@ impl ModelPicker {
         }
         Self {
             stage: stage.to_string(),
+            pipeline_b,
             focus: 0,
             entries,
             groups,
@@ -1084,6 +1072,8 @@ pub struct AppState {
     pub run_mode: String,    // "auto", "sprint", or "review"
     pub dual_selection: DualSelection, // Ctrl+D cycle: Off, First, Second, Both
     pub builder_model_specs: Vec<String>, // raw config values (e.g., ["claude:opus", "codex:"])
+    pub arena_mode: String,              // "solo" or "dual"
+    pub build_stage_label: String,       // formatted label from build stage routing
     pub awaiting_review: bool,
     pub(super) review_gates: HashMap<String, Arc<SyncFlag>>,
     pub(super) review_session_id: Option<String>,
@@ -1100,6 +1090,9 @@ pub struct AppState {
     pub lmstudio_models: Vec<String>, // discovered LM Studio model IDs (raw /v1/models ids)
     pub lmstudio_id_to_opencode_path: HashMap<String, String>, // suffix-after-last-slash -> canonical opencode path (e.g. "qwen3-coder-30b" -> "lmstudio/qwen/qwen3-coder-30b")
     pub ollama_models: Vec<String>, // discovered Ollama model names (raw /api/tags names)
+    pub claude_cli_available: bool,  // `claude --version` succeeded
+    pub codex_cli_available: bool,   // `codex --version` succeeded
+    pub copilot_available: bool,     // `gh auth token` succeeded
     pub local_model_cursor: usize,  // index into local_models for current selection
     pub selected_local_model: String, // persisted selection, from config or cycling
     pub builder_cursor: usize,      // index into unified builder list (specs + local)
@@ -1119,6 +1112,8 @@ pub struct AppState {
     pub git_branch: String,
     pub git_remote: Option<String>,
     pub git_dirty_count: usize,
+    pub show_git_init_offer: bool,
+    pub gh_cli_available: bool,
     pub session_patterns_learned: usize,
     pub session_review_high: usize,
     pub session_review_medium: usize,
@@ -1225,6 +1220,8 @@ impl AppState {
             run_mode: "auto".into(),
             dual_selection: DualSelection::Off,
             builder_model_specs: Vec::new(),
+            arena_mode: "solo".into(),
+            build_stage_label: String::new(),
             awaiting_review: false,
             review_gates: HashMap::new(),
             review_session_id: None,
@@ -1241,6 +1238,9 @@ impl AppState {
             lmstudio_models: Vec::new(),
             lmstudio_id_to_opencode_path: HashMap::new(),
             ollama_models: Vec::new(),
+            claude_cli_available: false,
+            codex_cli_available: false,
+            copilot_available: false,
             local_model_cursor: 0,
             selected_local_model: String::new(),
             builder_cursor: 0,
@@ -1258,6 +1258,8 @@ impl AppState {
             git_branch: String::new(),
             git_remote: None,
             git_dirty_count: 0,
+            show_git_init_offer: false,
+            gh_cli_available: false,
             session_patterns: Vec::new(),
             session_extensions_used: Vec::new(),
             session_patterns_learned: 0,
@@ -1392,30 +1394,24 @@ impl AppState {
     /// Returns the human-readable badge label for the currently selected builder.
     /// Local models route through opencode (P32.4); no prefix distinguishes them
     /// from native Claude/Codex specs anymore.
+    ///
+    /// `build_stage_label` is normally populated on startup from
+    /// `Config::active_routing_for_stage("build")`. The fallback to
+    /// `builder_model_specs[0]` covers the unlikely case where startup hasn't
+    /// run yet (e.g., a freshly constructed AppState in tests) so the
+    /// clickable ModelLabel hit target in the startup header doesn't collapse
+    /// to zero width.
     pub fn active_builder_label(&self) -> Option<String> {
-        use crate::config::Config;
-        let mut list: Vec<String> = self
-            .builder_model_specs
-            .iter()
-            .map(|s| Config::readable_spec(s))
-            .collect();
-        let spec_count = list.len();
-        if spec_count >= 2 {
-            let combined = list
-                .iter()
-                .take(spec_count)
-                .cloned()
-                .collect::<Vec<_>>()
-                .join("/");
-            list.push(combined);
+        if !self.build_stage_label.is_empty() {
+            return Some(self.build_stage_label.clone());
         }
-        for m in &self.local_models {
-            if !list.contains(m) {
-                list.push(m.clone());
+        if let Some(spec) = self.builder_model_specs.first() {
+            let trimmed = spec.trim();
+            if !trimmed.is_empty() {
+                return Some(trimmed.to_string());
             }
         }
-        let cursor = self.builder_cursor.min(list.len().saturating_sub(1));
-        list.into_iter().nth(cursor)
+        None
     }
 }
 
@@ -1456,6 +1452,9 @@ pub(super) enum AppEvent {
         ollama: Vec<String>,
         lmstudio_opencode_map: HashMap<String, String>,
         opencode_warning: Option<String>,
+        claude_available: bool,
+        codex_available: bool,
+        copilot_available: bool,
     },
 }
 
@@ -1782,7 +1781,7 @@ mod tests {
 
     #[test]
     fn test_routing_section_has_stage_rows() {
-        let sections = settings_sections();
+        let sections = settings_sections(false);
         let routing = sections.iter().find(|s| s.id == "routing").unwrap();
         let stage_fields: Vec<&str> = routing
             .fields
@@ -1794,5 +1793,101 @@ mod tests {
         assert!(stage_fields.contains(&"stage_build"), "missing stage_build");
         assert!(stage_fields.contains(&"stage_audit"), "missing stage_audit");
         assert_eq!(stage_fields.len(), 9, "expected 9 stage picker rows");
+    }
+
+    #[test]
+    fn test_routing_section_dual_mode_has_ab_rows() {
+        let sections = settings_sections(true);
+        let routing = sections.iter().find(|s| s.id == "routing").unwrap();
+        let stage_fields: Vec<&str> = routing
+            .fields
+            .iter()
+            .filter(|f| f.kind == FieldKind::StagePicker)
+            .map(|f| f.id)
+            .collect();
+        assert!(stage_fields.contains(&"stage_plan"), "missing stage_plan");
+        assert!(
+            stage_fields.contains(&"stage_plan_b"),
+            "missing stage_plan_b"
+        );
+        assert!(stage_fields.contains(&"stage_build"), "missing stage_build");
+        assert!(
+            stage_fields.contains(&"stage_build_b"),
+            "missing stage_build_b"
+        );
+        // 9 A rows + 5 B rows (Discovery, PR Review, Patterns, Fixer excluded from B)
+        assert_eq!(stage_fields.len(), 14, "expected 14 stage picker rows (9 A + 5 B)");
+    }
+
+    #[test]
+    fn test_routing_section_dual_mode_labels() {
+        let sections = settings_sections(true);
+        let routing = sections.iter().find(|s| s.id == "routing").unwrap();
+        let labels: Vec<&str> = routing.fields.iter().map(|f| f.label).collect();
+        assert!(labels.contains(&"  Plan (A)"), "missing Plan (A) label");
+        assert!(labels.contains(&"  Plan (B)"), "missing Plan (B) label");
+        assert!(!labels.contains(&"  Plan"), "solo label should not appear in dual mode");
+    }
+
+    #[test]
+    fn test_routing_section_solo_mode_no_b_rows() {
+        let sections = settings_sections(false);
+        let routing = sections.iter().find(|s| s.id == "routing").unwrap();
+        let b_fields: Vec<&str> = routing
+            .fields
+            .iter()
+            .filter(|f| f.id.ends_with("_b"))
+            .map(|f| f.id)
+            .collect();
+        assert!(b_fields.is_empty(), "solo mode should have no _b fields");
+    }
+
+    #[test]
+    fn test_routing_section_has_arena_field() {
+        for dual in [false, true] {
+            let sections = settings_sections(dual);
+            let routing = sections.iter().find(|s| s.id == "routing").unwrap();
+            let arena = routing.fields.iter().find(|f| f.id == "arena");
+            assert!(arena.is_some(), "arena field missing in dual={}", dual);
+            assert_eq!(arena.unwrap().kind, FieldKind::Enum);
+        }
+    }
+
+    #[test]
+    fn test_dual_mode_excludes_patterns_and_pr_review_b() {
+        let sections = settings_sections(true);
+        let routing = sections.iter().find(|s| s.id == "routing").unwrap();
+        let b_ids: Vec<&str> = routing
+            .fields
+            .iter()
+            .filter(|f| f.id.ends_with("_b"))
+            .map(|f| f.id)
+            .collect();
+        assert!(
+            !b_ids.contains(&"stage_patterns_b"),
+            "patterns B should not appear (hardcoded Claude)"
+        );
+        assert!(
+            !b_ids.contains(&"stage_pr_review_b"),
+            "PR review B should not appear (not in build loop)"
+        );
+        assert!(
+            b_ids.contains(&"stage_build_b"),
+            "build B should still appear"
+        );
+    }
+
+    #[test]
+    fn test_dual_mode_keeps_patterns_and_pr_review_a_rows() {
+        let sections = settings_sections(true);
+        let routing = sections.iter().find(|s| s.id == "routing").unwrap();
+        let a_ids: Vec<&str> = routing
+            .fields
+            .iter()
+            .filter(|f| !f.id.ends_with("_b") && f.kind == FieldKind::StagePicker)
+            .map(|f| f.id)
+            .collect();
+        assert!(a_ids.contains(&"stage_patterns"), "patterns A should still appear");
+        assert!(a_ids.contains(&"stage_pr_review"), "PR review A should still appear");
     }
 }

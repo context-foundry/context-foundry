@@ -240,6 +240,9 @@ pub(super) fn handle_startup_event(state: &mut AppState, event: AppEvent, config
             ollama,
             lmstudio_opencode_map,
             opencode_warning,
+            claude_available,
+            codex_available,
+            copilot_available,
         } => {
             let prev = state.selected_local_model.clone();
             let mut merged: Vec<String> = Vec::with_capacity(lmstudio.len() + ollama.len());
@@ -252,6 +255,9 @@ pub(super) fn handle_startup_event(state: &mut AppState, event: AppEvent, config
             state.ollama_models = ollama;
             state.local_models = merged;
             state.lmstudio_id_to_opencode_path = lmstudio_opencode_map;
+            state.claude_cli_available = claude_available;
+            state.codex_cli_available = codex_available;
+            state.copilot_available = copilot_available;
             if let Some(msg) = opencode_warning {
                 state.log(msg);
             }
@@ -278,6 +284,12 @@ pub(super) fn handle_startup_key(state: &mut AppState, key: event::KeyEvent, con
     let Some(_startup) = state.startup.as_ref() else {
         return;
     };
+
+    // Git init offer takes priority over everything -- it's a modal dialog
+    if state.show_git_init_offer {
+        handle_git_init_key(state, key);
+        return;
+    }
 
     // Extension panel navigation (when focused on extensions pane)
     if state.focused_pane == crate::app::state::TuiPane::Extensions
@@ -364,12 +376,15 @@ pub(super) fn handle_startup_key(state: &mut AppState, key: event::KeyEvent, con
             if let Some(tx) = state.event_tx.clone() {
                 let ollama_url = config.ollama_url.clone();
                 tokio::spawn(async move {
-                    let discovery = super::fetch_local_models(ollama_url).await;
+                    let discovery = super::fetch_available_models(ollama_url).await;
                     let _ = tx.send(AppEvent::LocalModels {
                         lmstudio: discovery.lmstudio,
                         ollama: discovery.ollama,
                         lmstudio_opencode_map: discovery.lmstudio_opencode_map,
                         opencode_warning: discovery.opencode_warning,
+                        claude_available: discovery.claude_available,
+                        codex_available: discovery.codex_available,
+                        copilot_available: discovery.copilot_available,
                     });
                 });
             }
@@ -382,7 +397,9 @@ pub(super) fn handle_startup_key(state: &mut AppState, key: event::KeyEvent, con
 
     if state.confirm_quit {
         match key.code {
-            KeyCode::Char('y') | KeyCode::Char('Y') => state.should_quit = true,
+            KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter => {
+                state.should_quit = true;
+            }
             KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => state.confirm_quit = false,
             _ => {}
         }
@@ -879,6 +896,15 @@ pub(super) fn handle_startup_mouse_at(
     mouse: MouseEvent,
     terminal_size: (u16, u16),
 ) {
+    if state.show_git_init_offer && matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
+        let area = ratatui::layout::Rect::new(0, 0, terminal_size.0, terminal_size.1);
+        if let Some(action) =
+            tui::git_init_offer_hit_test(area, state.gh_cli_available, mouse.column, mouse.row)
+        {
+            handle_git_init_action(state, action);
+        }
+        return;
+    }
     if state.show_no_tasks_warning && matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left))
     {
         state.show_no_tasks_warning = false;
@@ -958,6 +984,9 @@ pub(super) fn handle_startup_mouse_at(
                     }
                     tui::StartupMouseTarget::ExploreTab => {
                         state.show_run_view = false;
+                    }
+                    tui::StartupMouseTarget::ModelLabel => {
+                        super::toggle_settings_overlay(state);
                     }
                 }
             } else {
@@ -1496,4 +1525,82 @@ fn is_meaningful_project_file(name: &str) -> bool {
             )
         })
         .unwrap_or(false)
+}
+
+fn handle_git_init_key(state: &mut AppState, key: event::KeyEvent) {
+    let action = match key.code {
+        KeyCode::Char('g') | KeyCode::Char('G') if state.gh_cli_available => {
+            Some(tui::GitInitOfferAction::Github)
+        }
+        KeyCode::Char('l') | KeyCode::Char('L') | KeyCode::Enter => {
+            Some(tui::GitInitOfferAction::Local)
+        }
+        KeyCode::Char('s') | KeyCode::Char('S') | KeyCode::Esc => {
+            Some(tui::GitInitOfferAction::Skip)
+        }
+        _ => None,
+    };
+    if let Some(action) = action {
+        handle_git_init_action(state, action);
+    }
+}
+
+fn handle_git_init_action(state: &mut AppState, action: tui::GitInitOfferAction) {
+    let project_dir = state
+        .buildloop_dir
+        .parent()
+        .unwrap_or(std::path::Path::new("."))
+        .to_path_buf();
+
+    match action {
+        tui::GitInitOfferAction::Github if state.gh_cli_available => {
+            state.show_git_init_offer = false;
+            match crate::git::init_git_github(&project_dir) {
+                Ok(msg) => {
+                    state.log(msg);
+                    state.git_initialized = true;
+                }
+                Err(e) => {
+                    // init_git_github calls init_git_local internally before
+                    // attempting `gh repo create`, so a failure here means the
+                    // local repo is already initialized. Don't re-run
+                    // init_git_local -- it would create a duplicate empty
+                    // initial commit.
+                    state.log(format!(
+                        "GitHub init failed: {} -- using local repo (already initialized)",
+                        e
+                    ));
+                    state.git_initialized = true;
+                }
+            }
+            refresh_git_state(state, &project_dir);
+        }
+        tui::GitInitOfferAction::Local => {
+            state.show_git_init_offer = false;
+            match crate::git::init_git_local(&project_dir) {
+                Ok(msg) => {
+                    state.log(msg);
+                    state.git_initialized = true;
+                }
+                Err(e) => state.log(format!("git init failed: {}", e)),
+            }
+            refresh_git_state(state, &project_dir);
+        }
+        tui::GitInitOfferAction::Skip => {
+            state.show_git_init_offer = false;
+            state.log("Skipped git initialization".to_string());
+        }
+        tui::GitInitOfferAction::Github => {}
+    }
+}
+
+fn refresh_git_state(state: &mut AppState, project_dir: &Path) {
+    if let Some(ctx) = crate::git::gather_git_context(project_dir) {
+        state.git_branch = ctx.branch.clone();
+        state.git_remote = ctx.remote.clone();
+        state.git_dirty_count = ctx.dirty_count;
+        if let Some(ref mut startup) = state.startup {
+            startup.git_context = Some(ctx);
+        }
+    }
 }

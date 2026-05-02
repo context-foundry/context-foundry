@@ -100,16 +100,40 @@ pub fn bootstrap_scout_prompt(
         .unwrap_or_default();
 
     format!(
-        r#"You are the SCOUT agent. Investigate this project and create a task queue.
+        r#"You are the SCOUT agent. Your job is to create implementation tasks.
+
+CRITICAL CONSTRAINT: You are scoped to the CURRENT WORKING DIRECTORY ONLY.
+Never read, list, or explore files outside the project root (no parent directories,
+no sibling projects). This project is self-contained.
+
+PRIMARY DIRECTIVE -- SPEC IS THE PLAN:
+Read {spec_file} FIRST. If it exists, the spec defines what to build. Your tasks
+MUST implement what the spec describes -- nothing else. Do NOT create tasks about
+project setup, scaffolding, scanning, bootstrapping, or documentation. The spec
+already exists; do not create a task to write one.
+
+WRONG (never do this):
+- "Bootstrap the project -- create SPEC.md, README.md, .gitignore..."
+- "Set up project structure and documentation"
+- "Scan the codebase and establish foundations"
+
+RIGHT (do this):
+- "Implement the core game loop with player movement, obstacles, and collision"
+- "Build the REST API with user auth, CRUD endpoints, and database schema"
+- "Create the React dashboard with charts, filters, and data fetching"
+
+For a greenfield project, the first task should CREATE the project AND implement
+core functionality in one pass. Project files (package.json, index.html, etc.)
+are created as part of building the feature, not as a separate task.
 {intent_block}{updated_specs_block}{history_block}
-YOUR JOB:
+INVESTIGATION (do this quickly, then move on to task creation):
 1. Read {spec_file} and UPDATED_SPECS.md if they exist
 2. Detect the tech stack (Cargo.toml, package.json, pyproject.toml, etc.)
 3. Read existing source code to understand what's built
 4. Run build/test commands to find current state
 5. Check git history: git log --oneline -20 --name-only
 
-THEN CREATE TASKS:
+CREATE TASKS:
 Read {tasks_file}. Append tasks to the END using this exact format:
 
 - [ ] T<N>.1: Comprehensive task description
@@ -121,10 +145,10 @@ Bundle related work into FEWER, LARGER tasks:
 - Only split when work is truly independent
 - BAD: 10 tasks for one feature. GOOD: 2-3 tasks per feature.
 
-PRIORITIZATION:
+PRIORITIZATION (for existing projects with code):
 1. Broken functionality
 2. Security issues
-3. Missing core features
+3. Missing core features from the spec
 4. Integration gaps
 5. Test coverage
 
@@ -150,7 +174,9 @@ RULES:
 - Do NOT implement any code -- investigate and create tasks only
 - Do NOT read files in .buildloop/logs/
 - Do NOT use markdown bold/italic in task lines -- the parser is strict
+- STAY WITHIN the current working directory -- do NOT explore parent directories or sibling projects
 - If {tasks_file} does not exist, create it with a Task Queue header
+- If the project is new/empty, create tasks based on the spec -- do not go hunting for existing code elsewhere
 - If nothing credible to do, write "No new tasks discovered.""#
     )
 }
@@ -225,7 +251,8 @@ QUESTION GUIDELINES:
 - Ask about existing test patterns and build/lint configurations
 - Do NOT ask about things already stated in the task description
 - Do NOT ask implementation questions ("how should we...") -- ask investigation questions ("what does the codebase currently...")
-- Each question must be answerable by reading code, running commands, or checking file structure
+- Do NOT ask about sibling projects, parent directories, or external codebases -- scope to this project only
+- Each question must be answerable by reading code, running commands, or checking file structure within the project
 - Prioritize: HIGH = blocks planning entirely, MEDIUM = affects approach, LOW = nice to know
 
 BUDGET: Generate between 3 and {max_questions} questions. Prefer fewer, higher-quality questions.
@@ -243,6 +270,11 @@ pub fn research_prompt(stage_label: &str, prompt_override: Option<&str>) -> Stri
     }
     format!(
         r#"You are the {stage_label} agent for an autonomous build loop.
+
+CRITICAL CONSTRAINT: You are scoped to the CURRENT WORKING DIRECTORY ONLY.
+Never read, list, or explore files outside the project root (no parent directories,
+no sibling projects). If a question asks about external code, answer "not applicable
+-- outside project scope."
 
 YOUR JOB: Read .buildloop/questions.md and answer every question by investigating the codebase.
 You have full access to the project's source code, build system, and file structure.
@@ -276,10 +308,12 @@ naming conventions, etc. Keep this brief.]
 RULES:
 - Write ONLY to .buildloop/research-report.md -- do NOT modify any project source files
 - Do NOT read files in .buildloop/logs/
+- STAY WITHIN the current working directory -- do NOT explore parent directories or sibling projects
 - Answer ALL questions, even if the answer is "not found" or "does not exist"
 - Cite specific file paths and line numbers for every claim
 - Include short code snippets (3-10 lines) as evidence when relevant
-- Do NOT speculate about what should be built -- only report what exists"#
+- Do NOT speculate about what should be built -- only report what exists
+- If the project is new/empty, say so -- do not go hunting for code elsewhere"#
     )
 }
 
@@ -1929,15 +1963,29 @@ RULES:
     )
 }
 
-pub fn append_tasks_prompt(description: &str, tasks_file: &str, _spec_file: &str) -> String {
+pub fn append_tasks_prompt(description: &str, tasks_file: &str, spec_file: &str) -> String {
     format!(
-        r#"Expand the user's request into comprehensive task(s) and append them to {tasks_file}.
+        r#"Expand the user's request into implementation task(s) and append them to {tasks_file}.
 
 USER REQUEST: {description}
 
+CRITICAL: Create tasks that BUILD what the user described. The user wants working
+software, not project scaffolding. Do NOT create tasks about scanning, bootstrapping,
+creating README/CLAUDE.md/.gitignore, or "establishing foundations."
+
+WRONG (never do this):
+- "Perform a complete project scan and produce foundational baseline..."
+- "Bootstrap the project -- create SPEC.md, README.md, .gitignore..."
+- "Set up project structure and documentation"
+
+RIGHT (do this):
+- "Build a browser-based SkiFree clone with player skiing downhill, gorilla enemies, collision detection, scoring, and game-over screen using HTML5 Canvas and vanilla JS"
+- "Create a FastAPI backend with user auth, SQLite database, and REST endpoints for CRUD operations"
+
 STEPS:
-1. Read the LAST 20 lines of {tasks_file} to find the task ID format and next number
-2. Write comprehensive task(s) using Edit to append at the end of {tasks_file}
+1. Read {spec_file} if it exists -- it has the user's full project description
+2. Read the LAST 20 lines of {tasks_file} to find the task ID format and next number
+3. Write comprehensive task(s) using Edit to append at the end of {tasks_file}
 
 TASK FORMAT (parser is strict):
 - [ ] H<N>.1: Comprehensive task description covering the full scope of work
@@ -1945,8 +1993,9 @@ TASK FORMAT (parser is strict):
 RULES:
 - Write FEWER, LARGER tasks -- each runs through a full multi-agent pipeline
 - Bundle related work into single tasks (a single task can touch 5-15 files)
-- Expand the user's brief description into specific, actionable detail
-- Do NOT read source files, grep, or glob -- just format the task well
+- Expand the user's brief description into specific, actionable implementation detail
+- Tasks should create working code, not documentation or project structure
+- Project files (package.json, index.html, etc.) are created as PART of building the feature
 - Do NOT modify existing tasks
 - Only use Read, Edit, and Write tools -- nothing else"#
     )

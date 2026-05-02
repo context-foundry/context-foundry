@@ -29,20 +29,33 @@ When TASKS.md completes, a DISCOVERY agent scans for new work and appends tasks.
 
 ## Dual-Model Arena
 
-`builder_models` in .foundry.json defines two providers (e.g. `["claude:opus", "codex:"]`).
-`dual_selection` controls routing via Ctrl+D:
+`arena_mode` in .foundry.json is the controlling field: `"solo"` runs one pipeline,
+`"dual"` runs two. Toggled from the Settings overlay (Arena field).
 
-| Selection | Behavior |
-|-----------|----------|
-| `first` | All stages route through builder_models[0]. Incompatible model names cleared. |
-| `second` | All stages route through builder_models[1]. Incompatible model names cleared. |
-| `both` | Two complete independent pipelines fork before Scout into separate worktrees. |
+When `arena_mode == "dual"`, `selected_pipeline_configs()` unconditionally returns
+two configs:
+- Pipeline A: `self` with `arena_mode` reset to `"solo"`, `builder_models` and
+  `dual_selection` cleared.
+- Pipeline B: `self.pipeline_b_config()` -- inherits A then overrides any stage
+  whose `b_<stage>_provider` field is non-empty (per-stage routing for B).
 
-Key: provider selection is **full-pipeline**, not per-stage. `Config::for_pipeline()` overrides
-all 6 provider fields and clears model names that belong to the wrong provider.
+`legacy `builder_models` / `dual_selection` are still consulted in solo mode for
+single-pipeline routing (`first`/`second`/`third`), but they no longer trigger
+dual mode -- only `arena_mode == "dual"` does.
 
-In dual mode, worktrees live at `.buildloop/arena/{provider}/` with independent .buildloop/ dirs.
-TUI tab switching (1/2) shows each pipeline's output. No automated winner selection.
+Key invariants:
+- Guards must be written as `arena_mode == "dual"` (positive match), not
+  `!= "solo"`. The serde default for `arena_mode` is `""` (not `"solo"`), so
+  negative guards misfire on configs that omit the field.
+- Selecting a local model snapshots `arena_mode` into `prev_arena_mode` and forces
+  `arena_mode = "solo"` for the duration of the local-model run.
+  `clear_builder_routing` restores it.
+- Pipeline B excludes Scout (outer-loop bootstrap), Discovery, Fixer, PR review,
+  and Pattern extraction -- those run once per task, not once per pipeline.
+
+In dual mode, worktrees live at `.buildloop/arena/{provider}/` with independent
+.buildloop/ dirs. TUI tab switching (1/2) shows each pipeline's output. No
+automated winner selection.
 
 ## Global Config
 

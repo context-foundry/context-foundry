@@ -20,7 +20,6 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
 use super::context::{FailureType, RunContext, StageResult};
-use super::state::DualSelection;
 use super::{review, AppEvent, LoopEvent};
 use crate::budget;
 use crate::doubt_confidence;
@@ -2168,8 +2167,7 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
             // Skip scout if it already ran this session AND the last commit
             // didn't touch any structural files (SPEC.md, Cargo.toml, etc.)
             let skip_scout = qr_has_run && !last_commit_touched_structural(&ctx.project_dir);
-            let dual_arena_mode = ctx.config.builder_models.len() >= 2
-                && DualSelection::from_str(&ctx.config.dual_selection) == DualSelection::Both;
+            let dual_arena_mode = ctx.config.arena_mode == "dual";
             let (success, task_rate_limited, human_denied) = process_task(
                 &task_info,
                 &ctx,
@@ -2718,50 +2716,28 @@ async fn process_task(
     extension_context: &str,
 ) -> (bool, bool, bool) {
     let cc_version = ctx.cc_version.clone();
-    // Handle dual selection: Both forks two full pipelines, First/Second
-    // resolve an effective single-pipeline config before any stage starts.
-    let dual_sel = DualSelection::from_str(&ctx.config.dual_selection);
-    let selected_configs = ctx
-        .config
-        .selected_pipeline_configs(&ctx.config.dual_selection);
-    if ctx.config.builder_models.len() >= 2 {
-        match dual_sel {
-            DualSelection::Both if selected_configs.len() == 2 => {
-                // Dual pipelines use worktrees that don't survive a crash -- clear stale checkpoint.
-                clear_checkpoint(&ctx.buildloop_dir);
-                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::TaskStarted(
-                    task_info.clone(),
-                )));
-                let (v, r) = run_dual_pipelines(
-                    task_info,
-                    ctx,
-                    tx,
-                    cached_patterns,
-                    patterns_dir,
-                    extension_context,
-                    [selected_configs[0].clone(), selected_configs[1].clone()],
-                )
-                .await;
-                return (v, r, false);
-            }
-            DualSelection::First | DualSelection::Second | DualSelection::Third
-                if selected_configs.len() == 1 =>
-            {
-                let pipeline_config = selected_configs[0].clone();
-                let override_ctx = ctx.derive(pipeline_config);
-                // Box::pin to break async recursion (override_ctx has dual_selection cleared)
-                return Box::pin(process_task(
-                    task_info,
-                    &override_ctx,
-                    tx,
-                    skip_scout,
-                    cached_patterns,
-                    patterns_dir,
-                    extension_context,
-                ))
-                .await;
-            }
-            _ => {} // fall through to normal pipeline
+    // arena_mode == "dual" forks two full pipelines (A and pipeline_b_config).
+    // selected_pipeline_configs unconditionally returns 2 configs in that case.
+    if ctx.config.arena_mode == "dual" {
+        let selected_configs = ctx
+            .config
+            .selected_pipeline_configs(&ctx.config.dual_selection);
+        if selected_configs.len() == 2 {
+            clear_checkpoint(&ctx.buildloop_dir);
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::TaskStarted(
+                task_info.clone(),
+            )));
+            let (v, r) = run_dual_pipelines(
+                task_info,
+                ctx,
+                tx,
+                cached_patterns,
+                patterns_dir,
+                extension_context,
+                [selected_configs[0].clone(), selected_configs[1].clone()],
+            )
+            .await;
+            return (v, r, false);
         }
     }
 

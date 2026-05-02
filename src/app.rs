@@ -42,23 +42,25 @@ use crate::utils::{atomic_write_file, truncate_str};
 
 // ─── TUI Mode ────────────────────────────────────────────────
 
-/// Result of probing LM Studio + Ollama + opencode for local model availability.
+/// Result of probing all providers for available models.
 /// `lmstudio_opencode_map` keys are LM Studio short ids (suffix after the last `/`
 /// in the `/v1/models` id) and values are the canonical opencode model paths
 /// emitted by `opencode models lmstudio` (e.g. `lmstudio/qwen/qwen3-coder-30b`).
 /// `opencode_warning` is `Some(msg)` if `opencode models lmstudio` failed or
 /// returned an empty list while LM Studio itself reported models.
-pub(super) struct LocalModelsDiscovery {
+pub(super) struct ModelsDiscovery {
     pub lmstudio: Vec<String>,
     pub ollama: Vec<String>,
     pub lmstudio_opencode_map: HashMap<String, String>,
     pub opencode_warning: Option<String>,
+    pub claude_available: bool,
+    pub codex_available: bool,
+    pub copilot_available: bool,
 }
 
-/// Ping LM Studio and Ollama for available model names.
-/// Also shells out to `opencode models lmstudio` to build a canonical short-id ->
-/// opencode path map so namespaced LM Studio IDs route correctly.
-pub(super) async fn fetch_local_models(ollama_url: String) -> LocalModelsDiscovery {
+/// Probe all providers for available models and CLI presence.
+/// Checks LM Studio, Ollama, opencode, Claude CLI, Codex CLI, and gh (Copilot).
+pub(super) async fn fetch_available_models(ollama_url: String) -> ModelsDiscovery {
     tokio::task::spawn_blocking(move || {
         let mut lmstudio: Vec<String> = Vec::new();
         let mut ollama: Vec<String> = Vec::new();
@@ -127,19 +129,43 @@ pub(super) async fn fetch_local_models(ollama_url: String) -> LocalModelsDiscove
             );
         }
 
-        LocalModelsDiscovery {
+        // Claude CLI: check presence via `claude --version`
+        let claude_available = std::process::Command::new("claude")
+            .arg("--version")
+            .output()
+            .is_ok_and(|o| o.status.success());
+
+        // Codex CLI: check presence via `codex --version`
+        let codex_available = std::process::Command::new("codex")
+            .arg("--version")
+            .output()
+            .is_ok_and(|o| o.status.success());
+
+        // GitHub Copilot: check if `gh auth token` succeeds (implies gh CLI + auth)
+        let copilot_available = std::process::Command::new("gh")
+            .args(["auth", "token"])
+            .output()
+            .is_ok_and(|o| o.status.success());
+
+        ModelsDiscovery {
             lmstudio,
             ollama,
             lmstudio_opencode_map,
             opencode_warning,
+            claude_available,
+            codex_available,
+            copilot_available,
         }
     })
     .await
-    .unwrap_or_else(|_| LocalModelsDiscovery {
+    .unwrap_or_else(|_| ModelsDiscovery {
         lmstudio: vec![],
         ollama: vec![],
         lmstudio_opencode_map: HashMap::new(),
         opencode_warning: None,
+        claude_available: false,
+        codex_available: false,
+        copilot_available: false,
     })
 }
 
@@ -338,6 +364,11 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
     state.run_mode = config.run_mode.clone();
     state.selected_local_model = config.local_model.clone();
     state.builder_model_specs = config.builder_models.clone();
+    state.arena_mode = config.arena_mode.clone();
+    {
+        let (p, m) = config.active_routing_for_stage("build");
+        state.build_stage_label = Config::display_provider_model(&p, &m);
+    }
     if config.builder_models.len() >= 2 {
         state.dual_selection = state::DualSelection::from_str(&config.dual_selection);
     }
@@ -397,9 +428,15 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
         }
     }
 
-    // Git/GH readiness checks (advisory, non-blocking)
-    for msg in git::check_git_readiness(project_dir) {
-        state.log(msg);
+    // Git/GH readiness checks
+    if git::is_git_repo(project_dir) {
+        for msg in git::check_git_readiness(project_dir) {
+            state.log(msg);
+        }
+    } else {
+        state.gh_cli_available = git::is_gh_cli_available();
+        state.show_git_init_offer = true;
+        state.log("No git repository detected".to_string());
     }
     for msg in ContractPaths::resolve(project_dir).warnings() {
         state.log(msg);
@@ -520,6 +557,9 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
                     tui::render_settings_overlay(frame, &state);
                 }
                 // Warning/confirmation banners on top of everything
+                if state.show_git_init_offer {
+                    tui::render_git_init_offer(frame, &state.tui_theme, state.gh_cli_available);
+                }
                 if state.show_no_tasks_warning {
                     tui::render_no_tasks_warning(frame, &state.tui_theme);
                 }
@@ -1109,6 +1149,9 @@ fn handle_planning_event(state: &mut AppState, event: AppEvent, config: &Config)
             ollama,
             lmstudio_opencode_map,
             opencode_warning,
+            claude_available,
+            codex_available,
+            copilot_available,
         } => {
             let mut merged: Vec<String> = Vec::with_capacity(lmstudio.len() + ollama.len());
             for m in lmstudio.iter().chain(ollama.iter()) {
@@ -1120,6 +1163,9 @@ fn handle_planning_event(state: &mut AppState, event: AppEvent, config: &Config)
             state.ollama_models = ollama;
             state.local_models = merged;
             state.lmstudio_id_to_opencode_path = lmstudio_opencode_map;
+            state.claude_cli_available = claude_available;
+            state.codex_cli_available = codex_available;
+            state.copilot_available = copilot_available;
             if let Some(msg) = opencode_warning {
                 state.log(msg);
             }
@@ -1180,7 +1226,8 @@ fn toggle_settings_overlay(state: &mut AppState) -> bool {
     state.show_settings_overlay = !state.show_settings_overlay;
     state.settings_overlay_cursor = 0;
     if !was_open {
-        let mut ov = state::SettingsOverlayState::new();
+        let dual = state.arena_mode == "dual";
+        let mut ov = state::SettingsOverlayState::with_dual_mode(dual);
         let project_dir = state.buildloop_dir.parent().unwrap_or(Path::new("."));
         let config_path = project_dir.join(".foundry.json");
         ov.original_json = std::fs::read_to_string(&config_path).ok();
@@ -1349,7 +1396,7 @@ fn load_settings_config(state: &AppState) -> Config {
 }
 
 fn settings_field_kind(field_id: &str) -> state::FieldKind {
-    state::settings_sections()
+    state::settings_sections(true)
         .iter()
         .flat_map(|section| section.fields.iter())
         .find(|field| field.id == field_id)
@@ -1679,6 +1726,7 @@ pub(super) fn handle_settings_overlay_mouse(
     }
 
     enum OverlayMouseAction {
+        PickerClose,
         PickerFilter,
         PickerItem(usize),
         Row(usize),
@@ -1691,6 +1739,10 @@ pub(super) fn handle_settings_overlay_mouse(
         };
         if let Some(ref picker) = ov.picker {
             match tui::model_picker_hit_test(modal, picker, mouse.column, mouse.row) {
+                Some(tui::ModelPickerMouseTarget::CloseBtn)
+                | Some(tui::ModelPickerMouseTarget::OutsideClick) => {
+                    OverlayMouseAction::PickerClose
+                }
                 Some(tui::ModelPickerMouseTarget::FilterBar) => OverlayMouseAction::PickerFilter,
                 Some(tui::ModelPickerMouseTarget::Item(index)) => {
                     OverlayMouseAction::PickerItem(index)
@@ -1707,6 +1759,11 @@ pub(super) fn handle_settings_overlay_mouse(
     };
 
     match action {
+        OverlayMouseAction::PickerClose => {
+            if let Some(ref mut ov) = state.settings_overlay {
+                ov.picker = None;
+            }
+        }
         OverlayMouseAction::PickerFilter => {
             if let Some(ref mut ov) = state.settings_overlay {
                 if let Some(ref mut picker) = ov.picker {
@@ -1746,7 +1803,9 @@ pub(super) fn handle_settings_overlay_mouse(
 fn handle_planning_key(state: &mut AppState, key: event::KeyEvent, config: &Config) {
     if state.confirm_quit {
         match key.code {
-            KeyCode::Char('y') | KeyCode::Char('Y') => state.should_quit = true,
+            KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter => {
+                state.should_quit = true;
+            }
             KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => state.confirm_quit = false,
             _ => {}
         }
@@ -1802,12 +1861,15 @@ fn handle_planning_key(state: &mut AppState, key: event::KeyEvent, config: &Conf
             if let Some(tx) = state.event_tx.clone() {
                 let ollama_url = config.ollama_url.clone();
                 tokio::spawn(async move {
-                    let discovery = fetch_local_models(ollama_url).await;
+                    let discovery = fetch_available_models(ollama_url).await;
                     let _ = tx.send(AppEvent::LocalModels {
                         lmstudio: discovery.lmstudio,
                         ollama: discovery.ollama,
                         lmstudio_opencode_map: discovery.lmstudio_opencode_map,
                         opencode_warning: discovery.opencode_warning,
+                        claude_available: discovery.claude_available,
+                        codex_available: discovery.codex_available,
+                        copilot_available: discovery.copilot_available,
                     });
                 });
             }
@@ -2295,7 +2357,17 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
             }
         },
         AppEvent::Key(key) => {
-            if state.inject_input.is_some() {
+            if state.confirm_quit {
+                match key.code {
+                    KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter => {
+                        state.should_quit = true;
+                    }
+                    KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
+                        state.confirm_quit = false;
+                    }
+                    _ => {}
+                }
+            } else if state.inject_input.is_some() {
                 handle_inject_key(state, key);
             } else if state.dual_arena_ready()
                 && matches!(key.code, KeyCode::Char('q') | KeyCode::Esc)
@@ -2375,12 +2447,15 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                             if let Some(tx) = state.event_tx.clone() {
                                 let ollama_url = config.ollama_url.clone();
                                 tokio::spawn(async move {
-                                    let discovery = fetch_local_models(ollama_url).await;
+                                    let discovery = fetch_available_models(ollama_url).await;
                                     let _ = tx.send(AppEvent::LocalModels {
                                         lmstudio: discovery.lmstudio,
                                         ollama: discovery.ollama,
                                         lmstudio_opencode_map: discovery.lmstudio_opencode_map,
                                         opencode_warning: discovery.opencode_warning,
+                                        claude_available: discovery.claude_available,
+                                        codex_available: discovery.codex_available,
+                                        copilot_available: discovery.copilot_available,
                                     });
                                 });
                             }
@@ -2536,12 +2611,15 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                             if let Some(tx) = state.event_tx.clone() {
                                 let ollama_url = config.ollama_url.clone();
                                 tokio::spawn(async move {
-                                    let discovery = fetch_local_models(ollama_url).await;
+                                    let discovery = fetch_available_models(ollama_url).await;
                                     let _ = tx.send(AppEvent::LocalModels {
                                         lmstudio: discovery.lmstudio,
                                         ollama: discovery.ollama,
                                         lmstudio_opencode_map: discovery.lmstudio_opencode_map,
                                         opencode_warning: discovery.opencode_warning,
+                                        claude_available: discovery.claude_available,
+                                        codex_available: discovery.codex_available,
+                                        copilot_available: discovery.copilot_available,
                                     });
                                 });
                             }
@@ -2732,6 +2810,9 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
             ollama,
             lmstudio_opencode_map,
             opencode_warning,
+            claude_available,
+            codex_available,
+            copilot_available,
         } => {
             let mut merged: Vec<String> = Vec::with_capacity(lmstudio.len() + ollama.len());
             for m in lmstudio.iter().chain(ollama.iter()) {
@@ -2743,6 +2824,9 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
             state.ollama_models = ollama;
             state.local_models = merged;
             state.lmstudio_id_to_opencode_path = lmstudio_opencode_map;
+            state.claude_cli_available = claude_available;
+            state.codex_cli_available = codex_available;
+            state.copilot_available = copilot_available;
             if let Some(msg) = opencode_warning {
                 state.log(msg);
             }
@@ -3543,8 +3627,15 @@ pub(super) fn open_model_picker(state: &mut AppState, field_id: &str) {
         Some(id) => id,
         None => return,
     };
-    let entries = Config::list_available_models(&state.lmstudio_models, &state.ollama_models);
-    let picker = state::ModelPicker::new(stage_id, entries);
+    let is_b = Config::is_pipeline_b_field(field_id);
+    let entries = Config::list_available_models(
+        state.claude_cli_available,
+        state.codex_cli_available,
+        state.copilot_available,
+        &state.lmstudio_models,
+        &state.ollama_models,
+    );
+    let picker = state::ModelPicker::with_pipeline(stage_id, is_b, entries);
     if let Some(ref mut ov) = state.settings_overlay {
         ov.picker = Some(picker);
     }
@@ -3552,7 +3643,7 @@ pub(super) fn open_model_picker(state: &mut AppState, field_id: &str) {
 }
 
 pub(super) fn handle_picker_select(state: &mut AppState) {
-    let (stage, provider, model) = {
+    let (stage, pipeline_b, provider, model) = {
         let ov = match state.settings_overlay.as_ref() {
             Some(ov) => ov,
             None => return,
@@ -3582,6 +3673,7 @@ pub(super) fn handle_picker_select(state: &mut AppState) {
             }
             state::PickerItem::Entry(entry) => (
                 picker.stage.clone(),
+                picker.pipeline_b,
                 entry.provider.clone(),
                 entry.model.clone(),
             ),
@@ -3589,10 +3681,19 @@ pub(super) fn handle_picker_select(state: &mut AppState) {
     };
 
     let project_dir = overlay_project_dir(state);
-    if provider.is_empty() && model.is_empty() {
+    if pipeline_b {
+        if provider.is_empty() && model.is_empty() {
+            Config::clear_stage_routing_b(project_dir, &stage);
+        } else {
+            Config::set_stage_routing_b(project_dir, &stage, &provider, &model);
+        }
+    } else if provider.is_empty() && model.is_empty() {
         Config::clear_stage_routing(project_dir, &stage);
     } else {
         Config::set_stage_routing(project_dir, &stage, &provider, &model);
+    }
+    if stage == "build" && !pipeline_b {
+        state.build_stage_label = Config::display_provider_model(&provider, &model);
     }
     mark_settings_dirty(state);
 
@@ -3606,19 +3707,31 @@ fn cycle_enum_field(state: &mut AppState, field_id: &str, direction: i32) {
     let project_dir = overlay_project_dir(state).to_path_buf();
     match field_id {
         "arena" => {
-            let unified = build_unified_builders(&state.builder_model_specs, &state.local_models);
-            if !unified.is_empty() {
-                if direction > 0 {
-                    state.builder_cursor = (state.builder_cursor + 1) % unified.len();
-                } else {
-                    state.builder_cursor = if state.builder_cursor == 0 {
-                        unified.len() - 1
-                    } else {
-                        state.builder_cursor - 1
-                    };
-                }
-                let val = unified[state.builder_cursor].clone();
-                apply_builder_selection(state, &val);
+            let new_mode = if state.arena_mode == "dual" { "solo" } else { "dual" };
+            state.arena_mode = new_mode.to_string();
+            Config::save_arena_mode(&project_dir, new_mode);
+            if new_mode == "solo" {
+                state.reset_dual_build();
+            }
+            let dual = new_mode == "dual";
+            if let Some(ref mut ov) = state.settings_overlay {
+                // Preserve user-visible overlay state across the rebuild:
+                // focus position, scroll, expanded/collapsed sections, dirty
+                // flag, and baseline JSON. Then clamp focus since dual->solo
+                // drops the Pipeline B rows (~5 fields) and could leave the
+                // cursor out of range.
+                let old_focus = ov.focus;
+                let old_scroll = ov.scroll_offset;
+                let old_expanded = ov.expanded_sections.clone();
+                let old_dirty = ov.dirty;
+                let old_original = ov.original_json.clone();
+                *ov = state::SettingsOverlayState::with_dual_mode(dual);
+                ov.focus = old_focus;
+                ov.scroll_offset = old_scroll;
+                ov.expanded_sections = old_expanded;
+                ov.dirty = old_dirty;
+                ov.original_json = old_original;
+                ov.clamp_focus();
             }
         }
         "builder" => {

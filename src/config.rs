@@ -102,6 +102,13 @@ pub struct Config {
     #[serde(default)]
     #[allow(dead_code)]
     pub prev_dual_selection: String,
+    /// Snapshot of `arena_mode` taken when a local model was selected via
+    /// `save_builder_routing`. Restored by `clear_builder_routing` so picking
+    /// a local model from a dual-arena config and switching back returns the
+    /// user to dual mode instead of stranding them in solo.
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub prev_arena_mode: String,
     pub reviewer_model: String,
     pub fixer_model: String,
     pub discovery_model: String,
@@ -435,6 +442,52 @@ pub struct Config {
     /// across the pipeline (e.g. Claude for Plan, Codex for Build, Claude for Audit).
     #[serde(default)]
     pub stage_overrides: Vec<String>,
+
+    /// Arena mode: "solo" (one pipeline) or "dual" (two parallel pipelines).
+    #[serde(default)]
+    pub arena_mode: String,
+
+    // Pipeline B per-stage routing (used only in dual mode).
+    #[serde(default)]
+    pub b_scout_provider: String,
+    #[serde(default)]
+    pub b_scout_model: String,
+    #[serde(default)]
+    pub b_query_provider: String,
+    #[serde(default)]
+    pub b_query_model: String,
+    #[serde(default)]
+    pub b_research_provider: String,
+    #[serde(default)]
+    pub b_research_model: String,
+    #[serde(default)]
+    pub b_planner_provider: String,
+    #[serde(default)]
+    pub b_planner_model: String,
+    #[serde(default)]
+    pub b_builder_provider: String,
+    #[serde(default)]
+    pub b_builder_model: String,
+    #[serde(default)]
+    pub b_reviewer_provider: String,
+    #[serde(default)]
+    pub b_reviewer_model: String,
+    #[serde(default)]
+    pub b_fixer_provider: String,
+    #[serde(default)]
+    pub b_fixer_model: String,
+    #[serde(default)]
+    pub b_discovery_provider: String,
+    #[serde(default)]
+    pub b_discovery_model: String,
+    #[serde(default)]
+    pub b_pr_review_provider: String,
+    #[serde(default)]
+    pub b_pr_review_model: String,
+    #[serde(default)]
+    pub b_pattern_extraction_provider: String,
+    #[serde(default)]
+    pub b_pattern_extraction_model: String,
 }
 
 impl Default for Config {
@@ -449,6 +502,7 @@ impl Default for Config {
             dual_selection: "first".into(),
             prev_builder_models: Vec::new(),
             prev_dual_selection: String::new(),
+            prev_arena_mode: String::new(),
             reviewer_model: "sonnet".into(),
             fixer_model: "sonnet".into(),
             discovery_model: "opus".into(),
@@ -547,6 +601,27 @@ impl Default for Config {
             pipeline_stages: default_pipeline_stages(),
             on_task_complete: None,
             stage_overrides: Vec::new(),
+            arena_mode: "solo".into(),
+            b_scout_provider: String::new(),
+            b_scout_model: String::new(),
+            b_query_provider: String::new(),
+            b_query_model: String::new(),
+            b_research_provider: String::new(),
+            b_research_model: String::new(),
+            b_planner_provider: String::new(),
+            b_planner_model: String::new(),
+            b_builder_provider: String::new(),
+            b_builder_model: String::new(),
+            b_reviewer_provider: String::new(),
+            b_reviewer_model: String::new(),
+            b_fixer_provider: String::new(),
+            b_fixer_model: String::new(),
+            b_discovery_provider: String::new(),
+            b_discovery_model: String::new(),
+            b_pr_review_provider: String::new(),
+            b_pr_review_model: String::new(),
+            b_pattern_extraction_provider: String::new(),
+            b_pattern_extraction_model: String::new(),
         }
     }
 }
@@ -848,7 +923,20 @@ impl Config {
     pub fn display_provider_model(provider: &str, model: &str) -> String {
         let provider = Self::parse_provider(provider);
         match provider {
-            ModelProvider::Claude => "Claude".to_string(),
+            ModelProvider::Claude => {
+                let model = model.trim();
+                if model.is_empty() {
+                    "Claude".to_string()
+                } else {
+                    let tier = match model {
+                        "opus" | "claude-opus-4-7" => "Opus",
+                        "sonnet" | "claude-sonnet-4-6" => "Sonnet",
+                        "haiku" | "claude-haiku-4-5" => "Haiku",
+                        other => other,
+                    };
+                    format!("Claude {tier}")
+                }
+            }
             ModelProvider::Codex => {
                 let model = model.trim();
                 if model.is_empty() {
@@ -1085,6 +1173,11 @@ impl Config {
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_string();
+        let current_arena: String = value
+            .get("arena_mode")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
         let prev_models: Vec<String> = value
             .get("prev_builder_models")
             .and_then(|v| v.as_array())
@@ -1103,9 +1196,11 @@ impl Config {
         if !current_is_local && !prev_already_recorded {
             value["prev_builder_models"] = serde_json::json!(current_models);
             value["prev_dual_selection"] = serde_json::json!(current_selection);
+            value["prev_arena_mode"] = serde_json::json!(current_arena);
         }
         value["builder_models"] = serde_json::json!(vec![new_spec.clone()]);
         value["dual_selection"] = serde_json::json!("first");
+        value["arena_mode"] = serde_json::json!("solo");
         value["builder_provider"] = serde_json::json!(provider);
         value["builder_model"] = serde_json::json!(model);
         let json = serde_json::to_string_pretty(&value).unwrap_or_default();
@@ -1145,6 +1240,10 @@ impl Config {
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_string();
+        let prev_arena: Option<String> = value
+            .get("prev_arena_mode")
+            .and_then(|v| v.as_str())
+            .map(String::from);
 
         // D2.9: only restore from snapshot when one actually exists. Without
         // this guard, calling clear_builder_routing on a tree that's already
@@ -1164,9 +1263,13 @@ impl Config {
         } else {
             value["dual_selection"] = serde_json::json!(prev_selection);
         }
+        if let Some(arena) = prev_arena {
+            value["arena_mode"] = serde_json::json!(arena);
+        }
         if let Some(obj) = value.as_object_mut() {
             obj.remove("prev_builder_models");
             obj.remove("prev_dual_selection");
+            obj.remove("prev_arena_mode");
         }
         value["builder_provider"] = serde_json::json!("claude");
         value["builder_model"] = serde_json::json!("opus");
@@ -1318,6 +1421,15 @@ impl Config {
     /// Return the effective pipeline configs for the active dual selection.
     /// Single-selection modes return one config; dual mode returns two.
     pub fn selected_pipeline_configs(&self, selection: &str) -> Vec<Config> {
+        // New arena_mode-based routing: "dual" uses per-stage B fields
+        if self.arena_mode == "dual" {
+            let mut a = self.clone();
+            a.arena_mode = "solo".into();
+            a.builder_models.clear();
+            a.dual_selection.clear();
+            return vec![a, self.pipeline_b_config()];
+        }
+        // Legacy builder_models-based routing
         match selection {
             "first" if !self.builder_models.is_empty() => {
                 vec![self.for_pipeline(&self.builder_models[0])]
@@ -1328,10 +1440,6 @@ impl Config {
             "third" if self.builder_models.len() >= 3 => {
                 vec![self.for_pipeline(&self.builder_models[2])]
             }
-            "both" if self.builder_models.len() >= 2 => vec![
-                self.for_pipeline(&self.builder_models[0]),
-                self.for_pipeline(&self.builder_models[1]),
-            ],
             _ => vec![self.clone()],
         }
     }
@@ -1524,9 +1632,14 @@ impl Config {
             "tmux_keep_sessions" => self.tmux_keep_sessions.to_string(),
             "agent_backend" => self.agent_backend.clone(),
             "backpressure_only" => self.backpressure_only.to_string(),
+            "arena_mode" => self.arena_mode.clone(),
             _ => {
                 if let Some(stage_id) = Self::stage_id_from_field(field_id) {
-                    let (p, m) = self.active_routing_for_stage(stage_id);
+                    let (p, m) = if Self::is_pipeline_b_field(field_id) {
+                        self.active_routing_for_stage_b(stage_id)
+                    } else {
+                        self.active_routing_for_stage(stage_id)
+                    };
                     if p.is_empty() && m.is_empty() {
                         "(default)".into()
                     } else {
@@ -1678,20 +1791,169 @@ impl Config {
 
     pub fn stage_id_from_field(field_id: &str) -> Option<&str> {
         match field_id {
-            "stage_query" => Some("query"),
-            "stage_research" => Some("research"),
-            "stage_plan" => Some("plan"),
-            "stage_build" => Some("build"),
-            "stage_audit" => Some("audit"),
-            "stage_discovery" => Some("discovery"),
-            "stage_pr_review" => Some("pr_review"),
-            "stage_patterns" => Some("pattern_extraction"),
-            "stage_fixer" => Some("fixer"),
+            "stage_query" | "stage_query_b" => Some("query"),
+            "stage_research" | "stage_research_b" => Some("research"),
+            "stage_plan" | "stage_plan_b" => Some("plan"),
+            "stage_build" | "stage_build_b" => Some("build"),
+            "stage_audit" | "stage_audit_b" => Some("audit"),
+            "stage_discovery" | "stage_discovery_b" => Some("discovery"),
+            "stage_pr_review" | "stage_pr_review_b" => Some("pr_review"),
+            "stage_patterns" | "stage_patterns_b" => Some("pattern_extraction"),
+            "stage_fixer" | "stage_fixer_b" => Some("fixer"),
             _ => None,
         }
     }
 
+    pub fn is_pipeline_b_field(field_id: &str) -> bool {
+        field_id.ends_with("_b")
+            && matches!(
+                field_id,
+                "stage_query_b"
+                    | "stage_research_b"
+                    | "stage_plan_b"
+                    | "stage_build_b"
+                    | "stage_audit_b"
+                    | "stage_discovery_b"
+                    | "stage_pr_review_b"
+                    | "stage_patterns_b"
+                    | "stage_fixer_b"
+            )
+    }
+
+    fn stage_field_keys_b(stage_id: &str) -> (&'static str, &'static str) {
+        match stage_id {
+            "scout" => ("b_scout_provider", "b_scout_model"),
+            "query" => ("b_query_provider", "b_query_model"),
+            "research" => ("b_research_provider", "b_research_model"),
+            "plan" => ("b_planner_provider", "b_planner_model"),
+            "build" | "implement" => ("b_builder_provider", "b_builder_model"),
+            "audit" | "doubt" => ("b_reviewer_provider", "b_reviewer_model"),
+            "discovery" | "discover" => ("b_discovery_provider", "b_discovery_model"),
+            "pr_review" => ("b_pr_review_provider", "b_pr_review_model"),
+            "pattern_extraction" | "patterns" => {
+                ("b_pattern_extraction_provider", "b_pattern_extraction_model")
+            }
+            "fixer" => ("b_fixer_provider", "b_fixer_model"),
+            _ => ("b_builder_provider", "b_builder_model"),
+        }
+    }
+
+    pub fn active_routing_for_stage_b(&self, stage_id: &str) -> (String, String) {
+        let (prov, model) = match stage_id {
+            "scout" => (&self.b_scout_provider, &self.b_scout_model),
+            "query" => (&self.b_query_provider, &self.b_query_model),
+            "research" => (&self.b_research_provider, &self.b_research_model),
+            "plan" => (&self.b_planner_provider, &self.b_planner_model),
+            "build" | "implement" => (&self.b_builder_provider, &self.b_builder_model),
+            "audit" | "doubt" => (&self.b_reviewer_provider, &self.b_reviewer_model),
+            "discovery" | "discover" => (&self.b_discovery_provider, &self.b_discovery_model),
+            "pr_review" => (&self.b_pr_review_provider, &self.b_pr_review_model),
+            "pattern_extraction" | "patterns" => (
+                &self.b_pattern_extraction_provider,
+                &self.b_pattern_extraction_model,
+            ),
+            "fixer" => (&self.b_fixer_provider, &self.b_fixer_model),
+            _ => (&self.b_builder_provider, &self.b_builder_model),
+        };
+        // Provider-gated: model-only without provider is not a valid B override
+        // (runtime ignores it). Return empty so UI shows "(default)" / inherits A.
+        if prov.is_empty() {
+            (String::new(), String::new())
+        } else {
+            (prov.clone(), model.clone())
+        }
+    }
+
+    pub fn set_stage_routing_b(project_dir: &Path, stage_id: &str, provider: &str, model: &str) {
+        let config_path = project_dir.join(".foundry.json");
+        let content = std::fs::read_to_string(&config_path).unwrap_or_else(|_| "{}".to_string());
+        let mut value: serde_json::Value =
+            serde_json::from_str(&content).unwrap_or_else(|_| serde_json::json!({}));
+
+        let (prov_key, model_key) = Self::stage_field_keys_b(stage_id);
+        value[prov_key] = serde_json::json!(provider);
+        value[model_key] = serde_json::json!(model);
+
+        let json = serde_json::to_string_pretty(&value).unwrap_or_default();
+        if let Err(e) = crate::utils::atomic_write_file(&config_path, json.as_bytes()) {
+            eprintln!(
+                "warning: failed to save pipeline B routing to {} -- {e}",
+                config_path.display(),
+            );
+        }
+    }
+
+    pub fn clear_stage_routing_b(project_dir: &Path, stage_id: &str) {
+        let config_path = project_dir.join(".foundry.json");
+        let content = std::fs::read_to_string(&config_path).unwrap_or_else(|_| "{}".to_string());
+        let mut value: serde_json::Value =
+            serde_json::from_str(&content).unwrap_or_else(|_| serde_json::json!({}));
+
+        let (prov_key, model_key) = Self::stage_field_keys_b(stage_id);
+        if let Some(obj) = value.as_object_mut() {
+            obj.remove(prov_key);
+            obj.remove(model_key);
+        }
+
+        let json = serde_json::to_string_pretty(&value).unwrap_or_default();
+        if let Err(e) = crate::utils::atomic_write_file(&config_path, json.as_bytes()) {
+            eprintln!(
+                "warning: failed to clear pipeline B routing in {} -- {e}",
+                config_path.display(),
+            );
+        }
+    }
+
+    pub fn save_arena_mode(project_dir: &Path, mode: &str) {
+        let config_path = project_dir.join(".foundry.json");
+        let content = std::fs::read_to_string(&config_path).unwrap_or_else(|_| "{}".to_string());
+        let mut value: serde_json::Value =
+            serde_json::from_str(&content).unwrap_or_else(|_| serde_json::json!({}));
+        value["arena_mode"] = serde_json::json!(mode);
+        let json = serde_json::to_string_pretty(&value).unwrap_or_default();
+        if let Err(e) = crate::utils::atomic_write_file(&config_path, json.as_bytes()) {
+            eprintln!(
+                "warning: failed to save arena_mode to {} -- {e}",
+                config_path.display(),
+            );
+        }
+    }
+
+    pub fn pipeline_b_config(&self) -> Config {
+        let mut config = self.clone();
+        // Only override stages that actually run per-pipeline in dual mode.
+        // Excluded: scout (outer loop bootstrap), discovery (outer loop),
+        // fixer (no runtime invocations), pr_review, pattern_extraction.
+        if !self.b_query_provider.is_empty() {
+            config.query_provider = self.b_query_provider.clone();
+            config.query_model = self.b_query_model.clone();
+        }
+        if !self.b_research_provider.is_empty() {
+            config.research_provider = self.b_research_provider.clone();
+            config.research_model = self.b_research_model.clone();
+        }
+        if !self.b_planner_provider.is_empty() {
+            config.planner_provider = self.b_planner_provider.clone();
+            config.planner_model = self.b_planner_model.clone();
+        }
+        if !self.b_builder_provider.is_empty() {
+            config.builder_provider = self.b_builder_provider.clone();
+            config.builder_model = self.b_builder_model.clone();
+        }
+        if !self.b_reviewer_provider.is_empty() {
+            config.reviewer_provider = self.b_reviewer_provider.clone();
+            config.reviewer_model = self.b_reviewer_model.clone();
+        }
+        config.builder_models.clear();
+        config.dual_selection.clear();
+        config.arena_mode = "solo".into();
+        config
+    }
+
     pub fn list_available_models(
+        claude_available: bool,
+        codex_available: bool,
+        copilot_available: bool,
         lmstudio: &[String],
         ollama: &[String],
     ) -> Vec<crate::app::ModelEntry> {
@@ -1699,49 +1961,50 @@ impl Config {
 
         let mut entries = Vec::new();
 
-        // Claude models
-        for (model, rec) in [
-            ("claude-opus-4-7", true),
-            ("claude-sonnet-4-6", false),
-            ("claude-haiku-4-5", false),
-        ] {
-            entries.push(ModelEntry {
-                provider: "claude".into(),
-                model: model.into(),
-                label: model.into(),
-                recommended: rec,
-                group: "Claude (OAuth - Subscription)".into(),
-            });
+        if claude_available {
+            for (model, rec) in [
+                ("claude-opus-4-7", true),
+                ("claude-sonnet-4-6", false),
+                ("claude-haiku-4-5", false),
+            ] {
+                entries.push(ModelEntry {
+                    provider: "claude".into(),
+                    model: model.into(),
+                    label: model.into(),
+                    recommended: rec,
+                    group: "Claude".into(),
+                });
+            }
         }
 
-        // Codex models
-        for model in ["gpt-5.4", "gpt-5.4-thinking"] {
-            entries.push(ModelEntry {
-                provider: "codex".into(),
-                model: model.into(),
-                label: model.into(),
-                recommended: false,
-                group: "Codex (OAuth - Subscription)".into(),
-            });
+        if codex_available {
+            for model in ["gpt-5.4", "gpt-5.4-thinking"] {
+                entries.push(ModelEntry {
+                    provider: "codex".into(),
+                    model: model.into(),
+                    label: model.into(),
+                    recommended: false,
+                    group: "Codex".into(),
+                });
+            }
         }
 
-        // GitHub Copilot models (rides existing Copilot subscription via gh CLI)
-        for (model, rec) in [
-            ("gpt-4o", true),
-            ("gpt-4o-mini", false),
-            ("claude-3.7-sonnet-20250219", false),
-            ("o3-mini", false),
-        ] {
-            entries.push(ModelEntry {
-                provider: "ghcopilot".into(),
-                model: model.into(),
-                label: model.into(),
-                recommended: rec,
-                group: "GitHub Copilot (OAuth)".into(),
-            });
+        if copilot_available {
+            for (model, rec) in [
+                ("claude-sonnet-4-6", true),
+                ("gpt-4o", false),
+                ("o3-mini", false),
+            ] {
+                entries.push(ModelEntry {
+                    provider: "ghcopilot".into(),
+                    model: model.into(),
+                    label: model.into(),
+                    recommended: rec,
+                    group: "GitHub Copilot".into(),
+                });
+            }
         }
 
-        // LM Studio models
         for m in lmstudio {
             entries.push(ModelEntry {
                 provider: "opencode".into(),
@@ -1752,7 +2015,6 @@ impl Config {
             });
         }
 
-        // Ollama models
         for m in ollama {
             entries.push(ModelEntry {
                 provider: "opencode".into(),
@@ -1763,7 +2025,6 @@ impl Config {
             });
         }
 
-        // "Use stage default" sentinel
         entries.push(ModelEntry {
             provider: String::new(),
             model: String::new(),
@@ -1920,6 +2181,36 @@ mod tests {
         assert!(value.get("prev_dual_selection").is_none());
     }
 
+    /// Round-trip: when a user is in dual arena and selects a local model,
+    /// arena_mode must be forced to "solo" (so two pipelines don't spawn with
+    /// the same local model) and snapshotted into prev_arena_mode. Restoring
+    /// must put arena_mode back to "dual".
+    #[test]
+    fn local_model_routing_snapshots_and_restores_arena_mode() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join(".foundry.json"),
+            r#"{
+                "builder_models":["claude:opus","codex:"],
+                "dual_selection":"both",
+                "arena_mode":"dual"
+            }"#,
+        )
+        .unwrap();
+        Config::save_builder_routing(dir.path(), "opencode", "lmstudio/qwen3.6-35b-a3b");
+
+        let content = std::fs::read_to_string(dir.path().join(".foundry.json")).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&content).unwrap();
+        assert_eq!(value["arena_mode"], "solo", "local-model selection must drop to solo");
+        assert_eq!(value["prev_arena_mode"], "dual", "prior arena_mode must be snapshotted");
+
+        Config::clear_builder_routing(dir.path());
+        let content = std::fs::read_to_string(dir.path().join(".foundry.json")).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&content).unwrap();
+        assert_eq!(value["arena_mode"], "dual", "arena_mode must be restored on clear");
+        assert!(value.get("prev_arena_mode").is_none(), "snapshot must be removed");
+    }
+
     #[test]
     fn clear_builder_routing_with_no_snapshot_is_a_noop() {
         // D2.9: clear_builder_routing must be a no-op when no
@@ -2052,8 +2343,18 @@ mod tests {
 
     #[test]
     fn display_provider_model_formats_empty_and_named_models() {
-        assert_eq!(Config::display_provider_model("claude", "opus"), "Claude");
-        assert_eq!(Config::display_provider_model("claude", "sonnet"), "Claude");
+        assert_eq!(Config::display_provider_model("claude", ""), "Claude");
+        assert_eq!(Config::display_provider_model("claude", "opus"), "Claude Opus");
+        assert_eq!(Config::display_provider_model("claude", "sonnet"), "Claude Sonnet");
+        assert_eq!(Config::display_provider_model("claude", "haiku"), "Claude Haiku");
+        assert_eq!(
+            Config::display_provider_model("claude", "claude-opus-4-7"),
+            "Claude Opus"
+        );
+        assert_eq!(
+            Config::display_provider_model("claude", "claude-sonnet-4-6"),
+            "Claude Sonnet"
+        );
         assert_eq!(Config::display_provider_model("codex", ""), "Codex");
     }
 
@@ -2106,18 +2407,50 @@ mod tests {
     }
 
     #[test]
-    fn selected_pipeline_configs_expand_both_selection() {
+    fn selected_pipeline_configs_expand_dual_arena() {
         let mut config = Config::default();
-        config.builder_models = vec!["claude:opus".into(), "codex:".into()];
+        config.arena_mode = "dual".into();
+        config.b_builder_provider = "codex".into();
+        config.b_builder_model = String::new();
 
         let selected = config.selected_pipeline_configs("both");
 
         assert_eq!(selected.len(), 2);
         assert_eq!(selected[0].builder_provider, "claude");
-        assert_eq!(selected[0].builder_model, "opus");
+        assert_eq!(selected[0].arena_mode, "solo");
         assert_eq!(selected[1].builder_provider, "codex");
-        assert_eq!(selected[1].builder_model, "");
-        assert_eq!(selected[1].planner_model, "");
+        assert_eq!(selected[1].arena_mode, "solo");
+    }
+
+    #[test]
+    fn selected_pipeline_configs_solo_ignores_legacy_both() {
+        let mut config = Config::default();
+        // arena_mode defaults to "" via serde, not "solo" -- but either way, not "dual"
+        config.builder_models = vec!["claude:opus".into(), "codex:".into()];
+
+        let selected = config.selected_pipeline_configs("both");
+
+        assert_eq!(selected.len(), 1, "solo mode should not fork into dual pipelines");
+    }
+
+    /// Regression: a real on-disk config without `arena_mode` deserializes the
+    /// field to "" via #[serde(default)], not "solo". Any guard written as
+    /// `arena_mode != "solo"` would incorrectly trigger dual mode here. The
+    /// positive `== "dual"` guard at config.rs:1402 is what keeps this safe.
+    #[test]
+    fn selected_pipeline_configs_solo_when_arena_mode_missing_from_json() {
+        let config: Config = serde_json::from_str(
+            r#"{"builder_models":["claude:opus","codex:"],"dual_selection":"both"}"#,
+        )
+        .unwrap();
+        assert_eq!(config.arena_mode, "", "serde default for arena_mode is empty string");
+
+        let selected = config.selected_pipeline_configs("both");
+        assert_eq!(
+            selected.len(),
+            1,
+            "missing arena_mode must be treated as solo, not dual"
+        );
     }
 
     #[test]
@@ -3011,17 +3344,29 @@ mod tests {
     }
 
     #[test]
-    fn list_available_models_includes_static_providers() {
-        let entries = Config::list_available_models(&[], &[]);
+    fn list_available_models_includes_detected_providers() {
+        let entries = Config::list_available_models(true, true, true, &[], &[]);
         let providers: Vec<&str> = entries.iter().map(|e| e.provider.as_str()).collect();
         assert!(providers.contains(&"claude"), "missing claude");
         assert!(providers.contains(&"codex"), "missing codex");
+        assert!(providers.contains(&"ghcopilot"), "missing ghcopilot");
         assert!(providers.contains(&""), "missing reset sentinel");
     }
 
     #[test]
+    fn list_available_models_excludes_unavailable_providers() {
+        let entries = Config::list_available_models(false, false, false, &[], &[]);
+        let providers: Vec<&str> = entries.iter().map(|e| e.provider.as_str()).collect();
+        assert!(!providers.contains(&"claude"), "claude should be absent");
+        assert!(!providers.contains(&"codex"), "codex should be absent");
+        assert!(!providers.contains(&"ghcopilot"), "copilot should be absent");
+        assert!(providers.contains(&""), "reset sentinel always present");
+    }
+
+    #[test]
     fn list_available_models_includes_lmstudio() {
-        let entries = Config::list_available_models(&["qwen3-coder-30b".to_string()], &[]);
+        let entries =
+            Config::list_available_models(false, false, false, &["qwen3-coder-30b".into()], &[]);
         let lm = entries.iter().find(|e| e.label == "qwen3-coder-30b");
         assert!(lm.is_some(), "LM Studio model not in entries");
         assert_eq!(lm.unwrap().model, "lmstudio/qwen3-coder-30b");
@@ -3029,7 +3374,8 @@ mod tests {
 
     #[test]
     fn list_available_models_includes_ollama() {
-        let entries = Config::list_available_models(&[], &["llama3.2".to_string()]);
+        let entries =
+            Config::list_available_models(false, false, false, &[], &["llama3.2".into()]);
         let ol = entries.iter().find(|e| e.label == "llama3.2");
         assert!(ol.is_some(), "Ollama model not in entries");
         assert_eq!(ol.unwrap().model, "ollama/llama3.2");
@@ -3057,5 +3403,174 @@ mod tests {
             val.contains("Claude") || val.contains("claude") || val.contains("opus"),
             "stage_plan field_value should contain provider/model info, got: {val}"
         );
+    }
+
+    #[test]
+    fn pipeline_b_config_inherits_a_when_b_empty() {
+        let mut config = Config::default();
+        config.scout_provider = "claude".into();
+        config.scout_model = "opus-4-7".into();
+        config.builder_provider = "codex".into();
+        config.builder_model = "gpt-5.4".into();
+        // B fields left empty -- should inherit from A
+        let b = config.pipeline_b_config();
+        assert_eq!(b.scout_provider, "claude", "B should inherit scout from A");
+        assert_eq!(b.scout_model, "opus-4-7");
+        assert_eq!(b.builder_provider, "codex", "B should inherit builder from A");
+        assert_eq!(b.builder_model, "gpt-5.4");
+    }
+
+    #[test]
+    fn pipeline_b_config_overrides_when_b_set() {
+        let mut config = Config::default();
+        config.query_provider = "claude".into();
+        config.query_model = "opus".into();
+        config.b_query_provider = "codex".into();
+        config.b_query_model = "gpt-5.4".into();
+        let b = config.pipeline_b_config();
+        assert_eq!(b.query_provider, "codex", "B should use its own provider");
+        assert_eq!(b.query_model, "gpt-5.4", "B should use its own model");
+    }
+
+    #[test]
+    fn pipeline_b_config_clears_arena_mode() {
+        let mut config = Config::default();
+        config.arena_mode = "dual".into();
+        let b = config.pipeline_b_config();
+        assert_eq!(b.arena_mode, "solo", "B config should not re-trigger dual");
+    }
+
+    #[test]
+    fn selected_pipeline_configs_dual_returns_two() {
+        let mut config = Config::default();
+        config.arena_mode = "dual".into();
+        config.query_provider = "claude".into();
+        config.b_query_provider = "codex".into();
+        let configs = config.selected_pipeline_configs("");
+        assert_eq!(configs.len(), 2);
+        assert_eq!(configs[0].query_provider, "claude");
+        assert_eq!(configs[1].query_provider, "codex");
+    }
+
+    #[test]
+    fn selected_pipeline_configs_dual_both_are_solo() {
+        let mut config = Config::default();
+        config.arena_mode = "dual".into();
+        config.builder_models = vec!["claude:opus".into(), "codex:".into()];
+        config.dual_selection = "both".into();
+        let configs = config.selected_pipeline_configs("both");
+        assert_eq!(configs.len(), 2);
+        assert_eq!(configs[0].arena_mode, "solo", "Pipeline A must be solo to prevent recursion");
+        assert_eq!(configs[1].arena_mode, "solo", "Pipeline B must be solo to prevent recursion");
+        assert!(configs[0].builder_models.is_empty(), "Pipeline A must clear legacy dual fields");
+        assert!(configs[1].builder_models.is_empty(), "Pipeline B must clear legacy dual fields");
+        assert!(configs[0].dual_selection.is_empty(), "Pipeline A must clear dual_selection");
+        assert!(configs[1].dual_selection.is_empty(), "Pipeline B must clear dual_selection");
+    }
+
+    #[test]
+    fn selected_pipeline_configs_dual_no_infinite_recursion() {
+        let mut config = Config::default();
+        config.arena_mode = "dual".into();
+        config.query_provider = "claude".into();
+        config.b_query_provider = "codex".into();
+        let configs = config.selected_pipeline_configs("");
+        // Both A and B configs should themselves return 1 config (not trigger another dual split)
+        let a_sub = configs[0].selected_pipeline_configs("");
+        let b_sub = configs[1].selected_pipeline_configs("");
+        assert_eq!(a_sub.len(), 1, "Pipeline A config must not trigger dual again");
+        assert_eq!(b_sub.len(), 1, "Pipeline B config must not trigger dual again");
+    }
+
+    #[test]
+    fn selected_pipeline_configs_solo_returns_one() {
+        let config = Config::default();
+        let configs = config.selected_pipeline_configs("");
+        assert_eq!(configs.len(), 1);
+    }
+
+    #[test]
+    fn pipeline_b_partial_config_ignored_without_provider() {
+        let mut config = Config::default();
+        config.query_provider = "claude".into();
+        config.query_model = "opus".into();
+        // Only model set, no provider -- should be ignored
+        config.b_query_model = "gpt-5.4".into();
+        let b = config.pipeline_b_config();
+        assert_eq!(b.query_provider, "claude", "should inherit A provider");
+        assert_eq!(b.query_model, "opus", "should inherit A model");
+    }
+
+    #[test]
+    fn pipeline_b_provider_only_clears_model() {
+        let mut config = Config::default();
+        config.query_provider = "claude".into();
+        config.query_model = "opus".into();
+        // Provider set, model empty -- valid: use provider default model
+        config.b_query_provider = "codex".into();
+        let b = config.pipeline_b_config();
+        assert_eq!(b.query_provider, "codex");
+        assert!(b.query_model.is_empty(), "empty B model means use provider default");
+    }
+
+    #[test]
+    fn arena_mode_round_trip() {
+        let dir = tempfile::tempdir().unwrap();
+        Config::save_arena_mode(dir.path(), "dual");
+        let config = Config::load(dir.path());
+        assert_eq!(config.arena_mode, "dual");
+        Config::save_arena_mode(dir.path(), "solo");
+        let config = Config::load(dir.path());
+        assert_eq!(config.arena_mode, "solo");
+    }
+
+    #[test]
+    fn active_routing_for_stage_b_provider_gated() {
+        let mut config = Config::default();
+        // Model-only without provider: should return empty (UI shows "(default)")
+        config.b_scout_model = "opus-4-7".into();
+        let (p, m) = config.active_routing_for_stage_b("scout");
+        assert!(p.is_empty(), "model-only B should return empty provider");
+        assert!(m.is_empty(), "model-only B should return empty model");
+
+        // Provider set: should return both
+        config.b_scout_provider = "codex".into();
+        let (p, m) = config.active_routing_for_stage_b("scout");
+        assert_eq!(p, "codex");
+        assert_eq!(m, "opus-4-7");
+    }
+
+    #[test]
+    fn pipeline_b_config_skips_pr_review_and_patterns() {
+        let mut config = Config::default();
+        config.b_pr_review_provider = "codex".into();
+        config.b_pr_review_model = "gpt-5.4".into();
+        config.b_pattern_extraction_provider = "codex".into();
+        config.b_pattern_extraction_model = "gpt-5.4".into();
+        config.pr_review_provider = "claude".into();
+        config.pattern_extraction_provider = "claude".into();
+        let b = config.pipeline_b_config();
+        assert_eq!(
+            b.pr_review_provider, "claude",
+            "PR review should inherit A (not used per-pipeline)"
+        );
+        assert_eq!(
+            b.pattern_extraction_provider, "claude",
+            "patterns should inherit A (hardcoded Claude)"
+        );
+    }
+
+    #[test]
+    fn selected_pipeline_configs_dual_skips_legacy_builder_models() {
+        let mut config = Config::default();
+        config.arena_mode = "dual".into();
+        config.builder_models = vec!["claude:opus".into(), "codex:".into()];
+        config.dual_selection = "both".into();
+        let configs = config.selected_pipeline_configs("both");
+        // Should still return exactly 2 (arena mode path, not legacy)
+        assert_eq!(configs.len(), 2);
+        // Both should have empty builder_models
+        assert!(configs[0].builder_models.is_empty());
+        assert!(configs[1].builder_models.is_empty());
     }
 }

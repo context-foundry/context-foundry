@@ -115,6 +115,7 @@ pub enum StartupMouseTarget {
     WrapToggle,
     DashboardTab,
     ExploreTab,
+    ModelLabel,
 }
 
 fn is_all_expanded(file_tree: &[FileEntry]) -> bool {
@@ -243,10 +244,19 @@ fn summary_tab_hit_test(state: &AppState, column: u16) -> Option<StartupMouseTar
     let explore_start = dashboard_end + 1; // " " separator
     let explore_end = explore_start + " Explore ".len() as u16;
 
+    let model_start = explore_end + 1;
+    let model_label_len = state
+        .active_builder_label()
+        .map(|l| l.len() + 4) // "  {label} " with padding
+        .unwrap_or(0);
+    let model_end = model_start + model_label_len as u16;
+
     if column >= dashboard_start && column < dashboard_end {
         Some(StartupMouseTarget::DashboardTab)
     } else if column >= explore_start && column < explore_end {
         Some(StartupMouseTarget::ExploreTab)
+    } else if model_label_len > 0 && column >= model_start && column < model_end {
+        Some(StartupMouseTarget::ModelLabel)
     } else {
         None
     }

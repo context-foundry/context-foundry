@@ -170,7 +170,7 @@ pub fn running_header_tab_hit_test(state: &AppState, column: u16) -> Option<Runn
     } else if matches!(state.phase, AppPhase::Planning) {
         " PLANNING ".len()
     } else if state.dual_arena_ready() {
-        " ARENA READY ".len()
+        " DUAL COMPLETE ".len()
     } else if state.stop_after_task {
         " STOPPING ".len()
     } else if state.awaiting_commit_approval {
@@ -301,7 +301,7 @@ pub(super) fn render_header(frame: &mut Frame, area: Rect, state: &AppState) {
                 } else if matches!(state.phase, AppPhase::Planning) {
                     " PLANNING "
                 } else if state.dual_arena_ready() {
-                    " ARENA READY "
+                    " DUAL COMPLETE "
                 } else if state.stop_after_task {
                     " STOPPING "
                 } else if state.awaiting_commit_approval {
