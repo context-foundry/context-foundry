@@ -1020,7 +1020,57 @@ fn handle_planning_event(state: &mut AppState, event: AppEvent, config: &Config)
         AppEvent::PlanningFinished(outcome) => apply_planning_outcome(state, outcome),
         AppEvent::OrchestratorFinished(outcome) => apply_orchestrator_outcome(state, outcome),
         AppEvent::Key(key) => handle_planning_key(state, key, config),
-        AppEvent::Mouse(_) | AppEvent::Paste(_) => {}
+        AppEvent::Mouse(mouse) => {
+            use crossterm::event::{MouseButton, MouseEventKind};
+            if matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
+                let terminal_size = crossterm::terminal::size().unwrap_or((120, 40));
+                if state.confirm_quit {
+                    let area = ratatui::layout::Rect::new(0, 0, terminal_size.0, terminal_size.1);
+                    if let Some(action) = tui::quit_confirm_hit_test(area, mouse.column, mouse.row) {
+                        match action {
+                            tui::QuitConfirmAction::Quit => state.should_quit = true,
+                            tui::QuitConfirmAction::Cancel => state.confirm_quit = false,
+                        }
+                    }
+                    return;
+                }
+                if handle_settings_overlay_mouse(state, mouse, terminal_size) {
+                    return;
+                }
+                let area = ratatui::layout::Rect::new(0, 0, terminal_size.0, terminal_size.1);
+                let chunks = ratatui::layout::Layout::default()
+                    .direction(ratatui::layout::Direction::Vertical)
+                    .constraints([
+                        ratatui::layout::Constraint::Length(5),
+                        ratatui::layout::Constraint::Length(6),
+                        ratatui::layout::Constraint::Min(8),
+                        ratatui::layout::Constraint::Length(8),
+                        ratatui::layout::Constraint::Length(1),
+                    ])
+                    .split(area);
+                let status_bar = chunks[4];
+                if mouse.row == status_bar.y {
+                    if let Some(action) = tui::running_status_bar_hit_test(status_bar, mouse.column, state) {
+                        match action {
+                            tui::RunningStatusBarAction::Quit => {
+                                state.confirm_quit = true;
+                            }
+                            tui::RunningStatusBarAction::Settings => {
+                                toggle_settings_overlay(state);
+                            }
+                            tui::RunningStatusBarAction::Patterns => {
+                                state.show_patterns = !state.show_patterns;
+                            }
+                            tui::RunningStatusBarAction::Findings => {
+                                state.show_findings = !state.show_findings;
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+        }
+        AppEvent::Paste(_) => {}
         AppEvent::Tick => {
             state.tick_count = state.tick_count.wrapping_add(1);
         }
@@ -1567,6 +1617,30 @@ pub(super) fn handle_settings_overlay_mouse(
 
     let area = ratatui::layout::Rect::new(0, 0, terminal_size.0, terminal_size.1);
     let modal = tui::settings_modal_rect(area);
+
+    if state.settings_overlay.as_ref().is_some_and(|ov| ov.confirm_close) {
+        if let Some(action) = tui::confirm_banner_hit_test(modal, mouse.column, mouse.row) {
+            match action {
+                tui::ConfirmBannerAction::Save => {
+                    flush_settings_to_disk(state);
+                    state.show_settings_overlay = false;
+                    state.settings_overlay = None;
+                }
+                tui::ConfirmBannerAction::Discard => {
+                    discard_settings_changes(state);
+                    state.show_settings_overlay = false;
+                    state.settings_overlay = None;
+                }
+                tui::ConfirmBannerAction::Back => {
+                    if let Some(ref mut ov) = state.settings_overlay {
+                        ov.confirm_close = false;
+                    }
+                }
+            }
+        }
+        return true;
+    }
+
     let btn = tui::close_btn_rect(modal);
     if tui::rect_contains(btn, mouse.column, mouse.row)
         || !tui::rect_contains(modal, mouse.column, mouse.row)
@@ -2634,6 +2708,16 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
         AppEvent::Mouse(mouse) => {
             use crossterm::event::{MouseButton, MouseEventKind};
             let terminal_size = crossterm::terminal::size().unwrap_or((120, 40));
+            if state.confirm_quit && matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
+                let area = ratatui::layout::Rect::new(0, 0, terminal_size.0, terminal_size.1);
+                if let Some(action) = tui::quit_confirm_hit_test(area, mouse.column, mouse.row) {
+                    match action {
+                        tui::QuitConfirmAction::Quit => state.should_quit = true,
+                        tui::QuitConfirmAction::Cancel => state.confirm_quit = false,
+                    }
+                }
+                return;
+            }
             if handle_settings_overlay_mouse(state, mouse, terminal_size) {
                 return;
             }
@@ -2826,6 +2910,92 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                             .is_some_and(|r| tui::rect_contains(r, mouse.column, mouse.row))
                         {
                             state.focused_pane = state::TuiPane::Extensions;
+                        } else {
+                            let full_area = ratatui::layout::Rect::new(0, 0, terminal_size.0, terminal_size.1);
+                            let layout_chunks = ratatui::layout::Layout::default()
+                                .direction(ratatui::layout::Direction::Vertical)
+                                .constraints([
+                                    ratatui::layout::Constraint::Length(5),
+                                    ratatui::layout::Constraint::Length(6),
+                                    ratatui::layout::Constraint::Min(8),
+                                    ratatui::layout::Constraint::Length(8),
+                                    ratatui::layout::Constraint::Length(1),
+                                ])
+                                .split(full_area);
+                            let status_bar = layout_chunks[4];
+                            if mouse.row == status_bar.y {
+                                if let Some(action) = tui::running_status_bar_hit_test(status_bar, mouse.column, state) {
+                                    match action {
+                                        tui::RunningStatusBarAction::Quit => {
+                                            if state.dual_arena_ready() {
+                                                let project_dir = state
+                                                    .buildloop_dir
+                                                    .parent()
+                                                    .unwrap_or(std::path::Path::new("."))
+                                                    .to_path_buf();
+                                                enter_home_surface(
+                                                    &project_dir,
+                                                    state,
+                                                    Some("Arena results preserved in .buildloop/arena/".to_string()),
+                                                );
+                                            } else if state.stop_after_task {
+                                                state.stop_after_task = false;
+                                                state.remove_stop_file();
+                                                state.log("Stop cancelled -- resuming build");
+                                            } else {
+                                                state.stop_after_task = true;
+                                                state.write_stop_file();
+                                                state.log("Stopping after current task (q again to cancel, Ctrl+C to force quit)");
+                                            }
+                                        }
+                                        tui::RunningStatusBarAction::Settings => {
+                                            toggle_settings_overlay(state);
+                                        }
+                                        tui::RunningStatusBarAction::ToggleView => {
+                                            if !state.show_running_explorer {
+                                                if state.running_explorer.is_none() {
+                                                    let project_dir = state
+                                                        .buildloop_dir
+                                                        .parent()
+                                                        .unwrap_or(std::path::Path::new("."));
+                                                    let scenario = detect_startup_scenario(project_dir);
+                                                    let plan_status = classify_plan_status(
+                                                        &self::contract::ContractPaths::resolve(project_dir).tasks_path,
+                                                    );
+                                                    state.running_explorer =
+                                                        Some(StartupState::new(project_dir, scenario, plan_status, None));
+                                                }
+                                                state.show_running_explorer = true;
+                                                state.focused_pane = state::TuiPane::Explorer;
+                                            } else {
+                                                state.show_running_explorer = false;
+                                            }
+                                        }
+                                        tui::RunningStatusBarAction::Patterns => {
+                                            state.show_patterns = !state.show_patterns;
+                                        }
+                                        tui::RunningStatusBarAction::Stats => {
+                                            if state.show_stats_overlay {
+                                                state.show_stats_overlay = false;
+                                                state.stats_loading = false;
+                                                state.stats_overlay_report = None;
+                                                state.stats_overlay_scroll = 0;
+                                            } else {
+                                                compute_and_show_stats_overlay(state);
+                                            }
+                                        }
+                                        tui::RunningStatusBarAction::Findings => {
+                                            state.show_findings = !state.show_findings;
+                                        }
+                                        tui::RunningStatusBarAction::Inject => {
+                                            state.inject_input = Some(String::new());
+                                        }
+                                        tui::RunningStatusBarAction::Approve
+                                        | tui::RunningStatusBarAction::Deny
+                                        | tui::RunningStatusBarAction::Continue => {}
+                                    }
+                                }
+                            }
                         }
                     }
                     MouseEventKind::Drag(MouseButton::Left) if state.dragging_split => {
@@ -4256,6 +4426,16 @@ fn handle_startup_mouse_at_for_running(
     terminal_size: (u16, u16),
 ) {
     use crossterm::event::{MouseButton, MouseEventKind};
+    if state.confirm_quit && matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
+        let area = ratatui::layout::Rect::new(0, 0, terminal_size.0, terminal_size.1);
+        if let Some(action) = tui::quit_confirm_hit_test(area, mouse.column, mouse.row) {
+            match action {
+                tui::QuitConfirmAction::Quit => state.should_quit = true,
+                tui::QuitConfirmAction::Cancel => state.confirm_quit = false,
+            }
+        }
+        return;
+    }
     if handle_settings_overlay_mouse(state, mouse, terminal_size) {
         return;
     }

@@ -870,6 +870,16 @@ pub(super) fn handle_startup_mouse_at(
     mouse: MouseEvent,
     terminal_size: (u16, u16),
 ) {
+    if state.confirm_quit && matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
+        let area = ratatui::layout::Rect::new(0, 0, terminal_size.0, terminal_size.1);
+        if let Some(action) = tui::quit_confirm_hit_test(area, mouse.column, mouse.row) {
+            match action {
+                tui::QuitConfirmAction::Quit => state.should_quit = true,
+                tui::QuitConfirmAction::Cancel => state.confirm_quit = false,
+            }
+        }
+        return;
+    }
     if super::handle_settings_overlay_mouse(state, mouse, terminal_size) {
         return;
     }
@@ -937,6 +947,31 @@ pub(super) fn handle_startup_mouse_at(
                     }
                 }
             } else {
+                let status_bar = ratatui::layout::Rect::new(
+                    0, terminal_size.1.saturating_sub(1), terminal_size.0, 1,
+                );
+                if mouse.row == status_bar.y {
+                    if let Some(action) = tui::startup_status_bar_hit_test(status_bar, mouse.column, state) {
+                        match action {
+                            tui::StatusBarAction::Submit => {
+                                handle_startup_submit(state);
+                            }
+                            tui::StatusBarAction::Quit => {
+                                state.confirm_quit = true;
+                            }
+                            tui::StatusBarAction::ToggleView => {
+                                state.show_run_view = !state.show_run_view;
+                            }
+                            tui::StatusBarAction::Settings => {
+                                super::toggle_settings_overlay(state);
+                            }
+                            tui::StatusBarAction::Findings => {
+                                state.show_findings = !state.show_findings;
+                            }
+                        }
+                        return;
+                    }
+                }
                 // Clicked outside file/preview/extension panes (e.g. input area)
                 // Reset focus so Enter submits instead of opening editor
                 state.focused_pane = crate::app::state::TuiPane::AgentOutput;

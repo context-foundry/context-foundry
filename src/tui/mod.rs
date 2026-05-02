@@ -25,12 +25,13 @@ use crate::config::Config;
 use crate::utils::truncate_str_from_end;
 
 pub use overlays::{
-    close_btn_rect, model_picker_hit_test, render_quit_confirm, settings_modal_rect,
-    settings_overlay_row_hit_test, ModelPickerMouseTarget,
+    close_btn_rect, confirm_banner_hit_test, model_picker_hit_test, quit_confirm_hit_test,
+    render_quit_confirm, settings_modal_rect, settings_overlay_row_hit_test,
+    ConfirmBannerAction, ModelPickerMouseTarget, QuitConfirmAction,
 };
 pub use pipeline::{pipeline_click, PipelineClick};
-pub use running::{running_header_tab_hit_test, RunningHeaderTab};
-pub use startup::StartupMouseTarget;
+pub use running::{running_header_tab_hit_test, running_status_bar_hit_test, RunningHeaderTab, RunningStatusBarAction};
+pub use startup::{startup_status_bar_hit_test, StartupMouseTarget, StatusBarAction};
 pub use welcome::{random_fallback_message, render_welcome};
 
 pub type Tui = Terminal<ratatui::backend::CrosstermBackend<io::Stdout>>;

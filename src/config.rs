@@ -1653,7 +1653,7 @@ impl Config {
                 model: model.into(),
                 label: model.into(),
                 recommended: rec,
-                group: "Claude (Anthropic API)".into(),
+                group: "Claude (OAuth - Subscription)".into(),
             });
         }
 
@@ -1664,7 +1664,7 @@ impl Config {
                 model: model.into(),
                 label: model.into(),
                 recommended: false,
-                group: "Codex (OpenAI)".into(),
+                group: "Codex (OAuth - Subscription)".into(),
             });
         }
 
@@ -1680,7 +1680,7 @@ impl Config {
                 model: model.into(),
                 label: model.into(),
                 recommended: rec,
-                group: "GitHub Copilot (subscription)".into(),
+                group: "GitHub Copilot (OAuth)".into(),
             });
         }
 

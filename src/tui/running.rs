@@ -11,6 +11,117 @@ use crate::agent::AgentRole;
 use crate::app::{AppPhase, AppState, ExtensionDisplayInfo, TuiPane};
 use crate::utils::truncate_str;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RunningStatusBarAction {
+    Quit,
+    Settings,
+    ToggleView,
+    Patterns,
+    Stats,
+    Findings,
+    Inject,
+    Approve,
+    Deny,
+    Continue,
+}
+
+pub fn running_status_bar_hit_test(area: Rect, col: u16, state: &AppState) -> Option<RunningStatusBarAction> {
+    if col < area.x || col >= area.x + area.width {
+        return None;
+    }
+
+    if matches!(state.phase, AppPhase::Planning) {
+        let mut x = area.x;
+        let buttons: &[(&str, &str, RunningStatusBarAction)] = &[
+            (" q ", " quit  ", RunningStatusBarAction::Quit),
+            (" \u{2191}\u{2193} ", " scroll  ", RunningStatusBarAction::Quit), // non-actionable, skip
+            (" p ", " patterns", RunningStatusBarAction::Patterns),
+        ];
+        for &(key, label, action) in buttons {
+            let w = key.chars().count() as u16 + label.chars().count() as u16;
+            if col >= x && col < x + w {
+                if matches!(action, RunningStatusBarAction::Quit) && key == " q " {
+                    return Some(RunningStatusBarAction::Quit);
+                }
+                if matches!(action, RunningStatusBarAction::Patterns) {
+                    return Some(action);
+                }
+                return None;
+            }
+            x += w;
+        }
+        if state.last_orchestrator_outcome.is_some() {
+            let w = "  f ".chars().count() as u16 + " findings".chars().count() as u16;
+            if col >= x && col < x + w {
+                return Some(RunningStatusBarAction::Findings);
+            }
+        }
+        return None;
+    }
+
+    let mut x = area.x;
+    let quit_label = if state.dual_arena_ready() { " startup  " } else { " stop  " };
+    let base_buttons: Vec<(&str, &str, Option<RunningStatusBarAction>)> = vec![
+        (" q ", quit_label, Some(RunningStatusBarAction::Quit)),
+        (" Ctrl+C ", " force quit  ", None),
+        (" \u{2191}\u{2193} ", " scroll  ", None),
+        (" i ", " inject  ", Some(RunningStatusBarAction::Inject)),
+        (" PgUp/PgDn ", " queue  ", None),
+        (" p ", " patterns  ", Some(RunningStatusBarAction::Patterns)),
+        (" s ", " stats  ", Some(RunningStatusBarAction::Stats)),
+        ("  ? ", " settings", Some(RunningStatusBarAction::Settings)),
+    ];
+
+    for (key, label, action) in &base_buttons {
+        let w = key.chars().count() as u16 + label.chars().count() as u16;
+        if col >= x && col < x + w {
+            return *action;
+        }
+        x += w;
+    }
+
+    if state.awaiting_commit_approval {
+        let approve_w = "  y ".chars().count() as u16 + " approve  ".chars().count() as u16;
+        if col >= x && col < x + approve_w {
+            return Some(RunningStatusBarAction::Approve);
+        }
+        x += approve_w;
+        let deny_w = "  n ".chars().count() as u16 + " deny  ".chars().count() as u16;
+        if col >= x && col < x + deny_w {
+            return Some(RunningStatusBarAction::Deny);
+        }
+        x += deny_w;
+    } else if state.awaiting_review {
+        let w = "  Enter ".chars().count() as u16 + if state.awaiting_pr.is_some() { " skip wait" } else { " continue" }.chars().count() as u16;
+        if col >= x && col < x + w {
+            return Some(RunningStatusBarAction::Continue);
+        }
+        x += w;
+    }
+
+    if state.last_orchestrator_outcome.is_some() {
+        let w = "  f ".chars().count() as u16 + " findings".chars().count() as u16;
+        if col >= x && col < x + w {
+            return Some(RunningStatusBarAction::Findings);
+        }
+        x += w;
+    }
+
+    // discovery_info is rendered before Tab
+    if state.discovery_round > 0 {
+        let info = format!(" | loop round {} ", state.discovery_round);
+        x += info.chars().count() as u16;
+    }
+
+    // Tab toggle
+    let tab_w = "  Tab ".chars().count() as u16 + if state.show_running_explorer { " dashboard" } else { " explore" }.chars().count() as u16;
+    if col >= x && col < x + tab_w {
+        return Some(RunningStatusBarAction::ToggleView);
+    }
+
+    None
+}
+
 pub enum RunningHeaderTab {
     Dashboard,
     Explore,

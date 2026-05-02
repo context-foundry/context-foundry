@@ -13,6 +13,44 @@ use super::{pane_border_style, pane_border_type};
 use crate::app::{AppState, ExtensionDisplayInfo, FileEntry, StartupState, TuiPane};
 use crate::utils::truncate_str;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StatusBarAction {
+    Submit,
+    Quit,
+    ToggleView,
+    Settings,
+    Findings,
+}
+
+pub fn startup_status_bar_hit_test(area: Rect, col: u16, state: &AppState) -> Option<StatusBarAction> {
+    if col < area.x || col >= area.x + area.width {
+        return None;
+    }
+    let mut x = area.x;
+    let buttons: &[(&str, &str, StatusBarAction)] = &[
+        (" Enter ", " submit  ", StatusBarAction::Submit),
+        (" Esc ", " quit", StatusBarAction::Quit),
+        ("  Tab ", if state.show_run_view { " actions" } else { " dashboard" }, StatusBarAction::ToggleView),
+        ("  ? ", " settings", StatusBarAction::Settings),
+    ];
+    for &(key, label, action) in buttons {
+        let w = key.chars().count() as u16 + label.chars().count() as u16;
+        if col >= x && col < x + w {
+            return Some(action);
+        }
+        x += w;
+    }
+    if state.last_orchestrator_outcome.is_some() {
+        let key = "  ^F ";
+        let label = " findings";
+        let w = key.chars().count() as u16 + label.chars().count() as u16;
+        if col >= x && col < x + w {
+            return Some(StatusBarAction::Findings);
+        }
+    }
+    None
+}
+
 const PLACEHOLDER_SUGGESTIONS: &[&str] = &[
     "Scan this codebase and find improvements...",
     "Add authentication with JWT tokens...",

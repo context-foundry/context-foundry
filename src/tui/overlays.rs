@@ -1350,6 +1350,43 @@ fn render_model_picker(
     }
 }
 
+fn confirm_banner_rect(parent: Rect) -> Rect {
+    let w: u16 = 44.min(parent.width.saturating_sub(4));
+    let h: u16 = 6;
+    let x = parent.x + parent.width.saturating_sub(w) / 2;
+    let y = parent.y + parent.height.saturating_sub(h) / 2;
+    Rect { x, y, width: w, height: h }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConfirmBannerAction {
+    Save,
+    Discard,
+    Back,
+}
+
+pub fn confirm_banner_hit_test(parent: Rect, col: u16, row: u16) -> Option<ConfirmBannerAction> {
+    let banner = confirm_banner_rect(parent);
+    let inner_y = banner.y + 3;
+    if row != inner_y {
+        return None;
+    }
+    let inner_x = banner.x + 1;
+    let inner_w = banner.width.saturating_sub(2);
+    if col < inner_x || col >= inner_x + inner_w {
+        return None;
+    }
+    let rel = col - inner_x;
+    let third = inner_w / 3;
+    if rel < third {
+        Some(ConfirmBannerAction::Save)
+    } else if rel < third * 2 {
+        Some(ConfirmBannerAction::Discard)
+    } else {
+        Some(ConfirmBannerAction::Back)
+    }
+}
+
 fn render_confirm_banner(
     frame: &mut Frame,
     parent: Rect,
@@ -1357,34 +1394,100 @@ fn render_confirm_banner(
     title: &str,
     actions: &[&str],
 ) {
-    let text = format!("  {}  {}  ", title, actions.join("  "));
-    let w = text.len() as u16 + 2;
-    let h: u16 = 3;
-    let x = parent.x + parent.width.saturating_sub(w) / 2;
-    let y = parent.y + parent.height.saturating_sub(h) / 2;
-    let area = Rect { x, y, width: w.min(parent.width), height: h };
+    let area = frame.area();
+    let banner = confirm_banner_rect(parent);
 
-    frame.render_widget(Clear, area);
+    let sx = banner.x.saturating_add(2);
+    let sy = banner.y.saturating_add(1);
+    let sw = banner.width.min(area.width.saturating_sub(sx));
+    let sh = banner.height.min(area.height.saturating_sub(sy));
+    if sw > 0 && sh > 0 {
+        let shadow = Rect { x: sx, y: sy, width: sw, height: sh };
+        frame.render_widget(Clear, shadow);
+        frame.render_widget(
+            Block::default().style(Style::default().bg(theme.muted)),
+            shadow,
+        );
+    }
+
+    frame.render_widget(Clear, banner);
     let block = Block::default()
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(theme.accent))
+        .border_type(BorderType::Double)
+        .border_style(Style::default().fg(theme.accent).add_modifier(Modifier::BOLD))
         .style(Style::default().bg(theme.surface));
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
+    let inner = block.inner(banner);
+    frame.render_widget(block, banner);
 
-    let mut spans = vec![
-        Span::styled(
-            format!("  {}  ", title),
-            Style::default().fg(theme.accent).add_modifier(Modifier::BOLD),
-        ),
-    ];
-    for action in actions {
-        spans.push(Span::styled(
-            format!(" {} ", action),
-            Style::default().fg(theme.text),
-        ));
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(1), // title
+            Constraint::Length(1), // spacer
+            Constraint::Length(1), // buttons
+            Constraint::Min(0),
+        ])
+        .split(inner);
+
+    let title_line = Paragraph::new(Line::from(Span::styled(
+        title,
+        Style::default().fg(theme.accent).add_modifier(Modifier::BOLD),
+    )))
+    .alignment(Alignment::Center);
+    frame.render_widget(title_line, chunks[0]);
+
+    let third = chunks[2].width / 3;
+    let btn_areas = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Length(third),
+            Constraint::Length(third),
+            Constraint::Min(0),
+        ])
+        .split(chunks[2]);
+
+    for (i, action) in actions.iter().enumerate() {
+        if i < 3 {
+            let btn = Paragraph::new(Line::from(Span::styled(
+                *action,
+                Style::default().fg(theme.text),
+            )))
+            .alignment(Alignment::Center);
+            frame.render_widget(btn, btn_areas[i]);
+        }
     }
-    frame.render_widget(Paragraph::new(Line::from(spans)), inner);
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum QuitConfirmAction {
+    Quit,
+    Cancel,
+}
+
+pub fn quit_confirm_hit_test(area: Rect, col: u16, row: u16) -> Option<QuitConfirmAction> {
+    let w: u16 = 54.min(area.width.saturating_sub(2));
+    let h: u16 = 9.min(area.height.saturating_sub(2));
+    if w < 20 || h < 5 {
+        return None;
+    }
+    let x = area.width.saturating_sub(w) / 2;
+    let y = area.height.saturating_sub(h) / 2;
+    let inner_x = x + 1;
+    let inner_y = y + 1;
+    let inner_w = w.saturating_sub(2);
+    let btn_row = inner_y + 4;
+    if row != btn_row {
+        return None;
+    }
+    if col < inner_x || col >= inner_x + inner_w {
+        return None;
+    }
+    let mid = inner_x + inner_w / 2;
+    if col < mid {
+        Some(QuitConfirmAction::Quit)
+    } else {
+        Some(QuitConfirmAction::Cancel)
+    }
 }
 
 pub fn render_quit_confirm(frame: &mut Frame, theme: &crate::tui::theme::TuiTheme) {
