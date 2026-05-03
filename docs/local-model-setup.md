@@ -169,10 +169,10 @@ WIP with an idle-timeout reason. The suppression of opencode's own
 lifecycle events (step start/end) ensures the idle timer only resets on
 meaningful output, not on heartbeat noise.
 
-**Agent timeout.** The top-level `agent_timeout_secs` (default 180s, tightened
-from 600s in commit `5854172`) controls the idle timeout for all agents. The
-hard timeout is 4x the idle timeout (720s at default). Override in `.foundry.json`
-or in the Settings Overlay under Budgets & timeouts.
+**Agent timeout.** The top-level `agent_timeout_secs` (default 600s) controls
+the idle timeout for all agents. The hard timeout is 4x the idle timeout
+(2400s = 40 min at default). Override in `.foundry.json` or in the Settings
+Overlay under Budgets & timeouts.
 
 **Reading the indicator.** After a run, TASKS.md shows each completed task
 with a bracketed indicator:

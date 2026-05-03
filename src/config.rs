@@ -520,7 +520,7 @@ impl Default for Config {
             pause_between_agents_secs: 3,
             pause_between_cycles_secs: 30,
 
-            agent_timeout_secs: 180, // 3 minutes idle; hard timeout = 4x = 12 minutes
+            agent_timeout_secs: 600, // 10 minutes idle; hard timeout = 4x = 40 minutes. Opus on a fresh complex prompt routinely thinks for >3 min before emitting tool calls; the prior 180s default produced timeouts and infinite WIP retries on planning-heavy tasks.
 
             patterns_dir: "~/.foundry/patterns".into(),
             history_dir: "~/.foundry/history".into(),

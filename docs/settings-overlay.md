@@ -94,7 +94,7 @@ Controls timing, cost limits, and backoff behavior.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| Agent Timeout (secs) | Number | `180` | Idle timeout per agent (hard timeout = 4x) |
+| Agent Timeout (secs) | Number | `600` | Idle timeout per agent (hard timeout = 4x = 40 min) |
 | Pause Between Tasks | Number | `10` | Seconds between tasks |
 | Pause Between Agents | Number | `3` | Seconds between agent spawns within a task |
 | Pause Between Cycles | Number | `30` | Seconds between discovery cycles |
@@ -104,9 +104,11 @@ Controls timing, cost limits, and backoff behavior.
 | Budget Recovery | Bool | `false` | Auto-recover from budget overrun |
 | Discovery Cooldown | Number | `5` | Minutes between discovery rounds |
 
-The `agent_timeout_secs` default was tightened from 600s to 180s in commit
-`5854172`. Override it here or in `.foundry.json` if your tasks need longer agent
-runs.
+The `agent_timeout_secs` default is `600` (10 min idle, hard timeout 4x = 40 min).
+It was briefly `180` between commits `5854172` and the bump back to `600`, but
+180s caused infinite WIP-retry loops on planning-heavy tasks where Opus thinks
+for 3+ minutes before emitting its first tool call. Override here or in
+`.foundry.json` if your tasks need different agent run lengths.
 
 <!-- screenshot: budgets-section.png -->
 

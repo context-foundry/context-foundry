@@ -808,8 +808,8 @@ pub fn settings_sections(dual_mode: bool) -> Vec<SectionDef> {
                 },
                 FieldDef {
                     id: "backpressure_only",
-                    label: "Backpressure Only",
-                    hint: "Skip LLM review, use tests only",
+                    label: "Doubt in the Loop?",
+                    hint: "ON: runs Doubt (fresh-context audit). OFF: skips Doubt, builder tests only.",
                     kind: FieldKind::Bool,
                 },
             ],

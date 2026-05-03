@@ -33,7 +33,7 @@ Key config groups:
   "adaptive_pauses": true,
   "create_issue_on_wip": false,
   "auto_push_remote": null,
-  "agent_timeout_secs": 180,
+  "agent_timeout_secs": 600,
   "patterns_dir": "~/.foundry/patterns",
   "theme": "dark",
   "on_task_complete": null,

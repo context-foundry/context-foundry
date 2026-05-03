@@ -99,7 +99,7 @@ Completed tasks use QRPBA indicators: Q=Query, R=Research, P=Plan, B=Build, A=Au
 ## Agent Invocation
 - Claude CLI spawned in PTY (portable-pty) for line-buffered output.
 - `--output-format stream-json` for structured event parsing.
-- 180-second default idle timeout (`agent_timeout_secs`), configurable via `.foundry.json`.
+- 600-second default idle timeout (`agent_timeout_secs`), configurable via `.foundry.json`. Hard timeout is 4x = 2400s (40 min) per agent stage.
 - `CLAUDECODE=""` env var prevents nested Claude detection.
 
 ## Review Gate

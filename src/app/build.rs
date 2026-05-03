@@ -1848,6 +1848,13 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
     let mut session_tasks: usize = 0;
     let mut session_feats: usize = 0;
     let mut session_wips: usize = 0;
+    // Guard against infinite WIP loops on the same task. WIP commits don't
+    // mark a task complete, so without this the outer loop would re-pick the
+    // same task forever and burn API spend on every retry. After 2 WIPs in a
+    // row on the same task ID, we stop the session and surface a message.
+    let mut last_wip_task: Option<String> = None;
+    let mut consecutive_wip_count: usize = 0;
+    const MAX_CONSECUTIVE_WIP: usize = 2;
 
     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::SessionIdAssigned(
         session_id.clone(),
@@ -2183,10 +2190,27 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
             }
 
             session_tasks += 1;
+            // The consecutive-WIP guard exists to keep the outer loop from
+            // re-picking the same pending task forever and burning API spend.
+            // Dual-arena mode runs once per session and exits at the
+            // dual_arena_mode early-return below, so its WIP outcome cannot
+            // produce a retry loop -- skip the bookkeeping there.
             if success {
                 session_feats += 1;
+                if !dual_arena_mode {
+                    last_wip_task = None;
+                    consecutive_wip_count = 0;
+                }
             } else {
                 session_wips += 1;
+                if !dual_arena_mode {
+                    if last_wip_task.as_deref() == Some(task_info.id.as_str()) {
+                        consecutive_wip_count += 1;
+                    } else {
+                        last_wip_task = Some(task_info.id.clone());
+                        consecutive_wip_count = 1;
+                    }
+                }
             }
 
             // Restore state files if the builder deleted or truncated them
@@ -2227,15 +2251,19 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
                     "Pausing after denied commit -- loop will stop after this task".to_string(),
                 )));
-                if let Err(e) = std::fs::create_dir_all(&ctx.buildloop_dir) {
-                    eprintln!(
-                        "Warning: failed to create buildloop dir for stop file: {}",
-                        e
-                    );
-                }
-                if let Err(e) = std::fs::write(ctx.buildloop_dir.join("stop"), "") {
-                    eprintln!("Warning: failed to write stop file: {}", e);
-                }
+                ctx.write_stop_file();
+            }
+
+            // Stop after MAX_CONSECUTIVE_WIP WIPs on the same task. Without
+            // this guard the outer loop re-picks the same pending task and
+            // re-runs the whole pipeline, which burns money fast when an
+            // agent stage is hanging or deterministically failing.
+            if consecutive_wip_count >= MAX_CONSECUTIVE_WIP {
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                    "Pausing: task {} produced {} consecutive WIP commits -- stopping loop. Inspect the failures, then re-run when ready.",
+                    task_info.id, consecutive_wip_count
+                ))));
+                ctx.write_stop_file();
             }
 
             // Collect build claims for targeted discovery

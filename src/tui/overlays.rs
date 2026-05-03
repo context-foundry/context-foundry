@@ -1169,9 +1169,20 @@ pub(super) fn render_settings_overlay(frame: &mut Frame, state: &AppState) {
                         _ => config.field_value(field.id),
                     };
 
+                    // `backpressure_only` is stored with inverted semantics
+                    // relative to its UI label "Doubt in the Loop?": when the
+                    // user sees ON they expect Doubt to run, but the stored
+                    // value `true` means *skip* Doubt. Flip just the display
+                    // (and the value text below) so OK/checked = "Doubt runs".
+                    let display_inverted = field.id == "backpressure_only";
+                    let displayed_truthy = if display_inverted {
+                        value == "false"
+                    } else {
+                        value == "true"
+                    };
                     let icon_str = match field.kind {
                         FieldKind::Bool => {
-                            if value == "true" {
+                            if displayed_truthy {
                                 "\u{2611}"
                             } else {
                                 "\u{2610}"
@@ -1190,6 +1201,10 @@ pub(super) fn render_settings_overlay(frame: &mut Frame, state: &AppState) {
                     let value_width = 24usize;
                     let raw_display = if editing.is_some_and(|inline| inline.field_id == field.id) {
                         format!("{value}_")
+                    } else if display_inverted && field.kind == FieldKind::Bool {
+                        // Display inverted bools as ON/OFF (clearer than "true"/"false"
+                        // when the displayed semantics oppose the stored value).
+                        if displayed_truthy { "ON".to_string() } else { "OFF".to_string() }
                     } else {
                         value.clone()
                     };

@@ -749,8 +749,40 @@ pub(super) fn render_task_queue(frame: &mut Frame, area: Rect, state: &AppState,
                 Style::default().fg(prefix_color)
             };
 
-            // Pipeline indicator for completed and current tasks
-            let pipeline_spans = if let Some(history) = state.task_history.get(&task.id) {
+            // Pipeline indicator. is_current must take priority over
+            // task_history: a task that previously failed (WIP, `!` written
+            // to TASKS.md) leaves a history entry behind, and a retry would
+            // otherwise keep displaying the prior attempt's `!` while the
+            // new run is in progress.
+            let pipeline_spans = if is_current {
+                // Current: show progress through pipeline
+                let all_stages = [
+                    ("S", AgentRole::Scout),
+                    ("P", AgentRole::Planner),
+                    ("I", AgentRole::Builder),
+                    ("D", AgentRole::Reviewer),
+                ];
+                let active = state.current_agent.as_ref().map(|(r, _)| r);
+                let mut spans = vec![Span::styled(" ", Style::default())];
+                for (label, role) in &all_stages {
+                    let seen = state.task_stages_seen.contains(role);
+                    let is_active = active == Some(role);
+                    let (text, color) = if is_active {
+                        (label.to_string(), Color::Yellow)
+                    } else if seen {
+                        (label.to_string(), Color::Green)
+                    } else {
+                        (".".to_string(), Color::DarkGray)
+                    };
+                    let style = if is_active {
+                        Style::default().fg(color).add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default().fg(color)
+                    };
+                    spans.push(Span::styled(text, style));
+                }
+                spans
+            } else if let Some(history) = state.task_history.get(&task.id) {
                 // Completed: show S>P>I>V with colors
                 let all_stages = [
                     ("S", AgentRole::Scout),
@@ -782,34 +814,6 @@ pub(super) fn render_task_queue(frame: &mut Frame, area: Rect, state: &AppState,
                 }
                 if !history.passed_review {
                     spans.push(Span::styled("!", Style::default().fg(Color::Red)));
-                }
-                spans
-            } else if is_current {
-                // Current: show progress through pipeline
-                let all_stages = [
-                    ("S", AgentRole::Scout),
-                    ("P", AgentRole::Planner),
-                    ("I", AgentRole::Builder),
-                    ("D", AgentRole::Reviewer),
-                ];
-                let active = state.current_agent.as_ref().map(|(r, _)| r);
-                let mut spans = vec![Span::styled(" ", Style::default())];
-                for (label, role) in &all_stages {
-                    let seen = state.task_stages_seen.contains(role);
-                    let is_active = active == Some(role);
-                    let (text, color) = if is_active {
-                        (label.to_string(), Color::Yellow)
-                    } else if seen {
-                        (label.to_string(), Color::Green)
-                    } else {
-                        (".".to_string(), Color::DarkGray)
-                    };
-                    let style = if is_active {
-                        Style::default().fg(color).add_modifier(Modifier::BOLD)
-                    } else {
-                        Style::default().fg(color)
-                    };
-                    spans.push(Span::styled(text, style));
                 }
                 spans
             } else if task.completed {

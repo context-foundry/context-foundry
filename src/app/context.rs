@@ -157,6 +157,21 @@ impl RunContext {
         stop_file_exists || shutdown_flag
     }
 
+    /// Write the stop-file sentinel that the outer build loop polls. Best-effort:
+    /// failure is logged to stderr but not surfaced as an error -- the alternative
+    /// is the loop continuing, which is worse than a noisy log.
+    pub(super) fn write_stop_file(&self) {
+        if let Err(e) = std::fs::create_dir_all(&self.buildloop_dir) {
+            eprintln!(
+                "Warning: failed to create buildloop dir for stop file: {}",
+                e
+            );
+        }
+        if let Err(e) = std::fs::write(self.stop_file(), "") {
+            eprintln!("Warning: failed to write stop file: {}", e);
+        }
+    }
+
     pub(super) fn spec_file_name(&self) -> String {
         self.spec_path
             .file_name()
