@@ -43,3 +43,11 @@ pub fn atomic_write_file(path: &Path, contents: &[u8]) -> io::Result<()> {
 pub fn atomic_write_file_best_effort(path: &Path, contents: &[u8]) {
     let _ = atomic_write_file(path, contents);
 }
+
+/// Returns the user's home directory, falling back to `USERPROFILE` on Windows.
+pub fn home_dir() -> Option<std::path::PathBuf> {
+    std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .ok()
+        .map(std::path::PathBuf::from)
+}

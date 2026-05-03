@@ -215,6 +215,12 @@ impl ModelProvider {
         }
     }
 
+    /// Returns `false` for native HTTP providers that have no CLI binary
+    /// (GhCopilot, OpenCode). These are always considered "available".
+    pub fn uses_pty(self) -> bool {
+        !matches!(self, ModelProvider::GhCopilot | ModelProvider::OpenCode)
+    }
+
     /// Resolve the node CLI entry-point for this provider on Windows.
     /// Returns `Some(path)` if found, `None` otherwise.
     ///
@@ -1020,11 +1026,6 @@ pub async fn run_agent(
 
     // GhCopilot: native async HTTP provider — no PTY, no sandbox.
     if provider == ModelProvider::GhCopilot {
-        if config.enforce_phase_rbac {
-            let _ = output_tx.send(AgentOutputEvent::Stderr(
-                "[foundry] enforce_phase_rbac: GhCopilot provider does not support tool allowlists; enforcement not applied".to_string(),
-            ));
-        }
         let sandbox_cfg = config.sandbox_config();
         if sandbox_cfg.is_active() {
             let msg = "[foundry] GhCopilot provider is incompatible with sandbox mode. \

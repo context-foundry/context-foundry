@@ -43,11 +43,9 @@ pub fn discover_extensions(project_dir: &Path) -> Vec<ExtensionInfo> {
     let mut results = Vec::new();
 
     // Global extensions dir: ~/.foundry/extensions/
-    if let Ok(home) = std::env::var("HOME") {
-        let global_dir = PathBuf::from(home).join(".foundry").join("extensions");
+    if let Some(home) = crate::utils::home_dir() {
+        let global_dir = home.join(".foundry").join("extensions");
         scan_extensions_dir(&global_dir, ExtensionSource::Global, &mut results);
-    } else {
-        eprintln!("warning: HOME not set, skipping global extensions directory");
     }
 
     // Ancestor extensions: walk up from project_dir, collect ancestor

@@ -15,21 +15,17 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
 };
-use std::time::SystemTime;
 use tokio::sync::mpsc;
 
 use crate::agent::{AgentExitKind, AgentOutputEvent, AgentResult};
 
 // ─── API constants ──────────────────────────────────────────────────────────
 
-const COPILOT_TOKEN_URL: &str = "https://api.github.com/copilot_internal/v2/token";
 const COPILOT_CHAT_URL: &str = "https://api.githubcopilot.com/chat/completions";
 const EDITOR_VERSION: &str = "vscode/1.85.0";
 const COPILOT_INTEGRATION_ID: &str = "vscode-chat";
 const USER_AGENT_STR: &str = "context-foundry/3.0.0";
 const DEFAULT_MODEL: &str = "gpt-4o";
-/// Refresh the Copilot token if it expires within this many seconds.
-const TOKEN_REFRESH_MARGIN_SECS: u64 = 300;
 /// Default Bash tool timeout.
 const TOOL_BASH_TIMEOUT_SECS: u64 = 120;
 /// Maximum lines returned by Read without an explicit limit.
@@ -57,21 +53,6 @@ pub struct GhCopilotOptions<'a> {
 
 // ─── Token management ───────────────────────────────────────────────────────
 
-#[derive(Clone)]
-struct CopilotToken {
-    token: String,
-    expires_at: SystemTime,
-}
-
-impl CopilotToken {
-    fn needs_refresh(&self) -> bool {
-        match self.expires_at.duration_since(SystemTime::now()) {
-            Ok(remaining) => remaining.as_secs() < TOKEN_REFRESH_MARGIN_SECS,
-            Err(_) => true,
-        }
-    }
-}
-
 fn get_github_token() -> Result<String> {
     let output = std::process::Command::new("gh")
         .args(["auth", "token"])
@@ -93,66 +74,6 @@ fn get_github_token() -> Result<String> {
         ));
     }
     Ok(token)
-}
-
-async fn fetch_copilot_token(client: &reqwest::Client, github_token: &str) -> Result<CopilotToken> {
-    let resp = client
-        .get(COPILOT_TOKEN_URL)
-        .header("Authorization", format!("token {}", github_token))
-        .header("Editor-Version", EDITOR_VERSION)
-        .header("Copilot-Integration-Id", COPILOT_INTEGRATION_ID)
-        .header("User-Agent", USER_AGENT_STR)
-        .header("Accept", "application/json")
-        .send()
-        .await
-        .context("Failed to reach GitHub API for Copilot token")?;
-
-    let status = resp.status();
-    if status == 401 || status == 403 {
-        return Err(anyhow!(
-            "GitHub Copilot access denied (HTTP {}). \
-             Make sure your account has an active Copilot subscription.",
-            status
-        ));
-    }
-    if !status.is_success() {
-        let body = resp.text().await.unwrap_or_default();
-        return Err(anyhow!(
-            "GitHub Copilot token exchange failed (HTTP {}): {}",
-            status,
-            body
-        ));
-    }
-
-    let body: Value = resp
-        .json()
-        .await
-        .context("Failed to parse Copilot token response")?;
-
-    let token = body["token"]
-        .as_str()
-        .ok_or_else(|| anyhow!("No 'token' field in Copilot token response"))?
-        .to_string();
-
-    let expires_at = body["expires_at"]
-        .as_str()
-        .and_then(parse_iso8601)
-        .unwrap_or_else(|| {
-            // Default: 30 minutes from now
-            SystemTime::now() + std::time::Duration::from_secs(1800)
-        });
-
-    Ok(CopilotToken { token, expires_at })
-}
-
-fn parse_iso8601(s: &str) -> Option<SystemTime> {
-    chrono::DateTime::parse_from_rfc3339(s).ok().and_then(|dt| {
-        let secs = dt.timestamp();
-        if secs < 0 {
-            return None;
-        }
-        SystemTime::UNIX_EPOCH.checked_add(std::time::Duration::from_secs(secs as u64))
-    })
 }
 
 // ─── Path safety ────────────────────────────────────────────────────────────
@@ -491,15 +412,8 @@ async fn execute_tool(
 }
 
 async fn run_bash(command: &str, cwd: &Path, timeout_secs: u64) -> String {
-    #[cfg(windows)]
     let mut cmd = {
-        let mut c = tokio::process::Command::new("cmd");
-        c.args(["/c", command]);
-        c
-    };
-    #[cfg(not(windows))]
-    let mut cmd = {
-        let mut c = tokio::process::Command::new("sh");
+        let mut c = tokio::process::Command::new("bash");
         c.args(["-c", command]);
         c
     };
@@ -714,6 +628,7 @@ async fn fetch_url(client: &reqwest::Client, url: &str) -> Result<String> {
 // ─── Copilot chat completions ────────────────────────────────────────────────
 
 struct CopilotResponse {
+    raw_json: Value,
     message: Value,
     finish_reason: String,
     prompt_tokens: u64,
@@ -732,7 +647,7 @@ async fn call_copilot(
     let mut body = json!({
         "model": model,
         "messages": messages,
-        "max_tokens": 4096,
+        "max_tokens": 16384,
         "stream": false
     });
     if !tools.is_empty() {
@@ -786,6 +701,7 @@ async fn call_copilot(
     let message = json["choices"][0]["message"].clone();
 
     Ok(CopilotResponse {
+        raw_json: json,
         message,
         finish_reason,
         prompt_tokens,
@@ -796,7 +712,9 @@ async fn call_copilot(
 /// Returns the approximate context window size for the given model slug.
 fn model_context_window(model: &str) -> u64 {
     let lower = model.to_ascii_lowercase();
-    if lower.contains("claude") || lower.starts_with("o1") || lower.starts_with("o3") {
+    if lower.contains("-1m") {
+        1_000_000
+    } else if lower.contains("claude") || lower.starts_with("o1") || lower.starts_with("o3") {
         200_000
     } else {
         128_000
@@ -819,12 +737,9 @@ pub async fn run_ghcopilot_session(options: GhCopilotOptions<'_>) -> Result<Agen
         .build()
         .context("Failed to build HTTP client")?;
 
-    let _ = tx.send(AgentOutputEvent::Stderr(
-        "[ghcopilot] EXPERIMENTAL provider — API stability not guaranteed".to_string(),
-    ));
-
-    // Acquire GitHub OAuth token via gh CLI.
-    let github_token = match get_github_token() {
+    // Acquire GitHub OAuth token via gh CLI and use it directly as the
+    // Bearer token for api.githubcopilot.com — no internal token exchange needed.
+    let bearer_token = match get_github_token() {
         Ok(t) => t,
         Err(e) => {
             let msg = format!("[ghcopilot] {}", e);
@@ -838,22 +753,7 @@ pub async fn run_ghcopilot_session(options: GhCopilotOptions<'_>) -> Result<Agen
         }
     };
 
-    // Exchange for a Copilot API token.
-    let mut copilot_token = match fetch_copilot_token(&client, &github_token).await {
-        Ok(t) => t,
-        Err(e) => {
-            let msg = format!("[ghcopilot] {}", e);
-            let _ = tx.send(AgentOutputEvent::Stderr(msg.clone()));
-            return Ok(AgentResult {
-                success: false,
-                exit_code: 1,
-                exit_kind: AgentExitKind::Failed,
-                failure_message: Some(msg),
-            });
-        }
-    };
-
-    // Set up log file.
+    // Set up log files: full API trace + persistent error log.
     std::fs::create_dir_all(options.log_dir)?;
     let timestamp = chrono::Utc::now().format("%Y%m%d-%H%M%S");
     let log_path = options
@@ -861,13 +761,38 @@ pub async fn run_ghcopilot_session(options: GhCopilotOptions<'_>) -> Result<Agen
         .join(format!("studio-ghcopilot-{}.jsonl", timestamp));
     let mut log_file = std::fs::File::create(&log_path).ok();
 
+    let error_log_path = options.log_dir.join("ghcopilot-errors.log");
+    let mut error_log = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&error_log_path)
+        .ok();
+
+    let log_error = |error_log: &mut Option<std::fs::File>, msg: &str| {
+        if let Some(ref mut f) = error_log {
+            use std::io::Write;
+            let ts = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S");
+            let _ = writeln!(f, "[{}] {}", ts, msg);
+        }
+    };
+
     let _ = tx.send(AgentOutputEvent::Text(format!(
         "[ghcopilot] model: {}",
         model
     )));
 
     let tool_defs = build_tool_definitions(options.allowed_tools);
-    let system_content = options.system_directives.trim().to_string();
+    let system_content = {
+        let base = options.system_directives.trim();
+        let platform_hint = if cfg!(target_os = "windows") {
+            "\n\nEnvironment: Windows. The Bash tool runs commands via Git Bash (bash -c). \
+             Use Unix shell syntax (ls, cat, grep, forward-slash paths). \
+             Use native Windows paths (C:\\Users\\...) only for file_path arguments in Read/Write/Edit."
+        } else {
+            ""
+        };
+        format!("{}{}", base, platform_hint)
+    };
 
     let mut messages: Vec<Value> = vec![
         json!({"role": "system", "content": system_content}),
@@ -910,18 +835,7 @@ pub async fn run_ghcopilot_session(options: GhCopilotOptions<'_>) -> Result<Agen
             });
         }
 
-        // Proactive token refresh before the API call.
-        if copilot_token.needs_refresh() {
-            match fetch_copilot_token(&client, &github_token).await {
-                Ok(t) => copilot_token = t,
-                Err(e) => {
-                    let _ = tx.send(AgentOutputEvent::Stderr(format!(
-                        "[ghcopilot] token refresh warning: {}",
-                        e
-                    )));
-                }
-            }
-        }
+        // The GitHub OAuth token is used directly — no proactive refresh needed.
 
         let thinking_msg = if turn == 0 {
             "[ghcopilot] thinking…".to_string()
@@ -930,60 +844,27 @@ pub async fn run_ghcopilot_session(options: GhCopilotOptions<'_>) -> Result<Agen
         };
         let _ = tx.send(AgentOutputEvent::Text(thinking_msg));
 
-        // Call the Copilot API, with one automatic retry on token expiry.
+        // Call the Copilot API.
         let response = {
             let result =
-                call_copilot(&client, &copilot_token.token, model, &messages, &tool_defs).await;
+                call_copilot(&client, &bearer_token, model, &messages, &tool_defs).await;
 
             match result {
                 Ok(r) => r,
                 Err(e) if e.to_string() == AUTH_ERROR_SENTINEL => {
-                    // Token was rejected — refresh and retry once.
-                    let _ = tx.send(AgentOutputEvent::Stderr(
-                        "[ghcopilot] token rejected, refreshing…".to_string(),
-                    ));
-                    match fetch_copilot_token(&client, &github_token).await {
-                        Ok(t) => {
-                            copilot_token = t;
-                            match call_copilot(
-                                &client,
-                                &copilot_token.token,
-                                model,
-                                &messages,
-                                &tool_defs,
-                            )
-                            .await
-                            {
-                                Ok(r) => r,
-                                Err(e2) => {
-                                    let msg = format!(
-                                        "[ghcopilot] API call failed after token refresh: {}",
-                                        e2
-                                    );
-                                    let _ = tx.send(AgentOutputEvent::Stderr(msg.clone()));
-                                    return Ok(AgentResult {
-                                        success: false,
-                                        exit_code: 1,
-                                        exit_kind: AgentExitKind::Failed,
-                                        failure_message: Some(msg),
-                                    });
-                                }
-                            }
-                        }
-                        Err(re) => {
-                            let msg = format!("[ghcopilot] token refresh failed: {}", re);
-                            let _ = tx.send(AgentOutputEvent::Stderr(msg.clone()));
-                            return Ok(AgentResult {
-                                success: false,
-                                exit_code: 1,
-                                exit_kind: AgentExitKind::Failed,
-                                failure_message: Some(msg),
-                            });
-                        }
-                    }
+                    let msg = "[ghcopilot] token rejected — run: gh auth login".to_string();
+                    log_error(&mut error_log, &msg);
+                    let _ = tx.send(AgentOutputEvent::Stderr(msg.clone()));
+                    return Ok(AgentResult {
+                        success: false,
+                        exit_code: 1,
+                        exit_kind: AgentExitKind::Failed,
+                        failure_message: Some(msg),
+                    });
                 }
                 Err(e) => {
                     let msg = format!("[ghcopilot] API error: {}", e);
+                    log_error(&mut error_log, &msg);
                     let _ = tx.send(AgentOutputEvent::Stderr(msg.clone()));
                     return Ok(AgentResult {
                         success: false,
@@ -995,10 +876,10 @@ pub async fn run_ghcopilot_session(options: GhCopilotOptions<'_>) -> Result<Agen
             }
         };
 
-        // Log the raw message.
+        // Log the full raw API response.
         if let Some(ref mut f) = log_file {
             use std::io::Write;
-            let _ = writeln!(f, "{}", response.message);
+            let _ = writeln!(f, "{}", response.raw_json);
         }
 
         total_input += response.prompt_tokens;
@@ -1044,11 +925,40 @@ pub async fn run_ghcopilot_session(options: GhCopilotOptions<'_>) -> Result<Agen
                 let tool_calls = match response.message["tool_calls"].as_array() {
                     Some(tc) if !tc.is_empty() => tc.clone(),
                     _ => {
-                        let _ = tx.send(AgentOutputEvent::Stderr(
-                            "[ghcopilot] finish_reason=tool_calls but no tool_calls in message"
-                                .to_string(),
-                        ));
-                        break;
+                        // Log the full response for debugging — the tool_calls
+                        // may be structured differently than expected.
+                        let debug_msg = format!(
+                            "finish_reason=tool_calls but no tool_calls array in message. \
+                             Raw response: {}",
+                            serde_json::to_string_pretty(&response.raw_json)
+                                .unwrap_or_else(|_| "??".to_string())
+                        );
+                        log_error(&mut error_log, &debug_msg);
+
+                        // If there's text content, treat it as a normal completion.
+                        if response.message["content"].as_str().is_some_and(|s| !s.trim().is_empty()) {
+                            let result_text = response.message["content"]
+                                .as_str()
+                                .unwrap_or("")
+                                .trim()
+                                .to_string();
+                            let _ = tx.send(AgentOutputEvent::Result(result_text));
+                            return Ok(AgentResult {
+                                success: true,
+                                exit_code: 0,
+                                exit_kind: AgentExitKind::Completed,
+                                failure_message: None,
+                            });
+                        }
+
+                        let msg = "[ghcopilot] finish_reason=tool_calls but no tool_calls found — see ghcopilot-errors.log".to_string();
+                        let _ = tx.send(AgentOutputEvent::Stderr(msg.clone()));
+                        return Ok(AgentResult {
+                            success: false,
+                            exit_code: 1,
+                            exit_kind: AgentExitKind::Failed,
+                            failure_message: Some(msg),
+                        });
                     }
                 };
 
@@ -1083,19 +993,38 @@ pub async fn run_ghcopilot_session(options: GhCopilotOptions<'_>) -> Result<Agen
             }
 
             "length" => {
-                let msg = "[ghcopilot] context length exceeded — response truncated".to_string();
-                let _ = tx.send(AgentOutputEvent::Stderr(msg.clone()));
-                return Ok(AgentResult {
-                    success: false,
-                    exit_code: 1,
-                    exit_kind: AgentExitKind::Failed,
-                    failure_message: Some(msg),
-                });
+                // The model hit max_tokens on its *output*, not the context
+                // window.  Append whatever partial text it produced and ask
+                // it to continue.
+                let partial = response.message["content"]
+                    .as_str()
+                    .unwrap_or("")
+                    .to_string();
+                if !partial.is_empty() {
+                    messages.push(json!({"role": "assistant", "content": partial}));
+                    messages.push(json!({"role": "user", "content": "Continue from where you left off."}));
+                } else {
+                    let msg = "[ghcopilot] response truncated with no usable content".to_string();
+                    log_error(&mut error_log, &msg);
+                    let _ = tx.send(AgentOutputEvent::Stderr(msg.clone()));
+                    return Ok(AgentResult {
+                        success: false,
+                        exit_code: 1,
+                        exit_kind: AgentExitKind::Failed,
+                        failure_message: Some(msg),
+                    });
+                }
             }
 
             other => {
+                let msg = format!(
+                    "[ghcopilot] unexpected finish_reason: '{}'. Raw: {}",
+                    other,
+                    serde_json::to_string_pretty(&response.raw_json).unwrap_or_default()
+                );
+                log_error(&mut error_log, &msg);
                 let _ = tx.send(AgentOutputEvent::Stderr(format!(
-                    "[ghcopilot] unexpected finish_reason: '{}'",
+                    "[ghcopilot] unexpected finish_reason: '{}' — see ghcopilot-errors.log",
                     other
                 )));
                 break;
@@ -1108,6 +1037,7 @@ pub async fn run_ghcopilot_session(options: GhCopilotOptions<'_>) -> Result<Agen
         "[ghcopilot] reached maximum turn limit ({}) without completing",
         MAX_AGENTIC_TURNS
     );
+    log_error(&mut error_log, &msg);
     let _ = tx.send(AgentOutputEvent::Stderr(msg.clone()));
     Ok(AgentResult {
         success: false,

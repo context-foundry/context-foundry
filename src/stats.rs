@@ -357,8 +357,8 @@ pub fn print_session_summary(session_id: &str, project_dir: &Path) -> Result<()>
 }
 
 pub fn observatory_dir() -> Result<PathBuf> {
-    let home = std::env::var("HOME").context("HOME not set")?;
-    Ok(PathBuf::from(home).join(".foundry").join("observatory"))
+    let home = crate::utils::home_dir().context("HOME or USERPROFILE not set")?;
+    Ok(home.join(".foundry").join("observatory"))
 }
 
 // ─── Event Loading ───────────────────────────────────────────

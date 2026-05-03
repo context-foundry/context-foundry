@@ -791,7 +791,13 @@ fn launch_external_editor(file_path: &Path) -> Result<()> {
     let editor = std::env::var("EDITOR")
         .ok()
         .filter(|v| !v.trim().is_empty())
-        .unwrap_or_else(|| "nano".to_string());
+        .unwrap_or_else(|| {
+            if cfg!(target_os = "windows") {
+                "notepad".to_string()
+            } else {
+                "nano".to_string()
+            }
+        });
 
     let status = if cfg!(target_os = "windows") {
         std::process::Command::new("cmd")

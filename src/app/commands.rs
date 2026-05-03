@@ -181,6 +181,10 @@ pub(crate) fn ensure_required_providers_available(
 }
 
 pub(crate) fn provider_binary_is_available(provider: ModelProvider) -> bool {
+    // Native HTTP providers have no CLI binary — they are always "available".
+    if !provider.uses_pty() {
+        return true;
+    }
     let lookup_cmd = if cfg!(target_os = "windows") {
         "where"
     } else {
@@ -1031,7 +1035,6 @@ pub(super) fn run_patterns_prune(yes: bool) -> Result<()> {
 }
 
 pub(super) fn run_patterns_promote(apply: bool, days: u32) -> Result<()> {
-    let home = std::env::var("HOME").context("HOME not set")?;
     let obs_dir = crate::stats::observatory_dir()?;
 
     let (events, _skipped) = crate::stats::load_events(&obs_dir, days, None)?;
@@ -1108,7 +1111,7 @@ pub(super) fn run_patterns_promote(apply: bool, days: u32) -> Result<()> {
     }
 
     // Group promotable patterns by their primary tech stack (extension target)
-    let home_path = PathBuf::from(&home);
+    let home_path = crate::utils::home_dir().context("HOME or USERPROFILE not set")?;
     let ext_dir = home_path.join(".foundry").join("extensions");
 
     let mut by_extension: BTreeMap<String, Vec<&String>> = BTreeMap::new();
