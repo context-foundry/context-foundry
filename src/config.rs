@@ -1991,9 +1991,9 @@ impl Config {
 
         if copilot_available {
             for (model, rec) in [
-                ("claude-sonnet-4-6", true),
+                ("claude-sonnet-4.6", true),
+                ("gpt-4.1", false),
                 ("gpt-4o", false),
-                ("o3-mini", false),
             ] {
                 entries.push(ModelEntry {
                     provider: "ghcopilot".into(),
