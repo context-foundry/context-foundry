@@ -6,9 +6,29 @@ use ratatui::{
     Frame,
 };
 
-use crate::agent::ModelProvider;
+use crate::agent::{AgentRole, ModelProvider};
 use crate::app::AppState;
 use crate::config::Config;
+
+/// Single-letter abbreviation for a pipeline stage's QRPBA indicator
+/// (`query`->Q, `research`->R, `plan`->P, `implement`->B, `doubt`->A).
+/// Falls back to the uppercased first character of the stage label so
+/// custom stages still render legibly.
+fn stage_indicator_letter(stage: &crate::config::PipelineStageConfig) -> char {
+    match stage.id.as_str() {
+        "query" => 'Q',
+        "research" => 'R',
+        "plan" => 'P',
+        "implement" => 'B',
+        "doubt" => 'A',
+        _ => stage
+            .label
+            .chars()
+            .next()
+            .map(|c| c.to_ascii_uppercase())
+            .unwrap_or('?'),
+    }
+}
 
 pub(super) fn render_dashboard_stats(
     frame: &mut Frame,
@@ -29,6 +49,11 @@ pub(super) fn render_dashboard_stats(
         state.dual_build.context_pcts[selected_idx]
     } else {
         state.spid_context_pcts
+    };
+    let visible_stage_context_pcts = if state.dual_build.active {
+        &state.dual_build.stage_context_pcts[selected_idx]
+    } else {
+        &state.stage_context_pcts
     };
     let metrics_unavailable = metrics_unavailable(provider, visible_input_tokens);
 
@@ -72,7 +97,7 @@ pub(super) fn render_dashboard_stats(
     // We build each line with left and right halves padded to fill the width.
     let half_width = area.width.saturating_sub(4) as usize / 2; // borders + padding
 
-    // ─── Row 1: Git | Context SPID ───
+    // ─── Row 1: Git | Context QRPBA ───
     let (ollama_label, ollama_color) = match state.last_pattern_match_mode.as_deref() {
         Some("semantic") => ("connected", Color::Green),
         Some("cooldown") => ("down", Color::Red),
@@ -80,21 +105,25 @@ pub(super) fn render_dashboard_stats(
         _ => ("--", Color::DarkGray),
     };
 
-    let ((s_str, s_col), (p_str, p_col), (i_str, i_col), (d_str, d_col)) = if metrics_unavailable {
-        (
-            ctx_pct_span(None, true, theme.muted),
-            ctx_pct_span(None, true, theme.muted),
-            ctx_pct_span(None, true, theme.muted),
-            ctx_pct_span(None, true, theme.muted),
-        )
-    } else {
-        (
-            ctx_pct_span(visible_context_pcts[0], false, theme.muted),
-            ctx_pct_span(visible_context_pcts[1], false, theme.muted),
-            ctx_pct_span(visible_context_pcts[2], false, theme.muted),
-            ctx_pct_span(visible_context_pcts[3], false, theme.muted),
-        )
-    };
+    // Build per-stage context spans driven by config.pipeline_stages so the
+    // bottom meter mirrors the pipeline diagram at the top (QRPBA when all
+    // stages are enabled, fewer letters when stages are disabled).
+    let context_stages: Vec<(char, String, Color)> = config
+        .pipeline_stages
+        .iter()
+        .filter(|s| s.enabled)
+        .map(|stage| {
+            let letter = stage_indicator_letter(stage);
+            let pct =
+                if let Some(slot) = AgentRole::from_str(&stage.id).and_then(|r| r.qrpba_slot()) {
+                    visible_context_pcts.get(slot).copied().flatten()
+                } else {
+                    visible_stage_context_pcts.get(&stage.id).copied()
+                };
+            let (text, color) = ctx_pct_span(pct, metrics_unavailable, theme.muted);
+            (letter, text, color)
+        })
+        .collect();
 
     let git_status_str = if state.git_initialized {
         let remote_part = state.git_remote.as_deref().unwrap_or("no remote");
@@ -113,7 +142,7 @@ pub(super) fn render_dashboard_stats(
         Color::Green
     };
 
-    lines.push(Line::from(vec![
+    let mut row1_spans = vec![
         Span::styled("  Git      ", Style::default().fg(theme.info)),
         Span::styled(
             format!(
@@ -124,15 +153,25 @@ pub(super) fn render_dashboard_stats(
             Style::default().fg(git_status_color),
         ),
         Span::styled("Context   ", Style::default().fg(theme.info)),
-        Span::styled("S:", Style::default().fg(theme.muted)),
-        Span::styled(format!("{:<4}", s_str), Style::default().fg(s_col)),
-        Span::styled(" P:", Style::default().fg(theme.muted)),
-        Span::styled(format!("{:<4}", p_str), Style::default().fg(p_col)),
-        Span::styled(" I:", Style::default().fg(theme.muted)),
-        Span::styled(format!("{:<4}", i_str), Style::default().fg(i_col)),
-        Span::styled(" D:", Style::default().fg(theme.muted)),
-        Span::styled(&d_str, Style::default().fg(d_col)),
-    ]));
+    ];
+    let last_idx = context_stages.len().saturating_sub(1);
+    for (i, (letter, text, color)) in context_stages.iter().enumerate() {
+        let label = if i == 0 {
+            format!("{}:", letter)
+        } else {
+            format!(" {}:", letter)
+        };
+        row1_spans.push(Span::styled(label, Style::default().fg(theme.muted)));
+        if i == last_idx {
+            row1_spans.push(Span::styled(text.clone(), Style::default().fg(*color)));
+        } else {
+            row1_spans.push(Span::styled(
+                format!("{:<4}", text),
+                Style::default().fg(*color),
+            ));
+        }
+    }
+    lines.push(Line::from(row1_spans));
 
     // ─── Row 2: Extensions ───
     if !state.extension_inject_count.is_empty() {
@@ -646,27 +685,29 @@ mod tests {
         state.dual_build.input_tokens = [12_000, 7_000];
         state.dual_build.output_tokens = [1_500, 500];
         state.dual_build.context_pcts = [
-            [Some(41), Some(42), Some(43), Some(44)],
-            [Some(61), Some(62), Some(66), Some(64)],
+            [Some(40), Some(41), Some(42), Some(43), Some(44)],
+            [Some(60), Some(61), Some(62), Some(66), Some(64)],
         ];
         state.session_cost_usd = 9.99;
         state.session_input_tokens = 90_000;
         state.session_output_tokens = 10_000;
-        state.spid_context_pcts = [Some(11), Some(22), Some(88), Some(33)];
+        state.spid_context_pcts = [Some(10), Some(11), Some(22), Some(88), Some(33)];
 
         let rendered = render_stats_text(&state);
 
         assert!(rendered.contains("Cost [2: Codex]"));
         assert!(rendered.contains("$1.50 (7Kin / 500out)"));
-        assert!(rendered.contains("S:61%"));
+        assert!(rendered.contains("Q:60%"));
+        assert!(rendered.contains("R:61%"));
         assert!(rendered.contains("P:62%"));
-        assert!(rendered.contains("I:66%"));
-        assert!(rendered.contains("D:64%"));
+        assert!(rendered.contains("B:66%"));
+        assert!(rendered.contains("A:64%"));
         assert!(!rendered.contains("N/A (Codex)"));
-        assert!(!rendered.contains("S:11%"));
+        assert!(!rendered.contains("Q:10%"));
+        assert!(!rendered.contains("R:11%"));
         assert!(!rendered.contains("P:22%"));
-        assert!(!rendered.contains("I:88%"));
-        assert!(!rendered.contains("D:33%"));
+        assert!(!rendered.contains("B:88%"));
+        assert!(!rendered.contains("A:33%"));
         assert!(!rendered.contains("$9.99 (90Kin / 10Kout)"));
     }
 
@@ -678,17 +719,19 @@ mod tests {
         state.dual_build.tab = 0;
         state.dual_build.input_tokens = [8_000, 0];
         state.dual_build.context_pcts = [
-            [Some(15), Some(25), Some(35), Some(45)],
-            [Some(51), Some(61), Some(71), Some(81)],
+            [Some(5), Some(15), Some(25), Some(35), Some(45)],
+            [Some(50), Some(51), Some(61), Some(71), Some(81)],
         ];
-        state.spid_context_pcts = [Some(91), Some(92), Some(93), Some(94)];
+        state.spid_context_pcts = [Some(90), Some(91), Some(92), Some(93), Some(94)];
 
         let rendered = render_stats_text(&state);
 
-        assert!(rendered.contains("S:15%"));
+        assert!(rendered.contains("Q:5%"));
+        assert!(rendered.contains("R:15%"));
         assert!(rendered.contains("P:25%"));
-        assert!(rendered.contains("I:35%"));
-        assert!(rendered.contains("D:45%"));
+        assert!(rendered.contains("B:35%"));
+        assert!(rendered.contains("A:45%"));
+        assert!(!rendered.contains("90%"));
         assert!(!rendered.contains("91%"));
         assert!(!rendered.contains("92%"));
         assert!(!rendered.contains("93%"));
@@ -720,10 +763,11 @@ mod tests {
         let rendered = render_stats_text(&state);
 
         assert!(rendered.contains("N/A (Codex)"));
-        assert!(rendered.contains("S:N/A"));
+        assert!(rendered.contains("Q:N/A"));
+        assert!(rendered.contains("R:N/A"));
         assert!(rendered.contains("P:N/A"));
-        assert!(rendered.contains("I:N/A"));
-        assert!(rendered.contains("D:N/A"));
+        assert!(rendered.contains("B:N/A"));
+        assert!(rendered.contains("A:N/A"));
         assert!(!rendered.contains("$0.00 (0in / 0out)"));
     }
 
@@ -733,16 +777,18 @@ mod tests {
         state.dual_build.active = true;
         state.dual_build.tab = 1;
         state.dual_build.models = ["Claude".to_string(), "Codex".to_string()];
-        state.spid_context_pcts = [Some(11), Some(22), Some(88), Some(33)];
+        state.spid_context_pcts = [Some(10), Some(11), Some(22), Some(88), Some(33)];
 
         let rendered = render_stats_text(&state);
 
         assert!(rendered.contains("Cost [2: Codex]"));
         assert!(rendered.contains("N/A (Codex)"));
-        assert!(rendered.contains("S:N/A"));
+        assert!(rendered.contains("Q:N/A"));
+        assert!(rendered.contains("R:N/A"));
         assert!(rendered.contains("P:N/A"));
-        assert!(rendered.contains("I:N/A"));
-        assert!(rendered.contains("D:N/A"));
+        assert!(rendered.contains("B:N/A"));
+        assert!(rendered.contains("A:N/A"));
+        assert!(!rendered.contains("10%"));
         assert!(!rendered.contains("11%"));
         assert!(!rendered.contains("22%"));
         assert!(!rendered.contains("88%"));
@@ -766,11 +812,72 @@ mod tests {
         assert!(!rendered.contains("Codex: $0.00 (0in/0out)"));
     }
 
+    #[test]
+    fn render_dashboard_stats_omits_letters_for_disabled_pipeline_stages() {
+        let mut state = AppState::new(PathBuf::from(".buildloop"));
+        state.spid_context_pcts = [Some(10), Some(20), Some(30), Some(40), Some(50)];
+        let mut config = Config::default();
+        // Disable Query and Audit -- meter should drop Q and A and only show R P B.
+        for stage in &mut config.pipeline_stages {
+            if stage.id == "query" || stage.id == "doubt" {
+                stage.enabled = false;
+            }
+        }
+
+        let rendered = render_stats_text_with_config(&state, &config);
+
+        assert!(rendered.contains("R:20%"));
+        assert!(rendered.contains("P:30%"));
+        assert!(rendered.contains("B:40%"));
+        assert!(!rendered.contains("Q:"));
+        assert!(!rendered.contains("A:"));
+    }
+
+    #[test]
+    fn render_dashboard_stats_default_config_renders_qrpba_letters_in_order() {
+        let mut state = AppState::new(PathBuf::from(".buildloop"));
+        state.spid_context_pcts = [Some(11), Some(22), Some(33), Some(44), Some(55)];
+
+        let rendered = render_stats_text(&state);
+
+        let q = rendered.find("Q:11%").expect("Q letter present");
+        let r = rendered.find("R:22%").expect("R letter present");
+        let p = rendered.find("P:33%").expect("P letter present");
+        let b = rendered.find("B:44%").expect("B letter present");
+        let a = rendered.find("A:55%").expect("A letter present");
+        assert!(q < r && r < p && p < b && b < a, "QRPBA ordering");
+    }
+
+    #[test]
+    fn render_dashboard_stats_uses_custom_stage_context_by_stage_id() {
+        let mut state = AppState::new(PathBuf::from(".buildloop"));
+        state.spid_context_pcts = [Some(11), Some(22), Some(33), Some(44), Some(55)];
+        state.stage_context_pcts.insert("security".to_string(), 77);
+        let mut config = Config::default();
+        config
+            .pipeline_stages
+            .push(crate::config::PipelineStageConfig {
+                id: "security".to_string(),
+                label: "SECURITY".to_string(),
+                enabled: true,
+                prompt_override: None,
+            });
+
+        let rendered = render_stats_text_with_config(&state, &config);
+
+        assert!(rendered.contains("B:44%"));
+        assert!(rendered.contains(" S:77%"));
+    }
+
     fn render_stats_text(state: &AppState) -> String {
+        render_stats_text_with_config(state, &Config::default())
+    }
+
+    fn render_stats_text_with_config(state: &AppState, config: &Config) -> String {
         let backend = TestBackend::new(160, 6);
         let mut terminal = Terminal::new(backend).expect("failed to create terminal");
         terminal
-            .draw(|frame| render_dashboard_stats(frame, frame.area(), state, &Config::default()))
+            .draw(|frame| render_dashboard_stats(frame, frame.area(), state, config))
             .expect("failed to draw stats");
 
         let buffer = terminal.backend().buffer();

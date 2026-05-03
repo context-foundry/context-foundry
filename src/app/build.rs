@@ -224,10 +224,14 @@ async fn run_custom_card(
         usage
     });
 
-    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::AgentStarted(
-        AgentRole::Builder,
-        Config::display_provider_model(&ctx.config.builder_provider, &ctx.config.builder_model),
-    )));
+    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::AgentStageStarted {
+        role: AgentRole::Builder,
+        stage_id: stage.id.clone(),
+        model: Config::display_provider_model(
+            &ctx.config.builder_provider,
+            &ctx.config.builder_model,
+        ),
+    }));
     observatory::log_event(
         &ctx.session_id,
         &ctx.project_dir,
@@ -2232,7 +2236,7 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
 
             // mark_done is now called inside process_task, right before
             // commit_and_push, so the commit includes both the [x] mark
-            // and the [SPID] indicator in one atomic operation.
+            // and the pipeline indicator in one atomic operation.
 
             // Track when H-prefixed (human-injected) tasks complete for discovery cooldown
             if task_info.id.starts_with('H') {
@@ -4944,7 +4948,7 @@ async fn process_task(
                     &ctx.plan_path,
                     task_id,
                     &format!(
-                        "{}{}{}{}I-!",
+                        "{}{}{}{}B-!",
                         query_char, research_char, planner_char, plan_review_char
                     ),
                 );
@@ -4977,7 +4981,7 @@ async fn process_task(
                 &ctx.plan_path,
                 task_id,
                 &format!(
-                    "{}{}{}{}I.",
+                    "{}{}{}{}B.",
                     query_char, research_char, planner_char, plan_review_char
                 ),
             );
@@ -5031,7 +5035,7 @@ async fn process_task(
                             &ctx.plan_path,
                             task_id,
                             &format!(
-                                "{}{}{}{}I-!",
+                                "{}{}{}{}B-!",
                                 query_char, research_char, planner_char, plan_review_char
                             ),
                         );
@@ -5116,7 +5120,7 @@ async fn process_task(
             FailureType::StopRequested,
             vec![],
         ));
-        // Progress indicator already written at [SPI.] above; commit preserves it.
+        // Progress indicator already written with the Build slot above; commit preserves it.
         let _ = commit_wip_for_mode(ctx, task_id, task_desc);
         flush_budget_telemetry(
             &ctx.buildloop_dir,

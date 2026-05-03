@@ -904,7 +904,7 @@ pub fn create_wip_issue(
 }
 
 /// Annotate completed tasks in TASKS.md with a PR number.
-/// Inserts `PR:#N` before the pipeline progress indicator (e.g. `[SPID]`) so
+/// Inserts `PR:#N` before the pipeline progress indicator (e.g. `[QRPBA]`) so
 /// that the trailing `[XXXX]` regex in task.rs continues to match.
 /// If there is no indicator, the tag is appended at the end.
 pub fn annotate_tasks_with_pr(
@@ -916,7 +916,7 @@ pub fn annotate_tasks_with_pr(
     use std::sync::LazyLock;
 
     static RE_PROGRESS_TAIL: LazyLock<Regex> =
-        LazyLock::new(|| Regex::new(r"\s+\[([A-Z!.\-]{4,6})\]\s*$").unwrap());
+        LazyLock::new(|| Regex::new(r"\s+\[([A-Z!.\-+]{4,7})\]\s*$").unwrap());
 
     let content = std::fs::read_to_string(plan_path)?;
     let mut lines: Vec<String> = content.lines().map(String::from).collect();
@@ -935,7 +935,7 @@ pub fn annotate_tasks_with_pr(
                 }
             }
             if let Some(m) = RE_PROGRESS_TAIL.find(line) {
-                // Insert PR tag before the [SPID] indicator
+                // Insert PR tag before the pipeline indicator.
                 let insert_pos = m.start();
                 line.insert_str(insert_pos, &format!(" {}", pr_tag));
             } else {
@@ -1297,14 +1297,14 @@ mod tests {
         let file = path.join("TASKS.md");
         fs::write(
             &file,
-            "- [x] T1.1: First task [SPID]\n- [x] T1.2: No indicator\n- [x] T1.3: With exclaim [SPI!]\n",
+            "- [x] T1.1: First task [SPID]\n- [x] T1.2: No indicator\n- [x] T1.3: With exclaim [SPI!]\n- [x] T1.4: QRPBA task [QRPBA]\n- [x] T1.5: Plan review task [QRP+BA!]\n",
         )
         .expect("write tasks");
 
         super::annotate_tasks_with_pr(&file, 7, None).expect("annotate should succeed");
         let content = fs::read_to_string(&file).expect("read tasks");
 
-        // PR tag should appear before the [SPID] indicator
+        // PR tag should appear before the legacy [SPID] indicator.
         assert!(
             content.contains("T1.1: First task PR:#7 [SPID]"),
             "PR tag should be before [SPID], got: {}",
@@ -1316,6 +1316,16 @@ mod tests {
         assert!(
             content.contains("T1.3: With exclaim PR:#7 [SPI!]"),
             "PR tag should be before [SPI!], got: {}",
+            content
+        );
+        assert!(
+            content.contains("T1.4: QRPBA task PR:#7 [QRPBA]"),
+            "PR tag should be before [QRPBA], got: {}",
+            content
+        );
+        assert!(
+            content.contains("T1.5: Plan review task PR:#7 [QRP+BA!]"),
+            "PR tag should be before [QRP+BA!], got: {}",
             content
         );
 

@@ -60,13 +60,13 @@ fn default_pipeline_stages() -> Vec<PipelineStageConfig> {
         },
         PipelineStageConfig {
             id: "implement".into(),
-            label: "IMPLEMENT".into(),
+            label: "BUILD".into(),
             enabled: true,
             prompt_override: None,
         },
         PipelineStageConfig {
             id: "doubt".into(),
-            label: "DOUBT".into(),
+            label: "AUDIT".into(),
             enabled: true,
             prompt_override: None,
         },
@@ -3041,9 +3041,9 @@ mod tests {
         assert_eq!(stages[2].id, "plan");
         assert_eq!(stages[2].label, "PLAN");
         assert_eq!(stages[3].id, "implement");
-        assert_eq!(stages[3].label, "IMPLEMENT");
+        assert_eq!(stages[3].label, "BUILD");
         assert_eq!(stages[4].id, "doubt");
-        assert_eq!(stages[4].label, "DOUBT");
+        assert_eq!(stages[4].label, "AUDIT");
     }
 
     #[test]

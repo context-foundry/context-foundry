@@ -584,6 +584,13 @@ pub(super) async fn run_headless(project_dir: &Path, output_format: Option<Strin
                 LoopEvent::AgentStarted(role, model) => {
                     eprintln!("--- {} ({}) ---", role, model);
                 }
+                LoopEvent::AgentStageStarted {
+                    role,
+                    stage_id,
+                    model,
+                } => {
+                    eprintln!("--- {} [{}] ({}) ---", role, stage_id, model);
+                }
                 LoopEvent::TaskCompleted(id, ok) => {
                     let status = if ok { "DONE" } else { "WIP" };
                     eprintln!("=== {} {} ===\n", id, status);

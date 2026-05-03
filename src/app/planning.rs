@@ -34,7 +34,7 @@ pub(super) async fn spawn_inline_planning_task(
 
     // Wait for the forwarding task to drain all agent events (including Usage)
     // before signaling completion. Without this, PlanningFinished can arrive
-    // before the Usage event, causing spid_context_pcts to stay blank.
+    // before the Usage event, causing per-stage context percentages to stay blank.
     let _ = fwd_handle.await;
 
     let _ = event_tx.send(AppEvent::PlanningFinished(outcome));

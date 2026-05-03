@@ -25,6 +25,39 @@ pub enum RunningStatusBarAction {
     Continue,
 }
 
+fn qrpba_stage_seen(stages: &[AgentRole], role: &AgentRole) -> bool {
+    match role {
+        AgentRole::Research => {
+            stages.contains(&AgentRole::Research) || stages.contains(&AgentRole::Scout)
+        }
+        AgentRole::Reviewer => {
+            stages.contains(&AgentRole::Reviewer) || stages.contains(&AgentRole::Fixer)
+        }
+        _ => stages.contains(role),
+    }
+}
+
+fn qrpba_stage_active(
+    active_stage_id: Option<&str>,
+    active_role: Option<&AgentRole>,
+    role: &AgentRole,
+) -> bool {
+    if let Some(stage_id) = active_stage_id {
+        return match role {
+            AgentRole::Query => stage_id == "query",
+            AgentRole::Research => stage_id == "research" || stage_id == "scout",
+            AgentRole::Planner => stage_id == "plan",
+            AgentRole::Builder => stage_id == "implement",
+            AgentRole::Reviewer => stage_id == "doubt",
+            _ => false,
+        };
+    }
+
+    active_role == Some(role)
+        || (*role == AgentRole::Research && active_role == Some(&AgentRole::Scout))
+        || (*role == AgentRole::Reviewer && active_role == Some(&AgentRole::Fixer))
+}
+
 pub fn running_status_bar_hit_test(
     area: Rect,
     col: u16,
@@ -757,16 +790,18 @@ pub(super) fn render_task_queue(frame: &mut Frame, area: Rect, state: &AppState,
             let pipeline_spans = if is_current {
                 // Current: show progress through pipeline
                 let all_stages = [
-                    ("S", AgentRole::Scout),
+                    ("Q", AgentRole::Query),
+                    ("R", AgentRole::Research),
                     ("P", AgentRole::Planner),
-                    ("I", AgentRole::Builder),
-                    ("D", AgentRole::Reviewer),
+                    ("B", AgentRole::Builder),
+                    ("A", AgentRole::Reviewer),
                 ];
                 let active = state.current_agent.as_ref().map(|(r, _)| r);
+                let active_stage_id = state.current_agent_stage_id.as_deref();
                 let mut spans = vec![Span::styled(" ", Style::default())];
                 for (label, role) in &all_stages {
-                    let seen = state.task_stages_seen.contains(role);
-                    let is_active = active == Some(role);
+                    let seen = qrpba_stage_seen(&state.task_stages_seen, role);
+                    let is_active = qrpba_stage_active(active_stage_id, active, role);
                     let (text, color) = if is_active {
                         (label.to_string(), Color::Yellow)
                     } else if seen {
@@ -783,12 +818,13 @@ pub(super) fn render_task_queue(frame: &mut Frame, area: Rect, state: &AppState,
                 }
                 spans
             } else if let Some(history) = state.task_history.get(&task.id) {
-                // Completed: show S>P>I>V with colors
+                // Completed: show Q>R>P>B>A with colors
                 let all_stages = [
-                    ("S", AgentRole::Scout),
+                    ("Q", AgentRole::Query),
+                    ("R", AgentRole::Research),
                     ("P", AgentRole::Planner),
-                    ("I", AgentRole::Builder),
-                    ("D", AgentRole::Reviewer),
+                    ("B", AgentRole::Builder),
+                    ("A", AgentRole::Reviewer),
                 ];
                 let verify_color = if history.passed_review {
                     Color::Green
@@ -797,7 +833,7 @@ pub(super) fn render_task_queue(frame: &mut Frame, area: Rect, state: &AppState,
                 };
                 let mut spans = vec![Span::styled(" ", Style::default())];
                 for (label, role) in &all_stages {
-                    let ran = history.stages_seen.contains(role);
+                    let ran = qrpba_stage_seen(&history.stages_seen, role);
                     let color = if !ran {
                         Color::DarkGray
                     } else if *role == AgentRole::Reviewer {
@@ -1376,4 +1412,23 @@ fn format_running_extensions_status(
         })
         .collect();
     format!("Ext: {}", parts.join(", "))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn qrpba_stage_active_uses_stage_id_over_builder_role_for_custom_cards() {
+        assert!(!qrpba_stage_active(
+            Some("security"),
+            Some(&AgentRole::Builder),
+            &AgentRole::Builder,
+        ));
+        assert!(qrpba_stage_active(
+            Some("implement"),
+            Some(&AgentRole::Builder),
+            &AgentRole::Builder,
+        ));
+    }
 }

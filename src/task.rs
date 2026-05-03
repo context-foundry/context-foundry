@@ -22,7 +22,7 @@ static RE_DISCOVERY_TASK_ID: LazyLock<Regex> =
 /// the legacy SPID (Scout, Plan, Implement, Verify) and PBRF
 /// (Planner, Builder, Reviewer, Fixer) letter sets so archived TASKS.md
 /// entries continue to parse without modification. Length range 4..=7
-/// covers `[SPID]` (4) through `[QRP+BA!]` / `[QRP+ID!]` (7).
+/// covers `[SPID]` (4) through `[QRP+BA!]` (7).
 static RE_PIPELINE_PROGRESS: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"\s+\[([A-Z!.\-+]{4,7})\]\s*$").unwrap());
 

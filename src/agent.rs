@@ -63,6 +63,22 @@ impl AgentRole {
         }
     }
 
+    /// Slot index into the QRPBA stage arrays (Query, Research, Plan, Build,
+    /// Audit). Roles that do not correspond to a connected pipeline stage --
+    /// PlanReview, Discovery -- return None. Scout maps to the Research slot
+    /// for backward compatibility with legacy SPID configurations. Fixer
+    /// shares the Audit slot with Reviewer (both belong to the "doubt" stage).
+    pub fn qrpba_slot(&self) -> Option<usize> {
+        match self {
+            AgentRole::Query => Some(0),
+            AgentRole::Research | AgentRole::Scout => Some(1),
+            AgentRole::Planner => Some(2),
+            AgentRole::Builder => Some(3),
+            AgentRole::Reviewer | AgentRole::Fixer => Some(4),
+            AgentRole::PlanReview | AgentRole::Discovery => None,
+        }
+    }
+
     /// Inverse mapping for the RPID pipeline slugs. Returns `None` for
     /// unknown slugs. Mirrors `Config::parse_provider` (trim + lowercase).
     #[allow(dead_code)]

@@ -1841,7 +1841,7 @@ fn test_dual_build_started_initializes_per_pipeline_stats() {
     assert_eq!(state.dual_build.cost_usd, [0.0, 0.0]);
     assert_eq!(state.dual_build.input_tokens, [0, 0]);
     assert_eq!(state.dual_build.output_tokens, [0, 0]);
-    assert_eq!(state.dual_build.context_pcts, [[None; 4]; 2]);
+    assert_eq!(state.dual_build.context_pcts, [[None; 5]; 2]);
 }
 
 #[test]
@@ -1894,13 +1894,13 @@ fn test_dual_pipeline_usage_updates_pipeline_slot_and_session_totals() {
     assert!((state.dual_build.cost_usd[0] - 0.0).abs() < f64::EPSILON);
     assert_eq!(state.dual_build.input_tokens[0], 0);
     assert_eq!(state.dual_build.output_tokens[0], 0);
-    assert_eq!(state.dual_build.context_pcts[0], [None; 4]);
+    assert_eq!(state.dual_build.context_pcts[0], [None; 5]);
     assert!((state.dual_build.cost_usd[1] - 1.25).abs() < f64::EPSILON);
     assert_eq!(state.dual_build.input_tokens[1], 1_000);
     assert_eq!(state.dual_build.output_tokens[1], 250);
     assert_eq!(
         state.dual_build.context_pcts[1],
-        [None, None, Some(50), None]
+        [None, None, None, Some(50), None]
     );
 
     handle_event(
@@ -1939,14 +1939,160 @@ fn test_dual_pipeline_usage_updates_pipeline_slot_and_session_totals() {
     assert_eq!(state.dual_build.output_tokens[0], 100);
     assert_eq!(
         state.dual_build.context_pcts[0],
-        [Some(50), None, None, None]
+        [None, Some(50), None, None, None]
     );
     assert!((state.dual_build.cost_usd[1] - 1.25).abs() < f64::EPSILON);
     assert_eq!(state.dual_build.input_tokens[1], 1_000);
     assert_eq!(state.dual_build.output_tokens[1], 250);
     assert_eq!(
         state.dual_build.context_pcts[1],
-        [None, None, Some(50), None]
+        [None, None, None, Some(50), None]
+    );
+}
+
+#[test]
+fn test_single_pipeline_query_and_research_update_qrpba_slots_0_and_1() {
+    let mut state = AppState::new(PathBuf::from(".buildloop"));
+    let config = Config::default();
+
+    // AgentRole::Query -> slot 0 (Q).
+    handle_event(
+        &mut state,
+        AppEvent::LoopEvent(LoopEvent::AgentStarted(
+            AgentRole::Query,
+            "claude:sonnet".to_string(),
+        )),
+        &config,
+    );
+    handle_event(
+        &mut state,
+        AppEvent::AgentOutput(AgentOutputEvent::Usage {
+            cost_usd: 0.10,
+            input_tokens: 200,
+            output_tokens: 50,
+            context_window: 1_000,
+            cache_creation_tokens: 0,
+            cache_read_tokens: 0,
+        }),
+        &config,
+    );
+    assert_eq!(
+        state.spid_context_pcts,
+        [Some(25), None, None, None, None],
+        "Query usage must land in slot 0"
+    );
+
+    // AgentRole::Research -> slot 1 (R).
+    handle_event(
+        &mut state,
+        AppEvent::LoopEvent(LoopEvent::AgentStarted(
+            AgentRole::Research,
+            "claude:opus".to_string(),
+        )),
+        &config,
+    );
+    handle_event(
+        &mut state,
+        AppEvent::AgentOutput(AgentOutputEvent::Usage {
+            cost_usd: 0.20,
+            input_tokens: 300,
+            output_tokens: 100,
+            context_window: 1_000,
+            cache_creation_tokens: 0,
+            cache_read_tokens: 0,
+        }),
+        &config,
+    );
+    assert_eq!(
+        state.spid_context_pcts,
+        [Some(25), Some(40), None, None, None],
+        "Research usage must land in slot 1 without disturbing slot 0"
+    );
+}
+
+#[test]
+fn test_custom_pipeline_stage_usage_updates_stage_context_without_build_slot() {
+    let mut state = AppState::new(PathBuf::from(".buildloop"));
+    let config = Config::default();
+
+    handle_event(
+        &mut state,
+        AppEvent::LoopEvent(LoopEvent::AgentStageStarted {
+            role: AgentRole::Builder,
+            stage_id: "security".to_string(),
+            model: "claude:sonnet".to_string(),
+        }),
+        &config,
+    );
+    handle_event(
+        &mut state,
+        AppEvent::AgentOutput(AgentOutputEvent::Usage {
+            cost_usd: 0.10,
+            input_tokens: 400,
+            output_tokens: 100,
+            context_window: 1_000,
+            cache_creation_tokens: 0,
+            cache_read_tokens: 0,
+        }),
+        &config,
+    );
+
+    assert_eq!(
+        state.spid_context_pcts,
+        [None, None, None, None, None],
+        "custom cards must not overwrite the canonical Build slot"
+    );
+    assert_eq!(state.stage_context_pcts.get("security"), Some(&50));
+    assert!(
+        !state.task_stages_seen.contains(&AgentRole::Builder),
+        "custom cards should not make the QRPBA Build indicator look complete"
+    );
+}
+
+#[test]
+fn test_dual_custom_pipeline_stage_usage_updates_pipeline_stage_context() {
+    let mut state = AppState::new(PathBuf::from(".buildloop"));
+    let config = Config::default();
+
+    handle_event(
+        &mut state,
+        AppEvent::LoopEvent(LoopEvent::DualBuildStarted {
+            models: ["Claude".to_string(), "Codex".to_string()],
+        }),
+        &config,
+    );
+    handle_event(
+        &mut state,
+        AppEvent::DualPipelineEvent(
+            1,
+            Box::new(AppEvent::LoopEvent(LoopEvent::AgentStageStarted {
+                role: AgentRole::Builder,
+                stage_id: "security".to_string(),
+                model: "Codex".to_string(),
+            })),
+        ),
+        &config,
+    );
+    handle_event(
+        &mut state,
+        AppEvent::DualPipelineEvent(
+            1,
+            Box::new(AppEvent::AgentOutput(AgentOutputEvent::Usage {
+                cost_usd: 0.25,
+                input_tokens: 700,
+                output_tokens: 100,
+                context_window: 2_000,
+                cache_creation_tokens: 0,
+                cache_read_tokens: 0,
+            })),
+        ),
+        &config,
+    );
+
+    assert_eq!(state.dual_build.context_pcts[1], [None; 5]);
+    assert_eq!(
+        state.dual_build.stage_context_pcts[1].get("security"),
+        Some(&40)
     );
 }
 

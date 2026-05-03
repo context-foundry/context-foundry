@@ -119,6 +119,16 @@ pub(super) fn render_pipeline_map(
     } else {
         state.current_agent.as_ref().map(|(role, _)| role.clone())
     };
+    let active_stage_id = if state.dual_build.active {
+        state.dual_build.stage_ids[state.dual_build.tab]
+            .clone()
+            .or_else(|| active_role.as_ref().map(|role| role.slug().to_string()))
+    } else {
+        state
+            .current_agent_stage_id
+            .clone()
+            .or_else(|| active_role.as_ref().map(|role| role.slug().to_string()))
+    };
 
     let pipe_color = theme.accent;
     let box_width = 14usize;
@@ -141,13 +151,11 @@ pub(super) fn render_pipeline_map(
         .filter(|s| s.enabled)
         .collect();
 
-    // Map active role -> index in enabled_stages via AgentRole::slug().
-    // Fixer shares the "doubt" slug with Reviewer, matching prior behaviour
-    // where both roles highlighted the DOUBT box.
-    let active_connected = active_role.as_ref().and_then(|role| {
-        let slug = role.slug();
-        enabled_stages.iter().position(|s| s.id == slug)
-    });
+    // Map active stage id -> index in enabled_stages. Custom cards use their
+    // configured stage id even though they currently run with Builder tools.
+    let active_connected = active_stage_id
+        .as_deref()
+        .and_then(|stage_id| enabled_stages.iter().position(|s| s.id == stage_id));
 
     let connected: Vec<StageInfo> = enabled_stages
         .iter()

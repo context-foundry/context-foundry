@@ -1936,7 +1936,8 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                 state.task_start = Some(chrono::Utc::now());
                 state.task_stages_seen.clear();
                 state.active_pattern_keywords.clear();
-                state.spid_context_pcts = [None; 4];
+                state.spid_context_pcts = [None; 5];
+                state.stage_context_pcts.clear();
                 state.clear_agent();
             }
             LoopEvent::AgentStarted(role, model) => {
@@ -1945,6 +1946,21 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                     state.task_stages_seen.push(role.clone());
                 }
                 state.set_agent(role, &model);
+            }
+            LoopEvent::AgentStageStarted {
+                role,
+                stage_id,
+                model,
+            } => {
+                state.log(format!("{} spawned for {} ({})", role, stage_id, model));
+                if AgentRole::from_str(&stage_id)
+                    .and_then(|stage_role| stage_role.qrpba_slot())
+                    .is_some()
+                    && !state.task_stages_seen.contains(&role)
+                {
+                    state.task_stages_seen.push(role.clone());
+                }
+                state.set_agent_for_stage(role, &model, stage_id);
             }
             LoopEvent::DualBuildStarted { models } => {
                 state.dual_build = state::DualBuildState {
@@ -1956,9 +1972,11 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                     cost_usd: [0.0, 0.0],
                     input_tokens: [0, 0],
                     output_tokens: [0, 0],
-                    context_pcts: [[None; 4]; 2],
+                    context_pcts: [[None; 5]; 2],
+                    stage_context_pcts: Default::default(),
                     finished: [false, false],
                     stages: [None, None],
+                    stage_ids: [None, None],
                     stage_models: [String::new(), String::new()],
                 };
                 state.log(format!(
@@ -3882,6 +3900,35 @@ fn format_agent_error(kind: &AgentErrorKind) -> String {
     }
 }
 
+fn record_context_pct_for_stage(
+    stage_id: Option<&str>,
+    role: Option<&AgentRole>,
+    pct: u8,
+    qrpba_context_pcts: &mut [Option<u8>; 5],
+    custom_context_pcts: &mut HashMap<String, u8>,
+) {
+    if let Some(stage_id) = stage_id {
+        if let Some(stage_role) = AgentRole::from_str(stage_id) {
+            if let Some(slot) = stage_role.qrpba_slot() {
+                qrpba_context_pcts[slot] = Some(pct);
+            }
+            return;
+        }
+
+        let stage_id = stage_id.trim();
+        if !stage_id.is_empty() {
+            custom_context_pcts.insert(stage_id.to_string(), pct);
+        }
+        return;
+    }
+
+    if let Some(role) = role {
+        if let Some(slot) = role.qrpba_slot() {
+            qrpba_context_pcts[slot] = Some(pct);
+        }
+    }
+}
+
 fn handle_agent_output(state: &mut AppState, output: AgentOutputEvent) {
     state.events_received += 1;
     match output {
@@ -3980,20 +4027,17 @@ fn handle_agent_output(state: &mut AppState, output: AgentOutputEvent) {
             if context_window > 0 {
                 let pct = ((total_tokens as f64 / context_window as f64) * 100.0).min(100.0) as u8;
                 state.agent_context_pct = Some(pct);
-                // Save to SPID slot immediately (set_agent resets agent_context_pct
+                // Save to the stage slot immediately (set_agent resets agent_context_pct
                 // when the next stage starts, so we must capture it here)
-                if let Some((ref role, _)) = state.current_agent {
-                    let slot = match role {
-                        AgentRole::Scout => Some(0),
-                        AgentRole::Planner => Some(1),
-                        AgentRole::Builder => Some(2),
-                        AgentRole::Reviewer => Some(3),
-                        _ => None,
-                    };
-                    if let Some(i) = slot {
-                        state.spid_context_pcts[i] = Some(pct);
-                    }
-                }
+                let stage_id = state.current_agent_stage_id.clone();
+                let role = state.current_agent.as_ref().map(|(role, _)| role.clone());
+                record_context_pct_for_stage(
+                    stage_id.as_deref(),
+                    role.as_ref(),
+                    pct,
+                    &mut state.spid_context_pcts,
+                    &mut state.stage_context_pcts,
+                );
             }
         }
         AgentOutputEvent::Error { kind, raw } => {
@@ -4095,16 +4139,15 @@ fn handle_dual_build_output(state: &mut AppState, idx: usize, output: AgentOutpu
             let total_tokens = input_tokens + output_tokens;
             if *context_window > 0 {
                 let pct = ((total_tokens as f64 / *context_window as f64) * 100.0).min(100.0) as u8;
-                let slot = match state.dual_build.stages[idx].as_ref() {
-                    Some(AgentRole::Scout) => Some(0),
-                    Some(AgentRole::Planner) => Some(1),
-                    Some(AgentRole::Builder) => Some(2),
-                    Some(AgentRole::Reviewer) => Some(3),
-                    _ => None,
-                };
-                if let Some(slot) = slot {
-                    state.dual_build.context_pcts[idx][slot] = Some(pct);
-                }
+                let stage_id = state.dual_build.stage_ids[idx].clone();
+                let role = state.dual_build.stages[idx].clone();
+                record_context_pct_for_stage(
+                    stage_id.as_deref(),
+                    role.as_ref(),
+                    pct,
+                    &mut state.dual_build.context_pcts[idx],
+                    &mut state.dual_build.stage_context_pcts[idx],
+                );
             }
         }
         AgentOutputEvent::Error { kind, raw } => {
@@ -4152,7 +4195,17 @@ fn handle_dual_pipeline_event(state: &mut AppState, idx: usize, event: AppEvent,
         }
         AppEvent::LoopEvent(le) => match le {
             LoopEvent::AgentStarted(role, model) => {
+                state.dual_build.stage_ids[idx] = Some(role.slug().to_string());
                 state.dual_build.stages[idx] = Some(role);
+                state.dual_build.stage_models[idx] = model;
+            }
+            LoopEvent::AgentStageStarted {
+                role,
+                stage_id,
+                model,
+            } => {
+                state.dual_build.stages[idx] = Some(role);
+                state.dual_build.stage_ids[idx] = Some(stage_id);
                 state.dual_build.stage_models[idx] = model;
             }
             LoopEvent::Log(msg) => {

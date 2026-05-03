@@ -1018,9 +1018,11 @@ pub struct DualBuildState {
     pub cost_usd: [f64; 2],
     pub input_tokens: [u64; 2],
     pub output_tokens: [u64; 2],
-    pub context_pcts: [[Option<u8>; 4]; 2], // Per-pipeline SPID context %: [pipeline][Scout, Plan, Implement, Doubt]
+    pub context_pcts: [[Option<u8>; 5]; 2], // Per-pipeline QRPBA context %: [pipeline][Query, Research, Plan, Build, Audit]
+    pub stage_context_pcts: [HashMap<String, u8>; 2], // Per-pipeline custom-card context % keyed by pipeline stage id
     pub finished: [bool; 2],
-    pub stages: [Option<AgentRole>; 2], // Current SPID stage per pipeline
+    pub stages: [Option<AgentRole>; 2], // Current QRPBA stage per pipeline
+    pub stage_ids: [Option<String>; 2], // Current configured pipeline stage id per pipeline
     pub stage_models: [String; 2],      // Model label for current stage
 }
 
@@ -1032,6 +1034,7 @@ pub struct AppState {
     pub current_task: Option<Task>,
     pub next_task_hint: Option<String>,
     pub current_agent: Option<(AgentRole, DateTime<Utc>)>,
+    pub current_agent_stage_id: Option<String>,
     pub current_agent_model: Option<String>,
     pub agent_output: Vec<String>,
     pub scroll_offset: usize,
@@ -1125,7 +1128,8 @@ pub struct AppState {
     pub session_output_tokens: u64,
     pub agent_context_pct: Option<u8>, // Context window % used by current/last agent
     pub dual_build: DualBuildState,
-    pub spid_context_pcts: [Option<u8>; 4], // Per-stage context %: [Scout, Plan, Implement, Doubt]
+    pub spid_context_pcts: [Option<u8>; 5], // Per-stage context %: [Query, Research, Plan, Build, Audit]
+    pub stage_context_pcts: HashMap<String, u8>, // Custom-card context % keyed by pipeline stage id
     pub task_start: Option<DateTime<Utc>>,
     pub task_stages_seen: Vec<AgentRole>,
     pub(super) startup_scroll_debounce_ticks: u8,
@@ -1189,6 +1193,7 @@ impl AppState {
             current_task: None,
             next_task_hint: None,
             current_agent: None,
+            current_agent_stage_id: None,
             current_agent_model: None,
             agent_output: Vec::new(),
             scroll_offset: 0,
@@ -1272,7 +1277,8 @@ impl AppState {
             session_output_tokens: 0,
             agent_context_pct: None,
             dual_build: DualBuildState::default(),
-            spid_context_pcts: [None; 4],
+            spid_context_pcts: [None; 5],
+            stage_context_pcts: HashMap::new(),
             task_start: None,
             task_stages_seen: Vec::new(),
             startup_scroll_debounce_ticks: 0,
@@ -1341,6 +1347,7 @@ impl AppState {
 
     pub(super) fn clear_agent(&mut self) {
         self.current_agent = None;
+        self.current_agent_stage_id = None;
         self.current_agent_model = None;
         self.agent_output.clear();
         self.scroll_offset = 0;
@@ -1351,11 +1358,17 @@ impl AppState {
     }
 
     pub(super) fn set_agent(&mut self, role: AgentRole, model: &str) {
+        let stage_id = role.slug().to_string();
+        self.set_agent_for_stage(role, model, stage_id);
+    }
+
+    pub(super) fn set_agent_for_stage(&mut self, role: AgentRole, model: &str, stage_id: String) {
         self.agent_output.clear();
         self.scroll_offset = 0;
         self.events_received = 0;
         self.agent_context_pct = None;
         self.status_summary = String::new();
+        self.current_agent_stage_id = Some(stage_id);
         self.current_agent = Some((role, Utc::now()));
         self.current_agent_model = Some(model.to_string());
     }
@@ -1461,6 +1474,11 @@ pub(super) enum AppEvent {
 pub(super) enum LoopEvent {
     TaskStarted(Task),
     AgentStarted(AgentRole, String),
+    AgentStageStarted {
+        role: AgentRole,
+        stage_id: String,
+        model: String,
+    },
     DualBuildStarted {
         models: [String; 2],
     },

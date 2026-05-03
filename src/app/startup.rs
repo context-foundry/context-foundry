@@ -1107,8 +1107,102 @@ pub(super) fn enter_home_surface(
         .collect();
 }
 
+fn is_qrpba_progress(chars: &[char]) -> bool {
+    if chars.len() < 5 {
+        return false;
+    }
+    let q = matches!(chars.first(), Some('Q' | '-' | '.'));
+    let r = matches!(chars.get(1), Some('R' | '-' | '.'));
+    let p = matches!(chars.get(2), Some('P' | '-' | '.'));
+    q && r && p
+}
+
+fn task_history_from_progress(progress: &str, completed: bool) -> TaskPipelineHistory {
+    let failed = progress.ends_with('!');
+    let clean = progress.trim_end_matches('!');
+    let chars: Vec<char> = clean.chars().collect();
+    let mut stages_seen = Vec::new();
+
+    if is_qrpba_progress(&chars) {
+        if chars.first() == Some(&'Q') {
+            stages_seen.push(AgentRole::Query);
+        }
+        if chars.get(1) == Some(&'R') {
+            stages_seen.push(AgentRole::Research);
+        }
+        if chars.get(2) == Some(&'P') {
+            stages_seen.push(AgentRole::Planner);
+        }
+
+        let has_plan_review_slot =
+            chars.len() >= 6 && matches!(chars.get(3), Some('+' | '-' | '!'));
+        if matches!(chars.get(3), Some('+' | '!')) {
+            stages_seen.push(AgentRole::PlanReview);
+        }
+        let build_idx = if has_plan_review_slot { 4 } else { 3 };
+        let audit_idx = build_idx + 1;
+        if matches!(chars.get(build_idx), Some('B' | 'I')) {
+            stages_seen.push(AgentRole::Builder);
+        }
+        if matches!(chars.get(audit_idx), Some('A' | 'D' | 'V')) {
+            stages_seen.push(AgentRole::Reviewer);
+        }
+
+        return TaskPipelineHistory {
+            fix_passes: 0,
+            passed_review: !failed && completed,
+            stages_seen,
+        };
+    }
+
+    // Detect SPID format (starts with S) vs legacy PBRF format (starts with P or -)
+    let is_spid = chars.first() == Some(&'S');
+
+    if is_spid {
+        // SPID format: Scout, Plan, Implement, Verify
+        if chars.first() == Some(&'S') {
+            stages_seen.push(AgentRole::Scout);
+        }
+        if chars.get(1) == Some(&'P') {
+            stages_seen.push(AgentRole::Planner);
+        }
+        if chars.get(2) == Some(&'I') {
+            stages_seen.push(AgentRole::Builder);
+        }
+        if chars.get(3) == Some(&'D') || chars.get(3) == Some(&'V') {
+            stages_seen.push(AgentRole::Reviewer);
+        }
+    } else {
+        // Legacy PBRF format: Planner, Builder, Reviewer, Fixer
+        if chars.first() == Some(&'P') {
+            stages_seen.push(AgentRole::Planner);
+        }
+        if chars.get(1) == Some(&'B') {
+            stages_seen.push(AgentRole::Builder);
+        }
+        if chars.get(2) == Some(&'R') {
+            stages_seen.push(AgentRole::Reviewer);
+        }
+        if chars.get(3) == Some(&'F') {
+            stages_seen.push(AgentRole::Fixer);
+        }
+    }
+
+    let fix_passes = if !is_spid && chars.get(3) == Some(&'F') {
+        1
+    } else {
+        0
+    };
+
+    TaskPipelineHistory {
+        fix_passes,
+        passed_review: !failed && completed,
+        stages_seen,
+    }
+}
+
 /// Populate `state.task_history` from `pipeline_progress` fields parsed from TASKS.md.
-/// This restores the pipeline indicators (SPID / legacy PBRF) across session restarts.
+/// This restores QRPBA pipeline indicators, plus legacy SPID/PBRF history, across restarts.
 fn populate_task_history_from_progress(project_dir: &Path, state: &mut AppState) {
     let plan_path = ContractPaths::resolve(project_dir).tasks_path;
     let tasks = match task::parse_tasks(&plan_path) {
@@ -1126,57 +1220,7 @@ fn populate_task_history_from_progress(project_dir: &Path, state: &mut AppState)
             continue;
         }
 
-        let chars: Vec<char> = progress.chars().collect();
-
-        // Detect SPID format (starts with S) vs legacy PBRF format (starts with P or -)
-        let is_spid = chars.first() == Some(&'S');
-        let mut stages_seen = Vec::new();
-
-        if is_spid {
-            // SPID format: Scout, Plan, Implement, Verify
-            if chars.first() == Some(&'S') {
-                stages_seen.push(AgentRole::Scout);
-            }
-            if chars.get(1) == Some(&'P') {
-                stages_seen.push(AgentRole::Planner);
-            }
-            if chars.get(2) == Some(&'I') {
-                stages_seen.push(AgentRole::Builder);
-            }
-            if chars.get(3) == Some(&'D') || chars.get(3) == Some(&'V') {
-                stages_seen.push(AgentRole::Reviewer);
-            }
-        } else {
-            // Legacy PBRF format: Planner, Builder, Reviewer, Fixer
-            if chars.first() == Some(&'P') {
-                stages_seen.push(AgentRole::Planner);
-            }
-            if chars.get(1) == Some(&'B') {
-                stages_seen.push(AgentRole::Builder);
-            }
-            if chars.get(2) == Some(&'R') {
-                stages_seen.push(AgentRole::Reviewer);
-            }
-            if chars.get(3) == Some(&'F') {
-                stages_seen.push(AgentRole::Fixer);
-            }
-        }
-
-        let fix_passes = if is_spid {
-            0
-        } else if chars.get(3) == Some(&'F') {
-            1
-        } else {
-            0
-        };
-        let has_bang = progress.contains('!');
-        let passed_review = if has_bang { false } else { t.completed };
-
-        let history = TaskPipelineHistory {
-            fix_passes,
-            passed_review,
-            stages_seen,
-        };
+        let history = task_history_from_progress(progress, t.completed);
 
         state.task_history_order.push(t.id.clone());
         state.task_history.insert(t.id.clone(), history);
@@ -1602,5 +1646,79 @@ fn refresh_git_state(state: &mut AppState, project_dir: &Path) {
         if let Some(ref mut startup) = state.startup {
             startup.git_context = Some(ctx);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn task_history_from_progress_restores_qrpba_roles() {
+        let history = task_history_from_progress("QRPBA", true);
+
+        assert_eq!(
+            history.stages_seen,
+            vec![
+                AgentRole::Query,
+                AgentRole::Research,
+                AgentRole::Planner,
+                AgentRole::Builder,
+                AgentRole::Reviewer,
+            ]
+        );
+        assert!(history.passed_review);
+        assert_eq!(history.fix_passes, 0);
+    }
+
+    #[test]
+    fn task_history_from_progress_restores_qrpba_with_plan_review_modifier() {
+        let history = task_history_from_progress("QRP+BA!", true);
+
+        assert_eq!(
+            history.stages_seen,
+            vec![
+                AgentRole::Query,
+                AgentRole::Research,
+                AgentRole::Planner,
+                AgentRole::PlanReview,
+                AgentRole::Builder,
+                AgentRole::Reviewer,
+            ]
+        );
+        assert!(!history.passed_review);
+    }
+
+    #[test]
+    fn task_history_from_progress_restores_qrpba_with_skipped_plan_review_slot() {
+        let history = task_history_from_progress("QRP-BA", true);
+
+        assert_eq!(
+            history.stages_seen,
+            vec![
+                AgentRole::Query,
+                AgentRole::Research,
+                AgentRole::Planner,
+                AgentRole::Builder,
+                AgentRole::Reviewer,
+            ]
+        );
+        assert!(history.passed_review);
+    }
+
+    #[test]
+    fn task_history_from_progress_keeps_legacy_spid_compatibility() {
+        let history = task_history_from_progress("SPID", true);
+
+        assert_eq!(
+            history.stages_seen,
+            vec![
+                AgentRole::Scout,
+                AgentRole::Planner,
+                AgentRole::Builder,
+                AgentRole::Reviewer,
+            ]
+        );
+        assert!(history.passed_review);
     }
 }
