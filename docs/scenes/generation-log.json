@@ -543,5 +543,18 @@
     "retries": 0,
     "api_retries": 0,
     "validation": "pass"
+  },
+  {
+    "ts": "2026-05-07T10:36:07.420Z",
+    "scene": "aurora-borealis-broadcast.js",
+    "seed_id": "aurora-borealis-broadcast",
+    "biome": "arctic",
+    "model": "gpt-4o-mini",
+    "input_tokens": 7416,
+    "output_tokens": 936,
+    "cost_usd": 0.0017,
+    "retries": 0,
+    "api_retries": 0,
+    "validation": "pass"
   }
 ]
