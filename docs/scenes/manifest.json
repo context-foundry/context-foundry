@@ -367,6 +367,16 @@
       "model": "gpt-4o-mini",
       "lines": 85,
       "generation": 37
+    },
+    {
+      "file": "crystal-clear-cache.js",
+      "name": "Crystal Clear Cache",
+      "location": "Naica Mine Crystal Cave, Chihuahua, Mexico",
+      "biome": "underground",
+      "generated": "2026-05-07T04:08:02.133Z",
+      "model": "gpt-4o-mini",
+      "lines": 83,
+      "generation": 38
     }
   ]
 }
