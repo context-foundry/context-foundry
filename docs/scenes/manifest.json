@@ -417,6 +417,16 @@
       "model": "gpt-4o-mini",
       "lines": 84,
       "generation": 42
+    },
+    {
+      "file": "commit-history-frozen.js",
+      "name": "Commit History: Frozen",
+      "location": "Ross Ice Shelf, Antarctica",
+      "biome": "arctic",
+      "generated": "2026-05-07T19:56:51.942Z",
+      "model": "gpt-4o-mini",
+      "lines": 90,
+      "generation": 43
     }
   ]
 }

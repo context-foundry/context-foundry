@@ -582,5 +582,32 @@
     "retries": 1,
     "api_retries": 0,
     "validation": "pass"
+  },
+  {
+    "ts": "2026-05-07T19:56:34.915Z",
+    "scene": "lunar-landing-page.js",
+    "seed_id": "lunar-landing-page",
+    "biome": "space",
+    "model": "gpt-4o-mini",
+    "input_tokens": 16316,
+    "output_tokens": 1479,
+    "cost_usd": 0.0033,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "fail",
+    "error": "Validation failed after 2 attempts: VALIDATION FAILED (1 error):\n- Too short: 72 lines (min 80)"
+  },
+  {
+    "ts": "2026-05-07T19:56:51.943Z",
+    "scene": "commit-history-frozen.js",
+    "seed_id": "commit-history-frozen",
+    "biome": "arctic",
+    "model": "gpt-4o-mini",
+    "input_tokens": 8124,
+    "output_tokens": 884,
+    "cost_usd": 0.0017,
+    "retries": 0,
+    "api_retries": 0,
+    "validation": "pass"
   }
 ]
