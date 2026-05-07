@@ -609,5 +609,46 @@
     "retries": 0,
     "api_retries": 0,
     "validation": "pass"
+  },
+  {
+    "ts": "2026-05-07T21:16:43.012Z",
+    "scene": "bioluminescent-debug-log.js",
+    "seed_id": "bioluminescent-debug-log",
+    "biome": "extreme",
+    "model": "gpt-4o-mini",
+    "input_tokens": 16296,
+    "output_tokens": 1507,
+    "cost_usd": 0.0033,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "fail",
+    "error": "Validation failed after 2 attempts: VALIDATION FAILED (1 error):\n- Too short: 75 lines (min 80)"
+  },
+  {
+    "ts": "2026-05-07T21:17:08.158Z",
+    "scene": "recursive-stalactite-descent.js",
+    "seed_id": "recursive-stalactite-descent",
+    "biome": "underground",
+    "model": "gpt-4o-mini",
+    "input_tokens": 16656,
+    "output_tokens": 1612,
+    "cost_usd": 0.0035,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "fail",
+    "error": "Validation failed after 2 attempts: VALIDATION FAILED (1 error):\n- Too short: 69 lines (min 80)"
+  },
+  {
+    "ts": "2026-05-07T21:17:23.885Z",
+    "scene": "binary-search-tree-line.js",
+    "seed_id": "binary-search-tree-line",
+    "biome": "mountain",
+    "model": "gpt-4o-mini",
+    "input_tokens": 7412,
+    "output_tokens": 1021,
+    "cost_usd": 0.0017,
+    "retries": 0,
+    "api_retries": 0,
+    "validation": "pass"
   }
 ]

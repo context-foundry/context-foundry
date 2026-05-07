@@ -427,6 +427,16 @@
       "model": "gpt-4o-mini",
       "lines": 90,
       "generation": 43
+    },
+    {
+      "file": "binary-search-tree-line.js",
+      "name": "Binary Search Treeline",
+      "location": "Dolomites, South Tyrol, Italy",
+      "biome": "mountain",
+      "generated": "2026-05-07T21:17:23.884Z",
+      "model": "gpt-4o-mini",
+      "lines": 99,
+      "generation": 44
     }
   ]
 }
