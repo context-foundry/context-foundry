@@ -650,5 +650,32 @@
     "retries": 0,
     "api_retries": 0,
     "validation": "pass"
+  },
+  {
+    "ts": "2026-05-07T23:13:24.952Z",
+    "scene": "nested-loop-switchbacks.js",
+    "seed_id": "nested-loop-switchbacks",
+    "biome": "mountain",
+    "model": "gpt-4o-mini",
+    "input_tokens": 14874,
+    "output_tokens": 1486,
+    "cost_usd": 0.0031,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "fail",
+    "error": "Validation failed after 2 attempts: VALIDATION FAILED (1 error):\n- Too short: 67 lines (min 80)"
+  },
+  {
+    "ts": "2026-05-07T23:14:39.019Z",
+    "scene": "abandoned-thread-factory.js",
+    "seed_id": "abandoned-thread-factory",
+    "biome": "urban",
+    "model": "gpt-4o-mini",
+    "input_tokens": 16656,
+    "output_tokens": 1763,
+    "cost_usd": 0.0036,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "pass"
   }
 ]

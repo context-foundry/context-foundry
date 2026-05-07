@@ -437,6 +437,16 @@
       "model": "gpt-4o-mini",
       "lines": 99,
       "generation": 44
+    },
+    {
+      "file": "abandoned-thread-factory.js",
+      "name": "Abandoned Thread Factory",
+      "location": "Pripyat, Chernobyl Exclusion Zone, Ukraine",
+      "biome": "urban",
+      "generated": "2026-05-07T23:14:39.018Z",
+      "model": "gpt-4o-mini",
+      "lines": 90,
+      "generation": 45
     }
   ]
 }
