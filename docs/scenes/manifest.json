@@ -377,6 +377,16 @@
       "model": "gpt-4o-mini",
       "lines": 83,
       "generation": 38
+    },
+    {
+      "file": "spawn-point-galapagos.js",
+      "name": "Spawn Point: Galapagos",
+      "location": "Galapagos Islands, Ecuador",
+      "biome": "extreme",
+      "generated": "2026-05-07T07:20:25.632Z",
+      "model": "gpt-4o-mini",
+      "lines": 85,
+      "generation": 39
     }
   ]
 }
