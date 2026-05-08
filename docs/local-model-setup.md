@@ -21,7 +21,8 @@ and asserts six checks: foundry exits 0, the JSON output reports
 zero log files carry Claude's `subtype:"init"` marker), and stderr is free of
 the typed errors `ContextOverflow`, `ProviderUnreachable`, and `ModelNotLoaded`.
 On PASS the script prints `[smoke] PASS  (workspace: ...)` and exits 0; pass
-`--keep` to leave the workspace behind for inspection. The same gate is wired
+`--keep` to leave the workspace behind for inspection, or
+`--timeout <secs>` to override the default 600s cap. The same gate is wired
 to `cargo test --test local_model_smoke -- --ignored` for parity with the rest
 of the test suite.
 

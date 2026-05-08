@@ -15,7 +15,7 @@ Every agent follows this structure:
 ```
 agent-name/
 ├── SPEC.md                    # What this agent does, IRS/regulatory sources
-├── TASKS.md                   # SPID task queue
+├── TASKS.md                   # QRPBA task queue
 ├── .foundry.json              # extensions: ["extend", "workday-agents"]
 ├── pyproject.toml             # Python 3.10+, FastAPI, Pydantic, pytest
 ├── src/<package>/

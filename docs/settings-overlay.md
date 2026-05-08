@@ -1,7 +1,7 @@
 # Settings Overlay
 
 The Settings Overlay is a modal panel that exposes foundry's ~40 user-tunable
-configuration fields organized into 9 collapsible sections. All changes persist
+configuration fields organized into 11 collapsible sections. All changes persist
 to `.foundry.json` in the project directory.
 
 ## Opening and closing
@@ -38,7 +38,7 @@ If the terminal is smaller than 80x24, the overlay falls back to full-screen.
 
 ## Sections
 
-The overlay has 9 sections. Each section is collapsible -- press Enter on a
+The overlay has 11 sections. Each section is collapsible -- press Enter on a
 section header to expand or collapse it. Sections marked **(expanded)** are open
 by default; all others start collapsed.
 
@@ -65,7 +65,18 @@ Per-stage overrides are documented in detail in
 
 <!-- screenshot: routing-section-expanded.png -->
 
-### 2. Pipeline behavior **(expanded)**
+### 2. Pipeline Health
+
+Read-only summary of the most recent eval-harness run (no editable fields). The
+section header expands to show per-stage plumbing and heuristic check results
+(`Q/R/P/B/A` rollups) for the last task, plus the same EVAL badge line that
+appears in the TUI status meter (`EVAL Q✓R✓P✓B⚠A✓`). The harness never blocks
+the pipeline. See [`docs/eval-harness.md`](eval-harness.md) for the full
+reference.
+
+<!-- screenshot: pipeline-health-section.png -->
+
+### 3. Pipeline behavior **(expanded)**
 
 Controls how the build loop processes tasks.
 
@@ -88,7 +99,7 @@ Controls how the build loop processes tasks.
 
 <!-- screenshot: pipeline-section.png -->
 
-### 3. Budgets & timeouts **(expanded)**
+### 4. Budgets & timeouts **(expanded)**
 
 Controls timing, cost limits, and backoff behavior.
 
@@ -112,7 +123,7 @@ for 3+ minutes before emitting its first tool call. Override here or in
 
 <!-- screenshot: budgets-section.png -->
 
-### 4. Local models
+### 5. Local models
 
 Configuration for LM Studio and Ollama integration.
 
@@ -129,7 +140,7 @@ runbook.
 
 <!-- screenshot: local-models-section.png -->
 
-### 5. Sandbox & security
+### 6. Sandbox & security
 
 Docker isolation and security controls.
 
@@ -144,7 +155,7 @@ Docker isolation and security controls.
 
 <!-- screenshot: sandbox-section.png -->
 
-### 6. Discovery & patterns
+### 7. Discovery & patterns
 
 Controls for task archiving and pattern injection.
 
@@ -159,7 +170,7 @@ Controls for task archiving and pattern injection.
 
 <!-- screenshot: discovery-section.png -->
 
-### 7. Git & PR
+### 8. Git & PR
 
 Git integration and pull request behavior.
 
@@ -173,7 +184,7 @@ Git integration and pull request behavior.
 
 <!-- screenshot: git-section.png -->
 
-### 8. Display & theme
+### 9. Display & theme
 
 Visual preferences.
 
@@ -184,7 +195,7 @@ Visual preferences.
 
 <!-- screenshot: display-section.png -->
 
-### 9. Extensions & hooks
+### 10. Extensions & hooks
 
 Extension selection and lifecycle hooks.
 
@@ -195,6 +206,22 @@ Extension selection and lifecycle hooks.
 | Build Command | Editor | (empty) | Custom build/verify command |
 
 <!-- screenshot: extensions-section.png -->
+
+### 11. Advanced
+
+Lower-level knobs for storage paths, the agent backend, and the Doubt loop kill
+switch. Most operators do not need to touch these.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| Patterns Dir | Editor | Pattern storage directory (defaults to `~/.foundry/patterns/`) |
+| History Dir | Editor | Build history directory (defaults to `~/.foundry/history/`) |
+| Tmux Prefix | Editor | Prefix for tmux session names when `Agent Backend` is `tmux` |
+| Tmux Keep Sessions | Bool | Keep tmux sessions after a task completes (for post-mortem inspection) |
+| Agent Backend | Enum | `pty` / `tmux`. Forced to `pty` when the Docker sandbox is active. |
+| Doubt in the Loop? | Bool | ON: runs Doubt (fresh-context audit). OFF: skips Doubt and trusts builder-side tests only. |
+
+<!-- screenshot: advanced-section.png -->
 
 ## Inline editing rules
 

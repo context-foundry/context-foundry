@@ -316,7 +316,7 @@ runbook (prerequisites, command transcript, fail-interpretation guide).
 ## Settings Overlay
 
 Press `?` in the TUI to open the Settings Overlay -- a 90%x80% modal exposing
-~40 user-tunable configuration fields organized into 9 collapsible sections.
+~40 user-tunable configuration fields organized into 11 collapsible sections.
 Press `Esc` from any state, click outside the modal, or click the `[ X ]` button
 to close. Changes persist to `.foundry.json` after a save confirmation.
 
