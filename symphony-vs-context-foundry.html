@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Symphony vs Context Foundry vs Linear — side-by-side</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent2: #f78166;
+    --good: #3fb950;
+    --row-alt: #11161d;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    line-height: 1.55;
+  }
+  .wrap {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 48px 24px 96px;
+  }
+  h1 {
+    font-size: 2rem;
+    margin: 0 0 8px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 12px;
+  }
+  h2 {
+    font-size: 1.4rem;
+    margin: 40px 0 12px;
+    color: var(--accent);
+  }
+  h3 {
+    font-size: 1.1rem;
+    margin: 24px 0 8px;
+    color: var(--accent2);
+  }
+  p, li { color: var(--text); }
+  .lede {
+    color: var(--muted);
+    font-size: 1.05rem;
+    margin-bottom: 16px;
+  }
+  .cards {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin: 16px 0 24px;
+  }
+  .cards.three { grid-template-columns: 1fr 1fr 1fr; }
+  .callout {
+    background: #1c232c;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent2);
+    border-radius: 6px;
+    padding: 14px 18px;
+    margin: 16px 0;
+    color: var(--text);
+  }
+  .callout strong { color: var(--accent2); }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 18px 20px;
+  }
+  .card h3 { margin-top: 0; color: var(--accent); }
+  code, kbd {
+    background: #1f242c;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 0.88em;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    margin: 16px 0;
+    font-size: 0.95rem;
+  }
+  th, td {
+    padding: 10px 14px;
+    text-align: left;
+    vertical-align: top;
+    border-bottom: 1px solid var(--border);
+  }
+  th {
+    background: #1c232c;
+    color: var(--accent);
+    font-weight: 600;
+    border-bottom: 2px solid var(--border);
+    position: sticky;
+    top: 0;
+  }
+  tr:nth-child(even) td { background: var(--row-alt); }
+  tr:last-child td { border-bottom: none; }
+  td:first-child {
+    font-weight: 600;
+    color: var(--accent2);
+    width: 22%;
+  }
+  ul { padding-left: 22px; }
+  li { margin: 4px 0; }
+  ol { padding-left: 22px; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .pill {
+    display: inline-block;
+    padding: 2px 8px;
+    background: #1c232c;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    font-size: 0.78em;
+    color: var(--muted);
+    margin-right: 6px;
+  }
+  .footer {
+    margin-top: 56px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+  @media (max-width: 900px) {
+    .cards.three { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 720px) {
+    .cards { grid-template-columns: 1fr; }
+    td:first-child { width: 35%; }
+    .wrap { padding: 24px 14px 64px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Symphony vs Context Foundry vs Linear</h1>
+<p class="lede">Three pieces of the modern AI-coding stack — an orchestrator spec, a local pipelined builder, and an issue tracker. Side-by-side feature evaluation plus how they fit together.</p>
+
+<div class="callout">
+  <strong>TL;DR on roles:</strong> Symphony and Context Foundry are <em>orchestrators</em> &mdash; they run coding agents.
+  Linear is a <em>tracker</em> &mdash; it stores tickets. Symphony was explicitly designed to use Linear as its work queue,
+  so they're complements, not competitors. Context Foundry uses a local <code>TASKS.md</code> instead of any tracker.
+</div>
+
+<h2>What each one is</h2>
+
+<div class="cards three">
+  <div class="card">
+    <h3>Symphony</h3>
+    <p>
+      <span class="pill">OpenAI</span>
+      <span class="pill">Apache-2.0</span>
+      <span class="pill">Elixir</span>
+      <span class="pill">~21k stars</span>
+    </p>
+    <p>
+      A <strong>language-agnostic spec + reference daemon</strong> that turns a Linear board into the control plane for Codex agents.
+      Polls a tracker, spawns one agent per ticket in an isolated workspace, runs until handoff (e.g. <code>Human Review</code>).
+      Released as a "reference implementation" OpenAI does not plan to maintain as a product.
+    </p>
+    <p><a href="https://github.com/openai/symphony">github.com/openai/symphony</a></p>
+  </div>
+
+  <div class="card">
+    <h3>Context Foundry</h3>
+    <p>
+      <span class="pill">Local-first</span>
+      <span class="pill">Rust</span>
+      <span class="pill">MCP-aware</span>
+      <span class="pill">Multi-provider</span>
+    </p>
+    <p>
+      A <strong>local pipelined builder TUI</strong> that runs the RPID/QRPBA stages
+      (Query &rarr; Research &rarr; Plan &rarr; Build &rarr; Audit) over a <code>TASKS.md</code> queue,
+      with provider-agnostic model routing (Claude / Codex / Copilot CLIs), a pattern-learning store,
+      and a fresh-context doubt loop.
+    </p>
+    <p><code>/Users/Shared/homelab/context-foundry</code></p>
+  </div>
+
+  <div class="card">
+    <h3>Linear</h3>
+    <p>
+      <span class="pill">SaaS</span>
+      <span class="pill">Proprietary app</span>
+      <span class="pill">MIT SDK</span>
+      <span class="pill">Closed source server</span>
+    </p>
+    <p>
+      A <strong>hosted issue tracker</strong> for software teams &mdash; projects, issues, states, branches, GraphQL API.
+      The product itself is closed-source SaaS at <a href="https://linear.app">linear.app</a> (free tier + paid plans).
+      The <a href="https://github.com/linear/linear">github.com/linear/linear</a> repo is the public TypeScript SDK and tooling, MIT-licensed.
+      You cannot self-host Linear &mdash; you sign up and connect to <code>api.linear.app/graphql</code>.
+    </p>
+  </div>
+</div>
+
+<h2>Feature matrix</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>Feature</th>
+      <th>Symphony</th>
+      <th>Context Foundry</th>
+      <th>Linear</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Category</td>
+      <td>Agent orchestrator (daemon)</td>
+      <td>Agent orchestrator (TUI / pipeline)</td>
+      <td>Issue tracker (SaaS)</td>
+    </tr>
+    <tr>
+      <td>Purpose</td>
+      <td>Orchestrate many Codex agents across tickets</td>
+      <td>Drive a single project through a structured build pipeline</td>
+      <td>Be the source of truth for tickets, projects, sprint state</td>
+    </tr>
+    <tr>
+      <td>Work intake</td>
+      <td>Polls Linear board (<code>tracker.kind: linear</code>); state machine <code>Todo &rarr; In Progress &rarr; Human Review &rarr; Done</code></td>
+      <td>Reads local <code>TASKS.md</code>; Discovery rounds append new tasks when queue empties</td>
+      <td>Receives work via web/desktop UI, GraphQL API, GitHub/Slack integrations, email-to-issue</td>
+    </tr>
+    <tr>
+      <td>Pipeline stages</td>
+      <td>One agent loop per ticket; stages live inside Codex itself</td>
+      <td>Explicit stages: Query, Research, Plan, Build, Audit (QRPBA), with skip/defer indicators (<code>-</code>, <code>+</code>, <code>!</code>)</td>
+      <td>Configurable workflow states (Backlog, Todo, In Progress, In Review, Done, Cancelled)</td>
+    </tr>
+    <tr>
+      <td>Per-stage model routing</td>
+      <td>No &mdash; single <code>codex.command</code> per workflow</td>
+      <td>Yes &mdash; e.g. Claude Opus on Plan, Codex on Build, configurable via Settings overlay</td>
+      <td>N/A &mdash; doesn't run models</td>
+    </tr>
+    <tr>
+      <td>Provider lock-in</td>
+      <td>Codex App Server only (over stdio)</td>
+      <td>Provider-agnostic: <code>claude_cli</code>, <code>codex_exec</code>, <code>copilot_cli</code>; opencode + LM Studio for local models</td>
+      <td>N/A</td>
+    </tr>
+    <tr>
+      <td>Concurrency</td>
+      <td><code>agent.max_concurrent_agents</code> (default 10), per-state caps, exponential backoff retries</td>
+      <td>Single-task-at-a-time pipeline by design; max-WIP guard; sequential RPID per task</td>
+      <td>Unlimited issues; throttled by API rate limits</td>
+    </tr>
+    <tr>
+      <td>Isolation</td>
+      <td>Per-issue filesystem workspace under <code>workspace.root</code>, hooks <code>after_create</code> / <code>before_run</code> / <code>after_run</code> / <code>before_remove</code></td>
+      <td>Git worktree isolation, sandbox modes, separate <code>.buildloop/</code> artifact dir per run</td>
+      <td>Per-team / per-workspace permissions</td>
+    </tr>
+    <tr>
+      <td>Config surface</td>
+      <td><code>WORKFLOW.md</code> in repo (YAML front matter + prompt body), hot-reloaded on change</td>
+      <td><code>.foundry.json</code>, <code>~/.foundry/</code>, <code>CLAUDE.md</code>, plus 9-section Settings overlay (~40 fields)</td>
+      <td>Web UI settings + GraphQL admin API; SDK at <code>linear/linear</code> for codegen</td>
+    </tr>
+    <tr>
+      <td>Prompt contract</td>
+      <td>Liquid-style template, strict (unknown vars/filters fail), <code>issue</code> + <code>attempt</code> inputs</td>
+      <td>Fixed prompt functions per stage in <code>src/prompts.rs</code>; per-extension overrides</td>
+      <td>N/A</td>
+    </tr>
+    <tr>
+      <td>Audit / review</td>
+      <td>Out of scope &mdash; agent produces "proof of work"; humans review at handoff state</td>
+      <td>First-class <strong>Doubt loop</strong>: fresh-context auditor (Codex or Claude) reads <code>build-claims.md</code> (Audit Payload v1), validates <code>DELTA_MANIFEST</code> + <code>VERIFICATION_MATRIX</code>, fixes HIGH/MEDIUM, writes <code>review-report.md</code></td>
+      <td>PR-link integrations (GitHub) auto-update issue state on review/merge</td>
+    </tr>
+    <tr>
+      <td>Memory / learning</td>
+      <td>None &mdash; each ticket starts fresh</td>
+      <td>Pattern store at <code>~/.foundry/patterns/*.json</code>, matched into Plan stage; <code>merge_project_patterns</code> MCP tool; per-extension <code>*-common-issues.json</code></td>
+      <td>None automated; humans accumulate context in comments / docs</td>
+    </tr>
+    <tr>
+      <td>Tracker integration</td>
+      <td>Native Linear via dynamic <code>linear_graphql</code> tool injected per session; tokens hidden from sub-agents</td>
+      <td>None built-in (local-first); commits use <code>feat(task-id)</code> / <code>WIP(task-id)</code> based on Doubt outcome</td>
+      <td><strong>Is</strong> the tracker; first-class GitHub, Slack, Figma, Sentry, Zendesk integrations</td>
+    </tr>
+    <tr>
+      <td>Lifecycle hooks</td>
+      <td>4 shell hooks per workspace with <code>timeout_ms</code></td>
+      <td>Pipeline-stage transitions write artifacts (<code>research-report.md</code> &rarr; <code>current-plan.md</code> &rarr; <code>build-claims.md</code> &rarr; <code>review-report.md</code>); Codex <code>model_reasoning_effort="xhigh"</code> pinned in audit</td>
+      <td>Webhooks on issue create/update/state-change; OAuth2 apps</td>
+    </tr>
+    <tr>
+      <td>Observability</td>
+      <td>Structured logs + optional status surface (TUI/dashboard); session-level token + rate-limit counters</td>
+      <td>Observatory dashboard, stats, history, budget tracking, per-stage event stream in TUI</td>
+      <td>Built-in views, cycles, roadmaps, insights / analytics</td>
+    </tr>
+    <tr>
+      <td>UI</td>
+      <td>Headless daemon; status surface optional</td>
+      <td>Native Rust TUI with Settings overlay (<kbd>?</kbd>), dashboard, studio</td>
+      <td>Polished web app + Electron desktop apps + iOS/Android</td>
+    </tr>
+    <tr>
+      <td>Self-hosted?</td>
+      <td>Yes &mdash; runs on your devbox</td>
+      <td>Yes &mdash; runs on your machine</td>
+      <td><strong>No</strong> &mdash; cloud-only; no on-prem option</td>
+    </tr>
+    <tr>
+      <td>Restart recovery</td>
+      <td>Tracker + filesystem driven; no DB; scheduler in-memory state lost on restart</td>
+      <td>Artifacts under <code>.buildloop/</code> are durable; <code>TASKS.md</code> is the persistent queue</td>
+      <td>Cloud-managed; durable by default</td>
+    </tr>
+    <tr>
+      <td>Headline metric</td>
+      <td>"500% increase in landed PRs" on some OpenAI teams in first 3 weeks</td>
+      <td>None published; pattern reuse is the implicit win</td>
+      <td>Used by ~10k+ companies (Vercel, Ramp, Cash App, etc.)</td>
+    </tr>
+    <tr>
+      <td>Maintenance posture</td>
+      <td>Reference impl, not a maintained product &mdash; fork or rebuild</td>
+      <td>Active homelab project; rebuild-and-install per change (<code>cargo build --release</code>)</td>
+      <td>Actively developed commercial product</td>
+    </tr>
+    <tr>
+      <td>Implementation language</td>
+      <td>Elixir (reference); spec ports to TS, Go, Rust, Java, Python</td>
+      <td>Rust</td>
+      <td>App: closed-source. SDK: TypeScript.</td>
+    </tr>
+    <tr>
+      <td>License</td>
+      <td>Apache-2.0</td>
+      <td>See <code>LICENSE</code> in repo</td>
+      <td>App: proprietary (free tier + paid). SDK (<code>linear/linear</code>): MIT</td>
+    </tr>
+    <tr>
+      <td>Cost</td>
+      <td>Free + Codex API usage</td>
+      <td>Free + whatever provider API you use</td>
+      <td>Free up to 250 issues / 10 users; Standard $8/user/mo; Plus $14; Enterprise custom</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>How Linear fits with Symphony</h2>
+<p>
+  Symphony's SPEC pins <code>tracker.kind: linear</code> as the only currently supported tracker.
+  The daemon authenticates with <code>LINEAR_API_KEY</code>, queries the GraphQL endpoint at
+  <code>api.linear.app/graphql</code>, and walks every issue in the configured <code>project_slug</code>
+  whose state is in <code>tracker.active_states</code> (defaults: <code>Todo</code>, <code>In Progress</code>).
+  For each one, it spins up a workspace, launches a Codex session, and injects a dynamic
+  <code>linear_graphql</code> tool so the agent can read and mutate the ticket directly &mdash; while keeping
+  the API token out of sub-agent context.
+</p>
+<p>
+  In other words: <strong>Linear is the queue, Symphony is the worker pool, Codex is the worker.</strong>
+  Without Linear (or a Linear-shaped adapter you write yourself), Symphony has nothing to poll.
+</p>
+
+<div class="callout">
+  <strong>Can I install Linear locally?</strong> No. Linear is closed-source SaaS &mdash; there is no on-prem or
+  self-hosted edition. The <a href="https://github.com/linear/linear">linear/linear</a> repo on GitHub is just the
+  TypeScript <strong>SDK and tooling</strong> (codegen, import scripts, examples). To use Linear with Symphony you
+  sign up at <a href="https://linear.app">linear.app</a>, create a workspace + project, generate an API key,
+  and point Symphony at it. The free tier (250 issues, 10 users) is enough to evaluate.
+</div>
+
+<h2>Local-stack options if you don't want Linear</h2>
+<ol>
+  <li><strong>Use Linear's free tier</strong> &mdash; fastest path; what Symphony was designed for.</li>
+  <li><strong>Stub a fake tracker</strong> &mdash; small GraphQL server mimicking the Linear schema Symphony queries; lets you exercise the orchestrator fully offline.</li>
+  <li><strong>Fork Symphony, add a new <code>tracker.kind</code></strong> &mdash; the SPEC says additional tracker kinds are allowed; the reference impl just ships <code>linear</code>. A <code>tracker.kind: github</code> adapter that polls GitHub Issues, or <code>tracker.kind: file</code> that reads JSON from disk, would give you a fully local stack.</li>
+  <li><strong>Use Context Foundry instead</strong> &mdash; if a local <code>TASKS.md</code> queue is enough, you skip the tracker entirely.</li>
+</ol>
+
+<h2>Where Symphony and Context Foundry overlap</h2>
+<ul>
+  <li>Both treat the <strong>workspace as the unit of isolation</strong> and run agents against a real filesystem checkout.</li>
+  <li>Both keep <strong>policy in the repo</strong> (Symphony's <code>WORKFLOW.md</code>, Foundry's <code>CLAUDE.md</code> / <code>SPEC.md</code> / <code>TASKS.md</code>).</li>
+  <li>Both are designed to <strong>decouple humans from individual agent sessions</strong> &mdash; humans set work, agents execute, humans review.</li>
+</ul>
+
+<h2>Where they fundamentally differ</h2>
+<ol>
+  <li><strong>Axis of scale.</strong> Symphony scales <em>horizontally across tickets</em> (many agents, one Codex loop each). Foundry scales <em>vertically through a single task</em> (one task, many specialized stages with different models).</li>
+  <li><strong>Where intelligence lives.</strong> In Symphony, the smarts are inside Codex's own multi-step loop. In Foundry, the smarts are in the <em>pipeline structure</em> &mdash; Research feeds Plan, Plan feeds Build, Build feeds Audit, and patterns feed back into Plan on the next run.</li>
+  <li><strong>Verification model.</strong> Symphony defers verification to "human review" as a tracker state. Foundry bakes a <em>fresh-context auditor</em> into the pipeline and refuses to mark <code>feat()</code> (vs <code>WIP()</code>) unless Doubt passes.</li>
+  <li><strong>Provider posture.</strong> Symphony is Codex-shaped end to end. Foundry is <em>provider-router-shaped</em> &mdash; Opus on Plan, Codex on Build, a local LM Studio model on Research.</li>
+  <li><strong>Memory.</strong> Symphony has none. Foundry's pattern store is the whole point of the project's name.</li>
+</ol>
+
+<h2>Use-case fit</h2>
+<ul>
+  <li><strong>Pick Symphony if</strong> you have a Linear-driven team workflow, lots of well-scoped tickets, and want autonomous Codex agents grinding them down in parallel on a devbox.</li>
+  <li><strong>Pick Context Foundry if</strong> you're a solo or small-team builder who wants stage-level control, multi-provider routing, an explicit audit gate, and accumulated learning across projects.</li>
+  <li><strong>They're not really competitors.</strong> Symphony is a <em>fan-out scheduler</em>; Foundry is a <em>depth-first builder with memory</em>. You could plausibly run Foundry as the per-ticket coding agent inside a Symphony deployment.</li>
+</ul>
+
+<div class="footer">
+  <strong>Sources</strong>
+  <ul>
+    <li><a href="https://openai.com/index/open-source-codex-orchestration-symphony/">An open-source spec for Codex orchestration: Symphony &mdash; OpenAI</a></li>
+    <li><a href="https://github.com/openai/symphony">openai/symphony &mdash; GitHub</a></li>
+    <li><a href="https://github.com/openai/symphony/blob/main/SPEC.md">symphony/SPEC.md</a></li>
+    <li><a href="https://www.helpnetsecurity.com/2026/04/28/openai-symphony-codex-orchestration-linear/">OpenAI releases Symphony to automate Codex work through Linear &mdash; Help Net Security</a></li>
+    <li><a href="https://developers.openai.com/codex/subagents">Subagents &mdash; Codex | OpenAI Developers</a></li>
+    <li><a href="https://linear.app">linear.app</a> &mdash; the hosted product</li>
+    <li><a href="https://github.com/linear/linear">github.com/linear/linear</a> &mdash; SDK and tooling (MIT)</li>
+    <li><a href="https://linear.app/docs/api">Linear GraphQL API docs</a></li>
+    <li>Local: <code>/Users/Shared/homelab/context-foundry/CLAUDE.md</code>, <code>src/</code>, <code>extensions/</code></li>
+  </ul>
+</div>
+
+</div>
+</body>
+</html>
