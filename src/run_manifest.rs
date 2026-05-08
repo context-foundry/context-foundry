@@ -366,6 +366,28 @@ impl ManifestHandle {
         let m = self.inner.lock().expect("run manifest mutex poisoned");
         m.clone()
     }
+
+    pub fn reset_to(&self, task_id: &str, started_at: DateTime<Utc>) {
+        let mut m = self.inner.lock().expect("run manifest mutex poisoned");
+        let buildloop_dir = m
+            .manifest_path
+            .parent()
+            .map(|p| p.to_path_buf())
+            .unwrap_or_else(|| std::path::PathBuf::from(".buildloop"));
+        let run_id = format!("{}-{}", started_at.format("%Y-%m-%dT%H-%M-%S"), task_id);
+        *m = RunManifest {
+            schema_version: RUN_MANIFEST_SCHEMA_VERSION,
+            run_id,
+            task_id: task_id.to_string(),
+            started_at,
+            finished_at: None,
+            completion_path: None,
+            audit_skipped_reason: None,
+            invocations: Vec::new(),
+            manifest_path: buildloop_dir.join("run-manifest.json"),
+            next_invocation_id: 1,
+        };
+    }
 }
 
 pub fn read_manifest(path: &Path) -> Result<RunManifest> {
@@ -594,5 +616,18 @@ mod tests {
         let path = tmp.path().join("run-manifest.json");
         let m = read_manifest(&path).unwrap();
         assert_eq!(m.next_invocation_id, 4);
+    }
+
+    #[test]
+    fn reset_to_replaces_state_and_preserves_dir() {
+        let tmp = TempDir::new().unwrap();
+        let h = ManifestHandle::new(tmp.path(), "T1.1", Utc::now());
+        h.record_invocation(empty_spec("", ""));
+        h.reset_to("T1.2", Utc::now());
+        let m = h.snapshot();
+        assert_eq!(m.task_id, "T1.2");
+        assert_eq!(m.invocations.len(), 0);
+        assert_eq!(m.next_invocation_id, 1);
+        assert_eq!(m.manifest_path, tmp.path().join("run-manifest.json"));
     }
 }

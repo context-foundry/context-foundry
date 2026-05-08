@@ -6,6 +6,7 @@ use serde::Serialize;
 
 use crate::agent::AgentExitKind;
 use crate::config::Config;
+use crate::run_manifest::ManifestHandle;
 use crate::sync_flag::SyncFlag;
 
 use super::contract::ContractPaths;
@@ -103,6 +104,11 @@ pub(super) struct RunContext {
     pub(super) commit_approval_result: Arc<SyncFlag>,
     /// Claude CLI version, detected once at session start.
     pub(super) cc_version: String,
+    /// Per-run manifest handle. Cloned (Arc) for parallel builder slots.
+    /// Wired in build.rs at the start of process_task; populated by record_*
+    /// calls at every agent invocation site, every skip path, and at task
+    /// finalization. Best-effort: failures never block the pipeline.
+    pub(super) manifest: ManifestHandle,
 }
 
 impl RunContext {
@@ -115,6 +121,7 @@ impl RunContext {
         let contract_paths = ContractPaths::resolve(project_dir);
         let buildloop_dir = project_dir.join(".buildloop");
         let log_dir = buildloop_dir.join("logs");
+        let manifest = ManifestHandle::new(&buildloop_dir, "", chrono::Utc::now());
 
         Self {
             project_dir: project_dir.to_path_buf(),
@@ -134,6 +141,7 @@ impl RunContext {
             commit_approval_gate: Arc::new(SyncFlag::new(false)),
             commit_approval_result: Arc::new(SyncFlag::new(false)),
             cc_version: crate::agent::detect_cc_version(),
+            manifest,
         }
     }
 
@@ -236,6 +244,12 @@ impl RunContext {
         ctx.session_id = format!("{}/{}", self.session_id, sub_label);
         ctx.session_cost_millicents = self.session_cost_millicents.clone();
         ctx
+    }
+
+    #[allow(dead_code)]
+    pub(super) fn replace_manifest_for_task(&mut self, task_id: &str) {
+        let started_at = chrono::Utc::now();
+        self.manifest = ManifestHandle::new(&self.buildloop_dir, task_id, started_at);
     }
 }
 

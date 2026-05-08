@@ -23,10 +23,94 @@ use super::context::{FailureType, RunContext, StageResult};
 use super::{review, AppEvent, LoopEvent};
 use crate::budget;
 use crate::doubt_confidence;
+use crate::eval;
+use crate::eval::stage_id::{self as eval_stage_id, StageId};
 use crate::extensions;
 use crate::observatory::{self, AgentUsage, ObservatoryEvent};
 use crate::orchestrator::{self, OrchestratorConfig};
+use crate::run_manifest::{
+    AgentExitInfo, ArtifactSource, CompletionPath, PromptEvidenceSpec, StageStatus,
+};
 use crate::utils::atomic_write_file;
+
+// ─── Eval Harness Helpers ────────────────────────────────────
+// Helpers used by the orchestrator to record one entry per agent invocation,
+// skip path, and task-completion path into the per-run manifest. All calls
+// are best-effort; failures never block the pipeline.
+
+fn manifest_exit_info(
+    result: &anyhow::Result<AgentResult>,
+    fallback_provider: &str,
+    fallback_model: &str,
+) -> (StageStatus, AgentExitInfo) {
+    match result {
+        Ok(r) => {
+            let status = if r.success {
+                StageStatus::Ran
+            } else {
+                StageStatus::Failed
+            };
+            let info = AgentExitInfo {
+                log_path: r.log_path.clone(),
+                actual_provider: r.actual_provider.clone(),
+                actual_model: r.actual_model.clone(),
+                fallback_reason: r.fallback_reason.clone(),
+            };
+            (status, info)
+        }
+        Err(_) => {
+            let info = AgentExitInfo {
+                log_path: None,
+                actual_provider: fallback_provider.to_string(),
+                actual_model: fallback_model.to_string(),
+                fallback_reason: None,
+            };
+            (StageStatus::Failed, info)
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn build_evidence_spec<'a>(
+    stage_id: StageId,
+    role: AgentRole,
+    expected_artifact_path: Option<PathBuf>,
+    originally_configured_provider: &str,
+    originally_configured_model: &str,
+    effective_provider: &str,
+    effective_model: &str,
+    override_reason: Option<String>,
+    system_prompt: &'a str,
+    user_prompt: &'a str,
+    matched_pattern_ids: Vec<String>,
+    selected_extension_names: Vec<String>,
+) -> PromptEvidenceSpec<'a> {
+    let prior_artifact_paths: Vec<PathBuf> = match eval_stage_id::prior_artifact(stage_id) {
+        Some(p) => vec![PathBuf::from(p)],
+        None => Vec::new(),
+    };
+    PromptEvidenceSpec {
+        stage_id,
+        role,
+        expected_artifact_path,
+        originally_configured_provider: originally_configured_provider.to_string(),
+        originally_configured_model: originally_configured_model.to_string(),
+        effective_provider: effective_provider.to_string(),
+        effective_model: effective_model.to_string(),
+        override_reason,
+        system_prompt,
+        user_prompt,
+        matched_pattern_ids,
+        selected_extension_names,
+        prior_artifact_paths,
+    }
+}
+
+fn finalize_run(ctx: &RunContext, completion_path: CompletionPath) {
+    ctx.manifest.record_completion(completion_path);
+    let _ = ctx.manifest.flush();
+    let _ = eval::run_for_current_task(&ctx.project_dir);
+}
 
 // ─── Crash Recovery Checkpoint ───────────────────────────────
 // Write partial progress to checkpoint.json after each SPID stage.
@@ -244,6 +328,8 @@ async fn run_custom_card(
     );
 
     let start = Instant::now();
+    // custom-card manifest recording deferred to v2 -- see docs/PLAN_eval-harness.md
+    // "Custom-card invocations" risk note.
     let result = agent::run_agent(
         &AgentRole::Builder,
         Config::parse_provider(&ctx.config.builder_provider),
@@ -538,6 +624,10 @@ fn spawn_lookahead_planner(
         // Lookahead planner writes plans, not code -- skip extension context.
 
         let (agent_tx, _agent_rx) = mpsc::unbounded_channel();
+        // lookahead planner manifest recording deferred -- this invocation is
+        // attributed to a future task, not the one that triggered the spawn;
+        // see docs/PLAN_eval-harness.md "Custom-card invocations" for the
+        // analogous v1 scope cut.
         let result = agent::run_agent(
             &AgentRole::Planner,
             Config::parse_provider(&ctx.config.planner_provider),
@@ -1143,6 +1233,14 @@ async fn run_parallel_builder(
         let slot_builder_model = ctx.config.builder_model.clone();
         let slot_cc_version = cc_version.clone();
         let slot_config = ctx.config.clone();
+        let slot_manifest = ctx.manifest.clone();
+        let slot_prompt = prompt.clone();
+        let slot_orig_provider = ctx.config.builder_provider.clone();
+        let slot_orig_model = ctx.config.builder_model.clone();
+        let slot_eff_provider = ctx.config.builder_provider.clone();
+        let slot_eff_model = ctx.config.builder_model.clone();
+        let slot_extensions = ctx.config.extensions.clone();
+        let slot_pattern_ids: Vec<String> = Vec::new();
 
         let fut = async move {
             // Create forwarding channel for this slot
@@ -1182,6 +1280,22 @@ async fn run_parallel_builder(
             );
             let slot_start = Instant::now();
 
+            let slot_spec = build_evidence_spec(
+                StageId::Build,
+                AgentRole::Builder,
+                Some(wt_project_dir.join(".buildloop").join("build-claims.md")),
+                &slot_orig_provider,
+                &slot_orig_model,
+                &slot_eff_provider,
+                &slot_eff_model,
+                None,
+                "",
+                &slot_prompt,
+                slot_pattern_ids.clone(),
+                slot_extensions.clone(),
+            );
+            let slot_inv_id = slot_manifest.record_invocation(slot_spec);
+
             let result = agent::run_agent(
                 &AgentRole::Builder,
                 provider,
@@ -1196,6 +1310,12 @@ async fn run_parallel_builder(
                 Some(&slot_config),
             )
             .await;
+            let (slot_status, slot_exit) = manifest_exit_info(
+                &result,
+                &slot_orig_provider,
+                &slot_eff_model,
+            );
+            slot_manifest.record_exit(slot_inv_id, slot_status, chrono::Utc::now(), slot_exit);
 
             let slot_usage = fwd_handle.await.unwrap_or_default();
 
@@ -2076,6 +2196,21 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                 },
             );
             // Scout is investigation-only -- skip extension context to save tokens.
+            let scout_spec = build_evidence_spec(
+                StageId::Research,
+                AgentRole::Scout,
+                Some(ctx.buildloop_dir.join("scout-report.md")),
+                &ctx.config.scout_provider,
+                &ctx.config.scout_model,
+                &ctx.config.scout_provider,
+                &ctx.config.scout_model,
+                None,
+                "",
+                &prompt,
+                Vec::new(),
+                ctx.config.extensions.clone(),
+            );
+            let scout_inv_id = ctx.manifest.record_invocation(scout_spec);
             let scout_start = Instant::now();
             let scout_result = agent::run_agent(
                 &AgentRole::Scout,
@@ -2091,6 +2226,13 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                 Some(&ctx.config),
             )
             .await;
+            let (scout_status, scout_exit) = manifest_exit_info(
+                &scout_result,
+                &ctx.config.scout_provider,
+                &ctx.config.scout_model,
+            );
+            ctx.manifest
+                .record_exit(scout_inv_id, scout_status, chrono::Utc::now(), scout_exit);
 
             let agent_usage = fwd_handle.await.unwrap_or_default();
             let _ = tx.send(AppEvent::AgentDone(
@@ -2780,6 +2922,13 @@ async fn process_task(
             "Phase isolation: enabled (Doubt artifacts will be restricted)".to_string(),
         )));
     }
+    // ─── Per-task manifest reset (eval harness E1.3) ────────────
+    // Each task gets a fresh ManifestHandle keyed to its task_id and
+    // started_at. The manifest accumulates one entry per agent invocation,
+    // skip path, and completion path. Flushed at every task-completion
+    // path via finalize_run().
+    ctx.manifest.reset_to(task_id, chrono::Utc::now());
+
     let mut stage_results: Vec<StageResult> = Vec::new();
     let mut budget_telemetry = budget::BudgetTelemetry {
         task_id: task_id.to_string(),
@@ -2846,6 +2995,7 @@ async fn process_task(
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
             "ERROR: pipeline_stages reorders known stages (query/research/plan/implement/doubt) out of canonical order. Known stages have hard dependencies (gates, artifacts, shared state) and must appear in canonical order. Custom card slugs may be interspersed at any position. Refusing to run.".to_string(),
         )));
+        // eval-harness v1: pipeline_stages config error -- no manifest entries to flush; see docs/PLAN_eval-harness.md
         return (false, false, false);
     }
 
@@ -3065,6 +3215,37 @@ async fn process_task(
             "Reusing research report from previous task".to_string()
         };
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(msg)));
+        let qr_skip_reason = if checkpoint_skip_query && checkpoint_skip_research {
+            "Checkpoint: reusing questions + research from previous session".to_string()
+        } else if ctx.config.skip_scout_for_simple && task_complexity == TaskComplexity::Simple {
+            "skip_scout_for_simple".to_string()
+        } else {
+            "reuse_research_report_recent".to_string()
+        };
+        let qr_status = if checkpoint_skip_query && checkpoint_skip_research {
+            StageStatus::Reused
+        } else {
+            StageStatus::Skipped
+        };
+        let qr_artifact_source = if checkpoint_skip_query && checkpoint_skip_research {
+            Some(ArtifactSource::Checkpoint)
+        } else {
+            Some(ArtifactSource::PreviousRun)
+        };
+        let _ = ctx.manifest.record_skip(
+            StageId::Query,
+            AgentRole::Query,
+            qr_status,
+            qr_skip_reason.clone(),
+            qr_artifact_source,
+        );
+        let _ = ctx.manifest.record_skip(
+            StageId::Research,
+            AgentRole::Research,
+            qr_status,
+            qr_skip_reason,
+            qr_artifact_source,
+        );
     } else {
         // Determine question budget based on complexity
         let max_questions: usize = match task_complexity {
@@ -3085,6 +3266,28 @@ async fn process_task(
                 "Skipping Query (research report outdated)".to_string()
             };
             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(msg)));
+            let q_reason = if checkpoint_skip_query {
+                "Checkpoint: reusing questions from previous session".to_string()
+            } else {
+                "research_report_outdated".to_string()
+            };
+            let q_status = if checkpoint_skip_query {
+                StageStatus::Reused
+            } else {
+                StageStatus::Skipped
+            };
+            let q_source = if checkpoint_skip_query {
+                Some(ArtifactSource::Checkpoint)
+            } else {
+                Some(ArtifactSource::PreviousRun)
+            };
+            let _ = ctx.manifest.record_skip(
+                StageId::Query,
+                AgentRole::Query,
+                q_status,
+                q_reason,
+                q_source,
+            );
         } else {
             // ─── Query Phase ─────────────────────────────────────────
             {
@@ -3141,6 +3344,21 @@ async fn process_task(
                     spec_content.as_deref(),
                     tasks_content.as_deref(),
                 );
+                let query_spec = build_evidence_spec(
+                    StageId::Query,
+                    AgentRole::Query,
+                    Some(questions_file.clone()),
+                    &ctx.config.query_provider,
+                    &ctx.config.query_model,
+                    &ctx.config.query_provider,
+                    &ctx.config.query_model,
+                    None,
+                    "",
+                    &query_prompt_text,
+                    injected_pattern_ids.clone(),
+                    ctx.config.extensions.clone(),
+                );
+                let query_inv_id = ctx.manifest.record_invocation(query_spec);
                 let query_start = Instant::now();
                 let query_result = agent::run_agent(
                     &AgentRole::Query,
@@ -3156,6 +3374,13 @@ async fn process_task(
                     Some(&ctx.config),
                 )
                 .await;
+                let (query_status, query_exit) = manifest_exit_info(
+                    &query_result,
+                    &ctx.config.query_provider,
+                    &ctx.config.query_model,
+                );
+                ctx.manifest
+                    .record_exit(query_inv_id, query_status, chrono::Utc::now(), query_exit);
 
                 let agent_usage = fwd_handle.await.unwrap_or_default();
                 last_rate_limited = was_rate_limited(&query_result);
@@ -3275,6 +3500,7 @@ async fn process_task(
                         ctx.config.budget_recovery_enabled,
                         &budget_telemetry,
                     );
+                    finalize_run(ctx, CompletionPath::Aborted);
                     return (false, last_rate_limited, false);
                 }
             }
@@ -3305,6 +3531,13 @@ async fn process_task(
                 "Pipeline: research stage disabled in config -- skipping research for {}",
                 task_id
             ))));
+            let _ = ctx.manifest.record_skip(
+                StageId::Research,
+                AgentRole::Research,
+                StageStatus::Skipped,
+                "stage_disabled_research".to_string(),
+                None,
+            );
         } else if !query_failed {
             // ─── Research Phase (with phase isolation) ───────────────
             {
@@ -3363,6 +3596,21 @@ async fn process_task(
                         .and_then(|i| ctx.config.pipeline_stages.get(i))
                         .and_then(|s| s.prompt_override.as_deref()),
                 );
+                let research_spec = build_evidence_spec(
+                    StageId::Research,
+                    AgentRole::Research,
+                    Some(research_report.clone()),
+                    &ctx.config.research_provider,
+                    &ctx.config.research_model,
+                    &ctx.config.research_provider,
+                    &ctx.config.research_model,
+                    None,
+                    "",
+                    &research_prompt_text,
+                    injected_pattern_ids.clone(),
+                    ctx.config.extensions.clone(),
+                );
+                let research_inv_id = ctx.manifest.record_invocation(research_spec);
                 let research_start = Instant::now();
                 let research_result = agent::run_agent(
                     &AgentRole::Research,
@@ -3378,6 +3626,17 @@ async fn process_task(
                     Some(&ctx.config),
                 )
                 .await;
+                let (research_status, research_exit) = manifest_exit_info(
+                    &research_result,
+                    &ctx.config.research_provider,
+                    &ctx.config.research_model,
+                );
+                ctx.manifest.record_exit(
+                    research_inv_id,
+                    research_status,
+                    chrono::Utc::now(),
+                    research_exit,
+                );
 
                 // Restore isolated files before processing results
                 if let Some(mut iso) = isolation {
@@ -3535,6 +3794,7 @@ async fn process_task(
                         ctx.config.budget_recovery_enabled,
                         &budget_telemetry,
                     );
+                    finalize_run(ctx, CompletionPath::Aborted);
                     return (false, last_rate_limited, false);
                 }
             }
@@ -3646,6 +3906,11 @@ async fn process_task(
         "P"
     };
 
+    // Track the planner invocation id across the planner block and the
+    // separate `if !skip_planner { gate_builder(...) }` block below so the
+    // retry path can mark the original planner as superseded.
+    let mut planner_inv_id: Option<crate::run_manifest::StageInvocationId> = None;
+
     if skip_planner {
         let reason = if checkpoint_skip_planner {
             "checkpoint recovery"
@@ -3658,6 +3923,30 @@ async fn process_task(
             "Skipping planner for {}",
             reason
         ))));
+        let plan_skip_reason = if checkpoint_skip_planner {
+            "checkpoint_skip_builder".to_string()
+        } else if !ctx.config.pipeline_stage_enabled("plan") {
+            "stage_disabled_plan".to_string()
+        } else {
+            "simple_task_skip_planner".to_string()
+        };
+        let plan_status = if checkpoint_skip_planner {
+            StageStatus::CheckpointResume
+        } else {
+            StageStatus::Skipped
+        };
+        let plan_source = if checkpoint_skip_planner {
+            Some(ArtifactSource::Checkpoint)
+        } else {
+            Some(ArtifactSource::PreviousRun)
+        };
+        let _ = ctx.manifest.record_skip(
+            StageId::Plan,
+            AgentRole::Planner,
+            plan_status,
+            plan_skip_reason,
+            plan_source,
+        );
     } else {
         // ─── Check for Look-Ahead Plan ───────────────────────────
         let la_plan = lookahead_plan_path(ctx, task_id);
@@ -3748,6 +4037,11 @@ async fn process_task(
                 prompt = format!("{}\n\n{}", summary, prompt);
             }
             // Planner writes plans, not code -- skip extension context to save tokens.
+            let override_reason = if budget_model_override.is_some() {
+                Some("budget_recovery".to_string())
+            } else {
+                None
+            };
             let planner_start = Instant::now();
             let (eff_planner_provider, eff_planner_model) = match budget_model_override.take() {
                 Some((p, m)) => (Config::parse_provider(&p), m),
@@ -3756,6 +4050,24 @@ async fn process_task(
                     ctx.config.planner_model.clone(),
                 ),
             };
+            let eff_planner_provider_str: String =
+                format!("{:?}", eff_planner_provider).to_ascii_lowercase();
+            let planner_spec = build_evidence_spec(
+                StageId::Plan,
+                AgentRole::Planner,
+                Some(ctx.current_plan.clone()),
+                &ctx.config.planner_provider,
+                &ctx.config.planner_model,
+                &eff_planner_provider_str,
+                &eff_planner_model,
+                override_reason.clone(),
+                "",
+                &prompt,
+                injected_pattern_ids.clone(),
+                ctx.config.extensions.clone(),
+            );
+            let this_planner_inv_id = ctx.manifest.record_invocation(planner_spec);
+            planner_inv_id = Some(this_planner_inv_id);
             let plan_result = agent::run_agent(
                 &AgentRole::Planner,
                 eff_planner_provider,
@@ -3770,6 +4082,17 @@ async fn process_task(
                 Some(&ctx.config),
             )
             .await;
+            let (planner_status, planner_exit) = manifest_exit_info(
+                &plan_result,
+                &ctx.config.planner_provider,
+                &eff_planner_model,
+            );
+            ctx.manifest.record_exit(
+                this_planner_inv_id,
+                planner_status,
+                chrono::Utc::now(),
+                planner_exit,
+            );
 
             let agent_usage = fwd_handle.await.unwrap_or_default();
             last_rate_limited = was_rate_limited(&plan_result);
@@ -3903,6 +4226,7 @@ async fn process_task(
                     ctx.config.budget_recovery_enabled,
                     &budget_telemetry,
                 );
+                finalize_run(ctx, CompletionPath::PlannerFailure);
                 return (false, last_rate_limited, false);
             }
 
@@ -3942,6 +4266,7 @@ async fn process_task(
                     ctx.config.budget_recovery_enabled,
                     &budget_telemetry,
                 );
+                finalize_run(ctx, CompletionPath::Aborted);
                 return (false, last_rate_limited, false);
             }
         }
@@ -4013,6 +4338,7 @@ async fn process_task(
                 ctx.config.budget_recovery_enabled,
                 &budget_telemetry,
             );
+            finalize_run(ctx, CompletionPath::Aborted);
             return (false, last_rate_limited, false);
         }
     }
@@ -4064,6 +4390,27 @@ async fn process_task(
             );
             // Planner retry -- skip extension context to save tokens.
 
+            let retry_spec = build_evidence_spec(
+                StageId::Plan,
+                AgentRole::Planner,
+                Some(ctx.current_plan.clone()),
+                &ctx.config.planner_provider,
+                &ctx.config.planner_model,
+                &ctx.config.planner_provider,
+                &ctx.config.planner_model,
+                None,
+                "",
+                &retry_prompt,
+                injected_pattern_ids.clone(),
+                ctx.config.extensions.clone(),
+            );
+            let retry_inv_id = ctx.manifest.record_invocation(retry_spec);
+            // Mark the original planner invocation as superseded by this retry,
+            // when the original planner ran (Option is None if planner was
+            // skipped or replaced by a lookahead plan).
+            if let Some(prior) = planner_inv_id {
+                ctx.manifest.mark_superseded(prior, retry_inv_id);
+            }
             let retry_start = Instant::now();
             let (agent_tx2, mut agent_rx2) = mpsc::unbounded_channel();
             let fwd_tx2 = tx.clone();
@@ -4108,6 +4455,17 @@ async fn process_task(
                 Some(&ctx.config),
             )
             .await;
+            let (retry_status, retry_exit) = manifest_exit_info(
+                &retry_result,
+                &ctx.config.planner_provider,
+                &ctx.config.planner_model,
+            );
+            ctx.manifest.record_exit(
+                retry_inv_id,
+                retry_status,
+                chrono::Utc::now(),
+                retry_exit,
+            );
 
             let retry_usage = fwd_handle2.await.unwrap_or_default();
             last_rate_limited = was_rate_limited(&retry_result);
@@ -4228,6 +4586,7 @@ async fn process_task(
                     ctx.config.budget_recovery_enabled,
                     &budget_telemetry,
                 );
+                finalize_run(ctx, CompletionPath::PlannerFailure);
                 return (false, last_rate_limited, false);
             }
 
@@ -4540,6 +4899,7 @@ async fn process_task(
                     ctx.config.budget_recovery_enabled,
                     &budget_telemetry,
                 );
+                finalize_run(ctx, CompletionPath::Aborted);
                 return (false, last_rate_limited, false);
             }
 
@@ -4582,6 +4942,7 @@ async fn process_task(
                         ctx.config.budget_recovery_enabled,
                         &budget_telemetry,
                     );
+                    finalize_run(ctx, CompletionPath::Aborted);
                     return (false, last_rate_limited, false);
                 }
             }
@@ -4627,6 +4988,28 @@ async fn process_task(
             )
         };
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(log_msg)));
+        let build_skip_reason = if checkpoint_skip_builder {
+            "checkpoint_skip_builder".to_string()
+        } else {
+            "stage_disabled_implement".to_string()
+        };
+        let build_status = if checkpoint_skip_builder {
+            StageStatus::CheckpointResume
+        } else {
+            StageStatus::Skipped
+        };
+        let build_source = if checkpoint_skip_builder {
+            Some(ArtifactSource::Checkpoint)
+        } else {
+            None
+        };
+        let _ = ctx.manifest.record_skip(
+            StageId::Build,
+            AgentRole::Builder,
+            build_status,
+            build_skip_reason,
+            build_source,
+        );
         {
             let action = if checkpoint_skip_builder {
                 format!("Implement changes for {} (checkpoint)", task_id)
@@ -4820,6 +5203,11 @@ async fn process_task(
             } else {
                 prompt
             };
+            let builder_override_reason = if budget_model_override.is_some() {
+                Some("budget_recovery".to_string())
+            } else {
+                None
+            };
             let builder_start = Instant::now();
             let (eff_builder_provider, eff_builder_model) = match budget_model_override.take() {
                 Some((p, m)) => {
@@ -4836,6 +5224,23 @@ async fn process_task(
                     )
                 }
             };
+            let eff_builder_provider_str: String =
+                format!("{:?}", eff_builder_provider).to_ascii_lowercase();
+            let builder_spec = build_evidence_spec(
+                StageId::Build,
+                AgentRole::Builder,
+                Some(ctx.buildloop_dir.join("build-claims.md")),
+                &ctx.config.builder_provider,
+                &ctx.config.builder_model,
+                &eff_builder_provider_str,
+                &eff_builder_model,
+                builder_override_reason.clone(),
+                "",
+                &prompt,
+                injected_pattern_ids.clone(),
+                ctx.config.extensions.clone(),
+            );
+            let builder_inv_id = ctx.manifest.record_invocation(builder_spec);
             let build_result = agent::run_agent(
                 &AgentRole::Builder,
                 eff_builder_provider,
@@ -4850,6 +5255,17 @@ async fn process_task(
                 Some(&ctx.config),
             )
             .await;
+            let (builder_status, builder_exit) = manifest_exit_info(
+                &build_result,
+                &ctx.config.builder_provider,
+                &eff_builder_model,
+            );
+            ctx.manifest.record_exit(
+                builder_inv_id,
+                builder_status,
+                chrono::Utc::now(),
+                builder_exit,
+            );
 
             let agent_usage = fwd_handle.await.unwrap_or_default();
             let rl = was_rate_limited(&build_result);
@@ -4968,6 +5384,7 @@ async fn process_task(
                 ctx.config.budget_recovery_enabled,
                 &budget_telemetry,
             );
+            finalize_run(ctx, CompletionPath::BuilderFailure);
             return (false, last_rate_limited, false);
         }
 
@@ -5052,6 +5469,7 @@ async fn process_task(
                         ctx.config.budget_recovery_enabled,
                         &budget_telemetry,
                     );
+                    finalize_run(ctx, CompletionPath::BuilderFailure);
                     return (false, last_rate_limited, false);
                 }
                 Err(e) => {
@@ -5127,6 +5545,7 @@ async fn process_task(
             ctx.config.budget_recovery_enabled,
             &budget_telemetry,
         );
+        finalize_run(ctx, CompletionPath::Aborted);
         return (false, last_rate_limited, false);
     }
 
@@ -5161,6 +5580,29 @@ async fn process_task(
     let stage_skip_doubt = !ctx.config.pipeline_stage_enabled("doubt");
     let skip_verify =
         skip_doubt_simple || skip_for_batch || skip_doubt_confidence || stage_skip_doubt;
+
+    // Record doubt skip in the manifest BEFORE entering the review_loop branch.
+    // The four skip variants below cover every doubt-skip path in v1.
+    if skip_verify || ctx.config.backpressure_only {
+        let doubt_skip_reason = if ctx.config.backpressure_only {
+            "backpressure_only".to_string()
+        } else if skip_for_batch {
+            "batch_deferred_doubt".to_string()
+        } else if skip_doubt_simple {
+            "simple_task_skip_doubt".to_string()
+        } else if skip_doubt_confidence {
+            "confidence_skip_doubt".to_string()
+        } else {
+            "stage_disabled_doubt".to_string()
+        };
+        let _ = ctx.manifest.record_skip(
+            StageId::Audit,
+            AgentRole::Reviewer,
+            StageStatus::Skipped,
+            doubt_skip_reason,
+            None,
+        );
+    }
 
     let (validated, _fix_passes, review_findings, reviewer_budget_record) =
         if ctx.config.backpressure_only {
@@ -5319,6 +5761,7 @@ async fn process_task(
         while ctx.commit_approval_gate.get() {
             if ctx.is_stop_requested() {
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Finished));
+                // eval-harness v1: abrupt approval/PR abort -- manifest left as-is, no finalize_run; see docs/PLAN_eval-harness.md
                 return (false, false, false);
             }
             tokio::time::sleep(Duration::from_millis(200)).await;
@@ -5489,6 +5932,7 @@ async fn process_task(
                             h.abort();
                         }
                         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Finished));
+                        // eval-harness v1: abrupt approval/PR abort -- manifest left as-is, no finalize_run; see docs/PLAN_eval-harness.md
                         return (false, false, false);
                     }
                     tokio::time::sleep(Duration::from_millis(200)).await;
@@ -5528,6 +5972,7 @@ async fn process_task(
                     while ctx.review_gate.get() {
                         if ctx.is_stop_requested() {
                             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Finished));
+                            // eval-harness v1: abrupt approval/PR abort -- manifest left as-is, no finalize_run; see docs/PLAN_eval-harness.md
                             return (false, false, false);
                         }
                         tokio::time::sleep(Duration::from_millis(200)).await;
@@ -5875,6 +6320,19 @@ async fn process_task(
     // Clear checkpoint — task completed successfully (committed or WIP)
     clear_checkpoint(&ctx.buildloop_dir);
 
+    // Eval harness: select completion path based on validated + skip flags.
+    // skip_verify is the boolean computed near build.rs:5162; if doubt was
+    // skipped, classify as AuditSkipped regardless of validated. Otherwise
+    // AuditPass when validated, AuditFail when not.
+    let final_completion_path = if skip_verify || ctx.config.backpressure_only {
+        CompletionPath::AuditSkipped
+    } else if validated {
+        CompletionPath::AuditPass
+    } else {
+        CompletionPath::AuditFail
+    };
+    finalize_run(ctx, final_completion_path);
+
     (validated, last_rate_limited, human_denied_approval)
 }
 
@@ -5900,6 +6358,8 @@ async fn run_pattern_extraction(
     let prompt = prompts::pattern_extraction_prompt(task_id, task_desc);
     // Note: pattern extraction doesn't get extension context -- it's a lightweight
     // JSON extraction task that doesn't benefit from domain-specific instructions.
+    // Discovery-stage manifest recording deferred to v2 -- StageId enum
+    // covers Q/R/P/B/A only; see docs/PLAN_eval-harness.md.
     let result = agent::run_agent(
         &AgentRole::Discovery,
         agent::ModelProvider::Claude,
