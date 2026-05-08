@@ -677,5 +677,32 @@
     "retries": 1,
     "api_retries": 0,
     "validation": "pass"
+  },
+  {
+    "ts": "2026-05-08T03:56:00.564Z",
+    "scene": "bamboo-array-forest.js",
+    "seed_id": "bamboo-array-forest",
+    "biome": "forest",
+    "model": "gpt-4o-mini",
+    "input_tokens": 14888,
+    "output_tokens": 1723,
+    "cost_usd": 0.0033,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "fail",
+    "error": "Validation failed after 2 attempts: VALIDATION FAILED (1 error):\n- Too short: 66 lines (min 80)"
+  },
+  {
+    "ts": "2026-05-08T03:56:26.705Z",
+    "scene": "mars-rover-code-review.js",
+    "seed_id": "mars-rover-code-review",
+    "biome": "space",
+    "model": "gpt-4o-mini",
+    "input_tokens": 7592,
+    "output_tokens": 832,
+    "cost_usd": 0.0016,
+    "retries": 0,
+    "api_retries": 0,
+    "validation": "pass"
   }
 ]

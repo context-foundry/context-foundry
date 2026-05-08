@@ -447,6 +447,16 @@
       "model": "gpt-4o-mini",
       "lines": 90,
       "generation": 45
+    },
+    {
+      "file": "mars-rover-code-review.js",
+      "name": "Mars Rover Code Review",
+      "location": "Jezero Crater, Mars",
+      "biome": "space",
+      "generated": "2026-05-08T03:56:26.704Z",
+      "model": "gpt-4o-mini",
+      "lines": 83,
+      "generation": 46
     }
   ]
 }
