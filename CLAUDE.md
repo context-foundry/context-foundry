@@ -134,6 +134,15 @@ Full reference: [`docs/settings-overlay.md`](docs/settings-overlay.md).
 Per-stage model routing (e.g. Claude Opus on Plan, Codex on Build) is configured
 from the Routing section. See [`docs/per-stage-routing.md`](docs/per-stage-routing.md).
 
+## Eval Harness
+
+An eval harness runs after every task completion and grades the run for plumbing
+integrity (system prompts, pattern injection, prior-artifact reads) and heuristic
+outcome quality. Per-stage badges appear in the TUI status meter as
+`EVAL Q✓R✓P✓B⚠A✓`; the full breakdown is in the Settings overlay
+(`?` -> Pipeline Health). The harness never blocks the pipeline. See
+[`docs/eval-harness.md`](docs/eval-harness.md) for the full reference.
+
 ## Progress Indicators (QRPBA)
 
 Completed tasks in `TASKS.md` carry QRPBA indicators: **Q**uery, **R**esearch,

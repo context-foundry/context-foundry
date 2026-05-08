@@ -250,6 +250,7 @@ reverts to the pre-overlay state.
 ## Related docs
 
 - [Per-stage routing](per-stage-routing.md) -- how stage overrides work
+- [Eval harness](eval-harness.md) -- per-run plumbing and heuristic grading; the Pipeline Health section is its primary UI surface
 - [Progress indicators](progress-indicators.md) -- QRPBA letters for pipeline stages
 - [Local model setup](local-model-setup.md) -- LM Studio + opencode configuration
 - [README.md](../README.md) -- project overview
