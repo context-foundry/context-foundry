@@ -6,7 +6,7 @@ use crate::run_manifest::CompletionPath;
 use crate::utils::atomic_write_file;
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
 pub const EVAL_REPORT_SCHEMA_VERSION: u32 = 1;
@@ -102,6 +102,70 @@ pub fn write_report(
     atomic_write_file(&path, &bytes)
         .with_context(|| format!("failed to write eval-report to {}", path.display()))?;
     Ok(path)
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct EvalReportSnapshot {
+    #[serde(default)]
+    pub schema_version: u32,
+    #[serde(default)]
+    pub run_id: String,
+    #[serde(default)]
+    pub task_id: String,
+    #[serde(default)]
+    pub aggregate_badge: String,
+    #[serde(default)]
+    pub completion_path: Option<String>,
+    #[serde(default)]
+    pub stages: std::collections::BTreeMap<String, StageSnapshot>,
+    #[serde(default)]
+    pub notes: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct StageSnapshot {
+    #[serde(default)]
+    pub badge: String,
+    #[serde(default)]
+    pub invocations: Vec<InvocationSnapshot>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct InvocationSnapshot {
+    #[serde(default)]
+    pub invocation_id: u64,
+    #[serde(default)]
+    pub role: String,
+    #[serde(default)]
+    pub status: Option<String>,
+    #[serde(default)]
+    pub superseded_by: Option<u64>,
+    #[serde(default)]
+    pub skip_reason: Option<String>,
+    #[serde(default)]
+    pub artifact_source: Option<String>,
+    #[serde(default)]
+    pub checks: Vec<CheckSnapshot>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct CheckSnapshot {
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub category: String,
+    #[serde(default)]
+    pub severity: String,
+    #[serde(default)]
+    pub status: String,
+    #[serde(default)]
+    pub evidence: String,
+}
+
+pub fn read_report(buildloop_dir: &Path) -> Option<EvalReportSnapshot> {
+    let path = buildloop_dir.join(EVAL_REPORT_FILENAME);
+    let bytes = std::fs::read(&path).ok()?;
+    serde_json::from_slice::<EvalReportSnapshot>(&bytes).ok()
 }
 
 #[cfg(test)]

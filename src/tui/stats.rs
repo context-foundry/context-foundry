@@ -173,6 +173,20 @@ pub(super) fn render_dashboard_stats(
     }
     lines.push(Line::from(row1_spans));
 
+    if let Some(ref report) = state.eval_report_cache {
+        if !report.aggregate_badge.is_empty() {
+            let badge_color = badge_color_for(&report.aggregate_badge, theme);
+            lines.push(Line::from(vec![
+                Span::styled(
+                    format!("{:<width$}", "", width = half_width),
+                    Style::default(),
+                ),
+                Span::styled("Eval      ", Style::default().fg(theme.info)),
+                Span::styled(report.aggregate_badge.clone(), Style::default().fg(badge_color)),
+            ]));
+        }
+    }
+
     // ─── Row 2: Extensions ───
     if !state.extension_inject_count.is_empty() {
         let ext_parts: Vec<String> = state
@@ -459,6 +473,18 @@ fn dual_comparison_line(state: &AppState) -> Option<String> {
         .collect();
 
     Some(segments.join(" | "))
+}
+
+fn badge_color_for(badge: &str, theme: &crate::tui::theme::TuiTheme) -> Color {
+    if badge.contains('\u{2717}') {
+        theme.error
+    } else if badge.contains('\u{26A0}') {
+        theme.warning
+    } else if badge.contains('\u{2713}') {
+        theme.success
+    } else {
+        theme.muted
+    }
 }
 
 #[allow(dead_code)]

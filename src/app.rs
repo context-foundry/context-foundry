@@ -25,13 +25,15 @@ use self::startup::{
 };
 pub use self::state::FileEntry;
 pub use self::state::{
-    settings_sections, AppPhase, AppState, DualSelection, ExtensionDisplayInfo, FieldKind,
-    ModelEntry, ModelPicker, PatternEventKind, PickerItem, PlanStatus, PlanningState,
-    StartupAction, StartupScenario, StartupState, TuiPane,
+    settings_sections, Action, AppPhase, AppState, DualSelection, ExtensionDisplayInfo, FieldKind,
+    ModelEntry, ModelPicker, OverlayRow, PatternEventKind, PickerItem, PlanStatus, PlanningState,
+    SectionKind, StartupAction, StartupScenario, StartupState, TuiPane,
 };
 use self::state::{AppEvent, AppendTasksRequest, LoopEvent, PendingTransition, PlanningOutcome};
 use crate::agent::{AgentErrorKind, AgentOutputEvent, AgentRole};
 use crate::config::Config;
+use crate::eval;
+use crate::eval::report as eval_report;
 use crate::git;
 use crate::orchestrator::{self, OrchestratorConfig, OrchestratorOutcome};
 use crate::task;
@@ -1237,7 +1239,16 @@ fn toggle_settings_overlay(state: &mut AppState) -> bool {
         let project_dir = state.buildloop_dir.parent().unwrap_or(Path::new("."));
         let config_path = project_dir.join(".foundry.json");
         ov.original_json = std::fs::read_to_string(&config_path).ok();
+        ov.eval_report_cache = eval_report::read_report(&state.buildloop_dir);
+        if ov.eval_report_cache.is_some() && ov.eval_pipeline_health_first_view {
+            ov.expanded_sections.insert("pipeline_health".to_string());
+            ov.eval_pipeline_health_first_view = false;
+        }
         state.settings_overlay = Some(ov);
+        state.eval_report_cache = state
+            .settings_overlay
+            .as_ref()
+            .and_then(|o| o.eval_report_cache.clone());
         sync_settings_overlay_view(state);
         true
     } else {
@@ -1249,6 +1260,14 @@ fn toggle_settings_overlay(state: &mut AppState) -> bool {
 fn mark_settings_dirty(state: &mut AppState) {
     if let Some(ref mut ov) = state.settings_overlay {
         ov.dirty = true;
+    }
+}
+
+fn refresh_eval_report_cache(state: &mut AppState) {
+    let snap = eval_report::read_report(&state.buildloop_dir);
+    state.eval_report_cache = snap.clone();
+    if let Some(ref mut ov) = state.settings_overlay {
+        ov.eval_report_cache = snap;
     }
 }
 
@@ -2022,6 +2041,10 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                 state.task_stages_seen.clear();
                 state.clear_agent();
                 state.ship_active = false;
+                refresh_eval_report_cache(state);
+                if let Some(ref mut ov) = state.settings_overlay {
+                    ov.eval_pipeline_health_first_view = true;
+                }
             }
             LoopEvent::TaskReport { .. } => {
                 // TaskReport is consumed by headless mode only; TUI ignores it.
@@ -3587,6 +3610,14 @@ fn settings_action_for_row(state: &mut AppState, row: &state::RowId) {
             state::FieldKind::Readonly => {}
             state::FieldKind::StagePicker => {
                 open_model_picker(state, field_id);
+            }
+        },
+        state::RowId::ReportLine(_, _) => {}
+        state::RowId::ActionButton(_, action) => match action {
+            state::Action::RerunEvalOnLastRun => {
+                let project_dir = overlay_project_dir(state).to_path_buf();
+                let _ = eval::run_for_current_task(&project_dir);
+                refresh_eval_report_cache(state);
             }
         },
     }

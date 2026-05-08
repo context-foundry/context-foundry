@@ -1008,7 +1008,7 @@ fn stage_ids_match(lhs: &str, rhs: &str) -> bool {
 
 /// Render a floating settings overlay on top of whatever is already drawn.
 pub(super) fn render_settings_overlay(frame: &mut Frame, state: &AppState) {
-    use crate::app::{settings_sections, FieldKind};
+    use crate::app::{settings_sections, Action, FieldKind, OverlayRow, SectionKind};
 
     let theme = &state.tui_theme;
     let modal = settings_modal_rect(frame.area());
@@ -1131,6 +1131,72 @@ pub(super) fn render_settings_overlay(frame: &mut Frame, state: &AppState) {
         row_idx += 1;
 
         if is_expanded {
+            match section.kind {
+                SectionKind::PipelineHealth => {
+                    let rows: Vec<OverlayRow> = state
+                        .settings_overlay
+                        .as_ref()
+                        .map(|o| o.pipeline_health_rows())
+                        .unwrap_or_default();
+                    for row in &rows {
+                        if row_idx >= scroll_offset && (row_idx - scroll_offset) < content_height {
+                            let row_focused = row_idx == focus;
+                            let row_style = if row_focused {
+                                Style::default().bg(highlight_bg)
+                            } else {
+                                Style::default()
+                            };
+                            let line = match row {
+                                OverlayRow::ReportLine(text) => Line::from(vec![
+                                    Span::styled("  ", Style::default().fg(theme.muted)),
+                                    Span::styled(
+                                        truncate_str(text, inner.width.saturating_sub(2) as usize),
+                                        row_style.fg(theme.text),
+                                    ),
+                                ]),
+                                OverlayRow::ActionButton(action) => {
+                                    let label = match action {
+                                        Action::RerunEvalOnLastRun => {
+                                            "[ Re-run eval on last run ]"
+                                        }
+                                    };
+                                    let cursor_str = if row_focused { "> " } else { "  " };
+                                    Line::from(vec![
+                                        Span::styled(
+                                            cursor_str,
+                                            if row_focused {
+                                                Style::default()
+                                                    .fg(theme.accent)
+                                                    .add_modifier(Modifier::BOLD)
+                                            } else {
+                                                Style::default().fg(theme.muted)
+                                            },
+                                        ),
+                                        Span::styled(
+                                            label,
+                                            row_style
+                                                .fg(theme.accent)
+                                                .add_modifier(Modifier::BOLD),
+                                        ),
+                                    ])
+                                }
+                                OverlayRow::Field(_) => Line::from(""),
+                            };
+                            frame.render_widget(
+                                Paragraph::new(line),
+                                Rect {
+                                    x: inner.x,
+                                    y: render_y,
+                                    width: inner.width,
+                                    height: 1,
+                                },
+                            );
+                            render_y += 1;
+                        }
+                        row_idx += 1;
+                    }
+                }
+                SectionKind::Standard => {
             for field in &section.fields {
                 if row_idx >= scroll_offset && (row_idx - scroll_offset) < content_height {
                     let field_focused = row_idx == focus;
@@ -1258,6 +1324,8 @@ pub(super) fn render_settings_overlay(frame: &mut Frame, state: &AppState) {
                     render_y += 1;
                 }
                 row_idx += 1;
+            }
+                }
             }
         }
     }

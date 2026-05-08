@@ -8,6 +8,7 @@ use crossterm::event::{self, MouseEvent};
 use std::path::PathBuf;
 
 use crate::agent::{AgentErrorKind, AgentOutputEvent, AgentRole};
+use crate::eval::report::EvalReportSnapshot;
 use crate::git;
 use crate::orchestrator::OrchestratorOutcome;
 use crate::stats::StatsReport;
@@ -350,6 +351,17 @@ pub struct ModelPicker {
     pub filtering: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Action {
+    RerunEvalOnLastRun,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SectionKind {
+    Standard,
+    PipelineHealth,
+}
+
 #[derive(Debug, Clone)]
 pub struct FieldDef {
     pub id: &'static str,
@@ -359,11 +371,20 @@ pub struct FieldDef {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub enum OverlayRow {
+    Field(FieldDef),
+    ReportLine(String),
+    ActionButton(Action),
+}
+
+#[derive(Debug, Clone)]
 pub struct SectionDef {
     pub id: &'static str,
     pub name: &'static str,
     pub default_expanded: bool,
     pub fields: Vec<FieldDef>,
+    pub kind: SectionKind,
 }
 
 pub fn settings_sections(dual_mode: bool) -> Vec<SectionDef> {
@@ -414,6 +435,14 @@ pub fn settings_sections(dual_mode: bool) -> Vec<SectionDef> {
             name: "Routing",
             default_expanded: true,
             fields: routing_fields,
+            kind: SectionKind::Standard,
+        },
+        SectionDef {
+            id: "pipeline_health",
+            name: "Pipeline Health",
+            default_expanded: false,
+            fields: vec![],
+            kind: SectionKind::PipelineHealth,
         },
         SectionDef {
             id: "pipeline",
@@ -505,6 +534,7 @@ pub fn settings_sections(dual_mode: bool) -> Vec<SectionDef> {
                     kind: FieldKind::Number,
                 },
             ],
+            kind: SectionKind::Standard,
         },
         SectionDef {
             id: "budgets",
@@ -566,6 +596,7 @@ pub fn settings_sections(dual_mode: bool) -> Vec<SectionDef> {
                     kind: FieldKind::Number,
                 },
             ],
+            kind: SectionKind::Standard,
         },
         SectionDef {
             id: "local_models",
@@ -603,6 +634,7 @@ pub fn settings_sections(dual_mode: bool) -> Vec<SectionDef> {
                     kind: FieldKind::Bool,
                 },
             ],
+            kind: SectionKind::Standard,
         },
         SectionDef {
             id: "sandbox",
@@ -646,6 +678,7 @@ pub fn settings_sections(dual_mode: bool) -> Vec<SectionDef> {
                     kind: FieldKind::Bool,
                 },
             ],
+            kind: SectionKind::Standard,
         },
         SectionDef {
             id: "discovery",
@@ -689,6 +722,7 @@ pub fn settings_sections(dual_mode: bool) -> Vec<SectionDef> {
                     kind: FieldKind::Number,
                 },
             ],
+            kind: SectionKind::Standard,
         },
         SectionDef {
             id: "git",
@@ -726,6 +760,7 @@ pub fn settings_sections(dual_mode: bool) -> Vec<SectionDef> {
                     kind: FieldKind::Number,
                 },
             ],
+            kind: SectionKind::Standard,
         },
         SectionDef {
             id: "display",
@@ -745,6 +780,7 @@ pub fn settings_sections(dual_mode: bool) -> Vec<SectionDef> {
                     kind: FieldKind::Bool,
                 },
             ],
+            kind: SectionKind::Standard,
         },
         SectionDef {
             id: "extensions",
@@ -770,6 +806,7 @@ pub fn settings_sections(dual_mode: bool) -> Vec<SectionDef> {
                     kind: FieldKind::Editor,
                 },
             ],
+            kind: SectionKind::Standard,
         },
         SectionDef {
             id: "advanced",
@@ -813,14 +850,18 @@ pub fn settings_sections(dual_mode: bool) -> Vec<SectionDef> {
                     kind: FieldKind::Bool,
                 },
             ],
+            kind: SectionKind::Standard,
         },
     ]
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub enum RowId {
     SectionHeader(String),
     Field(String),
+    ReportLine(String, usize),
+    ActionButton(String, Action),
 }
 
 #[derive(Debug, Clone)]
@@ -844,6 +885,8 @@ pub struct SettingsOverlayState {
     pub confirm_close: bool,
     pub original_json: Option<String>,
     pub dual_mode: bool,
+    pub eval_report_cache: Option<EvalReportSnapshot>,
+    pub eval_pipeline_health_first_view: bool,
 }
 
 impl SettingsOverlayState {
@@ -869,6 +912,8 @@ impl SettingsOverlayState {
             confirm_close: false,
             original_json: None,
             dual_mode,
+            eval_report_cache: None,
+            eval_pipeline_health_first_view: true,
         }
     }
 
@@ -878,10 +923,94 @@ impl SettingsOverlayState {
         for section in &sections {
             count += 1; // header
             if self.expanded_sections.contains(section.id) {
-                count += section.fields.len();
+                if section.kind == SectionKind::PipelineHealth {
+                    count += self.pipeline_health_row_count();
+                } else {
+                    count += section.fields.len();
+                }
             }
         }
         count
+    }
+
+    pub fn pipeline_health_rows(&self) -> Vec<OverlayRow> {
+        let mut rows: Vec<OverlayRow> = Vec::new();
+        if self.eval_report_cache.is_none() {
+            rows.push(OverlayRow::ReportLine(
+                "No eval report yet -- run a task to generate one.".to_string(),
+            ));
+            rows.push(OverlayRow::ActionButton(Action::RerunEvalOnLastRun));
+            return rows;
+        }
+        let report = self.eval_report_cache.as_ref().unwrap();
+        let aggregate_text = if report.aggregate_badge.is_empty() {
+            "EVAL (no data)"
+        } else {
+            report.aggregate_badge.as_str()
+        };
+        rows.push(OverlayRow::ReportLine(format!("Aggregate: {}", aggregate_text)));
+        if let Some(cp) = report.completion_path.as_deref() {
+            rows.push(OverlayRow::ReportLine(format!("Completion: {}", cp)));
+        }
+        let qrpba_order = ["query", "research", "plan", "implement", "doubt"];
+        for slug in qrpba_order.iter() {
+            if let Some(stage) = report.stages.get(*slug) {
+                let letter = match *slug {
+                    "query" => "Q",
+                    "research" => "R",
+                    "plan" => "P",
+                    "implement" => "B",
+                    "doubt" => "A",
+                    _ => "?",
+                };
+                rows.push(OverlayRow::ReportLine(format!(
+                    "{} {}",
+                    letter, stage.badge
+                )));
+                for inv in &stage.invocations {
+                    let status = inv.status.as_deref().unwrap_or("?");
+                    let suffix = if let Some(r) = inv.skip_reason.as_deref() {
+                        format!(" -- {}", r)
+                    } else {
+                        String::new()
+                    };
+                    rows.push(OverlayRow::ReportLine(format!(
+                        "    {} [{}]{}",
+                        inv.role, status, suffix
+                    )));
+                    let pass = inv.checks.iter().filter(|c| c.status == "pass").count();
+                    let fail = inv.checks.iter().filter(|c| c.status == "fail").count();
+                    let skip = inv.checks.iter().filter(|c| c.status == "skip").count();
+                    rows.push(OverlayRow::ReportLine(format!(
+                        "      {} pass / {} fail / {} skip",
+                        pass, fail, skip
+                    )));
+                    for c in inv.checks.iter().filter(|c| c.status == "fail") {
+                        let ev = if c.evidence.chars().count() > 80 {
+                            format!(
+                                "{}...",
+                                c.evidence.chars().take(77).collect::<String>()
+                            )
+                        } else {
+                            c.evidence.clone()
+                        };
+                        rows.push(OverlayRow::ReportLine(format!(
+                            "      FAIL {}: {}",
+                            c.name, ev
+                        )));
+                    }
+                }
+            }
+        }
+        for note in &report.notes {
+            rows.push(OverlayRow::ReportLine(format!("Note: {}", note)));
+        }
+        rows.push(OverlayRow::ActionButton(Action::RerunEvalOnLastRun));
+        rows
+    }
+
+    pub fn pipeline_health_row_count(&self) -> usize {
+        self.pipeline_health_rows().len()
     }
 
     pub fn toggle_section(&mut self, section_id: &str) {
@@ -919,11 +1048,29 @@ impl SettingsOverlayState {
             }
             idx += 1;
             if self.expanded_sections.contains(section.id) {
-                for field in &section.fields {
-                    if idx == index {
-                        return Some(RowId::Field(field.id.to_string()));
+                if section.kind == SectionKind::PipelineHealth {
+                    let rows = self.pipeline_health_rows();
+                    for (j, row) in rows.iter().enumerate() {
+                        if idx == index {
+                            return match row {
+                                OverlayRow::ReportLine(_) => {
+                                    Some(RowId::ReportLine(section.id.to_string(), j))
+                                }
+                                OverlayRow::ActionButton(action) => {
+                                    Some(RowId::ActionButton(section.id.to_string(), *action))
+                                }
+                                OverlayRow::Field(_) => None,
+                            };
+                        }
+                        idx += 1;
                     }
-                    idx += 1;
+                } else {
+                    for field in &section.fields {
+                        if idx == index {
+                            return Some(RowId::Field(field.id.to_string()));
+                        }
+                        idx += 1;
+                    }
                 }
             }
         }
@@ -1028,6 +1175,7 @@ pub struct DualBuildState {
 
 pub struct AppState {
     pub buildloop_dir: PathBuf,
+    pub eval_report_cache: Option<EvalReportSnapshot>,
     pub phase: AppPhase,
     pub startup: Option<StartupState>,
     pub planning: Option<PlanningState>,
@@ -1187,6 +1335,7 @@ impl AppState {
     pub(crate) fn new(buildloop_dir: PathBuf) -> Self {
         Self {
             buildloop_dir,
+            eval_report_cache: None,
             phase: AppPhase::Startup,
             startup: None,
             planning: None,
@@ -1907,5 +2056,26 @@ mod tests {
             .collect();
         assert!(a_ids.contains(&"stage_patterns"), "patterns A should still appear");
         assert!(a_ids.contains(&"stage_pr_review"), "PR review A should still appear");
+    }
+
+    #[test]
+    fn pipeline_health_section_present_and_collapsed_by_default() {
+        let sections = settings_sections(false);
+        let ph = sections.iter().find(|s| s.id == "pipeline_health");
+        assert!(ph.is_some(), "pipeline_health section missing");
+        let ph = ph.unwrap();
+        assert_eq!(ph.kind, SectionKind::PipelineHealth);
+        assert!(!ph.default_expanded);
+        assert!(ph.fields.is_empty());
+    }
+
+    #[test]
+    fn pipeline_health_rows_returns_button_when_cache_empty() {
+        let ov = SettingsOverlayState::new();
+        assert!(ov.eval_report_cache.is_none());
+        let rows = ov.pipeline_health_rows();
+        assert!(rows
+            .iter()
+            .any(|r| matches!(r, OverlayRow::ActionButton(Action::RerunEvalOnLastRun))));
     }
 }
