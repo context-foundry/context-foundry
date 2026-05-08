@@ -457,6 +457,16 @@
       "model": "gpt-4o-mini",
       "lines": 83,
       "generation": 46
+    },
+    {
+      "file": "null-island-steppe.js",
+      "name": "Null Island Steppe",
+      "location": "Mongolian Steppe, Khentii, Mongolia",
+      "biome": "savanna",
+      "generated": "2026-05-08T06:11:25.388Z",
+      "model": "gpt-4o-mini",
+      "lines": 91,
+      "generation": 47
     }
   ]
 }
