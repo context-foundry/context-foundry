@@ -744,5 +744,32 @@
     "retries": 0,
     "api_retries": 0,
     "validation": "pass"
+  },
+  {
+    "ts": "2026-05-08T09:57:23.409Z",
+    "scene": "version-control-tree-rings.js",
+    "seed_id": "version-control-tree-rings",
+    "biome": "forest",
+    "model": "gpt-4o-mini",
+    "input_tokens": 14906,
+    "output_tokens": 1605,
+    "cost_usd": 0.0032,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "fail",
+    "error": "Validation failed after 2 attempts: VALIDATION FAILED (1 error):\n- Too short: 63 lines (min 80)"
+  },
+  {
+    "ts": "2026-05-08T09:57:39.567Z",
+    "scene": "monolith-architecture.js",
+    "seed_id": "monolith-architecture",
+    "biome": "desert",
+    "model": "gpt-4o-mini",
+    "input_tokens": 8118,
+    "output_tokens": 822,
+    "cost_usd": 0.0017,
+    "retries": 0,
+    "api_retries": 0,
+    "validation": "pass"
   }
 ]
