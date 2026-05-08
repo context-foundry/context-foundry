@@ -487,6 +487,16 @@
       "model": "gpt-4o-mini",
       "lines": 83,
       "generation": 49
+    },
+    {
+      "file": "socotra-branch-divergence.js",
+      "name": "Socotra Branch Divergence",
+      "location": "Socotra Island, Yemen",
+      "biome": "extreme",
+      "generated": "2026-05-08T11:48:12.670Z",
+      "model": "gpt-4o-mini",
+      "lines": 84,
+      "generation": 50
     }
   ]
 }
