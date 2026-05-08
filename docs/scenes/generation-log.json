@@ -824,5 +824,32 @@
     "retries": 0,
     "api_retries": 0,
     "validation": "pass"
+  },
+  {
+    "ts": "2026-05-08T17:46:56.121Z",
+    "scene": "websocket-whirlpool.js",
+    "seed_id": "websocket-whirlpool",
+    "biome": "ocean",
+    "model": "gpt-4o-mini",
+    "input_tokens": 16654,
+    "output_tokens": 1658,
+    "cost_usd": 0.0035,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "fail",
+    "error": "Validation failed after 2 attempts: VALIDATION FAILED (1 error):\n- Too short: 75 lines (min 80)"
+  },
+  {
+    "ts": "2026-05-08T17:47:31.819Z",
+    "scene": "git-blame-the-wind.js",
+    "seed_id": "git-blame-the-wind",
+    "biome": "desert",
+    "model": "gpt-4o-mini",
+    "input_tokens": 7601,
+    "output_tokens": 985,
+    "cost_usd": 0.0017,
+    "retries": 0,
+    "api_retries": 0,
+    "validation": "pass"
   }
 ]
