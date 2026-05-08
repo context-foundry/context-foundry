@@ -1,0 +1,8 @@
+{"type":"system","subtype":"init","session_id":"sess-1","model":"claude-opus-4-7","tools":["Read","Write","Edit","Bash","Glob","Grep"]}
+[?25l{"type":"system","subtype":"hook_response","outcome":"success"}
+{"type":"assistant","message":{"id":"msg-1","role":"assistant","content":[{"type":"tool_use","id":"tu-1","name":"Read","input":{"file_path":"/abs/.buildloop/current-plan.md"}}]}}
+{"type":"assistant","message":{"id":"msg-2","role":"assistant","content":[{"type":"text","text":"Reading the plan."}]}}
+{"type":"assistant","parent_tool_use_id":"tu-parent","message":{"id":"msg-3","role":"assistant","content":[{"type":"tool_use","id":"tu-2","name":"Read","input":{"file_path":"/abs/.buildloop/current-plan.md"}}]}}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"tu-1","content":"file contents here","is_error":false}]}}
+{"type":"assistant","message":{ this is not json
+{"type":"result","subtype":"success","session_id":"sess-1","total_cost_usd":0.05,"usage":{"input_tokens":100,"output_tokens":50}}
