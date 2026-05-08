@@ -537,6 +537,16 @@
       "model": "gpt-4o-mini",
       "lines": 99,
       "generation": 54
+    },
+    {
+      "file": "tail-recursive-taiga.js",
+      "name": "Tail Recursive Taiga",
+      "location": "Taiga Forest, Yakutia, Siberia, Russia",
+      "biome": "forest",
+      "generated": "2026-05-08T23:12:28.922Z",
+      "model": "gpt-4o-mini",
+      "lines": 85,
+      "generation": 55
     }
   ]
 }

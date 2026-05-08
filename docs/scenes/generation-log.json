@@ -864,5 +864,18 @@
     "retries": 0,
     "api_retries": 0,
     "validation": "pass"
+  },
+  {
+    "ts": "2026-05-08T23:12:28.923Z",
+    "scene": "tail-recursive-taiga.js",
+    "seed_id": "tail-recursive-taiga",
+    "biome": "forest",
+    "model": "gpt-4o-mini",
+    "input_tokens": 7415,
+    "output_tokens": 857,
+    "cost_usd": 0.0016,
+    "retries": 0,
+    "api_retries": 0,
+    "validation": "pass"
   }
 ]
