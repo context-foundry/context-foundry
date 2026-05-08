@@ -797,5 +797,32 @@
     "retries": 0,
     "api_retries": 0,
     "validation": "pass"
+  },
+  {
+    "ts": "2026-05-08T15:54:32.944Z",
+    "scene": "floating-point-lagoon.js",
+    "seed_id": "floating-point-lagoon",
+    "biome": "ocean",
+    "model": "gpt-4o-mini",
+    "input_tokens": 16280,
+    "output_tokens": 1320,
+    "cost_usd": 0.0032,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "fail",
+    "error": "Validation failed after 2 attempts: VALIDATION FAILED (1 error):\n- Too short: 73 lines (min 80)"
+  },
+  {
+    "ts": "2026-05-08T15:55:04.458Z",
+    "scene": "sql-injection-spring.js",
+    "seed_id": "sql-injection-spring",
+    "biome": "underground",
+    "model": "gpt-4o-mini",
+    "input_tokens": 7418,
+    "output_tokens": 1035,
+    "cost_usd": 0.0017,
+    "retries": 0,
+    "api_retries": 0,
+    "validation": "pass"
   }
 ]

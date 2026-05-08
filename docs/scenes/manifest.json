@@ -507,6 +507,16 @@
       "model": "gpt-4o-mini",
       "lines": 83,
       "generation": 51
+    },
+    {
+      "file": "sql-injection-spring.js",
+      "name": "SQL Injection Spring",
+      "location": "Son Doong Cave, Quang Binh, Vietnam",
+      "biome": "underground",
+      "generated": "2026-05-08T15:55:04.457Z",
+      "model": "gpt-4o-mini",
+      "lines": 104,
+      "generation": 52
     }
   ]
 }
