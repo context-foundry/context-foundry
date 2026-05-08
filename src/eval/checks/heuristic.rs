@@ -1,0 +1,1190 @@
+#![allow(dead_code)]
+
+use crate::eval::checks::{
+    invocation_skip_status, non_superseded, skip_evidence_for_status, Category, Check, Severity,
+    StageCheckResult, Status,
+};
+use crate::eval::run::RunTranscripts;
+use crate::eval::stage_id::StageId;
+use crate::run_manifest::StageInvocation;
+use serde_json::Value;
+use std::path::{Path, PathBuf};
+
+const RESEARCH_REPORT: &str = ".buildloop/research-report.md";
+const CURRENT_PLAN: &str = ".buildloop/current-plan.md";
+const BUILD_CLAIMS: &str = ".buildloop/build-claims.md";
+const REVIEW_REPORT: &str = ".buildloop/review-report.md";
+
+pub struct PlanCoversResearchFiles;
+pub struct PlanHasVerification;
+pub struct BuildClaimsHasFilesChanged;
+pub struct BuildClaimsHasVerificationResults;
+pub struct BuildClaimsFilesExist;
+pub struct BuildClaimsHasGapsSection;
+pub struct AuditEngaged;
+pub struct AuditFindingsLocalized;
+
+fn project_root_for(run: &RunTranscripts) -> PathBuf {
+    run.manifest
+        .manifest_path
+        .parent()
+        .and_then(|p| p.parent())
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| PathBuf::from("."))
+}
+
+fn read_artifact(root: &Path, rel: &str) -> Option<String> {
+    std::fs::read_to_string(root.join(rel)).ok()
+}
+
+fn extract_file_paths_from_research(text: &str) -> Vec<String> {
+    let mut set = std::collections::BTreeSet::new();
+    if let Ok(re) = regex::Regex::new(r"`([A-Za-z0-9_./\-]+\.[A-Za-z0-9]+)`") {
+        for cap in re.captures_iter(text) {
+            if let Some(m) = cap.get(1) {
+                set.insert(m.as_str().to_string());
+            }
+        }
+    }
+    if let Ok(re) = regex::Regex::new(r"\b([A-Za-z0-9_./\-]+/[A-Za-z0-9_./\-]+\.[A-Za-z0-9]+)\b") {
+        for cap in re.captures_iter(text) {
+            if let Some(m) = cap.get(1) {
+                set.insert(m.as_str().to_string());
+            }
+        }
+    }
+    set.into_iter().collect()
+}
+
+fn extract_file_paths_from_files_changed(text: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let re = match regex::Regex::new(r"^- \[(?:CREATE|MODIFY)\]\s+(\S+)\s*--") {
+        Ok(re) => re,
+        Err(_) => return out,
+    };
+    let mut in_section = false;
+    for line in text.lines() {
+        let trimmed = line.trim_end();
+        if trimmed == "## Files Changed" {
+            in_section = true;
+            continue;
+        }
+        if in_section && trimmed.starts_with("## ") {
+            break;
+        }
+        if !in_section {
+            continue;
+        }
+        if let Some(cap) = re.captures(line) {
+            if let Some(m) = cap.get(1) {
+                out.push(m.as_str().to_string());
+            }
+        }
+    }
+    out
+}
+
+fn extract_review_json(md: &str) -> Option<Value> {
+    let start_marker = "```json";
+    let start = md.find(start_marker)?;
+    let after_start = start + start_marker.len();
+    let rest = md.get(after_start..)?;
+    let end_rel = rest.find("```")?;
+    let inner = &rest[..end_rel];
+    serde_json::from_str(inner.trim()).ok()
+}
+
+fn audit_invocations_run(run: &RunTranscripts) -> Vec<&StageInvocation> {
+    run.invocations
+        .iter()
+        .filter(|(inv, _)| non_superseded(inv) && inv.stage_id == Some(StageId::Audit))
+        .map(|(inv, _)| inv)
+        .collect()
+}
+
+fn truncate_list(v: &[String], max: usize) -> Vec<String> {
+    if v.len() <= max {
+        v.to_vec()
+    } else {
+        v.iter().take(max).cloned().collect()
+    }
+}
+
+const STAGES_PLAN: &[StageId] = &[StageId::Plan];
+const STAGES_BUILD: &[StageId] = &[StageId::Build];
+const STAGES_AUDIT: &[StageId] = &[StageId::Audit];
+
+impl Check for PlanCoversResearchFiles {
+    fn name(&self) -> &'static str {
+        "plan_covers_research_files"
+    }
+    fn category(&self) -> Category {
+        Category::Heuristic
+    }
+    fn severity(&self) -> Severity {
+        Severity::Standard
+    }
+    fn applies_to(&self) -> &[StageId] {
+        STAGES_PLAN
+    }
+    fn run(&self, run: &RunTranscripts) -> Vec<StageCheckResult> {
+        let mut out = Vec::new();
+        for (inv, _) in run
+            .invocations
+            .iter()
+            .filter(|(inv, _)| non_superseded(inv) && inv.stage_id == Some(StageId::Plan))
+        {
+            let stage = StageId::Plan;
+            if invocation_skip_status(inv).is_some() {
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Skip,
+                    evidence: skip_evidence_for_status(inv.status, &inv.skip_reason),
+                });
+                continue;
+            }
+            let root = project_root_for(run);
+            let research = match read_artifact(&root, RESEARCH_REPORT) {
+                Some(s) => s,
+                None => {
+                    out.push(StageCheckResult {
+                        stage,
+                        invocation_id: inv.invocation_id,
+                        status: Status::Skip,
+                        evidence: "no research-report.md".to_string(),
+                    });
+                    continue;
+                }
+            };
+            let plan = match read_artifact(&root, CURRENT_PLAN) {
+                Some(s) => s,
+                None => {
+                    out.push(StageCheckResult {
+                        stage,
+                        invocation_id: inv.invocation_id,
+                        status: Status::Fail,
+                        evidence: "no current-plan.md".to_string(),
+                    });
+                    continue;
+                }
+            };
+            let files = extract_file_paths_from_research(&research);
+            if files.is_empty() {
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Skip,
+                    evidence: "research-report.md has no file paths".to_string(),
+                });
+                continue;
+            }
+            let missing: Vec<String> = files
+                .iter()
+                .filter(|f| !plan.contains(f.as_str()))
+                .cloned()
+                .collect();
+            if missing.is_empty() {
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Pass,
+                    evidence: format!("matched {} paths", files.len()),
+                });
+            } else {
+                let display = truncate_list(&missing, 10);
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Fail,
+                    evidence: format!("missing in plan: {:?}", display),
+                });
+            }
+        }
+        out
+    }
+}
+
+impl Check for PlanHasVerification {
+    fn name(&self) -> &'static str {
+        "plan_has_verification"
+    }
+    fn category(&self) -> Category {
+        Category::Heuristic
+    }
+    fn severity(&self) -> Severity {
+        Severity::Standard
+    }
+    fn applies_to(&self) -> &[StageId] {
+        STAGES_PLAN
+    }
+    fn run(&self, run: &RunTranscripts) -> Vec<StageCheckResult> {
+        let mut out = Vec::new();
+        let cmd_re = regex::Regex::new(r"^- \w+:\s+\S").ok();
+        for (inv, _) in run
+            .invocations
+            .iter()
+            .filter(|(inv, _)| non_superseded(inv) && inv.stage_id == Some(StageId::Plan))
+        {
+            let stage = StageId::Plan;
+            if invocation_skip_status(inv).is_some() {
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Skip,
+                    evidence: skip_evidence_for_status(inv.status, &inv.skip_reason),
+                });
+                continue;
+            }
+            let root = project_root_for(run);
+            let plan = match read_artifact(&root, CURRENT_PLAN) {
+                Some(s) => s,
+                None => {
+                    out.push(StageCheckResult {
+                        stage,
+                        invocation_id: inv.invocation_id,
+                        status: Status::Fail,
+                        evidence: "no current-plan.md".to_string(),
+                    });
+                    continue;
+                }
+            };
+            let lines: Vec<&str> = plan.lines().collect();
+            let heading_idx = lines
+                .iter()
+                .position(|l| l.starts_with("##") && l.to_lowercase().contains("verification"));
+            let idx = match heading_idx {
+                Some(i) => i,
+                None => {
+                    out.push(StageCheckResult {
+                        stage,
+                        invocation_id: inv.invocation_id,
+                        status: Status::Fail,
+                        evidence: "no Verification heading".to_string(),
+                    });
+                    continue;
+                }
+            };
+            let mut end = lines.len();
+            for (j, l) in lines.iter().enumerate().skip(idx + 1) {
+                if l.starts_with("## ") {
+                    end = j;
+                    break;
+                }
+            }
+            let section = &lines[idx + 1..end];
+            let mut found = false;
+            for l in section {
+                let lower = l.to_lowercase();
+                if lower.contains("cargo ")
+                    || lower.contains("npm ")
+                    || lower.contains("pnpm ")
+                    || lower.contains("yarn ")
+                    || lower.contains("pytest")
+                    || lower.contains("go test")
+                    || lower.contains("make ")
+                {
+                    found = true;
+                    break;
+                }
+                if let Some(re) = &cmd_re {
+                    if re.is_match(l) {
+                        found = true;
+                        break;
+                    }
+                }
+            }
+            if found {
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Pass,
+                    evidence: "verification section has command-like content".to_string(),
+                });
+            } else {
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Fail,
+                    evidence: "verification section has no commands".to_string(),
+                });
+            }
+        }
+        out
+    }
+}
+
+impl Check for BuildClaimsHasFilesChanged {
+    fn name(&self) -> &'static str {
+        "build_claims_has_files_changed"
+    }
+    fn category(&self) -> Category {
+        Category::Heuristic
+    }
+    fn severity(&self) -> Severity {
+        Severity::Standard
+    }
+    fn applies_to(&self) -> &[StageId] {
+        STAGES_BUILD
+    }
+    fn run(&self, run: &RunTranscripts) -> Vec<StageCheckResult> {
+        let mut out = Vec::new();
+        for (inv, _) in run
+            .invocations
+            .iter()
+            .filter(|(inv, _)| non_superseded(inv) && inv.stage_id == Some(StageId::Build))
+        {
+            let stage = StageId::Build;
+            if invocation_skip_status(inv).is_some() {
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Skip,
+                    evidence: skip_evidence_for_status(inv.status, &inv.skip_reason),
+                });
+                continue;
+            }
+            let root = project_root_for(run);
+            let claims = match read_artifact(&root, BUILD_CLAIMS) {
+                Some(s) => s,
+                None => {
+                    out.push(StageCheckResult {
+                        stage,
+                        invocation_id: inv.invocation_id,
+                        status: Status::Fail,
+                        evidence: "no build-claims.md".to_string(),
+                    });
+                    continue;
+                }
+            };
+            if !claims.lines().any(|l| l.trim_end() == "## Files Changed") {
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Fail,
+                    evidence: "## Files Changed heading missing".to_string(),
+                });
+                continue;
+            }
+            let files = extract_file_paths_from_files_changed(&claims);
+            if !files.is_empty() {
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Pass,
+                    evidence: format!("found {} entries", files.len()),
+                });
+            } else {
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Fail,
+                    evidence: "## Files Changed empty or no [CREATE|MODIFY] lines".to_string(),
+                });
+            }
+        }
+        out
+    }
+}
+
+impl Check for BuildClaimsHasVerificationResults {
+    fn name(&self) -> &'static str {
+        "build_claims_has_verification_results"
+    }
+    fn category(&self) -> Category {
+        Category::Heuristic
+    }
+    fn severity(&self) -> Severity {
+        Severity::Standard
+    }
+    fn applies_to(&self) -> &[StageId] {
+        STAGES_BUILD
+    }
+    fn run(&self, run: &RunTranscripts) -> Vec<StageCheckResult> {
+        let mut out = Vec::new();
+        for (inv, _) in run
+            .invocations
+            .iter()
+            .filter(|(inv, _)| non_superseded(inv) && inv.stage_id == Some(StageId::Build))
+        {
+            let stage = StageId::Build;
+            if invocation_skip_status(inv).is_some() {
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Skip,
+                    evidence: skip_evidence_for_status(inv.status, &inv.skip_reason),
+                });
+                continue;
+            }
+            let root = project_root_for(run);
+            let claims = match read_artifact(&root, BUILD_CLAIMS) {
+                Some(s) => s,
+                None => {
+                    out.push(StageCheckResult {
+                        stage,
+                        invocation_id: inv.invocation_id,
+                        status: Status::Fail,
+                        evidence: "no build-claims.md".to_string(),
+                    });
+                    continue;
+                }
+            };
+            // Locate ## Verification Results
+            let lines: Vec<&str> = claims.lines().collect();
+            let idx = lines
+                .iter()
+                .position(|l| l.trim_end() == "## Verification Results");
+            let idx = match idx {
+                Some(i) => i,
+                None => {
+                    out.push(StageCheckResult {
+                        stage,
+                        invocation_id: inv.invocation_id,
+                        status: Status::Fail,
+                        evidence: "## Verification Results heading missing".to_string(),
+                    });
+                    continue;
+                }
+            };
+            let mut end = lines.len();
+            for (j, l) in lines.iter().enumerate().skip(idx + 1) {
+                if l.starts_with("## ") {
+                    end = j;
+                    break;
+                }
+            }
+            let section = &lines[idx + 1..end];
+            let mut missing: Vec<&str> = Vec::new();
+            for label in &["- Build:", "- Tests:", "- Lint:"] {
+                let line = section
+                    .iter()
+                    .find(|l| l.trim_start().starts_with(label.trim_start()));
+                let ok = match line {
+                    Some(l) => l.contains("PASS") || l.contains("FAIL") || l.contains("SKIPPED"),
+                    None => false,
+                };
+                if !ok {
+                    missing.push(*label);
+                }
+            }
+            if missing.is_empty() {
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Pass,
+                    evidence: "Build/Tests/Lint verdicts all present".to_string(),
+                });
+            } else {
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Fail,
+                    evidence: format!("missing or malformed: {:?}", missing),
+                });
+            }
+        }
+        out
+    }
+}
+
+impl Check for BuildClaimsFilesExist {
+    fn name(&self) -> &'static str {
+        "build_claims_files_exist"
+    }
+    fn category(&self) -> Category {
+        Category::Heuristic
+    }
+    fn severity(&self) -> Severity {
+        Severity::Standard
+    }
+    fn applies_to(&self) -> &[StageId] {
+        STAGES_BUILD
+    }
+    fn run(&self, run: &RunTranscripts) -> Vec<StageCheckResult> {
+        let mut out = Vec::new();
+        for (inv, _) in run
+            .invocations
+            .iter()
+            .filter(|(inv, _)| non_superseded(inv) && inv.stage_id == Some(StageId::Build))
+        {
+            let stage = StageId::Build;
+            if invocation_skip_status(inv).is_some() {
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Skip,
+                    evidence: skip_evidence_for_status(inv.status, &inv.skip_reason),
+                });
+                continue;
+            }
+            let root = project_root_for(run);
+            let claims = match read_artifact(&root, BUILD_CLAIMS) {
+                Some(s) => s,
+                None => {
+                    out.push(StageCheckResult {
+                        stage,
+                        invocation_id: inv.invocation_id,
+                        status: Status::Fail,
+                        evidence: "no build-claims.md".to_string(),
+                    });
+                    continue;
+                }
+            };
+            let files = extract_file_paths_from_files_changed(&claims);
+            if files.is_empty() {
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Skip,
+                    evidence: "## Files Changed empty".to_string(),
+                });
+                continue;
+            }
+            let missing: Vec<String> = files
+                .iter()
+                .filter(|f| !root.join(f).exists())
+                .cloned()
+                .collect();
+            if missing.is_empty() {
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Pass,
+                    evidence: format!("all {} files exist", files.len()),
+                });
+            } else {
+                let display = truncate_list(&missing, 10);
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Fail,
+                    evidence: format!(
+                        "{} of {} missing: {:?}",
+                        missing.len(),
+                        files.len(),
+                        display
+                    ),
+                });
+            }
+        }
+        out
+    }
+}
+
+impl Check for BuildClaimsHasGapsSection {
+    fn name(&self) -> &'static str {
+        "build_claims_has_gaps_section"
+    }
+    fn category(&self) -> Category {
+        Category::Heuristic
+    }
+    fn severity(&self) -> Severity {
+        Severity::Standard
+    }
+    fn applies_to(&self) -> &[StageId] {
+        STAGES_BUILD
+    }
+    fn run(&self, run: &RunTranscripts) -> Vec<StageCheckResult> {
+        let mut out = Vec::new();
+        for (inv, _) in run
+            .invocations
+            .iter()
+            .filter(|(inv, _)| non_superseded(inv) && inv.stage_id == Some(StageId::Build))
+        {
+            let stage = StageId::Build;
+            if invocation_skip_status(inv).is_some() {
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Skip,
+                    evidence: skip_evidence_for_status(inv.status, &inv.skip_reason),
+                });
+                continue;
+            }
+            let root = project_root_for(run);
+            let claims = match read_artifact(&root, BUILD_CLAIMS) {
+                Some(s) => s,
+                None => {
+                    out.push(StageCheckResult {
+                        stage,
+                        invocation_id: inv.invocation_id,
+                        status: Status::Fail,
+                        evidence: "no build-claims.md".to_string(),
+                    });
+                    continue;
+                }
+            };
+            let found = claims.lines().any(|l| l.trim_end() == "## Gaps and Assumptions");
+            if found {
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Pass,
+                    evidence: "## Gaps and Assumptions present".to_string(),
+                });
+            } else {
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Fail,
+                    evidence: "## Gaps and Assumptions heading missing".to_string(),
+                });
+            }
+        }
+        out
+    }
+}
+
+impl Check for AuditEngaged {
+    fn name(&self) -> &'static str {
+        "audit_engaged"
+    }
+    fn category(&self) -> Category {
+        Category::Heuristic
+    }
+    fn severity(&self) -> Severity {
+        Severity::Standard
+    }
+    fn applies_to(&self) -> &[StageId] {
+        STAGES_AUDIT
+    }
+    fn run(&self, run: &RunTranscripts) -> Vec<StageCheckResult> {
+        let mut out = Vec::new();
+        for inv in audit_invocations_run(run) {
+            let stage = StageId::Audit;
+            if let Some(reason) = run.manifest.audit_skipped_reason.as_deref() {
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Skip,
+                    evidence: format!("audit_skipped_reason={}", reason),
+                });
+                continue;
+            }
+            if invocation_skip_status(inv).is_some() {
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Skip,
+                    evidence: skip_evidence_for_status(inv.status, &inv.skip_reason),
+                });
+                continue;
+            }
+            let root = project_root_for(run);
+            let md = match read_artifact(&root, REVIEW_REPORT) {
+                Some(s) => s,
+                None => {
+                    out.push(StageCheckResult {
+                        stage,
+                        invocation_id: inv.invocation_id,
+                        status: Status::Fail,
+                        evidence: "no review-report.md".to_string(),
+                    });
+                    continue;
+                }
+            };
+            let json = extract_review_json(&md);
+            let (high_count, medium_count, low_count) = match &json {
+                Some(j) => (
+                    j.get("high")
+                        .and_then(|v| v.as_array())
+                        .map(|a| a.len())
+                        .unwrap_or(0),
+                    j.get("medium")
+                        .and_then(|v| v.as_array())
+                        .map(|a| a.len())
+                        .unwrap_or(0),
+                    j.get("low")
+                        .and_then(|v| v.as_array())
+                        .map(|a| a.len())
+                        .unwrap_or(0),
+                ),
+                None => (0, 0, 0),
+            };
+            if high_count > 0 || medium_count > 0 || low_count > 0 {
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Pass,
+                    evidence: format!(
+                        "findings high={} medium={} low={}",
+                        high_count, medium_count, low_count
+                    ),
+                });
+                continue;
+            }
+            if json.is_none() {
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Fail,
+                    evidence: "no fenced ```json block".to_string(),
+                });
+                continue;
+            }
+            let has_pass_with_rationale = md.contains("PASS")
+                && md.lines().any(|l| {
+                    let lower = l.to_lowercase();
+                    lower.starts_with("verdict") || lower.contains("rationale")
+                });
+            if has_pass_with_rationale {
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Pass,
+                    evidence: "verdict PASS with rationale".to_string(),
+                });
+            } else {
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Fail,
+                    evidence: "all findings empty and no PASS verdict".to_string(),
+                });
+            }
+        }
+        out
+    }
+}
+
+impl Check for AuditFindingsLocalized {
+    fn name(&self) -> &'static str {
+        "audit_findings_localized"
+    }
+    fn category(&self) -> Category {
+        Category::Heuristic
+    }
+    fn severity(&self) -> Severity {
+        Severity::Standard
+    }
+    fn applies_to(&self) -> &[StageId] {
+        STAGES_AUDIT
+    }
+    fn run(&self, run: &RunTranscripts) -> Vec<StageCheckResult> {
+        let mut out = Vec::new();
+        for inv in audit_invocations_run(run) {
+            let stage = StageId::Audit;
+            if invocation_skip_status(inv).is_some() {
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Skip,
+                    evidence: skip_evidence_for_status(inv.status, &inv.skip_reason),
+                });
+                continue;
+            }
+            if run.manifest.audit_skipped_reason.is_some() {
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Skip,
+                    evidence: "audit skipped".to_string(),
+                });
+                continue;
+            }
+            let root = project_root_for(run);
+            let md = match read_artifact(&root, REVIEW_REPORT) {
+                Some(s) => s,
+                None => {
+                    out.push(StageCheckResult {
+                        stage,
+                        invocation_id: inv.invocation_id,
+                        status: Status::Skip,
+                        evidence: "no parseable review JSON".to_string(),
+                    });
+                    continue;
+                }
+            };
+            let json = match extract_review_json(&md) {
+                Some(v) => v,
+                None => {
+                    out.push(StageCheckResult {
+                        stage,
+                        invocation_id: inv.invocation_id,
+                        status: Status::Skip,
+                        evidence: "no parseable review JSON".to_string(),
+                    });
+                    continue;
+                }
+            };
+            let mut total_entries = 0usize;
+            let mut violations: Vec<(String, usize)> = Vec::new();
+            for sev in &["high", "medium", "low"] {
+                if let Some(arr) = json.get(*sev).and_then(|v| v.as_array()) {
+                    for (i, entry) in arr.iter().enumerate() {
+                        total_entries += 1;
+                        let has_file = entry
+                            .get("file")
+                            .and_then(|v| v.as_str())
+                            .is_some();
+                        let has_line = entry.get("line").and_then(|v| v.as_u64()).is_some();
+                        if !(has_file && has_line) {
+                            violations.push((sev.to_string(), i));
+                        }
+                    }
+                }
+            }
+            if total_entries == 0 {
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Skip,
+                    evidence: "no findings to localize".to_string(),
+                });
+                continue;
+            }
+            if violations.is_empty() {
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Pass,
+                    evidence: format!("all {} findings localized", total_entries),
+                });
+            } else {
+                let preview: Vec<String> = violations
+                    .iter()
+                    .take(3)
+                    .map(|(sev, idx)| format!("{}[{}]", sev, idx))
+                    .collect();
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Fail,
+                    evidence: format!(
+                        "{} of {} unlocalized; first: {:?}",
+                        violations.len(),
+                        total_entries,
+                        preview
+                    ),
+                });
+            }
+        }
+        out
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::agent::AgentRole;
+    use crate::eval::run::latest_run;
+    use crate::run_manifest::{
+        AgentExitInfo, ManifestHandle, PromptEvidenceSpec, StageStatus,
+    };
+    use chrono::Utc;
+    use std::fs;
+    use tempfile::TempDir;
+
+    fn make_buildloop(tmp: &TempDir) -> PathBuf {
+        let bl = tmp.path().join(".buildloop");
+        fs::create_dir_all(&bl).unwrap();
+        bl
+    }
+
+    fn empty_spec<'a>(
+        stage: StageId,
+        role: AgentRole,
+        system: &'a str,
+        user: &'a str,
+    ) -> PromptEvidenceSpec<'a> {
+        PromptEvidenceSpec {
+            stage_id: stage,
+            role,
+            expected_artifact_path: None,
+            originally_configured_provider: String::new(),
+            originally_configured_model: String::new(),
+            effective_provider: String::new(),
+            effective_model: String::new(),
+            override_reason: None,
+            system_prompt: system,
+            user_prompt: user,
+            matched_pattern_ids: Vec::new(),
+            selected_extension_names: Vec::new(),
+            prior_artifact_paths: Vec::new(),
+        }
+    }
+
+    fn run_check(check: impl Check, run: &RunTranscripts) -> Vec<StageCheckResult> {
+        check.run(run)
+    }
+
+    fn write_plan_invocation(bl: &Path) -> ManifestHandle {
+        let h = ManifestHandle::new(bl, "T1.1", Utc::now());
+        let id = h.record_invocation(empty_spec(StageId::Plan, AgentRole::Planner, "sys", "user"));
+        h.record_exit(id, StageStatus::Ran, Utc::now(), AgentExitInfo::default());
+        h
+    }
+
+    fn write_build_invocation(bl: &Path) -> ManifestHandle {
+        let h = ManifestHandle::new(bl, "T1.1", Utc::now());
+        let id = h.record_invocation(empty_spec(StageId::Build, AgentRole::Builder, "sys", "user"));
+        h.record_exit(id, StageStatus::Ran, Utc::now(), AgentExitInfo::default());
+        h
+    }
+
+    fn write_audit_invocation(bl: &Path) -> ManifestHandle {
+        let h = ManifestHandle::new(bl, "T1.1", Utc::now());
+        let id = h.record_invocation(empty_spec(StageId::Audit, AgentRole::Reviewer, "sys", "user"));
+        h.record_exit(id, StageStatus::Ran, Utc::now(), AgentExitInfo::default());
+        h
+    }
+
+    #[test]
+    fn plan_covers_research_files_passes_when_paths_present() {
+        let tmp = TempDir::new().unwrap();
+        let bl = make_buildloop(&tmp);
+        fs::write(
+            bl.join("research-report.md"),
+            "Touches `src/foo.rs` and tests.",
+        )
+        .unwrap();
+        fs::write(
+            bl.join("current-plan.md"),
+            "Operation on src/foo.rs goes here.\n## Verification\n- build: cargo build",
+        )
+        .unwrap();
+        let h = write_plan_invocation(&bl);
+        h.flush().unwrap();
+        let r = latest_run(&bl).unwrap();
+        let results = run_check(PlanCoversResearchFiles, &r);
+        assert_eq!(results[0].status, Status::Pass);
+    }
+
+    #[test]
+    fn plan_covers_research_files_fails_when_path_missing() {
+        let tmp = TempDir::new().unwrap();
+        let bl = make_buildloop(&tmp);
+        fs::write(bl.join("research-report.md"), "Touches `src/foo.rs`.").unwrap();
+        fs::write(bl.join("current-plan.md"), "no relevant content here").unwrap();
+        let h = write_plan_invocation(&bl);
+        h.flush().unwrap();
+        let r = latest_run(&bl).unwrap();
+        let results = run_check(PlanCoversResearchFiles, &r);
+        assert_eq!(results[0].status, Status::Fail);
+    }
+
+    #[test]
+    fn plan_has_verification_passes_with_cargo() {
+        let tmp = TempDir::new().unwrap();
+        let bl = make_buildloop(&tmp);
+        fs::write(
+            bl.join("current-plan.md"),
+            "intro\n## Verification\n- build: cargo build\n",
+        )
+        .unwrap();
+        let h = write_plan_invocation(&bl);
+        h.flush().unwrap();
+        let r = latest_run(&bl).unwrap();
+        let results = run_check(PlanHasVerification, &r);
+        assert_eq!(results[0].status, Status::Pass);
+    }
+
+    #[test]
+    fn plan_has_verification_fails_without_section() {
+        let tmp = TempDir::new().unwrap();
+        let bl = make_buildloop(&tmp);
+        fs::write(bl.join("current-plan.md"), "intro\n## Other\n- thing").unwrap();
+        let h = write_plan_invocation(&bl);
+        h.flush().unwrap();
+        let r = latest_run(&bl).unwrap();
+        let results = run_check(PlanHasVerification, &r);
+        assert_eq!(results[0].status, Status::Fail);
+    }
+
+    #[test]
+    fn build_claims_has_files_changed_passes() {
+        let tmp = TempDir::new().unwrap();
+        let bl = make_buildloop(&tmp);
+        fs::write(
+            bl.join("build-claims.md"),
+            "## Files Changed\n- [CREATE] src/foo.rs -- new file\n",
+        )
+        .unwrap();
+        let h = write_build_invocation(&bl);
+        h.flush().unwrap();
+        let r = latest_run(&bl).unwrap();
+        let results = run_check(BuildClaimsHasFilesChanged, &r);
+        assert_eq!(results[0].status, Status::Pass);
+    }
+
+    #[test]
+    fn build_claims_has_files_changed_fails_when_empty() {
+        let tmp = TempDir::new().unwrap();
+        let bl = make_buildloop(&tmp);
+        fs::write(
+            bl.join("build-claims.md"),
+            "## Files Changed\nblank\n## Next\n",
+        )
+        .unwrap();
+        let h = write_build_invocation(&bl);
+        h.flush().unwrap();
+        let r = latest_run(&bl).unwrap();
+        let results = run_check(BuildClaimsHasFilesChanged, &r);
+        assert_eq!(results[0].status, Status::Fail);
+    }
+
+    #[test]
+    fn build_claims_has_verification_results_passes_with_three_lines() {
+        let tmp = TempDir::new().unwrap();
+        let bl = make_buildloop(&tmp);
+        fs::write(
+            bl.join("build-claims.md"),
+            "## Verification Results\n- Build: PASS (cargo build)\n- Tests: PASS (cargo test)\n- Lint: SKIPPED (no lint)\n",
+        )
+        .unwrap();
+        let h = write_build_invocation(&bl);
+        h.flush().unwrap();
+        let r = latest_run(&bl).unwrap();
+        let results = run_check(BuildClaimsHasVerificationResults, &r);
+        assert_eq!(results[0].status, Status::Pass);
+    }
+
+    #[test]
+    fn build_claims_has_verification_results_fails_missing_lint() {
+        let tmp = TempDir::new().unwrap();
+        let bl = make_buildloop(&tmp);
+        fs::write(
+            bl.join("build-claims.md"),
+            "## Verification Results\n- Build: PASS\n- Tests: PASS\n",
+        )
+        .unwrap();
+        let h = write_build_invocation(&bl);
+        h.flush().unwrap();
+        let r = latest_run(&bl).unwrap();
+        let results = run_check(BuildClaimsHasVerificationResults, &r);
+        assert_eq!(results[0].status, Status::Fail);
+    }
+
+    #[test]
+    fn build_claims_files_exist_passes_when_paths_real() {
+        let tmp = TempDir::new().unwrap();
+        let bl = make_buildloop(&tmp);
+        // Create src/foo.rs at project root (tmp.path())
+        let src_dir = tmp.path().join("src");
+        fs::create_dir_all(&src_dir).unwrap();
+        fs::write(src_dir.join("foo.rs"), "fn main() {}").unwrap();
+        fs::write(
+            bl.join("build-claims.md"),
+            "## Files Changed\n- [CREATE] src/foo.rs -- new file\n",
+        )
+        .unwrap();
+        let h = write_build_invocation(&bl);
+        h.flush().unwrap();
+        let r = latest_run(&bl).unwrap();
+        let results = run_check(BuildClaimsFilesExist, &r);
+        assert_eq!(results[0].status, Status::Pass);
+    }
+
+    #[test]
+    fn build_claims_files_exist_fails_when_path_missing() {
+        let tmp = TempDir::new().unwrap();
+        let bl = make_buildloop(&tmp);
+        fs::write(
+            bl.join("build-claims.md"),
+            "## Files Changed\n- [CREATE] src/missing.rs -- not actually created\n",
+        )
+        .unwrap();
+        let h = write_build_invocation(&bl);
+        h.flush().unwrap();
+        let r = latest_run(&bl).unwrap();
+        let results = run_check(BuildClaimsFilesExist, &r);
+        assert_eq!(results[0].status, Status::Fail);
+    }
+
+    #[test]
+    fn build_claims_has_gaps_section_passes() {
+        let tmp = TempDir::new().unwrap();
+        let bl = make_buildloop(&tmp);
+        fs::write(
+            bl.join("build-claims.md"),
+            "## Files Changed\n- [CREATE] x -- y\n## Gaps and Assumptions\n- some gap\n",
+        )
+        .unwrap();
+        let h = write_build_invocation(&bl);
+        h.flush().unwrap();
+        let r = latest_run(&bl).unwrap();
+        let results = run_check(BuildClaimsHasGapsSection, &r);
+        assert_eq!(results[0].status, Status::Pass);
+    }
+
+    #[test]
+    fn build_claims_has_gaps_section_fails_when_missing() {
+        let tmp = TempDir::new().unwrap();
+        let bl = make_buildloop(&tmp);
+        fs::write(bl.join("build-claims.md"), "## Files Changed\n- [CREATE] x -- y\n").unwrap();
+        let h = write_build_invocation(&bl);
+        h.flush().unwrap();
+        let r = latest_run(&bl).unwrap();
+        let results = run_check(BuildClaimsHasGapsSection, &r);
+        assert_eq!(results[0].status, Status::Fail);
+    }
+
+    #[test]
+    fn audit_engaged_passes_when_findings_present() {
+        let tmp = TempDir::new().unwrap();
+        let bl = make_buildloop(&tmp);
+        fs::write(
+            bl.join("review-report.md"),
+            "preface\n```json\n{\"high\":[{\"file\":\"x\",\"line\":1}],\"medium\":[],\"low\":[]}\n```\nepilogue",
+        )
+        .unwrap();
+        let h = write_audit_invocation(&bl);
+        h.flush().unwrap();
+        let r = latest_run(&bl).unwrap();
+        let results = run_check(AuditEngaged, &r);
+        assert_eq!(results[0].status, Status::Pass);
+    }
+
+    #[test]
+    fn audit_engaged_passes_on_empty_with_pass_verdict() {
+        let tmp = TempDir::new().unwrap();
+        let bl = make_buildloop(&tmp);
+        fs::write(
+            bl.join("review-report.md"),
+            "Verdict: PASS\nRationale: nothing wrong\n```json\n{\"high\":[],\"medium\":[],\"low\":[]}\n```\n",
+        )
+        .unwrap();
+        let h = write_audit_invocation(&bl);
+        h.flush().unwrap();
+        let r = latest_run(&bl).unwrap();
+        let results = run_check(AuditEngaged, &r);
+        assert_eq!(results[0].status, Status::Pass);
+    }
+
+    #[test]
+    fn audit_engaged_skips_when_audit_skipped_reason_set() {
+        let tmp = TempDir::new().unwrap();
+        let bl = make_buildloop(&tmp);
+        let h = write_audit_invocation(&bl);
+        // Mutate manifest before flushing: read snapshot, push audit_skipped_reason.
+        // The handle does not expose direct mutation; flush, mutate JSON, rewrite.
+        h.flush().unwrap();
+        let manifest_path = bl.join("run-manifest.json");
+        let raw = fs::read_to_string(&manifest_path).unwrap();
+        let mut v: Value = serde_json::from_str(&raw).unwrap();
+        v.as_object_mut()
+            .unwrap()
+            .insert("audit_skipped_reason".to_string(), Value::String("simple".into()));
+        fs::write(&manifest_path, serde_json::to_string_pretty(&v).unwrap()).unwrap();
+        let r = latest_run(&bl).unwrap();
+        let results = run_check(AuditEngaged, &r);
+        assert_eq!(results[0].status, Status::Skip);
+    }
+
+    #[test]
+    fn audit_findings_localized_fails_on_missing_line() {
+        let tmp = TempDir::new().unwrap();
+        let bl = make_buildloop(&tmp);
+        fs::write(
+            bl.join("review-report.md"),
+            "```json\n{\"high\":[{\"file\":\"x\"}],\"medium\":[],\"low\":[]}\n```\n",
+        )
+        .unwrap();
+        let h = write_audit_invocation(&bl);
+        h.flush().unwrap();
+        let r = latest_run(&bl).unwrap();
+        let results = run_check(AuditFindingsLocalized, &r);
+        assert_eq!(results[0].status, Status::Fail);
+    }
+}
