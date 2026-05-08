@@ -467,6 +467,16 @@
       "model": "gpt-4o-mini",
       "lines": 91,
       "generation": 47
+    },
+    {
+      "file": "the-eye-of-the-storm-async.js",
+      "name": "await the Eye of the Storm",
+      "location": "Hurricane Alley, Caribbean Sea",
+      "biome": "extreme",
+      "generated": "2026-05-08T08:01:29.992Z",
+      "model": "gpt-4o-mini",
+      "lines": 82,
+      "generation": 48
     }
   ]
 }

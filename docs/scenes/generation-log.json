@@ -717,5 +717,32 @@
     "retries": 0,
     "api_retries": 0,
     "validation": "pass"
+  },
+  {
+    "ts": "2026-05-08T08:00:54.059Z",
+    "scene": "autumn-deprecation-notice.js",
+    "seed_id": "autumn-deprecation-notice",
+    "biome": "forest",
+    "model": "gpt-4o-mini",
+    "input_tokens": 16288,
+    "output_tokens": 1497,
+    "cost_usd": 0.0033,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "fail",
+    "error": "Validation failed after 2 attempts: VALIDATION FAILED (1 error):\n- Insufficient animation: found 1 animation patterns (need 2+). Use osc(t,period,phase), Math.sin(t*speed), or Math.cos(t*speed) for time-based animation"
+  },
+  {
+    "ts": "2026-05-08T08:01:29.993Z",
+    "scene": "the-eye-of-the-storm-async.js",
+    "seed_id": "the-eye-of-the-storm-async",
+    "biome": "extreme",
+    "model": "gpt-4o-mini",
+    "input_tokens": 7412,
+    "output_tokens": 872,
+    "cost_usd": 0.0016,
+    "retries": 0,
+    "api_retries": 0,
+    "validation": "pass"
   }
 ]
