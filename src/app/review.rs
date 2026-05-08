@@ -8,10 +8,13 @@ use tokio::sync::mpsc;
 use crate::agent::{self, AgentOutputEvent, AgentRole};
 use crate::budget;
 use crate::config::Config;
+use crate::eval::stage_id::StageId;
 use crate::isolation;
 use crate::observatory::{self, AgentUsage, ObservatoryEvent};
 use crate::prompts;
+use crate::run_manifest::{AgentExitInfo, PromptEvidenceSpec, StageInvocationId, StageStatus};
 
+use super::build::{build_evidence_spec, manifest_exit_info};
 use super::commands;
 use super::context::RunContext;
 use super::{AppEvent, LoopEvent};
@@ -347,6 +350,7 @@ pub(super) async fn run_review_loop(
     pattern_context: &str,
     extension_context: &str,
     tx: &mpsc::UnboundedSender<AppEvent>,
+    pattern_ids: &[String],
 ) -> (
     bool,
     usize,
@@ -481,7 +485,44 @@ pub(super) async fn run_review_loop(
     // Claude sub-agent. Configured via doubt_engine = "codex" in .foundry.json
     // or FOUNDRY_DOUBT_ENGINE / DOUBT_ENGINE env vars.
     if ctx.config.doubt_engine == "codex" {
+        // codex-doubt evidence is degraded in v1 (no orchestrator-side prompt assembly,
+        // no AgentResult). Transcript adapter is v2 priority #1 -- see docs/PLAN_eval-harness.md.
+        let codex_doubt_spec = PromptEvidenceSpec {
+            stage_id: StageId::Audit,
+            role: AgentRole::Reviewer,
+            expected_artifact_path: Some(ctx.review_report.clone()),
+            originally_configured_provider: "codex".to_string(),
+            originally_configured_model: CODEX_DEFAULT_MODEL.to_string(),
+            effective_provider: "codex".to_string(),
+            effective_model: CODEX_DEFAULT_MODEL.to_string(),
+            override_reason: None,
+            system_prompt: "",
+            user_prompt: "",
+            matched_pattern_ids: Vec::new(),
+            selected_extension_names: Vec::new(),
+            prior_artifact_paths: Vec::new(),
+        };
+        let codex_doubt_inv_id: StageInvocationId =
+            ctx.manifest.record_invocation(codex_doubt_spec);
         let result = run_codex_doubt(task_id, task_desc, ctx, tx).await;
+        // result.0 is the audit verdict (PASS/FAIL of findings), not whether the
+        // codex subprocess ran. A FAIL verdict with findings is still a successful
+        // invocation -- the agent ran and produced output. Distinguishing
+        // "verdict failed" vs "agent crashed" requires extra information that
+        // run_codex_doubt does not currently surface in its return tuple, so v1
+        // records StageStatus::Ran unconditionally for the placeholder.
+        let codex_doubt_status = StageStatus::Ran;
+        ctx.manifest.record_exit(
+            codex_doubt_inv_id,
+            codex_doubt_status,
+            chrono::Utc::now(),
+            AgentExitInfo {
+                log_path: None,
+                actual_provider: "codex".to_string(),
+                actual_model: CODEX_DEFAULT_MODEL.to_string(),
+                fallback_reason: None,
+            },
+        );
         restore_phase_guard(&mut phase_guard, tx);
         return result;
     }
@@ -519,6 +560,7 @@ pub(super) async fn run_review_loop(
             &files_list,
             diff_for_review.as_deref(),
             &semgrep_findings,
+            pattern_ids,
         )
         .await;
         let _ = tx.send(AppEvent::AgentDone(result.0));
@@ -601,6 +643,21 @@ pub(super) async fn run_review_loop(
             }));
         }
     }
+    let reviewer_spec = build_evidence_spec(
+        StageId::Audit,
+        AgentRole::Reviewer,
+        Some(ctx.review_report.clone()),
+        &ctx.config.reviewer_provider,
+        &ctx.config.reviewer_model,
+        &ctx.config.reviewer_provider,
+        &ctx.config.reviewer_model,
+        None,
+        "",
+        &prompt,
+        pattern_ids.to_vec(),
+        ctx.config.extensions.clone(),
+    );
+    let reviewer_inv_id: StageInvocationId = ctx.manifest.record_invocation(reviewer_spec);
     let reviewer_start = Instant::now();
     let review_result = agent::run_agent(
         &AgentRole::Reviewer,
@@ -616,6 +673,18 @@ pub(super) async fn run_review_loop(
         Some(&ctx.config),
     )
     .await;
+
+    let (reviewer_status, reviewer_exit) = manifest_exit_info(
+        &review_result,
+        &ctx.config.reviewer_provider,
+        &ctx.config.reviewer_model,
+    );
+    ctx.manifest.record_exit(
+        reviewer_inv_id,
+        reviewer_status,
+        chrono::Utc::now(),
+        reviewer_exit,
+    );
 
     let agent_usage = fwd_handle.await.unwrap_or_default();
     let _ = tx.send(AppEvent::AgentDone(
@@ -816,6 +885,7 @@ async fn run_multipass_review(
     files_list: &str,
     diff_for_review: Option<&str>,
     semgrep_findings: &str,
+    pattern_ids: &[String],
 ) -> (
     bool,
     usize,
@@ -861,6 +931,26 @@ async fn run_multipass_review(
             &ctx.tasks_file_prompt_path(),
         );
 
+        // The per-file prompt is NOT extension-wrapped (only single-pass and
+        // integration prompts are). Recording an empty selected_extension_names
+        // makes E1.5's `extension_loaded` Skip cleanly per the E1.5 spec.
+        let per_file_spec = build_evidence_spec(
+            StageId::Audit,
+            AgentRole::Reviewer,
+            Some(ctx.review_report.clone()),
+            &ctx.config.reviewer_provider,
+            &ctx.config.reviewer_model,
+            &ctx.config.reviewer_provider,
+            &ctx.config.reviewer_model,
+            None,
+            "",
+            &prompt,
+            pattern_ids.to_vec(),
+            Vec::new(),
+        );
+        let per_file_inv_id: StageInvocationId =
+            ctx.manifest.record_invocation(per_file_spec);
+
         let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
         let fwd_tx = tx.clone();
         let fwd_handle = tokio::spawn(async move {
@@ -897,6 +987,18 @@ async fn run_multipass_review(
             Some(&ctx.config),
         )
         .await;
+
+        let (per_file_status, per_file_exit) = manifest_exit_info(
+            &result,
+            &ctx.config.reviewer_provider,
+            &ctx.config.reviewer_model,
+        );
+        ctx.manifest.record_exit(
+            per_file_inv_id,
+            per_file_status,
+            chrono::Utc::now(),
+            per_file_exit,
+        );
 
         let agent_usage = fwd_handle.await.unwrap_or_default();
         total_usage.tokens_in += agent_usage.tokens_in;
@@ -992,6 +1094,22 @@ async fn run_multipass_review(
         }
     }
 
+    let integration_spec = build_evidence_spec(
+        StageId::Audit,
+        AgentRole::Reviewer,
+        Some(ctx.review_report.clone()),
+        &ctx.config.reviewer_provider,
+        &ctx.config.reviewer_model,
+        &ctx.config.reviewer_provider,
+        &ctx.config.reviewer_model,
+        None,
+        "",
+        &prompt,
+        pattern_ids.to_vec(),
+        ctx.config.extensions.clone(),
+    );
+    let integration_inv_id: StageInvocationId = ctx.manifest.record_invocation(integration_spec);
+
     let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
     let fwd_tx = tx.clone();
     let fwd_handle = tokio::spawn(async move {
@@ -1028,6 +1146,18 @@ async fn run_multipass_review(
         Some(&ctx.config),
     )
     .await;
+
+    let (integration_status, integration_exit) = manifest_exit_info(
+        &review_result,
+        &ctx.config.reviewer_provider,
+        &ctx.config.reviewer_model,
+    );
+    ctx.manifest.record_exit(
+        integration_inv_id,
+        integration_status,
+        chrono::Utc::now(),
+        integration_exit,
+    );
 
     let agent_usage = fwd_handle.await.unwrap_or_default();
     total_usage.tokens_in += agent_usage.tokens_in;

@@ -38,7 +38,7 @@ use crate::utils::atomic_write_file;
 // skip path, and task-completion path into the per-run manifest. All calls
 // are best-effort; failures never block the pipeline.
 
-fn manifest_exit_info(
+pub(super) fn manifest_exit_info(
     result: &anyhow::Result<AgentResult>,
     fallback_provider: &str,
     fallback_model: &str,
@@ -71,7 +71,7 @@ fn manifest_exit_info(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn build_evidence_spec<'a>(
+pub(super) fn build_evidence_spec<'a>(
     stage_id: StageId,
     role: AgentRole,
     expected_artifact_path: Option<PathBuf>,
@@ -5650,6 +5650,7 @@ async fn process_task(
                         &reviewer_pattern_context,
                         extension_context,
                         tx,
+                        &injected_pattern_ids,
                     )
                     .await
                 }
@@ -5661,6 +5662,7 @@ async fn process_task(
                         &reviewer_pattern_context,
                         extension_context,
                         tx,
+                        &injected_pattern_ids,
                     )
                     .await
                 }
