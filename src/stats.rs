@@ -1841,6 +1841,25 @@ fn print_table(report: &StatsReport) {
     }
 }
 
+/// Look up a per-token rate from the on-disk model catalog.
+/// Returns the input price in $/Mtok or 0.0 when no entry matches.
+#[allow(dead_code)]
+pub fn input_rate_per_mtok(provider: &str, model_id: &str) -> f64 {
+    let catalog = crate::model_catalog::load_catalog();
+    crate::model_catalog::lookup(&catalog, provider, model_id)
+        .map(|e| e.input_price_per_mtok)
+        .unwrap_or(0.0)
+}
+
+/// Look up a per-token output rate from the on-disk model catalog.
+#[allow(dead_code)]
+pub fn output_rate_per_mtok(provider: &str, model_id: &str) -> f64 {
+    let catalog = crate::model_catalog::load_catalog();
+    crate::model_catalog::lookup(&catalog, provider, model_id)
+        .map(|e| e.output_price_per_mtok)
+        .unwrap_or(0.0)
+}
+
 // ─── Tests ───────────────────────────────────────────────────
 
 #[cfg(test)]

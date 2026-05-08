@@ -16,6 +16,10 @@ fn default_budget_overrun_threshold() -> u8 {
     10
 }
 
+fn default_catalog_refresh_secs() -> u64 {
+    86400
+}
+
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 #[serde(default)]
 pub struct PipelineStageConfig {
@@ -443,6 +447,17 @@ pub struct Config {
     #[serde(default)]
     pub stage_overrides: Vec<String>,
 
+    /// Background catalog refresh cadence in seconds. 0 disables refresh entirely
+    /// (the on-disk catalog or baseline is used as-is). Default 86400 (24h).
+    #[serde(default = "default_catalog_refresh_secs")]
+    pub model_catalog_refresh_secs: u64,
+
+    /// Map of provider -> URL override for model catalog sources. Keys: "anthropic",
+    /// "openai". When set, the catalog refresher hits this URL instead of the
+    /// provider default. Useful for internal mirrors. Empty by default.
+    #[serde(default)]
+    pub model_catalog_url_overrides: std::collections::HashMap<String, String>,
+
     /// Arena mode: "solo" (one pipeline) or "dual" (two parallel pipelines).
     #[serde(default)]
     pub arena_mode: String,
@@ -601,6 +616,8 @@ impl Default for Config {
             pipeline_stages: default_pipeline_stages(),
             on_task_complete: None,
             stage_overrides: Vec::new(),
+            model_catalog_refresh_secs: 86400,
+            model_catalog_url_overrides: std::collections::HashMap::new(),
             arena_mode: "solo".into(),
             b_scout_provider: String::new(),
             b_scout_model: String::new(),
@@ -1959,50 +1976,42 @@ impl Config {
     ) -> Vec<crate::app::ModelEntry> {
         use crate::app::ModelEntry;
 
-        let mut entries = Vec::new();
+        let catalog = crate::model_catalog::load_catalog();
+        let mut entries: Vec<ModelEntry> = Vec::new();
 
-        if claude_available {
-            for (model, rec) in [
-                ("claude-opus-4-7", true),
-                ("claude-sonnet-4-6", false),
-                ("claude-haiku-4-5", false),
-            ] {
-                entries.push(ModelEntry {
-                    provider: "claude".into(),
-                    model: model.into(),
-                    label: model.into(),
-                    recommended: rec,
-                    group: "Claude".into(),
-                });
+        for e in &catalog.entries {
+            let visible = match e.provider.as_str() {
+                "claude" => claude_available,
+                "codex" => codex_available,
+                "ghcopilot" => copilot_available,
+                "opencode" => false,
+                _ => false,
+            };
+            if !visible {
+                continue;
             }
-        }
-
-        if codex_available {
-            for model in ["gpt-5.4", "gpt-5.4-thinking"] {
-                entries.push(ModelEntry {
-                    provider: "codex".into(),
-                    model: model.into(),
-                    label: model.into(),
-                    recommended: false,
-                    group: "Codex".into(),
-                });
-            }
-        }
-
-        if copilot_available {
-            for (model, rec) in [
-                ("claude-sonnet-4.6", true),
-                ("gpt-4.1", false),
-                ("gpt-4o", false),
-            ] {
-                entries.push(ModelEntry {
-                    provider: "ghcopilot".into(),
-                    model: model.into(),
-                    label: model.into(),
-                    recommended: rec,
-                    group: "GitHub Copilot".into(),
-                });
-            }
+            let label = if e.deprecated_at.is_some() {
+                format!(
+                    "{} (deprecated, sunset {})",
+                    e.display_name,
+                    e.deprecated_at
+                        .map(|d| d.format("%Y-%m-%d").to_string())
+                        .unwrap_or_else(|| "unknown".into())
+                )
+            } else {
+                e.display_name.clone()
+            };
+            entries.push(ModelEntry {
+                provider: e.provider.clone(),
+                model: e.model_id.clone(),
+                label,
+                recommended: e.recommended,
+                group: if e.group.is_empty() {
+                    default_group_for_provider(&e.provider).to_string()
+                } else {
+                    e.group.clone()
+                },
+            });
         }
 
         for m in lmstudio {
@@ -2034,6 +2043,16 @@ impl Config {
         });
 
         entries
+    }
+}
+
+fn default_group_for_provider(provider: &str) -> &'static str {
+    match provider {
+        "claude" => "Claude",
+        "codex" => "Codex",
+        "ghcopilot" => "GitHub Copilot",
+        "opencode" => "OpenCode",
+        _ => "Other",
     }
 }
 

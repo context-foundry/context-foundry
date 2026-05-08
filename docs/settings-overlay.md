@@ -4,6 +4,8 @@ The Settings Overlay is a modal panel that exposes foundry's ~40 user-tunable
 configuration fields organized into 11 collapsible sections. All changes persist
 to `.foundry.json` in the project directory.
 
+See also: [Model Catalog](model-catalog.md) for how the picker's model list and rates are kept fresh.
+
 ## Opening and closing
 
 | Action | Effect |

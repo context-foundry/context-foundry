@@ -1603,6 +1603,10 @@ pub(super) enum AppEvent {
     UpdateAvailable(String),
     OllamaStatus(bool), // true = connected, false = unreachable
     WelcomeMessage(String),
+    /// Background model-catalog refresh completed; payload contains
+    /// activity-log lines (one per new model, deprecation, or error) that
+    /// should be appended to the activity log.
+    CatalogRefreshed(Vec<String>),
     /// Discovered local models, split by source so the selection handler can prefix
     /// `lmstudio/` vs `ollama/` correctly when persisting builder routing.
     /// `lmstudio_opencode_map` maps the LM Studio short-id (suffix after the last `/`)

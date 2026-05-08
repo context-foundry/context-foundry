@@ -504,6 +504,44 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
         }
     });
 
+    // Background model-catalog refresh (non-blocking, delayed).
+    let catalog_tx = event_tx.clone();
+    let catalog_url_overrides = config.model_catalog_url_overrides.clone();
+    let catalog_refresh_secs = config.model_catalog_refresh_secs;
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_secs(3)).await;
+        if catalog_refresh_secs == 0 {
+            return;
+        }
+        let mode = crate::model_catalog::refresh_mode_from_env();
+        let catalog = crate::model_catalog::load_catalog();
+        if !crate::model_catalog::refresh_policy_should_run(&catalog, mode, chrono::Utc::now()) {
+            return;
+        }
+        let (log_tx, mut log_rx) = mpsc::unbounded_channel::<String>();
+        let refresh_handle = tokio::spawn(crate::model_catalog::refresh_catalog_async(
+            catalog,
+            catalog_url_overrides,
+            Some(log_tx),
+        ));
+        let mut messages: Vec<String> = Vec::new();
+        while let Some(line) = log_rx.recv().await {
+            messages.push(line);
+        }
+        match refresh_handle.await {
+            Ok(Ok(_next)) => {}
+            Ok(Err(e)) => {
+                messages.push(format!("[catalog] refresh failed: {}", e));
+            }
+            Err(e) => {
+                messages.push(format!("[catalog] refresh task panicked: {}", e));
+            }
+        }
+        if !messages.is_empty() {
+            let _ = catalog_tx.send(AppEvent::CatalogRefreshed(messages));
+        }
+    });
+
     // Fetch a fresh welcome message from a local LLM (best-effort, non-blocking)
     {
         let welcome_tx = event_tx.clone();
@@ -1151,6 +1189,11 @@ fn handle_planning_event(state: &mut AppState, event: AppEvent, config: &Config)
                 }
                 .to_string(),
             );
+        }
+        AppEvent::CatalogRefreshed(messages) => {
+            for line in messages {
+                state.log(line);
+            }
         }
         AppEvent::LocalModels {
             lmstudio,
@@ -2851,6 +2894,11 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                 }
                 .to_string(),
             );
+        }
+        AppEvent::CatalogRefreshed(messages) => {
+            for line in messages {
+                state.log(line);
+            }
         }
         AppEvent::LocalModels {
             lmstudio,

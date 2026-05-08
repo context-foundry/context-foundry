@@ -18,6 +18,7 @@ mod history;
 mod init;
 mod isolation;
 mod mcp;
+mod model_catalog;
 mod observatory;
 mod orchestrator;
 mod patterns;

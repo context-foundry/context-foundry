@@ -1429,19 +1429,27 @@ fn render_model_picker(
     let popup = model_picker_rect(parent, picker);
 
     frame.render_widget(Clear, popup);
-    let title = if picker.pipeline_b {
+    let catalog = crate::model_catalog::load_catalog();
+    let (stale_label, stale_warn) = crate::model_catalog::staleness_label(
+        chrono::Utc::now(),
+        catalog.source_fetched_at,
+    );
+    let base = if picker.pipeline_b {
         format!(" Model for {} (B) ", picker.stage)
     } else {
         format!(" Model for {} ", picker.stage)
     };
+    let title = format!("{} {} ", base.trim_end(), stale_label);
+    let title_color = if stale_warn { Color::Yellow } else { theme.accent };
+    // "Refresh now" button deferred -- env var FOUNDRY_MODEL_REFRESH=force triggers a manual refresh.
     frame.render_widget(
         Block::default()
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(theme.accent))
+            .border_style(Style::default().fg(title_color))
             .title(Span::styled(
                 title,
                 Style::default()
-                    .fg(theme.accent)
+                    .fg(title_color)
                     .add_modifier(Modifier::BOLD),
             )),
         popup,
