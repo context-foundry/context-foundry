@@ -2,7 +2,7 @@ use anyhow::{Context as _, Result};
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use serde_json::Value;
 use std::io::BufRead;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc, Mutex,
@@ -188,6 +188,12 @@ pub struct AgentResult {
     pub exit_code: i32,
     pub exit_kind: AgentExitKind,
     pub failure_message: Option<String>,
+    #[allow(dead_code)]
+    pub log_path: Option<PathBuf>,
+    pub actual_provider: String,
+    #[allow(dead_code)]
+    pub actual_model: String,
+    pub fallback_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -779,6 +785,10 @@ pub async fn run_provider_session(options: ProviderRunOptions<'_>) -> Result<Age
     let cancel_flag = options.cancel_flag.clone();
     let progress = Arc::new(Mutex::new(ProviderProgressState::new(Instant::now())));
 
+    let outer_log_path = log_file_path.clone();
+    let outer_provider = provider.slug().to_string();
+    let outer_model = model_name.clone();
+
     tokio::task::spawn_blocking(move || {
         let tx = output_tx;
         let mut child = child;
@@ -806,6 +816,10 @@ pub async fn run_provider_session(options: ProviderRunOptions<'_>) -> Result<Age
             exit_code: 1,
             exit_kind: AgentExitKind::Failed,
             failure_message: None,
+            log_path: Some(log_file_path.clone()),
+            actual_provider: provider.slug().to_string(),
+            actual_model: model_name.clone(),
+            fallback_reason: None,
         };
 
         loop {
@@ -919,6 +933,10 @@ pub async fn run_provider_session(options: ProviderRunOptions<'_>) -> Result<Age
         exit_code: 1,
         exit_kind: AgentExitKind::Failed,
         failure_message: Some("provider session result channel closed".to_string()),
+        log_path: Some(outer_log_path.clone()),
+        actual_provider: outer_provider.clone(),
+        actual_model: outer_model.clone(),
+        fallback_reason: None,
     }))
 }
 
@@ -996,7 +1014,7 @@ pub async fn run_agent(
                         .as_deref()
                         .unwrap_or("unknown error"),
                 )));
-                return Box::pin(run_agent(
+                let mut r = Box::pin(run_agent(
                     role,
                     ModelProvider::Claude,
                     "",
@@ -1009,7 +1027,13 @@ pub async fn run_agent(
                     shutdown,
                     Some(&config),
                 ))
-                .await;
+                .await?;
+                r.actual_provider = "claude".to_string();
+                // r.actual_model stays "" -- Claude SDK picked default; eval parser fills from JSONL system/init in E1.5.
+                r.fallback_reason = Some(
+                    "codex transport stall, fell back to claude default".to_string(),
+                );
+                return Ok(r);
             }
 
             return Ok(outcome);
@@ -1052,6 +1076,10 @@ pub async fn run_agent(
                 exit_code: 1,
                 exit_kind: AgentExitKind::Failed,
                 failure_message: Some(msg.to_string()),
+                log_path: None,
+                actual_provider: ModelProvider::GhCopilot.slug().to_string(),
+                actual_model: model.to_string(),
+                fallback_reason: None,
             });
         }
         let sys_directives = crate::prompts::agent_system_directives();
@@ -1212,6 +1240,9 @@ async fn run_agent_pty(
 
     let role_name = role.to_string();
     let model_name = model.to_string();
+    let function_log_path = log_file_path.clone();
+    let function_provider = ModelProvider::Claude.slug().to_string();
+    let function_model = model.to_string();
     tokio::task::spawn_blocking(move || {
         let tx = output_tx;
         let mut child = child;
@@ -1219,8 +1250,9 @@ async fn run_agent_pty(
         let model_label = model_name.clone();
         let progress = Arc::new(Mutex::new(ProviderProgressState::new(Instant::now())));
         let read_progress = progress.clone();
+        let log_file_path_for_reader = log_file_path.clone();
         let read_thread = std::thread::spawn(move || {
-            read_pty_output(reader, &tx, &log_file_path, &model_label, &read_progress);
+            read_pty_output(reader, &tx, &log_file_path_for_reader, &model_label, &read_progress);
         });
 
         let hard_timeout_secs = timeout_secs.saturating_mul(PROVIDER_HARD_TIMEOUT_MULTIPLIER);
@@ -1230,6 +1262,10 @@ async fn run_agent_pty(
             exit_code: 1,
             exit_kind: AgentExitKind::Failed,
             failure_message: None,
+            log_path: Some(log_file_path.clone()),
+            actual_provider: ModelProvider::Claude.slug().to_string(),
+            actual_model: model_name.clone(),
+            fallback_reason: None,
         };
 
         loop {
@@ -1317,6 +1353,10 @@ async fn run_agent_pty(
         exit_code: 1,
         exit_kind: AgentExitKind::Failed,
         failure_message: Some(format!("Agent {} result channel closed", role)),
+        log_path: Some(function_log_path.clone()),
+        actual_provider: function_provider.clone(),
+        actual_model: function_model.clone(),
+        fallback_reason: None,
     }))
 }
 
@@ -1366,6 +1406,9 @@ async fn run_agent_tmux(
 
     let role_name = role.to_string();
     let model_name = model.to_string();
+    let function_log_path = log_file_path.clone();
+    let function_provider = ModelProvider::Claude.slug().to_string();
+    let function_model = model.to_string();
     tokio::task::spawn_blocking(move || {
         let tx = output_tx;
         let progress = Arc::new(Mutex::new(ProviderProgressState::new(Instant::now())));
@@ -1377,6 +1420,10 @@ async fn run_agent_tmux(
             exit_code: 1,
             exit_kind: AgentExitKind::Failed,
             failure_message: None,
+            log_path: Some(log_file_path.clone()),
+            actual_provider: ModelProvider::Claude.slug().to_string(),
+            actual_model: model_name.clone(),
+            fallback_reason: None,
         };
 
         let pipe_file = match std::fs::File::open(&session.log_file) {
@@ -1599,6 +1646,10 @@ async fn run_agent_tmux(
         exit_code: 1,
         exit_kind: AgentExitKind::Failed,
         failure_message: Some(format!("Agent {} result channel closed", role)),
+        log_path: Some(function_log_path.clone()),
+        actual_provider: function_provider.clone(),
+        actual_model: function_model.clone(),
+        fallback_reason: None,
     }))
 }
 
@@ -3114,6 +3165,10 @@ mod tests {
             exit_code: 1,
             exit_kind: AgentExitKind::TransportStall,
             failure_message: Some("stalled".to_string()),
+            log_path: None,
+            actual_provider: String::new(),
+            actual_model: String::new(),
+            fallback_reason: None,
         };
 
         assert!(should_retry_run_agent_attempt(
@@ -3137,12 +3192,20 @@ mod tests {
             exit_code: 1,
             exit_kind: AgentExitKind::TransportStall,
             failure_message: Some("stalled".to_string()),
+            log_path: None,
+            actual_provider: String::new(),
+            actual_model: String::new(),
+            fallback_reason: None,
         };
         let failed_outcome = AgentResult {
             success: false,
             exit_code: 1,
             exit_kind: AgentExitKind::Failed,
             failure_message: Some("failed".to_string()),
+            log_path: None,
+            actual_provider: String::new(),
+            actual_model: String::new(),
+            fallback_reason: None,
         };
 
         assert!(!should_retry_run_agent_attempt(
@@ -3352,6 +3415,10 @@ mod tests {
                 exit_code: 1,
                 exit_kind: AgentExitKind::Failed,
                 failure_message: Some(msg.to_string()),
+                log_path: None,
+                actual_provider: String::new(),
+                actual_model: String::new(),
+                fallback_reason: None,
             };
             assert!(
                 should_fallback_to_claude(&outcome),
@@ -3368,6 +3435,10 @@ mod tests {
                 exit_code: 1,
                 exit_kind: kind,
                 failure_message: Some("something went wrong".to_string()),
+                log_path: None,
+                actual_provider: String::new(),
+                actual_model: String::new(),
+                fallback_reason: None,
             };
             assert!(
                 should_fallback_to_claude(&outcome),
@@ -3383,6 +3454,10 @@ mod tests {
             exit_code: 0,
             exit_kind: AgentExitKind::Completed,
             failure_message: None,
+            log_path: None,
+            actual_provider: String::new(),
+            actual_model: String::new(),
+            fallback_reason: None,
         };
         assert!(!should_fallback_to_claude(&outcome));
     }
@@ -3395,6 +3470,10 @@ mod tests {
                 exit_code: 1,
                 exit_kind: kind,
                 failure_message: Some("user cancelled".to_string()),
+                log_path: None,
+                actual_provider: String::new(),
+                actual_model: String::new(),
+                fallback_reason: None,
             };
             assert!(
                 !should_fallback_to_claude(&outcome),

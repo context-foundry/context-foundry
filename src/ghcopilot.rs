@@ -749,6 +749,10 @@ pub async fn run_ghcopilot_session(options: GhCopilotOptions<'_>) -> Result<Agen
                 exit_code: 1,
                 exit_kind: AgentExitKind::Failed,
                 failure_message: Some(msg),
+                log_path: None,
+                actual_provider: "ghcopilot".to_string(),
+                actual_model: model.to_string(),
+                fallback_reason: None,
             });
         }
     };
@@ -817,6 +821,10 @@ pub async fn run_ghcopilot_session(options: GhCopilotOptions<'_>) -> Result<Agen
                 exit_code: 1,
                 exit_kind: AgentExitKind::Cancelled,
                 failure_message: Some("Cancelled".to_string()),
+                log_path: Some(log_path.clone()),
+                actual_provider: "ghcopilot".to_string(),
+                actual_model: model.to_string(),
+                fallback_reason: None,
             });
         }
 
@@ -832,6 +840,10 @@ pub async fn run_ghcopilot_session(options: GhCopilotOptions<'_>) -> Result<Agen
                 exit_code: 1,
                 exit_kind: AgentExitKind::TimedOut,
                 failure_message: Some(msg),
+                log_path: Some(log_path.clone()),
+                actual_provider: "ghcopilot".to_string(),
+                actual_model: model.to_string(),
+                fallback_reason: None,
             });
         }
 
@@ -860,6 +872,10 @@ pub async fn run_ghcopilot_session(options: GhCopilotOptions<'_>) -> Result<Agen
                         exit_code: 1,
                         exit_kind: AgentExitKind::Failed,
                         failure_message: Some(msg),
+                        log_path: Some(log_path.clone()),
+                        actual_provider: "ghcopilot".to_string(),
+                        actual_model: model.to_string(),
+                        fallback_reason: None,
                     });
                 }
                 Err(e) => {
@@ -871,6 +887,10 @@ pub async fn run_ghcopilot_session(options: GhCopilotOptions<'_>) -> Result<Agen
                         exit_code: 1,
                         exit_kind: AgentExitKind::Failed,
                         failure_message: Some(msg),
+                        log_path: Some(log_path.clone()),
+                        actual_provider: "ghcopilot".to_string(),
+                        actual_model: model.to_string(),
+                        fallback_reason: None,
                     });
                 }
             }
@@ -918,6 +938,10 @@ pub async fn run_ghcopilot_session(options: GhCopilotOptions<'_>) -> Result<Agen
                     exit_code: 0,
                     exit_kind: AgentExitKind::Completed,
                     failure_message: None,
+                    log_path: Some(log_path.clone()),
+                    actual_provider: "ghcopilot".to_string(),
+                    actual_model: model.to_string(),
+                    fallback_reason: None,
                 });
             }
 
@@ -948,6 +972,10 @@ pub async fn run_ghcopilot_session(options: GhCopilotOptions<'_>) -> Result<Agen
                                 exit_code: 0,
                                 exit_kind: AgentExitKind::Completed,
                                 failure_message: None,
+                                log_path: Some(log_path.clone()),
+                                actual_provider: "ghcopilot".to_string(),
+                                actual_model: model.to_string(),
+                                fallback_reason: None,
                             });
                         }
 
@@ -958,6 +986,10 @@ pub async fn run_ghcopilot_session(options: GhCopilotOptions<'_>) -> Result<Agen
                             exit_code: 1,
                             exit_kind: AgentExitKind::Failed,
                             failure_message: Some(msg),
+                            log_path: Some(log_path.clone()),
+                            actual_provider: "ghcopilot".to_string(),
+                            actual_model: model.to_string(),
+                            fallback_reason: None,
                         });
                     }
                 };
@@ -1012,6 +1044,10 @@ pub async fn run_ghcopilot_session(options: GhCopilotOptions<'_>) -> Result<Agen
                         exit_code: 1,
                         exit_kind: AgentExitKind::Failed,
                         failure_message: Some(msg),
+                        log_path: Some(log_path.clone()),
+                        actual_provider: "ghcopilot".to_string(),
+                        actual_model: model.to_string(),
+                        fallback_reason: None,
                     });
                 }
             }
@@ -1044,5 +1080,9 @@ pub async fn run_ghcopilot_session(options: GhCopilotOptions<'_>) -> Result<Agen
         exit_code: 1,
         exit_kind: AgentExitKind::Failed,
         failure_message: Some(msg),
+        log_path: Some(log_path.clone()),
+        actual_provider: "ghcopilot".to_string(),
+        actual_model: model.to_string(),
+        fallback_reason: None,
     })
 }
