@@ -17,6 +17,7 @@ const REVIEW_REPORT: &str = ".buildloop/review-report.md";
 
 pub struct PlanCoversResearchFiles;
 pub struct PlanHasVerification;
+pub struct PlanHasPerPhaseVerification;
 pub struct BuildClaimsHasFilesChanged;
 pub struct BuildClaimsHasVerificationResults;
 pub struct BuildClaimsFilesExist;
@@ -39,29 +40,66 @@ fn read_artifact(root: &Path, rel: &str) -> Option<String> {
 
 fn extract_file_paths_from_research(text: &str) -> Vec<String> {
     let mut set = std::collections::BTreeSet::new();
-    if let Ok(re) = regex::Regex::new(r"`([A-Za-z0-9_./\-]+\.[A-Za-z0-9]+)`") {
+    // Backtick-quoted file references: `app/main.py`, `Cargo.toml`.
+    // Extension must be alphabetical (1-8 chars) -- this rejects numeric
+    // suffixes like `data/2.5` (a URL fragment, not a file).
+    if let Ok(re) = regex::Regex::new(r"`([A-Za-z0-9_./\-]+\.[A-Za-z][A-Za-z0-9]{0,7})`") {
         for cap in re.captures_iter(text) {
             if let Some(m) = cap.get(1) {
-                set.insert(m.as_str().to_string());
+                let path = m.as_str();
+                if !looks_like_url_fragment(path) {
+                    set.insert(path.to_string());
+                }
             }
         }
     }
-    if let Ok(re) = regex::Regex::new(r"\b([A-Za-z0-9_./\-]+/[A-Za-z0-9_./\-]+\.[A-Za-z0-9]+)\b") {
+    // Bare paths with a directory separator. Each path segment must be
+    // dot-free so that `api.openweathermap.org/data/foo.txt` cannot match
+    // (the `api.openweathermap` segment contains a dot). Extension must
+    // be alphabetical (rejects numeric API versions).
+    if let Ok(re) =
+        regex::Regex::new(r"\b([A-Za-z0-9_\-]+(?:/[A-Za-z0-9_\-]+)+\.[A-Za-z][A-Za-z0-9]{0,7})\b")
+    {
         for cap in re.captures_iter(text) {
             if let Some(m) = cap.get(1) {
-                set.insert(m.as_str().to_string());
+                let path = m.as_str();
+                if !looks_like_url_fragment(path) {
+                    set.insert(path.to_string());
+                }
             }
         }
     }
     set.into_iter().collect()
 }
 
+/// Reject path-shaped strings that are actually URL components, e.g.
+/// `api.openweathermap.org/data/foo.txt`. Detects a TLD-like substring
+/// directly preceding a `/`.
+fn looks_like_url_fragment(s: &str) -> bool {
+    let lower = s.to_ascii_lowercase();
+    const TLDS: &[&str] = &[
+        ".com/", ".org/", ".net/", ".io/", ".ai/", ".dev/", ".app/", ".co/", ".gov/", ".edu/",
+        ".uk/", ".eu/", ".us/",
+    ];
+    TLDS.iter().any(|tld| lower.contains(tld))
+}
+
 fn extract_file_paths_from_files_changed(text: &str) -> Vec<String> {
     let mut out = Vec::new();
-    let re = match regex::Regex::new(r"^- \[(?:CREATE|MODIFY)\]\s+(\S+)\s*--") {
-        Ok(re) => re,
-        Err(_) => return out,
-    };
+    // Strict format mandated by the builder prompt at src/prompts.rs:592-610:
+    //   - [CREATE] path -- description
+    //   - [MODIFY] path -- description
+    let strict_re = regex::Regex::new(r"^[-*+]\s*\[(?:CREATE|MODIFY)\]\s+(\S+)").ok();
+    // Loose fallback: any bullet line that quotes or names a file-shaped
+    // token. Accepts variants the builder produces in practice when it
+    // doesn't follow the strict schema verbatim:
+    //   - `src/foo.rs` -- new file
+    //   - src/bar.rs (modified)
+    //   * frontend/App.tsx
+    let loose_re = regex::Regex::new(
+        r"^[-*+]\s+`?([A-Za-z0-9_./\-]*(?:[/.][A-Za-z0-9_./\-]+)+)`?",
+    )
+    .ok();
     let mut in_section = false;
     for line in text.lines() {
         let trimmed = line.trim_end();
@@ -75,7 +113,12 @@ fn extract_file_paths_from_files_changed(text: &str) -> Vec<String> {
         if !in_section {
             continue;
         }
-        if let Some(cap) = re.captures(line) {
+        // Try strict first; fall back to loose if no match.
+        let captured = strict_re
+            .as_ref()
+            .and_then(|re| re.captures(line))
+            .or_else(|| loose_re.as_ref().and_then(|re| re.captures(line)));
+        if let Some(cap) = captured {
             if let Some(m) = cap.get(1) {
                 out.push(m.as_str().to_string());
             }
@@ -110,9 +153,45 @@ fn truncate_list(v: &[String], max: usize) -> Vec<String> {
     }
 }
 
+fn count_file_operations(plan: &str) -> usize {
+    let bullet_re = match regex::Regex::new(r"^[-*+]\s+\[(?:CREATE|MODIFY)\]\s+\S+") {
+        Ok(re) => re,
+        Err(_) => return 0,
+    };
+    let heading_re = match regex::Regex::new(
+        r"^#{2,4}\s+\d+\.\s+\[?(?:CREATE|MODIFY)\]?\s+\S+",
+    ) {
+        Ok(re) => re,
+        Err(_) => return 0,
+    };
+    let mut count: usize = 0;
+    for line in plan.lines() {
+        if bullet_re.is_match(line) || heading_re.is_match(line) {
+            count += 1;
+        }
+    }
+    count
+}
+
+fn count_verification_sections(plan: &str) -> usize {
+    let mut count: usize = 0;
+    for line in plan.lines() {
+        let trimmed = line.trim_end();
+        if !trimmed.starts_with("##") {
+            continue;
+        }
+        let lower = trimmed.to_lowercase();
+        if lower.contains("verification") {
+            count += 1;
+        }
+    }
+    count
+}
+
 const STAGES_PLAN: &[StageId] = &[StageId::Plan];
 const STAGES_BUILD: &[StageId] = &[StageId::Build];
 const STAGES_AUDIT: &[StageId] = &[StageId::Audit];
+const PER_PHASE_VERIFICATION_FILE_OP_THRESHOLD: usize = 5;
 
 impl Check for PlanCoversResearchFiles {
     fn name(&self) -> &'static str {
@@ -184,12 +263,32 @@ impl Check for PlanCoversResearchFiles {
                 .filter(|f| !plan.contains(f.as_str()))
                 .cloned()
                 .collect();
+            let total = files.len();
+            let matched = total - missing.len();
+            // Plans for incremental tasks legitimately don't enumerate every
+            // file research surveyed -- only the ones the plan will modify.
+            // Pass at >=50% coverage; fail only when most of the research
+            // findings are absent from the plan.
             if missing.is_empty() {
                 out.push(StageCheckResult {
                     stage,
                     invocation_id: inv.invocation_id,
                     status: Status::Pass,
-                    evidence: format!("matched {} paths", files.len()),
+                    evidence: format!("matched {} paths", total),
+                });
+            } else if matched * 2 >= total {
+                let display = truncate_list(&missing, 5);
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Pass,
+                    evidence: format!(
+                        "matched {}/{} paths ({} not in plan, e.g. {:?})",
+                        matched,
+                        total,
+                        missing.len(),
+                        display
+                    ),
                 });
             } else {
                 let display = truncate_list(&missing, 10);
@@ -197,7 +296,10 @@ impl Check for PlanCoversResearchFiles {
                     stage,
                     invocation_id: inv.invocation_id,
                     status: Status::Fail,
-                    evidence: format!("missing in plan: {:?}", display),
+                    evidence: format!(
+                        "low coverage: matched {}/{} paths -- missing {:?}",
+                        matched, total, display
+                    ),
                 });
             }
         }
@@ -295,11 +397,23 @@ impl Check for PlanHasVerification {
                 }
             }
             if found {
+                let file_ops_count = count_file_operations(&plan);
+                let verification_count = count_verification_sections(&plan);
+                let evidence = if file_ops_count >= PER_PHASE_VERIFICATION_FILE_OP_THRESHOLD
+                    && verification_count <= 1
+                {
+                    format!(
+                        "verification section has command-like content; soft warning: {} file ops with only {} verification section -- per-phase verification recommended",
+                        file_ops_count, verification_count
+                    )
+                } else {
+                    "verification section has command-like content".to_string()
+                };
                 out.push(StageCheckResult {
                     stage,
                     invocation_id: inv.invocation_id,
                     status: Status::Pass,
-                    evidence: "verification section has command-like content".to_string(),
+                    evidence,
                 });
             } else {
                 out.push(StageCheckResult {
@@ -307,6 +421,77 @@ impl Check for PlanHasVerification {
                     invocation_id: inv.invocation_id,
                     status: Status::Fail,
                     evidence: "verification section has no commands".to_string(),
+                });
+            }
+        }
+        out
+    }
+}
+
+impl Check for PlanHasPerPhaseVerification {
+    fn name(&self) -> &'static str {
+        "plan_has_per_phase_verification"
+    }
+    fn category(&self) -> Category {
+        Category::Heuristic
+    }
+    fn severity(&self) -> Severity {
+        Severity::Standard
+    }
+    fn applies_to(&self) -> &[StageId] {
+        STAGES_PLAN
+    }
+    fn run(&self, run: &RunTranscripts) -> Vec<StageCheckResult> {
+        let mut out = Vec::new();
+        for (inv, _) in run
+            .invocations
+            .iter()
+            .filter(|(inv, _)| non_superseded(inv) && inv.stage_id == Some(StageId::Plan))
+        {
+            let stage = StageId::Plan;
+            if invocation_skip_status(inv).is_some() {
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Skip,
+                    evidence: skip_evidence_for_status(inv.status, &inv.skip_reason),
+                });
+                continue;
+            }
+            let root = project_root_for(run);
+            let plan = match read_artifact(&root, CURRENT_PLAN) {
+                Some(s) => s,
+                None => {
+                    out.push(StageCheckResult {
+                        stage,
+                        invocation_id: inv.invocation_id,
+                        status: Status::Fail,
+                        evidence: "no current-plan.md".to_string(),
+                    });
+                    continue;
+                }
+            };
+            let file_ops = count_file_operations(&plan);
+            let verifications = count_verification_sections(&plan);
+            if file_ops >= PER_PHASE_VERIFICATION_FILE_OP_THRESHOLD && verifications <= 1 {
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Fail,
+                    evidence: format!(
+                        "plan has {} file operations but only {} verification section(s); per-phase verification required for plans with {}+ file ops",
+                        file_ops, verifications, PER_PHASE_VERIFICATION_FILE_OP_THRESHOLD
+                    ),
+                });
+            } else {
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Pass,
+                    evidence: format!(
+                        "{} file operations, {} verification section(s)",
+                        file_ops, verifications
+                    ),
                 });
             }
         }
@@ -379,7 +564,8 @@ impl Check for BuildClaimsHasFilesChanged {
                     stage,
                     invocation_id: inv.invocation_id,
                     status: Status::Fail,
-                    evidence: "## Files Changed empty or no [CREATE|MODIFY] lines".to_string(),
+                    evidence: "## Files Changed empty or no recognizable file-shaped bullets"
+                        .to_string(),
                 });
             }
         }
@@ -1186,5 +1372,121 @@ mod tests {
         let r = latest_run(&bl).unwrap();
         let results = run_check(AuditFindingsLocalized, &r);
         assert_eq!(results[0].status, Status::Fail);
+    }
+
+    #[test]
+    fn plan_has_per_phase_verification_passes_with_small_plan() {
+        let tmp = TempDir::new().unwrap();
+        let bl = make_buildloop(&tmp);
+        let plan = "intro\n\
+## File Operations\n\
+- [CREATE] src/a.rs -- thing a\n\
+- [MODIFY] src/b.rs -- thing b\n\
+- [CREATE] src/c.rs -- thing c\n\
+## Verification\n\
+- build: cargo build\n";
+        fs::write(bl.join("current-plan.md"), plan).unwrap();
+        let h = write_plan_invocation(&bl);
+        h.flush().unwrap();
+        let r = latest_run(&bl).unwrap();
+        let existing = run_check(PlanHasVerification, &r);
+        assert_eq!(existing[0].status, Status::Pass);
+        assert!(!existing[0].evidence.contains("soft warning"));
+        let new_check = run_check(PlanHasPerPhaseVerification, &r);
+        assert_eq!(new_check[0].status, Status::Pass);
+    }
+
+    #[test]
+    fn plan_has_per_phase_verification_fails_with_large_horizontal_plan() {
+        let tmp = TempDir::new().unwrap();
+        let bl = make_buildloop(&tmp);
+        let plan = "intro\n\
+## File Operations\n\
+- [CREATE] src/a.rs -- thing\n\
+- [CREATE] src/b.rs -- thing\n\
+- [CREATE] src/c.rs -- thing\n\
+- [CREATE] src/d.rs -- thing\n\
+- [CREATE] src/e.rs -- thing\n\
+- [CREATE] src/f.rs -- thing\n\
+- [CREATE] src/g.rs -- thing\n\
+- [CREATE] src/h.rs -- thing\n\
+- [CREATE] src/i.rs -- thing\n\
+- [CREATE] src/j.rs -- thing\n\
+- [CREATE] src/k.rs -- thing\n\
+- [CREATE] src/l.rs -- thing\n\
+## Verification\n\
+- build: cargo build\n";
+        fs::write(bl.join("current-plan.md"), plan).unwrap();
+        let h = write_plan_invocation(&bl);
+        h.flush().unwrap();
+        let r = latest_run(&bl).unwrap();
+        let existing = run_check(PlanHasVerification, &r);
+        assert_eq!(existing[0].status, Status::Pass);
+        assert!(existing[0].evidence.contains("soft warning"));
+        let new_check = run_check(PlanHasPerPhaseVerification, &r);
+        assert_eq!(new_check[0].status, Status::Fail);
+    }
+
+    #[test]
+    fn plan_has_per_phase_verification_passes_with_large_vertical_plan() {
+        let tmp = TempDir::new().unwrap();
+        let bl = make_buildloop(&tmp);
+        let plan = "intro\n\
+## File Operations -- Phase 1\n\
+- [CREATE] src/a.rs -- thing\n\
+- [CREATE] src/b.rs -- thing\n\
+- [CREATE] src/c.rs -- thing\n\
+### Verification (Phase 1)\n\
+- build: cargo build\n\
+## File Operations -- Phase 2\n\
+- [CREATE] src/d.rs -- thing\n\
+- [CREATE] src/e.rs -- thing\n\
+- [CREATE] src/f.rs -- thing\n\
+### Verification (Phase 2)\n\
+- build: cargo build\n\
+## File Operations -- Phase 3\n\
+- [CREATE] src/g.rs -- thing\n\
+- [CREATE] src/h.rs -- thing\n\
+- [CREATE] src/i.rs -- thing\n\
+### Verification (Phase 3)\n\
+- build: cargo build\n\
+## File Operations -- Phase 4\n\
+- [CREATE] src/j.rs -- thing\n\
+- [CREATE] src/k.rs -- thing\n\
+- [CREATE] src/l.rs -- thing\n\
+### Verification (Phase 4)\n\
+- build: cargo build\n";
+        fs::write(bl.join("current-plan.md"), plan).unwrap();
+        let h = write_plan_invocation(&bl);
+        h.flush().unwrap();
+        let r = latest_run(&bl).unwrap();
+        let existing = run_check(PlanHasVerification, &r);
+        assert_eq!(existing[0].status, Status::Pass);
+        assert!(!existing[0].evidence.contains("soft warning"));
+        let new_check = run_check(PlanHasPerPhaseVerification, &r);
+        assert_eq!(new_check[0].status, Status::Pass);
+    }
+
+    #[test]
+    fn plan_has_per_phase_verification_fails_with_heading_form_no_brackets() {
+        let tmp = TempDir::new().unwrap();
+        let bl = make_buildloop(&tmp);
+        let plan = "intro\n\
+## File Operations\n\
+### 1. MODIFY src/a.rs\n\
+### 2. CREATE src/b.rs\n\
+### 3. MODIFY src/c.rs\n\
+### 4. CREATE src/d.rs\n\
+### 5. MODIFY src/e.rs\n\
+### 6. CREATE src/f.rs\n\
+## Verification\n\
+- build: cargo build\n";
+        fs::write(bl.join("current-plan.md"), plan).unwrap();
+        let h = write_plan_invocation(&bl);
+        h.flush().unwrap();
+        let r = latest_run(&bl).unwrap();
+        let new_check = run_check(PlanHasPerPhaseVerification, &r);
+        assert_eq!(new_check[0].status, Status::Fail);
+        assert!(new_check[0].evidence.contains("6 file operations"));
     }
 }

@@ -1333,9 +1333,18 @@ pub struct AppState {
 
 impl AppState {
     pub(crate) fn new(buildloop_dir: PathBuf) -> Self {
+        // Re-hydrate the eval report from disk on startup. Without this,
+        // closing and reopening Foundry hides the EVAL badge until the
+        // next task completes -- even though .buildloop/eval-report.json
+        // is sitting right there from the prior run. The settings overlay
+        // populates the cache when opened (see open_settings_overlay in
+        // app.rs), but the status meter renders directly from this field
+        // and won't see anything until something forces a refresh.
+        let initial_eval_cache =
+            crate::eval::report::read_report(&buildloop_dir);
         Self {
             buildloop_dir,
-            eval_report_cache: None,
+            eval_report_cache: initial_eval_cache,
             phase: AppPhase::Startup,
             startup: None,
             planning: None,

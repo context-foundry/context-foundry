@@ -17,7 +17,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use std::sync::atomic::Ordering;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use super::context::{FailureType, RunContext, StageResult};
 use super::{review, AppEvent, LoopEvent};
@@ -70,6 +70,19 @@ pub(super) fn manifest_exit_info(
     }
 }
 
+// Cache of `prompts::agent_system_directives()` -- the static meta-rules string
+// that Foundry passes via `--append-system-prompt` at every agent invocation
+// (see `src/agent.rs:1161`). Cached because the directives are content-stable
+// per binary (one Windows conditional decided at compile time), so we only
+// compute the String once and hand out `&'static str` references thereafter.
+static SYSTEM_DIRECTIVES_CACHE: OnceLock<String> = OnceLock::new();
+
+fn cached_agent_system_directives() -> &'static str {
+    SYSTEM_DIRECTIVES_CACHE
+        .get_or_init(prompts::agent_system_directives)
+        .as_str()
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(super) fn build_evidence_spec<'a>(
     stage_id: StageId,
@@ -89,6 +102,17 @@ pub(super) fn build_evidence_spec<'a>(
         Some(p) => vec![PathBuf::from(p)],
         None => Vec::new(),
     };
+    // When the caller passes an empty system_prompt, substitute the cached
+    // `agent_system_directives()` -- the actual content the agent receives via
+    // `--append-system-prompt`. This was the source of `Q✗R✗P✗B✗A-` false-fails
+    // on the harness's first end-to-end run: every caller passed `""`, so the
+    // Critical `system_prompt_present` check fired on every stage even though
+    // the agent itself was correctly receiving the directives.
+    let effective_system_prompt: &'a str = if system_prompt.is_empty() {
+        cached_agent_system_directives()
+    } else {
+        system_prompt
+    };
     PromptEvidenceSpec {
         stage_id,
         role,
@@ -98,7 +122,7 @@ pub(super) fn build_evidence_spec<'a>(
         effective_provider: effective_provider.to_string(),
         effective_model: effective_model.to_string(),
         override_reason,
-        system_prompt,
+        system_prompt: effective_system_prompt,
         user_prompt,
         matched_pattern_ids,
         selected_extension_names,
@@ -3355,7 +3379,12 @@ async fn process_task(
                     None,
                     "",
                     &query_prompt_text,
-                    injected_pattern_ids.clone(),
+                    // Query does NOT inject patterns into its prompt
+                    // (`prompts::query_prompt` has no pattern_context parameter).
+                    // Passing an empty Vec ensures the `patterns_injected`
+                    // eval check correctly Skips for this stage rather than
+                    // false-failing on matched-but-not-found.
+                    Vec::new(),
                     ctx.config.extensions.clone(),
                 );
                 let query_inv_id = ctx.manifest.record_invocation(query_spec);
@@ -3607,7 +3636,10 @@ async fn process_task(
                     None,
                     "",
                     &research_prompt_text,
-                    injected_pattern_ids.clone(),
+                    // Research does NOT inject patterns into its prompt
+                    // (`prompts::research_prompt` has no pattern_context parameter).
+                    // See the matching note at the Query call site above.
+                    Vec::new(),
                     ctx.config.extensions.clone(),
                 );
                 let research_inv_id = ctx.manifest.record_invocation(research_spec);
