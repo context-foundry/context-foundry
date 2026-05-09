@@ -587,6 +587,16 @@
       "model": "gpt-4o-mini",
       "lines": 91,
       "generation": 59
+    },
+    {
+      "file": "tidal-bore-race-condition.js",
+      "name": "Tidal Bore Race Condition",
+      "location": "Severn Bore, Gloucestershire, England",
+      "biome": "extreme",
+      "generated": "2026-05-09T15:15:10.799Z",
+      "model": "gpt-4o-mini",
+      "lines": 87,
+      "generation": 60
     }
   ]
 }
