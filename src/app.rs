@@ -1287,6 +1287,20 @@ fn toggle_settings_overlay(state: &mut AppState) -> bool {
             ov.expanded_sections.insert("pipeline_health".to_string());
             ov.eval_pipeline_health_first_view = false;
         }
+        // Populate Patterns Detail snapshot. AppState does not currently track
+        // per-session injected pattern ids, so injected_ids is empty -- the
+        // "Injected this session" filter renders header + buttons only until
+        // the user toggles to All. Future work may thread the live set in.
+        let global_patterns = crate::patterns::load_patterns_from_global();
+        ov.patterns_section_cache = Some(state::PatternsSectionSnapshot {
+            all: global_patterns,
+            injected_ids: std::collections::BTreeSet::new(),
+            filter: state::PatternsFilter::InjectedThisSession,
+        });
+        if ov.patterns_section_cache.is_some() && ov.patterns_section_first_view {
+            ov.expanded_sections.insert("patterns_detail".to_string());
+            ov.patterns_section_first_view = false;
+        }
         state.settings_overlay = Some(ov);
         state.eval_report_cache = state
             .settings_overlay
@@ -2087,6 +2101,7 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                 refresh_eval_report_cache(state);
                 if let Some(ref mut ov) = state.settings_overlay {
                     ov.eval_pipeline_health_first_view = true;
+                    ov.patterns_section_first_view = true;
                 }
             }
             LoopEvent::TaskReport { .. } => {
@@ -3666,6 +3681,20 @@ fn settings_action_for_row(state: &mut AppState, row: &state::RowId) {
                 let project_dir = overlay_project_dir(state).to_path_buf();
                 let _ = eval::run_for_current_task(&project_dir);
                 refresh_eval_report_cache(state);
+            }
+            state::Action::ViewInjectedPatterns => {
+                if let Some(ref mut ov) = state.settings_overlay {
+                    if let Some(ref mut cache) = ov.patterns_section_cache {
+                        cache.filter = state::PatternsFilter::InjectedThisSession;
+                    }
+                }
+            }
+            state::Action::ViewAllPatterns => {
+                if let Some(ref mut ov) = state.settings_overlay {
+                    if let Some(ref mut cache) = ov.patterns_section_cache {
+                        cache.filter = state::PatternsFilter::All;
+                    }
+                }
             }
         },
     }

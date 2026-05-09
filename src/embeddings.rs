@@ -913,6 +913,9 @@ mod tests {
             promoted_to: String::new(),
             promoted_at: String::new(),
             last_used_at: None,
+            cited_in_pass: 0,
+            cited_in_wip: 0,
+            cited_by_stage: std::collections::HashMap::new(),
         }
     }
 }

@@ -55,6 +55,19 @@ pub struct Pattern {
     /// Updated automatically by update_used_counts(). Used for time-based decay.
     #[serde(default)]
     pub last_used_at: Option<String>,
+    /// How many times this pattern was cited in a task that ended in feat() (PASS).
+    /// Used by Pattern::success_rate(). Updated automatically by update_used_counts().
+    #[serde(default)]
+    pub cited_in_pass: usize,
+    /// How many times this pattern was cited in a task that ended in WIP() (FAIL).
+    /// Used by Pattern::success_rate(). Updated automatically by update_used_counts().
+    #[serde(default)]
+    pub cited_in_wip: usize,
+    /// Per-stage citation counts. Keys are agent role slugs in lowercase
+    /// ("planner", "builder", "reviewer", "scout"). Empty by default.
+    /// Updated by update_used_counts() when threaded with a stage attribution.
+    #[serde(default)]
+    pub cited_by_stage: HashMap<String, usize>,
 }
 
 /// Feedback signal from a builder agent about a pattern's quality.
@@ -66,6 +79,14 @@ pub enum PatternFeedback {
     Stale(String),
     /// Pattern is actively harmful/misleading
     Wrong(String),
+}
+
+/// Outcome of the task that cited a pattern. Threaded into update_used_counts to
+/// distinguish pass-cited patterns from wip-cited patterns.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CommitOutcome {
+    Pass,
+    Wip,
 }
 
 impl Pattern {
@@ -100,6 +121,16 @@ impl Pattern {
     /// Return a star display string (e.g. "3.2" rendered as context for prompts).
     pub fn star_display(&self) -> String {
         format!("{:.1}/5", self.rating())
+    }
+
+    /// Fraction of pass-cited / total cited. Defaults to 1.0 (neutral) when no
+    /// citations are recorded so unproven patterns are not penalized.
+    pub fn success_rate(&self) -> f64 {
+        let total = self.cited_in_pass + self.cited_in_wip;
+        if total == 0 {
+            return 1.0_f64;
+        }
+        self.cited_in_pass as f64 / total as f64
     }
 }
 
@@ -193,6 +224,12 @@ pub fn load_patterns(dir: &Path) -> Vec<Pattern> {
     }
 
     patterns
+}
+
+/// Convenience: load all patterns from `~/.foundry/patterns/`.
+pub fn load_patterns_from_global() -> Vec<Pattern> {
+    let dir = resolve_patterns_dir("~/.foundry/patterns");
+    load_patterns(&dir)
 }
 
 /// Load all patterns from JSON files in a directory, returning each pattern paired with its source file path.
@@ -336,6 +373,14 @@ pub fn keyword_scores(
                 }
             }
 
+            // Success-rate factor: 0.5 + 0.5 * success_rate.
+            // Pristine new patterns have neutral 1.0; 0%-pass patterns are halved.
+            if score > 0 {
+                let sr = p.success_rate();
+                let factor = 0.5_f64 + 0.5_f64 * sr;
+                score = ((score as f64) * factor).round() as usize;
+            }
+
             if score > 0 {
                 Some((i, score))
             } else {
@@ -343,6 +388,67 @@ pub fn keyword_scores(
             }
         })
         .collect()
+}
+
+/// Stage-aware keyword ranker. Calls `keyword_scores` for the base score, then
+/// applies a per-stage attribution boost/penalty and an exponential recency decay.
+#[allow(dead_code)]
+pub fn keyword_scores_for_stage(
+    patterns: &[Pattern],
+    task_desc: &str,
+    detected_stack: &[String],
+    stage: &str,
+) -> Vec<(usize, usize)> {
+    let base = keyword_scores(patterns, task_desc, detected_stack);
+    let stage_lc = stage.to_lowercase();
+    let today = Utc::now().date_naive();
+
+    base.into_iter()
+        .filter_map(|(idx, mut score)| {
+            // Stage attribution: boost if cited in this stage, penalize if only in others.
+            let cby = &patterns[idx].cited_by_stage;
+            let total: usize = cby.values().sum();
+            let this_stage = cby.get(&stage_lc).copied().unwrap_or(0);
+            if total > 0 && this_stage > 0 {
+                score = score.saturating_add(1);
+            } else if total > 0 && this_stage == 0 {
+                score = score.saturating_sub(1);
+            }
+
+            // Recency decay: exp(-days_ago / 90), floored at 0.1.
+            if let Some(date_str) = patterns[idx].last_used_at.as_ref() {
+                if let Ok(last_used) = NaiveDate::parse_from_str(date_str, "%Y-%m-%d") {
+                    let days_ago = (today - last_used).num_days().max(0) as f64;
+                    let decay = (-days_ago / 90.0_f64).exp().max(0.1_f64);
+                    score = ((score as f64) * decay).round() as usize;
+                }
+            }
+
+            if score > 0 {
+                Some((idx, score))
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+/// Convenience wrapper mirroring `match_patterns` but using the stage-aware ranker.
+#[allow(dead_code)]
+pub fn match_patterns_for_stage<'a>(
+    patterns: &'a [Pattern],
+    task_desc: &str,
+    detected_stack: &[String],
+    stage: &str,
+) -> Vec<&'a Pattern> {
+    let scored = keyword_scores_for_stage(patterns, task_desc, detected_stack, stage);
+    let mut result: Vec<(&Pattern, usize)> = scored
+        .into_iter()
+        .filter(|(_, score)| *score > 0)
+        .map(|(idx, score)| (&patterns[idx], score))
+        .collect();
+    result.sort_by_key(|a| std::cmp::Reverse(a.1));
+    result.into_iter().map(|(p, _)| p).collect()
 }
 
 /// Format matched patterns as markdown text for injection into agent prompts.
@@ -442,17 +548,56 @@ pub fn scan_citations(text: &str, patterns: &[Pattern]) -> Vec<String> {
 
 /// Increment used_count and stamp last_used_at for cited patterns across all JSON files in a directory.
 /// Mirrors load_patterns() behavior: scans every *.json file, not just common-issues.json.
-/// Returns the total number of patterns updated.
-pub fn update_used_counts(dir: &Path, cited_ids: &[String]) -> Result<usize> {
-    if cited_ids.is_empty() {
+/// Also tallies pass/wip success counts and per-stage citation counts.
+/// `cited_by_role` is a list of `(pattern_id, role)` pairs; duplicates are tallied per stage.
+/// Returns the total number of distinct (pattern, file) updates.
+pub fn update_used_counts(
+    dir: &Path,
+    cited_by_role: &[(String, String)],
+    outcome: CommitOutcome,
+) -> Result<usize> {
+    if cited_by_role.is_empty() {
         return Ok(0);
     }
 
     let today = Utc::now().format("%Y-%m-%d").to_string();
 
+    // Deduplicated set of pattern_ids -- used as the primary "did this pattern get cited" filter.
+    let cited_ids: Vec<String> = {
+        let mut v: Vec<String> = cited_by_role.iter().map(|(pid, _)| pid.clone()).collect();
+        v.sort();
+        v.dedup();
+        v
+    };
+
+    // Per-pattern stage tally. role is lowercased so storage matches keyword_scores_for_stage().
+    let mut stage_counts: HashMap<String, HashMap<String, usize>> = HashMap::new();
+    for (pid, role) in cited_by_role {
+        let role_lc = role.to_lowercase();
+        *stage_counts
+            .entry(pid.clone())
+            .or_default()
+            .entry(role_lc)
+            .or_insert(0) += 1;
+    }
+
     let entries = match std::fs::read_dir(dir) {
         Ok(e) => e,
         Err(_) => return Ok(0),
+    };
+
+    let apply_to_pattern = |p: &mut Pattern| {
+        p.used_count += 1;
+        p.last_used_at = Some(today.clone());
+        match outcome {
+            CommitOutcome::Pass => p.cited_in_pass += 1,
+            CommitOutcome::Wip => p.cited_in_wip += 1,
+        }
+        if let Some(role_map) = stage_counts.get(&p.pattern_id) {
+            for (role, count) in role_map {
+                *p.cited_by_stage.entry(role.clone()).or_insert(0) += count;
+            }
+        }
     };
 
     let mut total_updated = 0usize;
@@ -472,8 +617,7 @@ pub fn update_used_counts(dir: &Path, cited_ids: &[String]) -> Result<usize> {
             let mut file_updated = 0usize;
             for p in &mut wrapper.patterns {
                 if cited_ids.contains(&p.pattern_id) {
-                    p.used_count += 1;
-                    p.last_used_at = Some(today.clone());
+                    apply_to_pattern(p);
                     file_updated += 1;
                 }
             }
@@ -490,8 +634,7 @@ pub fn update_used_counts(dir: &Path, cited_ids: &[String]) -> Result<usize> {
             let mut file_updated = 0usize;
             for p in &mut patterns {
                 if cited_ids.contains(&p.pattern_id) {
-                    p.used_count += 1;
-                    p.last_used_at = Some(today.clone());
+                    apply_to_pattern(p);
                     file_updated += 1;
                 }
             }
@@ -506,8 +649,7 @@ pub fn update_used_counts(dir: &Path, cited_ids: &[String]) -> Result<usize> {
         // Single pattern object
         if let Ok(mut pattern) = serde_json::from_str::<Pattern>(&content) {
             if cited_ids.contains(&pattern.pattern_id) {
-                pattern.used_count += 1;
-                pattern.last_used_at = Some(today.clone());
+                apply_to_pattern(&mut pattern);
                 let json = serde_json::to_string_pretty(&pattern)?;
                 atomic_write_file(&path, json.as_bytes())?;
                 total_updated += 1;
@@ -870,6 +1012,9 @@ mod tests {
             promoted_to: String::new(),
             promoted_at: String::new(),
             last_used_at: None,
+            cited_in_pass: 0,
+            cited_in_wip: 0,
+            cited_by_stage: HashMap::new(),
         };
         let patterns = vec![&pattern];
 
@@ -1055,6 +1200,9 @@ mod tests {
                 promoted_to: String::new(),
                 promoted_at: String::new(),
                 last_used_at: None,
+                cited_in_pass: 0,
+                cited_in_wip: 0,
+                cited_by_stage: HashMap::new(),
             },
             Pattern {
                 pattern_id: "new-1".to_string(),
@@ -1073,6 +1221,9 @@ mod tests {
                 promoted_to: String::new(),
                 promoted_at: String::new(),
                 last_used_at: None,
+                cited_in_pass: 0,
+                cited_in_wip: 0,
+                cited_by_stage: HashMap::new(),
             },
         ];
 
@@ -1152,6 +1303,9 @@ mod tests {
             promoted_to: String::new(),
             promoted_at: String::new(),
             last_used_at: None,
+            cited_in_pass: 0,
+            cited_in_wip: 0,
+            cited_by_stage: HashMap::new(),
         }
     }
 
@@ -1232,7 +1386,8 @@ mod tests {
         let json = serde_json::to_string_pretty(&patterns).unwrap();
         std::fs::write(dir.join("common-issues.json"), &json).unwrap();
 
-        let updated = update_used_counts(&dir, &["p1".to_string()]).unwrap();
+        let cites: Vec<(String, String)> = vec![("p1".to_string(), "builder".to_string())];
+        let updated = update_used_counts(&dir, &cites, CommitOutcome::Pass).unwrap();
         assert_eq!(updated, 1);
 
         let content = std::fs::read_to_string(dir.join("common-issues.json")).unwrap();
@@ -1276,7 +1431,11 @@ mod tests {
         }"#;
         std::fs::write(dir.join("security.json"), wrapper_json).unwrap();
 
-        let updated = update_used_counts(&dir, &["p1".to_string(), "p2".to_string()]).unwrap();
+        let cites: Vec<(String, String)> = vec![
+            ("p1".to_string(), "builder".to_string()),
+            ("p2".to_string(), "builder".to_string()),
+        ];
+        let updated = update_used_counts(&dir, &cites, CommitOutcome::Pass).unwrap();
         assert_eq!(updated, 2, "should update patterns across both files");
 
         // Verify security.json preserved wrapper format and metadata
@@ -1354,6 +1513,9 @@ mod tests {
             promoted_to: String::new(),
             promoted_at: String::new(),
             last_used_at: None,
+            cited_in_pass: 0,
+            cited_in_wip: 0,
+            cited_by_stage: HashMap::new(),
         };
         let rust_pattern = Pattern {
             pattern_id: "utf8-byte-slice-panic".to_string(),
@@ -1372,6 +1534,9 @@ mod tests {
             promoted_to: String::new(),
             promoted_at: String::new(),
             last_used_at: None,
+            cited_in_pass: 0,
+            cited_in_wip: 0,
+            cited_by_stage: HashMap::new(),
         };
         let patterns = vec![react_pattern, rust_pattern];
         let rust_stack = vec!["rust".to_string()];
@@ -1433,6 +1598,9 @@ mod tests {
             promoted_to: String::new(),
             promoted_at: String::new(),
             last_used_at: None,
+            cited_in_pass: 0,
+            cited_in_wip: 0,
+            cited_by_stage: HashMap::new(),
         };
         let patterns = vec![agnostic_pattern];
         let rust_stack = vec!["rust".to_string()];
@@ -1473,6 +1641,9 @@ mod tests {
             promoted_to: String::new(),
             promoted_at: String::new(),
             last_used_at: None,
+            cited_in_pass: 0,
+            cited_in_wip: 0,
+            cited_by_stage: HashMap::new(),
         };
         let promoted = Pattern {
             pattern_id: "promoted-pattern".to_string(),
@@ -1491,6 +1662,9 @@ mod tests {
             promoted_to: "extensions/rust/CLAUDE.md".to_string(),
             promoted_at: "2026-04-07".to_string(),
             last_used_at: None,
+            cited_in_pass: 0,
+            cited_in_wip: 0,
+            cited_by_stage: HashMap::new(),
         };
         let patterns = vec![active, promoted];
         let matched = match_patterns(&patterns, "rust project", &[]);
@@ -1517,6 +1691,9 @@ mod tests {
             promoted_to: String::new(),
             promoted_at: String::new(),
             last_used_at: None,
+            cited_in_pass: 0,
+            cited_in_wip: 0,
+            cited_by_stage: HashMap::new(),
         };
         let promoted = Pattern {
             pattern_id: "promoted-pattern".to_string(),
@@ -1535,6 +1712,9 @@ mod tests {
             promoted_to: "extensions/rust/CLAUDE.md".to_string(),
             promoted_at: "2026-04-07".to_string(),
             last_used_at: None,
+            cited_in_pass: 0,
+            cited_in_wip: 0,
+            cited_by_stage: HashMap::new(),
         };
         let patterns = vec![active, promoted];
         let scores = keyword_scores(&patterns, "rust project", &[]);
@@ -1798,7 +1978,8 @@ mod tests {
         let json = serde_json::to_string_pretty(&patterns).unwrap();
         std::fs::write(dir.join("test.json"), &json).unwrap();
 
-        update_used_counts(&dir, &["p1".to_string()]).unwrap();
+        let cites: Vec<(String, String)> = vec![("p1".to_string(), "builder".to_string())];
+        update_used_counts(&dir, &cites, CommitOutcome::Pass).unwrap();
 
         let content = std::fs::read_to_string(dir.join("test.json")).unwrap();
         let result: Vec<Pattern> = serde_json::from_str(&content).unwrap();
@@ -1810,5 +1991,271 @@ mod tests {
         );
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // ─── T1.3a: success-rate tracking ───────────────────────────
+
+    #[test]
+    fn test_success_rate_neutral_for_unused() {
+        let p = make_test_pattern("p", "Untouched Pattern Title", 1, 0);
+        assert_eq!(p.success_rate(), 1.0);
+    }
+
+    #[test]
+    fn test_success_rate_half_for_one_each() {
+        let mut p = make_test_pattern("p", "Half Half Pattern Title", 1, 0);
+        p.cited_in_pass = 1;
+        p.cited_in_wip = 1;
+        assert_eq!(p.success_rate(), 0.5);
+    }
+
+    #[test]
+    fn test_success_rate_one_for_all_pass() {
+        let mut p = make_test_pattern("p", "All Pass Pattern Title", 1, 0);
+        p.cited_in_pass = 5;
+        p.cited_in_wip = 0;
+        assert_eq!(p.success_rate(), 1.0);
+    }
+
+    #[test]
+    fn test_update_used_counts_pass_increments_cited_in_pass() {
+        let dir = std::env::temp_dir().join("foundry_test_used_counts_pass");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let patterns = vec![make_test_pattern("p1", "Pattern One Long Title", 3, 0)];
+        let json = serde_json::to_string_pretty(&patterns).unwrap();
+        std::fs::write(dir.join("common-issues.json"), &json).unwrap();
+
+        let cites: Vec<(String, String)> = vec![("p1".to_string(), "builder".to_string())];
+        update_used_counts(&dir, &cites, CommitOutcome::Pass).unwrap();
+
+        let content = std::fs::read_to_string(dir.join("common-issues.json")).unwrap();
+        let result: Vec<Pattern> = serde_json::from_str(&content).unwrap();
+        let p1 = result.iter().find(|p| p.pattern_id == "p1").unwrap();
+        assert_eq!(p1.cited_in_pass, 1, "PASS should bump cited_in_pass");
+        assert_eq!(p1.cited_in_wip, 0, "PASS should not touch cited_in_wip");
+        assert_eq!(p1.used_count, 1, "used_count should still increment");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_update_used_counts_wip_increments_cited_in_wip() {
+        let dir = std::env::temp_dir().join("foundry_test_used_counts_wip");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let patterns = vec![make_test_pattern("p1", "Pattern One Long Title", 3, 0)];
+        let json = serde_json::to_string_pretty(&patterns).unwrap();
+        std::fs::write(dir.join("common-issues.json"), &json).unwrap();
+
+        let cites: Vec<(String, String)> = vec![("p1".to_string(), "builder".to_string())];
+        update_used_counts(&dir, &cites, CommitOutcome::Wip).unwrap();
+
+        let content = std::fs::read_to_string(dir.join("common-issues.json")).unwrap();
+        let result: Vec<Pattern> = serde_json::from_str(&content).unwrap();
+        let p1 = result.iter().find(|p| p.pattern_id == "p1").unwrap();
+        assert_eq!(p1.cited_in_wip, 1, "WIP should bump cited_in_wip");
+        assert_eq!(p1.cited_in_pass, 0, "WIP should not touch cited_in_pass");
+        assert_eq!(p1.used_count, 1, "used_count should still increment");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_keyword_scores_success_rate_factor_halves_zero_pass() {
+        let mut all_pass = make_test_pattern("all-pass", "All Pass Pattern Title", 1, 0);
+        all_pass.cited_in_pass = 5;
+        all_pass.cited_in_wip = 0;
+        let mut all_wip = make_test_pattern("all-wip", "All Wip Pattern Title", 1, 0);
+        all_wip.cited_in_pass = 0;
+        all_wip.cited_in_wip = 5;
+        let patterns = vec![all_pass, all_wip];
+
+        let scores = keyword_scores(&patterns, "rust project", &[]);
+        let pass_score = scores
+            .iter()
+            .find(|(i, _)| *i == 0)
+            .map(|(_, s)| *s)
+            .unwrap_or(0);
+        let wip_score = scores
+            .iter()
+            .find(|(i, _)| *i == 1)
+            .map(|(_, s)| *s)
+            .unwrap_or(0);
+        assert!(
+            pass_score > wip_score,
+            "all-pass score ({}) should beat all-wip score ({})",
+            pass_score,
+            wip_score
+        );
+    }
+
+    #[test]
+    fn test_keyword_scores_unproven_patterns_not_penalized() {
+        // Use a pattern with citation ratio 0.6 + frequency 5 to push base score even and high.
+        let mut neutral = make_test_pattern("neutral", "Neutral Pattern Title", 5, 3);
+        neutral.cited_in_pass = 0;
+        neutral.cited_in_wip = 0;
+        let patterns = vec![neutral];
+
+        let scores = keyword_scores(&patterns, "rust project", &[]);
+        let s = scores
+            .iter()
+            .find(|(i, _)| *i == 0)
+            .map(|(_, sc)| *sc)
+            .unwrap_or(0);
+        // success_rate is 1.0 -> factor 1.0 -> no rounding loss.
+        // Score should still be > 0 (was non-zero pre-T1.3a).
+        assert!(s > 0, "neutral pattern should keep its score (got {})", s);
+    }
+
+    // ─── T1.3b: per-stage attribution + recency decay ───────────
+
+    #[test]
+    fn test_update_used_counts_records_stage() {
+        let dir = std::env::temp_dir().join("foundry_test_records_stage");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let patterns = vec![make_test_pattern("p1", "Stage Recording Pattern Title", 3, 0)];
+        let json = serde_json::to_string_pretty(&patterns).unwrap();
+        std::fs::write(dir.join("common-issues.json"), &json).unwrap();
+
+        let cites: Vec<(String, String)> = vec![("p1".to_string(), "Planner".to_string())];
+        update_used_counts(&dir, &cites, CommitOutcome::Pass).unwrap();
+
+        let content = std::fs::read_to_string(dir.join("common-issues.json")).unwrap();
+        let result: Vec<Pattern> = serde_json::from_str(&content).unwrap();
+        let p1 = result.iter().find(|p| p.pattern_id == "p1").unwrap();
+        assert_eq!(p1.cited_by_stage.get("planner").copied(), Some(1));
+        assert!(p1.cited_by_stage.get("reviewer").is_none());
+        assert!(p1.cited_by_stage.get("builder").is_none());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_update_used_counts_aggregates_stages() {
+        let dir = std::env::temp_dir().join("foundry_test_aggregates_stages");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let patterns = vec![make_test_pattern("p1", "Aggregated Stages Pattern Title", 3, 0)];
+        let json = serde_json::to_string_pretty(&patterns).unwrap();
+        std::fs::write(dir.join("common-issues.json"), &json).unwrap();
+
+        let cites: Vec<(String, String)> = vec![
+            ("p1".to_string(), "Planner".to_string()),
+            ("p1".to_string(), "Reviewer".to_string()),
+            ("p1".to_string(), "Planner".to_string()),
+        ];
+        update_used_counts(&dir, &cites, CommitOutcome::Pass).unwrap();
+
+        let content = std::fs::read_to_string(dir.join("common-issues.json")).unwrap();
+        let result: Vec<Pattern> = serde_json::from_str(&content).unwrap();
+        let p1 = result.iter().find(|p| p.pattern_id == "p1").unwrap();
+        assert_eq!(p1.cited_by_stage.get("planner").copied(), Some(2));
+        assert_eq!(p1.cited_by_stage.get("reviewer").copied(), Some(1));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_keyword_scores_for_stage_boosts_matching_stage() {
+        let mut planner_pat = make_test_pattern("planner-pat", "Planner Helper Pattern Title", 1, 0);
+        planner_pat.cited_by_stage.insert("planner".to_string(), 5);
+        let mut reviewer_pat =
+            make_test_pattern("reviewer-pat", "Reviewer Helper Pattern Title", 1, 0);
+        reviewer_pat
+            .cited_by_stage
+            .insert("reviewer".to_string(), 5);
+        let patterns = vec![planner_pat, reviewer_pat];
+
+        let scores = keyword_scores_for_stage(&patterns, "rust project", &[], "planner");
+        let p_score = scores
+            .iter()
+            .find(|(i, _)| *i == 0)
+            .map(|(_, s)| *s)
+            .unwrap_or(0);
+        let r_score = scores
+            .iter()
+            .find(|(i, _)| *i == 1)
+            .map(|(_, s)| *s)
+            .unwrap_or(0);
+        assert!(
+            p_score > r_score,
+            "planner-cited pattern (score={}) should outscore reviewer-cited pattern (score={}) at the planner stage",
+            p_score,
+            r_score
+        );
+    }
+
+    #[test]
+    fn test_keyword_scores_for_stage_recency_decay() {
+        let today = Utc::now().date_naive();
+        let mut fresh = make_test_pattern("fresh", "Fresh Pattern Title", 1, 0);
+        fresh.last_used_at = Some(today.format("%Y-%m-%d").to_string());
+        let mut old = make_test_pattern("old", "Old Pattern Title", 1, 0);
+        let old_date = today
+            .checked_sub_signed(chrono::Duration::days(180))
+            .unwrap();
+        old.last_used_at = Some(old_date.format("%Y-%m-%d").to_string());
+        let patterns = vec![fresh, old];
+
+        let scores = keyword_scores_for_stage(&patterns, "rust project", &[], "builder");
+        let fresh_score = scores
+            .iter()
+            .find(|(i, _)| *i == 0)
+            .map(|(_, s)| *s)
+            .unwrap_or(0);
+        let old_score = scores
+            .iter()
+            .find(|(i, _)| *i == 1)
+            .map(|(_, s)| *s)
+            .unwrap_or(0);
+        assert!(
+            fresh_score > old_score,
+            "fresh pattern (score={}) should outscore 180-day-old pattern (score={})",
+            fresh_score,
+            old_score
+        );
+    }
+
+    #[test]
+    fn test_keyword_scores_for_stage_decay_floor() {
+        let today = Utc::now().date_naive();
+        // Use a pattern with high frequency + auto_apply for a large raw score.
+        let mut p = make_test_pattern("ancient", "Ancient Pattern Title", 10, 8);
+        p.auto_apply = true;
+        let ancient_date = today
+            .checked_sub_signed(chrono::Duration::days(365))
+            .unwrap();
+        p.last_used_at = Some(ancient_date.format("%Y-%m-%d").to_string());
+
+        // First confirm raw score is large enough to survive the 0.1 floor.
+        let raw = keyword_scores(&[p.clone()], "rust project", &[]);
+        let raw_score = raw
+            .iter()
+            .find(|(i, _)| *i == 0)
+            .map(|(_, s)| *s)
+            .unwrap_or(0);
+        assert!(raw_score >= 5, "raw score should be large (got {})", raw_score);
+
+        let scores = keyword_scores_for_stage(&[p], "rust project", &[], "builder");
+        let s = scores
+            .iter()
+            .find(|(i, _)| *i == 0)
+            .map(|(_, s)| *s)
+            .unwrap_or(0);
+        let floor = ((raw_score as f64) * 0.1_f64).round() as usize;
+        assert!(
+            s >= floor,
+            "decay floor (10%) should keep ancient pattern at >= {} (got {})",
+            floor,
+            s
+        );
+        assert!(s > 0, "decayed score should not be zero (got {})", s);
     }
 }

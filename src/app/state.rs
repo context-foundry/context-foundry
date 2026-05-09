@@ -11,6 +11,7 @@ use crate::agent::{AgentErrorKind, AgentOutputEvent, AgentRole};
 use crate::eval::report::EvalReportSnapshot;
 use crate::git;
 use crate::orchestrator::OrchestratorOutcome;
+use crate::patterns::Pattern;
 use crate::stats::StatsReport;
 use crate::task::{self, Task};
 use crate::tui::theme::TuiTheme;
@@ -354,12 +355,31 @@ pub struct ModelPicker {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Action {
     RerunEvalOnLastRun,
+    ViewInjectedPatterns,
+    ViewAllPatterns,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SectionKind {
     Standard,
     PipelineHealth,
+    Patterns,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PatternsFilter {
+    InjectedThisSession,
+    All,
+}
+
+#[derive(Debug, Clone)]
+pub struct PatternsSectionSnapshot {
+    /// All patterns parsed from `~/.foundry/patterns/`.
+    pub all: Vec<Pattern>,
+    /// Pattern ids that were injected this session (subset of all by id).
+    pub injected_ids: std::collections::BTreeSet<String>,
+    /// Currently selected filter: "session" or "all".
+    pub filter: PatternsFilter,
 }
 
 #[derive(Debug, Clone)]
@@ -443,6 +463,13 @@ pub fn settings_sections(dual_mode: bool) -> Vec<SectionDef> {
             default_expanded: false,
             fields: vec![],
             kind: SectionKind::PipelineHealth,
+        },
+        SectionDef {
+            id: "patterns_detail",
+            name: "Patterns",
+            default_expanded: false,
+            fields: vec![],
+            kind: SectionKind::Patterns,
         },
         SectionDef {
             id: "pipeline",
@@ -887,6 +914,8 @@ pub struct SettingsOverlayState {
     pub dual_mode: bool,
     pub eval_report_cache: Option<EvalReportSnapshot>,
     pub eval_pipeline_health_first_view: bool,
+    pub patterns_section_cache: Option<PatternsSectionSnapshot>,
+    pub patterns_section_first_view: bool,
 }
 
 impl SettingsOverlayState {
@@ -914,6 +943,8 @@ impl SettingsOverlayState {
             dual_mode,
             eval_report_cache: None,
             eval_pipeline_health_first_view: true,
+            patterns_section_cache: None,
+            patterns_section_first_view: true,
         }
     }
 
@@ -923,10 +954,10 @@ impl SettingsOverlayState {
         for section in &sections {
             count += 1; // header
             if self.expanded_sections.contains(section.id) {
-                if section.kind == SectionKind::PipelineHealth {
-                    count += self.pipeline_health_row_count();
-                } else {
-                    count += section.fields.len();
+                match section.kind {
+                    SectionKind::PipelineHealth => count += self.pipeline_health_row_count(),
+                    SectionKind::Patterns => count += self.patterns_row_count(),
+                    SectionKind::Standard => count += section.fields.len(),
                 }
             }
         }
@@ -1013,6 +1044,61 @@ impl SettingsOverlayState {
         self.pipeline_health_rows().len()
     }
 
+    pub fn patterns_rows(&self) -> Vec<OverlayRow> {
+        let mut rows: Vec<OverlayRow> = Vec::new();
+        let cache = match self.patterns_section_cache.as_ref() {
+            Some(c) => c,
+            None => {
+                rows.push(OverlayRow::ReportLine("No patterns loaded.".to_string()));
+                rows.push(OverlayRow::ActionButton(Action::ViewAllPatterns));
+                return rows;
+            }
+        };
+
+        let working: Vec<&Pattern> = match cache.filter {
+            PatternsFilter::InjectedThisSession => cache
+                .all
+                .iter()
+                .filter(|p| cache.injected_ids.contains(&p.pattern_id))
+                .collect(),
+            PatternsFilter::All => cache.all.iter().collect(),
+        };
+
+        let filter_label = match cache.filter {
+            PatternsFilter::InjectedThisSession => "session",
+            PatternsFilter::All => "all",
+        };
+        rows.push(OverlayRow::ReportLine(format!(
+            "Patterns ({}): id | title | sev | freq | used | last | success%",
+            filter_label
+        )));
+
+        for p in working.iter().take(100) {
+            let title_trunc = if p.title.chars().count() > 40 {
+                let mut s: String = p.title.chars().take(37).collect();
+                s.push_str("...");
+                s
+            } else {
+                p.title.clone()
+            };
+            let sev = p.severity.as_deref().unwrap_or("-");
+            let last = p.last_used_at.as_deref().unwrap_or("-");
+            let success_pct = (p.success_rate() * 100.0).round() as i64;
+            rows.push(OverlayRow::ReportLine(format!(
+                "{} | {} | {} | freq {} | used {} | {} | {}%",
+                p.pattern_id, title_trunc, sev, p.frequency, p.used_count, last, success_pct
+            )));
+        }
+
+        rows.push(OverlayRow::ActionButton(Action::ViewInjectedPatterns));
+        rows.push(OverlayRow::ActionButton(Action::ViewAllPatterns));
+        rows
+    }
+
+    pub fn patterns_row_count(&self) -> usize {
+        self.patterns_rows().len()
+    }
+
     pub fn toggle_section(&mut self, section_id: &str) {
         if self.expanded_sections.contains(section_id) {
             self.expanded_sections.remove(section_id);
@@ -1048,28 +1134,48 @@ impl SettingsOverlayState {
             }
             idx += 1;
             if self.expanded_sections.contains(section.id) {
-                if section.kind == SectionKind::PipelineHealth {
-                    let rows = self.pipeline_health_rows();
-                    for (j, row) in rows.iter().enumerate() {
-                        if idx == index {
-                            return match row {
-                                OverlayRow::ReportLine(_) => {
-                                    Some(RowId::ReportLine(section.id.to_string(), j))
-                                }
-                                OverlayRow::ActionButton(action) => {
-                                    Some(RowId::ActionButton(section.id.to_string(), *action))
-                                }
-                                OverlayRow::Field(_) => None,
-                            };
+                match section.kind {
+                    SectionKind::PipelineHealth => {
+                        let rows = self.pipeline_health_rows();
+                        for (j, row) in rows.iter().enumerate() {
+                            if idx == index {
+                                return match row {
+                                    OverlayRow::ReportLine(_) => {
+                                        Some(RowId::ReportLine(section.id.to_string(), j))
+                                    }
+                                    OverlayRow::ActionButton(action) => {
+                                        Some(RowId::ActionButton(section.id.to_string(), *action))
+                                    }
+                                    OverlayRow::Field(_) => None,
+                                };
+                            }
+                            idx += 1;
                         }
-                        idx += 1;
                     }
-                } else {
-                    for field in &section.fields {
-                        if idx == index {
-                            return Some(RowId::Field(field.id.to_string()));
+                    SectionKind::Patterns => {
+                        let rows = self.patterns_rows();
+                        for (j, row) in rows.iter().enumerate() {
+                            if idx == index {
+                                return match row {
+                                    OverlayRow::ReportLine(_) => {
+                                        Some(RowId::ReportLine(section.id.to_string(), j))
+                                    }
+                                    OverlayRow::ActionButton(action) => {
+                                        Some(RowId::ActionButton(section.id.to_string(), *action))
+                                    }
+                                    OverlayRow::Field(_) => None,
+                                };
+                            }
+                            idx += 1;
                         }
-                        idx += 1;
+                    }
+                    SectionKind::Standard => {
+                        for field in &section.fields {
+                            if idx == index {
+                                return Some(RowId::Field(field.id.to_string()));
+                            }
+                            idx += 1;
+                        }
                     }
                 }
             }

@@ -6389,9 +6389,10 @@ async fn process_task(
     }
 
     // Scan build artifacts for pattern citations to track usefulness.
-    // Only on validated tasks -- failed/WIP tasks should not train the ranking system.
+    // Recorded for both PASS and WIP runs so the success-rate ranker can learn.
+    let mut all_cited_by_role: Vec<(String, String)> = Vec::new();
     let mut all_cited: Vec<String> = Vec::new();
-    if validated && !injected_pattern_ids.is_empty() {
+    if !injected_pattern_ids.is_empty() {
         let injected_refs: Vec<patterns::Pattern> = cached_patterns
             .iter()
             .filter(|p| injected_pattern_ids.contains(&p.pattern_id))
@@ -6424,19 +6425,32 @@ async fn process_task(
                             },
                         );
                     }
-                    all_cited.extend(cited_in_artifact);
+                    for pid in cited_in_artifact {
+                        all_cited_by_role.push((pid, role.to_lowercase()));
+                    }
                 }
             }
         }
-        all_cited.sort();
-        all_cited.dedup();
+
+        all_cited = {
+            let mut v: Vec<String> = all_cited_by_role.iter().map(|(pid, _)| pid.clone()).collect();
+            v.sort();
+            v.dedup();
+            v
+        };
 
         if !all_cited.is_empty() {
+            let outcome = if validated {
+                patterns::CommitOutcome::Pass
+            } else {
+                patterns::CommitOutcome::Wip
+            };
             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
                 "Pattern citations: {} patterns referenced by agents",
                 all_cited.len()
             ))));
-            if let Err(e) = patterns::update_used_counts(patterns_dir, &all_cited) {
+            if let Err(e) = patterns::update_used_counts(patterns_dir, &all_cited_by_role, outcome)
+            {
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
                     "Warning: failed to update pattern used_counts: {}",
                     e
@@ -6446,7 +6460,7 @@ async fn process_task(
             for ext_name in &ctx.config.extensions {
                 if let Some(ext) = ext_infos.iter().find(|e| &e.name == ext_name) {
                     if let Some(ref pdir) = ext.patterns_dir {
-                        let _ = patterns::update_used_counts(pdir, &all_cited);
+                        let _ = patterns::update_used_counts(pdir, &all_cited_by_role, outcome);
                     }
                 }
             }
