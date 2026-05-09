@@ -98,6 +98,7 @@ pub fn all_checks() -> Vec<Box<dyn Check>> {
         Box::new(heuristic::AuditEngaged),
         Box::new(heuristic::AuditFindingsLocalized),
         Box::new(heuristic::BashCommandsSafe),
+        Box::new(heuristic::PatternCitationsPersisted),
     ]
 }
 
@@ -128,7 +129,7 @@ mod tests {
     }
 
     #[test]
-    fn all_checks_returns_twenty() {
-        assert_eq!(all_checks().len(), 20);
+    fn all_checks_returns_twenty_one() {
+        assert_eq!(all_checks().len(), 21);
     }
 }

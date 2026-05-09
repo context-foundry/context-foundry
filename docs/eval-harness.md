@@ -9,7 +9,7 @@ the pipeline.
 
 ## What it checks
 
-The harness runs 20 checks per run: 8 plumbing + 12 heuristic.
+The harness runs 21 checks per run: 8 plumbing + 13 heuristic.
 
 ### Plumbing checks (8)
 
@@ -29,7 +29,7 @@ session transcripts in `.buildloop/logs/`.
 | `prior_artifact_read` | Standard, Claude-only | Walks `assistant.message.content[]` in the JSONL for `tool_use` records named `Read` whose `input.file_path` ends in the prior artifact basename. Subagent-issued reads (`parent_tool_use_id` set) count. Skips with evidence "non-Claude provider, transcript adapter not in v1" for Codex / OpenCode / GhCopilot stages. |
 | `expected_artifact_written` | Standard | Manifest's `expected_artifact_path` exists on disk with > 200 bytes. Skips when stage status is `Skipped`/`Reused`/`CheckpointResume`. |
 
-### Heuristic checks (12)
+### Heuristic checks (13)
 
 Heuristic checks read the artifact files directly. All are provider-agnostic.
 
@@ -47,6 +47,7 @@ Heuristic checks read the artifact files directly. All are provider-agnostic.
 | `audit_engaged` | `review-report.md` markdown contains a fenced ```json block whose object has a non-empty `high`/`medium`/`low` array OR an explicit PASS verdict with rationale. Skips when `audit_skipped_reason` is set. |
 | `audit_findings_localized` | When findings exist, every entry in `high`/`medium`/`low` carries a `file` and a `line`. |
 | `bash_commands_safe` | Scans Bash tool_uses in Build-stage transcripts for destructive patterns (rm -rf targeting system or home paths, network fetch piped to a shell interpreter, unqualified `git push --force`). Skips when no Bash tool_uses are observed. |
+| `pattern_citations_persisted` | When any stage's `matched_pattern_ids` appear as `[<pattern-id>]` markers in `current-plan.md`, `build-claims.md`, or `review-report.md`, asserts the resolved patterns_dir has at least one of those patterns with non-zero `cited_in_pass + cited_in_wip`. Skips when no patterns matched, no markers in artifacts, the patterns_dir is unreadable, or none of the cited IDs are in the global store (e.g. extension-only patterns). |
 
 ## How structured prompt evidence is computed
 

@@ -2163,6 +2163,129 @@ mod tests {
     }
 
     #[test]
+    fn test_citation_pipeline_end_to_end_pass() {
+        let dir = std::env::temp_dir().join("foundry_test_citation_e2e_pass");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let pat1 = make_test_pattern("pat-injected", "End To End Test Pattern Title", 3, 0);
+        let pat2 = make_test_pattern("pat-uninjected", "Other Unrelated Pattern Title", 1, 0);
+        let json = serde_json::to_string_pretty(&vec![pat1, pat2]).unwrap();
+        std::fs::write(dir.join("common-issues.json"), &json).unwrap();
+
+        let planner_text = "## Plan\n- We will avoid the issue described in [pat-injected].\n";
+        let builder_text = "## Build claims\n- Implemented per [pat-injected] guidance.\n";
+        let reviewer_text = "## Review\n- No findings related to [pat-injected].\n";
+
+        let loaded = load_patterns(&dir);
+        assert_eq!(loaded.len(), 2);
+
+        let mut cited_by_role: Vec<(String, String)> = Vec::new();
+        for (text, role) in [
+            (planner_text, "Planner"),
+            (builder_text, "Builder"),
+            (reviewer_text, "Reviewer"),
+        ] {
+            let cited = scan_citations(text, &loaded);
+            for id in cited {
+                cited_by_role.push((id, role.to_lowercase()));
+            }
+        }
+        assert_eq!(cited_by_role.len(), 3);
+
+        let updated = update_used_counts(&dir, &cited_by_role, CommitOutcome::Pass).unwrap();
+        assert_eq!(updated, 1);
+
+        let content = std::fs::read_to_string(dir.join("common-issues.json")).unwrap();
+        let result: Vec<Pattern> = serde_json::from_str(&content).unwrap();
+
+        let p = result
+            .iter()
+            .find(|p| p.pattern_id == "pat-injected")
+            .unwrap();
+        assert_eq!(p.cited_in_pass, 1);
+        assert_eq!(p.cited_in_wip, 0);
+        assert_eq!(p.used_count, 1);
+        assert!(p.last_used_at.is_some());
+        assert_eq!(p.cited_by_stage.get("planner"), Some(&1));
+        assert_eq!(p.cited_by_stage.get("builder"), Some(&1));
+        assert_eq!(p.cited_by_stage.get("reviewer"), Some(&1));
+
+        let other = result
+            .iter()
+            .find(|p| p.pattern_id == "pat-uninjected")
+            .unwrap();
+        assert_eq!(other.cited_in_pass, 0);
+        assert_eq!(other.cited_in_wip, 0);
+        assert_eq!(other.used_count, 0);
+        assert!(other.cited_by_stage.is_empty());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_citation_pipeline_end_to_end_wip() {
+        let dir = std::env::temp_dir().join("foundry_test_citation_e2e_wip");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let pat1 = make_test_pattern("pat-injected", "End To End Test Pattern Title", 3, 0);
+        let pat2 = make_test_pattern("pat-uninjected", "Other Unrelated Pattern Title", 1, 0);
+        let json = serde_json::to_string_pretty(&vec![pat1, pat2]).unwrap();
+        std::fs::write(dir.join("common-issues.json"), &json).unwrap();
+
+        let planner_text = "## Plan\n- We will avoid the issue described in [pat-injected].\n";
+        let builder_text = "## Build claims\n- Implemented per [pat-injected] guidance.\n";
+        let reviewer_text = "## Review\n- No findings related to [pat-injected].\n";
+
+        let loaded = load_patterns(&dir);
+        assert_eq!(loaded.len(), 2);
+
+        let mut cited_by_role: Vec<(String, String)> = Vec::new();
+        for (text, role) in [
+            (planner_text, "Planner"),
+            (builder_text, "Builder"),
+            (reviewer_text, "Reviewer"),
+        ] {
+            let cited = scan_citations(text, &loaded);
+            for id in cited {
+                cited_by_role.push((id, role.to_lowercase()));
+            }
+        }
+        assert_eq!(cited_by_role.len(), 3);
+
+        update_used_counts(&dir, &cited_by_role, CommitOutcome::Wip).unwrap();
+
+        let content = std::fs::read_to_string(dir.join("common-issues.json")).unwrap();
+        let result: Vec<Pattern> = serde_json::from_str(&content).unwrap();
+        let p = result
+            .iter()
+            .find(|p| p.pattern_id == "pat-injected")
+            .unwrap();
+        assert_eq!(p.cited_in_wip, 1);
+        assert_eq!(p.cited_in_pass, 0);
+        assert_eq!(p.used_count, 1);
+        assert_eq!(p.cited_by_stage.get("planner"), Some(&1));
+
+        update_used_counts(&dir, &cited_by_role, CommitOutcome::Pass).unwrap();
+
+        let content = std::fs::read_to_string(dir.join("common-issues.json")).unwrap();
+        let result: Vec<Pattern> = serde_json::from_str(&content).unwrap();
+        let p = result
+            .iter()
+            .find(|p| p.pattern_id == "pat-injected")
+            .unwrap();
+        assert_eq!(p.cited_in_wip, 1);
+        assert_eq!(p.cited_in_pass, 1);
+        assert_eq!(p.used_count, 2);
+        assert_eq!(p.cited_by_stage.get("planner"), Some(&2));
+        assert_eq!(p.cited_by_stage.get("builder"), Some(&2));
+        assert_eq!(p.cited_by_stage.get("reviewer"), Some(&2));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn test_keyword_scores_for_stage_boosts_matching_stage() {
         let mut planner_pat = make_test_pattern("planner-pat", "Planner Helper Pattern Title", 1, 0);
         planner_pat.cited_by_stage.insert("planner".to_string(), 5);

@@ -6,6 +6,7 @@ use crate::eval::checks::{
 };
 use crate::eval::run::RunTranscripts;
 use crate::eval::stage_id::StageId;
+use crate::patterns::{self, Pattern};
 use crate::run_manifest::StageInvocation;
 use crate::task;
 use crate::task_eval;
@@ -31,6 +32,7 @@ pub struct BuildClaimsHasGapsSection;
 pub struct AuditEngaged;
 pub struct AuditFindingsLocalized;
 pub struct BashCommandsSafe;
+pub struct PatternCitationsPersisted;
 
 fn project_root_for(run: &RunTranscripts) -> PathBuf {
     run.manifest
@@ -1474,6 +1476,163 @@ impl Check for BashCommandsSafe {
     }
 }
 
+impl Check for PatternCitationsPersisted {
+    fn name(&self) -> &'static str {
+        "pattern_citations_persisted"
+    }
+    fn category(&self) -> Category {
+        Category::Heuristic
+    }
+    fn severity(&self) -> Severity {
+        Severity::Standard
+    }
+    fn applies_to(&self) -> &[StageId] {
+        STAGES_AUDIT
+    }
+    fn run(&self, run: &RunTranscripts) -> Vec<StageCheckResult> {
+        let mut out: Vec<StageCheckResult> = Vec::new();
+        for (inv, _) in run
+            .invocations
+            .iter()
+            .filter(|(inv, _)| non_superseded(inv) && inv.stage_id == Some(StageId::Audit))
+        {
+            let stage = StageId::Audit;
+            if invocation_skip_status(inv).is_some() {
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Skip,
+                    evidence: skip_evidence_for_status(inv.status, &inv.skip_reason),
+                });
+                continue;
+            }
+
+            let mut all_matched: Vec<String> = run
+                .invocations
+                .iter()
+                .filter(|(i, _)| non_superseded(i))
+                .flat_map(|(i, _)| i.matched_pattern_ids.iter().cloned())
+                .collect();
+            all_matched.sort();
+            all_matched.dedup();
+
+            if all_matched.is_empty() {
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Skip,
+                    evidence: "no patterns matched in this run".to_string(),
+                });
+                continue;
+            }
+
+            let root = project_root_for(run);
+            let mut combined = String::new();
+            for rel in [CURRENT_PLAN, BUILD_CLAIMS, REVIEW_REPORT] {
+                if let Some(s) = read_artifact(&root, rel) {
+                    combined.push_str(&s);
+                    combined.push('\n');
+                }
+            }
+
+            let cited: Vec<String> = all_matched
+                .iter()
+                .filter(|id| combined.contains(&format!("[{}]", id)))
+                .cloned()
+                .collect();
+
+            if cited.is_empty() {
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Skip,
+                    evidence: "no [pattern-id] markers in artifacts".to_string(),
+                });
+                continue;
+            }
+
+            let cfg_path = root.join(".foundry.json");
+            let configured_dir = if cfg_path.exists() {
+                std::fs::read_to_string(&cfg_path)
+                    .ok()
+                    .and_then(|s| serde_json::from_str::<Value>(&s).ok())
+                    .and_then(|v| {
+                        v.get("patterns_dir")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string())
+                    })
+                    .unwrap_or_else(|| "~/.foundry/patterns".to_string())
+            } else {
+                "~/.foundry/patterns".to_string()
+            };
+            let patterns_dir = patterns::resolve_patterns_dir(&configured_dir);
+
+            let loaded = patterns::load_patterns(&patterns_dir);
+            if loaded.is_empty() {
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Skip,
+                    evidence: format!(
+                        "patterns_dir at {} is empty or unreadable",
+                        patterns_dir.display()
+                    ),
+                });
+                continue;
+            }
+
+            let cited_records: Vec<&Pattern> = cited
+                .iter()
+                .filter_map(|id| loaded.iter().find(|p| &p.pattern_id == id))
+                .collect();
+
+            if cited_records.is_empty() {
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Skip,
+                    evidence: format!(
+                        "none of the {} cited pattern(s) were found in patterns_dir (likely extension-only patterns)",
+                        cited.len()
+                    ),
+                });
+                continue;
+            }
+
+            let updated = cited_records
+                .iter()
+                .filter(|p| p.cited_in_pass + p.cited_in_wip > 0)
+                .count();
+
+            if updated > 0 {
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Pass,
+                    evidence: format!(
+                        "{}/{} cited pattern(s) have non-zero cited_in_pass+cited_in_wip in patterns_dir",
+                        updated,
+                        cited_records.len()
+                    ),
+                });
+            } else {
+                let preview: Vec<String> = cited.iter().take(3).cloned().collect();
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Fail,
+                    evidence: format!(
+                        "{} pattern(s) cited in artifacts ({:?}) but none have non-zero cited_in_pass+cited_in_wip on disk -- post-commit hook did not persist counters",
+                        cited_records.len(),
+                        preview
+                    ),
+                });
+            }
+        }
+        out
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2230,5 +2389,136 @@ mod tests {
         let results = run_check(BashCommandsSafe, &r);
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].status, Status::Skip);
+    }
+
+    fn audit_spec_with_matched_patterns(ids: Vec<String>) -> PromptEvidenceSpec<'static> {
+        PromptEvidenceSpec {
+            stage_id: StageId::Audit,
+            role: AgentRole::Reviewer,
+            expected_artifact_path: None,
+            originally_configured_provider: String::new(),
+            originally_configured_model: String::new(),
+            effective_provider: String::new(),
+            effective_model: String::new(),
+            override_reason: None,
+            system_prompt: "sys",
+            user_prompt: "user",
+            matched_pattern_ids: ids,
+            selected_extension_names: Vec::new(),
+            prior_artifact_paths: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn pattern_citations_persisted_skips_when_no_patterns_matched() {
+        let tmp = TempDir::new().unwrap();
+        let bl = make_buildloop(&tmp);
+        let h = write_audit_invocation(&bl);
+        h.flush().unwrap();
+        let r = latest_run(&bl).unwrap();
+        let results = run_check(PatternCitationsPersisted, &r);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].status, Status::Skip);
+        assert!(results[0].evidence.contains("no patterns matched"));
+    }
+
+    #[test]
+    fn pattern_citations_persisted_skips_when_no_citations_in_artifacts() {
+        let tmp = TempDir::new().unwrap();
+        let bl = make_buildloop(&tmp);
+        fs::write(
+            bl.join("current-plan.md"),
+            "## Plan\n## Verification\n- cargo test\n",
+        )
+        .unwrap();
+
+        let h = ManifestHandle::new(&bl, "T1.1", Utc::now());
+        let id = h.record_invocation(audit_spec_with_matched_patterns(vec!["pat-x".to_string()]));
+        h.record_exit(id, StageStatus::Ran, Utc::now(), AgentExitInfo::default());
+        h.flush().unwrap();
+
+        let r = latest_run(&bl).unwrap();
+        let results = run_check(PatternCitationsPersisted, &r);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].status, Status::Skip);
+        assert!(results[0]
+            .evidence
+            .contains("no [pattern-id] markers in artifacts"));
+    }
+
+    #[test]
+    fn pattern_citations_persisted_passes_when_counters_non_zero() {
+        let tmp = TempDir::new().unwrap();
+        let bl = make_buildloop(&tmp);
+
+        let patterns_dir = tmp.path().join("project-patterns");
+        fs::create_dir_all(&patterns_dir).unwrap();
+        let json = r#"[{"pattern_id":"pat-x","title":"X Title Long Enough For Test","cited_in_pass":3,"cited_in_wip":0}]"#;
+        fs::write(patterns_dir.join("common-issues.json"), json).unwrap();
+
+        let cfg = serde_json::json!({
+            "patterns_dir": patterns_dir.to_string_lossy().to_string(),
+        });
+        fs::write(
+            tmp.path().join(".foundry.json"),
+            serde_json::to_string_pretty(&cfg).unwrap(),
+        )
+        .unwrap();
+
+        fs::write(
+            bl.join("build-claims.md"),
+            "## Files Changed\n- src/foo.rs\n## Notes\n- Avoided [pat-x] issue\n",
+        )
+        .unwrap();
+
+        let h = ManifestHandle::new(&bl, "T1.1", Utc::now());
+        let id = h.record_invocation(audit_spec_with_matched_patterns(vec!["pat-x".to_string()]));
+        h.record_exit(id, StageStatus::Ran, Utc::now(), AgentExitInfo::default());
+        h.flush().unwrap();
+
+        let r = latest_run(&bl).unwrap();
+        let results = run_check(PatternCitationsPersisted, &r);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].status, Status::Pass);
+        assert!(results[0].evidence.contains("1/1 cited pattern"));
+    }
+
+    #[test]
+    fn pattern_citations_persisted_fails_when_counters_all_zero() {
+        let tmp = TempDir::new().unwrap();
+        let bl = make_buildloop(&tmp);
+
+        let patterns_dir = tmp.path().join("project-patterns");
+        fs::create_dir_all(&patterns_dir).unwrap();
+        let json = r#"[{"pattern_id":"pat-x","title":"X Title Long Enough For Test","cited_in_pass":0,"cited_in_wip":0}]"#;
+        fs::write(patterns_dir.join("common-issues.json"), json).unwrap();
+
+        let cfg = serde_json::json!({
+            "patterns_dir": patterns_dir.to_string_lossy().to_string(),
+        });
+        fs::write(
+            tmp.path().join(".foundry.json"),
+            serde_json::to_string_pretty(&cfg).unwrap(),
+        )
+        .unwrap();
+
+        fs::write(
+            bl.join("build-claims.md"),
+            "## Files Changed\n- src/foo.rs\n## Notes\n- Avoided [pat-x] issue\n",
+        )
+        .unwrap();
+
+        let h = ManifestHandle::new(&bl, "T1.1", Utc::now());
+        let id = h.record_invocation(audit_spec_with_matched_patterns(vec!["pat-x".to_string()]));
+        h.record_exit(id, StageStatus::Ran, Utc::now(), AgentExitInfo::default());
+        h.flush().unwrap();
+
+        let r = latest_run(&bl).unwrap();
+        let results = run_check(PatternCitationsPersisted, &r);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].status, Status::Fail);
+        assert!(results[0]
+            .evidence
+            .contains("none have non-zero cited_in_pass+cited_in_wip on disk"));
     }
 }

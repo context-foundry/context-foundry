@@ -6446,21 +6446,43 @@ async fn process_task(
                 patterns::CommitOutcome::Wip
             };
             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                "Pattern citations: {} patterns referenced by agents",
-                all_cited.len()
+                "Pattern citations: {} patterns referenced by agents (outcome: {:?})",
+                all_cited.len(),
+                outcome
             ))));
-            if let Err(e) = patterns::update_used_counts(patterns_dir, &all_cited_by_role, outcome)
-            {
-                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                    "Warning: failed to update pattern used_counts: {}",
-                    e
-                ))));
+            match patterns::update_used_counts(patterns_dir, &all_cited_by_role, outcome) {
+                Ok(n) => {
+                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                        "Pattern store updated: {} pattern(s) updated in global store",
+                        n
+                    ))));
+                }
+                Err(e) => {
+                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                        "Warning: failed to update pattern used_counts: {}",
+                        e
+                    ))));
+                }
             }
             let ext_infos = extensions::discover_extensions(&ctx.project_dir);
             for ext_name in &ctx.config.extensions {
                 if let Some(ext) = ext_infos.iter().find(|e| &e.name == ext_name) {
                     if let Some(ref pdir) = ext.patterns_dir {
-                        let _ = patterns::update_used_counts(pdir, &all_cited_by_role, outcome);
+                        match patterns::update_used_counts(pdir, &all_cited_by_role, outcome) {
+                            Ok(n) if n > 0 => {
+                                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                                    "Pattern store updated: {} pattern(s) updated in extension '{}'",
+                                    n, ext_name
+                                ))));
+                            }
+                            Err(e) => {
+                                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                                    "Warning: failed to update pattern used_counts for extension '{}': {}",
+                                    ext_name, e
+                                ))));
+                            }
+                            _ => {}
+                        }
                     }
                 }
             }
