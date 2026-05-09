@@ -808,6 +808,14 @@ and the code to verify your work. Be precise and honest.
 - [ ] Claim 2: another specific verifiable statement
 - [ ] ...
 
+## Wire-Up Evidence
+For every new function, struct field, or config field introduced in this task,
+list the EXACT call site that exercises it from production code (not tests).
+Each bullet must name a file:line and the calling function. Example:
+- src/app/build.rs:6452 calls patterns::update_used_counts(...) after each commit
+- src/config.rs:215 read by src/app/build.rs:3010 inside run_task()
+If this task adds no new functions/fields, write: "- N/A: no new public surface"
+
 ## Gaps and Assumptions
 - anything you are NOT confident about
 - edge cases you did not test
@@ -3235,6 +3243,13 @@ mod prompt_override_tests {
             "TASKS.md",
         );
         assert_eq!(out, "BUILD ANYTHING");
+    }
+
+    #[test]
+    fn builder_prompt_requires_wire_up_evidence_section() {
+        let p = builder_prompt("BUILD", None, "T1.6", "desc", "SPEC.md", "TASKS.md");
+        assert!(p.contains("## Wire-Up Evidence"));
+        assert!(p.contains("file:line"));
     }
 
     #[test]

@@ -9,7 +9,7 @@ the pipeline.
 
 ## What it checks
 
-The harness runs 21 checks per run: 8 plumbing + 13 heuristic.
+The harness runs 25 checks per run: 8 plumbing + 17 heuristic.
 
 ### Plumbing checks (8)
 
@@ -29,7 +29,7 @@ session transcripts in `.buildloop/logs/`.
 | `prior_artifact_read` | Standard, Claude-only | Walks `assistant.message.content[]` in the JSONL for `tool_use` records named `Read` whose `input.file_path` ends in the prior artifact basename. Subagent-issued reads (`parent_tool_use_id` set) count. Skips with evidence "non-Claude provider, transcript adapter not in v1" for Codex / OpenCode / GhCopilot stages. |
 | `expected_artifact_written` | Standard | Manifest's `expected_artifact_path` exists on disk with > 200 bytes. Skips when stage status is `Skipped`/`Reused`/`CheckpointResume`. |
 
-### Heuristic checks (13)
+### Heuristic checks (17)
 
 Heuristic checks read the artifact files directly. All are provider-agnostic.
 
@@ -48,6 +48,10 @@ Heuristic checks read the artifact files directly. All are provider-agnostic.
 | `audit_findings_localized` | When findings exist, every entry in `high`/`medium`/`low` carries a `file` and a `line`. |
 | `bash_commands_safe` | Scans Bash tool_uses in Build-stage transcripts for destructive patterns (rm -rf targeting system or home paths, network fetch piped to a shell interpreter, unqualified `git push --force`). Skips when no Bash tool_uses are observed. |
 | `pattern_citations_persisted` | When any stage's `matched_pattern_ids` appear as `[<pattern-id>]` markers in `current-plan.md`, `build-claims.md`, or `review-report.md`, asserts the resolved patterns_dir has at least one of those patterns with non-zero `cited_in_pass + cited_in_wip`. Skips when no patterns matched, no markers in artifacts, the patterns_dir is unreadable, or none of the cited IDs are in the global store (e.g. extension-only patterns). |
+| `new_struct_field_has_writer` | When `git diff HEAD~1 HEAD -- src/` adds new `pub` struct fields, asserts at least one production-region (non-`#[cfg(test)]`, non-`Default::default()`) write-site exists. Skips when no new fields. Catches latent fields that only the schema and Default see. |
+| `new_function_has_non_test_caller` | When the diff adds new `fn`/`pub fn` definitions, asserts at least one caller exists outside `#[cfg(test)]` regions. Skips when no new functions. Catches functions wired only into test code. |
+| `new_config_field_is_read` | When the diff adds new fields to `src/config.rs`, asserts at least one read-site (`config.<name>`, `ctx.config.<name>`, `self.<name>`) exists outside `src/config.rs` and outside test regions. Skips when no new Config fields. Catches config knobs that the build flow ignores. |
+| `build_claims_has_wire_up_evidence` | When the diff adds new functions, struct fields, or config fields, requires `build-claims.md` to contain a `## Wire-Up Evidence` section with at least one substantive bullet. Skips when no new public surface. Catches builders that ship code without proving it's reachable. |
 
 ## How structured prompt evidence is computed
 

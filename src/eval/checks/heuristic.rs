@@ -13,6 +13,7 @@ use crate::task_eval;
 use crate::utils::truncate_str;
 use serde_json::Value;
 use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 
 const SCOUT_REPORT: &str = ".buildloop/scout-report.md";
 const RESEARCH_REPORT: &str = ".buildloop/research-report.md";
@@ -33,6 +34,10 @@ pub struct AuditEngaged;
 pub struct AuditFindingsLocalized;
 pub struct BashCommandsSafe;
 pub struct PatternCitationsPersisted;
+pub struct NewStructFieldHasWriter;
+pub struct NewFunctionHasNonTestCaller;
+pub struct NewConfigFieldIsRead;
+pub struct BuildClaimsHasWireUpEvidence;
 
 fn project_root_for(run: &RunTranscripts) -> PathBuf {
     run.manifest
@@ -1633,6 +1638,641 @@ impl Check for PatternCitationsPersisted {
     }
 }
 
+// ─── T1.6 reachability helpers ──────────────────────────────────────────────
+
+fn run_git_diff_for_src(root: &Path) -> Option<String> {
+    let output = Command::new("git")
+        .args(["diff", "HEAD~1", "HEAD", "--", "src/"])
+        .current_dir(root)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    String::from_utf8(output.stdout).ok()
+}
+
+fn parse_added_struct_field_names(diff: &str) -> Vec<String> {
+    let re = match regex::Regex::new(r"^\+\s+pub\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*:") {
+        Ok(r) => r,
+        Err(_) => return Vec::new(),
+    };
+    let mut set: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    for line in diff.lines() {
+        if line.starts_with("+++") || line.starts_with("++ ") {
+            continue;
+        }
+        if let Some(caps) = re.captures(line) {
+            if let Some(m) = caps.get(1) {
+                set.insert(m.as_str().to_string());
+            }
+        }
+    }
+    set.into_iter().collect()
+}
+
+fn parse_added_function_names(diff: &str) -> Vec<String> {
+    let re = match regex::Regex::new(
+        r"^\+\s*(?:pub(?:\([a-z]+\))?\s+)?(?:async\s+)?fn\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*[<(]",
+    ) {
+        Ok(r) => r,
+        Err(_) => return Vec::new(),
+    };
+    let mut set: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    for line in diff.lines() {
+        if line.starts_with("+++") || line.starts_with("++ ") {
+            continue;
+        }
+        if let Some(caps) = re.captures(line) {
+            if let Some(m) = caps.get(1) {
+                let name = m.as_str();
+                if !name.starts_with("test_") {
+                    set.insert(name.to_string());
+                }
+            }
+        }
+    }
+    set.into_iter().collect()
+}
+
+fn parse_added_config_field_names(diff: &str) -> Vec<String> {
+    let re = match regex::Regex::new(r"^\+\s+pub\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*:") {
+        Ok(r) => r,
+        Err(_) => return Vec::new(),
+    };
+    let mut set: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    let mut in_config_rs = false;
+    for line in diff.lines() {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with("+++ b/") || trimmed.starts_with("--- a/") {
+            in_config_rs = trimmed.contains("src/config.rs");
+            continue;
+        }
+        if line.starts_with("diff --git ") {
+            in_config_rs = line.contains("src/config.rs");
+            continue;
+        }
+        if !in_config_rs {
+            continue;
+        }
+        if line.starts_with("+++") || line.starts_with("++ ") {
+            continue;
+        }
+        if let Some(caps) = re.captures(line) {
+            if let Some(m) = caps.get(1) {
+                set.insert(m.as_str().to_string());
+            }
+        }
+    }
+    set.into_iter().collect()
+}
+
+fn read_src_files(root: &Path) -> Vec<(PathBuf, String)> {
+    let src_dir = root.join("src");
+    if !src_dir.is_dir() {
+        return Vec::new();
+    }
+    let mut out = Vec::new();
+    let mut stack: Vec<PathBuf> = vec![src_dir];
+    while let Some(dir) = stack.pop() {
+        let entries = match std::fs::read_dir(&dir) {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let meta = match entry.metadata() {
+                Ok(m) => m,
+                Err(_) => continue,
+            };
+            if meta.is_dir() {
+                stack.push(path);
+            } else if meta.is_file()
+                && path.extension().and_then(|s| s.to_str()) == Some("rs")
+            {
+                if let Ok(content) = std::fs::read_to_string(&path) {
+                    out.push((path, content));
+                }
+            }
+        }
+    }
+    out
+}
+
+// Heuristic line-region classifier. May misclassify exotic Rust constructs
+// (raw strings containing `{`, `'{ '` char literals, doc-comment braces).
+fn classify_line_regions(content: &str) -> Vec<bool> {
+    let default_re = regex::Regex::new(r"^\s*impl(?:<[^>]*>)?\s+Default\s+for\b").ok();
+    let mut out = Vec::with_capacity(content.lines().count());
+    let mut stack: Vec<&'static str> = Vec::new();
+    let mut next_block_is_test = false;
+    let mut next_block_is_default = false;
+    for line in content.lines() {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with("#[cfg(test)]") {
+            next_block_is_test = true;
+        }
+        if trimmed.starts_with("impl Default for ") {
+            next_block_is_default = true;
+        } else if let Some(re) = default_re.as_ref() {
+            if re.is_match(line) {
+                next_block_is_default = true;
+            }
+        }
+        for c in line.chars() {
+            match c {
+                '{' => {
+                    let kind = if next_block_is_test {
+                        next_block_is_test = false;
+                        "test"
+                    } else if next_block_is_default {
+                        next_block_is_default = false;
+                        "default"
+                    } else {
+                        "other"
+                    };
+                    stack.push(kind);
+                }
+                '}' => {
+                    stack.pop();
+                }
+                _ => {}
+            }
+        }
+        let inside = stack.iter().any(|r| *r == "test" || *r == "default");
+        out.push(inside);
+    }
+    out
+}
+
+fn scan_token_in_production_lines(
+    root: &Path,
+    token_re: &regex::Regex,
+) -> Vec<(PathBuf, usize)> {
+    let files = read_src_files(root);
+    let mut hits = Vec::new();
+    for (path, content) in files {
+        let mask = classify_line_regions(&content);
+        for (idx, line) in content.lines().enumerate() {
+            if idx >= mask.len() {
+                continue;
+            }
+            if mask[idx] {
+                continue;
+            }
+            if token_re.is_match(line) {
+                hits.push((path.clone(), idx + 1));
+            }
+        }
+    }
+    hits
+}
+
+fn first_evidence_path(hits: &[(PathBuf, usize)], max_len: usize) -> String {
+    if hits.is_empty() {
+        return "<none>".to_string();
+    }
+    hits.iter()
+        .take(max_len)
+        .map(|(p, l)| format!("{}:{}", p.display(), l))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+impl Check for NewStructFieldHasWriter {
+    fn name(&self) -> &'static str {
+        "new_struct_field_has_writer"
+    }
+    fn category(&self) -> Category {
+        Category::Heuristic
+    }
+    fn severity(&self) -> Severity {
+        Severity::Standard
+    }
+    fn applies_to(&self) -> &[StageId] {
+        STAGES_BUILD
+    }
+    fn run(&self, run: &RunTranscripts) -> Vec<StageCheckResult> {
+        let mut out: Vec<StageCheckResult> = Vec::new();
+        for (inv, _) in run
+            .invocations
+            .iter()
+            .filter(|(inv, _)| non_superseded(inv) && inv.stage_id == Some(StageId::Build))
+        {
+            let stage = StageId::Build;
+            if invocation_skip_status(inv).is_some() {
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Skip,
+                    evidence: skip_evidence_for_status(inv.status, &inv.skip_reason),
+                });
+                continue;
+            }
+            let root = project_root_for(run);
+            let diff = match run_git_diff_for_src(&root) {
+                Some(d) => d,
+                None => {
+                    out.push(StageCheckResult {
+                        stage,
+                        invocation_id: inv.invocation_id,
+                        status: Status::Skip,
+                        evidence: "git diff HEAD~1 HEAD unavailable".to_string(),
+                    });
+                    continue;
+                }
+            };
+            let fields = parse_added_struct_field_names(&diff);
+            if fields.is_empty() {
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Skip,
+                    evidence: "no new struct fields in diff".to_string(),
+                });
+                continue;
+            }
+            let mut found_writer_for: Option<String> = None;
+            let mut all_hits: Vec<(PathBuf, usize)> = Vec::new();
+            for name in &fields {
+                let pat = format!(r"\b{}\s*[:=]", regex::escape(name));
+                let token_re = match regex::Regex::new(&pat) {
+                    Ok(r) => r,
+                    Err(_) => continue,
+                };
+                let decl_pat = format!(r"^\s*pub\s+{}\s*:", regex::escape(name));
+                let decl_re = regex::Regex::new(&decl_pat).ok();
+                let hits = scan_token_in_production_lines(&root, &token_re);
+                let filtered: Vec<(PathBuf, usize)> = hits
+                    .into_iter()
+                    .filter(|(path, line_num)| {
+                        if let Some(d) = decl_re.as_ref() {
+                            if let Ok(content) = std::fs::read_to_string(path) {
+                                if let Some(line) = content.lines().nth(*line_num - 1) {
+                                    if d.is_match(line) {
+                                        return false;
+                                    }
+                                }
+                            }
+                        }
+                        true
+                    })
+                    .collect();
+                if !filtered.is_empty() && found_writer_for.is_none() {
+                    found_writer_for = Some(name.clone());
+                    all_hits = filtered;
+                }
+            }
+            if let Some(name) = found_writer_for {
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Pass,
+                    evidence: format!(
+                        "{} new field(s); writer for {} found at {}",
+                        fields.len(),
+                        name,
+                        first_evidence_path(&all_hits, 3)
+                    ),
+                });
+            } else {
+                let preview: Vec<String> = fields.iter().take(3).cloned().collect();
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Fail,
+                    evidence: format!(
+                        "{} new field(s) ({:?}) -- only test or Default writers found; field is latent",
+                        fields.len(),
+                        preview
+                    ),
+                });
+            }
+        }
+        out
+    }
+}
+
+impl Check for NewFunctionHasNonTestCaller {
+    fn name(&self) -> &'static str {
+        "new_function_has_non_test_caller"
+    }
+    fn category(&self) -> Category {
+        Category::Heuristic
+    }
+    fn severity(&self) -> Severity {
+        Severity::Standard
+    }
+    fn applies_to(&self) -> &[StageId] {
+        STAGES_BUILD
+    }
+    fn run(&self, run: &RunTranscripts) -> Vec<StageCheckResult> {
+        let mut out: Vec<StageCheckResult> = Vec::new();
+        for (inv, _) in run
+            .invocations
+            .iter()
+            .filter(|(inv, _)| non_superseded(inv) && inv.stage_id == Some(StageId::Build))
+        {
+            let stage = StageId::Build;
+            if invocation_skip_status(inv).is_some() {
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Skip,
+                    evidence: skip_evidence_for_status(inv.status, &inv.skip_reason),
+                });
+                continue;
+            }
+            let root = project_root_for(run);
+            let diff = match run_git_diff_for_src(&root) {
+                Some(d) => d,
+                None => {
+                    out.push(StageCheckResult {
+                        stage,
+                        invocation_id: inv.invocation_id,
+                        status: Status::Skip,
+                        evidence: "git diff HEAD~1 HEAD unavailable".to_string(),
+                    });
+                    continue;
+                }
+            };
+            let fns = parse_added_function_names(&diff);
+            if fns.is_empty() {
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Skip,
+                    evidence: "no new functions in diff".to_string(),
+                });
+                continue;
+            }
+            let mut found_caller_for: Option<String> = None;
+            let mut all_hits: Vec<(PathBuf, usize)> = Vec::new();
+            for name in &fns {
+                let call_pat = format!(r"\b{}\s*\(", regex::escape(name));
+                let def_pat = format!(r"\bfn\s+{}\b", regex::escape(name));
+                let call_re = match regex::Regex::new(&call_pat) {
+                    Ok(r) => r,
+                    Err(_) => continue,
+                };
+                let def_re = regex::Regex::new(&def_pat).ok();
+                let hits = scan_token_in_production_lines(&root, &call_re);
+                let filtered: Vec<(PathBuf, usize)> = hits
+                    .into_iter()
+                    .filter(|(path, line_num)| {
+                        if let Some(d) = def_re.as_ref() {
+                            if let Ok(content) = std::fs::read_to_string(path) {
+                                if let Some(line) = content.lines().nth(*line_num - 1) {
+                                    if d.is_match(line) {
+                                        return false;
+                                    }
+                                }
+                            }
+                        }
+                        true
+                    })
+                    .collect();
+                if !filtered.is_empty() && found_caller_for.is_none() {
+                    found_caller_for = Some(name.clone());
+                    all_hits = filtered;
+                }
+            }
+            if let Some(name) = found_caller_for {
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Pass,
+                    evidence: format!(
+                        "{} new fn(s); caller for {} found at {}",
+                        fns.len(),
+                        name,
+                        first_evidence_path(&all_hits, 3)
+                    ),
+                });
+            } else {
+                let preview: Vec<String> = fns.iter().take(3).cloned().collect();
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Fail,
+                    evidence: format!(
+                        "{} new fn(s) ({:?}) -- only callers in test modules; function is unreachable from production code",
+                        fns.len(),
+                        preview
+                    ),
+                });
+            }
+        }
+        out
+    }
+}
+
+impl Check for NewConfigFieldIsRead {
+    fn name(&self) -> &'static str {
+        "new_config_field_is_read"
+    }
+    fn category(&self) -> Category {
+        Category::Heuristic
+    }
+    fn severity(&self) -> Severity {
+        Severity::Standard
+    }
+    fn applies_to(&self) -> &[StageId] {
+        STAGES_BUILD
+    }
+    fn run(&self, run: &RunTranscripts) -> Vec<StageCheckResult> {
+        let mut out: Vec<StageCheckResult> = Vec::new();
+        for (inv, _) in run
+            .invocations
+            .iter()
+            .filter(|(inv, _)| non_superseded(inv) && inv.stage_id == Some(StageId::Build))
+        {
+            let stage = StageId::Build;
+            if invocation_skip_status(inv).is_some() {
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Skip,
+                    evidence: skip_evidence_for_status(inv.status, &inv.skip_reason),
+                });
+                continue;
+            }
+            let root = project_root_for(run);
+            let diff = match run_git_diff_for_src(&root) {
+                Some(d) => d,
+                None => {
+                    out.push(StageCheckResult {
+                        stage,
+                        invocation_id: inv.invocation_id,
+                        status: Status::Skip,
+                        evidence: "git diff HEAD~1 HEAD unavailable".to_string(),
+                    });
+                    continue;
+                }
+            };
+            let fields = parse_added_config_field_names(&diff);
+            if fields.is_empty() {
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Skip,
+                    evidence: "no new Config fields in diff".to_string(),
+                });
+                continue;
+            }
+            let config_rs_path = root.join("src").join("config.rs");
+            let mut found_read_for: Option<String> = None;
+            let mut all_hits: Vec<(PathBuf, usize)> = Vec::new();
+            for name in &fields {
+                let pat = format!(
+                    r"\b(?:config|ctx\.config|self|cfg)\.{}\b",
+                    regex::escape(name)
+                );
+                let token_re = match regex::Regex::new(&pat) {
+                    Ok(r) => r,
+                    Err(_) => continue,
+                };
+                let hits = scan_token_in_production_lines(&root, &token_re);
+                let filtered: Vec<(PathBuf, usize)> = hits
+                    .into_iter()
+                    .filter(|(path, _)| path != &config_rs_path)
+                    .collect();
+                if !filtered.is_empty() && found_read_for.is_none() {
+                    found_read_for = Some(name.clone());
+                    all_hits = filtered;
+                }
+            }
+            if let Some(name) = found_read_for {
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Pass,
+                    evidence: format!(
+                        "{} new config field(s); read for {} at {}",
+                        fields.len(),
+                        name,
+                        first_evidence_path(&all_hits, 3)
+                    ),
+                });
+            } else {
+                let preview: Vec<String> = fields.iter().take(3).cloned().collect();
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Fail,
+                    evidence: format!(
+                        "{} new config field(s) ({:?}) -- only seen in Default::default; never read by the build flow",
+                        fields.len(),
+                        preview
+                    ),
+                });
+            }
+        }
+        out
+    }
+}
+
+impl Check for BuildClaimsHasWireUpEvidence {
+    fn name(&self) -> &'static str {
+        "build_claims_has_wire_up_evidence"
+    }
+    fn category(&self) -> Category {
+        Category::Heuristic
+    }
+    fn severity(&self) -> Severity {
+        Severity::Standard
+    }
+    fn applies_to(&self) -> &[StageId] {
+        STAGES_BUILD
+    }
+    fn run(&self, run: &RunTranscripts) -> Vec<StageCheckResult> {
+        let mut out: Vec<StageCheckResult> = Vec::new();
+        for (inv, _) in run
+            .invocations
+            .iter()
+            .filter(|(inv, _)| non_superseded(inv) && inv.stage_id == Some(StageId::Build))
+        {
+            let stage = StageId::Build;
+            if invocation_skip_status(inv).is_some() {
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Skip,
+                    evidence: skip_evidence_for_status(inv.status, &inv.skip_reason),
+                });
+                continue;
+            }
+            let root = project_root_for(run);
+            let claims = match read_artifact(&root, BUILD_CLAIMS) {
+                Some(s) => s,
+                None => {
+                    out.push(StageCheckResult {
+                        stage,
+                        invocation_id: inv.invocation_id,
+                        status: Status::Fail,
+                        evidence: "no build-claims.md".to_string(),
+                    });
+                    continue;
+                }
+            };
+            let diff = run_git_diff_for_src(&root).unwrap_or_default();
+            let trigger = !parse_added_struct_field_names(&diff).is_empty()
+                || !parse_added_function_names(&diff).is_empty()
+                || !parse_added_config_field_names(&diff).is_empty();
+            if !trigger {
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Skip,
+                    evidence: "no new functions/fields/config in diff".to_string(),
+                });
+                continue;
+            }
+            match markdown_section(&claims, "## Wire-Up Evidence") {
+                None => {
+                    out.push(StageCheckResult {
+                        stage,
+                        invocation_id: inv.invocation_id,
+                        status: Status::Fail,
+                        evidence:
+                            "build-claims has no Wire-Up Evidence section -- builder did not prove new code is reachable"
+                                .to_string(),
+                    });
+                }
+                Some(section) => {
+                    let count = section
+                        .lines()
+                        .filter(|l| {
+                            let t = l.trim();
+                            (t.starts_with('-') || t.starts_with('*'))
+                                && t.trim_start_matches(['-', '*']).trim().len() >= 8
+                        })
+                        .count();
+                    if count >= 1 {
+                        out.push(StageCheckResult {
+                            stage,
+                            invocation_id: inv.invocation_id,
+                            status: Status::Pass,
+                            evidence: format!("Wire-Up Evidence has {} bullet(s)", count),
+                        });
+                    } else {
+                        out.push(StageCheckResult {
+                            stage,
+                            invocation_id: inv.invocation_id,
+                            status: Status::Fail,
+                            evidence: "Wire-Up Evidence section present but trivially short or empty"
+                                .to_string(),
+                        });
+                    }
+                }
+            }
+        }
+        out
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2520,5 +3160,388 @@ mod tests {
         assert!(results[0]
             .evidence
             .contains("none have non-zero cited_in_pass+cited_in_wip on disk"));
+    }
+
+    // ─── T1.6 reachability checks tests ─────────────────────────────────────
+
+    fn init_git_repo(root: &Path) {
+        use std::process::Command;
+        let _ = Command::new("git")
+            .args(["init", "-q"])
+            .current_dir(root)
+            .status();
+        let _ = Command::new("git")
+            .args(["config", "user.email", "t@t"])
+            .current_dir(root)
+            .status();
+        let _ = Command::new("git")
+            .args(["config", "user.name", "t"])
+            .current_dir(root)
+            .status();
+        let _ = Command::new("git")
+            .args(["config", "commit.gpgsign", "false"])
+            .current_dir(root)
+            .status();
+    }
+
+    fn git_commit_all(root: &Path, msg: &str) {
+        use std::process::Command;
+        let _ = Command::new("git")
+            .args(["add", "-A"])
+            .current_dir(root)
+            .status();
+        let _ = Command::new("git")
+            .args(["commit", "-q", "-m", msg, "--allow-empty"])
+            .current_dir(root)
+            .status();
+    }
+
+    #[test]
+    fn parse_added_struct_field_names_extracts_pub_fields() {
+        let diff = "diff --git a/src/x.rs b/src/x.rs\n+++ b/src/x.rs\n+    pub foo: usize,\n+    pub bar_baz: String,\n+ pub fn ignored() {}\n";
+        let names = parse_added_struct_field_names(diff);
+        assert!(names.contains(&"foo".to_string()));
+        assert!(names.contains(&"bar_baz".to_string()));
+        assert!(!names.contains(&"ignored".to_string()));
+    }
+
+    #[test]
+    fn parse_added_function_names_extracts_pub_fn() {
+        let diff = "diff --git a/src/x.rs b/src/x.rs\n+++ b/src/x.rs\n+pub fn alpha(x: i32) {}\n+fn beta() -> Result<()> {}\n+    pub async fn gamma() {}\n";
+        let names = parse_added_function_names(diff);
+        assert!(names.contains(&"alpha".to_string()));
+        assert!(names.contains(&"beta".to_string()));
+        assert!(names.contains(&"gamma".to_string()));
+    }
+
+    #[test]
+    fn parse_added_config_field_names_only_picks_config_rs() {
+        let diff = "diff --git a/src/foo.rs b/src/foo.rs\n--- a/src/foo.rs\n+++ b/src/foo.rs\n+    pub a: bool,\ndiff --git a/src/config.rs b/src/config.rs\n--- a/src/config.rs\n+++ b/src/config.rs\n+    pub b: usize,\n";
+        let names = parse_added_config_field_names(diff);
+        assert_eq!(names, vec!["b".to_string()]);
+    }
+
+    #[test]
+    fn classify_line_regions_marks_test_block() {
+        let content = "fn prod() {}\n#[cfg(test)]\nmod tests {\n    fn t() {}\n}\nfn other() {}\n";
+        let mask = classify_line_regions(content);
+        // line 0: fn prod() {} — outside
+        // line 1: #[cfg(test)] — outside (no { yet)
+        // line 2: mod tests { — { pushed as "test", then end of line state shows inside
+        // line 3: fn t() {} — inside test (push other, pop other still inside test)
+        // line 4: } — pops test, now empty
+        // line 5: fn other() {} — outside
+        assert_eq!(mask.len(), 6);
+        assert!(!mask[0]);
+        assert!(!mask[1]);
+        assert!(mask[2]);
+        assert!(mask[3]);
+        assert!(!mask[5]);
+    }
+
+    #[test]
+    fn classify_line_regions_marks_default_impl() {
+        let content = "impl Default for Foo {\n    fn default() -> Self {\n        Self { x: 0 }\n    }\n}\nfn other() {}\n";
+        let mask = classify_line_regions(content);
+        // Inside the impl block we should have lines flagged true
+        assert!(mask[0]); // line that opened the default block
+        assert!(mask[1]);
+        assert!(mask[2]);
+        assert!(mask[3]);
+        assert!(!mask[5]); // outside
+    }
+
+    fn build_run_for(tmp_path: &Path) -> RunTranscripts {
+        let bl = tmp_path.join(".buildloop");
+        std::fs::create_dir_all(&bl).unwrap();
+        let h = ManifestHandle::new(&bl, "T1.6", Utc::now());
+        let id = h.record_invocation(empty_spec(
+            StageId::Build,
+            AgentRole::Builder,
+            "sys",
+            "user",
+        ));
+        h.record_exit(id, StageStatus::Ran, Utc::now(), AgentExitInfo::default());
+        h.flush().unwrap();
+        latest_run(&bl).unwrap()
+    }
+
+    #[test]
+    fn new_struct_field_has_writer_skips_when_no_diff() {
+        let tmp = TempDir::new().unwrap();
+        let r = build_run_for(tmp.path());
+        let results = run_check(NewStructFieldHasWriter, &r);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].status, Status::Skip);
+        assert!(results[0]
+            .evidence
+            .contains("git diff HEAD~1 HEAD unavailable"));
+    }
+
+    #[test]
+    fn new_struct_field_has_writer_skips_when_no_new_fields() {
+        let tmp = TempDir::new().unwrap();
+        init_git_repo(tmp.path());
+        std::fs::create_dir_all(tmp.path().join("src")).unwrap();
+        std::fs::write(tmp.path().join("src/foo.rs"), "pub fn x() {}\n").unwrap();
+        git_commit_all(tmp.path(), "init");
+        std::fs::write(tmp.path().join("src/foo.rs"), "pub fn x() {}\n\n").unwrap();
+        git_commit_all(tmp.path(), "noop");
+        let r = build_run_for(tmp.path());
+        let results = run_check(NewStructFieldHasWriter, &r);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].status, Status::Skip);
+        assert!(results[0].evidence.contains("no new struct fields"));
+    }
+
+    #[test]
+    fn new_struct_field_has_writer_passes_when_writer_outside_tests() {
+        let tmp = TempDir::new().unwrap();
+        init_git_repo(tmp.path());
+        std::fs::create_dir_all(tmp.path().join("src")).unwrap();
+        std::fs::write(tmp.path().join("src/lib.rs"), "// baseline\n").unwrap();
+        git_commit_all(tmp.path(), "baseline");
+        std::fs::write(
+            tmp.path().join("src/foo.rs"),
+            "pub struct Foo {\n    pub bar: usize,\n}\n",
+        )
+        .unwrap();
+        std::fs::write(
+            tmp.path().join("src/bar.rs"),
+            "pub fn build() -> super::foo::Foo {\n    super::foo::Foo { bar: 1 }\n}\n",
+        )
+        .unwrap();
+        git_commit_all(tmp.path(), "add foo");
+        let r = build_run_for(tmp.path());
+        let results = run_check(NewStructFieldHasWriter, &r);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].status, Status::Pass);
+        assert!(results[0].evidence.contains("writer for bar"));
+    }
+
+    #[test]
+    fn new_struct_field_has_writer_fails_when_only_default_writer() {
+        let tmp = TempDir::new().unwrap();
+        init_git_repo(tmp.path());
+        std::fs::create_dir_all(tmp.path().join("src")).unwrap();
+        std::fs::write(tmp.path().join("src/lib.rs"), "// baseline\n").unwrap();
+        git_commit_all(tmp.path(), "baseline");
+        std::fs::write(
+            tmp.path().join("src/foo.rs"),
+            "pub struct Foo {\n    pub bar: usize,\n}\nimpl Default for Foo {\n    fn default() -> Self {\n        Self { bar: 0 }\n    }\n}\n",
+        )
+        .unwrap();
+        std::fs::write(
+            tmp.path().join("src/uses.rs"),
+            "#[cfg(test)]\nmod tests {\n    fn t() {\n        let _f = super::foo::Foo { bar: 1 };\n    }\n}\n",
+        )
+        .unwrap();
+        git_commit_all(tmp.path(), "add foo with only default and test writer");
+        let r = build_run_for(tmp.path());
+        let results = run_check(NewStructFieldHasWriter, &r);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].status, Status::Fail);
+        assert!(results[0].evidence.contains("only test or Default writers"));
+        assert!(results[0].evidence.contains("bar"));
+    }
+
+    #[test]
+    fn new_function_has_non_test_caller_passes() {
+        let tmp = TempDir::new().unwrap();
+        init_git_repo(tmp.path());
+        std::fs::create_dir_all(tmp.path().join("src")).unwrap();
+        std::fs::write(tmp.path().join("src/lib.rs"), "// baseline\n").unwrap();
+        git_commit_all(tmp.path(), "baseline");
+        std::fs::write(
+            tmp.path().join("src/foo.rs"),
+            "pub fn alpha() -> bool { true }\n",
+        )
+        .unwrap();
+        std::fs::write(
+            tmp.path().join("src/bar.rs"),
+            "pub fn caller() -> bool { super::foo::alpha() }\n",
+        )
+        .unwrap();
+        git_commit_all(tmp.path(), "add alpha + caller");
+        let r = build_run_for(tmp.path());
+        let results = run_check(NewFunctionHasNonTestCaller, &r);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].status, Status::Pass);
+    }
+
+    #[test]
+    fn new_function_has_non_test_caller_fails() {
+        let tmp = TempDir::new().unwrap();
+        init_git_repo(tmp.path());
+        std::fs::create_dir_all(tmp.path().join("src")).unwrap();
+        std::fs::write(tmp.path().join("src/lib.rs"), "// baseline\n").unwrap();
+        git_commit_all(tmp.path(), "baseline");
+        std::fs::write(tmp.path().join("src/foo.rs"), "pub fn alpha() {}\n").unwrap();
+        std::fs::write(
+            tmp.path().join("src/bar.rs"),
+            "#[cfg(test)]\nmod tests {\n    fn t() { super::foo::alpha(); }\n}\n",
+        )
+        .unwrap();
+        git_commit_all(tmp.path(), "add alpha with only test caller");
+        let r = build_run_for(tmp.path());
+        let results = run_check(NewFunctionHasNonTestCaller, &r);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].status, Status::Fail);
+        assert!(results[0].evidence.contains("alpha"));
+        assert!(results[0]
+            .evidence
+            .contains("unreachable from production code"));
+    }
+
+    #[test]
+    fn new_config_field_is_read_passes_when_consumer_reads_outside_config() {
+        let tmp = TempDir::new().unwrap();
+        init_git_repo(tmp.path());
+        std::fs::create_dir_all(tmp.path().join("src")).unwrap();
+        std::fs::write(
+            tmp.path().join("src/config.rs"),
+            "pub struct Config {\n    pub existing: bool,\n}\n",
+        )
+        .unwrap();
+        std::fs::write(tmp.path().join("src/app.rs"), "// baseline\n").unwrap();
+        git_commit_all(tmp.path(), "baseline");
+        std::fs::write(
+            tmp.path().join("src/config.rs"),
+            "pub struct Config {\n    pub existing: bool,\n    pub my_new_field: usize,\n}\n",
+        )
+        .unwrap();
+        std::fs::write(
+            tmp.path().join("src/app.rs"),
+            "pub fn run(config: &super::config::Config) -> usize {\n    config.my_new_field\n}\n",
+        )
+        .unwrap();
+        git_commit_all(tmp.path(), "add field + reader");
+        let r = build_run_for(tmp.path());
+        let results = run_check(NewConfigFieldIsRead, &r);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].status, Status::Pass);
+    }
+
+    #[test]
+    fn new_config_field_is_read_fails_when_only_default() {
+        let tmp = TempDir::new().unwrap();
+        init_git_repo(tmp.path());
+        std::fs::create_dir_all(tmp.path().join("src")).unwrap();
+        std::fs::write(
+            tmp.path().join("src/config.rs"),
+            "pub struct Config {\n    pub existing: bool,\n}\nimpl Default for Config {\n    fn default() -> Self {\n        Self { existing: false }\n    }\n}\n",
+        )
+        .unwrap();
+        std::fs::write(tmp.path().join("src/app.rs"), "// no reads\n").unwrap();
+        git_commit_all(tmp.path(), "baseline");
+        std::fs::write(
+            tmp.path().join("src/config.rs"),
+            "pub struct Config {\n    pub existing: bool,\n    pub my_new_field: usize,\n}\nimpl Default for Config {\n    fn default() -> Self {\n        Self { existing: false, my_new_field: 0 }\n    }\n}\n",
+        )
+        .unwrap();
+        git_commit_all(tmp.path(), "add field, no reader");
+        let r = build_run_for(tmp.path());
+        let results = run_check(NewConfigFieldIsRead, &r);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].status, Status::Fail);
+        assert!(results[0].evidence.contains("only seen in Default"));
+    }
+
+    #[test]
+    fn build_claims_has_wire_up_evidence_skips_when_no_new_functionality() {
+        let tmp = TempDir::new().unwrap();
+        init_git_repo(tmp.path());
+        std::fs::create_dir_all(tmp.path().join("src")).unwrap();
+        std::fs::write(tmp.path().join("src/foo.rs"), "// baseline\n").unwrap();
+        git_commit_all(tmp.path(), "baseline");
+        std::fs::write(tmp.path().join("src/foo.rs"), "// baseline\n\n").unwrap();
+        git_commit_all(tmp.path(), "noop edit");
+        let bl = tmp.path().join(".buildloop");
+        std::fs::create_dir_all(&bl).unwrap();
+        std::fs::write(
+            bl.join("build-claims.md"),
+            "## Files Changed\n- src/foo.rs\n",
+        )
+        .unwrap();
+        let h = ManifestHandle::new(&bl, "T1.6", Utc::now());
+        let id = h.record_invocation(empty_spec(
+            StageId::Build,
+            AgentRole::Builder,
+            "sys",
+            "user",
+        ));
+        h.record_exit(id, StageStatus::Ran, Utc::now(), AgentExitInfo::default());
+        h.flush().unwrap();
+        let r = latest_run(&bl).unwrap();
+        let results = run_check(BuildClaimsHasWireUpEvidence, &r);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].status, Status::Skip);
+        assert!(results[0]
+            .evidence
+            .contains("no new functions/fields/config"));
+    }
+
+    #[test]
+    fn build_claims_has_wire_up_evidence_fails_when_section_missing() {
+        let tmp = TempDir::new().unwrap();
+        init_git_repo(tmp.path());
+        std::fs::create_dir_all(tmp.path().join("src")).unwrap();
+        std::fs::write(tmp.path().join("src/lib.rs"), "// baseline\n").unwrap();
+        git_commit_all(tmp.path(), "baseline");
+        std::fs::write(tmp.path().join("src/x.rs"), "pub fn alpha() {}\n").unwrap();
+        git_commit_all(tmp.path(), "add alpha");
+        let bl = tmp.path().join(".buildloop");
+        std::fs::create_dir_all(&bl).unwrap();
+        std::fs::write(
+            bl.join("build-claims.md"),
+            "## Files Changed\n- src/x.rs\n",
+        )
+        .unwrap();
+        let h = ManifestHandle::new(&bl, "T1.6", Utc::now());
+        let id = h.record_invocation(empty_spec(
+            StageId::Build,
+            AgentRole::Builder,
+            "sys",
+            "user",
+        ));
+        h.record_exit(id, StageStatus::Ran, Utc::now(), AgentExitInfo::default());
+        h.flush().unwrap();
+        let r = latest_run(&bl).unwrap();
+        let results = run_check(BuildClaimsHasWireUpEvidence, &r);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].status, Status::Fail);
+        assert!(results[0].evidence.contains("no Wire-Up Evidence section"));
+    }
+
+    #[test]
+    fn build_claims_has_wire_up_evidence_passes_when_section_has_bullets() {
+        let tmp = TempDir::new().unwrap();
+        init_git_repo(tmp.path());
+        std::fs::create_dir_all(tmp.path().join("src")).unwrap();
+        std::fs::write(tmp.path().join("src/lib.rs"), "// baseline\n").unwrap();
+        git_commit_all(tmp.path(), "baseline");
+        std::fs::write(tmp.path().join("src/x.rs"), "pub fn alpha() {}\n").unwrap();
+        git_commit_all(tmp.path(), "add alpha");
+        let bl = tmp.path().join(".buildloop");
+        std::fs::create_dir_all(&bl).unwrap();
+        std::fs::write(
+            bl.join("build-claims.md"),
+            "## Files Changed\n- src/x.rs\n\n## Wire-Up Evidence\n- alpha is called from src/main.rs:42 inside run_pipeline()\n",
+        )
+        .unwrap();
+        let h = ManifestHandle::new(&bl, "T1.6", Utc::now());
+        let id = h.record_invocation(empty_spec(
+            StageId::Build,
+            AgentRole::Builder,
+            "sys",
+            "user",
+        ));
+        h.record_exit(id, StageStatus::Ran, Utc::now(), AgentExitInfo::default());
+        h.flush().unwrap();
+        let r = latest_run(&bl).unwrap();
+        let results = run_check(BuildClaimsHasWireUpEvidence, &r);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].status, Status::Pass);
+        assert!(results[0].evidence.contains("Wire-Up Evidence has 1 bullet"));
     }
 }
