@@ -9,7 +9,7 @@ the pipeline.
 
 ## What it checks
 
-The harness runs 17 checks per run: 8 plumbing + 9 heuristic.
+The harness runs 19 checks per run: 8 plumbing + 11 heuristic.
 
 ### Plumbing checks (8)
 
@@ -29,12 +29,14 @@ session transcripts in `.buildloop/logs/`.
 | `prior_artifact_read` | Standard, Claude-only | Walks `assistant.message.content[]` in the JSONL for `tool_use` records named `Read` whose `input.file_path` ends in the prior artifact basename. Subagent-issued reads (`parent_tool_use_id` set) count. Skips with evidence "non-Claude provider, transcript adapter not in v1" for Codex / OpenCode / GhCopilot stages. |
 | `expected_artifact_written` | Standard | Manifest's `expected_artifact_path` exists on disk with > 200 bytes. Skips when stage status is `Skipped`/`Reused`/`CheckpointResume`. |
 
-### Heuristic checks (9)
+### Heuristic checks (11)
 
 Heuristic checks read the artifact files directly. All are provider-agnostic.
 
 | Check | Purpose |
 |-------|---------|
+| `scout_explains_task_decomposition` | When bootstrap Scout creates task lines, `scout-report.md` must include a `## Task Decomposition` rationale with selected task count, candidate work units, coupling/dependency rationale, why not fewer/more tasks, and requirement mapping. |
+| `task_queue_well_formed` | Evaluates `TASKS.md` / `IMPL_PLAN.md` after bootstrap Scout for parser validity, duplicate IDs/descriptions, malformed progress suffixes, scaffolding busywork, vague tasks, and likely file-by-file splitting. |
 | `plan_covers_research_files` | Every file path mentioned in `research-report.md` also appears in `current-plan.md`. |
 | `plan_has_verification` | `current-plan.md` has a verification section with at least one command. |
 | `plan_has_per_phase_verification` | When `current-plan.md` has 5+ file operations, requires 2+ verification sections (per-phase verification). Fails on horizontal plans (5+ file ops with a single end-block verification). |

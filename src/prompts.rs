@@ -140,10 +140,19 @@ Read {tasks_file}. Append tasks to the END using this exact format:
 
 TASK GRANULARITY:
 Each task runs through a full multi-agent pipeline (scout, plan, implement, verify).
-Bundle related work into FEWER, LARGER tasks:
-- A single task can touch 5-15 files
-- Only split when work is truly independent
-- BAD: 10 tasks for one feature. GOOD: 2-3 tasks per feature.
+Choose task count explicitly; do not default to 1 task just because the work is
+greenfield, and do not split by file/layer/implementation step.
+- Prefer the smallest set of independently verifiable vertical slices
+- Split when work can be built, verified, and merged independently with little shared state
+- Bundle when requirements share state, data flow, UI surfaces, or a verification path
+- A single task can touch 5-15 files when those files form one coherent slice
+- BAD: 10 tasks for one feature, one per file. GOOD: 1 task for a coupled feature,
+  or 2-3 tasks when there are independent user-visible concerns.
+
+Before writing task lines, decide:
+1. Candidate work units in the spec
+2. Coupling/dependencies between those units
+3. Selected task count and why it is not fewer or more
 
 PRIORITIZATION (for existing projects with code):
 1. Broken functionality
@@ -166,6 +175,14 @@ details in the middle, risks and constraints last:
 
 ## Architecture Notes
 [how the code is structured, key abstractions, data flow -- can be detailed]
+
+## Task Decomposition
+- Selected task count: [number of tasks you appended]
+- Candidate work units considered: [short list]
+- Coupling/dependency rationale: [why units were bundled or split]
+- Why not fewer tasks: [what would become too broad or say "already minimal"]
+- Why not more/per-file tasks: [why finer splitting would add overhead or break cohesion]
+- Requirement mapping: [task IDs you wrote -> spec requirements covered]
 
 ## Risks and Constraints (read this last)
 [what could go wrong, hard constraints, things the planner must not ignore]
@@ -2266,6 +2283,16 @@ mod tests {
             planner.contains("3-5 phases"),
             "prompt must mention the 3-5-phase guidance for tasks with 10+ files"
         );
+    }
+
+    #[test]
+    fn bootstrap_scout_prompt_requires_task_decomposition_rationale() {
+        let prompt = bootstrap_scout_prompt(None, None, "SPEC.md", "TASKS.md", None);
+        assert!(prompt.contains("Choose task count explicitly"));
+        assert!(prompt.contains("## Task Decomposition"));
+        assert!(prompt.contains("Selected task count"));
+        assert!(prompt.contains("Why not more/per-file tasks"));
+        assert!(prompt.contains("Requirement mapping"));
     }
 
     #[test]

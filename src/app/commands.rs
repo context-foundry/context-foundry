@@ -14,6 +14,7 @@ use crate::config::Config;
 use crate::patterns;
 use crate::patterns::Pattern;
 use crate::task::{self, Task};
+use crate::task_eval;
 use crate::update;
 use crate::utils::atomic_write_file;
 
@@ -767,6 +768,16 @@ pub(super) fn show_status(project_dir: &Path) -> Result<()> {
 pub(super) fn show_tasks(project_dir: &Path) -> Result<()> {
     let tasks = load_tasks(project_dir)?;
     print!("{}", format_tasks_output(&tasks));
+    Ok(())
+}
+
+pub(super) fn show_task_evaluation(project_dir: &Path) -> Result<()> {
+    let contract_paths = ContractPaths::resolve(project_dir);
+    let eval = task_eval::evaluate_tasks_file(&contract_paths.tasks_path)?;
+    print!("{}", task_eval::format_task_queue_evaluation(&eval));
+    if !eval.ok() {
+        anyhow::bail!("TASKS.md evaluation failed");
+    }
     Ok(())
 }
 

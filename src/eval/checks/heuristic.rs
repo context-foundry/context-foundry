@@ -7,14 +7,19 @@ use crate::eval::checks::{
 use crate::eval::run::RunTranscripts;
 use crate::eval::stage_id::StageId;
 use crate::run_manifest::StageInvocation;
+use crate::task;
+use crate::task_eval;
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 
+const SCOUT_REPORT: &str = ".buildloop/scout-report.md";
 const RESEARCH_REPORT: &str = ".buildloop/research-report.md";
 const CURRENT_PLAN: &str = ".buildloop/current-plan.md";
 const BUILD_CLAIMS: &str = ".buildloop/build-claims.md";
 const REVIEW_REPORT: &str = ".buildloop/review-report.md";
 
+pub struct ScoutExplainsTaskDecomposition;
+pub struct TaskQueueWellFormed;
 pub struct PlanCoversResearchFiles;
 pub struct PlanHasVerification;
 pub struct PlanHasPerPhaseVerification;
@@ -36,6 +41,71 @@ fn project_root_for(run: &RunTranscripts) -> PathBuf {
 
 fn read_artifact(root: &Path, rel: &str) -> Option<String> {
     std::fs::read_to_string(root.join(rel)).ok()
+}
+
+fn task_queue_path(root: &Path) -> Option<PathBuf> {
+    ["TASKS.md", "IMPL_PLAN.md", "tasks.md", "impl_plan.md"]
+        .iter()
+        .map(|name| root.join(name))
+        .find(|p| p.exists())
+}
+
+fn task_count(root: &Path) -> Option<usize> {
+    let path = task_queue_path(root)?;
+    task::parse_tasks(&path).ok().map(|tasks| tasks.len())
+}
+
+fn markdown_section<'a>(text: &'a str, heading: &str) -> Option<&'a str> {
+    let mut start = None;
+    let mut end = text.len();
+    let mut offset = 0;
+
+    for line in text.split_inclusive('\n') {
+        let current = line
+            .trim_end_matches('\n')
+            .trim_end_matches('\r')
+            .trim_end();
+        if start.is_none() && current == heading {
+            start = Some(offset + line.len());
+        } else if start.is_some() && current.starts_with("## ") {
+            end = offset;
+            break;
+        }
+        offset += line.len();
+    }
+
+    start.and_then(|s| text.get(s..end))
+}
+
+fn selected_task_count_has_number(section: &str) -> bool {
+    section.lines().any(|line| {
+        let lower = line.to_ascii_lowercase();
+        lower.contains("selected task count") && line.chars().any(|c| c.is_ascii_digit())
+    })
+}
+
+fn missing_decomposition_requirements(section: &str) -> Vec<&'static str> {
+    let lower = section.to_ascii_lowercase();
+    let mut missing = Vec::new();
+    if !selected_task_count_has_number(section) {
+        missing.push("selected task count with number");
+    }
+    if !lower.contains("candidate work") {
+        missing.push("candidate work units");
+    }
+    if !(lower.contains("coupling") || lower.contains("dependency")) {
+        missing.push("coupling/dependency rationale");
+    }
+    if !lower.contains("why not fewer") {
+        missing.push("why not fewer tasks");
+    }
+    if !(lower.contains("why not more") || lower.contains("per-file")) {
+        missing.push("why not more/per-file tasks");
+    }
+    if !lower.contains("requirement mapping") {
+        missing.push("requirement mapping");
+    }
+    missing
 }
 
 fn extract_file_paths_from_research(text: &str) -> Vec<String> {
@@ -189,9 +259,194 @@ fn count_verification_sections(plan: &str) -> usize {
 }
 
 const STAGES_PLAN: &[StageId] = &[StageId::Plan];
+const STAGES_RESEARCH: &[StageId] = &[StageId::Research];
 const STAGES_BUILD: &[StageId] = &[StageId::Build];
 const STAGES_AUDIT: &[StageId] = &[StageId::Audit];
 const PER_PHASE_VERIFICATION_FILE_OP_THRESHOLD: usize = 5;
+
+impl Check for ScoutExplainsTaskDecomposition {
+    fn name(&self) -> &'static str {
+        "scout_explains_task_decomposition"
+    }
+    fn category(&self) -> Category {
+        Category::Heuristic
+    }
+    fn severity(&self) -> Severity {
+        Severity::Standard
+    }
+    fn applies_to(&self) -> &[StageId] {
+        STAGES_RESEARCH
+    }
+    fn run(&self, run: &RunTranscripts) -> Vec<StageCheckResult> {
+        let mut out = Vec::new();
+        for (inv, _) in run.invocations.iter().filter(|(inv, _)| {
+            non_superseded(inv)
+                && inv.stage_id == Some(StageId::Research)
+                && inv.role.eq_ignore_ascii_case("scout")
+        }) {
+            let stage = StageId::Research;
+            if invocation_skip_status(inv).is_some() {
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Skip,
+                    evidence: skip_evidence_for_status(inv.status, &inv.skip_reason),
+                });
+                continue;
+            }
+            let root = project_root_for(run);
+            let report = match read_artifact(&root, SCOUT_REPORT) {
+                Some(s) => s,
+                None => {
+                    out.push(StageCheckResult {
+                        stage,
+                        invocation_id: inv.invocation_id,
+                        status: Status::Fail,
+                        evidence: "no scout-report.md".to_string(),
+                    });
+                    continue;
+                }
+            };
+            if report.contains("No new tasks discovered") {
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Skip,
+                    evidence: "scout reported no new tasks".to_string(),
+                });
+                continue;
+            }
+            let count = task_count(&root).unwrap_or(0);
+            if count == 0 {
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Skip,
+                    evidence: "no task lines found to evaluate".to_string(),
+                });
+                continue;
+            }
+            let section = match markdown_section(&report, "## Task Decomposition") {
+                Some(s) => s,
+                None => {
+                    out.push(StageCheckResult {
+                        stage,
+                        invocation_id: inv.invocation_id,
+                        status: Status::Fail,
+                        evidence: "## Task Decomposition heading missing".to_string(),
+                    });
+                    continue;
+                }
+            };
+            let missing = missing_decomposition_requirements(section);
+            if missing.is_empty() {
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Pass,
+                    evidence: format!("task decomposition rationale present; {} task lines", count),
+                });
+            } else {
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Fail,
+                    evidence: format!("task decomposition missing {:?}", missing),
+                });
+            }
+        }
+        out
+    }
+}
+
+impl Check for TaskQueueWellFormed {
+    fn name(&self) -> &'static str {
+        "task_queue_well_formed"
+    }
+    fn category(&self) -> Category {
+        Category::Heuristic
+    }
+    fn severity(&self) -> Severity {
+        Severity::Standard
+    }
+    fn applies_to(&self) -> &[StageId] {
+        STAGES_RESEARCH
+    }
+    fn run(&self, run: &RunTranscripts) -> Vec<StageCheckResult> {
+        let mut out = Vec::new();
+        for (inv, _) in run.invocations.iter().filter(|(inv, _)| {
+            non_superseded(inv)
+                && inv.stage_id == Some(StageId::Research)
+                && inv.role.eq_ignore_ascii_case("scout")
+        }) {
+            let stage = StageId::Research;
+            if invocation_skip_status(inv).is_some() {
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Skip,
+                    evidence: skip_evidence_for_status(inv.status, &inv.skip_reason),
+                });
+                continue;
+            }
+
+            let root = project_root_for(run);
+            let path = match task_queue_path(&root) {
+                Some(path) => path,
+                None => {
+                    out.push(StageCheckResult {
+                        stage,
+                        invocation_id: inv.invocation_id,
+                        status: Status::Skip,
+                        evidence: "no TASKS.md or IMPL_PLAN.md found".to_string(),
+                    });
+                    continue;
+                }
+            };
+            let eval = match task_eval::evaluate_tasks_file(&path) {
+                Ok(eval) => eval,
+                Err(e) => {
+                    out.push(StageCheckResult {
+                        stage,
+                        invocation_id: inv.invocation_id,
+                        status: Status::Fail,
+                        evidence: format!("failed to evaluate task queue: {}", e),
+                    });
+                    continue;
+                }
+            };
+
+            if eval.findings.is_empty() {
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Pass,
+                    evidence: format!("{} task lines; no findings", eval.task_count),
+                });
+            } else {
+                let examples: Vec<String> = eval
+                    .findings
+                    .iter()
+                    .take(5)
+                    .map(|f| f.code.to_string())
+                    .collect();
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Fail,
+                    evidence: format!(
+                        "{} task line(s); {} error(s), {} warning(s); examples {:?}",
+                        eval.task_count,
+                        eval.error_count(),
+                        eval.warning_count(),
+                        examples
+                    ),
+                });
+            }
+        }
+        out
+    }
+}
 
 impl Check for PlanCoversResearchFiles {
     fn name(&self) -> &'static str {
@@ -1102,18 +1357,125 @@ mod tests {
         h
     }
 
+    fn write_scout_invocation(bl: &Path) -> ManifestHandle {
+        let h = ManifestHandle::new(bl, "T1.1", Utc::now());
+        let id = h.record_invocation(empty_spec(
+            StageId::Research,
+            AgentRole::Scout,
+            "sys",
+            "user",
+        ));
+        h.record_exit(id, StageStatus::Ran, Utc::now(), AgentExitInfo::default());
+        h
+    }
+
     fn write_build_invocation(bl: &Path) -> ManifestHandle {
         let h = ManifestHandle::new(bl, "T1.1", Utc::now());
-        let id = h.record_invocation(empty_spec(StageId::Build, AgentRole::Builder, "sys", "user"));
+        let id = h.record_invocation(empty_spec(
+            StageId::Build,
+            AgentRole::Builder,
+            "sys",
+            "user",
+        ));
         h.record_exit(id, StageStatus::Ran, Utc::now(), AgentExitInfo::default());
         h
     }
 
     fn write_audit_invocation(bl: &Path) -> ManifestHandle {
         let h = ManifestHandle::new(bl, "T1.1", Utc::now());
-        let id = h.record_invocation(empty_spec(StageId::Audit, AgentRole::Reviewer, "sys", "user"));
+        let id = h.record_invocation(empty_spec(
+            StageId::Audit,
+            AgentRole::Reviewer,
+            "sys",
+            "user",
+        ));
         h.record_exit(id, StageStatus::Ran, Utc::now(), AgentExitInfo::default());
         h
+    }
+
+    #[test]
+    fn scout_explains_task_decomposition_passes_when_section_complete() {
+        let tmp = TempDir::new().unwrap();
+        let bl = make_buildloop(&tmp);
+        fs::write(
+            tmp.path().join("TASKS.md"),
+            "# Task Queue\n\n- [ ] T1.1: Build the weather app\n",
+        )
+        .unwrap();
+        fs::write(
+            bl.join("scout-report.md"),
+            "# Scout Report\n\n\
+## Task Decomposition\n\
+- Selected task count: 1\n\
+- Candidate work units considered: map, forecast, hourly scrubber\n\
+- Coupling/dependency rationale: map selection feeds forecast state\n\
+- Why not fewer tasks: already minimal\n\
+- Why not more/per-file tasks: per-file tasks would split one vertical slice\n\
+- Requirement mapping: T1.1 -> map, forecast, hourly scrubber\n\n\
+## Risks and Constraints\n\
+- none\n",
+        )
+        .unwrap();
+        let h = write_scout_invocation(&bl);
+        h.flush().unwrap();
+        let r = latest_run(&bl).unwrap();
+        let results = run_check(ScoutExplainsTaskDecomposition, &r);
+        assert_eq!(results[0].status, Status::Pass);
+    }
+
+    #[test]
+    fn scout_explains_task_decomposition_fails_when_section_missing() {
+        let tmp = TempDir::new().unwrap();
+        let bl = make_buildloop(&tmp);
+        fs::write(
+            tmp.path().join("TASKS.md"),
+            "# Task Queue\n\n- [ ] T1.1: Build the weather app\n",
+        )
+        .unwrap();
+        fs::write(
+            bl.join("scout-report.md"),
+            "# Scout Report\n\n## Key Facts\n- x\n",
+        )
+        .unwrap();
+        let h = write_scout_invocation(&bl);
+        h.flush().unwrap();
+        let r = latest_run(&bl).unwrap();
+        let results = run_check(ScoutExplainsTaskDecomposition, &r);
+        assert_eq!(results[0].status, Status::Fail);
+        assert!(results[0].evidence.contains("Task Decomposition"));
+    }
+
+    #[test]
+    fn task_queue_well_formed_passes_valid_queue() {
+        let tmp = TempDir::new().unwrap();
+        let bl = make_buildloop(&tmp);
+        fs::write(
+            tmp.path().join("TASKS.md"),
+            "# Task Queue\n\n- [ ] T1.1: Build the weather app with map search, hourly forecast, units toggle, and verification\n",
+        )
+        .unwrap();
+        let h = write_scout_invocation(&bl);
+        h.flush().unwrap();
+        let r = latest_run(&bl).unwrap();
+        let results = run_check(TaskQueueWellFormed, &r);
+        assert_eq!(results[0].status, Status::Pass);
+    }
+
+    #[test]
+    fn task_queue_well_formed_fails_invalid_queue() {
+        let tmp = TempDir::new().unwrap();
+        let bl = make_buildloop(&tmp);
+        fs::write(
+            tmp.path().join("TASKS.md"),
+            "# Task Queue\n\n- [ ] Build it\n",
+        )
+        .unwrap();
+        let h = write_scout_invocation(&bl);
+        h.flush().unwrap();
+        let r = latest_run(&bl).unwrap();
+        let results = run_check(TaskQueueWellFormed, &r);
+        assert_eq!(results[0].status, Status::Fail);
+        assert!(results[0].evidence.contains("missing_or_invalid_task_id"));
     }
 
     #[test]
@@ -1349,9 +1711,10 @@ mod tests {
         let manifest_path = bl.join("run-manifest.json");
         let raw = fs::read_to_string(&manifest_path).unwrap();
         let mut v: Value = serde_json::from_str(&raw).unwrap();
-        v.as_object_mut()
-            .unwrap()
-            .insert("audit_skipped_reason".to_string(), Value::String("simple".into()));
+        v.as_object_mut().unwrap().insert(
+            "audit_skipped_reason".to_string(),
+            Value::String("simple".into()),
+        );
         fs::write(&manifest_path, serde_json::to_string_pretty(&v).unwrap()).unwrap();
         let r = latest_run(&bl).unwrap();
         let results = run_check(AuditEngaged, &r);

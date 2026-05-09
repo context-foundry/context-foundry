@@ -29,6 +29,7 @@ mod sandbox;
 mod stats;
 mod sync_flag;
 mod task;
+mod task_eval;
 mod tmux;
 mod tui;
 mod update;
@@ -63,7 +64,11 @@ enum Commands {
     /// Show current progress
     Status,
     /// List all tasks from TASKS.md (legacy: IMPL_PLAN.md)
-    Tasks,
+    Tasks {
+        /// Evaluate TASKS.md syntax and task-quality heuristics
+        #[arg(long)]
+        eval: bool,
+    },
     /// Run dedicated planning mode (gap analysis, no building)
     Plan {
         /// Maximum planning iterations (0 = unlimited, stops when plan stabilizes)
@@ -174,8 +179,12 @@ async fn main() -> Result<()> {
         Commands::Status => {
             app::show_status(&project_dir)?;
         }
-        Commands::Tasks => {
-            app::show_tasks(&project_dir)?;
+        Commands::Tasks { eval } => {
+            if eval {
+                app::show_task_evaluation(&project_dir)?;
+            } else {
+                app::show_tasks(&project_dir)?;
+            }
         }
         Commands::Design { intent } => {
             let intent = intent.join(" ");

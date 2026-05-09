@@ -4585,6 +4585,10 @@ pub fn show_tasks(project_dir: &Path) -> Result<()> {
     commands::show_tasks(project_dir)
 }
 
+pub fn show_task_evaluation(project_dir: &Path) -> Result<()> {
+    commands::show_task_evaluation(project_dir)
+}
+
 // ─── Extract Patterns Command ─────────────────────────────────
 
 pub fn run_extract(project_dir: &Path) -> Result<()> {

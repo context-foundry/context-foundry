@@ -86,6 +86,8 @@ pub fn all_checks() -> Vec<Box<dyn Check>> {
         Box::new(plumbing::PriorArtifactReceived),
         Box::new(plumbing::PriorArtifactRead),
         Box::new(plumbing::ExpectedArtifactWritten),
+        Box::new(heuristic::ScoutExplainsTaskDecomposition),
+        Box::new(heuristic::TaskQueueWellFormed),
         Box::new(heuristic::PlanCoversResearchFiles),
         Box::new(heuristic::PlanHasVerification),
         Box::new(heuristic::PlanHasPerPhaseVerification),
@@ -125,7 +127,7 @@ mod tests {
     }
 
     #[test]
-    fn all_checks_returns_seventeen() {
-        assert_eq!(all_checks().len(), 17);
+    fn all_checks_returns_nineteen() {
+        assert_eq!(all_checks().len(), 19);
     }
 }

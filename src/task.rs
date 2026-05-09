@@ -47,7 +47,10 @@ impl Task {
 
 pub fn parse_tasks(plan_path: &Path) -> Result<Vec<Task>> {
     let content = fs::read_to_string(plan_path)?;
+    Ok(parse_tasks_from_str(&content))
+}
 
+pub fn parse_tasks_from_str(content: &str) -> Vec<Task> {
     let mut tasks = Vec::new();
 
     for (i, line) in content.lines().enumerate() {
@@ -88,7 +91,7 @@ pub fn parse_tasks(plan_path: &Path) -> Result<Vec<Task>> {
         });
     }
 
-    Ok(tasks)
+    tasks
 }
 
 pub fn next_pending(tasks: &[Task]) -> Option<&Task> {
