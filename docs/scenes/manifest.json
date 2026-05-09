@@ -627,6 +627,16 @@
       "model": "gpt-4o-mini",
       "lines": 89,
       "generation": 63
+    },
+    {
+      "file": "promise-all-settled-sunset.js",
+      "name": "Promise.allSettled() Sunset",
+      "location": "Okavango Delta, Botswana",
+      "biome": "savanna",
+      "generated": "2026-05-09T23:08:16.230Z",
+      "model": "gpt-4o-mini",
+      "lines": 95,
+      "generation": 64
     }
   ]
 }

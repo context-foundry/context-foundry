@@ -1009,5 +1009,18 @@
     "retries": 1,
     "api_retries": 0,
     "validation": "pass"
+  },
+  {
+    "ts": "2026-05-09T23:08:16.231Z",
+    "scene": "promise-all-settled-sunset.js",
+    "seed_id": "promise-all-settled-sunset",
+    "biome": "savanna",
+    "model": "gpt-4o-mini",
+    "input_tokens": 16658,
+    "output_tokens": 1629,
+    "cost_usd": 0.0035,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "pass"
   }
 ]
