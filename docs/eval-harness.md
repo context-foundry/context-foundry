@@ -9,7 +9,7 @@ the pipeline.
 
 ## What it checks
 
-The harness runs 19 checks per run: 8 plumbing + 11 heuristic.
+The harness runs 20 checks per run: 8 plumbing + 12 heuristic.
 
 ### Plumbing checks (8)
 
@@ -29,7 +29,7 @@ session transcripts in `.buildloop/logs/`.
 | `prior_artifact_read` | Standard, Claude-only | Walks `assistant.message.content[]` in the JSONL for `tool_use` records named `Read` whose `input.file_path` ends in the prior artifact basename. Subagent-issued reads (`parent_tool_use_id` set) count. Skips with evidence "non-Claude provider, transcript adapter not in v1" for Codex / OpenCode / GhCopilot stages. |
 | `expected_artifact_written` | Standard | Manifest's `expected_artifact_path` exists on disk with > 200 bytes. Skips when stage status is `Skipped`/`Reused`/`CheckpointResume`. |
 
-### Heuristic checks (11)
+### Heuristic checks (12)
 
 Heuristic checks read the artifact files directly. All are provider-agnostic.
 
@@ -46,6 +46,7 @@ Heuristic checks read the artifact files directly. All are provider-agnostic.
 | `build_claims_has_gaps_section` | `build-claims.md` has a `## Gaps and Assumptions` section. |
 | `audit_engaged` | `review-report.md` markdown contains a fenced ```json block whose object has a non-empty `high`/`medium`/`low` array OR an explicit PASS verdict with rationale. Skips when `audit_skipped_reason` is set. |
 | `audit_findings_localized` | When findings exist, every entry in `high`/`medium`/`low` carries a `file` and a `line`. |
+| `bash_commands_safe` | Scans Bash tool_uses in Build-stage transcripts for destructive patterns (rm -rf targeting system or home paths, network fetch piped to a shell interpreter, unqualified `git push --force`). Skips when no Bash tool_uses are observed. |
 
 ## How structured prompt evidence is computed
 
