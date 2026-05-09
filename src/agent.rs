@@ -27,6 +27,7 @@ pub enum AgentRole {
     Fixer,
     PlanReview,
     Discovery,
+    Coach,
 }
 
 impl std::fmt::Display for AgentRole {
@@ -41,6 +42,7 @@ impl std::fmt::Display for AgentRole {
             AgentRole::Fixer => write!(f, "VERIFY"),
             AgentRole::PlanReview => write!(f, "P+"),
             AgentRole::Discovery => write!(f, "DISCOVERY"),
+            AgentRole::Coach => write!(f, "COACH"),
         }
     }
 }
@@ -60,6 +62,7 @@ impl AgentRole {
             AgentRole::Fixer => "doubt",
             AgentRole::PlanReview => "plan-review",
             AgentRole::Discovery => "discover",
+            AgentRole::Coach => "coach",
         }
     }
 
@@ -75,7 +78,7 @@ impl AgentRole {
             AgentRole::Planner => Some(2),
             AgentRole::Builder => Some(3),
             AgentRole::Reviewer | AgentRole::Fixer => Some(4),
-            AgentRole::PlanReview | AgentRole::Discovery => None,
+            AgentRole::PlanReview | AgentRole::Discovery | AgentRole::Coach => None,
         }
     }
 
@@ -93,6 +96,7 @@ impl AgentRole {
             "scout" => Some(AgentRole::Scout),
             "discover" => Some(AgentRole::Discovery),
             "plan-review" => Some(AgentRole::PlanReview),
+            "coach" => Some(AgentRole::Coach),
             _ => None,
         }
     }
@@ -130,6 +134,7 @@ pub fn allowed_tools_for_role(role: &AgentRole) -> &'static [&'static str] {
         AgentRole::Reviewer => &["Read", "Glob", "Grep", "Bash", "Edit", "Write"],
         AgentRole::Fixer => &["Read", "Glob", "Grep", "Bash", "Edit", "Write"],
         AgentRole::Discovery => &["Read", "Glob", "Grep", "Bash", "Edit", "Write"],
+        AgentRole::Coach => &["Read", "Glob", "Grep", "Write"],
     }
 }
 

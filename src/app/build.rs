@@ -2158,6 +2158,127 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                 "No pending tasks -- running bootstrap scout to create task queue".to_string(),
             )));
 
+            // ─── Coach Pre-Flight (run_mode == "coach") ──────────────
+            // When the user has opted into Coach mode, run a Coach turn
+            // before bootstrap Scout. Coach reads SPEC.md and writes
+            // .buildloop/intake-brief.md with a clarified outline,
+            // suspected task decomposition, and open assumptions. Scout
+            // then consumes that brief on its next read. Skipped when
+            // intake-brief.md already exists (idempotent across re-runs).
+            let intake_brief_path = ctx.buildloop_dir.join("intake-brief.md");
+            if ctx.config.run_mode == "coach" && !intake_brief_path.exists() {
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+                    "Coach mode: running pre-flight intake before bootstrap Scout".to_string(),
+                )));
+
+                // v1: no chat input, so user_intent is empty -- SPEC.md flows
+                // through spec_content. v2 will pass the user's typed reply here.
+                let intake_thread_path = ctx.buildloop_dir.join("intake-thread.md");
+                let coach_thread = std::fs::read_to_string(&intake_thread_path).unwrap_or_default();
+                let coach_spec_content = std::fs::read_to_string(&ctx.spec_path).ok();
+                let coach_prompt = prompts::coach_intake_prompt(
+                    "",
+                    coach_spec_content.as_deref(),
+                    &coach_thread,
+                    1,
+                );
+
+                let (coach_tx, mut coach_rx) = mpsc::unbounded_channel();
+                let coach_fwd_tx = tx.clone();
+                let coach_fwd_handle = tokio::spawn(async move {
+                    let mut usage = AgentUsage::default();
+                    while let Some(evt) = coach_rx.recv().await {
+                        usage.accumulate(&evt);
+                        let _ = coach_fwd_tx.send(AppEvent::AgentOutput(evt));
+                    }
+                    usage
+                });
+
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::AgentStarted(
+                    AgentRole::Coach,
+                    Config::display_provider_model(
+                        &ctx.config.scout_provider,
+                        &ctx.config.scout_model,
+                    ),
+                )));
+                observatory::log_event(
+                    &session_id,
+                    &ctx.project_dir,
+                    ObservatoryEvent::AgentStarted {
+                        role: format!("{}", AgentRole::Coach),
+                        provider: ctx.config.scout_provider.clone(),
+                        model: ctx.config.scout_model.clone(),
+                        cc_version: cc_version.clone(),
+                    },
+                );
+
+                let coach_evidence_spec = build_evidence_spec(
+                    StageId::Research,
+                    AgentRole::Coach,
+                    Some(intake_brief_path.clone()),
+                    &ctx.config.scout_provider,
+                    &ctx.config.scout_model,
+                    &ctx.config.scout_provider,
+                    &ctx.config.scout_model,
+                    None,
+                    "",
+                    &coach_prompt,
+                    Vec::new(),
+                    ctx.config.extensions.clone(),
+                );
+                let coach_inv_id = ctx.manifest.record_invocation(coach_evidence_spec);
+                let coach_start = Instant::now();
+                let coach_result = agent::run_agent(
+                    &AgentRole::Coach,
+                    Config::parse_provider(&ctx.config.scout_provider),
+                    &ctx.config.scout_model,
+                    &coach_prompt,
+                    &ctx.project_dir,
+                    coach_tx,
+                    &ctx.log_dir,
+                    None,
+                    ctx.config.agent_timeout_secs,
+                    Some(ctx.shutdown.clone()),
+                    Some(&ctx.config),
+                )
+                .await;
+                let (coach_status, coach_exit) = manifest_exit_info(
+                    &coach_result,
+                    &ctx.config.scout_provider,
+                    &ctx.config.scout_model,
+                );
+                ctx.manifest.record_exit(
+                    coach_inv_id,
+                    coach_status,
+                    chrono::Utc::now(),
+                    coach_exit,
+                );
+                let coach_usage = coach_fwd_handle.await.unwrap_or_default();
+                let coach_success = coach_result.as_ref().map(|r| r.success).unwrap_or(false);
+                let _ = tx.send(AppEvent::AgentDone(coach_success));
+                observatory::log_event(
+                    &session_id,
+                    &ctx.project_dir,
+                    ObservatoryEvent::AgentDone {
+                        role: format!("{}", AgentRole::Coach),
+                        success: coach_success,
+                        duration_secs: coach_start.elapsed().as_secs_f64(),
+                        tokens_in: coach_usage.tokens_in,
+                        tokens_out: coach_usage.tokens_out,
+                        cost_usd: coach_usage.cost_usd,
+                        context_pct: coach_usage.context_pct,
+                        cache_creation_tokens: coach_usage.cache_creation_tokens,
+                        cache_read_tokens: coach_usage.cache_read_tokens,
+                    },
+                );
+
+                if ctx.is_stop_requested() {
+                    emit_session_ended!();
+                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Finished));
+                    return;
+                }
+            }
+
             let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
             let fwd_tx = tx.clone();
             let fwd_handle = tokio::spawn(async move {
@@ -2208,6 +2329,13 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
             };
             let history_context = crate::history::format_history_for_prompt(&history_records);
 
+            // Read intake-brief.md if Coach mode produced one before Scout fired
+            let intake_brief = std::fs::read_to_string(
+                ctx.buildloop_dir.join("intake-brief.md"),
+            )
+            .ok()
+            .filter(|s| !s.trim().is_empty());
+
             let prompt = prompts::bootstrap_scout_prompt(
                 user_intent.as_deref(),
                 updated_specs.as_deref(),
@@ -2218,6 +2346,7 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                 } else {
                     Some(&history_context)
                 },
+                intake_brief.as_deref(),
             );
             // Scout is investigation-only -- skip extension context to save tokens.
             let scout_spec = build_evidence_spec(

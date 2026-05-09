@@ -134,6 +134,15 @@ Full reference: [`docs/settings-overlay.md`](docs/settings-overlay.md).
 Per-stage model routing (e.g. Claude Opus on Plan, Codex on Build) is configured
 from the Routing section. See [`docs/per-stage-routing.md`](docs/per-stage-routing.md).
 
+## Coach Mode
+
+`run_mode = "coach"` (toggle via Ctrl+M or Settings -> Pipeline -> Run Mode)
+inserts an intake-clarification stage before bootstrap Scout. v1 is a
+non-interactive pre-flight: Coach reads SPEC.md, writes
+`.buildloop/intake-brief.md` with a clarified outline + suspected task
+decomposition, and Scout consumes the brief. v2 will add multi-turn chat
+in the startup input box. Full reference: [`docs/coach-mode.md`](docs/coach-mode.md).
+
 ## Eval Harness
 
 An eval harness runs after every task completion and grades the run for plumbing

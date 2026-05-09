@@ -673,6 +673,7 @@ pub(super) fn render_agent_output(
             AgentRole::Fixer => Color::Yellow,
             AgentRole::PlanReview => Color::Magenta,
             AgentRole::Discovery => Color::Blue,
+            AgentRole::Coach => Color::LightYellow,
         };
         Span::styled(
             format!(" {} ", role),

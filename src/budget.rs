@@ -43,6 +43,7 @@ impl BudgetTargets {
             AgentRole::Fixer => Some(self.reviewer), // shares D-phase budget
             AgentRole::PlanReview => Some(self.plan_review),
             AgentRole::Discovery => None,
+            AgentRole::Coach => None,
         }
     }
 }

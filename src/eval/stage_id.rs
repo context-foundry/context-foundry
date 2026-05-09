@@ -47,7 +47,7 @@ pub fn from_role(role: &AgentRole) -> Option<StageId> {
         AgentRole::Planner => Some(StageId::Plan),
         AgentRole::Builder => Some(StageId::Build),
         AgentRole::Reviewer | AgentRole::Fixer => Some(StageId::Audit),
-        AgentRole::PlanReview | AgentRole::Discovery => None,
+        AgentRole::PlanReview | AgentRole::Discovery | AgentRole::Coach => None,
     }
 }
 

@@ -1779,7 +1779,7 @@ impl Config {
     /// Get the list of valid enum values for cycling.
     pub fn enum_values(field_id: &str) -> &'static [&'static str] {
         match field_id {
-            "run_mode" => &["auto", "sprint", "review"],
+            "run_mode" => &["auto", "sprint", "review", "coach"],
             "pipeline_mode" => &["full", "fast", "backpressure"],
             "review_mode" => &["diff-only", "full-file"],
             "doubt_engine" => &["claude", "codex"],
@@ -2067,6 +2067,15 @@ mod tests {
     #[test]
     fn default_config_disables_auto_push() {
         assert_eq!(Config::default().auto_push_remote, None);
+    }
+
+    #[test]
+    fn run_mode_enum_values_include_coach() {
+        let values = Config::enum_values("run_mode");
+        assert!(values.contains(&"auto"));
+        assert!(values.contains(&"sprint"));
+        assert!(values.contains(&"review"));
+        assert!(values.contains(&"coach"));
     }
 
     #[test]

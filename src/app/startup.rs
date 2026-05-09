@@ -446,6 +446,7 @@ pub(super) fn handle_startup_key(state: &mut AppState, key: event::KeyEvent, con
             state.run_mode = match state.run_mode.as_str() {
                 "auto" => "sprint".into(),
                 "sprint" => "review".into(),
+                "review" => "coach".into(),
                 _ => "auto".into(),
             };
             let project_dir = state

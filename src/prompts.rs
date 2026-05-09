@@ -83,6 +83,7 @@ pub fn bootstrap_scout_prompt(
     spec_file: &str,
     tasks_file: &str,
     history_context: Option<&str>,
+    intake_brief: Option<&str>,
 ) -> String {
     let intent_block = user_intent
         .filter(|s| !s.trim().is_empty())
@@ -97,6 +98,13 @@ pub fn bootstrap_scout_prompt(
     let history_block = history_context
         .filter(|s| !s.trim().is_empty())
         .map(|h| format!("\n{h}\n"))
+        .unwrap_or_default();
+
+    let intake_block = intake_brief
+        .filter(|s| !s.trim().is_empty())
+        .map(|brief| format!(
+            "\n--- BEGIN INTAKE BRIEF (clarified by user via Coach mode) ---\n{brief}\n--- END INTAKE BRIEF ---\n\nThe user iterated on this brief intentionally. When the brief contradicts SPEC.md, the brief is the source of truth.\n"
+        ))
         .unwrap_or_default();
 
     format!(
@@ -125,7 +133,7 @@ RIGHT (do this):
 For a greenfield project, the first task should CREATE the project AND implement
 core functionality in one pass. Project files (package.json, index.html, etc.)
 are created as part of building the feature, not as a separate task.
-{intent_block}{updated_specs_block}{history_block}
+{intent_block}{updated_specs_block}{history_block}{intake_block}
 INVESTIGATION (do this quickly, then move on to task creation):
 1. Read {spec_file} and UPDATED_SPECS.md if they exist
 2. Detect the tech stack (Cargo.toml, package.json, pyproject.toml, etc.)
@@ -195,6 +203,96 @@ RULES:
 - If {tasks_file} does not exist, create it with a Task Queue header
 - If the project is new/empty, create tasks based on the spec -- do not go hunting for existing code elsewhere
 - If nothing credible to do, write "No new tasks discovered.""#
+    )
+}
+
+/// Coach intake: runs before bootstrap Scout when run_mode == "coach".
+/// Each invocation is one stateless turn. Reads the accumulated thread,
+/// the latest user message, and the spec; writes its reply by appending
+/// to .buildloop/intake-thread.md and (when ready) writing the final
+/// .buildloop/intake-brief.md. Decides whether the user's intent is
+/// detailed enough to proceed or needs clarification.
+pub fn coach_intake_prompt(
+    user_intent: &str,
+    spec_content: Option<&str>,
+    intake_thread: &str,
+    turn: usize,
+) -> String {
+    let spec_block = spec_content
+        .filter(|s| !s.trim().is_empty())
+        .map(|c| format!("\n--- BEGIN SPEC.md ---\n{c}\n--- END SPEC.md ---\n"))
+        .unwrap_or_else(|| "\n(No SPEC.md found yet)\n".to_string());
+
+    let thread_block = if intake_thread.trim().is_empty() {
+        "\n(No prior conversation -- this is the first turn)\n".to_string()
+    } else {
+        format!(
+            "\n--- BEGIN INTAKE THREAD SO FAR ---\n{intake_thread}\n--- END INTAKE THREAD ---\n"
+        )
+    };
+
+    let user_intent_block = if user_intent.trim().is_empty() {
+        "(No user message this turn -- read SPEC.md and decide whether intent is concrete enough.)".to_string()
+    } else {
+        format!("The user just said:\n{user_intent}")
+    };
+
+    format!(
+        r#"You are the COACH agent. Your job is to clarify the user's intent into a concrete brief BEFORE the autonomous build pipeline runs.
+
+CRITICAL CONSTRAINTS:
+- You are scoped to the CURRENT WORKING DIRECTORY ONLY. Do not read files outside it.
+- You DO NOT write code. You DO NOT create TASKS.md. Your only deliverables are:
+  1. Append a turn to .buildloop/intake-thread.md
+  2. When ready, write .buildloop/intake-brief.md with the final reconciled brief
+- This is turn #{turn}. Hard cap: 5 turns total. If turn >= 4, you MUST emit READY_TO_PROCEED regardless.
+
+CURRENT TURN INPUT:
+{user_intent_block}
+{spec_block}{thread_block}
+
+DECISION:
+Step 1 -- Decide whether the intent is concrete enough to build autonomously.
+  Concrete enough means: a coherent picture of what the user wants, the surface area
+  (web/CLI/lib), one or two key constraints, and any non-obvious priorities.
+  IF the SPEC.md and prior turns already describe this, lean toward READY.
+
+Step 2 -- One of two paths:
+
+PATH A (READY_TO_PROCEED): The intent is clear enough.
+  - Append your turn to .buildloop/intake-thread.md (use the format below)
+  - Write .buildloop/intake-brief.md with these sections:
+      # Intake Brief
+      ## What the user wants
+      ## Surface and stack
+      ## Key constraints / non-obvious priorities
+      ## Suspected task decomposition
+      [list candidate tasks with 1-line rationale -- this is a hint to Scout, not a binding plan]
+      ## Open assumptions (if any)
+  - End your output with the literal token: READY_TO_PROCEED
+
+PATH B (AWAITING_USER): You need 1-4 short, specific clarifying questions.
+  - Append your turn to .buildloop/intake-thread.md
+  - DO NOT write intake-brief.md yet
+  - End your output with the literal token: AWAITING_USER
+
+INTAKE-THREAD APPEND FORMAT (read existing thread, then write the full new content -- do NOT use Edit, you don't have it):
+```
+## Turn {turn} -- COACH
+[Your reply here. If asking questions, list them as numbered Q1, Q2, ...
+ If proceeding, summarize what you understood from the user's input.]
+```
+
+GUIDELINES:
+- Questions should be SHORT and SPECIFIC. "Web app or CLI?" beats "What kind of interface do you want?"
+- Avoid questions answerable from SPEC.md or prior turns -- if you can infer it, infer it.
+- Do not propose implementation details (file structure, libraries) unless the user asked for them.
+- If the user wrote "go" or "proceed" or "ship it", treat as READY_TO_PROCEED regardless of ambiguity -- the user is opting out of further questions.
+- If turn >= 4, force READY_TO_PROCEED. Do NOT ask more questions on the 5th turn.
+
+OUTPUT:
+Use Read/Glob/Grep to examine SPEC.md and prior thread. Use Write tool to write the intake-brief.md or append to intake-thread.md (note: Coach has Read+Glob+Grep+Write only, no Edit, so for thread appends do a read-modify-write of intake-thread.md).
+Then output your reply text and end with exactly one of: READY_TO_PROCEED or AWAITING_USER."#
     )
 }
 
@@ -2287,12 +2385,82 @@ mod tests {
 
     #[test]
     fn bootstrap_scout_prompt_requires_task_decomposition_rationale() {
-        let prompt = bootstrap_scout_prompt(None, None, "SPEC.md", "TASKS.md", None);
+        let prompt = bootstrap_scout_prompt(None, None, "SPEC.md", "TASKS.md", None, None);
         assert!(prompt.contains("Choose task count explicitly"));
         assert!(prompt.contains("## Task Decomposition"));
         assert!(prompt.contains("Selected task count"));
         assert!(prompt.contains("Why not more/per-file tasks"));
         assert!(prompt.contains("Requirement mapping"));
+    }
+
+    #[test]
+    fn bootstrap_scout_prompt_includes_intake_brief_when_present() {
+        let prompt = bootstrap_scout_prompt(
+            Some("build a weather app"),
+            None,
+            "SPEC.md",
+            "TASKS.md",
+            None,
+            Some("# Intake Brief\n\nWeather app, web, offline-first."),
+        );
+        assert!(prompt.contains("BEGIN INTAKE BRIEF"));
+        assert!(prompt.contains("Weather app, web, offline-first."));
+        assert!(prompt.contains("the brief is the source of truth"));
+    }
+
+    #[test]
+    fn bootstrap_scout_prompt_omits_intake_block_when_absent() {
+        let prompt = bootstrap_scout_prompt(None, None, "SPEC.md", "TASKS.md", None, None);
+        assert!(!prompt.contains("BEGIN INTAKE BRIEF"));
+    }
+
+    #[test]
+    fn coach_intake_prompt_first_turn_explains_the_two_paths() {
+        let prompt = coach_intake_prompt("build me a weather app", None, "", 1);
+        assert!(prompt.contains("READY_TO_PROCEED"));
+        assert!(prompt.contains("AWAITING_USER"));
+        assert!(prompt.contains("turn #1"));
+        assert!(prompt.contains("intake-brief.md"));
+        assert!(prompt.contains("intake-thread.md"));
+    }
+
+    #[test]
+    fn coach_intake_prompt_includes_thread_when_present() {
+        let prompt = coach_intake_prompt(
+            "make it offline first",
+            Some("# Project Brief\n\nWeather app."),
+            "## Turn 1 -- COACH\nQ1: Web or CLI?\n",
+            2,
+        );
+        assert!(prompt.contains("BEGIN INTAKE THREAD SO FAR"));
+        assert!(prompt.contains("Q1: Web or CLI?"));
+        assert!(prompt.contains("BEGIN SPEC.md"));
+        assert!(prompt.contains("turn #2"));
+    }
+
+    #[test]
+    fn coach_intake_prompt_forces_proceed_after_turn_4() {
+        let prompt = coach_intake_prompt("...", None, "thread", 5);
+        assert!(prompt.contains("turn >= 4"));
+        assert!(prompt.contains("force READY_TO_PROCEED"));
+    }
+
+    #[test]
+    fn coach_intake_prompt_handles_empty_user_intent() {
+        // v1 case: no chat UI, so user_intent is "". Must not render
+        // "The user just said:" with an empty body.
+        let prompt = coach_intake_prompt("", Some("# Project Brief\n\nA weather app."), "", 1);
+        assert!(!prompt.contains("The user just said:\n\n"));
+        assert!(prompt.contains("No user message this turn"));
+        assert!(prompt.contains("BEGIN SPEC.md"));
+    }
+
+    #[test]
+    fn coach_intake_prompt_uses_read_modify_write_not_edit() {
+        // Coach has no Edit tool -- prompt must not instruct it to use one
+        let prompt = coach_intake_prompt("build a thing", None, "", 1);
+        assert!(!prompt.contains("use Edit tool"));
+        assert!(prompt.contains("you don't have it"));
     }
 
     #[test]
