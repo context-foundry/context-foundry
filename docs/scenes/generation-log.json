@@ -916,5 +916,18 @@
     "retries": 1,
     "api_retries": 0,
     "validation": "pass"
+  },
+  {
+    "ts": "2026-05-09T13:55:47.439Z",
+    "scene": "ctrl-z-the-ice-age.js",
+    "seed_id": "ctrl-z-the-ice-age",
+    "biome": "arctic",
+    "model": "gpt-4o-mini",
+    "input_tokens": 16650,
+    "output_tokens": 1650,
+    "cost_usd": 0.0035,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "pass"
   }
 ]

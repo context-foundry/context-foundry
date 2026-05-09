@@ -577,6 +577,16 @@
       "model": "gpt-4o-mini",
       "lines": 84,
       "generation": 58
+    },
+    {
+      "file": "ctrl-z-the-ice-age.js",
+      "name": "Ctrl+Z the Ice Age",
+      "location": "Vatnajokull Glacier, Iceland",
+      "biome": "arctic",
+      "generated": "2026-05-09T13:55:47.438Z",
+      "model": "gpt-4o-mini",
+      "lines": 91,
+      "generation": 59
     }
   ]
 }
