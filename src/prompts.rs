@@ -343,7 +343,7 @@ pub fn planner_prompt(
     };
 
     format!(
-        r#"You are the {stage_label} agent for an autonomous build loop.
+        r####"You are the {stage_label} agent for an autonomous build loop.
 
 YOUR TASK: Create a detailed implementation plan for:
 
@@ -352,16 +352,16 @@ Task Description: {task_desc}
 
 CRITICAL CONTEXT: Your plan will be read and executed by an AI BUILDER agent, not a human.
 Write for machine consumption: be explicit, structured, and deterministic.
-Eliminate all ambiguity — the builder should never need to make judgment calls.
+Eliminate all ambiguity -- the builder should never need to make judgment calls.
 
 INSTRUCTIONS:
-1. Read .buildloop/research-report.md first — a research agent already investigated the codebase for this task
+1. Read .buildloop/research-report.md first -- a research agent already investigated the codebase for this task
 2. Read {spec_file} for the relevant sections
 3. Read {tasks_file} to understand where this task fits
 4. If the research report is missing, look at existing code yourself to understand what's built
 5. Write a structured implementation plan to .buildloop/current-plan.md
 
-PLAN FORMAT — Use this exact structure in .buildloop/current-plan.md:
+PLAN FORMAT -- Use this exact structure in .buildloop/current-plan.md:
 
 ```
 # Plan: {{task_id}}
@@ -392,10 +392,37 @@ PLAN FORMAT — Use this exact structure in .buildloop/current-plan.md:
   - error handling: [what errors to handle and how]
 
 #### Wiring / Integration
-- [how this file connects to others — exact function calls, route registrations, config entries]
+- [how this file connects to others -- exact function calls, route registrations, config entries]
 
 ### 2. [CREATE|MODIFY] path/to/next_file.ext
 [repeat structure above]
+
+Multi-phase format (use this when the task touches 5 or more files):
+
+### File Operations (Phase 1) -- short slice name
+- [CREATE] path/to/file_a.ext -- one-line reason
+- [MODIFY] path/to/file_b.ext -- one-line reason
+
+#### file_a.ext detail
+- operation: CREATE
+- reason: ...
+##### Imports / Dependencies
+##### Structs / Types
+##### Functions
+##### Wiring / Integration
+
+#### file_b.ext detail
+[same expansion as above]
+
+### File Operations (Phase 2) -- short slice name
+- [CREATE] path/to/file_c.ext -- one-line reason
+- [MODIFY] path/to/file_d.ext -- one-line reason
+[file detail blocks for c and d]
+
+### File Operations (Phase 3) -- short slice name
+- [CREATE] path/to/file_e.ext -- one-line reason
+- [CREATE] path/to/file_f.ext -- one-line reason
+[file detail blocks for e and f]
 
 ## Verification
 - build: [exact build command, e.g. "cargo build" or "npm run build"]
@@ -403,8 +430,23 @@ PLAN FORMAT — Use this exact structure in .buildloop/current-plan.md:
 - test: [exact test command, or "no existing tests" if none]
 - smoke: [specific manual check the builder should do, e.g. "run `curl localhost:8080/health` and expect 200"]
 
+Multi-phase format (matches the multi-phase File Operations above; each phase ends with its own runnable verification commands):
+
+### Verification (Phase 1)
+- build: [exact command]
+- test: [exact command exercising the Phase 1 slice]
+
+### Verification (Phase 2)
+- build: [exact command]
+- test: [exact command exercising the Phase 2 slice]
+
+### Verification (Phase 3)
+- build: [exact command]
+- test: [exact command exercising the Phase 3 slice]
+- smoke: [specific manual check]
+
 ## Constraints
-- [anything the builder must NOT do — e.g. "do not modify main.rs" or "do not add new dependencies beyond X"]
+- [anything the builder must NOT do -- e.g. "do not modify main.rs" or "do not add new dependencies beyond X"]
 ```
 
 RULES FOR WRITING THE PLAN:
@@ -415,6 +457,7 @@ RULES FOR WRITING THE PLAN:
 - Logic steps must be concrete: "call fetch_user(user_id) and match on the Result" not "handle the user lookup"
 - Do not use vague language: no "appropriate", "relevant", "necessary", "etc.", "as needed", "should contain"
 - Every verification command must be copy-paste ready -- no placeholders
+- Vertical slicing on medium/complex tasks: if the task touches 5 or more files, split the plan into 2-3 phases (3-5 phases for tasks with 10+ files) under the top-level "## File Operations" and "## Verification" headings. Each phase must have its own "### File Operations (Phase N)" and "### Verification (Phase N)" subsection. Inside each "### File Operations (Phase N)" subsection, list every file op as a bullet line of the form "- [CREATE] path/to/file.ext -- one-line reason" or "- [MODIFY] path/to/file.ext -- one-line reason" so automated checks can detect them; then expand each file op below with its full Imports / Structs / Functions / Wiring detail blocks. Each "### Verification (Phase N)" subsection must contain at least one runnable command. If the task touches fewer than 5 files, a single block under each top-level heading is acceptable. The 5-file threshold is a guideline -- a 4-file change with very independent components may also be split.
 
 GOOD vs BAD PLAN EXAMPLES:
 
@@ -435,11 +478,59 @@ GOOD (explicit, anchored, deterministic):
     - logic: 1. Add `batch_doubt: false` to Default impl
     - anchor: `impl Default for Config {{`
 
+GOOD multi-phase example (5+ file task -- "add a new MCP tool that searches patterns by tag"):
+
+  ## File Operations (in execution order)
+
+  ### File Operations (Phase 1) -- backend handler skeleton
+  - [CREATE] src/mcp/handlers/search_patterns_by_tag.rs -- new handler trait impl
+  - [MODIFY] src/mcp/handlers/mod.rs -- register the new handler
+
+  ### File Operations (Phase 2) -- pattern matcher integration
+  - [MODIFY] src/patterns.rs -- add find_by_tag(tag: &str) -> Vec<Pattern>
+  - [MODIFY] src/mcp/handlers/search_patterns_by_tag.rs -- wire to patterns::find_by_tag
+
+  ### File Operations (Phase 3) -- TUI wiring + tests
+  - [MODIFY] src/tui/overlays.rs -- show the new tool in the search overlay
+  - [CREATE] tests/search_by_tag_smoke.rs -- end-to-end smoke test
+
+  ## Verification
+
+  ### Verification (Phase 1) -- backend handler compiles and is registered
+  - build: cargo build --release
+  - test: cargo test mcp::handlers::search_patterns_by_tag::
+
+  ### Verification (Phase 2) -- pattern matcher returns expected results
+  - build: cargo build --release
+  - test: cargo test patterns::find_by_tag
+
+  ### Verification (Phase 3) -- TUI shows the new tool and end-to-end works
+  - build: cargo build --release
+  - test: cargo test --test search_by_tag_smoke
+  - smoke: launch foundry, open the search overlay, search by tag "rust", expect non-empty result list
+
+BAD (horizontal -- single block for a 5+ file task):
+
+  ## File Operations (in execution order)
+  - [CREATE] src/mcp/handlers/search_patterns_by_tag.rs
+  - [MODIFY] src/mcp/handlers/mod.rs
+  - [MODIFY] src/patterns.rs
+  - [MODIFY] src/mcp/handlers/search_patterns_by_tag.rs (wire-up pass)
+  - [MODIFY] src/tui/overlays.rs
+  - [CREATE] tests/search_by_tag_smoke.rs
+
+  ## Verification
+  - build: cargo build --release
+  - test: cargo test
+  - smoke: launch foundry and search by tag
+
+  # antipattern: a bug introduced in step 4 only surfaces at the final verification, with no incremental rollback signal
+
 IMPORTANT:
 - Do NOT implement the code -- only write the plan
 - Do NOT modify {spec_file}, CLAUDE.md, {tasks_file}, or .buildloop/ (except current-plan.md)
 - Do NOT read files in .buildloop/logs/ -- these are internal agent logs, not project files
-- Write the plan to: .buildloop/current-plan.md{patterns_block}"#
+- Write the plan to: .buildloop/current-plan.md{patterns_block}"####
     )
 }
 
@@ -2158,6 +2249,35 @@ mod tests {
         assert!(
             !reviewer.contains("BEGIN REFERENCE DATA"),
             "empty pattern context should not produce a reference block"
+        );
+    }
+
+    #[test]
+    fn planner_prompt_includes_vertical_slicing_rule() {
+        let planner = planner_prompt("PLAN", None, "T1", "test task", "", "SPEC.md", "TASKS.md");
+        assert!(
+            planner.contains("Vertical slicing"),
+            "planner prompt must include the vertical slicing rule heading phrase"
+        );
+        assert!(
+            planner.contains("5 or more files"),
+            "planner prompt must state the 5-or-more-files threshold"
+        );
+        assert!(
+            planner.contains("### File Operations (Phase 1)"),
+            "planner prompt must show the multi-phase File Operations subsection format"
+        );
+        assert!(
+            planner.contains("### Verification (Phase 1)"),
+            "planner prompt must show the multi-phase Verification subsection format"
+        );
+        assert!(
+            planner.contains("- [CREATE]") || planner.contains("- [MODIFY]"),
+            "multi-phase example must use bullet+bracket form so heuristic count_file_operations detects it"
+        );
+        assert!(
+            planner.contains("3-5 phases"),
+            "prompt must mention the 3-5-phase guidance for tasks with 10+ files"
         );
     }
 
