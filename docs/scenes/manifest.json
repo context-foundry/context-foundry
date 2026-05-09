@@ -567,6 +567,16 @@
       "model": "gpt-4o-mini",
       "lines": 88,
       "generation": 57
+    },
+    {
+      "file": "fire-and-forget-island.js",
+      "name": "Fire and Forget Island",
+      "location": "Surtsey, Vestmannaeyjar, Iceland",
+      "biome": "volcanic",
+      "generated": "2026-05-09T11:13:18.624Z",
+      "model": "gpt-4o-mini",
+      "lines": 84,
+      "generation": 58
     }
   ]
 }
