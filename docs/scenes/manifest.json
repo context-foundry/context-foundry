@@ -547,6 +547,16 @@
       "model": "gpt-4o-mini",
       "lines": 85,
       "generation": 55
+    },
+    {
+      "file": "firewall-of-china.js",
+      "name": "The Great Firewall",
+      "location": "Great Wall at Jinshanling, Hebei, China",
+      "biome": "urban",
+      "generated": "2026-05-09T06:29:17.949Z",
+      "model": "gpt-4o-mini",
+      "lines": 90,
+      "generation": 56
     }
   ]
 }
