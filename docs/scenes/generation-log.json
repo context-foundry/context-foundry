@@ -955,5 +955,46 @@
     "retries": 0,
     "api_retries": 0,
     "validation": "pass"
+  },
+  {
+    "ts": "2026-05-09T19:36:02.002Z",
+    "scene": "bamboo-array-forest.js",
+    "seed_id": "bamboo-array-forest",
+    "biome": "forest",
+    "model": "gpt-4o-mini",
+    "input_tokens": 14858,
+    "output_tokens": 1604,
+    "cost_usd": 0.0032,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "fail",
+    "error": "Validation failed after 2 attempts: VALIDATION FAILED (1 error):\n- Insufficient animation: found 1 animation patterns (need 2+). Use osc(t,period,phase), Math.sin(t*speed), or Math.cos(t*speed) for time-based animation"
+  },
+  {
+    "ts": "2026-05-09T19:36:31.536Z",
+    "scene": "stack-trace-spires.js",
+    "seed_id": "stack-trace-spires",
+    "biome": "mountain",
+    "model": "gpt-4o-mini",
+    "input_tokens": 15288,
+    "output_tokens": 1823,
+    "cost_usd": 0.0034,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "fail",
+    "error": "Validation failed after 2 attempts: VALIDATION FAILED (1 error):\n- Runtime error: h.slice is not a function"
+  },
+  {
+    "ts": "2026-05-09T19:37:17.613Z",
+    "scene": "race-condition-rapids.js",
+    "seed_id": "race-condition-rapids",
+    "biome": "ocean",
+    "model": "gpt-4o-mini",
+    "input_tokens": 14862,
+    "output_tokens": 1683,
+    "cost_usd": 0.0032,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "pass"
   }
 ]

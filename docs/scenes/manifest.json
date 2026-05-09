@@ -607,6 +607,16 @@
       "model": "gpt-4o-mini",
       "lines": 88,
       "generation": 61
+    },
+    {
+      "file": "race-condition-rapids.js",
+      "name": "Race Condition Rapids",
+      "location": "Zambezi River Rapids, Victoria Falls, Zambia",
+      "biome": "ocean",
+      "generated": "2026-05-09T19:37:17.612Z",
+      "model": "gpt-4o-mini",
+      "lines": 82,
+      "generation": 62
     }
   ]
 }
