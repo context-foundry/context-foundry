@@ -767,6 +767,7 @@ mod tests {
     #[test]
     fn render_dashboard_stats_shows_dual_comparison_line_when_both_pipelines_finish() {
         let mut state = AppState::new(PathBuf::from(".buildloop"));
+        state.eval_report_cache = None;
         state.dual_build.active = true;
         state.dual_build.finished = [true, true];
         state.dual_build.models = ["Claude".to_string(), "Codex".to_string()];
@@ -824,6 +825,7 @@ mod tests {
     #[test]
     fn render_dashboard_stats_shows_na_in_dual_comparison_line_for_codex_without_usage() {
         let mut state = AppState::new(PathBuf::from(".buildloop"));
+        state.eval_report_cache = None;
         state.dual_build.active = true;
         state.dual_build.finished = [true, true];
         state.dual_build.models = ["Claude".to_string(), "Codex".to_string()];
