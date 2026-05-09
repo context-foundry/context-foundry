@@ -557,6 +557,16 @@
       "model": "gpt-4o-mini",
       "lines": 90,
       "generation": 56
+    },
+    {
+      "file": "fjord-partition-table.js",
+      "name": "Fjord Partition Table",
+      "location": "Milford Sound, South Island, New Zealand",
+      "biome": "mountain",
+      "generated": "2026-05-09T09:45:46.396Z",
+      "model": "gpt-4o-mini",
+      "lines": 88,
+      "generation": 57
     }
   ]
 }

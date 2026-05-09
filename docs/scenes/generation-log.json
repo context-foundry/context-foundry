@@ -890,5 +890,18 @@
     "retries": 1,
     "api_retries": 0,
     "validation": "pass"
+  },
+  {
+    "ts": "2026-05-09T09:45:46.397Z",
+    "scene": "fjord-partition-table.js",
+    "seed_id": "fjord-partition-table",
+    "biome": "mountain",
+    "model": "gpt-4o-mini",
+    "input_tokens": 8124,
+    "output_tokens": 847,
+    "cost_usd": 0.0017,
+    "retries": 0,
+    "api_retries": 0,
+    "validation": "pass"
   }
 ]
