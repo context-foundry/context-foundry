@@ -14,10 +14,13 @@ use crate::{
 };
 
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use std::sync::atomic::Ordering;
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, LazyLock, OnceLock};
+
+use anyhow::Context as _;
+use regex::Regex;
 
 use super::context::{FailureType, RunContext, StageResult};
 use super::{review, AppEvent, LoopEvent};
@@ -3185,12 +3188,37 @@ async fn process_task(
     let mut query_failed = false;
     let mut eff_task_builder_provider = ctx.config.builder_provider.clone();
     let mut eff_task_builder_model = ctx.config.builder_model.clone();
+    // Resolve the producing task_id from on-disk artifact headers BEFORE
+    // cleanup. Cross-task case: when T1.2 starts and finds T1.1's artifacts on
+    // disk, those should be archived under `history/T1.1/`, not `history/T1.2/`.
+    // Same-task checkpoint resume case: extracted id matches current task_id,
+    // so behaviour is unchanged. Fallback bucket: `_orphaned` if no header is
+    // parseable (corrupt artifacts, manual file placement, etc).
+    // Task IDs match `[A-Za-z]?\d+\.\d+` per src/task.rs:10 -- bounded shape,
+    // contains no path separators, safe to use as a directory name.
+    let archive_label = extract_prior_task_id(&ctx.buildloop_dir)
+        .unwrap_or_else(|| "_orphaned".to_string());
+    let history_archive_dir = ctx
+        .buildloop_dir
+        .join("history")
+        .join(&archive_label)
+        .join(
+            chrono::Utc::now()
+                .format("%Y%m%dT%H%M%SZ")
+                .to_string(),
+        );
+    let mut archive_failures: Vec<String> = Vec::new();
     // Stale artifact cleanup: failures here mean the next phase may read stale data.
     // Log warnings so the root cause is visible.
     let mut stale_cleanup_failures: Vec<String> = Vec::new();
     if !skip_query && !checkpoint_skip_query {
         // Full Q+R cleanup: neither was checkpointed
         for path in [&questions_file, &research_report] {
+            if let Err(e) = archive_artifact(path, &history_archive_dir) {
+                let name = path.file_name().unwrap_or_default().to_string_lossy();
+                eprintln!("archive: failed to archive {}: {}", name, e);
+                archive_failures.push(name.to_string());
+            }
             if let Err(e) = std::fs::remove_file(path) {
                 if e.kind() != std::io::ErrorKind::NotFound {
                     let name = path.file_name().unwrap_or_default().to_string_lossy();
@@ -3201,6 +3229,10 @@ async fn process_task(
         }
     } else if !skip_research && !checkpoint_skip_research {
         // Query was checkpointed but Research was not -- clean only research-report.md
+        if let Err(e) = archive_artifact(&research_report, &history_archive_dir) {
+            eprintln!("archive: failed to archive research-report.md: {}", e);
+            archive_failures.push("research-report.md".to_string());
+        }
         if let Err(e) = std::fs::remove_file(&research_report) {
             if e.kind() != std::io::ErrorKind::NotFound {
                 eprintln!("Warning: failed to remove stale research-report.md: {}", e);
@@ -3209,6 +3241,10 @@ async fn process_task(
         }
     }
     if !checkpoint_skip_builder {
+        if let Err(e) = archive_artifact(&build_claims, &history_archive_dir) {
+            eprintln!("archive: failed to archive build-claims.md: {}", e);
+            archive_failures.push("build-claims.md".to_string());
+        }
         if let Err(e) = std::fs::remove_file(&build_claims) {
             if e.kind() != std::io::ErrorKind::NotFound {
                 eprintln!("Warning: failed to remove stale build-claims.md: {}", e);
@@ -3217,6 +3253,10 @@ async fn process_task(
         }
     }
     if !checkpoint_skip_planner {
+        if let Err(e) = archive_artifact(&ctx.current_plan, &history_archive_dir) {
+            eprintln!("archive: failed to archive current-plan.md: {}", e);
+            archive_failures.push("current-plan.md".to_string());
+        }
         if let Err(e) = std::fs::remove_file(&ctx.current_plan) {
             if e.kind() != std::io::ErrorKind::NotFound {
                 eprintln!("Warning: failed to remove stale current-plan.md: {}", e);
@@ -3224,11 +3264,22 @@ async fn process_task(
             }
         }
     }
+    if let Err(e) = archive_artifact(&ctx.review_report, &history_archive_dir) {
+        eprintln!("archive: failed to archive review-report.md: {}", e);
+        archive_failures.push("review-report.md".to_string());
+    }
     if let Err(e) = std::fs::remove_file(&ctx.review_report) {
         if e.kind() != std::io::ErrorKind::NotFound {
             eprintln!("Warning: failed to remove stale review-report.md: {}", e);
             stale_cleanup_failures.push("review-report.md".to_string());
         }
+    }
+    if let Err(e) = archive_artifact(&patterns_extracted, &history_archive_dir) {
+        eprintln!(
+            "archive: failed to archive patterns-extracted.json: {}",
+            e
+        );
+        archive_failures.push("patterns-extracted.json".to_string());
     }
     if let Err(e) = std::fs::remove_file(&patterns_extracted) {
         if e.kind() != std::io::ErrorKind::NotFound {
@@ -3245,6 +3296,18 @@ async fn process_task(
             stale_cleanup_failures.join(", ")
         ))));
     }
+    if !archive_failures.is_empty() {
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+            "Warning: could not archive [{}] under history/{} -- post-mortem trail incomplete",
+            archive_failures.join(", "),
+            archive_label
+        ))));
+    }
+    prune_history(
+        &ctx.buildloop_dir.join("history"),
+        ctx.config.history_retention_tasks,
+        tx,
+    );
 
     let detected_stack = patterns::detect_project_tech_stack(&ctx.project_dir);
     let matched = if ctx.config.semantic_match_enabled {
@@ -6653,10 +6716,92 @@ fn should_restart_docker(task_desc: &str) -> bool {
     false
 }
 
+// ─── Per-task artifact archiving ────────────────────────────────
+// First-line task-id capture for build-claims.md (`# Build Claims -- <id>`),
+// current-plan.md (`# Plan: <id>`), and research-report.md (`Task ID: <id>`).
+// Bounded to the same task-id shape as src/task.rs:10 (`[A-Za-z]?\d+\.\d+`).
+static RE_PRIOR_TASK: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?:Build Claims --|Plan:|Task ID:)\s+([A-Za-z]?\d+\.\d+)").unwrap()
+});
+
+fn archive_artifact(src: &Path, archive_dir: &Path) -> anyhow::Result<()> {
+    if !src.exists() {
+        return Ok(());
+    }
+    std::fs::create_dir_all(archive_dir)
+        .with_context(|| format!("create_dir_all {}", archive_dir.display()))?;
+    let name = src
+        .file_name()
+        .ok_or_else(|| anyhow::anyhow!("source has no filename: {}", src.display()))?;
+    let dest = archive_dir.join(name);
+    std::fs::copy(src, &dest)
+        .with_context(|| format!("copy {} -> {}", src.display(), dest.display()))?;
+    Ok(())
+}
+
+fn extract_prior_task_id(buildloop_dir: &Path) -> Option<String> {
+    for filename in ["build-claims.md", "current-plan.md", "research-report.md"] {
+        let p = buildloop_dir.join(filename);
+        let content = match std::fs::read_to_string(&p) {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+        let head = &content[..content.len().min(1024)];
+        if let Some(captures) = RE_PRIOR_TASK.captures(head) {
+            return Some(captures[1].to_string());
+        }
+    }
+    None
+}
+
+fn prune_history(
+    history_root: &Path,
+    max_tasks: usize,
+    tx: &mpsc::UnboundedSender<AppEvent>,
+) {
+    if max_tasks == 0 {
+        return;
+    }
+    if !history_root.exists() {
+        return;
+    }
+    let entries = match std::fs::read_dir(history_root) {
+        Ok(e) => e,
+        Err(_) => return,
+    };
+    let mut task_dirs: Vec<(PathBuf, std::time::SystemTime)> = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let mtime = entry
+            .metadata()
+            .and_then(|m| m.modified())
+            .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
+        task_dirs.push((path, mtime));
+    }
+    if task_dirs.len() <= max_tasks {
+        return;
+    }
+    task_dirs.sort_by_key(|(_, t)| *t);
+    let to_remove = task_dirs.len() - max_tasks;
+    for (path, _) in task_dirs.iter().take(to_remove) {
+        if let Err(e) = std::fs::remove_dir_all(path) {
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                "archive: failed to prune {}: {}",
+                path.display(),
+                e
+            ))));
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::should_restart_docker;
     use super::{backup_state_files, restore_state_files};
+    use super::{archive_artifact, extract_prior_task_id, prune_history};
     use super::{clear_checkpoint, flush_budget_telemetry, read_checkpoint, write_checkpoint};
     use crate::app::context::RunContext;
     use crate::app::state::{AppEvent, LoopEvent};
@@ -6854,6 +6999,137 @@ mod tests {
         );
 
         let _ = drain_events(&mut rx);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    fn unique_archive_dir(label: &str) -> PathBuf {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("foundry-archive-{}-{}", label, nanos));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn test_archive_artifact_copies_file_to_dest() {
+        let dir = unique_archive_dir("copy");
+        let src = dir.join("research-report.md");
+        std::fs::write(&src, b"REPORT_CONTENT").unwrap();
+        let archive_dir = dir.join("history").join("T1.1").join("20260101T000000Z");
+
+        let result = archive_artifact(&src, &archive_dir);
+        assert!(result.is_ok());
+
+        assert!(archive_dir.join("research-report.md").exists());
+        assert_eq!(
+            std::fs::read(archive_dir.join("research-report.md")).unwrap(),
+            b"REPORT_CONTENT"
+        );
+        assert!(src.exists());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_archive_artifact_missing_source_is_silent_ok() {
+        let dir = unique_archive_dir("missing");
+        let src = dir.join("does-not-exist.md");
+        let archive_dir = dir.join("history").join("T1.1").join("20260101T000000Z");
+
+        assert!(!src.exists());
+        let result = archive_artifact(&src, &archive_dir);
+        assert!(result.is_ok());
+        assert!(!archive_dir.exists());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_extract_prior_task_id_resolves_from_build_claims() {
+        let dir = unique_archive_dir("extract");
+        let buildloop = dir.join(".buildloop");
+        std::fs::create_dir_all(&buildloop).unwrap();
+
+        // Case A: build-claims.md present with header
+        std::fs::write(
+            buildloop.join("build-claims.md"),
+            "# Build Claims -- T1.1\n\nbody\n",
+        )
+        .unwrap();
+        assert_eq!(
+            extract_prior_task_id(&buildloop),
+            Some("T1.1".to_string())
+        );
+
+        // Case B: build-claims.md gone, fallback to current-plan.md
+        std::fs::remove_file(buildloop.join("build-claims.md")).unwrap();
+        std::fs::write(
+            buildloop.join("current-plan.md"),
+            "# Plan: H1.3\n\nbody\n",
+        )
+        .unwrap();
+        assert_eq!(
+            extract_prior_task_id(&buildloop),
+            Some("H1.3".to_string())
+        );
+
+        // Case C: fallback to research-report.md
+        std::fs::remove_file(buildloop.join("current-plan.md")).unwrap();
+        std::fs::write(
+            buildloop.join("research-report.md"),
+            "# Research Report\n\nTask ID: D2.4\n\nbody\n",
+        )
+        .unwrap();
+        assert_eq!(
+            extract_prior_task_id(&buildloop),
+            Some("D2.4".to_string())
+        );
+
+        // Case D: no artifacts -> None
+        std::fs::remove_file(buildloop.join("research-report.md")).unwrap();
+        assert_eq!(extract_prior_task_id(&buildloop), None);
+
+        // Case E: corrupt header -> None
+        std::fs::write(
+            buildloop.join("build-claims.md"),
+            "# Random nonsense\n",
+        )
+        .unwrap();
+        assert_eq!(extract_prior_task_id(&buildloop), None);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_prune_history_keeps_only_n_newest() {
+        use std::time::Duration;
+        let dir = unique_archive_dir("prune");
+        let history_root = dir.join("history");
+        std::fs::create_dir_all(&history_root).unwrap();
+
+        let task_ids = ["T1.1", "T1.2", "T1.3", "T1.4", "T1.5"];
+        for id in task_ids.iter() {
+            let p = history_root.join(id);
+            std::fs::create_dir_all(&p).unwrap();
+            std::fs::write(p.join("marker"), id.as_bytes()).unwrap();
+            std::thread::sleep(Duration::from_millis(50));
+        }
+
+        let (tx, mut _rx) = mpsc::unbounded_channel();
+        prune_history(&history_root, 2, &tx);
+
+        let remaining: Vec<String> = std::fs::read_dir(&history_root)
+            .unwrap()
+            .flatten()
+            .filter(|e| e.path().is_dir())
+            .map(|e| e.file_name().to_string_lossy().to_string())
+            .collect();
+        assert_eq!(remaining.len(), 2);
+        assert!(remaining.contains(&"T1.4".to_string()));
+        assert!(remaining.contains(&"T1.5".to_string()));
+
         let _ = std::fs::remove_dir_all(&dir);
     }
 

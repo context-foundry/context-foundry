@@ -41,6 +41,7 @@ Architectural constraint that v2 must respect: do **not** suspend a PTY waiting 
 |------|-------|---------|
 | `.buildloop/intake-thread.md` | Coach (append-only) | Append-only transcript of `(user_turn, coach_turn)` pairs |
 | `.buildloop/intake-brief.md` | Coach (write-once) | Final reconciled brief consumed by bootstrap Scout |
+| `.buildloop/history/<task_id>/<UTC-timestamp>/` | Build loop (per-task cleanup) | Archived snapshots of `research-report.md`, `current-plan.md`, `build-claims.md`, `review-report.md`, `patterns-extracted.json`, `questions.md` taken just before per-task cleanup deletes them. `<task_id>` is the **producing** task (resolved from artifact headers), or `_orphaned` if no header is parseable. Retained per `history_retention_tasks` (default 50); pruning is best-effort and runs at end of cleanup. |
 
 Both files persist after the run (per-task cleanup in `src/app/build.rs` does not touch them).
 

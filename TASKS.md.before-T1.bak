@@ -1,0 +1,474 @@
+- Phase 34: Settings Overlay v2 -- Comprehensive, Self-Describing, Esc-Anywhere (3 tasks archived to TASKS-ARCHIVE.md)
+- Discovery Round 2 (1 tasks archived to TASKS-ARCHIVE.md)
+- Discovery Round 3 (1 tasks archived to TASKS-ARCHIVE.md)
+
+## Engineering-Talk Follow-Ups (T1.x)
+
+Reviewed 11 action items from a recent engineering podcast on harness design, evals, and context engineering. Six items are already done in CF (single-layer harness, eval loops with production traces, easy-to-delete harness code, no custom RL, standard tool interfaces, from-scratch primitives). Two gaps are concrete enough to queue here. Items 9 (surfing the models) and 11 (avoid paradigm lockin) are practice habits with no clean task; item 10 (auto-research overfitting) is dormant until CF adds prompt auto-evolution.
+
+- [ ] T1.1: Archive per-task `.buildloop/` artifacts before cleanup so post-mortem inspection works on multi-task projects. Today the per-task cleanup in `src/app/build.rs:3055-3112` deletes `research-report.md`, `current-plan.md`, `build-claims.md`, `review-report.md`, and `patterns-extracted.json` at the start of each new task. Git captures the final diff but not the structured reasoning trail (DELTA_MANIFEST, KNOWN_GAPS, audit findings vs commit). For projects that run 10+ tasks over weeks, this destroys the artifacts the user would need to answer "show me H1.3's audit findings from last Tuesday."
+
+  Why: Item #3 from the talk -- "Manually inspect your agent's data and outputs rather than delegating everything to the model." CF persists logs but not the curated structured artifacts that are actually grep-friendly. We discussed the fix shape in chat: archive instead of delete, with a retention cap.
+
+  Scope:
+  - Before each artifact removal in `src/app/build.rs:3055-3112`, copy the file to `.buildloop/history/<task-id>/<UTC-timestamp>/<basename>` (timestamp uses `chrono::Utc::now().format("%Y%m%dT%H%M%SZ")`).
+  - Add `history_retention_tasks: usize` to `Config` (default 50). After each archive, prune oldest task subdirs in `.buildloop/history/` so the count stays at or below the cap.
+  - Update `.gitignore` -- `.buildloop/` already covered, but explicitly note `.buildloop/history/` for grepability.
+  - Update `docs/coach-mode.md` (file layout table) and add a brief "Archived artifacts" subsection to `CLAUDE.md` near the existing `.buildloop/` description.
+  - Tests: archive path is created with files present (positive); retention cap evicts oldest first when exceeded; archive failure does NOT block the cleanup or the next task (best-effort, log + continue).
+
+  Files:
+  - `src/app/build.rs` -- MODIFY. Wrap each `remove_file` in a copy-then-remove with archive directory creation.
+  - `src/config.rs` -- MODIFY. Add `history_retention_tasks` field with `#[serde(default)]` returning 50.
+  - `.gitignore` -- MODIFY (1 line).
+  - `docs/coach-mode.md` -- MODIFY (1 row in file layout table).
+  - `CLAUDE.md` -- MODIFY (4-5 lines).
+
+  Constraints:
+  - Best-effort: if archive fails (disk full, permission), proceed to delete and log a warning. Never block the pipeline.
+  - Atomic move not required; copy-then-delete is fine. Archives don't need fsync guarantees.
+  - Retention pruning runs at end of cleanup, not at start, so the just-archived task isn't immediately evicted at cap=1.
+
+  Verification:
+  - `cargo test` green.
+  - Manual: run two tasks in a row; confirm `.buildloop/history/T<first-id>/<timestamp>/` contains the five artifact files after the second task starts.
+  - Manual: set `history_retention_tasks: 2` in `.foundry.json`, run 3+ tasks, confirm only the last 2 task subdirs remain.
+
+- [ ] T1.2: Delegate "is this Bash command safe to run autonomously" checks to a smaller, faster model (Haiku) before executing destructive commands. Mirrors the pattern Jeff cited in the talk -- Claude Code delegates safety classification to Haiku rather than letting the main agent decide. Reduces a class of "agent ran rm -rf in the wrong dir" incidents without paying for a Sonnet/Opus call per command.
+
+  Why: Item #8 from the talk. CF has a sandbox layer (Docker), but it's all-or-nothing: when sandbox is degraded (image not found, as in the user's screenshots) the agents run unsandboxed and there's no second-line check on individual commands. Haiku is fast and cheap enough to gate every Bash invocation.
+
+  Scope:
+  - Add `safety_provider: String` and `safety_model: String` config fields (default `"claude"` and `"haiku"`).
+  - Add `bash_safety_check_enabled: bool` (default `true`); allows disable for performance-sensitive runs.
+  - Add `bash_safety_check_threshold: String` enum: `"destructive_only"` (default; gates rm/git push --force/dropdb/curl|sh and similar) or `"all"` (gates every Bash).
+  - Build a `safety_check_prompt(command: &str) -> String` returning a Haiku prompt that emits one of three tokens: `SAFE`, `BLOCK <reason>`, `ASK_USER <reason>`.
+  - Insert a hook into the agent harness that intercepts Bash tool calls before they execute. On `BLOCK`, return a synthetic tool error to the parent agent; on `ASK_USER`, surface a TUI confirm dialog (or auto-block if non-interactive); on `SAFE`, proceed.
+  - Cache decisions per (normalized command, safety threshold) tuple within a session to avoid re-asking on retries.
+  - Tests: prompt builder unit test; classifier-mock test verifying SAFE/BLOCK/ASK_USER routing; cache hit avoids double-call.
+
+  Why this is non-trivial:
+  - The PTY harness streams Bash tool calls inline; intercepting them requires either pausing the stream or routing through a proxy tool. Probably the cleanest approach is to insert a pre-flight via a wrapper tool that the agent calls *first*, but that requires prompt cooperation.
+  - Alternative simpler approach: add a post-hoc audit on `.buildloop/logs/<stage>.jsonl` for any Bash commands that match destructive patterns, and surface a warning + manual review flag rather than blocking. This is *cheaper to ship* and a meaningful step toward the talk's recommendation without re-architecting the harness.
+
+  Recommend: ship the post-hoc audit first as T1.2a (small, safe, no harness changes), then decide whether the in-line block is worth the harness work as T1.2b.
+
+  Files (T1.2a, post-hoc audit slice):
+  - `src/eval/checks/heuristic.rs` -- MODIFY. Add `bash_commands_safe` heuristic check: parse all Bash tool_uses from the run, classify each via local regex (no model call needed for v1), surface findings as `evidence` strings. This becomes a 12th heuristic eval check.
+  - `src/eval/checks/mod.rs` -- MODIFY. Register the new check.
+  - `docs/eval-harness.md` -- MODIFY. Update count to 12 heuristic / 20 total.
+
+  Files (T1.2b, in-line model gate, deferred):
+  - Out of scope for v1; revisit after T1.2a is in production for a few weeks and we have a sense of how often the audit flags real issues.
+
+  Verification (T1.2a):
+  - `cargo test eval::checks::heuristic::bash_commands_safe` -- pass for benign commands, flag for `rm -rf /`, `curl ... | sh`, `git push --force` (without `origin` qualifier).
+  - Manual: induce a destructive Bash in a test task; confirm the eval-report flags it under the new check.
+
+
+
+## Planner Vertical Slicing + Heuristic Tightening
+
+Tighten Foundry's planner output to produce vertical (per-phase) plans on medium/complex tasks instead of single-block horizontal plans, and tighten the eval harness so it rewards the new pattern. Full design + decision log lives in `docs/PLAN_planner-vertical-slicing.md`. Run order: F1.1 -> F1.2 -> F1.3.
+
+Thesis context (saved to homelab memory as "context-eval guiding thesis"): coding agents won because code has cheap automatic verification. Per-phase verification is that pattern at the orchestration layer -- horizontal plans collapse N tiered verification signals into one end-block signal, defeating the verifier-generator asymmetry that makes incremental rollback possible.
+
+Empirical motivation: 3-of-3 sampled `current-plan.md` files (frontend, Rust backend, Python compliance, all from the past week) classified as horizontal. The clearest failure mode in the sample was M1.1 at ~1000 lines, 12 file ops, single end-block verification, no intermediate testable steps.
+
+**Self-modification safety note for the implementer:** F1.x edits Foundry's own source (`src/prompts.rs`, `src/eval/checks/heuristic.rs`). The running TUI does NOT hot-reload (per `CLAUDE.md`); the running pipeline has the OLD prompts and eval checks compiled in. Edits take effect only after rebuild + reinstall. Each task should pass `cargo build --release` and `cargo test` before commit; if either fails, the task commits as WIP and the next task inherits the broken code. Restore point: tag `v3.1.0`.
+
+- [x] F1.1: Tighten the `plan_has_verification` eval heuristic and add a new `plan_has_per_phase_verification` check. Implementation per `docs/PLAN_planner-vertical-slicing.md` Step 1. After this task: existing eval behavior unchanged for plans with single-block verification (still passes); a new Standard-severity check fires on plans with 5+ file operations that have only a single verification block, surfacing the antipattern explicitly. [QRP+B-]
+
+  Why: Foundry's eval harness currently rewards plans for "having a verification section" without checking where it appears. The check implicitly endorses the horizontal-plan antipattern. Pairing this fix with F1.2 (the planner prompt change) avoids the incoherent state where the eval is happy with end-block verification while the prompt is being updated to produce per-phase verification.
+
+  Scope of v1 (this task):
+
+  1. **Read the current implementation** in `src/eval/checks/heuristic.rs`. Locate the existing `PlanHasVerification` struct and its `Check` impl. Familiarize yourself with the Check trait, the `Status::{Pass, Fail, Skip}` enum, and how other heuristic checks structure their `run()` body.
+
+  2. **Add a helper function** `count_verification_sections(plan: &str) -> usize` near the existing `extract_file_paths_from_research` helper. It should count occurrences of headings whose text starts with `## Verification` (case-insensitive, allowing trailing text like `## Verification (Phase 1)` or `## Verification Results`). Use a tolerant regex; do NOT require exact match.
+
+  3. **Add a helper** `count_file_operations(plan: &str) -> usize` that counts file-operation entries under any `## File Operations` (or `### File Operations (Phase N)`) heading. Match bullet lines that look like `- [CREATE|MODIFY] <path>` OR the existing loose form (any bullet quoting/naming a file-shaped token, similar to `extract_file_paths_from_files_changed`). Sum across all phases.
+
+  4. **Add a new public struct** `PlanHasPerPhaseVerification`. Implement `Check`:
+     - `name()` returns `"plan_has_per_phase_verification"`.
+     - `category()` returns `Category::Heuristic`.
+     - `severity()` returns `Severity::Standard`.
+     - `applies_to()` returns `STAGES_PLAN`.
+     - `run()` mirrors `PlanHasVerification`'s structure: skip on non-Ran statuses; read the plan artifact; if `count_file_operations(&plan) >= 5` AND `count_verification_sections(&plan) <= 1`, return `Status::Fail` with evidence like `"plan has 12 file ops but only 1 verification section -- prefer per-phase verification on tasks with 5+ ops"`. Otherwise return `Status::Pass` with evidence like `"3 phases, 3 verification sections"` or `"4 file ops, single verification block (under threshold)"`.
+
+  5. **Register the new check** in the registry returned by `all_checks()` in `src/eval/checks/mod.rs`. After this task, the registry returns 9 heuristic checks total (was 8).
+
+  6. **Tests** (in the existing `#[cfg(test)] mod tests` block in `heuristic.rs`):
+     - `plan_has_per_phase_verification_passes_below_threshold`: a 3-op plan with 1 verification block -> Pass.
+     - `plan_has_per_phase_verification_fails_above_threshold_with_one_block`: a 12-op plan with 1 verification block -> Fail with the expected evidence string.
+     - `plan_has_per_phase_verification_passes_with_multiple_blocks`: a 12-op plan with 4 verification blocks -> Pass.
+     - `plan_has_per_phase_verification_skips_on_skipped_invocation`: invocation status `Skipped` -> Skip with the existing skip-evidence helper.
+
+  7. **Update doc references** that say "8 heuristic checks". Look for the count in `docs/eval-harness.md` (if present), `docs/PLAN_eval-harness.md`, and `CLAUDE.md`. Replace with "9 heuristic checks" or equivalent. Do NOT touch references to the 8 plumbing checks (those are unchanged).
+
+  Files (modify or create):
+  - `src/eval/checks/heuristic.rs` -- MODIFY. Add helpers, new struct, new Check impl, new tests.
+  - `src/eval/checks/mod.rs` -- MODIFY. Register the new check in `all_checks()`.
+  - `docs/eval-harness.md` -- MODIFY (if it exists). Update heuristic-check count and add a 1-2 sentence description of the new check.
+  - `docs/PLAN_eval-harness.md` -- MODIFY. Update heuristic-check count if referenced.
+  - `CLAUDE.md` (project root) -- MODIFY. Update heuristic-check count if referenced.
+
+  Files (out of scope):
+  - `src/prompts.rs` -- F1.2 owns this.
+  - The existing `PlanHasVerification` check -- do NOT change its semantics. The new check is additive.
+  - The plumbing check registry -- unchanged.
+
+  Constraints:
+  - **No regression** in the existing `PlanHasVerification` check. All current evals must score the same on this check before/after.
+  - The new check is **Standard severity, not Critical**. It produces a `⚠` warning, not a `✗` failure.
+  - **Threshold is 5 file operations** (empirically chosen from the 3-plan sample). If easy, surface the threshold as a `const FILE_OP_THRESHOLD: usize = 5;` near the top of the function so it's tunable.
+  - All matching is heuristic (regex-based on plan markdown). Do NOT try to parse the plan structurally.
+  - No em-dashes; use `--`.
+  - Follow existing patterns in `heuristic.rs` -- new check should look idiomatic alongside the existing 8.
+
+  Verification:
+  - `cargo build --release` succeeds.
+  - `cargo test eval::checks::heuristic::` passes including the 4 new tests.
+  - `cargo test` overall: 856+ tests still pass (was 856 after E1.7).
+  - `grep -rn "panic!\|\.unwrap()" src/eval/checks/heuristic.rs` returns no hits in non-test code.
+  - Manual: spot-check the new check against the historical horizontal plans in `/Users/Shared/homelab/weather-hourly/.buildloop/current-plan.md` and `/Users/Shared/homelab/i9-reverification/.buildloop/current-plan.md` (read-only). The new check should report Fail on these (they're horizontal, 5+ ops, 1 verification block). Foundry's running binary doesn't have the new check until rebuild + reinstall, so this verification is paper-only -- but the unit tests cover the same shape.
+
+- [x] F1.2: Tighten `planner_prompt` to require vertical slicing on medium/complex tasks. Implementation per `docs/PLAN_planner-vertical-slicing.md` Step 2. After this task: tasks with 5+ file operations are planned as 2-3 phases each ending with verification commands; smaller tasks keep producing single-block plans. [--P+B-]
+
+  Why: Foundry's planner produces horizontal plans by default (3-of-3 sample). The horizontal pattern collapses tiered verification into a single end-block signal, making incremental rollback impossible. The fix is a complexity-aware planner prompt rule, paired with the F1.1 heuristic so the eval rewards the new pattern.
+
+  Scope of v1 (this task):
+
+  1. **Read the current `planner_prompt`** in `src/prompts.rs:321-449`. Familiarize yourself with the structure: INSTRUCTIONS block at the top, PLAN FORMAT spec in the middle (template the planner fills in), RULES, GOOD/BAD examples, IMPORTANT block at the end.
+
+  2. **Modify the PLAN FORMAT spec** to support multi-phase plans. Keep the existing top-level `## File Operations` and `## Verification` headings (the planner gate at `gate_builder` in `src/app/build.rs` requires them by name). Within those, allow phase sub-sections via `### File Operations (Phase 1)`, `### Verification (Phase 1)`, etc. Document the multi-phase pattern in the PLAN FORMAT spec block as the preferred form for medium/complex tasks.
+
+  3. **Add a complexity-aware rule** to the RULES section. Suggested wording (tune as needed):
+     ```
+     - **Vertical slicing on medium/complex tasks:** If the task touches 5 or more files, split the plan into 2-3 phases under the top-level `## File Operations` and `## Verification` headings. Each phase must have its own `### File Operations (Phase N)` and `### Verification (Phase N)` subsection, with at least one runnable verification command in each. If the task touches fewer than 5 files, a single block under each top-level heading is acceptable.
+     ```
+
+  4. **Add a GOOD example** showing a 3-phase plan for a hypothetical "add new endpoint with frontend" task. Show: Phase 1 = backend endpoint + unit test; Phase 2 = service layer + integration test; Phase 3 = frontend wire-up + smoke test. Each phase has its own File Operations + Verification subsection. Keep the example tight (~30-50 lines).
+
+  5. **Add a BAD example** showing the same task as a single horizontal block (all backend, all service, all frontend, then one verification). Note inline why this is the antipattern (verification fails opaquely if any single step broke; no incremental rollback signal).
+
+  6. **Verify the gate compatibility.** Read `gate_builder` in `src/app/build.rs` (likely around the `## File Operations` / `## Verification` regex check). Confirm that the new multi-phase format still passes the gate -- the top-level headings must still be present even when phases live underneath them. If the gate is too strict and rejects multi-phase plans, the gate must be widened in this task.
+
+  7. **Tests:**
+     - `cargo test prompts::` should still pass (any existing planner_prompt tests).
+     - Add a new test `planner_prompt_includes_vertical_slicing_rule` that asserts the produced prompt contains the phrase "Vertical slicing" or "5 or more files" (whichever specific marker you use in step 3).
+     - If gate logic was modified in step 6, add a test confirming both single-block and multi-phase plans pass the gate.
+
+  Files (modify):
+  - `src/prompts.rs` -- MODIFY. Edit `planner_prompt` per steps 2-5.
+  - `src/app/build.rs` -- MODIFY ONLY IF NEEDED. The gate widening from step 6. If the existing gate already accepts multi-phase plans (because it just checks for top-level headings), do NOT modify build.rs.
+
+  Files (out of scope):
+  - `src/eval/checks/heuristic.rs` -- F1.1 already handled.
+  - `reviewer_prompt`, `builder_prompt`, etc. -- only `planner_prompt` changes here.
+  - The complexity classifier (`src/complexity.rs`) -- the new rule uses file count from the task description (or defers to the planner's judgment), not the existing complexity classifier. Don't entangle them in this task.
+
+  Constraints:
+  - **The gate must still pass on existing single-block plans.** Backward-compatible. Older `current-plan.md` files in `.buildloop/` should still work if the user resumes a checkpoint.
+  - **The 5-file threshold is a guideline, not a hard rule.** The planner has judgment; the rule is "5+ files -> prefer phases" but a 4-file change with very independent components could legitimately be 2 phases too. Don't over-mandate.
+  - **Don't add a complexity classifier dependency.** The planner reads file count from the task description and decides. Keep this orthogonal to `src/complexity.rs`.
+  - **Each phase must have at least one runnable verification command** -- no empty "Verification" subsections. The prompt should make this explicit.
+  - No em-dashes; use `--`.
+  - No new external crates.
+
+  Verification:
+  - `cargo build --release` succeeds.
+  - `cargo test prompts::` passes.
+  - `cargo test` overall: still passing (count from F1.1 +/- new tests).
+  - The unit test from step 7 passes (vertical-slicing rule is in the prompt).
+  - **Manual integration test (post-rebuild + reinstall, NOT during this task):** Run a 5+-file scratch task; inspect the generated `current-plan.md`; confirm it has 2+ phases with `### Verification (Phase N)` subsections each containing at least one command. Re-run a 1-2-file scratch task; confirm planner still produces single-block plans. The eval-report on the multi-phase plan should show `plan_has_per_phase_verification: pass`.
+  - The post-rebuild manual validation is the user's concern, not this task's. This task only validates that the prompt change compiles, tests pass, and the prompt-content assertion holds.
+
+- [x] F1.3: (Optional) Reviewer prompt repetition cleanup. Implementation per `docs/PLAN_planner-vertical-slicing.md` Step 3. After this task: `reviewer_prompt` instruction count drops from ~55 to ~40 by consolidating repeated rules; reviewer behavior is functionally unchanged. [--P+BA]
+
+  Why: Step 1 of the prior plan (`docs/PLAN_context-eval-followups.md`) found that `reviewer_prompt` repeats "fix HIGH/MEDIUM, skip LOW" 5 times across YOUR JOB / severity examples / WHEN YOU FIND ISSUES / VERDICT RULES / closing RULES sections, and "every finding must cite source_evidence" 3 times across PROVENANCE / closing RULES / JSON schema. Reviewer is the only stage prompt above the engineering-talk-recommended threshold of 40 instructions. The comprehension check on 2026-05-08 demonstrated the LLM-judge IS sensitive to this kind of repetition pattern, making this a stronger cleanup candidate.
+
+  Skip this task if F1.1 and F1.2 went smoothly and there's no remaining time/energy. Reviewer correctness > reviewer prompt size.
+
+  Scope of v1 (this task):
+
+  1. **Read `reviewer_prompt`** in `src/prompts.rs:769-986`. Identify the 5 mentions of the HIGH/MEDIUM/LOW fix rule and the 3 mentions of the source_evidence requirement.
+
+  2. **Consolidate the HIGH/MEDIUM/LOW rule** to 1-2 mentions:
+     - Keep the canonical statement in YOUR JOB (one mention).
+     - Keep the calibration in the severity classification examples (they teach by example, distinct purpose).
+     - Remove redundant restatements in WHEN YOU FIND ISSUES, VERDICT RULES, and closing RULES. Replace with a one-line back-reference: "Severity rules: see YOUR JOB above."
+
+  3. **Consolidate the source_evidence requirement** to 1-2 mentions:
+     - Keep the canonical statement in PROVENANCE RULES (one mention; that's where it belongs).
+     - Keep the field-level requirement in the JSON schema example (it's a schema requirement, not a restatement).
+     - Remove the duplicate restatement in closing RULES.
+
+  4. **Verify the resulting prompt still emits the same JSON shape** with the same fields. The schema (high/medium/low arrays with file/line/issue/category/source_evidence/confidence) must be unchanged.
+
+  5. **Tests:**
+     - All existing `cargo test prompts::reviewer` tests pass unchanged.
+     - Add a test `reviewer_prompt_consolidated_severity_rule` that asserts the literal phrase "fix HIGH/MEDIUM" or equivalent appears 1-2 times (not 5).
+     - The instruction count of `reviewer_prompt` should drop to roughly 40-45. Don't add a hard test on this -- count is fuzzy -- but eyeball it.
+
+  Files (modify):
+  - `src/prompts.rs` -- MODIFY. Edit `reviewer_prompt` per steps 2-3.
+
+  Files (out of scope):
+  - `planner_prompt`, `builder_prompt` -- F1.2 covered planner; builder unchanged.
+  - The reviewer JSON schema -- the SHAPE is unchanged. Only the surrounding prose is consolidated.
+  - `src/app/review.rs` (the orchestrator-side reviewer code) -- no logic changes.
+
+  Constraints:
+  - **Reviewer behavior MUST be functionally unchanged.** This is a prose cleanup, not a behavior change. If in doubt about whether a given mention is restatement or load-bearing, leave it.
+  - **The JSON schema is sacrosanct.** Do not touch the field names, types, or the example block.
+  - **The few-shot severity examples (HIGH/MEDIUM/LOW calibration) stay** -- they're calibration data, not redundancy. Per `.claude/rules/prompts.md`: "Preserve the few-shot severity examples -- they are calibration data, not decoration."
+  - No em-dashes; use `--`.
+
+  Verification:
+  - `cargo build --release` succeeds.
+  - `cargo test prompts::` passes; reviewer-specific tests pass unchanged.
+  - The new test from step 5 passes.
+  - `cargo test` overall: still passing.
+  - Manual eyeball: read the new `reviewer_prompt` end-to-end; confirm it still teaches the agent the same things, just with less repetition. If a critical instruction was lost in the cleanup, restore it.
+
+## Pipeline Eval Harness (1 archived, 6 retained)
+
+Implement v1 of the eval harness per `docs/PLAN_eval-harness.md` (v8). Split into seven sequential tasks sized for context boundaries; each task compiles and tests pass independently. Run order: E1.1 -> E1.2 -> E1.3 -> E1.4 -> E1.5 -> E1.6 -> E1.7.
+
+- [x] E1.1: Foundation -- run manifest types, JSONL parser, run loader, stage canonicalization. Implementation per `docs/PLAN_eval-harness.md` (v8) steps 0, 2, 3, 4. This is the data plane: types and parsers, no orchestrator wiring yet. After this task the codebase compiles with new modules but no behavior change. [QRP!B-]
+
+  Files (CREATE):
+  - `src/run_manifest.rs` -- public types: `RunManifest`, `ManifestHandle` (`Arc<std::sync::Mutex<RunManifest>>`), `PromptEvidenceSpec`, `StageInvocationId(u64)`, `StageStatus { Ran, Skipped, Reused, CheckpointResume, Failed }`, `ArtifactSource { ThisRun, Checkpoint, PreviousRun }`, `CompletionPath { AuditPass, AuditFail, AuditSkipped, BuilderFailure, PlannerFailure, Aborted }`, `AgentExitInfo { log_path: Option<PathBuf>, actual_provider: String, actual_model: String, fallback_reason: Option<String> }`. Public methods on `ManifestHandle`: `record_invocation(spec) -> StageInvocationId`, `record_exit(id, status, exit_observed_at, exit_info)`, `record_skip(stage_id, role, status, skip_reason, artifact_source) -> StageInvocationId`, `mark_superseded(prior_id, by_id)`, `record_completion(completion_path)`, `flush() -> Result<()>`. All take `&self`. Atomic flush via `.tmp` + rename. Use `blake3 = "1"` (already in Cargo.toml:26) for `system_prompt_hash` / `user_prompt_hash`; label as `blake3:<hex>`. Compute at `record_invocation` time: `system_prompt_bytes` and `user_prompt_bytes` (raw byte length); `prompt_pattern_ids_found` (substring match `[<pattern_id>]` per `src/patterns.rs:366`); `prompt_artifact_refs_found` (basename match against `prior_artifact_paths`); `prompt_extension_names_found` (substring match `--- BEGIN EXTENSION CONTEXT: {name} ---` per `src/extensions.rs:192`). Manifest serializes to `.buildloop/run-manifest.json`.
+  - `src/eval/mod.rs` -- module entry. Public `pub fn run_for_current_task(project_dir: &Path) -> anyhow::Result<()>`. **For E1.1 this is a stub returning `Ok(())`**; real implementation lands in E1.5.
+  - `src/eval/parser.rs` -- `StageTranscript { stage_id, log_path, model_from_init, tools_from_init, tool_uses, tool_results, assistant_messages, exit_observed, parser_skipped: bool }`. `parse_stage_log(path) -> Result<StageTranscript>`. Walks Claude SDK JSONL: extracts `system/init` events (model, tools), iterates `assistant.message.content[]` for `tool_use` items (record `name`, `input`, `parent_tool_use_id`), `tool_result` items, and assistant text. Resilient to malformed lines (skip + log via `tracing::warn` or eprintln). Non-Claude logs (e.g. `studio-codex-*.jsonl`) return `parser_skipped: true` with empty `tool_uses` so checks Skip cleanly.
+  - `src/eval/run.rs` -- `RunTranscripts { manifest: RunManifest, invocations: Vec<(StageInvocation, StageTranscript)> }`. `latest_run(buildloop_dir: &Path) -> Result<RunTranscripts>` reads `.buildloop/run-manifest.json` and loads each invocation's JSONL by `log_path`. Invocations with `status` in `{Skipped, Reused, CheckpointResume}` get a stub `StageTranscript` with `parser_skipped: true` and empty fields. Failed invocations with `log_path: None` get the same.
+  - `src/eval/stage_id.rs` -- `enum StageId { Query, Research, Plan, Build, Audit }` with `#[derive(Serialize, Deserialize)]` and `#[serde(rename_all = "lowercase")]` plus `#[serde(rename = "implement")]` on `Build` and `#[serde(rename = "doubt")]` on `Audit`. `from_log_prefix(&str) -> Option<StageId>` handles `SCOUT, QUERY, RESEARCH, PLAN, IMPLEMENT, VERIFY, P+, DISCOVERY` and legacy `PLANNER, BUILDER, REVIEWER, FIXER`. `from_role(AgentRole) -> Option<StageId>`. Hard-coded `pub fn prior_artifact(stage: StageId) -> Option<&'static str>` map: Q -> None; R -> ".buildloop/questions.md"; P -> ".buildloop/research-report.md"; B -> ".buildloop/current-plan.md"; A -> ".buildloop/build-claims.md".
+
+  Tests (in each module's `#[cfg(test)]` block):
+  - `src/run_manifest.rs` -- atomic flush survives partial-write recovery; single-owner invariant; hash + bytes computation; `prompt_pattern_ids_found` matches `[pat_001]` but NOT bare `pat_001`; `prompt_extension_names_found` matches the `BEGIN EXTENSION CONTEXT: recon` marker; `prompt_artifact_refs_found` matches basename suffix.
+  - `src/eval/parser.rs` -- happy path on a sample JSONL fixture; malformed line skip; `parser_skipped: true` on synthetic non-Claude data; `tool_use` extraction includes `parent_tool_use_id` when present.
+  - `src/eval/run.rs` -- manifest-driven loading; stub transcripts for `Skipped|Reused|CheckpointResume`; missing log file produces stub.
+  - `src/eval/stage_id.rs` -- every (slug, enum) round-trip via serde; legacy log prefixes (PLANNER, BUILDER, REVIEWER, FIXER) map correctly; `prior_artifact` map.
+
+  Constraints:
+  - No orchestrator code modified in this task; create new modules only.
+  - All IO scoped to `.buildloop/`, `~/.foundry/patterns/` (read-only), `~/.foundry/extensions/` (read-only).
+  - No new external crates -- serde, serde_json, blake3, anyhow, std only.
+  - No `panic!`, no `.unwrap()` in non-test code. Use `?` and `anyhow::Context`.
+  - No em-dashes; use `--`.
+
+  Verification:
+  - `cargo build --release` succeeds.
+  - `cargo test --lib run_manifest:: eval::` -- new tests pass.
+  - `cargo clippy -- -D warnings` clean on the new files.
+  - `grep -rn "panic!\|\.unwrap()" src/run_manifest.rs src/eval/` -- no hits in non-test code.
+  - Manual: foundry still launches and runs a task to completion (no behavior change yet).
+
+- [x] E1.2: AgentResult provider/log fields + constructor propagation. Implementation per `docs/PLAN_eval-harness.md` (v8) step 1 "Field-assignment rule" and the Codex->Claude fallback mutation. Adds four fields to `AgentResult` and propagates through every constructor. [--P+B-]
+
+  Files (MODIFY):
+  - `src/agent.rs` -- add four fields to `pub struct AgentResult`: `pub log_path: Option<PathBuf>`, `pub actual_provider: String`, `pub actual_model: String`, `pub fallback_reason: Option<String>`. Update every `AgentResult { ... }` constructor (find via `grep -n "AgentResult {" src/agent.rs`) per the assignment rule:
+    - Constructors that run BEFORE the function's `log_file_path` is initialized -> `log_path: None`.
+    - Constructors at or after `log_file_path` init -> `log_path: Some(log_file_path.clone())`.
+    - Default provider fields: `actual_provider = format!("{}", provider)` (or use `provider.slug()`), `actual_model = model.to_string()`, `fallback_reason: None`.
+    - Sites confirmed during R7 audit: `:917, 1050, 1138, 1228, 1315, 1338, 1375, 1597`. Discover any others via grep.
+  - `src/agent.rs:989` -- the Codex->Claude fallback. Change the existing `return Box::pin(run_agent(role, ModelProvider::Claude, "", prompt, ...)).await;` block to:
+    ```rust
+    let mut r = Box::pin(run_agent(
+        role, ModelProvider::Claude, "", prompt,
+        project_dir, output_tx, log_dir,
+        Some(effective_tools), timeout_secs, shutdown,
+        Some(&config),
+    )).await?;
+    r.actual_provider = "claude".to_string();
+    // r.actual_model stays "" -- Claude SDK picked default; eval parser fills from JSONL system/init in E1.5.
+    r.fallback_reason = Some("codex transport stall, fell back to claude default".to_string());
+    return Ok(r);
+    ```
+    Behavior-preserving: success/exit_code/exit_kind/failure_message are unchanged; only the four new fields differ.
+  - `src/ghcopilot.rs` -- same four-field add at every constructor (ten sites per R7 audit: `:747, 815, 830, 858, 869, 916, 946, 956, 1010, 1042`). `:747` (auth failure, fires before path init at `:759`) sets `log_path: None`. The other nine sites fire at or after `:759` and set `log_path: Some(log_path.clone())`.
+  - Update every existing test in `src/agent.rs` and `src/ghcopilot.rs` that constructs `AgentResult` via field literal -- initialize the four new fields. Find via `grep -n "AgentResult {" src/agent.rs src/ghcopilot.rs`.
+
+  Constraints:
+  - No signature changes to `run_agent`, `run_provider_session`, `run_ghcopilot_session`, or any other public function.
+  - No behavior changes other than the field assignments and the explicit Codex->Claude fallback mutation.
+  - No em-dashes; use `--`.
+
+  Verification:
+  - `cargo build --release` succeeds.
+  - `cargo test agent:: ghcopilot::` passes.
+  - `grep -n "AgentResult {" src/agent.rs src/ghcopilot.rs | wc -l` -- count matches the original constructor count (no constructors lost or duplicated).
+  - Manual: launch foundry, run any task; agent completes; existing behavior preserved.
+  - Manual: trigger a Codex transport stall to exercise `agent.rs:989`; confirm the resulting AgentResult has `actual_provider == "claude"` and `fallback_reason == Some(...)` (debug-print or stub a test).
+
+- [x] E1.3: Orchestrator wiring in `src/app/build.rs` + finalization hook. Implementation per `docs/PLAN_eval-harness.md` (v8) step 1 (build.rs sites only) plus step 10 (finalization hook). Adds `ManifestHandle` to the orchestrator and instruments every agent invocation site, every skip path, and every task-completion path. [--P!B-]
+
+  Files (MODIFY):
+  - `src/app/build.rs`:
+    1. Add `ManifestHandle` field to `RunContext` (or wherever the orchestrator state lives). Initialize at start of run. Clone the handle for parallel builder slots.
+    2. **Agent invocation sites** -- before each `agent::run_agent` call, build a `PromptEvidenceSpec` from already-available context (matched patterns, selected extension names, originally-configured + effective provider/model, override_reason, system + user prompt, expected artifact path, prior artifact paths via `stage_id::prior_artifact`). Call `record_invocation` to capture `StageInvocationId`. After the agent returns, call `record_exit(id, status, now, AgentExitInfo { log_path: result.log_path.clone(), actual_provider: result.actual_provider.clone(), actual_model: result.actual_model.clone(), fallback_reason: result.fallback_reason.clone() })`. Status is `Ran` on success, `Failed` on error. Sites:
+       - planner ~`build.rs:3034`
+       - planner retry `build.rs:4097` (also call `mark_superseded(first_planner_id, by: retry_id)`)
+       - builder regular ~`build.rs:4811`
+       - builder parallel slot `build.rs:1185` (clone handle for each `tokio::spawn`; mutex guard MUST never be held across an `await`)
+       - scout / query / research / discovery -- find via `grep -n "agent::run_agent" src/app/build.rs`
+    3. **Skip / reuse paths** -- call `record_skip` at each:
+       - planner skip ~`build.rs:3034` -- `StageStatus::Skipped`, reasons: `simple_task_skip_planner` | `stage_disabled_plan`
+       - Q+R reuse ~`build.rs:3058` -- `StageStatus::Reused`, reason: `Checkpoint: reusing questions + research from previous session`, `artifact_source: ArtifactSource::Checkpoint`. Record both query and research entries.
+       - builder skip ~`build.rs:4615` -- `StageStatus::CheckpointResume` (if checkpoint) or `Skipped` (if `pipeline_stage_enabled` false)
+       - doubt skip ~`build.rs:5162` -- `StageStatus::Skipped`, reasons: `simple_task_skip_doubt` | `batch_deferred_doubt` | `confidence_skip_doubt` | `stage_disabled_doubt`
+    4. **Custom-card invocations** at `build.rs:180` (`run_custom_card`) -- SKIP manifest writes entirely (out of v1 scope per v8 plan). Add a code comment: `// custom-card manifest recording deferred to v2 -- see docs/PLAN_eval-harness.md "Custom-card invocations" risk note`.
+    5. **Task finalization** -- at every task-completion path (post-audit pass, post-audit fail, post-audit-skipped success, builder failure, planner failure, doubt skip): call `record_completion(completion_path)`, then `manifest_handle.flush()`, then `let _ = eval::run_for_current_task(&ctx.project_dir);`. v1 instruments these six known paths only; abrupt config aborts leave a stale manifest and produce no eval-report (consistent with best-effort invariant).
+
+  Constraints:
+  - **The mutex guard MUST never be held across an `await`.** Acquire, mutate, drop the guard, then call any async code. `flush()` is synchronous IO inside the lock; brief and acceptable.
+  - All eval-side calls are best-effort: `let _ = ...`. Manifest write failures log via existing logging infrastructure but never block the pipeline.
+  - No signature changes to existing public APIs in build.rs.
+  - No em-dashes; use `--`.
+
+  Verification:
+  - `cargo build --release` succeeds.
+  - `cargo test` passes (no regressions).
+  - Manual happy path: run foundry on a known-good task. After completion, `.buildloop/run-manifest.json` exists with invocations for query/research/plan/implement/doubt, each with sensible `system_prompt_hash`/`user_prompt_hash`/`prompt_pattern_ids_found`/etc. No crash. The v8 stub of `eval::run_for_current_task` returns Ok(()) so no eval-report yet -- that's expected.
+  - Manual planner retry: induce a planner gate failure. Manifest contains two Planner invocations under `stage_id: "plan"`; first has `superseded_by: <retry_id>`; second is non-superseded.
+  - Manual builder failure: induce builder failure. Manifest has builder invocation with `status: "failed"` and `log_path` populated. Eval finalization runs without crash.
+  - Manual Q+R reuse: rerun a task with checkpoints intact. Manifest entries for query/research show `status: "reused"` with the checkpoint skip_reason.
+  - Manual parallel builder: enable parallel builder slots; confirm N concurrent Builder invocations all appear in manifest with no contention or lost entries.
+
+  ... (1 tasks archived to TASKS-ARCHIVE.md)
+
+  Files (MODIFY):
+  - `src/app/review.rs`:
+    1. Plumb `ManifestHandle` into the review entry points (likely `run_review_loop` or whatever `build.rs` calls). Pass through to per-pass functions.
+    2. **Reviewer single-pass at `review.rs:605`** (default for changesets at or below `review_multipass_threshold`) -- build a `PromptEvidenceSpec` for `StageId::Audit` / `AgentRole::Reviewer`, call `record_invocation` + `record_exit` around the `agent::run_agent` call.
+    3. **Reviewer per-file multipass at `review.rs:886`** -- one `record_invocation` per file (the call is in a loop). Each file gets its own `StageInvocationId` under `stage_id: "doubt"`; aggregation at scoring time treats them as multipass passes (no supersession; all count).
+    4. **Reviewer integration multipass at `review.rs:1017`** -- one final `record_invocation` after the per-file loop completes. Same shape as above.
+    5. **Codex-doubt placeholder at `review.rs:480`** (when `ctx.config.doubt_engine == "codex"` and `run_codex_doubt` is invoked): record a single placeholder Audit invocation. The codex path doesn't return an `AgentResult`, so build the entry from what's known: `actual_provider: "codex"`, `log_path: None`, `parser_skipped: true`, status from the doubt result (Ran on success, Failed on error), `system_prompt_*` and `user_prompt_*` empty (the codex subprocess invocation doesn't go through orchestrator-side prompt assembly), `prompt_*_found` empty, `selected_extension_names` and `matched_pattern_ids` empty. Add a code comment: `// codex-doubt evidence is degraded in v1; transcript adapter is v2 priority #1 -- see docs/PLAN_eval-harness.md`.
+    6. **Fixer is NOT a separate agent.** The comment at `review.rs:546` confirms: "no separate fixer agent; reviewer audits AND fixes". `AgentRole::Fixer` exists in the enum but is never invoked. No wiring needed.
+
+  Constraints:
+  - Same as E1.3 (no `await` across mutex guard, best-effort writes, no em-dashes).
+  - No new public APIs.
+
+  Verification:
+  - `cargo build --release` succeeds.
+  - `cargo test review::` passes.
+  - Manual happy path single-pass: configure a small changeset (size at or below `review_multipass_threshold`). Reviewer takes the single-pass path. Manifest contains one Reviewer invocation with `stage_id: "doubt"`, `role: "Reviewer"`.
+  - Manual happy path multipass: configure a large changeset. Manifest contains N+1 Reviewer invocations under `stage_id: "doubt"` (N per-file + 1 integration); none superseded.
+  - Manual codex-doubt: configure `doubt_engine = "codex"` (or set `FOUNDRY_DOUBT_ENGINE=codex`). Manifest's Audit invocation has `actual_provider: "codex"`, `log_path: null`, `parser_skipped: true`, status from the doubt result.
+
+- [x] E1.5: Check registry + 8 plumbing checks + 8 heuristic checks + scorer + report writer + real `run_for_current_task`. Implementation per `docs/PLAN_eval-harness.md` (v8) steps 5, 6, 7, 8, 9. Replaces the E1.1 stub of `eval::run_for_current_task` with the real implementation that produces `.buildloop/eval-report.json`. [--P!B-]
+
+  Files (CREATE):
+  - `src/eval/checks/mod.rs` -- `Check` trait per PLAN.md step 5: `fn name(&self) -> &str`, `fn category(&self) -> Category`, `fn severity(&self) -> Severity`, `fn applies_to(&self) -> &[StageId]`, `fn run(&self, run: &RunTranscripts) -> Vec<StageCheckResult>`. Types: `Category { Plumbing, Heuristic }`, `Severity { Critical, Standard }`, `StageCheckResult { stage: StageId, status: Status, evidence: String }`, `Status { Pass, Fail, Skip }`. Skip rule per PLAN.md: checks Skip with evidence when invocation status is `Skipped|Reused|CheckpointResume`; checks grade normally on `Ran` or `Failed`. Static check registry as `pub fn all_checks() -> Vec<Box<dyn Check>>` returning the 16 checks.
+  - `src/eval/checks/plumbing.rs` -- 8 checks per PLAN.md step 6:
+    - `stage_completed_successfully` (Critical) -- invocation `status` is `Ran`. Fails on `Failed`.
+    - `system_prompt_present` (Critical) -- `system_prompt_bytes > 0`. NOT just hash non-empty (`blake3("")` is `af1349b9...`, a non-empty hash).
+    - `model_matches_config` -- pass if `effective_provider/model == originally_configured_provider/model` AND `override_reason` is null. Skip when `override_reason` is set (e.g. `"budget_recovery"`); evidence names the reason.
+    - `extension_loaded` -- `prompt_extension_names_found` contains every entry from `selected_extension_names`. Skip if `selected_extension_names` is empty.
+    - `patterns_injected` -- `prompt_pattern_ids_found` contains every `matched_pattern_ids`. Skip if no patterns matched.
+    - `prior_artifact_received` (Critical) -- for stages B>1, `prompt_artifact_refs_found` contains stage N-1's artifact basename (per `stage_id::prior_artifact` map).
+    - `prior_artifact_read` (Standard, **Claude-only**) -- the parser walks `assistant.message.content[]` for `tool_use` records with `name == "Read"`. Passes if any record has `input.file_path` ending in the prior artifact's basename. Subagent-issued reads (records carrying `parent_tool_use_id`) count. Skip with evidence "non-Claude provider, transcript adapter not in v1" when `actual_provider != "claude"` OR `parser_skipped == true`. Keys on `actual_provider`, not `effective_provider`, so Codex->Claude fallback parses correctly.
+    - `expected_artifact_written` -- manifest's `expected_artifact_path` exists on disk with > 200 bytes.
+  - `src/eval/checks/heuristic.rs` -- 8 checks per PLAN.md step 7:
+    - `plan_covers_research_files` -- every file path in `research-report.md` appears in `current-plan.md`.
+    - `plan_has_verification` -- `current-plan.md` has a verification section with at least one command.
+    - `build_claims_has_files_changed` -- `## Files Changed` with at least one `[CREATE|MODIFY]` line per `src/prompts.rs:592-610`.
+    - `build_claims_has_verification_results` -- `## Verification Results` with PASS/FAIL/SKIPPED for Build, Tests, Lint.
+    - `build_claims_files_exist` -- every path under `## Files Changed` exists on disk.
+    - `build_claims_has_gaps_section` -- `## Gaps and Assumptions` is present.
+    - `audit_engaged` -- parse `review-report.md` markdown, locate the fenced ```json code block, parse the inner object per `src/prompts.rs:941`, confirm at least one of `high`/`medium`/`low` is non-empty OR the verdict is explicit PASS with rationale. Skip if `audit_skipped_reason` is set.
+    - `audit_findings_localized` -- when findings exist, each entry in `high`/`medium`/`low` has `file` and `line` fields per the reviewer schema.
+  - `src/eval/scorer.rs` -- aggregate per stage. `enum StageBadge { Pass, Warn, Fail, Skipped }` rendered as `✓ ⚠ ✗ -`. Status thresholds: `✓` all checks pass; `⚠` any heuristic fail or any non-critical plumbing fail; `✗` any Critical plumbing fail; `-` stage status is `Skipped|Reused|CheckpointResume`. Aggregate badge string in QRPBA order, e.g. `EVAL Q✓R✓P✓B⚠A✓`. Aggregation rule: per stage, take the worst status across all checks for **non-superseded invocations only**; superseded invocations appear in the overlay but don't contribute to the badge. Multipass review never sets `superseded_by`, so all per-file passes count.
+  - `src/eval/report.rs` -- `write_report(transcripts: &RunTranscripts, scores: &Scores, project_dir: &Path) -> Result<()>` writes `.buildloop/eval-report.json` with `schema_version: 1`, `run_id`, `task_id`, `generated_at`, per-stage scores (including stage status + skip_reason + artifact_source), every check's status + evidence per invocation, aggregate badge, manifest's `completion_path`, and a `notes: Vec<String>` array (e.g. `["1 stage ran under budget_recovery override", "1 stage uses codex-doubt; manifest evidence is degraded"]`). Idempotent: re-running on the same manifest + logs produces a byte-identical report (modulo `generated_at`).
+
+  Files (MODIFY):
+  - `src/eval/mod.rs` -- replace the E1.1 stub with real `run_for_current_task(project_dir: &Path)`: load `RunTranscripts::latest_run`, parse JSONL where present, also fill `actual_model` from JSONL `system/init.model` for any invocation where AgentResult left it empty AND a `log_path` exists, run all checks via `all_checks()`, call scorer, write report. Best-effort: any error logs and returns Ok(()).
+
+  Tests:
+  - `cargo test eval::checks::plumbing::` -- positive and negative for each of the 8 checks. Key cases: `system_prompt_present` fails when `system_prompt_bytes == 0` even though hash is non-empty; `model_matches_config` skips with reason on override; `patterns_injected` does NOT false-positive on bare `simple` (no brackets); `prior_artifact_read` PASSES on subagent-issued reads (`parent_tool_use_id != null`).
+  - `cargo test eval::checks::heuristic::` -- positive and negative for each. `audit_engaged` parses the actual reviewer schema (markdown + fenced `json` with `high`/`medium`/`low`).
+  - `cargo test eval::scorer::` -- thresholds (all pass / heuristic fail / critical fail / skipped); supersession (failed superseded + ran non-superseded -> `✓`); multipass aggregation (multiple non-superseded -> worst-status).
+  - `cargo test eval::report::` -- idempotent rewrite (byte-identical except `generated_at`); graceful handling of missing manifest (`run_for_current_task` returns Ok with no report file).
+
+  Constraints:
+  - All checks Skip with evidence on `Skipped|Reused|CheckpointResume`. `Failed` is graded.
+  - `Failed` invocations always fail `stage_completed_successfully` (Critical) -- guaranteed `✗` regardless of which other checks coincidentally pass.
+  - No new external crates.
+  - No `panic!`, no `.unwrap()` in non-test code.
+  - No em-dashes.
+
+  Verification:
+  - `cargo build --release` succeeds.
+  - `cargo test eval::` passes.
+  - Manual happy path: complete a known-good foundry task. `.buildloop/eval-report.json` exists with mostly-green badges; aggregate is `EVAL Q✓R✓P✓B✓A✓` or close.
+  - Manual budget-recovery override: configure a model that triggers budget recovery; `model_matches_config` is Skip with evidence `"budget_recovery"`; aggregate stays `✓`. `notes` array contains "1 stage ran under budget_recovery override".
+  - Manual blake3-empty trap: in a debug build, force planner system prompt to empty; `system_prompt_present` fails (Critical); aggregate `P✗`.
+  - Manual late-prompt evidence: place a pattern reference 5KB into the assembled prompt (past any 1KB preview); `patterns_injected` PASSES because evidence is computed over the full prompt at invocation time.
+  - Manual subagent Read: configure a stage where the agent spawns a subagent that reads the prior artifact; `prior_artifact_read` PASSES.
+  - Manual idempotency: invoke `eval::run_for_current_task` twice on the same manifest; report files are byte-identical (modulo `generated_at`).
+
+- [x] E1.6: TUI integration -- EVAL badge line + Pipeline Health section. Implementation per `docs/PLAN_eval-harness.md` (v8) steps 11 and 12. Adds the compact per-stage badge to the status meter and the full breakdown to the settings overlay. [--P!B-]
+
+  Files (MODIFY):
+  - `src/app/state.rs` (~line 369) -- the existing `OverlayRow` (or equivalent) is config-only. Extend to:
+    ```rust
+    pub enum OverlayRow {
+        Field(FieldDef),         // existing
+        ReportLine(String),      // new -- read-only evidence row
+        ActionButton(Action),    // new -- e.g. "Re-run eval on last run"
+    }
+    ```
+    Update any existing match on `OverlayRow` to handle the new variants. `Action` enum with at minimum `RerunEvalOnLastRun`.
+  - `src/tui/overlays.rs` (~line 1101) -- render the new variants. `ReportLine` is a read-only text row. `ActionButton` is keyboard-focusable; pressing Enter triggers the action. Add a new "Pipeline Health" section positioned directly after the existing routing/model section. Section state: collapsed by default; auto-expands the first time the overlay is opened after a fresh task completes (track an `eval_pipeline_health_first_view: bool` flag in app state; flip after first auto-expand). Section contents: read `.buildloop/eval-report.json` once per overlay open (cache the parse). Render per-stage rows with PASS/FAIL/Skip and a one-line evidence string. At the bottom, a `[ Re-run eval on last run ]` `ActionButton` that calls `eval::run_for_current_task(&project_dir)` synchronously (it's fast; no spinner needed).
+  - Status meter component -- locate via `grep -rn "QRPBA" src/tui/`. Add an `EVAL Q✓R✓P✓B⚠A✓` line below the QRPBA line. Read badges from `.buildloop/eval-report.json` (cache the parse per refresh). Graceful degradation: if the report file is missing or malformed, render no EVAL line and no error.
+
+  Constraints:
+  - Never block the TUI render on file IO. Read the report file once per refresh (or once per overlay open), cache the parsed value.
+  - Follow existing ratatui patterns in the codebase.
+  - No em-dashes.
+
+  Verification:
+  - `cargo build --release` succeeds.
+  - `cargo test` passes.
+  - Manual: launch foundry; complete a task; observe the new `EVAL` line in the status meter and a "Pipeline Health" section in the `?` overlay.
+  - Manual auto-expand: press `?` after a fresh run; Pipeline Health is expanded the first time. Close and reopen; section is collapsed (default state).
+  - Manual graceful degradation: delete `.buildloop/eval-report.json`; relaunch foundry; no crash, no EVAL line.
+  - Manual re-run button: invoke "Re-run eval on last run"; the report file is rewritten (byte-identical except `generated_at`); the overlay refreshes.
+
+- [x] E1.7: Documentation + .gitignore + project CLAUDE.md. Implementation per `docs/PLAN_eval-harness.md` (v8) step 13. Final task: ship the user-facing doc, update gitignore, and point future agents at the new docs. [--P!B-]
+
+  Files (CREATE):
+  - `docs/eval-harness.md` -- user-facing doc. Cover:
+    - What the harness checks: 8 plumbing checks (one Claude-only), 8 heuristic checks; describe each in 1-2 sentences.
+    - How structured prompt evidence is computed (`prompt_pattern_ids_found` matches `[<pattern_id>]`, `prompt_extension_names_found` matches `BEGIN EXTENSION CONTEXT: {name}`, `prompt_artifact_refs_found` matches basename).
+    - Where the report and manifest live (`.buildloop/run-manifest.json`, `.buildloop/eval-report.json`).
+    - The `override_reason` vocabulary (`null`, `"budget_recovery"`).
+    - The `skip_reason` vocabulary (`simple_task_skip_planner`, `Checkpoint: ...`, `simple_task_skip_doubt`, `batch_deferred_doubt`, `confidence_skip_doubt`, `stage_disabled_<id>`, `checkpoint_skip_builder`).
+    - How to read the badge: `EVAL Q✓R✓P✓B⚠A✓` per QRPBA order; `✓` all pass, `⚠` heuristic or non-critical plumbing fail, `✗` Critical plumbing fail, `-` stage skipped or reused.
+    - How to debug a failed check: open `?`, expand "Pipeline Health", read the per-check evidence string; click "Re-run eval on last run" after fixing.
+    - The v1 Claude-only scope and the v2 roadmap (Codex transcript adapter as priority #1, custom card support, golden tasks, LLM-as-judge, regression tracking).
+    - A note on degraded grading: codex-doubt produces a placeholder Audit entry with `parser_skipped: true`; transcript-dependent checks Skip; only `audit_engaged` and `audit_findings_localized` (and `stage_completed_successfully`) grade against `review-report.md`.
+
+  Files (MODIFY):
+  - `.gitignore` -- add lines for `.buildloop/eval-report.json` and `.buildloop/run-manifest.json` if not already covered by an existing `.buildloop/*` rule.
+  - `CLAUDE.md` (project root) -- add a one-paragraph "Eval Harness" subsection (after the Settings Overlay section): "An eval harness runs after every task completion and grades the run for plumbing integrity (system prompts, pattern injection, prior-artifact reads) and heuristic outcome quality. Per-stage badges appear in the TUI status meter as `EVAL Q✓R✓P✓B⚠A✓`; full breakdown is in the Settings overlay (`?` -> Pipeline Health). The harness never blocks the pipeline. See [`docs/eval-harness.md`](docs/eval-harness.md) for details."
+  - `README.md` -- add a one-line mention of the EVAL badge under the existing TUI features list, with a link to `docs/eval-harness.md`.
+
+  Constraints:
+  - No em-dashes; use `--`.
+  - Cross-link aggressively: README -> `docs/eval-harness.md` -> `docs/settings-overlay.md` and back.
+  - Documentation-as-deliverable: a future operator should be able to answer "what does EVAL mean?", "where's the report?", "what's `parser_skipped: true`?" purely from the docs.
+
+  Verification:
+  - `find docs -name 'eval-harness.md'` finds the new file.
+  - `git status` shows `docs/eval-harness.md` (new), `.gitignore` (modified), `CLAUDE.md` (modified), `README.md` (modified).
+  - Manual: read each new/updated section; verify the cross-links work.
+
+## Deferred (resume after eval harness lands)
+
+The two tasks below are paused while the eval harness ships. They are unrelated to E1.x and have their own scope. Resume them by moving these subsections back above the eval section (or after eval completes).
+
+- Documentation Refresh (1 tasks archived to TASKS-ARCHIVE.md)
+- Model Catalog & Pricing Auto-Refresh (1 tasks archived to TASKS-ARCHIVE.md)

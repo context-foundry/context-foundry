@@ -20,6 +20,10 @@ fn default_catalog_refresh_secs() -> u64 {
     86400
 }
 
+fn default_history_retention_tasks() -> usize {
+    50
+}
+
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 #[serde(default)]
 pub struct PipelineStageConfig {
@@ -296,6 +300,14 @@ pub struct Config {
     /// Number of completed tasks to keep at the end of each archived phase.
     #[serde(default = "default_archive_keep")]
     pub archive_keep_last: usize,
+
+    /// Maximum number of per-task subdirectories retained under
+    /// `.buildloop/history/`. On each task cleanup, prior-run artifacts are
+    /// archived to `.buildloop/history/<task_id>/<UTC-timestamp>/`; once the
+    /// number of `<task_id>` subdirectories exceeds this cap, the oldest are
+    /// pruned (best-effort). 0 disables pruning. Default: 50.
+    #[serde(default = "default_history_retention_tasks")]
+    pub history_retention_tasks: usize,
 
     /// Multi-pass review threshold: when changed file count exceeds this,
     /// split review into per-file passes plus an integration pass.
@@ -586,6 +598,7 @@ impl Default for Config {
             auto_archive_tasks: true,
             archive_keep_first: 3,
             archive_keep_last: 3,
+            history_retention_tasks: 50,
             review_multipass_threshold: 8,
             confidence_threshold: 0.5,
             parallel_builder: false,
