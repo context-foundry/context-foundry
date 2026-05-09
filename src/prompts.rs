@@ -924,11 +924,9 @@ YOUR JOB (in order):
    Read the files, check the logic, confirm the claim is true.
 3. Run the build and tests yourself -- do not trust the builder's reported results.
 4. Check the Gaps and Assumptions section -- these are where bugs hide.
-5. FIX every HIGH and MEDIUM issue you find -- you have full write access.
+5. FIX every HIGH and MEDIUM issue you find -- be surgical (fix only the issue, no surrounding refactors). You have full write access.
 6. After fixing, re-run checks to confirm your fixes work.
-7. Write your final report AFTER all fixes are applied.
-
-Write your output file (review-report.md) as your final action.
+7. Write your final report (.buildloop/review-report.md) AFTER all fixes are applied.
 
 IF .buildloop/build-claims.md IS MISSING:
 Fall back to reading .buildloop/current-plan.md and the changed files directly.
@@ -938,11 +936,6 @@ RUN THESE CHECKS (skip with reason if tool unavailable):
 - Python: python -m py_compile && pytest
 - Node/TS: tsc --noEmit && npm test
 - Docker: docker compose config (syntax only, do NOT start services)
-
-WHEN YOU FIND ISSUES:
-- Fix them immediately -- do not just report them
-- Be surgical: fix only the issue, do not refactor surrounding code
-- After fixing, re-run the relevant check to confirm it passes
 
 SEVERITY CLASSIFICATION -- use these examples to calibrate:
 
@@ -1059,17 +1052,11 @@ CONFIDENCE SCORING:
 - Findings below the project's confidence threshold will be logged for manual review instead of auto-fixed
 - When in doubt, assign lower confidence -- it is better to flag for human review than to fix a false positive
 
-VERDICT RULES:
-- PASS if: all runtime checks pass AND all high/medium issues were fixed and verified
-- FAIL if: any runtime failure you could not fix, or any high/medium issue you could not fix
+VERDICT: PASS if all runtime checks pass and all HIGH/MEDIUM issues were fixed; FAIL otherwise.
 
 RULES:
 - Do NOT modify CLAUDE.md, {spec_file}, {tasks_file}, or .buildloop/ (except review-report.md)
 - Do NOT read files in .buildloop/logs/
-- Every finding MUST cite file, line number, and concrete evidence
-- LOW findings: report only, do not fix
-- HIGH/MEDIUM findings: fix, then verify the fix works
-- Be surgical -- fix the issue, not the style
 {patterns_block}{semgrep_block}"#
     )
 }
@@ -2499,6 +2486,104 @@ mod tests {
         assert!(
             integration.contains(needle_3),
             "reviewer_integration_prompt missing borderline 3"
+        );
+    }
+
+    #[test]
+    fn reviewer_prompt_consolidated_severity_rule() {
+        let prompt = reviewer_prompt(
+            "T1", "test", "file.rs", 1, "", None, "SPEC.md", "TASKS.md", "",
+        );
+
+        // Removed-section headers must be absent.
+        assert!(
+            !prompt.contains("WHEN YOU FIND ISSUES:"),
+            "WHEN YOU FIND ISSUES section should be removed (consolidated into YOUR JOB)"
+        );
+        assert!(
+            !prompt.contains("VERDICT RULES:"),
+            "VERDICT RULES section header should be replaced with single-line VERDICT"
+        );
+
+        // Compressed VERDICT line is present.
+        assert!(
+            prompt.contains("VERDICT:"),
+            "compressed single-line VERDICT directive must be present"
+        );
+        assert!(
+            prompt.contains("PASS if all runtime checks pass"),
+            "VERDICT must still state PASS criteria"
+        );
+
+        // Canonical directive lives in YOUR JOB.
+        assert!(
+            prompt.contains("FIX every HIGH and MEDIUM issue"),
+            "YOUR JOB step 5 must keep the canonical HIGH/MEDIUM directive"
+        );
+        assert!(
+            prompt.contains("be surgical"),
+            "surgical-fix constraint must be folded into YOUR JOB step 5"
+        );
+
+        // Closing RULES must not restate severity or source_evidence directives.
+        assert!(
+            !prompt.contains("- HIGH/MEDIUM findings: fix"),
+            "closing RULES must not restate the HIGH/MEDIUM fix rule"
+        );
+        assert!(
+            !prompt.contains("- LOW findings: report only, do not fix"),
+            "closing RULES must not restate the LOW skip rule"
+        );
+        assert!(
+            !prompt.contains("Every finding MUST cite file, line number"),
+            "closing RULES must not restate the source_evidence requirement (lives in PROVENANCE RULES)"
+        );
+
+        // Calibration material is preserved (regression guard).
+        assert!(
+            prompt.contains("SEVERITY CLASSIFICATION"),
+            "SEVERITY CLASSIFICATION calibration must still be present"
+        );
+        assert!(
+            prompt.contains("BORDERLINE CASES"),
+            "BORDERLINE CASES calibration must still be present"
+        );
+        assert!(
+            prompt.contains("PROVENANCE RULES"),
+            "PROVENANCE RULES section must still be present"
+        );
+        assert!(
+            prompt.contains("CONFIDENCE SCORING"),
+            "CONFIDENCE SCORING section must still be present"
+        );
+
+        // Closing RULES retains the two write-restriction directives.
+        assert!(
+            prompt.contains("Do NOT modify CLAUDE.md"),
+            "closing RULES must keep the write-restriction directive"
+        );
+        assert!(
+            prompt.contains("Do NOT read files in .buildloop/logs/"),
+            "closing RULES must keep the logs read-restriction directive"
+        );
+
+        // Cross-prompt non-regression guard: reviewer_integration_prompt must be UNCHANGED.
+        // F1.3 only consolidates reviewer_prompt. If any Edit's anchor accidentally
+        // matched the integration variant, these asserts fail.
+        let integration = reviewer_integration_prompt(
+            "T1", "test", "file.rs", "{}", "", None, "SPEC.md", "TASKS.md", "",
+        );
+        assert!(
+            integration.contains("WHEN YOU FIND ISSUES:"),
+            "reviewer_integration_prompt must NOT have its WHEN YOU FIND ISSUES section removed -- F1.3 only touches reviewer_prompt"
+        );
+        assert!(
+            integration.contains("VERDICT RULES:"),
+            "reviewer_integration_prompt must keep its VERDICT RULES section"
+        );
+        assert!(
+            integration.contains("- HIGH/MEDIUM findings: fix"),
+            "reviewer_integration_prompt must keep its closing-RULES bullets"
         );
     }
 
