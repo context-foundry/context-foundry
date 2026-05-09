@@ -2156,12 +2156,24 @@ RULES:
     )
 }
 
-pub fn append_tasks_prompt(description: &str, tasks_file: &str, spec_file: &str) -> String {
+pub fn append_tasks_prompt(
+    description: &str,
+    tasks_file: &str,
+    spec_file: &str,
+    intake_brief: Option<&str>,
+) -> String {
+    let intake_block = intake_brief
+        .filter(|s| !s.trim().is_empty())
+        .map(|brief| format!(
+            "\n--- BEGIN INTAKE BRIEF (clarified by user via Coach mode) ---\n{brief}\n--- END INTAKE BRIEF ---\n\nThe user iterated on this brief intentionally. When the brief contradicts SPEC.md or the USER REQUEST line, the brief is the source of truth.\n"
+        ))
+        .unwrap_or_default();
+
     format!(
         r#"Expand the user's request into implementation task(s) and append them to {tasks_file}.
 
 USER REQUEST: {description}
-
+{intake_block}
 CRITICAL: Create tasks that BUILD what the user described. The user wants working
 software, not project scaffolding. Do NOT create tasks about scanning, bootstrapping,
 creating README/CLAUDE.md/.gitignore, or "establishing foundations."
@@ -2461,6 +2473,26 @@ mod tests {
         let prompt = coach_intake_prompt("build a thing", None, "", 1);
         assert!(!prompt.contains("use Edit tool"));
         assert!(prompt.contains("you don't have it"));
+    }
+
+    #[test]
+    fn append_tasks_prompt_includes_intake_brief_when_present() {
+        let prompt = append_tasks_prompt(
+            "build a weather app",
+            "TASKS.md",
+            "SPEC.md",
+            Some("# Intake Brief\n\nWeb app, offline-first."),
+        );
+        assert!(prompt.contains("BEGIN INTAKE BRIEF"));
+        assert!(prompt.contains("Web app, offline-first."));
+        assert!(prompt.contains("the brief is the source of truth"));
+    }
+
+    #[test]
+    fn append_tasks_prompt_omits_intake_block_when_absent() {
+        let prompt = append_tasks_prompt("build a thing", "TASKS.md", "SPEC.md", None);
+        assert!(!prompt.contains("BEGIN INTAKE BRIEF"));
+        assert!(prompt.contains("USER REQUEST: build a thing"));
     }
 
     #[test]

@@ -10,6 +10,7 @@ use crate::config::Config;
 use crate::{patterns, prompts, task};
 
 use super::context::RunContext;
+use super::state::LoopEvent;
 use super::{AppEvent, PlanningOutcome};
 
 pub(super) async fn spawn_inline_planning_task(
@@ -67,6 +68,35 @@ pub(super) async fn run_append_tasks(
         .map(|tasks| tasks.len())
         .unwrap_or(0);
 
+    // ─── Coach Pre-Flight (run_mode == "coach") ──────────────
+    // When the user has opted into Coach mode, run a Coach turn before
+    // the planner appends tasks. Coach reads SPEC.md and writes
+    // .buildloop/intake-brief.md; the planner's prompt then prepends
+    // the brief so it bases its task decomposition on a clarified
+    // outline rather than the raw spec. Idempotent: skipped when
+    // intake-brief.md already exists.
+    let intake_brief_path = ctx.buildloop_dir.join("intake-brief.md");
+    if ctx.config.run_mode == "coach" && !intake_brief_path.exists() {
+        run_coach_preflight(&ctx, &event_tx).await;
+        // Parity with build.rs Coach block: honor both the atomic shutdown
+        // signal AND the .buildloop/stop sentinel file.
+        if ctx.is_stop_requested() {
+            let _ = event_tx.send(AppEvent::PlanningFinished(PlanningOutcome {
+                success: false,
+                total_tasks: 0,
+                pending_tasks: 0,
+                completed_tasks: 0,
+                new_tasks: 0,
+                error: Some("Cancelled during Coach pre-flight".to_string()),
+                return_to_startup: true,
+            }));
+            return;
+        }
+    }
+    let intake_brief = std::fs::read_to_string(&intake_brief_path)
+        .ok()
+        .filter(|s| !s.trim().is_empty());
+
     let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
     let forward_tx = event_tx.clone();
     let fwd_handle = tokio::spawn(async move {
@@ -79,6 +109,7 @@ pub(super) async fn run_append_tasks(
         &description,
         &ctx.tasks_file_prompt_path(),
         &ctx.spec_file_prompt_path(),
+        intake_brief.as_deref(),
     );
     let result = agent::run_agent(
         &AgentRole::Planner,
@@ -127,6 +158,64 @@ pub(super) async fn run_append_tasks(
 
     let _ = fwd_handle.await;
     let _ = event_tx.send(AppEvent::PlanningFinished(outcome));
+}
+
+/// Run a single Coach turn before the planner appends tasks. Reads SPEC.md
+/// and any existing intake-thread.md, invokes the Coach agent with the
+/// configured scout provider/model, and lets the agent write
+/// .buildloop/intake-brief.md as a side effect. Errors are best-effort:
+/// if Coach fails or times out, the caller proceeds without an intake
+/// brief and the planner runs against SPEC.md alone (the same behavior
+/// as auto/sprint/review modes).
+async fn run_coach_preflight(
+    ctx: &RunContext,
+    event_tx: &mpsc::UnboundedSender<AppEvent>,
+) {
+    let _ = event_tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+        "Coach mode: running pre-flight intake before task creation".to_string(),
+    )));
+
+    let intake_thread_path = ctx.buildloop_dir.join("intake-thread.md");
+    let coach_thread = std::fs::read_to_string(&intake_thread_path).unwrap_or_default();
+    let coach_spec_content = std::fs::read_to_string(&ctx.spec_path).ok();
+    let coach_prompt = prompts::coach_intake_prompt(
+        "",
+        coach_spec_content.as_deref(),
+        &coach_thread,
+        1,
+    );
+
+    let (coach_tx, mut coach_rx) = mpsc::unbounded_channel();
+    let coach_fwd_tx = event_tx.clone();
+    let coach_fwd_handle = tokio::spawn(async move {
+        while let Some(evt) = coach_rx.recv().await {
+            let _ = coach_fwd_tx.send(AppEvent::AgentOutput(evt));
+        }
+    });
+
+    let _ = event_tx.send(AppEvent::LoopEvent(LoopEvent::AgentStarted(
+        AgentRole::Coach,
+        Config::display_provider_model(&ctx.config.scout_provider, &ctx.config.scout_model),
+    )));
+
+    let coach_result = agent::run_agent(
+        &AgentRole::Coach,
+        Config::parse_provider(&ctx.config.scout_provider),
+        &ctx.config.scout_model,
+        &coach_prompt,
+        &ctx.project_dir,
+        coach_tx,
+        &ctx.log_dir,
+        None,
+        ctx.config.agent_timeout_secs,
+        Some(ctx.shutdown.clone()),
+        Some(&ctx.config),
+    )
+    .await;
+
+    let _ = coach_fwd_handle.await;
+    let success = coach_result.as_ref().map(|r| r.success).unwrap_or(false);
+    let _ = event_tx.send(AppEvent::AgentDone(success));
 }
 
 pub(super) async fn run_plan_mode(project_dir: &Path, max_iterations: u64) -> Result<()> {

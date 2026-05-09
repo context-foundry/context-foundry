@@ -6,11 +6,16 @@ Toggle via `Ctrl+M` (cycles auto -> sprint -> review -> coach -> auto) or via th
 
 ## v1 (current): non-interactive pre-flight
 
-When `run_mode == "coach"` and `.buildloop/intake-brief.md` does not yet exist, the build pipeline runs a single Coach turn before bootstrap Scout:
+When `run_mode == "coach"` and `.buildloop/intake-brief.md` does not yet exist, Coach runs a single turn before tasks are created. The hook fires at two entry points:
 
-1. Coach reads `SPEC.md` (and any prior `.buildloop/intake-thread.md`).
-2. Coach writes `.buildloop/intake-brief.md` with: outline, surface/stack, key constraints, suspected task decomposition, and any open assumptions.
-3. Bootstrap Scout reads `intake-brief.md` on its next prompt build. When the brief contradicts SPEC.md, the brief is the source of truth.
+1. **`run_append_tasks`** (`src/app/planning.rs`) — the greenfield path. When the user types intent in the startup screen and Foundry plans the initial task queue, Coach runs first and the planner's `append_tasks_prompt` then prepends the brief.
+2. **`spawn_build_loop`** (`src/app/build.rs`) — the bootstrap-Scout path. When the build loop kicks off against an empty TASKS.md (e.g. after Discovery clears the queue), Coach runs and `bootstrap_scout_prompt` consumes the brief.
+
+In both cases:
+
+- Coach reads `SPEC.md` (and any prior `.buildloop/intake-thread.md`).
+- Coach writes `.buildloop/intake-brief.md` with: outline, surface/stack, key constraints, suspected task decomposition, and any open assumptions.
+- The downstream prompt prepends the brief in a `--- BEGIN INTAKE BRIEF (clarified by user via Coach mode) ---` block; when the brief contradicts SPEC.md, the brief is the source of truth.
 
 The Coach prompt always asks the agent to choose between two paths:
 
