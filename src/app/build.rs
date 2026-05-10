@@ -627,7 +627,17 @@ fn spawn_lookahead_planner(
         let pattern_context = if !all_skills_lookahead.is_empty() {
             let stage_skills =
                 skills::match_skills_for_stage(&all_skills_lookahead, "planner");
-            skills::format_skills_for_prompt(&stage_skills, lookahead_pattern_count)
+            let ranked = skills::rank_skills_for_task(
+                &stage_skills,
+                &task_desc,
+                &detected_stack,
+                ctx.config.semantic_match_enabled,
+                &ctx.config.embedding_model,
+                ctx.config.embedding_timeout_ms,
+                &ctx.config.ollama_url,
+            )
+            .await;
+            skills::format_skills_for_prompt(&ranked, lookahead_pattern_count)
         } else {
             let m = if ctx.config.semantic_match_enabled {
                 let keyword_scores =
@@ -3335,10 +3345,30 @@ async fn process_task(
             skills::match_skills_for_stage(&all_skills_main, "planner");
         let reviewer_skills =
             skills::match_skills_for_stage(&all_skills_main, "reviewer");
+        let ranked_planner = skills::rank_skills_for_task(
+            &planner_skills,
+            task_desc,
+            &detected_stack,
+            ctx.config.semantic_match_enabled,
+            &ctx.config.embedding_model,
+            ctx.config.embedding_timeout_ms,
+            &ctx.config.ollama_url,
+        )
+        .await;
+        let ranked_reviewer = skills::rank_skills_for_task(
+            &reviewer_skills,
+            task_desc,
+            &detected_stack,
+            ctx.config.semantic_match_enabled,
+            &ctx.config.embedding_model,
+            ctx.config.embedding_timeout_ms,
+            &ctx.config.ollama_url,
+        )
+        .await;
         let planner_text =
-            skills::format_skills_for_prompt(&planner_skills, effective_pattern_count);
+            skills::format_skills_for_prompt(&ranked_planner, effective_pattern_count);
         let reviewer_text =
-            skills::format_skills_for_prompt(&reviewer_skills, effective_pattern_count);
+            skills::format_skills_for_prompt(&ranked_reviewer, effective_pattern_count);
         (
             Vec::<&patterns::Pattern>::new(),
             planner_text,

@@ -20,7 +20,7 @@ pub(super) async fn spawn_inline_planning_task(
     user_intent: Option<String>,
 ) {
     ctx.ensure_runtime_dirs();
-    let pattern_context = load_gap_analysis_pattern_context(&ctx);
+    let pattern_context = load_gap_analysis_pattern_context(&ctx).await;
 
     let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
     let forward_tx = event_tx.clone();
@@ -255,7 +255,7 @@ pub(super) async fn run_plan_mode(project_dir: &Path, max_iterations: u64) -> Re
         eprintln!("Max iterations: {}", iterations);
     }
 
-    let pattern_context = load_gap_analysis_pattern_context(&ctx);
+    let pattern_context = load_gap_analysis_pattern_context(&ctx).await;
 
     for i in 1..=iterations {
         eprintln!(
@@ -367,12 +367,24 @@ pub(super) async fn run_plan_mode(project_dir: &Path, max_iterations: u64) -> Re
     Ok(())
 }
 
-fn load_gap_analysis_pattern_context(ctx: &RunContext) -> String {
+async fn load_gap_analysis_pattern_context(ctx: &RunContext) -> String {
     let skills_dir = skills::resolve_skills_dir("~/.foundry/skills");
     let all_skills = skills::load_skills(&skills_dir);
     if !all_skills.is_empty() {
         let planner_skills = skills::match_skills_for_stage(&all_skills, "planner");
-        return skills::format_skills_for_prompt(&planner_skills, ctx.config.max_pattern_injection);
+        let task_seed = ctx.spec_file_prompt_path();
+        let detected_stack = patterns::detect_project_tech_stack(&ctx.project_dir);
+        let ranked = skills::rank_skills_for_task(
+            &planner_skills,
+            &task_seed,
+            &detected_stack,
+            ctx.config.semantic_match_enabled,
+            &ctx.config.embedding_model,
+            ctx.config.embedding_timeout_ms,
+            &ctx.config.ollama_url,
+        )
+        .await;
+        return skills::format_skills_for_prompt(&ranked, ctx.config.max_pattern_injection);
     }
     let patterns_dir = patterns::resolve_patterns_dir(&ctx.config.patterns_dir);
     let all_patterns = patterns::load_patterns(&patterns_dir);
@@ -477,9 +489,13 @@ mod tests {
         dir
     }
 
-    #[test]
-    fn gap_analysis_pattern_context_is_empty_without_pattern_files() {
+    #[tokio::test]
+    #[serial_test::serial(home_env)]
+    async fn gap_analysis_pattern_context_is_empty_without_pattern_files() {
         let dir = temp_dir("foundry-planning-empty-patterns");
+        let prev_home = std::env::var("HOME").ok();
+        std::env::set_var("HOME", &dir);
+
         let config = crate::config::Config {
             patterns_dir: dir.display().to_string(),
             ..crate::config::Config::default()
@@ -491,13 +507,19 @@ mod tests {
             std::sync::Arc::new(std::sync::Mutex::new(())),
         );
 
-        assert_eq!(load_gap_analysis_pattern_context(&ctx), "");
+        assert_eq!(load_gap_analysis_pattern_context(&ctx).await, "");
 
+        if let Some(prev) = prev_home {
+            std::env::set_var("HOME", prev);
+        } else {
+            std::env::remove_var("HOME");
+        }
         let _ = std::fs::remove_dir_all(dir);
     }
 
-    #[test]
-    fn gap_analysis_pattern_context_includes_loaded_patterns() {
+    #[tokio::test]
+    #[serial_test::serial(home_env)]
+    async fn gap_analysis_pattern_context_includes_loaded_patterns() {
         let dir = temp_dir("foundry-planning-patterns");
         let patterns_dir = dir.join("patterns");
         std::fs::create_dir_all(&patterns_dir).expect("failed to create patterns dir");
@@ -515,6 +537,9 @@ mod tests {
         )
         .expect("failed to write pattern");
 
+        let prev_home = std::env::var("HOME").ok();
+        std::env::set_var("HOME", &dir);
+
         let config = crate::config::Config {
             patterns_dir: patterns_dir.display().to_string(),
             ..crate::config::Config::default()
@@ -525,11 +550,16 @@ mod tests {
             std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             std::sync::Arc::new(std::sync::Mutex::new(())),
         );
-        let context = load_gap_analysis_pattern_context(&ctx);
+        let context = load_gap_analysis_pattern_context(&ctx).await;
 
         assert!(context.contains("Auth callback mismatch"));
         assert!(context.contains("Verify callback URLs."));
 
+        if let Some(prev) = prev_home {
+            std::env::set_var("HOME", prev);
+        } else {
+            std::env::remove_var("HOME");
+        }
         let _ = std::fs::remove_dir_all(dir);
     }
 }

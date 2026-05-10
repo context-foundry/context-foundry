@@ -1,9 +1,12 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
+use chrono::{NaiveDate, Utc};
 
+use crate::embeddings;
 use crate::patterns::{Pattern, PatternSolution};
+use crate::skills_telemetry;
 use crate::utils::atomic_write_file;
 
 /// A single SKILL.md file on disk parsed back into a Pattern shape so the
@@ -143,6 +146,98 @@ pub fn skill_to_pattern(s: SkillFile) -> Pattern {
         cited_in_wip: s.frontmatter.cf_citations_wip,
         cited_by_stage: std::collections::HashMap::new(),
     }
+}
+
+/// Hybrid retrieval over a stage-filtered set of skills. Combines BM25 keyword
+/// scoring (via `patterns::keyword_scores`), optional Ollama-backed semantic
+/// reranking (via `embeddings::match_patterns_semantic`), and a popularity +
+/// recency multiplier sourced from `skills-telemetry.db`. Returns all skills
+/// with a non-zero ranked score in descending order; the caller is still
+/// responsible for capping via `format_skills_for_prompt(.., max_skills)`.
+pub async fn rank_skills_for_task<'a>(
+    skills: &[&'a SkillFile],
+    task_desc: &str,
+    detected_stack: &[String],
+    semantic_match_enabled: bool,
+    embedding_model: &str,
+    embedding_timeout_ms: u64,
+    ollama_url: &str,
+) -> Vec<&'a SkillFile> {
+    if skills.is_empty() {
+        return Vec::new();
+    }
+
+    let owned_patterns: Vec<Pattern> = skills
+        .iter()
+        .map(|s| skill_to_pattern((*s).clone()))
+        .collect();
+
+    let kw_scores = crate::patterns::keyword_scores(&owned_patterns, task_desc, detected_stack);
+
+    let semantic_scored: Vec<(&Pattern, usize)> = if semantic_match_enabled {
+        let (scored, _result) = embeddings::match_patterns_semantic(
+            &owned_patterns,
+            task_desc,
+            embedding_model,
+            embedding_timeout_ms,
+            &kw_scores,
+            ollama_url,
+        )
+        .await;
+        scored
+    } else {
+        let mut s: Vec<(&Pattern, usize)> = kw_scores
+            .iter()
+            .filter(|(_, sc)| *sc > 0)
+            .map(|(idx, sc)| (&owned_patterns[*idx], *sc))
+            .collect();
+        s.sort_by_key(|a| std::cmp::Reverse(a.1));
+        s
+    };
+
+    let telemetry = skills_telemetry::load_popularity_scores_or_default();
+    let today = Utc::now().date_naive();
+
+    let mut boosted: Vec<(String, usize)> = Vec::with_capacity(semantic_scored.len());
+    for (p, score) in &semantic_scored {
+        let mut multiplier: f64 = 1.0;
+        if let Some(rec) = telemetry.get(&p.pattern_id) {
+            if rec.citations_pass > 0 {
+                multiplier *= 1.10;
+            }
+            if let Some(date_str) = rec.last_used.as_deref() {
+                if let Ok(last) = NaiveDate::parse_from_str(date_str, "%Y-%m-%d") {
+                    let days_ago = (today - last).num_days().max(0) as f64;
+                    let decay = (-days_ago / 90.0_f64).exp().max(0.1_f64);
+                    multiplier *= decay;
+                }
+            }
+        }
+        let final_score = ((*score as f64) * multiplier).round() as usize;
+        if final_score > 0 {
+            boosted.push((p.pattern_id.clone(), final_score));
+        }
+    }
+
+    boosted.sort_by_key(|a| std::cmp::Reverse(a.1));
+
+    let mut id_to_skill: HashMap<String, &'a SkillFile> = HashMap::with_capacity(skills.len());
+    for s in skills {
+        let id = if !s.dir_name.is_empty() {
+            s.dir_name.clone()
+        } else {
+            s.frontmatter.name.clone()
+        };
+        id_to_skill.insert(id, *s);
+    }
+
+    let mut ranked: Vec<&'a SkillFile> = Vec::with_capacity(boosted.len());
+    for (id, _) in &boosted {
+        if let Some(skill) = id_to_skill.get(id.as_str()) {
+            ranked.push(*skill);
+        }
+    }
+    ranked
 }
 
 pub fn match_skills_for_stage<'a>(skills: &'a [SkillFile], stage: &str) -> Vec<&'a SkillFile> {
@@ -795,5 +890,72 @@ mod tests {
         let empty: Vec<&SkillFile> = Vec::new();
         let out = format_skills_for_prompt(&empty, 10);
         assert_eq!(out, "");
+    }
+
+    fn make_skill_with_keywords(name: &str, kws: &[&str]) -> SkillFile {
+        SkillFile {
+            dir_name: name.to_string(),
+            frontmatter: SkillFrontmatter {
+                name: name.to_string(),
+                description: String::new(),
+                cf_stage: "planner".to_string(),
+                cf_citations_pass: 0,
+                cf_citations_wip: 0,
+                cf_last_used: None,
+                cf_frequency: 0,
+                cf_severity: None,
+                cf_keywords: kws.iter().map(|s| s.to_string()).collect(),
+            },
+            body: String::new(),
+        }
+    }
+
+    #[tokio::test]
+    async fn rank_skills_for_task_returns_empty_for_empty_input() {
+        let empty: Vec<&SkillFile> = Vec::new();
+        let out = rank_skills_for_task(
+            &empty,
+            "anything goes here",
+            &[],
+            false,
+            "",
+            0,
+            "http://localhost:1",
+        )
+        .await;
+        assert!(out.is_empty());
+    }
+
+    #[tokio::test]
+    async fn rank_skills_for_task_orders_by_keyword_relevance() {
+        let s1 = make_skill_with_keywords("alpha", &["phantom-path"]);
+        let s2 = make_skill_with_keywords("beta", &["wholly-unrelated"]);
+        let s3 = make_skill_with_keywords("gamma", &["templates"]);
+        let refs: Vec<&SkillFile> = vec![&s1, &s2, &s3];
+        let out = rank_skills_for_task(
+            &refs,
+            "task touches phantom-path templates handling",
+            &[],
+            false,
+            "",
+            0,
+            "http://localhost:1",
+        )
+        .await;
+
+        assert!(!out.is_empty(), "expected at least one matching skill");
+        let names: Vec<&str> = out
+            .iter()
+            .map(|s| s.frontmatter.name.as_str())
+            .collect();
+        assert!(
+            names.contains(&"alpha") || names.contains(&"gamma"),
+            "expected alpha or gamma to surface; got {:?}",
+            names
+        );
+        assert!(
+            !names.contains(&"beta"),
+            "beta has no overlapping keywords; should be excluded"
+        );
     }
 }

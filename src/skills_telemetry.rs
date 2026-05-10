@@ -205,6 +205,47 @@ pub fn load_record(conn: &Connection, skill_name: &str) -> Result<Option<Telemet
     }
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct PopularityRecord {
+    pub citations_pass: u64,
+    pub last_used: Option<String>,
+}
+
+pub fn load_popularity_scores(conn: &Connection) -> Result<HashMap<String, PopularityRecord>> {
+    let mut stmt = conn
+        .prepare("SELECT skill_name, citations_pass, last_used FROM skill_telemetry")
+        .context("failed to prepare load_popularity_scores")?;
+    let rows = stmt
+        .query_map([], |row| {
+            let name: String = row.get(0)?;
+            let pass: i64 = row.get(1)?;
+            let last_used: Option<String> = row.get(2)?;
+            Ok((
+                name,
+                PopularityRecord {
+                    citations_pass: pass as u64,
+                    last_used,
+                },
+            ))
+        })
+        .context("failed to query popularity rows")?;
+    let mut out: HashMap<String, PopularityRecord> = HashMap::new();
+    for row in rows {
+        let (name, rec) = row.context("failed to read popularity row")?;
+        out.insert(name, rec);
+    }
+    Ok(out)
+}
+
+pub fn load_popularity_scores_or_default() -> HashMap<String, PopularityRecord> {
+    let path = db_path();
+    let conn = match open_db(&path) {
+        Ok(c) => c,
+        Err(_) => return HashMap::new(),
+    };
+    load_popularity_scores(&conn).unwrap_or_default()
+}
+
 #[allow(dead_code)]
 pub fn load_all(conn: &Connection) -> Result<HashMap<String, TelemetryRecord>> {
     let mut stmt = conn

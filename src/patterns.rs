@@ -1,7 +1,7 @@
 use anyhow::Result;
 use chrono::{NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use crate::complexity::TaskComplexity;
@@ -319,6 +319,55 @@ pub fn keyword_scores(
     let desc_lower = task_desc.to_lowercase();
     let desc_words: Vec<&str> = desc_lower.split_whitespace().collect();
 
+    // Unique query terms for BM25 (TF still counts repeats inside docs).
+    let query_terms: Vec<String> = {
+        let unique: HashSet<String> = desc_lower
+            .split_whitespace()
+            .map(|s| s.to_string())
+            .collect();
+        unique.into_iter().collect()
+    };
+
+    // Tokenize each pattern's keywords (whitespace-split) into a doc.
+    // Promoted patterns are excluded from the corpus entirely so their
+    // tokens do not pollute IDF.
+    let docs: Vec<Vec<String>> = patterns
+        .iter()
+        .map(|p| {
+            if !p.promoted_to.is_empty() {
+                Vec::new()
+            } else {
+                p.keywords
+                    .iter()
+                    .flat_map(|kw| {
+                        kw.to_lowercase()
+                            .split_whitespace()
+                            .map(|s| s.to_string())
+                            .collect::<Vec<_>>()
+                    })
+                    .collect()
+            }
+        })
+        .collect();
+
+    let n_docs: f64 = docs.iter().filter(|d| !d.is_empty()).count() as f64;
+    let avg_dl: f64 = if n_docs > 0.0 {
+        docs.iter().map(|d| d.len()).sum::<usize>() as f64 / n_docs
+    } else {
+        1.0
+    };
+
+    let mut df: HashMap<String, usize> = HashMap::new();
+    for doc in docs.iter().filter(|d| !d.is_empty()) {
+        let unique: HashSet<&str> = doc.iter().map(|s| s.as_str()).collect();
+        for tok in unique {
+            *df.entry(tok.to_string()).or_insert(0) += 1;
+        }
+    }
+
+    let k1: f64 = 1.5;
+    let b: f64 = 0.75;
+
     patterns
         .iter()
         .enumerate()
@@ -328,16 +377,28 @@ pub fn keyword_scores(
                 return None;
             }
 
-            let mut score = 0usize;
-
-            for kw in &p.keywords {
-                let kw_lower = kw.to_lowercase();
-                if desc_words.iter().any(|w| *w == kw_lower) {
-                    score += 2;
-                } else if desc_lower.contains(&kw_lower) {
-                    score += 1;
+            // BM25 contribution from keyword tokens.
+            let doc = &docs[i];
+            let dl = doc.len() as f64;
+            let mut bm25: f64 = 0.0;
+            for q in &query_terms {
+                let n_q = df.get(q).copied().unwrap_or(0) as f64;
+                if n_q == 0.0 {
+                    continue;
                 }
+                let idf = ((n_docs - n_q + 0.5) / (n_q + 0.5) + 1.0).ln();
+                let tf = doc.iter().filter(|w| w.as_str() == q.as_str()).count() as f64;
+                if tf == 0.0 {
+                    continue;
+                }
+                let denom = tf + k1 * (1.0 - b + b * dl / avg_dl.max(1.0));
+                bm25 += idf * tf * (k1 + 1.0) / denom;
             }
+            // Scale by 2 so the integer score remains in roughly the same
+            // magnitude as the prior +2/+1 system; downstream success_rate
+            // factor and the (similarity * 10.0) semantic boost still
+            // meaningfully rerank on top of it.
+            let mut score: usize = (bm25 * 2.0).round().max(0.0) as usize;
 
             for tech in &p.tech_stack {
                 let tech_lower = tech.to_lowercase();
@@ -1357,11 +1418,14 @@ mod tests {
 
     #[test]
     fn test_usefulness_boost_high_ratio() {
-        let patterns = vec![
-            make_test_pattern("high-use", "High Use Pattern", 5, 3), // ratio 0.6
-            make_test_pattern("low-use", "Low Use Pattern", 5, 0),   // ratio 0.0
-        ];
-        let scores = keyword_scores(&patterns, "rust project", &[]);
+        // Distinct keywords so BM25 IDF distinguishes the two patterns; the
+        // test's intent is the rating()/usefulness boost, not BM25 itself.
+        let mut high = make_test_pattern("high-use", "High Use Pattern", 5, 3); // ratio 0.6
+        high.keywords = vec!["highkw".to_string()];
+        let mut low = make_test_pattern("low-use", "Low Use Pattern", 5, 0); // ratio 0.0
+        low.keywords = vec!["lowkw".to_string()];
+        let patterns = vec![high, low];
+        let scores = keyword_scores(&patterns, "highkw lowkw project", &[]);
         let high_score = scores
             .iter()
             .find(|(i, _)| *i == 0)
@@ -2072,15 +2136,31 @@ mod tests {
 
     #[test]
     fn test_keyword_scores_success_rate_factor_halves_zero_pass() {
+        // Use multi-keyword fixtures so BM25 produces a base score large
+        // enough that the 0.5 success_rate factor visibly differentiates.
         let mut all_pass = make_test_pattern("all-pass", "All Pass Pattern Title", 1, 0);
+        all_pass.keywords = vec![
+            "passkwa".to_string(),
+            "passkwb".to_string(),
+            "passkwc".to_string(),
+        ];
         all_pass.cited_in_pass = 5;
         all_pass.cited_in_wip = 0;
         let mut all_wip = make_test_pattern("all-wip", "All Wip Pattern Title", 1, 0);
+        all_wip.keywords = vec![
+            "wipkwa".to_string(),
+            "wipkwb".to_string(),
+            "wipkwc".to_string(),
+        ];
         all_wip.cited_in_pass = 0;
         all_wip.cited_in_wip = 5;
         let patterns = vec![all_pass, all_wip];
 
-        let scores = keyword_scores(&patterns, "rust project", &[]);
+        let scores = keyword_scores(
+            &patterns,
+            "passkwa passkwb passkwc wipkwa wipkwb wipkwc project",
+            &[],
+        );
         let pass_score = scores
             .iter()
             .find(|(i, _)| *i == 0)
@@ -2295,15 +2375,17 @@ mod tests {
     #[test]
     fn test_keyword_scores_for_stage_boosts_matching_stage() {
         let mut planner_pat = make_test_pattern("planner-pat", "Planner Helper Pattern Title", 1, 0);
+        planner_pat.keywords = vec!["plannerkw".to_string()];
         planner_pat.cited_by_stage.insert("planner".to_string(), 5);
         let mut reviewer_pat =
             make_test_pattern("reviewer-pat", "Reviewer Helper Pattern Title", 1, 0);
+        reviewer_pat.keywords = vec!["reviewerkw".to_string()];
         reviewer_pat
             .cited_by_stage
             .insert("reviewer".to_string(), 5);
         let patterns = vec![planner_pat, reviewer_pat];
 
-        let scores = keyword_scores_for_stage(&patterns, "rust project", &[], "planner");
+        let scores = keyword_scores_for_stage(&patterns, "plannerkw reviewerkw project", &[], "planner");
         let p_score = scores
             .iter()
             .find(|(i, _)| *i == 0)
@@ -2326,15 +2408,17 @@ mod tests {
     fn test_keyword_scores_for_stage_recency_decay() {
         let today = Utc::now().date_naive();
         let mut fresh = make_test_pattern("fresh", "Fresh Pattern Title", 1, 0);
+        fresh.keywords = vec!["freshkw".to_string()];
         fresh.last_used_at = Some(today.format("%Y-%m-%d").to_string());
         let mut old = make_test_pattern("old", "Old Pattern Title", 1, 0);
+        old.keywords = vec!["oldkw".to_string()];
         let old_date = today
             .checked_sub_signed(chrono::Duration::days(180))
             .unwrap();
         old.last_used_at = Some(old_date.format("%Y-%m-%d").to_string());
         let patterns = vec![fresh, old];
 
-        let scores = keyword_scores_for_stage(&patterns, "rust project", &[], "builder");
+        let scores = keyword_scores_for_stage(&patterns, "freshkw oldkw project", &[], "builder");
         let fresh_score = scores
             .iter()
             .find(|(i, _)| *i == 0)
