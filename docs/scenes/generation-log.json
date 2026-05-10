@@ -1048,5 +1048,32 @@
     "retries": 0,
     "api_retries": 0,
     "validation": "pass"
+  },
+  {
+    "ts": "2026-05-10T09:50:34.130Z",
+    "scene": "404-sunlight-not-found.js",
+    "seed_id": "404-sunlight-not-found",
+    "biome": "arctic",
+    "model": "gpt-4o-mini",
+    "input_tokens": 14884,
+    "output_tokens": 1615,
+    "cost_usd": 0.0032,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "fail",
+    "error": "Validation failed after 2 attempts: VALIDATION FAILED (1 error):\n- Too short: 68 lines (min 80)"
+  },
+  {
+    "ts": "2026-05-10T09:51:42.221Z",
+    "scene": "hash-map-of-rice-terraces.js",
+    "seed_id": "hash-map-of-rice-terraces",
+    "biome": "urban",
+    "model": "gpt-4o-mini",
+    "input_tokens": 16662,
+    "output_tokens": 1755,
+    "cost_usd": 0.0036,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "pass"
   }
 ]
