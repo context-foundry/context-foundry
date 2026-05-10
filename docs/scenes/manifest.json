@@ -707,6 +707,16 @@
       "model": "gpt-4o-mini",
       "lines": 99,
       "generation": 71
+    },
+    {
+      "file": "rooftop-container-garden.js",
+      "name": "Rooftop Container Garden",
+      "location": "Singapore Skyline, Marina Bay, Singapore",
+      "biome": "urban",
+      "generated": "2026-05-10T19:36:42.343Z",
+      "model": "gpt-4o-mini",
+      "lines": 87,
+      "generation": 72
     }
   ]
 }

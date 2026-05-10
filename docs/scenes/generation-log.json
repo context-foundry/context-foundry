@@ -1169,5 +1169,46 @@
     "retries": 1,
     "api_retries": 0,
     "validation": "pass"
+  },
+  {
+    "ts": "2026-05-10T19:35:52.639Z",
+    "scene": "404-sand-not-found.js",
+    "seed_id": "404-sand-not-found",
+    "biome": "desert",
+    "model": "gpt-4o-mini",
+    "input_tokens": 16292,
+    "output_tokens": 1678,
+    "cost_usd": 0.0035,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "fail",
+    "error": "Validation failed after 2 attempts: VALIDATION FAILED (1 error):\n- Too short: 75 lines (min 80)"
+  },
+  {
+    "ts": "2026-05-10T19:36:16.225Z",
+    "scene": "nested-loop-switchbacks.js",
+    "seed_id": "nested-loop-switchbacks",
+    "biome": "mountain",
+    "model": "gpt-4o-mini",
+    "input_tokens": 14874,
+    "output_tokens": 1546,
+    "cost_usd": 0.0032,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "fail",
+    "error": "Validation failed after 2 attempts: VALIDATION FAILED (1 error):\n- Too short: 74 lines (min 80)"
+  },
+  {
+    "ts": "2026-05-10T19:36:42.343Z",
+    "scene": "rooftop-container-garden.js",
+    "seed_id": "rooftop-container-garden",
+    "biome": "urban",
+    "model": "gpt-4o-mini",
+    "input_tokens": 15230,
+    "output_tokens": 1710,
+    "cost_usd": 0.0033,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "pass"
   }
 ]
