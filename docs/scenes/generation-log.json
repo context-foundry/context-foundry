@@ -1115,5 +1115,32 @@
     "retries": 1,
     "api_retries": 0,
     "validation": "pass"
+  },
+  {
+    "ts": "2026-05-10T15:16:47.373Z",
+    "scene": "404-sunlight-not-found.js",
+    "seed_id": "404-sunlight-not-found",
+    "biome": "arctic",
+    "model": "gpt-4o-mini",
+    "input_tokens": 14914,
+    "output_tokens": 1606,
+    "cost_usd": 0.0032,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "fail",
+    "error": "Validation failed after 2 attempts: VALIDATION FAILED (1 error):\n- Too short: 71 lines (min 80)"
+  },
+  {
+    "ts": "2026-05-10T15:17:15.335Z",
+    "scene": "shipping-code-from-the-abyss.js",
+    "seed_id": "shipping-code-from-the-abyss",
+    "biome": "ocean",
+    "model": "gpt-4o-mini",
+    "input_tokens": 7608,
+    "output_tokens": 908,
+    "cost_usd": 0.0017,
+    "retries": 0,
+    "api_retries": 0,
+    "validation": "pass"
   }
 ]
