@@ -27,7 +27,8 @@ pub use self::state::FileEntry;
 pub use self::state::{
     settings_sections, Action, AppPhase, AppState, DualSelection, ExtensionDisplayInfo, FieldKind,
     ModelEntry, ModelPicker, OverlayRow, PatternEventKind, PickerItem, PlanStatus, PlanningState,
-    SectionKind, StartupAction, StartupScenario, StartupState, StreamState, TuiPane,
+    RunningModalKind, SectionKind, StartupAction, StartupScenario, StartupState, StreamState,
+    TuiPane,
 };
 use self::state::{AppEvent, AppendTasksRequest, LoopEvent, PendingTransition, PlanningOutcome};
 use crate::agent::{AgentErrorKind, AgentOutputEvent, AgentRole};
@@ -631,6 +632,9 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
                 }
                 if state.confirm_quit {
                     tui::render_quit_confirm(frame, &state.tui_theme);
+                }
+                if let Some(kind) = state.running_screen_modal {
+                    tui::render_running_modal(frame, &state.tui_theme, kind);
                 }
             } // close show_welcome else
         })?;
@@ -1301,6 +1305,67 @@ pub(crate) fn handle_overlay_esc(state: &mut AppState) -> bool {
         return true;
     }
     false
+}
+
+fn handle_running_modal_key(
+    state: &mut AppState,
+    key: event::KeyEvent,
+    kind: RunningModalKind,
+) {
+    match kind {
+        RunningModalKind::StopRun => match key.code {
+            KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter => {
+                state.running_screen_modal = None;
+                state.stop_after_task = true;
+                state.write_stop_file();
+                state.log("Stopping after current stage completes");
+            }
+            KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
+                state.running_screen_modal = None;
+            }
+            _ => {}
+        },
+        RunningModalKind::CtrlC => {
+            if matches!(key.code, KeyCode::Char('c'))
+                && key.modifiers.contains(KeyModifiers::CONTROL)
+            {
+                // Second Ctrl+C while modal open: force-quit immediately. Preserves muscle memory.
+                state.running_screen_modal = None;
+                state.remove_stop_file();
+                state.should_quit = true;
+                return;
+            }
+            match key.code {
+                KeyCode::Char('1') => {
+                    state.running_screen_modal = None;
+                    state.stop_after_task = true;
+                    state.write_stop_file();
+                    state.should_quit = true;
+                    state.log("Stopping run and exiting Foundry");
+                }
+                KeyCode::Char('2') => {
+                    state.running_screen_modal = None;
+                    state.stop_after_task = true;
+                    state.write_stop_file();
+                    state.log("Stopping run -- returning to startup screen");
+                    let project_dir = state
+                        .buildloop_dir
+                        .parent()
+                        .unwrap_or(std::path::Path::new("."))
+                        .to_path_buf();
+                    enter_home_surface(
+                        &project_dir,
+                        state,
+                        Some("Run stopped by user".to_string()),
+                    );
+                }
+                KeyCode::Char('3') | KeyCode::Esc => {
+                    state.running_screen_modal = None;
+                }
+                _ => {}
+            }
+        }
+    }
 }
 
 /// Toggle the settings overlay open/closed. Initializes SettingsOverlayState
@@ -2725,6 +2790,8 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                         state.awaiting_review = false;
                         state.log("Continuing to next task");
                     }
+                } else if let Some(kind) = state.running_screen_modal {
+                    handle_running_modal_key(state, key, kind);
                 } else {
                     match key.code {
                         KeyCode::Char('r') | KeyCode::Char('R') if state.typed_error_can_retry => {
@@ -2789,29 +2856,15 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                             state.stats_overlay_scroll = 0;
                         }
                         KeyCode::Esc if !handle_overlay_esc(state) => {
-                            if state.stop_after_task {
-                                state.stop_after_task = false;
-                                state.remove_stop_file();
-                                state.log("Stop cancelled -- resuming build");
-                            } else {
-                                state.stop_after_task = true;
-                                state.write_stop_file();
-                                state.log("Stopping after current task (Esc again to cancel, Ctrl+C to force quit)");
-                            }
+                            // Open the StopRun modal instead of arming the soft-stop directly.
+                            // The modal sets stop_after_task only after the user picks Y.
+                            state.running_screen_modal = Some(RunningModalKind::StopRun);
                         }
                         KeyCode::Esc => {}
                         KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                            if state.stop_after_task {
-                                // Second Ctrl+C: quit immediately
-                                state.remove_stop_file();
-                                state.should_quit = true;
-                            } else {
-                                state.stop_after_task = true;
-                                state.write_stop_file();
-                                state.log(
-                                "Will stop after current task completes (Ctrl+C again to force quit)",
-                            );
-                            }
+                            // Open the CtrlC modal. Force-quit on second Ctrl+C is handled
+                            // inside handle_running_modal_key when the modal is already open.
+                            state.running_screen_modal = Some(RunningModalKind::CtrlC);
                         }
                         KeyCode::Char('f') if state.last_orchestrator_outcome.is_some() => {
                             state.show_findings = !state.show_findings;

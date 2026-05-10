@@ -2516,3 +2516,87 @@ fn handle_agent_output_text_delta_starts_new_burst_after_tool_use() {
     assert_eq!(state.agent_output.last().unwrap(), "second");
     assert_eq!(state.stream_state, StreamState::WritingText);
 }
+
+#[test]
+fn esc_opens_stop_run_modal_then_y_arms_stop() {
+    use crate::app::RunningModalKind;
+    let dir = temp_project_dir("foundry-running-modal-y");
+    std::fs::create_dir_all(dir.join(".buildloop")).expect("failed to create .buildloop");
+    let mut state = AppState::new(dir.join(".buildloop"));
+    assert!(state.running_screen_modal.is_none());
+    assert!(!state.stop_after_task);
+
+    state.running_screen_modal = Some(RunningModalKind::StopRun);
+    let key = event::KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE);
+    super::handle_running_modal_key(&mut state, key, RunningModalKind::StopRun);
+
+    assert!(state.running_screen_modal.is_none());
+    assert!(state.stop_after_task);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn esc_modal_n_dismisses_without_arming_stop() {
+    use crate::app::RunningModalKind;
+    let dir = temp_project_dir("foundry-running-modal-n");
+    std::fs::create_dir_all(dir.join(".buildloop")).expect("failed to create .buildloop");
+    let mut state = AppState::new(dir.join(".buildloop"));
+    state.running_screen_modal = Some(RunningModalKind::StopRun);
+
+    let key = event::KeyEvent::new(KeyCode::Char('n'), KeyModifiers::NONE);
+    super::handle_running_modal_key(&mut state, key, RunningModalKind::StopRun);
+
+    assert!(state.running_screen_modal.is_none());
+    assert!(!state.stop_after_task);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn ctrl_c_modal_3_cancels() {
+    use crate::app::RunningModalKind;
+    let dir = temp_project_dir("foundry-running-modal-3");
+    std::fs::create_dir_all(dir.join(".buildloop")).expect("failed to create .buildloop");
+    let mut state = AppState::new(dir.join(".buildloop"));
+    state.running_screen_modal = Some(RunningModalKind::CtrlC);
+
+    let key = event::KeyEvent::new(KeyCode::Char('3'), KeyModifiers::NONE);
+    super::handle_running_modal_key(&mut state, key, RunningModalKind::CtrlC);
+
+    assert!(state.running_screen_modal.is_none());
+    assert!(!state.stop_after_task);
+    assert!(!state.should_quit);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn ctrl_c_modal_second_ctrl_c_force_quits() {
+    use crate::app::RunningModalKind;
+    let dir = temp_project_dir("foundry-running-modal-force-quit");
+    std::fs::create_dir_all(dir.join(".buildloop")).expect("failed to create .buildloop");
+    let mut state = AppState::new(dir.join(".buildloop"));
+    state.running_screen_modal = Some(RunningModalKind::CtrlC);
+
+    let key = event::KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL);
+    super::handle_running_modal_key(&mut state, key, RunningModalKind::CtrlC);
+
+    assert!(state.should_quit);
+    assert!(state.running_screen_modal.is_none());
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn ctrl_c_modal_1_arms_stop_and_quits() {
+    use crate::app::RunningModalKind;
+    let dir = temp_project_dir("foundry-running-modal-1");
+    std::fs::create_dir_all(dir.join(".buildloop")).expect("failed to create .buildloop");
+    let mut state = AppState::new(dir.join(".buildloop"));
+    state.running_screen_modal = Some(RunningModalKind::CtrlC);
+
+    let key = event::KeyEvent::new(KeyCode::Char('1'), KeyModifiers::NONE);
+    super::handle_running_modal_key(&mut state, key, RunningModalKind::CtrlC);
+
+    assert!(state.stop_after_task);
+    assert!(state.should_quit);
+    assert!(state.running_screen_modal.is_none());
+    let _ = std::fs::remove_dir_all(dir);
+}

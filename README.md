@@ -4,6 +4,8 @@ Autonomous build loop that plans, builds, reviews, and learns.
 
 Foundry reads a `TASKS.md` task list and works through it using Claude Code agents in a TUI, committing each completed task. Three [run modes](#run-modes) control what happens next: run forever with discovery (Auto), stop when done (Sprint), or pause for human review after each task (Review).
 
+**When to use the pipeline:** the harness is a multiplier for verifiable engineering work — tasks with `file:line` references the planner can ground against, constraints the auditor can check, and behavior that BUILD or AUDIT can exercise against the code. For prose work (README updates, brainstorming, architecture decision records, documentation rewrites), the pipeline pays plan-review and audit costs for zero marginal benefit because there's nothing for it to verify. Write those directly. Full guidance: [`docs/task-composition.md`](docs/task-composition.md).
+
 ## Demos
 
 - [Building a Second Brain with the Loop](https://youtu.be/VO_c2j0dPH0) — Foundry autonomously works through an implementation plan, building a second-brain app from a task list while the TUI streams each agent's output in real time.

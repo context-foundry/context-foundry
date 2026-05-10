@@ -64,6 +64,7 @@ Coach is automatically skipped when:
 ## See also
 
 - `docs/PLAN_coach-mode.md` — implementation plan
+- [`docs/task-composition.md`](task-composition.md) — Coach exists to clarify task spec before Scout runs; what Coach optimizes for is exactly what good task composition produces. If your TASKS.md entries already pass the composition checklist, Coach has less to add.
 - `src/prompts.rs::coach_intake_prompt` — the prompt
 - `src/agent.rs::AgentRole::Coach` — restrictive tool surface (Read/Glob/Grep/Write only)
 - `src/app/build.rs` — pre-flight invocation site

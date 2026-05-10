@@ -1949,6 +1949,209 @@ pub fn render_quit_confirm(frame: &mut Frame, theme: &crate::tui::theme::TuiThem
     frame.render_widget(buttons, chunks[4]);
 }
 
+pub fn render_running_modal(
+    frame: &mut Frame,
+    theme: &crate::tui::theme::TuiTheme,
+    kind: crate::app::RunningModalKind,
+) {
+    use crate::app::RunningModalKind;
+    let area = frame.area();
+    let (w, h): (u16, u16) = match kind {
+        RunningModalKind::StopRun => (
+            60.min(area.width.saturating_sub(2)),
+            9.min(area.height.saturating_sub(2)),
+        ),
+        RunningModalKind::CtrlC => (
+            64.min(area.width.saturating_sub(2)),
+            13.min(area.height.saturating_sub(2)),
+        ),
+    };
+    if w < 30 || h < 5 {
+        // Terminal too small for the full modal -- fall back to a single line.
+        let text = match kind {
+            RunningModalKind::StopRun => "  Stop this run?  [Y] yes  [N] no  ",
+            RunningModalKind::CtrlC => "  Ctrl+C menu  [1] exit  [2] startup  [3] cancel  ",
+        };
+        let fw = (text.len() as u16 + 2).min(area.width);
+        let fx = area.width.saturating_sub(fw) / 2;
+        let fy = area.height.saturating_sub(3) / 2;
+        let banner = Rect {
+            x: fx,
+            y: fy,
+            width: fw,
+            height: 3,
+        };
+        frame.render_widget(Clear, banner);
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(theme.accent))
+            .style(Style::default().bg(theme.surface));
+        let inner = block.inner(banner);
+        frame.render_widget(block, banner);
+        frame.render_widget(
+            Paragraph::new(Line::from(text)).style(Style::default().fg(theme.text)),
+            inner,
+        );
+        return;
+    }
+
+    let x = area.width.saturating_sub(w) / 2;
+    let y = area.height.saturating_sub(h) / 2;
+    let modal = Rect {
+        x,
+        y,
+        width: w,
+        height: h,
+    };
+
+    // Drop shadow: offset right 2, down 1.
+    let sx = modal.x.saturating_add(2);
+    let sy = modal.y.saturating_add(1);
+    let sw = modal.width.min(area.width.saturating_sub(sx));
+    let sh = modal.height.min(area.height.saturating_sub(sy));
+    if sw > 0 && sh > 0 {
+        let shadow = Rect {
+            x: sx,
+            y: sy,
+            width: sw,
+            height: sh,
+        };
+        frame.render_widget(Clear, shadow);
+        frame.render_widget(
+            Block::default().style(Style::default().bg(theme.muted)),
+            shadow,
+        );
+    }
+
+    // Main modal -- double border in accent, surface fill.
+    frame.render_widget(Clear, modal);
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Double)
+        .border_style(
+            Style::default()
+                .fg(theme.accent)
+                .add_modifier(Modifier::BOLD),
+        )
+        .style(Style::default().bg(theme.surface).fg(theme.text));
+    let inner = block.inner(modal);
+    frame.render_widget(block, modal);
+
+    match kind {
+        RunningModalKind::StopRun => {
+            let chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Length(1), // title
+                    Constraint::Length(1), // spacer
+                    Constraint::Length(1), // message
+                    Constraint::Length(1), // spacer
+                    Constraint::Length(1), // buttons
+                    Constraint::Min(0),
+                ])
+                .split(inner);
+
+            let title = Paragraph::new(Line::from(Span::styled(
+                "Stop this run?",
+                Style::default()
+                    .fg(theme.accent)
+                    .add_modifier(Modifier::BOLD),
+            )))
+            .alignment(Alignment::Center);
+            frame.render_widget(title, chunks[0]);
+
+            let msg = Paragraph::new(Line::from(Span::styled(
+                "It will halt after the current stage completes. The run can be resumed later.",
+                Style::default().fg(theme.muted),
+            )))
+            .alignment(Alignment::Center);
+            frame.render_widget(msg, chunks[2]);
+
+            let stop_btn = Span::styled(
+                "  [Y] Stop after current stage  ",
+                Style::default()
+                    .bg(theme.error)
+                    .fg(theme.text)
+                    .add_modifier(Modifier::BOLD),
+            );
+            let cancel_btn = Span::styled(
+                "  [N] Cancel  ",
+                Style::default()
+                    .bg(theme.border)
+                    .fg(theme.text)
+                    .add_modifier(Modifier::BOLD),
+            );
+            let buttons =
+                Paragraph::new(Line::from(vec![stop_btn, Span::raw("    "), cancel_btn]))
+                    .alignment(Alignment::Center);
+            frame.render_widget(buttons, chunks[4]);
+        }
+        RunningModalKind::CtrlC => {
+            let chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Length(1), // title
+                    Constraint::Length(1), // spacer
+                    Constraint::Length(1), // prompt
+                    Constraint::Length(1), // spacer
+                    Constraint::Length(1), // opt1
+                    Constraint::Length(1), // opt2
+                    Constraint::Length(1), // opt3
+                    Constraint::Length(1), // spacer
+                    Constraint::Length(1), // hint
+                    Constraint::Min(0),
+                ])
+                .split(inner);
+
+            let title = Paragraph::new(Line::from(Span::styled(
+                "Ctrl+C -- what would you like to do?",
+                Style::default()
+                    .fg(theme.accent)
+                    .add_modifier(Modifier::BOLD),
+            )))
+            .alignment(Alignment::Center);
+            frame.render_widget(title, chunks[0]);
+
+            let prompt = Paragraph::new(Line::from(Span::styled(
+                "Choose an option:",
+                Style::default().fg(theme.muted),
+            )))
+            .alignment(Alignment::Center);
+            frame.render_widget(prompt, chunks[2]);
+
+            let opt1 = Paragraph::new(Line::from(Span::styled(
+                "  [1] Stop run and exit Foundry",
+                Style::default().fg(theme.text),
+            )))
+            .alignment(Alignment::Left);
+            frame.render_widget(opt1, chunks[4]);
+
+            let opt2 = Paragraph::new(Line::from(Span::styled(
+                "  [2] Stop run and return to startup screen",
+                Style::default().fg(theme.text),
+            )))
+            .alignment(Alignment::Left);
+            frame.render_widget(opt2, chunks[5]);
+
+            let opt3 = Paragraph::new(Line::from(Span::styled(
+                "  [3] Cancel (keep running)",
+                Style::default().fg(theme.text),
+            )))
+            .alignment(Alignment::Left);
+            frame.render_widget(opt3, chunks[6]);
+
+            let hint = Paragraph::new(Line::from(Span::styled(
+                "Press Ctrl+C again to force-quit immediately",
+                Style::default()
+                    .fg(theme.muted)
+                    .add_modifier(Modifier::ITALIC),
+            )))
+            .alignment(Alignment::Center);
+            frame.render_widget(hint, chunks[8]);
+        }
+    }
+}
+
 pub fn render_no_tasks_warning(frame: &mut Frame, theme: &crate::tui::theme::TuiTheme) {
     let area = frame.area();
     let w: u16 = 58.min(area.width.saturating_sub(2));

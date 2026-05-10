@@ -170,3 +170,52 @@ agent that reads build-claims.md and audits with "Audit and validate these claim
 Find the gaps."). Individual agents (researcher, planner, builder) should NOT self-audit
 or spawn sub-agents for verification -- that wastes time and tokens. Focus on doing
 your job well and let DOUBT catch the gaps with fresh eyes.
+
+## Task Composition
+
+Task composition is the upstream lever that drives the pipeline cost. The
+complexity engine reads the shape of a task to set its budget; well-composed
+tasks land cheaply, bundled tasks thrash through P+ revisions.
+
+**Rule of thumb: one mental model change per task.**
+
+Signs a task is over-bundled (split it):
+
+- Numbered sub-features in the description: `(1) ... (2) ... (3)`
+- Lead sentence contains "AND also", "plus", "three layers", "and additionally"
+- Multiple distinct verbs in the opening clause ("add X and refactor Y and rename Z")
+- File references span more than ~6 distinct paths (real blast radius)
+- Description exceeds ~500 words
+- The Constraints section needs subsections to organize itself
+
+Signs a task is well-composed (let it run):
+
+- One verb, one concern, one mental model
+- File refs concentrated in 1-3 modules
+- Constraints can be checked independently
+- Verification checks are local to the change
+
+**Why it matters:** T1.16 (`(1) wire ranker (2) BM25 upgrade (3) telemetry boost`)
+burned ~$20 over 63 minutes through 4 PLAN attempts because P+ couldn't reason
+about three independent concerns as one coherent change. The same scope split
+into T1.16a/b/c would have shipped in ~$8 over 25 minutes total.
+
+T1.18 (Esc + Ctrl+C modals) is borderline -- two modals + key handler + render
+dispatch + tests is four concerns, but they share state plumbing. P+ ran 3/3
+iterations and caught real bugs each pass. Borderline tasks pay rigor tax;
+clearly-bundled tasks pay thrashing tax. Bias toward splitting.
+
+**Per-task override flags** (planned via T1.23):
+
+- `[fast]` after the task ID -- skips P+ entirely; use when the spec is
+  well-specified and you trust BUILD+AUDIT to catch what slips.
+- `[strict]` -- forces full 3-iteration P+ even on Simple tasks.
+
+Until T1.23 ships, the lever is composition: rewrite the task to match what
+you want the pipeline to do.
+
+**When NOT to pipeline at all:** if a task has zero ``file:line`` references
+and zero verifiable behavioral claims (pure prose -- README updates,
+brainstorming, architecture decision records), the pipeline adds no value.
+Its mechanism is verifying claims against code; prose has no code counterpart.
+Write those directly. Full guidance: [`docs/task-composition.md`](docs/task-composition.md).

@@ -1294,6 +1294,15 @@ pub struct DualBuildState {
     pub last_event_was_delta: [bool; 2],
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RunningModalKind {
+    /// Esc tap on running screen -- "Stop this run?" Y/N modal.
+    StopRun,
+    /// Ctrl+C tap on running screen -- 3-option modal:
+    /// [1] stop and exit foundry, [2] stop and return to startup, [3] cancel.
+    CtrlC,
+}
+
 pub struct AppState {
     pub buildloop_dir: PathBuf,
     pub eval_report_cache: Option<EvalReportSnapshot>,
@@ -1324,6 +1333,9 @@ pub struct AppState {
     pub welcome_message: String,
     pub observatory_session_id: Option<String>,
     pub stop_after_task: bool,
+    /// When `Some`, a modal dialog is open over the running screen and consumes all keys.
+    /// `None` means no modal is shown. Transient UI state -- not persisted across restarts.
+    pub running_screen_modal: Option<RunningModalKind>,
     /// Set when handle_agent_output observes a typed AgentErrorKind. The TUI
     /// renders this as a one-line toast and uses it to gate the R-key retry.
     /// Cleared on dismiss/retry. None == no toast displayed.
@@ -1498,6 +1510,7 @@ impl AppState {
             welcome_message: crate::tui::random_fallback_message().to_string(),
             observatory_session_id: None,
             stop_after_task: false,
+            running_screen_modal: None,
             typed_error_toast: None,
             typed_error_can_retry: false,
             last_typed_error: None,

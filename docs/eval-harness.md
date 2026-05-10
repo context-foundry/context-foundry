@@ -259,3 +259,8 @@ the "best-effort, never blocks" invariant.
   `TASKS.md` are the durable summary; the EVAL badge is the per-run detail.
 - [PLAN_eval-harness.md](PLAN_eval-harness.md) -- v8 design spec, including
   the run-manifest schema and architecture decisions.
+- [Task composition](task-composition.md) -- eval health correlates with
+  task shape: well-composed tasks produce clean badges (`Q✓R✓P✓B✓A✓`);
+  bundled tasks produce iteration thrash and mixed-warn badges. The eval
+  harness measures plumbing; composition determines whether the plumbing
+  effort was well-spent.
