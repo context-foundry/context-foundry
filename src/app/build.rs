@@ -6789,28 +6789,66 @@ async fn run_pattern_extraction(
     if patterns_extracted.exists() {
         match patterns::extract_patterns_from_file(patterns_extracted) {
             Ok(new_patterns) if !new_patterns.is_empty() => {
-                // Capture titles before merge (merge consumes the vec)
+                // Capture titles before any consuming call.
                 let titles: Vec<String> = new_patterns.iter().map(|p| p.title.clone()).collect();
-                match patterns::merge_patterns(patterns_dir, new_patterns) {
-                    Ok(added) => {
+
+                // 1) ALWAYS write SKILL.md (the layer the matcher reads).
+                let skills_dir = crate::skills::resolve_skills_dir("~/.foundry/skills");
+                match crate::skills::write_extracted_skills(&skills_dir, &new_patterns) {
+                    Ok(report) => {
                         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BackgroundLog(format!(
-                            "Merged patterns: {} new added to {}",
-                            added,
-                            patterns_dir.display()
+                            "Skills written: {} new, {} bumped, {} skipped (dir: {})",
+                            report.created.len(),
+                            report.bumped.len(),
+                            report.skipped_empty,
+                            skills_dir.display()
                         ))));
-                        // Send individual pattern titles for session tracking
-                        for title in &titles {
+                        for created in &report.created {
                             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BackgroundLog(
-                                format!("Pattern learned: {}", title),
+                                format!("Skill learned: {}", created),
+                            )));
+                        }
+                        for bumped in &report.bumped {
+                            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BackgroundLog(
+                                format!("Skill bumped (frequency+1): {}", bumped),
                             )));
                         }
                     }
                     Err(e) => {
                         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BackgroundLog(format!(
-                            "Failed to merge patterns: {}",
+                            "Failed to write extracted skills: {}",
                             e
                         ))));
                     }
+                }
+
+                // 2) Optionally also write the legacy JSON store (Phase 1 of strangler-fig).
+                if ctx.config.pattern_dual_emit {
+                    match patterns::merge_patterns(patterns_dir, new_patterns) {
+                        Ok(added) => {
+                            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BackgroundLog(
+                                format!(
+                                    "Merged patterns: {} new added to {}",
+                                    added,
+                                    patterns_dir.display()
+                                ),
+                            )));
+                            for title in &titles {
+                                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BackgroundLog(
+                                    format!("Pattern learned: {}", title),
+                                )));
+                            }
+                        }
+                        Err(e) => {
+                            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BackgroundLog(
+                                format!("Failed to merge patterns: {}", e),
+                            )));
+                        }
+                    }
+                } else {
+                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BackgroundLog(
+                        "Legacy patterns merge skipped (pattern_dual_emit=false)".to_string(),
+                    )));
                 }
             }
             Ok(_) => {

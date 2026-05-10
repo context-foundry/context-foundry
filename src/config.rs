@@ -525,6 +525,15 @@ pub struct Config {
     pub b_pattern_extraction_provider: String,
     #[serde(default)]
     pub b_pattern_extraction_model: String,
+    /// When true (default), pattern extraction emits BOTH the legacy
+    /// ~/.foundry/patterns/common-issues.json merge AND the new
+    /// ~/.foundry/skills/<pattern_id>/SKILL.md write. When false, only
+    /// the SKILL.md write runs (legacy JSON store is read-only). Phase 1
+    /// of the T1.26/T1.28/T1.29 strangler-fig rollout: dual-emit while
+    /// the new path bakes; flip to false in T1.28; remove the legacy
+    /// path in T1.29.
+    #[serde(default = "default_true")]
+    pub pattern_dual_emit: bool,
 }
 
 impl Default for Config {
@@ -663,6 +672,7 @@ impl Default for Config {
             b_pr_review_model: String::new(),
             b_pattern_extraction_provider: String::new(),
             b_pattern_extraction_model: String::new(),
+            pattern_dual_emit: true,
         }
     }
 }

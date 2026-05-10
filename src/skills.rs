@@ -606,7 +606,6 @@ fn escape_scalar(v: &str) -> String {
 }
 
 /// Write a single skill to `<skills_dir>/<dir_name>/SKILL.md`.
-#[allow(dead_code)]
 pub fn write_skill(skills_dir: &Path, dir_name: &str, contents: &str) -> Result<()> {
     let dir = skills_dir.join(dir_name);
     std::fs::create_dir_all(&dir)
@@ -614,6 +613,118 @@ pub fn write_skill(skills_dir: &Path, dir_name: &str, contents: &str) -> Result<
     let target = dir.join("SKILL.md");
     atomic_write_file(&target, contents.as_bytes())
         .with_context(|| format!("failed to write {}", target.display()))?;
+    Ok(())
+}
+
+/// Tally of what `write_extracted_skills` did so the build loop can
+/// log per-skill outcomes through `LoopEvent::BackgroundLog`.
+#[derive(Debug, Default)]
+pub struct WriteExtractedReport {
+    /// Skills written for the first time (one entry per dir_name actually placed).
+    pub created: Vec<String>,
+    /// Skills whose body matched an existing SKILL.md; frequency + last-used were bumped in place.
+    pub bumped: Vec<String>,
+    /// Patterns whose `solution` was None or both planner+reviewer empty -- nothing to emit.
+    pub skipped_empty: usize,
+}
+
+/// Convert each freshly-extracted `Pattern` into one or two SKILL.md files
+/// under `skills_dir`. Idempotent: bytewise-equal body bumps frequency in
+/// place; differing body gets a `-2`, `-3`, ... suffix. Never silently
+/// overwrites a different skill.
+pub fn write_extracted_skills(
+    skills_dir: &Path,
+    patterns: &[Pattern],
+) -> Result<WriteExtractedReport> {
+    std::fs::create_dir_all(skills_dir)
+        .with_context(|| format!("failed to create {}", skills_dir.display()))?;
+    let mut report = WriteExtractedReport::default();
+    let today = Utc::now().format("%Y-%m-%d").to_string();
+    for p in patterns {
+        let pairs = pattern_to_skill_files(p);
+        if pairs.is_empty() {
+            report.skipped_empty += 1;
+            continue;
+        }
+        for (base_dir_name, contents) in pairs {
+            apply_skill_emission(skills_dir, &base_dir_name, &contents, &today, &mut report)?;
+        }
+    }
+    Ok(report)
+}
+
+fn apply_skill_emission(
+    skills_dir: &Path,
+    base_dir_name: &str,
+    contents: &str,
+    today: &str,
+    report: &mut WriteExtractedReport,
+) -> Result<()> {
+    let new_body = body_only_from_skill_md(contents);
+    let mut suffix: usize = 0;
+    loop {
+        let candidate = if suffix == 0 {
+            base_dir_name.to_string()
+        } else {
+            format!("{}-{}", base_dir_name, suffix + 1)
+        };
+        let target_path = skills_dir.join(&candidate).join("SKILL.md");
+        if !target_path.exists() {
+            if suffix == 0 {
+                write_skill(skills_dir, &candidate, contents)?;
+            } else {
+                let rewritten = rewrite_name_in_skill_md(contents, &candidate);
+                write_skill(skills_dir, &candidate, &rewritten)?;
+            }
+            report.created.push(candidate);
+            return Ok(());
+        }
+        let existing = std::fs::read_to_string(&target_path)
+            .with_context(|| format!("failed to read {}", target_path.display()))?;
+        let existing_body = body_only_from_skill_md(&existing);
+        if existing_body == new_body {
+            bump_skill_frequency_and_last_used(&target_path, today)?;
+            report.bumped.push(candidate);
+            return Ok(());
+        }
+        suffix += 1;
+        if suffix > 99 {
+            anyhow::bail!(
+                "skill suffix exhausted for {} (>99 collisions)",
+                base_dir_name
+            );
+        }
+    }
+}
+
+fn body_only_from_skill_md(contents: &str) -> String {
+    match parse_skill_file("", contents) {
+        Ok(sf) => sf.body.trim().to_string(),
+        Err(_) => contents.trim().to_string(),
+    }
+}
+
+fn rewrite_name_in_skill_md(contents: &str, new_name: &str) -> String {
+    let sf = match parse_skill_file("", contents) {
+        Ok(sf) => sf,
+        Err(_) => return contents.to_string(),
+    };
+    let mut fm = sf.frontmatter;
+    fm.name = new_name.to_string();
+    render_skill(&fm, &sf.body)
+}
+
+fn bump_skill_frequency_and_last_used(skill_md_path: &Path, today: &str) -> Result<()> {
+    let original = std::fs::read_to_string(skill_md_path)
+        .with_context(|| format!("failed to read {}", skill_md_path.display()))?;
+    let sf = parse_skill_file("", &original)
+        .with_context(|| format!("failed to parse {}", skill_md_path.display()))?;
+    let mut fm = sf.frontmatter;
+    fm.cf_frequency = fm.cf_frequency.saturating_add(1);
+    fm.cf_last_used = Some(format!("{}T00:00:00Z", today));
+    let new_contents = render_skill(&fm, &sf.body);
+    atomic_write_file(skill_md_path, new_contents.as_bytes())
+        .with_context(|| format!("failed to write {}", skill_md_path.display()))?;
     Ok(())
 }
 
@@ -957,5 +1068,116 @@ mod tests {
             !names.contains(&"beta"),
             "beta has no overlapping keywords; should be excluded"
         );
+    }
+
+    #[test]
+    fn write_extracted_skills_creates_planner_and_reviewer_for_dual_solution() {
+        let p = sample_pattern("plan body", "review body");
+        let dir = tempfile::tempdir().expect("tempdir");
+        let report = write_extracted_skills(dir.path(), &[p]).expect("write");
+        assert_eq!(report.created.len(), 2);
+        assert!(report.bumped.is_empty());
+        assert_eq!(report.skipped_empty, 0);
+        assert!(dir.path().join("sample-pid-planner/SKILL.md").exists());
+        assert!(dir.path().join("sample-pid-reviewer/SKILL.md").exists());
+    }
+
+    #[test]
+    fn write_extracted_skills_bumps_frequency_on_byte_identical_body() {
+        let p = sample_pattern("plan body", "review body");
+        let dir = tempfile::tempdir().expect("tempdir");
+
+        let first = write_extracted_skills(dir.path(), &[p.clone()]).expect("write1");
+        assert_eq!(first.created.len(), 2);
+
+        // Capture pre-bump frequency from the planner side.
+        let planner_path = dir.path().join("sample-pid-planner/SKILL.md");
+        let pre_contents = std::fs::read_to_string(&planner_path).expect("read pre");
+        let pre = parse_skill_file("sample-pid-planner", &pre_contents).expect("parse pre");
+        let pre_freq = pre.frontmatter.cf_frequency;
+
+        let second = write_extracted_skills(dir.path(), &[p]).expect("write2");
+        assert!(second.created.is_empty());
+        assert_eq!(second.bumped.len(), 2);
+
+        let post_contents = std::fs::read_to_string(&planner_path).expect("read post");
+        let post = parse_skill_file("sample-pid-planner", &post_contents).expect("parse post");
+        assert_eq!(post.frontmatter.cf_frequency, pre_freq + 1);
+        let last_used = post.frontmatter.cf_last_used.expect("last_used set");
+        assert!(
+            last_used.ends_with("T00:00:00Z"),
+            "expected ISO date suffix, got {}",
+            last_used
+        );
+    }
+
+    #[test]
+    fn write_extracted_skills_appends_numeric_suffix_when_body_differs() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let p1 = sample_pattern("body A", "body A reviewer");
+        let _ = write_extracted_skills(dir.path(), &[p1]).expect("first");
+
+        let p2 = sample_pattern("body B", "body A reviewer");
+        let report = write_extracted_skills(dir.path(), &[p2]).expect("second");
+
+        assert!(dir.path().join("sample-pid-planner/SKILL.md").exists());
+        assert!(dir.path().join("sample-pid-planner-2/SKILL.md").exists());
+        assert!(report.bumped.iter().any(|s| s == "sample-pid-reviewer"));
+        assert!(!dir.path().join("sample-pid-reviewer-2").exists());
+    }
+
+    #[test]
+    fn write_extracted_skills_collision_rewrites_inner_name_to_match_dir() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let p1 = sample_pattern("body A", "body A reviewer");
+        let _ = write_extracted_skills(dir.path(), &[p1]).expect("first");
+
+        let p2 = sample_pattern("body B", "body A reviewer");
+        let _ = write_extracted_skills(dir.path(), &[p2]).expect("second");
+
+        let suffix_path = dir.path().join("sample-pid-planner-2/SKILL.md");
+        let contents = std::fs::read_to_string(&suffix_path).expect("read suffix");
+        let parsed = parse_skill_file("sample-pid-planner-2", &contents).expect("parse suffix");
+        assert_eq!(parsed.frontmatter.name, "sample-pid-planner-2");
+    }
+
+    #[test]
+    fn write_extracted_skills_skips_pattern_without_solution() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let mut p_none = sample_pattern("x", "y");
+        p_none.solution = None;
+        let mut p_empty = sample_pattern("x", "y");
+        p_empty.solution = Some(PatternSolution {
+            planner: String::new(),
+            reviewer: String::new(),
+        });
+
+        let report = write_extracted_skills(dir.path(), &[p_none, p_empty]).expect("write");
+        assert!(report.created.is_empty());
+        assert!(report.bumped.is_empty());
+        assert_eq!(report.skipped_empty, 2);
+    }
+
+    #[test]
+    fn bump_frequency_and_last_used_round_trips_after_crlf_normalization() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let target_dir = dir.path().join("crlf-skill");
+        std::fs::create_dir_all(&target_dir).expect("mkdir");
+        let target = target_dir.join("SKILL.md");
+        let raw = "---\r\nname: crlf-skill\r\ndescription: d\r\nmetadata:\r\n  cf-stage: planner\r\n  cf-citations-pass: 0\r\n  cf-citations-wip: 0\r\n  cf-frequency: 4\r\n  cf-keywords:\r\n    - foo\r\n---\r\n\r\n## Issue\r\n\r\nBody text\r\n\r\n## Solution\r\n\r\nDo X\r\n";
+        std::fs::write(&target, raw).expect("write raw");
+
+        bump_skill_frequency_and_last_used(&target, "2026-05-10").expect("bump");
+
+        let after = std::fs::read_to_string(&target).expect("read after");
+        let parsed = parse_skill_file("crlf-skill", &after).expect("parse after");
+        assert_eq!(parsed.frontmatter.cf_frequency, 5);
+        assert_eq!(
+            parsed.frontmatter.cf_last_used.as_deref(),
+            Some("2026-05-10T00:00:00Z")
+        );
+        assert!(parsed.body.contains("Body text"));
+        assert!(parsed.body.contains("Do X"));
+        assert!(!after.contains('\r'), "re-rendered file should be LF-only");
     }
 }

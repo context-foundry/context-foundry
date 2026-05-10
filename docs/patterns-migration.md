@@ -125,3 +125,74 @@ to re-run.
 `patterns::load_patterns_from_global` reads `~/.foundry/skills/` first;
 if no SKILL.md is present, it falls back to the JSON store. Removal of
 the JSON fallback is scheduled for T1.15.
+
+## 2026-05 Extractor Migration (T1.26)
+
+### Why
+
+Until T1.26 the post-task pattern extractor wrote learnings only to
+`~/.foundry/patterns/common-issues.json`, but T1.15 had already routed
+the matcher to read from `~/.foundry/skills/`. Newly-learned patterns
+accumulated in a JSON graveyard the matcher never opened. T1.26 adds
+the SKILL.md write path so extraction reaches the layer that gets
+injected.
+
+### Command
+
+No new CLI -- the change happens in the existing background extractor
+(`src/app/build.rs::run_pattern_extraction`). After every successful
+build, extracted patterns are written to
+`~/.foundry/skills/<pattern_id>/SKILL.md` (or two files when both
+planner and reviewer advice are present, suffixed `-planner` /
+`-reviewer`).
+
+### Output shape
+
+Identical to T1.13's migration output: standard `name` / `description`
+plus a `metadata` map carrying `cf-stage`, `cf-citations-pass`,
+`cf-citations-wip`, `cf-last-used`, `cf-frequency`, `cf-severity`,
+`cf-keywords`. Body is `## Issue` / `## Solution`. Solution text is
+truncated to 16000 characters via `crate::utils::truncate_str`.
+
+### Idempotency
+
+The runtime extractor handles collisions differently from the one-shot
+T1.13 migration:
+
+- If `<pattern_id>/SKILL.md` already exists with a body equal (post-
+  frontmatter, trimmed) to the new emission, `cf-frequency` is bumped
+  by one and `cf-last-used` is refreshed to today's UTC date. The
+  frontmatter is rewritten atomically; the body is preserved.
+- If `<pattern_id>/SKILL.md` already exists with a different body, a
+  numeric suffix is appended (`<pattern_id>-2`, `-3`, ...) and a new
+  skill is written. The inner `name:` field is rewritten to match the
+  suffixed directory so the skill's self-identification stays
+  consistent. We never silently overwrite a different skill.
+- All writes use `crate::utils::atomic_write_file` (tmp + rename) so
+  concurrent matcher reads cannot see truncated content.
+
+### Dual emit
+
+`config.pattern_dual_emit` (default `true` in this phase) controls
+whether the legacy `~/.foundry/patterns/common-issues.json` merge runs
+alongside the new SKILL.md write. With it on, both stores grow on
+every extraction. Set `pattern_dual_emit: false` in
+`~/.foundry/config.json` or `.foundry.json` to skip the legacy write
+entirely.
+
+### Rollout
+
+- Phase 1 (T1.26 -- this phase): default `pattern_dual_emit = true`,
+  both paths run.
+- Phase 2 (T1.28): flip default to `false` after roughly 10 tasks
+  with no observed regressions; legacy JSON store stops growing.
+- Phase 3 (T1.29): delete `merge_patterns` and the `common-issues.json`
+  reader; archive the file as `_legacy_archive_<date>.json`; remove
+  the `pattern_dual_emit` field.
+
+### Fallback
+
+If `~/.foundry/skills/` does not exist (fresh install with no T1.13
+migration), `write_extracted_skills` creates it. No T1.13 prerequisite.
+On any I/O error the failure is logged through
+`LoopEvent::BackgroundLog` and the pipeline continues.
