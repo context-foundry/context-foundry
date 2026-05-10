@@ -3379,6 +3379,13 @@ async fn process_task(
     let skills_dir_main = skills::resolve_skills_dir("~/.foundry/skills");
     let all_skills_main = skills::load_skills(&skills_dir_main);
 
+    // Collect skill IDs injected into either planner or reviewer prompts so
+    // the downstream PatternsUsed emit can report a non-zero inj count even
+    // when no legacy patterns matched. T1.30: previously the skills branch
+    // returned an empty `matched` vec, leaving `state.pattern_inject_count`
+    // permanently stuck at 0 despite skills being injected.
+    let mut injected_skill_titles: Vec<String> = Vec::new();
+    let mut injected_skill_keywords: HashMap<String, Vec<String>> = HashMap::new();
     let (matched, pattern_context, reviewer_pattern_context) = if !all_skills_main.is_empty() {
         let planner_skills =
             skills::match_skills_for_stage(&all_skills_main, "planner");
@@ -3408,6 +3415,38 @@ async fn process_task(
             skills::format_skills_for_prompt(&ranked_planner, effective_pattern_count);
         let reviewer_text =
             skills::format_skills_for_prompt(&ranked_reviewer, effective_pattern_count);
+
+        // Build the deduped union of skill_ids actually formatted into either
+        // prompt. `format_skills_for_prompt` takes the first `effective_pattern_count`
+        // skills from each list -- match that here so the reported count
+        // reflects what the agent actually saw.
+        let mut seen_ids: std::collections::HashSet<String> =
+            std::collections::HashSet::new();
+        let mut collect = |ranked: &[&skills::SkillFile]| {
+            for s in ranked.iter().take(effective_pattern_count) {
+                let id = if !s.dir_name.is_empty() {
+                    s.dir_name.clone()
+                } else {
+                    s.frontmatter.name.clone()
+                };
+                if seen_ids.insert(id.clone()) {
+                    if !s.frontmatter.cf_keywords.is_empty() {
+                        injected_skill_keywords.insert(
+                            id.clone(),
+                            s.frontmatter
+                                .cf_keywords
+                                .iter()
+                                .map(|k| k.to_lowercase())
+                                .collect(),
+                        );
+                    }
+                    injected_skill_titles.push(id);
+                }
+            }
+        };
+        collect(&ranked_planner);
+        collect(&ranked_reviewer);
+
         (
             Vec::<&patterns::Pattern>::new(),
             planner_text,
@@ -3481,6 +3520,29 @@ async fn process_task(
             ObservatoryEvent::PatternInjected {
                 task_id: task_id.to_string(),
                 pattern_ids,
+                count: actually_injected,
+            },
+        );
+    } else if !injected_skill_titles.is_empty() {
+        // T1.30: skills branch -- legacy `matched` is empty by design (skill
+        // citation tracking lives in skills-telemetry.db, not in the patterns
+        // JSON), but we still emit PatternsUsed so the Stats panel's inj
+        // counter reflects reality.
+        let actually_injected = injected_skill_titles.len();
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+            "Injected {} skill(s) into planner/reviewer prompts",
+            actually_injected
+        ))));
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::PatternsUsed {
+            titles: injected_skill_titles.clone(),
+            keywords_by_title: injected_skill_keywords.clone(),
+        }));
+        observatory::log_event(
+            &ctx.session_id,
+            &ctx.project_dir,
+            ObservatoryEvent::PatternInjected {
+                task_id: task_id.to_string(),
+                pattern_ids: injected_skill_titles.clone(),
                 count: actually_injected,
             },
         );

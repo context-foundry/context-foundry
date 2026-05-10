@@ -251,6 +251,19 @@ pub fn match_skills_for_stage<'a>(skills: &'a [SkillFile], stage: &str) -> Vec<&
         .collect()
 }
 
+/// Render the matched skills as a prompt-embeddable Markdown block.
+///
+/// Each skill block leads with its kebab-case `skill_id` (from
+/// `frontmatter.name`) in a backtick-quoted header so the agent's natural
+/// quoting style picks the ID up verbatim. A closing **Citation instruction**
+/// asks the agent to list applied skill_ids in a `**Skills referenced:**`
+/// footer at the bottom of its output -- this is what the post-AUDIT citation
+/// scanner in `src/app/build.rs` greps for to close the feedback loop.
+///
+/// The citation instruction is injected *here* (rather than in `prompts.rs`)
+/// so it stays adjacent to the skill list the agent must reference and is
+/// emitted only when skills are actually present. Returns an empty string
+/// when `skills` is empty.
 pub fn format_skills_for_prompt(skills: &[&SkillFile], max_skills: usize) -> String {
     if skills.is_empty() {
         return String::new();
@@ -258,8 +271,10 @@ pub fn format_skills_for_prompt(skills: &[&SkillFile], max_skills: usize) -> Str
     let limit = if max_skills == 0 { 10 } else { max_skills };
     let mut out = String::from("\n\n---\n## Available Skills (decide which to apply)\n\n");
     for (i, s) in skills.iter().take(limit).enumerate() {
+        // Lead each block with the skill_id in backticks so the agent quotes
+        // it verbatim (kebab-case, lowercase, exact match for scan_citations).
         out.push_str(&format!(
-            "### {}. {} [cf-stage: {}]\n",
+            "### {}. `{}` [cf-stage: {}]\n",
             i + 1,
             s.frontmatter.name,
             s.frontmatter.cf_stage
@@ -278,6 +293,11 @@ pub fn format_skills_for_prompt(skills: &[&SkillFile], max_skills: usize) -> Str
         }
         out.push('\n');
     }
+    out.push_str(
+        "**Citation instruction:** when you apply guidance from any skill above, \
+list its `skill_id` in a `**Skills referenced:**` footer at the bottom of your output. \
+Only cite skill_ids from the list above -- do not invent new ones.\n",
+    );
     out
 }
 
@@ -994,6 +1014,90 @@ mod tests {
         assert!(out.contains("does X"));
         assert!(out.contains("a, b"));
         assert!(out.contains("cf-stage: planner"));
+        // T1.30: skill_id must appear as a backtick-quoted header so the
+        // agent quotes it verbatim, and the citation instruction footer
+        // must be present so the agent knows to cite applied skills.
+        assert!(
+            out.contains("`sample`"),
+            "expected backtick-quoted skill_id header, got: {}",
+            out
+        );
+        assert!(
+            out.contains("Skills referenced:"),
+            "expected citation instruction footer, got: {}",
+            out
+        );
+        assert!(
+            out.contains("skill_id"),
+            "expected the word skill_id in the citation instruction, got: {}",
+            out
+        );
+    }
+
+    #[test]
+    fn format_skills_for_prompt_lists_each_skill_id_only_once() {
+        // Idempotence guard: re-formatting the same skill twice must not
+        // duplicate the closing citation footer.
+        let s1 = make_skill("alpha-planner", "planner");
+        let s2 = make_skill("beta-planner", "planner");
+        let refs: Vec<&SkillFile> = vec![&s1, &s2];
+        let out = format_skills_for_prompt(&refs, 10);
+        let footer_count = out.matches("Citation instruction:").count();
+        assert_eq!(
+            footer_count, 1,
+            "footer must appear exactly once per format call, got {}: {}",
+            footer_count, out
+        );
+        assert!(out.contains("`alpha-planner`"));
+        assert!(out.contains("`beta-planner`"));
+    }
+
+    #[test]
+    fn scan_citations_finds_skill_ids_in_skills_referenced_footer() {
+        // T1.30 citation round-trip: a synthetic current-plan.md with the
+        // expected `**Skills referenced:**` footer should be parsed by
+        // patterns::scan_citations into a list of skill_ids.
+        let s1 = make_skill("plan-file-token-overflow-planner", "planner");
+        let s2 = make_skill("stats-structs-need-clone-for-tui-state-planner", "planner");
+        let s3 = make_skill("unused-skill-planner", "planner");
+        let pats: Vec<crate::patterns::Pattern> = vec![s1, s2, s3]
+            .into_iter()
+            .map(skill_to_pattern)
+            .collect();
+
+        let synthetic_plan = "\
+# Plan: T1.30
+
+## Dependencies
+- none
+
+## File Operations
+- [MODIFY] src/app/build.rs -- counter wiring fix.
+
+**Skills referenced:** `plan-file-token-overflow-planner`, \
+`stats-structs-need-clone-for-tui-state-planner`
+";
+
+        let cited = crate::patterns::scan_citations(synthetic_plan, &pats);
+        assert!(
+            cited
+                .iter()
+                .any(|c| c == "plan-file-token-overflow-planner"),
+            "expected plan-file-token-overflow-planner in {:?}",
+            cited
+        );
+        assert!(
+            cited
+                .iter()
+                .any(|c| c == "stats-structs-need-clone-for-tui-state-planner"),
+            "expected stats-structs-need-clone-for-tui-state-planner in {:?}",
+            cited
+        );
+        assert!(
+            !cited.iter().any(|c| c == "unused-skill-planner"),
+            "unused skill must NOT appear, got {:?}",
+            cited
+        );
     }
 
     #[test]
