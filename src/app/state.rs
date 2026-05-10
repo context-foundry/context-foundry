@@ -1309,6 +1309,19 @@ pub struct DualBuildState {
     pub last_event_was_delta: [bool; 2],
 }
 
+#[derive(Debug, Clone)]
+pub struct StageSummaryOverlay {
+    pub stage: String,
+    pub stage_label: String,
+    pub state: crate::llm::summary_cache::StageState,
+    pub summary: Option<String>,
+    pub in_flight: bool,
+    pub last_error: Option<String>,
+    pub last_cache_hit: bool,
+    pub last_model: String,
+    pub last_provider: String,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RunningModalKind {
     /// Esc tap on running screen -- "Stop this run?" Y/N modal.
@@ -1444,6 +1457,7 @@ pub struct AppState {
     pub focused_pane: TuiPane,
     pub running_explorer: Option<StartupState>,
     pub show_running_explorer: bool,
+    pub stage_summary_overlay: Option<StageSummaryOverlay>,
     pub available_extensions: Vec<ExtensionDisplayInfo>,
     pub extensions_cursor: usize,
     // ─── Extension & Pattern Telemetry Counters ───
@@ -1626,6 +1640,7 @@ impl AppState {
             focused_pane: TuiPane::Explorer,
             running_explorer: None,
             show_running_explorer: false,
+            stage_summary_overlay: None,
             available_extensions: Vec::new(),
             extensions_cursor: 0,
             extension_inject_count: HashMap::new(),
@@ -1896,6 +1911,10 @@ pub(super) enum AppEvent {
         claude_available: bool,
         codex_available: bool,
         copilot_available: bool,
+    },
+    StageSummaryReady {
+        stage: String,
+        outcome: crate::llm::summary::SummaryOutcome,
     },
 }
 

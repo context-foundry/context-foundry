@@ -27,14 +27,16 @@ pub use self::state::FileEntry;
 pub use self::state::{
     settings_sections, Action, AppPhase, AppState, CurrentClassification, DualSelection,
     ExtensionDisplayInfo, FieldKind, ModelEntry, ModelPicker, OverlayRow, PatternEventKind,
-    PickerItem, PlanStatus, PlanningState, RunningModalKind, SectionKind, StartupAction,
-    StartupScenario, StartupState, StreamState, TuiPane,
+    PickerItem, PlanStatus, PlanningState, RunningModalKind, SectionKind, StageSummaryOverlay,
+    StartupAction, StartupScenario, StartupState, StreamState, TuiPane,
 };
 use self::state::{AppEvent, AppendTasksRequest, LoopEvent, PendingTransition, PlanningOutcome};
 use crate::agent::{AgentErrorKind, AgentOutputEvent, AgentRole};
 use crate::complexity::TaskOverride;
 use crate::config::Config;
 use crate::eval;
+use crate::llm::summary::summarize_stage;
+use crate::llm::summary_cache::StageState;
 use crate::eval::report as eval_report;
 use crate::git;
 use crate::orchestrator::{self, OrchestratorConfig, OrchestratorOutcome};
@@ -623,6 +625,9 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
                 // Settings overlay floats on top -- render after base view
                 if state.show_settings_overlay {
                     tui::render_settings_overlay(frame, &state);
+                }
+                if state.stage_summary_overlay.is_some() {
+                    tui::render_stage_summary_overlay(frame, &state);
                 }
                 // Warning/confirmation banners on top of everything
                 if state.show_git_init_offer {
@@ -1288,6 +1293,7 @@ fn handle_planning_event(state: &mut AppState, event: AppEvent, config: &Config)
                 state.welcome_message = msg;
             }
         }
+        AppEvent::StageSummaryReady { .. } => {}
         AppEvent::NarrativeRefresh(brief) => {
             state.last_commit_brief = brief;
         }
@@ -2008,6 +2014,10 @@ fn handle_planning_key(state: &mut AppState, key: event::KeyEvent, config: &Conf
     }
     match key.code {
         KeyCode::Char('q') | KeyCode::Esc => {
+            if !state.show_settings_overlay && state.stage_summary_overlay.is_some() {
+                state.stage_summary_overlay = None;
+                return;
+            }
             if handle_overlay_esc(state) {
                 return;
             }
@@ -2019,6 +2029,26 @@ fn handle_planning_key(state: &mut AppState, key: event::KeyEvent, config: &Conf
             } else {
                 state.confirm_quit = true;
             }
+        }
+        KeyCode::Char('r')
+            if !state.show_settings_overlay && state.stage_summary_overlay.is_some() =>
+        {
+            let Some(overlay) = state.stage_summary_overlay.as_ref().cloned() else {
+                return;
+            };
+            let project_dir = state
+                .buildloop_dir
+                .parent()
+                .unwrap_or(std::path::Path::new("."))
+                .to_path_buf();
+            trigger_stage_summary(
+                state,
+                &project_dir,
+                config,
+                &overlay.stage,
+                &overlay.stage_label,
+                true,
+            );
         }
         KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
             state.should_quit = true;
@@ -2879,8 +2909,35 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                             }
                         }
                         _ if handle_settings_overlay_key(state, key) => {}
+                        KeyCode::Char('r')
+                            if !state.show_settings_overlay
+                                && state.stage_summary_overlay.is_some() =>
+                        {
+                            let Some(overlay) =
+                                state.stage_summary_overlay.as_ref().cloned()
+                            else {
+                                return;
+                            };
+                            let project_dir = state
+                                .buildloop_dir
+                                .parent()
+                                .unwrap_or(std::path::Path::new("."))
+                                .to_path_buf();
+                            trigger_stage_summary(
+                                state,
+                                &project_dir,
+                                config,
+                                &overlay.stage,
+                                &overlay.stage_label,
+                                true,
+                            );
+                        }
                         KeyCode::Char('q') => {
-                            if handle_overlay_esc(state) {
+                            if !state.show_settings_overlay
+                                && state.stage_summary_overlay.is_some()
+                            {
+                                state.stage_summary_overlay = None;
+                            } else if handle_overlay_esc(state) {
                                 // overlay closed
                             } else if state.show_stats_overlay {
                                 state.show_stats_overlay = false;
@@ -2896,6 +2953,12 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                                 state.write_stop_file();
                                 state.log("Stopping after current task (q again to cancel, Ctrl+C to force quit)");
                             }
+                        }
+                        KeyCode::Esc
+                            if !state.show_settings_overlay
+                                && state.stage_summary_overlay.is_some() =>
+                        {
+                            state.stage_summary_overlay = None;
                         }
                         KeyCode::Esc if !handle_overlay_esc(state) && state.show_stats_overlay => {
                             state.show_stats_overlay = false;
@@ -3165,8 +3228,28 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                         .parent()
                         .unwrap_or(std::path::Path::new("."))
                         .to_path_buf();
-                    if let Some(target) = pipeline_click_artifact(click, &project_dir, config) {
-                        navigate_explorer_to_file(state, &project_dir, &target);
+                    match pipeline_click_target(click, &project_dir, config) {
+                        PipelineClickTarget::StageSummary { stage_id } => {
+                            let already_in_flight = state
+                                .stage_summary_overlay
+                                .as_ref()
+                                .is_some_and(|o| o.stage == stage_id && o.in_flight);
+                            if !already_in_flight {
+                                let label = stage_label_for(&stage_id, config);
+                                trigger_stage_summary(
+                                    state,
+                                    &project_dir,
+                                    config,
+                                    &stage_id,
+                                    &label,
+                                    false,
+                                );
+                            }
+                        }
+                        PipelineClickTarget::OpenFile(path) => {
+                            navigate_explorer_to_file(state, &project_dir, &path);
+                        }
+                        PipelineClickTarget::None => {}
                     }
                 }
             }
@@ -3447,6 +3530,18 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
             state.log("Ignoring late orchestrator result while running");
         }
         AppEvent::WelcomeMessage(_) => {}
+        AppEvent::StageSummaryReady { stage, outcome } => {
+            if let Some(overlay) = state.stage_summary_overlay.as_mut() {
+                if overlay.stage == stage {
+                    overlay.in_flight = false;
+                    overlay.summary = Some(outcome.summary);
+                    overlay.last_cache_hit = outcome.cache_hit;
+                    overlay.last_model = outcome.model;
+                    overlay.last_provider = outcome.provider;
+                    overlay.last_error = outcome.error;
+                }
+            }
+        }
         AppEvent::NarrativeRefresh(brief) => {
             state.last_commit_brief = brief;
         }
@@ -4895,7 +4990,185 @@ pub fn run_patterns_promote(apply: bool, days: u32) -> Result<()> {
 
 // ─── Running Explorer Helpers ─────────────────────────────────
 
+enum PipelineClickTarget {
+    StageSummary { stage_id: String },
+    OpenFile(std::path::PathBuf),
+    None,
+}
+
+fn pipeline_click_target(
+    click: tui::PipelineClick,
+    project_dir: &std::path::Path,
+    config: &Config,
+) -> PipelineClickTarget {
+    let buildloop = project_dir.join(".buildloop");
+    let enabled_stages: Vec<&crate::config::PipelineStageConfig> = config
+        .pipeline_stages
+        .iter()
+        .filter(|s| s.enabled)
+        .collect();
+    let mut connected_ids: Vec<String> = Vec::new();
+    if config.run_mode == "coach" {
+        connected_ids.push("coach".to_string());
+    }
+    for stage in enabled_stages.iter() {
+        connected_ids.push(stage.id.clone());
+        if stage.id == "plan" && config.plan_review_enabled {
+            connected_ids.push("plan-review".to_string());
+        }
+    }
+    match click {
+        tui::PipelineClick::ConnectedStage(i) => {
+            let stage_id = match connected_ids.get(i) {
+                Some(s) => s.as_str(),
+                None => return PipelineClickTarget::None,
+            };
+            if stage_id == "plan-review" {
+                return PipelineClickTarget::StageSummary {
+                    stage_id: stage_id.to_string(),
+                };
+            }
+            let file = match stage_id {
+                "scout" => buildloop.join("scout-report.md"),
+                "query" => buildloop.join("questions.md"),
+                "research" => buildloop.join("research-report.md"),
+                "plan" => buildloop.join("current-plan.md"),
+                "implement" => buildloop.join("build-claims.md"),
+                "doubt" => buildloop.join("review-report.md"),
+                "coach" => buildloop.join("intake-brief.md"),
+                _ => return PipelineClickTarget::None,
+            };
+            PipelineClickTarget::OpenFile(file)
+        }
+        tui::PipelineClick::Discover => {
+            PipelineClickTarget::OpenFile(ContractPaths::resolve(project_dir).tasks_path)
+        }
+        tui::PipelineClick::Ship | tui::PipelineClick::Patterns => PipelineClickTarget::None,
+    }
+}
+
+fn detect_stage_state(stage_id: &str, state: &AppState, buildloop_dir: &Path) -> StageState {
+    if let Some((role, _)) = &state.current_agent {
+        if role.slug() == stage_id {
+            return StageState::Running;
+        }
+    }
+    let log_path = buildloop_dir
+        .join("logs")
+        .join(format!("{}-out.jsonl", stage_id));
+    if log_path.exists() {
+        let is_wip = state
+            .last_commit_brief
+            .as_ref()
+            .map(|b| b.subject.starts_with("WIP"))
+            .unwrap_or(false);
+        if is_wip {
+            return StageState::Failed;
+        }
+        return StageState::Complete;
+    }
+    StageState::NotStarted
+}
+
+fn read_log_tail(buildloop_dir: &Path, stage_id: &str, max_bytes: usize) -> Option<String> {
+    let path = buildloop_dir
+        .join("logs")
+        .join(format!("{}-out.jsonl", stage_id));
+    let bytes = std::fs::read(&path).ok()?;
+    if bytes.len() <= max_bytes {
+        Some(String::from_utf8_lossy(&bytes).into_owned())
+    } else {
+        Some(String::from_utf8_lossy(&bytes[bytes.len() - max_bytes..]).into_owned())
+    }
+}
+
+fn stage_label_for(stage_id: &str, config: &Config) -> String {
+    match stage_id {
+        "plan-review" => "P+".to_string(),
+        _ => config.pipeline_stage_label(stage_id),
+    }
+}
+
+fn trigger_stage_summary(
+    state: &mut AppState,
+    project_dir: &Path,
+    config: &Config,
+    stage_id: &str,
+    stage_label: &str,
+    force_refresh: bool,
+) {
+    let buildloop_dir = state.buildloop_dir.clone();
+    let stage_state = detect_stage_state(stage_id, state, &buildloop_dir);
+    let artifacts = vec![project_dir.join(".buildloop").join("current-plan.md")];
+    let log_tail = read_log_tail(&buildloop_dir, stage_id, 8192);
+
+    let existing = state.stage_summary_overlay.take();
+    let preserve_summary = if force_refresh {
+        None
+    } else {
+        existing.as_ref().and_then(|o| o.summary.clone())
+    };
+    state.stage_summary_overlay = Some(StageSummaryOverlay {
+        stage: stage_id.to_string(),
+        stage_label: stage_label.to_string(),
+        state: stage_state.clone(),
+        summary: preserve_summary,
+        in_flight: true,
+        last_error: None,
+        last_cache_hit: false,
+        last_model: existing
+            .as_ref()
+            .map(|o| o.last_model.clone())
+            .unwrap_or_default(),
+        last_provider: existing
+            .as_ref()
+            .map(|o| o.last_provider.clone())
+            .unwrap_or_default(),
+    });
+    drop(existing);
+
+    let cfg = config.clone();
+    let stage_owned = stage_id.to_string();
+    let state_clone = stage_state;
+    let event_tx = match state.event_tx.clone() {
+        Some(t) => t,
+        None => return,
+    };
+    let session_id = state.observatory_session_id.clone().unwrap_or_default();
+    let proj = project_dir.to_path_buf();
+
+    tokio::spawn(async move {
+        let outcome = summarize_stage(
+            &stage_owned,
+            state_clone,
+            artifacts,
+            log_tail,
+            &cfg,
+            force_refresh,
+        )
+        .await;
+        crate::observatory::log_event(
+            &session_id,
+            &proj,
+            crate::observatory::ObservatoryEvent::StageSummaryRequested {
+                stage: outcome.stage.clone(),
+                cache_hit: outcome.cache_hit,
+                provider: outcome.provider.clone(),
+                model: outcome.model.clone(),
+                latency_ms: outcome.latency_ms,
+                state: outcome.state.as_str().to_string(),
+                error: outcome.error.clone(),
+            },
+        );
+        let _ = event_tx.send(AppEvent::StageSummaryReady {
+            stage: stage_owned,
+            outcome,
+        });
+    });
+}
+
 /// Map a pipeline click to the artifact file path for that stage.
+#[allow(dead_code)]
 fn pipeline_click_artifact(
     click: tui::PipelineClick,
     project_dir: &std::path::Path,

@@ -7,6 +7,7 @@ use ratatui::{
 };
 
 use crate::app::AppState;
+use crate::app::StageSummaryOverlay;
 use crate::config::Config;
 use crate::utils::truncate_str;
 
@@ -1960,6 +1961,108 @@ pub fn render_quit_confirm(frame: &mut Frame, theme: &crate::tui::theme::TuiThem
     let buttons = Paragraph::new(Line::from(vec![quit_btn, Span::raw("    "), cancel_btn]))
         .alignment(Alignment::Center);
     frame.render_widget(buttons, chunks[4]);
+}
+
+pub fn render_stage_summary_overlay(
+    frame: &mut Frame,
+    theme: &crate::tui::theme::TuiTheme,
+    overlay: &StageSummaryOverlay,
+) {
+    let area = frame.area();
+    let w: u16 = 78.min(area.width.saturating_sub(2));
+    let h: u16 = 18.min(area.height.saturating_sub(2));
+    if w < 20 || h < 5 {
+        return;
+    }
+    let x = area.width.saturating_sub(w) / 2;
+    let y = area.height.saturating_sub(h) / 2;
+    let modal = Rect {
+        x,
+        y,
+        width: w,
+        height: h,
+    };
+
+    frame.render_widget(Clear, modal);
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Double)
+        .border_style(
+            Style::default()
+                .fg(theme.accent)
+                .add_modifier(Modifier::BOLD),
+        )
+        .style(Style::default().bg(theme.surface).fg(theme.text));
+    let inner = block.inner(modal);
+    frame.render_widget(block, modal);
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Min(0),
+            Constraint::Length(1),
+            Constraint::Length(1),
+        ])
+        .split(inner);
+
+    let title = Paragraph::new(Line::from(Span::styled(
+        format!("{} -- AI summary", overlay.stage_label),
+        Style::default()
+            .fg(theme.accent)
+            .add_modifier(Modifier::BOLD),
+    )))
+    .alignment(Alignment::Center);
+    frame.render_widget(title, chunks[0]);
+
+    let body: Paragraph = if overlay.in_flight && overlay.summary.is_none() {
+        Paragraph::new("  summarizing...").style(Style::default().fg(theme.muted))
+    } else if let Some(text) = &overlay.summary {
+        Paragraph::new(text.as_str())
+            .wrap(ratatui::widgets::Wrap { trim: false })
+            .style(Style::default().fg(theme.text))
+    } else {
+        Paragraph::new("")
+    };
+    frame.render_widget(body, chunks[2]);
+
+    let model_label = if overlay.last_model.is_empty() {
+        "(default)"
+    } else {
+        overlay.last_model.as_str()
+    };
+    let cache_label = if overlay.last_cache_hit { "cached" } else { "fresh" };
+    let provider_label = if overlay.last_provider.is_empty() {
+        "(default)"
+    } else {
+        overlay.last_provider.as_str()
+    };
+    let status_text = if let Some(err) = &overlay.last_error {
+        format!("  error: {}", err)
+    } else {
+        format!(
+            "  state: {}   {} {} -- {}",
+            overlay.state.as_str(),
+            cache_label,
+            provider_label,
+            model_label,
+        )
+    };
+    let status_style = if overlay.last_error.is_some() {
+        Style::default().fg(theme.error)
+    } else {
+        Style::default().fg(theme.muted)
+    };
+    let status = Paragraph::new(status_text).style(status_style);
+    frame.render_widget(status, chunks[3]);
+
+    let footer = Paragraph::new(Line::from(vec![Span::styled(
+        "[Esc] dismiss   [r] refresh",
+        Style::default().fg(theme.muted),
+    )]))
+    .alignment(Alignment::Center);
+    frame.render_widget(footer, chunks[4]);
 }
 
 pub fn render_running_modal(

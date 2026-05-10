@@ -1,5 +1,7 @@
 // T23.1: Headless build ran successfully — confirmed by autonomous build loop.
 
+use crate::llm::summary_cache::StageState;
+
 /// Cache-aligned system directives appended via `--append-system-prompt` to every
 /// spawned agent. Consolidates all static, role-invariant directives into a single
 /// block so the system prompt prefix stays byte-stable across invocations, enabling
@@ -2099,6 +2101,33 @@ pub fn format_stage_results_for_prompt(
         }
         out.push('\n');
     }
+    out
+}
+
+pub fn stage_summary_prompt(
+    stage: &str,
+    state: &StageState,
+    artifacts: &[(String, String)],
+    log_tail: &str,
+) -> String {
+    let mut out = String::with_capacity(2048);
+    out.push_str(&format!(
+        "Pipeline stage: {}\nCurrent state: {}\n\n",
+        stage,
+        state.as_str()
+    ));
+    for (label, body) in artifacts {
+        out.push_str(&format!("=== {} ===\n{}\n", label, body));
+    }
+    if !log_tail.is_empty() {
+        out.push_str(&format!("=== recent log ===\n{}\n", log_tail));
+    }
+    out.push_str(
+        "\nWrite a 4-8-sentence friendly-but-technical summary of what this stage is doing right now. \
+         Lead with the current state, then cite specific findings, iteration counts, file paths, or \
+         error messages from the artifacts above. Cap output at 500 tokens. Plain text only, no \
+         markdown headers.",
+    );
     out
 }
 

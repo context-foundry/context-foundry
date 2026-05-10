@@ -31,6 +31,11 @@ pub use overlays::{
     render_running_modal, settings_modal_rect, settings_overlay_row_hit_test, ConfirmBannerAction,
     GitInitOfferAction, ModelPickerMouseTarget, QuitConfirmAction,
 };
+pub fn render_stage_summary_overlay(frame: &mut Frame, state: &AppState) {
+    if let Some(overlay) = state.stage_summary_overlay.as_ref() {
+        overlays::render_stage_summary_overlay(frame, &state.tui_theme, overlay);
+    }
+}
 pub use pipeline::{pipeline_click, PipelineClick};
 pub use running::{
     running_header_tab_hit_test, running_status_bar_hit_test, RunningHeaderTab,

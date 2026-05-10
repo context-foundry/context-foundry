@@ -20,6 +20,14 @@ fn default_catalog_refresh_secs() -> u64 {
     86400
 }
 
+fn default_summary_provider() -> String {
+    "claude".to_string()
+}
+
+fn default_summary_model() -> String {
+    "haiku".to_string()
+}
+
 fn default_history_retention_tasks() -> usize {
     50
 }
@@ -482,6 +490,11 @@ pub struct Config {
     #[serde(default)]
     pub stage_overrides: Vec<String>,
 
+    #[serde(default = "default_summary_provider")]
+    pub summary_provider: String,
+    #[serde(default = "default_summary_model")]
+    pub summary_model: String,
+
     /// Background catalog refresh cadence in seconds. 0 disables refresh entirely
     /// (the on-disk catalog or baseline is used as-is). Default 86400 (24h).
     #[serde(default = "default_catalog_refresh_secs")]
@@ -663,6 +676,8 @@ impl Default for Config {
             pipeline_stages: default_pipeline_stages(),
             on_task_complete: None,
             stage_overrides: Vec::new(),
+            summary_provider: default_summary_provider(),
+            summary_model: default_summary_model(),
             model_catalog_refresh_secs: 86400,
             model_catalog_url_overrides: std::collections::HashMap::new(),
             arena_mode: "solo".into(),
@@ -1568,6 +1583,10 @@ impl Config {
                 self.pattern_extraction_model.clone(),
             ),
             "fixer" => (self.fixer_provider.clone(), self.fixer_model.clone()),
+            "summary" => (
+                self.summary_provider.clone(),
+                self.summary_model.clone(),
+            ),
             _ => (self.builder_provider.clone(), self.builder_model.clone()),
         }
     }
@@ -1850,6 +1869,7 @@ impl Config {
                 ("pattern_extraction_provider", "pattern_extraction_model")
             }
             "fixer" => ("fixer_provider", "fixer_model"),
+            "summary" => ("summary_provider", "summary_model"),
             _ => ("builder_provider", "builder_model"),
         }
     }

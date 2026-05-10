@@ -134,6 +134,15 @@ pub enum ObservatoryEvent {
         finding_count: usize,
         feedback_summary: String,
     },
+    StageSummaryRequested {
+        stage: String,
+        cache_hit: bool,
+        provider: String,
+        model: String,
+        latency_ms: u128,
+        state: String,
+        error: Option<String>,
+    },
     RateLimited {
         provider: String,
         wait_secs: u64,
@@ -172,6 +181,7 @@ pub fn event_type_str(event: &ObservatoryEvent) -> &'static str {
         ObservatoryEvent::BudgetOverrun { .. } => "budget_overrun",
         ObservatoryEvent::TaskClassified { .. } => "task_classified",
         ObservatoryEvent::PlanReviewLoopCapped { .. } => "plan_review_loop_capped",
+        ObservatoryEvent::StageSummaryRequested { .. } => "stage_summary_requested",
         ObservatoryEvent::RateLimited { .. } => "rate_limited",
         ObservatoryEvent::DualPipelineStarted { .. } => "dual_pipeline_started",
         ObservatoryEvent::DualPipelineCompleted { .. } => "dual_pipeline_completed",
@@ -253,5 +263,24 @@ impl AgentUsage {
                     ((total as f64 / *context_window as f64) * 100.0).min(100.0) as u8;
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn event_type_str_includes_stage_summary_requested() {
+        let ev = ObservatoryEvent::StageSummaryRequested {
+            stage: "plan-review".into(),
+            cache_hit: false,
+            provider: "claude".into(),
+            model: "haiku".into(),
+            latency_ms: 1234,
+            state: "running".into(),
+            error: None,
+        };
+        assert_eq!(event_type_str(&ev), "stage_summary_requested");
     }
 }

@@ -17,6 +17,7 @@ mod git;
 mod history;
 mod init;
 mod isolation;
+mod llm;
 mod mcp;
 mod model_catalog;
 mod observatory;
