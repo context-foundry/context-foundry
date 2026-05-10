@@ -9,6 +9,10 @@ pub struct ExtensionInfo {
     pub claude_md_path: PathBuf,
     pub patterns_dir: Option<PathBuf>,
     pub source: ExtensionSource,
+    // Discovered for the modern plugin layout; reserved for future plugin tooling.
+    #[allow(dead_code)]
+    pub plugin_manifest: Option<PathBuf>,
+    pub skills_dir: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -102,9 +106,27 @@ fn scan_extensions_dir(dir: &Path, source: ExtensionSource, results: &mut Vec<Ex
             continue;
         }
         let claude_md_path = path.join("CLAUDE.md");
-        if !claude_md_path.exists() {
+        let plugin_manifest_path = path.join(".claude-plugin").join("plugin.json");
+        let skills_dir_path = path.join("skills");
+
+        let has_claude_md = claude_md_path.exists();
+        let has_plugin_manifest = plugin_manifest_path.is_file();
+        if !has_claude_md && !has_plugin_manifest {
             continue;
         }
+
+        let plugin_manifest = if has_plugin_manifest {
+            Some(plugin_manifest_path)
+        } else {
+            None
+        };
+        let skills_dir = if skills_dir_path.is_dir() && skills_dir_has_any_skill_md(&skills_dir_path)
+        {
+            Some(skills_dir_path)
+        } else {
+            None
+        };
+
         let name = entry.file_name().to_string_lossy().into_owned();
         let pdir = path.join("patterns");
         let patterns_dir = if pdir.is_dir() { Some(pdir) } else { None };
@@ -113,8 +135,77 @@ fn scan_extensions_dir(dir: &Path, source: ExtensionSource, results: &mut Vec<Ex
             claude_md_path,
             patterns_dir,
             source,
+            plugin_manifest,
+            skills_dir,
         });
     }
+}
+
+fn skills_dir_has_any_skill_md(skills_dir: &Path) -> bool {
+    let entries = match std::fs::read_dir(skills_dir) {
+        Ok(e) => e,
+        Err(_) => return false,
+    };
+    for entry in entries.flatten() {
+        if entry.path().join("SKILL.md").is_file() {
+            return true;
+        }
+    }
+    false
+}
+
+fn strip_skill_frontmatter(content: &str) -> &str {
+    let stripped = content.strip_prefix('\u{feff}').unwrap_or(content);
+    if !stripped.starts_with("---\n") {
+        return content;
+    }
+    let after_open = &stripped[4..];
+    let close_idx = match after_open.find("\n---\n") {
+        Some(i) => i,
+        None => return content,
+    };
+    let body_start_in_after = close_idx + "\n---\n".len();
+    let body = &after_open[body_start_in_after..];
+    body.strip_prefix('\n').unwrap_or(body)
+}
+
+fn read_skills_body(skills_dir: &Path) -> String {
+    let entries_iter = match std::fs::read_dir(skills_dir) {
+        Ok(e) => e,
+        Err(_) => return String::new(),
+    };
+    let mut entries: Vec<PathBuf> = Vec::new();
+    for entry in entries_iter.flatten() {
+        let p = entry.path();
+        if p.is_dir() {
+            let skill_md = p.join("SKILL.md");
+            if skill_md.is_file() {
+                entries.push(skill_md);
+            }
+        }
+    }
+    entries.sort();
+
+    let mut out = String::new();
+    for path in &entries {
+        let content = match std::fs::read_to_string(path) {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("warning: failed to read skill {}: {}", path.display(), e);
+                continue;
+            }
+        };
+        let body = strip_skill_frontmatter(&content);
+        let trimmed = body.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if !out.is_empty() {
+            out.push_str("\n\n");
+        }
+        out.push_str(body);
+    }
+    out
 }
 
 /// Extract a one-line description from a CLAUDE.md file.
@@ -163,8 +254,10 @@ pub fn count_extension_patterns(patterns_dir: &Option<PathBuf>) -> usize {
         .count()
 }
 
-/// Read CLAUDE.md from each selected extension and build a single concatenated
-/// context string wrapped in delimiter blocks.
+/// Build the concatenated agent-prompt context block for selected extensions.
+/// Prefers `skills/*/SKILL.md` content (modern plugin layout) and falls back to
+/// `CLAUDE.md` (legacy layout). Each extension's body is wrapped in the
+/// `--- BEGIN/END EXTENSION CONTEXT ---` delimiter pair (format unchanged).
 pub fn load_extension_context(extensions: &[ExtensionInfo], selected: &[String]) -> String {
     let mut context = String::new();
     for name in selected {
@@ -175,31 +268,36 @@ pub fn load_extension_context(extensions: &[ExtensionInfo], selected: &[String])
             );
             continue;
         };
-        let content = match std::fs::read_to_string(&ext.claude_md_path) {
-            Ok(c) => c,
-            Err(e) => {
-                eprintln!(
-                    "warning: failed to read CLAUDE.md for extension '{}': {}",
-                    name, e
-                );
-                continue;
+        let body = if let Some(skills_dir) = ext.skills_dir.as_ref() {
+            read_skills_body(skills_dir)
+        } else {
+            match std::fs::read_to_string(&ext.claude_md_path) {
+                Ok(c) => c,
+                Err(e) => {
+                    eprintln!(
+                        "warning: failed to read CLAUDE.md for extension '{}': {}",
+                        name, e
+                    );
+                    String::new()
+                }
             }
         };
-        if content.trim().is_empty() {
+        if body.trim().is_empty() {
             continue;
         }
         context.push_str(&format!(
             "\n--- BEGIN EXTENSION CONTEXT: {} ---\n{}\n--- END EXTENSION CONTEXT: {} ---\n",
             name,
-            content.trim(),
+            body.trim(),
             name
         ));
     }
     context
 }
 
-/// Verify all configured extensions have their CLAUDE.md present and non-empty.
-/// Called before the IMPLEMENT stage as a prerequisite gate.
+/// Verify all configured extensions have usable content -- either a non-empty
+/// `skills/*/SKILL.md` body (modern plugin layout) or a non-empty `CLAUDE.md`
+/// (legacy layout). Called before the IMPLEMENT stage as a prerequisite gate.
 pub fn validate_extensions(
     extensions: &[ExtensionInfo],
     selected: &[String],
@@ -214,32 +312,22 @@ pub fn validate_extensions(
                 ));
             }
             Some(ext) => {
-                if !ext.claude_md_path.exists() {
+                let has_skills_body = ext
+                    .skills_dir
+                    .as_ref()
+                    .map(|d| !read_skills_body(d).trim().is_empty())
+                    .unwrap_or(false);
+                let has_claude_md_body = ext.claude_md_path.exists()
+                    && std::fs::read_to_string(&ext.claude_md_path)
+                        .map(|c| !c.trim().is_empty())
+                        .unwrap_or(false);
+
+                if !has_skills_body && !has_claude_md_body {
                     errors.push(format!(
-                        "Extension '{}' is configured but CLAUDE.md not found at {}",
+                        "Extension '{}' is configured but has no usable content (no skills/*/SKILL.md and no non-empty CLAUDE.md at {})",
                         name,
                         ext.claude_md_path.display()
                     ));
-                } else {
-                    match std::fs::read_to_string(&ext.claude_md_path) {
-                        Err(e) => {
-                            errors.push(format!(
-                                "Extension '{}' CLAUDE.md cannot be read at {}: {}",
-                                name,
-                                ext.claude_md_path.display(),
-                                e
-                            ));
-                        }
-                        Ok(content) => {
-                            if content.trim().is_empty() {
-                                errors.push(format!(
-                                    "Extension '{}' has empty CLAUDE.md at {}",
-                                    name,
-                                    ext.claude_md_path.display()
-                                ));
-                            }
-                        }
-                    }
                 }
             }
         }
@@ -358,5 +446,112 @@ mod tests {
         let discovered = discover_extensions(&project_dir);
         let ext = discovered.iter().find(|e| e.name == "samename").unwrap();
         assert_eq!(ext.source, ExtensionSource::ProjectLocal);
+    }
+
+    #[test]
+    fn test_plugin_only_extension_is_discovered() {
+        let root = tempfile::tempdir().unwrap();
+        let ext_dir = root
+            .path()
+            .join("extensions")
+            .join("onlyplugin")
+            .join(".claude-plugin");
+        std::fs::create_dir_all(&ext_dir).unwrap();
+        std::fs::write(
+            ext_dir.join("plugin.json"),
+            r#"{"name":"foo","version":"0.1.0","description":"x"}"#,
+        )
+        .unwrap();
+
+        let project_dir = root.path().join("child");
+        std::fs::create_dir_all(&project_dir).unwrap();
+
+        let discovered = discover_extensions(&project_dir);
+        let ext = discovered
+            .iter()
+            .find(|e| e.name == "onlyplugin")
+            .expect("plugin-only extension should be discovered");
+        assert!(ext.plugin_manifest.is_some());
+        assert!(ext.skills_dir.is_none());
+    }
+
+    #[test]
+    fn test_load_extension_context_prefers_skills_over_claude_md() {
+        let root = tempfile::tempdir().unwrap();
+        let ext_root = root.path().join("extensions").join("dual");
+        std::fs::create_dir_all(&ext_root).unwrap();
+        std::fs::write(ext_root.join("CLAUDE.md"), "LEGACY-BODY").unwrap();
+
+        let topic_a = ext_root.join("skills").join("topicA");
+        let topic_b = ext_root.join("skills").join("topicB");
+        std::fs::create_dir_all(&topic_a).unwrap();
+        std::fs::create_dir_all(&topic_b).unwrap();
+        std::fs::write(
+            topic_a.join("SKILL.md"),
+            "---\nname: topicA\ndescription: a\n---\n\nMODERN-BODY-A\n",
+        )
+        .unwrap();
+        std::fs::write(
+            topic_b.join("SKILL.md"),
+            "---\nname: topicB\ndescription: b\n---\n\nMODERN-BODY-B\n",
+        )
+        .unwrap();
+
+        // Use a child project_dir so root.path()/extensions/dual is found via ancestor walk.
+        let project_dir = root.path().join("child");
+        std::fs::create_dir_all(&project_dir).unwrap();
+        let extensions = discover_extensions(&project_dir);
+        let result = load_extension_context(&extensions, &vec!["dual".to_string()]);
+
+        assert!(
+            result.contains("--- BEGIN EXTENSION CONTEXT: dual ---"),
+            "missing BEGIN delimiter: {}",
+            result
+        );
+        assert!(
+            result.contains("MODERN-BODY-A"),
+            "missing MODERN-BODY-A: {}",
+            result
+        );
+        assert!(
+            result.contains("MODERN-BODY-B"),
+            "missing MODERN-BODY-B: {}",
+            result
+        );
+        assert!(
+            !result.contains("LEGACY-BODY"),
+            "LEGACY-BODY should not appear when skills present: {}",
+            result
+        );
+        let pos_a = result.find("MODERN-BODY-A").unwrap();
+        let pos_b = result.find("MODERN-BODY-B").unwrap();
+        assert!(
+            pos_a < pos_b,
+            "topicA should appear before topicB (lex order)"
+        );
+    }
+
+    #[test]
+    fn test_load_extension_context_falls_back_to_claude_md() {
+        let root = tempfile::tempdir().unwrap();
+        let ext_root = root.path().join("extensions").join("legacy");
+        std::fs::create_dir_all(&ext_root).unwrap();
+        std::fs::write(ext_root.join("CLAUDE.md"), "LEGACY-FALLBACK-BODY").unwrap();
+
+        let project_dir = root.path().join("child");
+        std::fs::create_dir_all(&project_dir).unwrap();
+        let extensions = discover_extensions(&project_dir);
+        let result = load_extension_context(&extensions, &vec!["legacy".to_string()]);
+
+        assert!(
+            result.contains("LEGACY-FALLBACK-BODY"),
+            "missing legacy body: {}",
+            result
+        );
+        assert!(
+            result.contains("--- BEGIN EXTENSION CONTEXT: legacy ---"),
+            "missing BEGIN delimiter: {}",
+            result
+        );
     }
 }

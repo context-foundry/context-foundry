@@ -1,0 +1,13 @@
+{
+  "name": "context-foundry-workday-agents",
+  "version": "0.1.0",
+  "description": "Standalone compliance rule engines targeting the Workday Marketplace (ACA, multi-state tax, Davis-Bacon, etc.) for Context Foundry agents.",
+  "author": {
+    "name": "Context Foundry",
+    "url": "https://github.com/snedea/context-foundry"
+  },
+  "homepage": "https://github.com/snedea/context-foundry/tree/main/extensions/workday-agents",
+  "repository": "https://github.com/snedea/context-foundry",
+  "license": "MIT",
+  "keywords": ["workday", "compliance", "aca", "tax", "davis-bacon", "marketplace", "context-foundry"]
+}

@@ -1,0 +1,13 @@
+{
+  "name": "context-foundry-recon",
+  "version": "0.1.0",
+  "description": "Fleet recon and ops patterns: iDRAC/racadm, SSH batch loops, Dell server inventory, and management-server checks for Context Foundry agents.",
+  "author": {
+    "name": "Context Foundry",
+    "url": "https://github.com/snedea/context-foundry"
+  },
+  "homepage": "https://github.com/snedea/context-foundry/tree/main/extensions/recon",
+  "repository": "https://github.com/snedea/context-foundry",
+  "license": "MIT",
+  "keywords": ["fleet", "ops", "idrac", "racadm", "dell", "ssh", "context-foundry"]
+}
