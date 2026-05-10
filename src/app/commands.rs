@@ -1064,6 +1064,125 @@ pub(super) fn run_patterns_prune(yes: bool) -> Result<()> {
     Ok(())
 }
 
+pub(super) fn run_patterns_prune_stale(yes: bool, dry_run: bool) -> Result<()> {
+    let config = Config::load(&PathBuf::from("."));
+    let patterns_dir = patterns::resolve_patterns_dir(&config.patterns_dir);
+    prune_stale_in_dir(&patterns_dir, yes, dry_run)
+}
+
+/// Pure inner function for the one-time prune-stale migration. Reads
+/// `<patterns_dir>/common-issues.json`, partitions entries by the predicate
+/// `cited_in_pass==0 AND cited_in_wip==0 AND frequency==1`, and archives
+/// pruned entries to `<patterns_dir>/pruned-pre-migration-2026-05.json`.
+///
+/// The archive is written as a top-level JSON array of `serde_json::Value`,
+/// so every field of every entry round-trips losslessly. The survivor file
+/// is rewritten in its original outer shape (array stays array; wrapper
+/// object retains all top-level keys with `patterns` replaced).
+fn prune_stale_in_dir(patterns_dir: &Path, yes: bool, dry_run: bool) -> Result<()> {
+    let source_path = patterns_dir.join("common-issues.json");
+    let archive_path = patterns_dir.join("pruned-pre-migration-2026-05.json");
+
+    if !source_path.exists() {
+        println!(
+            "common-issues.json not found at {}; nothing to prune.",
+            source_path.display()
+        );
+        return Ok(());
+    }
+
+    if archive_path.exists() && !dry_run {
+        anyhow::bail!(
+            "archive file already exists at {}; remove it before re-running prune-stale (this is a one-time migration)",
+            archive_path.display()
+        );
+    }
+
+    let content = std::fs::read_to_string(&source_path)
+        .with_context(|| format!("failed to read {}", source_path.display()))?;
+    let mut root: serde_json::Value = serde_json::from_str(&content)
+        .with_context(|| format!("failed to parse {} as JSON", source_path.display()))?;
+
+    let (is_wrapper, items): (bool, Vec<serde_json::Value>) = if root.is_array() {
+        (false, root.as_array().unwrap().clone())
+    } else if root.is_object() && root.get("patterns").and_then(|v| v.as_array()).is_some() {
+        (true, root["patterns"].as_array().unwrap().clone())
+    } else {
+        anyhow::bail!(
+            "unrecognized format in {}: expected a top-level JSON array or an object with a \"patterns\" array",
+            source_path.display()
+        );
+    };
+
+    let total = items.len();
+    let mut keep: Vec<serde_json::Value> = Vec::new();
+    let mut prune: Vec<serde_json::Value> = Vec::new();
+    for v in items {
+        let cited_pass = v.get("cited_in_pass").and_then(|x| x.as_u64()).unwrap_or(0);
+        let cited_wip = v.get("cited_in_wip").and_then(|x| x.as_u64()).unwrap_or(0);
+        let frequency = v.get("frequency").and_then(|x| x.as_u64()).unwrap_or(0);
+        if cited_pass == 0 && cited_wip == 0 && frequency == 1 {
+            prune.push(v);
+        } else {
+            keep.push(v);
+        }
+    }
+
+    let keep_count = keep.len();
+    let prune_count = prune.len();
+
+    println!(
+        "common-issues.json: {} total | {} keep | {} prune",
+        total, keep_count, prune_count
+    );
+    println!("Predicate: cited_in_pass==0 AND cited_in_wip==0 AND frequency==1");
+    println!("Archive: {}", archive_path.display());
+
+    if prune.is_empty() {
+        println!("No patterns match the prune predicate; nothing to do.");
+        return Ok(());
+    }
+
+    if dry_run {
+        println!("Dry-run: no files written.");
+        return Ok(());
+    }
+
+    if !yes {
+        eprint!("\nProceed? [y/N] ");
+        io::stderr().flush()?;
+        let mut line = String::new();
+        io::stdin().lock().read_line(&mut line)?;
+        let trimmed = line.trim();
+        if !trimmed.starts_with('y') && !trimmed.starts_with('Y') {
+            println!("Aborted.");
+            return Ok(());
+        }
+    }
+
+    let archive_json = serde_json::to_string_pretty(&prune)?;
+    atomic_write_file(&archive_path, archive_json.as_bytes())?;
+
+    // Always re-write rather than delete: this is a one-time migration
+    // and the survivor file's continued existence is meaningful.
+    let new_json = if is_wrapper {
+        root["patterns"] = serde_json::Value::Array(keep);
+        serde_json::to_string_pretty(&root)?
+    } else {
+        serde_json::to_string_pretty(&serde_json::Value::Array(keep))?
+    };
+    atomic_write_file(&source_path, new_json.as_bytes())?;
+
+    println!(
+        "Pruned {} pattern(s); archived to {}. Survivors in common-issues.json: {}.",
+        prune_count,
+        archive_path.display(),
+        keep_count
+    );
+
+    Ok(())
+}
+
 pub(super) fn run_patterns_promote(apply: bool, days: u32) -> Result<()> {
     let obs_dir = crate::stats::observatory_dir()?;
 
@@ -1484,8 +1603,11 @@ mod tests {
     use std::path::{Path, PathBuf};
     use std::time::{SystemTime, UNIX_EPOCH};
 
+    use std::collections::BTreeSet;
+
     use super::{
-        format_status_output, format_tasks_output, missing_provider_commands, ProviderCommandMode,
+        format_status_output, format_tasks_output, missing_provider_commands, prune_stale_in_dir,
+        ProviderCommandMode,
     };
     use crate::agent::ModelProvider;
     use crate::config::Config;
@@ -1856,5 +1978,189 @@ mod tests {
             !missing.values().flatten().any(|role| *role == "builder"),
             "base builder_provider should not be required when dual_selection=both uses only builder_models"
         );
+    }
+
+    fn read_ids_array(path: &Path) -> BTreeSet<String> {
+        let content = std::fs::read_to_string(path).expect("read file");
+        let arr: Vec<serde_json::Value> = serde_json::from_str(&content).expect("parse array");
+        arr.iter()
+            .filter_map(|v| v.get("pattern_id").and_then(|x| x.as_str()).map(String::from))
+            .collect()
+    }
+
+    #[test]
+    fn prune_stale_in_dir_array_format_partitions_correctly() {
+        let dir = temp_dir("foundry-prune-stale-array");
+        let source = dir.join("common-issues.json");
+        let body = serde_json::json!([
+            {"pattern_id":"keep-cited","frequency":1,"cited_in_pass":1,"cited_in_wip":0,"title":"t","first_seen":"","last_seen":""},
+            {"pattern_id":"keep-freq","frequency":3,"cited_in_pass":0,"cited_in_wip":0,"title":"t","first_seen":"","last_seen":""},
+            {"pattern_id":"keep-freq2","frequency":2,"cited_in_pass":0,"cited_in_wip":0,"title":"t","first_seen":"","last_seen":""},
+            {"pattern_id":"prune-1","frequency":1,"cited_in_pass":0,"cited_in_wip":0,"title":"t","first_seen":"","last_seen":""},
+            {"pattern_id":"prune-2","frequency":1,"cited_in_pass":0,"cited_in_wip":0,"title":"t","first_seen":"","last_seen":""}
+        ]);
+        std::fs::write(&source, serde_json::to_string_pretty(&body).unwrap())
+            .expect("write source");
+
+        prune_stale_in_dir(&dir, true, false).unwrap();
+
+        let kept = read_ids_array(&source);
+        assert_eq!(kept.len(), 3);
+        let expected_keep: BTreeSet<String> = ["keep-cited", "keep-freq", "keep-freq2"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        assert_eq!(kept, expected_keep);
+
+        let archive = dir.join("pruned-pre-migration-2026-05.json");
+        let pruned = read_ids_array(&archive);
+        assert_eq!(pruned.len(), 2);
+        let expected_prune: BTreeSet<String> = ["prune-1", "prune-2"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        assert_eq!(pruned, expected_prune);
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn prune_stale_in_dir_wrapper_format_preserves_outer_keys() {
+        let dir = temp_dir("foundry-prune-stale-wrapper");
+        let source = dir.join("common-issues.json");
+        let body = serde_json::json!({
+            "pattern_type": "common-issues",
+            "domain": "global",
+            "version": "1.0.0",
+            "patterns": [
+                {"pattern_id":"keep-1","frequency":3,"cited_in_pass":0,"cited_in_wip":0,"title":"t","first_seen":"","last_seen":""},
+                {"pattern_id":"prune-1","frequency":1,"cited_in_pass":0,"cited_in_wip":0,"title":"t","first_seen":"","last_seen":""}
+            ]
+        });
+        std::fs::write(&source, serde_json::to_string_pretty(&body).unwrap())
+            .expect("write source");
+
+        prune_stale_in_dir(&dir, true, false).unwrap();
+
+        let content = std::fs::read_to_string(&source).expect("read source");
+        let val: serde_json::Value = serde_json::from_str(&content).expect("parse");
+        assert_eq!(val["pattern_type"], "common-issues");
+        assert_eq!(val["domain"], "global");
+        assert_eq!(val["version"], "1.0.0");
+        let pats = val["patterns"].as_array().expect("patterns array");
+        assert_eq!(pats.len(), 1);
+        assert_eq!(pats[0]["pattern_id"], "keep-1");
+
+        let archive = dir.join("pruned-pre-migration-2026-05.json");
+        let pruned = read_ids_array(&archive);
+        assert_eq!(pruned.len(), 1);
+        assert!(pruned.contains("prune-1"));
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn prune_stale_in_dir_missing_source_is_noop() {
+        let dir = temp_dir("foundry-prune-stale-missing");
+
+        prune_stale_in_dir(&dir, true, false).unwrap();
+
+        assert!(!dir.join("pruned-pre-migration-2026-05.json").exists());
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn prune_stale_in_dir_existing_archive_errors() {
+        let dir = temp_dir("foundry-prune-stale-existing-archive");
+        let source = dir.join("common-issues.json");
+        let archive = dir.join("pruned-pre-migration-2026-05.json");
+        std::fs::write(&source, "[]").expect("write source");
+        std::fs::write(&archive, "[]").expect("write archive");
+
+        let err = prune_stale_in_dir(&dir, true, false).unwrap_err();
+        assert!(format!("{:?}", err).contains("archive file already exists"));
+
+        let content = std::fs::read_to_string(&source).expect("read source");
+        assert_eq!(content, "[]");
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn prune_stale_in_dir_no_matches_is_noop() {
+        let dir = temp_dir("foundry-prune-stale-no-matches");
+        let source = dir.join("common-issues.json");
+        let body = serde_json::json!([
+            {"pattern_id":"keep-1","frequency":2,"cited_in_pass":0,"cited_in_wip":0,"title":"t","first_seen":"","last_seen":""}
+        ]);
+        std::fs::write(&source, serde_json::to_string_pretty(&body).unwrap())
+            .expect("write source");
+
+        prune_stale_in_dir(&dir, true, false).unwrap();
+
+        assert!(!dir.join("pruned-pre-migration-2026-05.json").exists());
+        let kept = read_ids_array(&source);
+        assert_eq!(kept.len(), 1);
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn prune_stale_in_dir_all_pruned_writes_empty_array_keeps_file() {
+        let dir = temp_dir("foundry-prune-stale-all");
+        let source = dir.join("common-issues.json");
+        let body = serde_json::json!([
+            {"pattern_id":"prune-1","frequency":1,"cited_in_pass":0,"cited_in_wip":0,"title":"t","first_seen":"","last_seen":""},
+            {"pattern_id":"prune-2","frequency":1,"cited_in_pass":0,"cited_in_wip":0,"title":"t","first_seen":"","last_seen":""}
+        ]);
+        std::fs::write(&source, serde_json::to_string_pretty(&body).unwrap())
+            .expect("write source");
+
+        prune_stale_in_dir(&dir, true, false).unwrap();
+
+        assert!(source.exists(), "common-issues.json should still exist");
+        let content = std::fs::read_to_string(&source).expect("read source");
+        let arr: Vec<serde_json::Value> = serde_json::from_str(&content).expect("parse");
+        assert!(arr.is_empty());
+
+        let archive = dir.join("pruned-pre-migration-2026-05.json");
+        let pruned = read_ids_array(&archive);
+        assert_eq!(pruned.len(), 2);
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn prune_stale_in_dir_unrecognized_format_errors() {
+        let dir = temp_dir("foundry-prune-stale-bad-format");
+        let source = dir.join("common-issues.json");
+        std::fs::write(&source, "{\"foo\": 1}").expect("write source");
+
+        let err = prune_stale_in_dir(&dir, true, false).unwrap_err();
+        assert!(format!("{:?}", err).contains("unrecognized format"));
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn prune_stale_in_dir_dry_run_writes_nothing() {
+        let dir = temp_dir("foundry-prune-stale-dry");
+        let source = dir.join("common-issues.json");
+        let body = serde_json::json!([
+            {"pattern_id":"keep-1","frequency":3,"cited_in_pass":0,"cited_in_wip":0,"title":"t","first_seen":"","last_seen":""},
+            {"pattern_id":"prune-1","frequency":1,"cited_in_pass":0,"cited_in_wip":0,"title":"t","first_seen":"","last_seen":""}
+        ]);
+        let original = serde_json::to_string_pretty(&body).unwrap();
+        std::fs::write(&source, &original).expect("write source");
+
+        prune_stale_in_dir(&dir, false, true).unwrap();
+
+        assert!(!dir.join("pruned-pre-migration-2026-05.json").exists());
+        let after = std::fs::read_to_string(&source).expect("read source");
+        let arr: Vec<serde_json::Value> = serde_json::from_str(&after).expect("parse");
+        assert_eq!(arr.len(), 2);
+
+        let _ = std::fs::remove_dir_all(dir);
     }
 }

@@ -139,6 +139,18 @@ enum PatternAction {
         #[arg(long)]
         yes: bool,
     },
+    /// One-time pruning: delete patterns in ~/.foundry/patterns/common-issues.json
+    /// where cited_in_pass==0 AND cited_in_wip==0 AND frequency==1. Pruned entries
+    /// are archived to ~/.foundry/patterns/pruned-pre-migration-2026-05.json.
+    /// See docs/patterns-migration.md.
+    PruneStale {
+        /// Skip confirmation prompt
+        #[arg(long)]
+        yes: bool,
+        /// Print what would be pruned without writing anything
+        #[arg(long, conflicts_with = "yes")]
+        dry_run: bool,
+    },
     /// Promote high-citation patterns into extension CLAUDE.md prose
     Promote {
         /// Actually write files (default is dry-run)
@@ -220,6 +232,9 @@ async fn main() -> Result<()> {
         Commands::Patterns { action } => match action {
             PatternAction::Prune { yes } => {
                 app::run_patterns_prune(yes)?;
+            }
+            PatternAction::PruneStale { yes, dry_run } => {
+                app::run_patterns_prune_stale(yes, dry_run)?;
             }
             PatternAction::Promote { apply, days } => {
                 app::run_patterns_promote(apply, days)?;
