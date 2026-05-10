@@ -1761,6 +1761,73 @@ fn read_src_files(root: &Path) -> Vec<(PathBuf, String)> {
     out
 }
 
+// Like `classify_line_regions` but flags only `#[cfg(test)]` regions
+// (excludes `impl Default for ...` blocks). Used to recognize functions
+// that are defined exclusively inside test modules so the
+// `NewFunctionHasNonTestCaller` check does not flag them as
+// "unreachable from production code" -- they are intentionally test-only.
+fn classify_test_only_regions(content: &str) -> Vec<bool> {
+    let mut out = Vec::with_capacity(content.lines().count());
+    let mut stack: Vec<&'static str> = Vec::new();
+    let mut next_block_is_test = false;
+    for line in content.lines() {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with("#[cfg(test)]") {
+            next_block_is_test = true;
+        }
+        for c in line.chars() {
+            match c {
+                '{' => {
+                    let kind = if next_block_is_test {
+                        next_block_is_test = false;
+                        "test"
+                    } else {
+                        "other"
+                    };
+                    stack.push(kind);
+                }
+                '}' => {
+                    stack.pop();
+                }
+                _ => {}
+            }
+        }
+        let inside = stack.contains(&"test");
+        out.push(inside);
+    }
+    out
+}
+
+// Returns true if the named function is defined in the project but every
+// definition site lives inside a `#[cfg(test)]` region. Returns false if
+// the function has at least one production-code definition or if no
+// definition can be located at all (be conservative -- let the existing
+// check logic decide).
+fn function_defined_only_in_tests(root: &Path, name: &str) -> bool {
+    let def_pat = format!(
+        r"\bfn\s+{}\b",
+        regex::escape(name)
+    );
+    let def_re = match regex::Regex::new(&def_pat) {
+        Ok(r) => r,
+        Err(_) => return false,
+    };
+    let files = read_src_files(root);
+    let mut found_any = false;
+    for (_path, content) in &files {
+        let test_mask = classify_test_only_regions(content);
+        for (idx, line) in content.lines().enumerate() {
+            if def_re.is_match(line) {
+                found_any = true;
+                if idx >= test_mask.len() || !test_mask[idx] {
+                    return false;
+                }
+            }
+        }
+    }
+    found_any
+}
+
 // Heuristic line-region classifier. May misclassify exotic Rust constructs
 // (raw strings containing `{`, `'{ '` char literals, doc-comment braces).
 fn classify_line_regions(content: &str) -> Vec<bool> {
@@ -1998,13 +2065,26 @@ impl Check for NewFunctionHasNonTestCaller {
                     continue;
                 }
             };
-            let fns = parse_added_function_names(&diff);
+            let raw_fns = parse_added_function_names(&diff);
+            let raw_fn_count = raw_fns.len();
+            let fns: Vec<String> = raw_fns
+                .into_iter()
+                .filter(|n| !function_defined_only_in_tests(&root, n))
+                .collect();
             if fns.is_empty() {
+                let evidence = if raw_fn_count == 0 {
+                    "no new functions in diff".to_string()
+                } else {
+                    format!(
+                        "no new production functions in diff ({} added, all defined inside #[cfg(test)] regions)",
+                        raw_fn_count
+                    )
+                };
                 out.push(StageCheckResult {
                     stage,
                     invocation_id: inv.invocation_id,
                     status: Status::Skip,
-                    evidence: "no new functions in diff".to_string(),
+                    evidence,
                 });
                 continue;
             }
@@ -3367,6 +3447,42 @@ mod tests {
         let results = run_check(NewFunctionHasNonTestCaller, &r);
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].status, Status::Pass);
+    }
+
+    #[test]
+    fn new_function_has_non_test_caller_skips_when_defined_in_test_module() {
+        let tmp = TempDir::new().unwrap();
+        init_git_repo(tmp.path());
+        std::fs::create_dir_all(tmp.path().join("src")).unwrap();
+        std::fs::write(tmp.path().join("src/lib.rs"), "// baseline\n").unwrap();
+        git_commit_all(tmp.path(), "baseline");
+        std::fs::write(
+            tmp.path().join("src/foo.rs"),
+            "#[cfg(test)]\nmod tests {\n    fn build_fixture() -> u32 { 42 }\n    #[test]\n    fn it_works() { assert_eq!(build_fixture(), 42); }\n}\n",
+        )
+        .unwrap();
+        git_commit_all(tmp.path(), "add test helper inside cfg(test)");
+        let r = build_run_for(tmp.path());
+        let results = run_check(NewFunctionHasNonTestCaller, &r);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].status, Status::Skip);
+        assert!(results[0]
+            .evidence
+            .contains("all defined inside #[cfg(test)] regions"));
+    }
+
+    #[test]
+    fn function_defined_only_in_tests_distinguishes_test_vs_prod() {
+        let tmp = TempDir::new().unwrap();
+        std::fs::create_dir_all(tmp.path().join("src")).unwrap();
+        std::fs::write(
+            tmp.path().join("src/a.rs"),
+            "pub fn alpha() {}\n#[cfg(test)]\nmod tests {\n    fn helper() {}\n}\n",
+        )
+        .unwrap();
+        assert!(!function_defined_only_in_tests(tmp.path(), "alpha"));
+        assert!(function_defined_only_in_tests(tmp.path(), "helper"));
+        assert!(!function_defined_only_in_tests(tmp.path(), "missing"));
     }
 
     #[test]
