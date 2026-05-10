@@ -25,7 +25,7 @@ fn default_history_retention_tasks() -> usize {
 }
 
 fn default_agent_pane_split() -> u16 {
-    50
+    30
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
@@ -600,7 +600,7 @@ impl Default for Config {
             extensions: Vec::new(),
             create_issue_on_wip: false,
             preview_wrap: false,
-            agent_pane_split: 50,
+            agent_pane_split: 30,
             pr_poll_interval_secs: 30,
             theme: "dark".into(),
             truecolor: None,

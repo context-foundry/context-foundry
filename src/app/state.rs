@@ -1463,7 +1463,7 @@ pub struct AppState {
     /// arrived while another approval was already being shown to the user.
     pub(super) pending_approvals: VecDeque<(String, String, String)>,
     pub(super) event_tx: Option<tokio::sync::mpsc::UnboundedSender<AppEvent>>,
-    /// Percentage of the middle row given to the agent output pane (default 50, range 20-80).
+    /// Percentage of the middle row given to the agent output pane (default 30, range 20-80).
     pub agent_pane_split: u16,
     /// True while the user is dragging the agent/task-queue vertical separator.
     pub dragging_split: bool,
@@ -1627,7 +1627,7 @@ impl AppState {
             pending_approvals: VecDeque::new(),
             event_tx: None,
             stats_loading: false,
-            agent_pane_split: 50,
+            agent_pane_split: 30,
             dragging_split: false,
             last_scroll_at: None,
             last_commit_brief: None,
