@@ -13,6 +13,13 @@ pub struct GitContext {
     pub recent_commits: Vec<String>,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct LastCommitBrief {
+    pub subject: String,
+    pub relative_age: String,
+    pub short_sha: String,
+}
+
 /// Check if `gh` CLI is installed and authenticated.
 pub fn is_gh_authenticated() -> bool {
     Command::new("gh")
@@ -223,6 +230,36 @@ pub fn gather_git_context(project_dir: &Path) -> Option<GitContext> {
         remote,
         dirty_count,
         recent_commits,
+    })
+}
+
+/// Run `git log -1 --format=%s|%cr|%h` and parse the single output line into
+/// `LastCommitBrief`. Returns `None` for any failure (no commits, not a git
+/// repo, parse error). Never panics.
+pub fn last_commit_brief(project_dir: &Path) -> Option<LastCommitBrief> {
+    let output = Command::new("git")
+        .args(["log", "-1", "--format=%s|%cr|%h"])
+        .current_dir(project_dir)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let raw = String::from_utf8_lossy(&output.stdout);
+    let line = raw.trim();
+    if line.is_empty() {
+        return None;
+    }
+    let parts: Vec<&str> = line.splitn(3, '|').collect();
+    if parts.len() < 3 {
+        return None;
+    }
+    Some(LastCommitBrief {
+        subject: parts[0].trim().to_string(),
+        relative_age: parts[1].trim().to_string(),
+        short_sha: parts[2].trim().to_string(),
     })
 }
 

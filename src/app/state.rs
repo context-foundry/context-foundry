@@ -1454,6 +1454,7 @@ pub struct AppState {
     pub dragging_split: bool,
     /// Timestamp of the last scroll event, used to compute velocity multiplier.
     pub last_scroll_at: Option<std::time::Instant>,
+    pub last_commit_brief: Option<crate::git::LastCommitBrief>,
 }
 
 impl AppState {
@@ -1601,6 +1602,7 @@ impl AppState {
             agent_pane_split: 60,
             dragging_split: false,
             last_scroll_at: None,
+            last_commit_brief: None,
         }
     }
 
@@ -1743,6 +1745,7 @@ pub(super) enum AppEvent {
     UpdateAvailable(String),
     OllamaStatus(bool), // true = connected, false = unreachable
     WelcomeMessage(String),
+    NarrativeRefresh(Option<crate::git::LastCommitBrief>),
     /// Background model-catalog refresh completed; payload contains
     /// activity-log lines (one per new model, deprecation, or error) that
     /// should be appended to the activity log.

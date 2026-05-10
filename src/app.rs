@@ -557,6 +557,31 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
         });
     }
 
+    // Background narrative refresh: re-read `git log -1` every 10 seconds and
+    // post the result to the TUI. Best-effort; never blocks rendering.
+    {
+        let narrative_tx = event_tx.clone();
+        let project_dir_buf = project_dir.to_path_buf();
+        tokio::spawn(async move {
+            loop {
+                let dir = project_dir_buf.clone();
+                let brief = tokio::task::spawn_blocking(move || {
+                    crate::git::last_commit_brief(&dir)
+                })
+                .await
+                .ok()
+                .flatten();
+                if narrative_tx
+                    .send(AppEvent::NarrativeRefresh(brief))
+                    .is_err()
+                {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_secs(10)).await;
+            }
+        });
+    }
+
     // Main render loop
     loop {
         // Draw based on phase
@@ -731,6 +756,10 @@ fn dispatch_event(state: &mut AppState, event: AppEvent, config: &Config) {
     }
     if matches!(&event, AppEvent::WelcomeMessage(_)) {
         return; // ignore late arrivals after welcome is dismissed
+    }
+    if let AppEvent::NarrativeRefresh(brief) = &event {
+        state.last_commit_brief = brief.clone();
+        return;
     }
     match state.phase {
         AppPhase::Startup => handle_startup_event(state, event, config),
@@ -1238,6 +1267,9 @@ fn handle_planning_event(state: &mut AppState, event: AppEvent, config: &Config)
             if state.show_welcome {
                 state.welcome_message = msg;
             }
+        }
+        AppEvent::NarrativeRefresh(brief) => {
+            state.last_commit_brief = brief;
         }
         AppEvent::LoopEvent(_) => {}
     }
@@ -3296,6 +3328,9 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
             state.log("Ignoring late orchestrator result while running");
         }
         AppEvent::WelcomeMessage(_) => {}
+        AppEvent::NarrativeRefresh(brief) => {
+            state.last_commit_brief = brief;
+        }
     }
 }
 

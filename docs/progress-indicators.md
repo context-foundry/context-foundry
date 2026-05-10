@@ -154,6 +154,24 @@ Color conventions:
 - Red/yellow: failed audit or WIP path.
 - Gray: skipped, pending, or unavailable stage data.
 
+### Narrative panel
+
+The right column also includes a 6-row Narrative panel between the Task Queue
+and Patterns panes. It surfaces three lines:
+
+- **Last:** the most recent commit subject, short SHA, and relative age. Comes
+  from `git log -1 --format='%s|%cr|%h'`, refreshed every 10 seconds in the
+  background.
+- **Now:** the current task ID + short description, the active stage ID,
+  elapsed stage time, and event count. Reads `state.current_task`,
+  `state.current_agent`, `state.current_agent_stage_id`, and
+  `state.events_received`.
+- **Next:** the next pending task description from `state.next_task_hint`.
+
+When a slot has no data the panel falls back to placeholder copy
+(`no prior commits`, `no task in progress`, `queue empty`). The panel is
+read-only and never blocks the TUI.
+
 ## Relationship To The Eval Harness
 
 The planned eval harness adds a second, deeper status line:

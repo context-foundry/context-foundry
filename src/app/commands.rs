@@ -707,6 +707,7 @@ pub(super) async fn run_headless(project_dir: &Path, output_format: Option<Strin
             | AppEvent::CatalogRefreshed(_)
             | AppEvent::LocalModels { .. }
             | AppEvent::WelcomeMessage(_)
+            | AppEvent::NarrativeRefresh(_)
             | AppEvent::Tick => {}
         }
     }
