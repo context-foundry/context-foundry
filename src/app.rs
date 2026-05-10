@@ -4720,6 +4720,10 @@ pub fn run_patterns_prune_stale(yes: bool, dry_run: bool) -> Result<()> {
     commands::run_patterns_prune_stale(yes, dry_run)
 }
 
+pub fn run_patterns_migrate_to_skills(yes: bool, dry_run: bool) -> Result<()> {
+    commands::run_patterns_migrate_to_skills(yes, dry_run)
+}
+
 pub fn run_patterns_promote(apply: bool, days: u32) -> Result<()> {
     commands::run_patterns_promote(apply, days)
 }

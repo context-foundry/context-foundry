@@ -81,3 +81,47 @@ T1.13 and downstream tooling.
 Surviving entries are migrated to `~/.foundry/skills/` by T1.13. After
 T1.13 lands, `common-issues.json` becomes a fallback source and is
 scheduled for full removal in T1.15.
+
+## 2026-05 Skills Migration (T1.13)
+
+After pruning (T1.12), each surviving pattern in
+`~/.foundry/patterns/common-issues.json` is converted to a SKILL.md file
+under `~/.foundry/skills/<dir>/SKILL.md`. The matcher prefers Skills
+when any SKILL.md is present and falls back to the legacy JSON store
+otherwise.
+
+### Command
+
+```
+foundry patterns migrate-to-skills            # prompts before writing
+foundry patterns migrate-to-skills --yes      # non-interactive
+foundry patterns migrate-to-skills --dry-run  # report only, no writes
+```
+
+### Output shape
+
+Each emitted SKILL.md has standard `name` and `description` fields plus
+a `metadata` map carrying CF-specific extensions: `cf-stage`
+(`planner`/`reviewer`), `cf-citations-pass`, `cf-citations-wip`,
+`cf-last-used`, `cf-frequency`, `cf-severity`, and `cf-keywords`. The
+body has `## Issue` and `## Solution` sections.
+
+When a pattern has both planner and reviewer advice, two files are
+written: `<pattern_id>-planner/SKILL.md` and
+`<pattern_id>-reviewer/SKILL.md`. Otherwise a single
+`<pattern_id>/SKILL.md` is emitted with the appropriate `cf-stage`.
+
+Patterns whose `solution` is null or whose planner+reviewer text are
+both empty are skipped.
+
+### Idempotency
+
+The command refuses to overwrite any existing SKILL.md. Remove the
+conflicting directories under `~/.foundry/skills/` if you really want
+to re-run.
+
+### Fallback
+
+`patterns::load_patterns_from_global` reads `~/.foundry/skills/` first;
+if no SKILL.md is present, it falls back to the JSON store. Removal of
+the JSON fallback is scheduled for T1.15.

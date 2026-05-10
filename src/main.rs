@@ -22,6 +22,7 @@ mod model_catalog;
 mod observatory;
 mod orchestrator;
 mod patterns;
+mod skills;
 mod prompts;
 mod review_pr;
 mod run_manifest;
@@ -151,6 +152,17 @@ enum PatternAction {
         #[arg(long, conflicts_with = "yes")]
         dry_run: bool,
     },
+    /// One-time migration: convert each surviving pattern in
+    /// ~/.foundry/patterns/common-issues.json into a SKILL.md under
+    /// ~/.foundry/skills/<pattern_id>/SKILL.md. See docs/patterns-migration.md.
+    MigrateToSkills {
+        /// Skip confirmation prompt
+        #[arg(long)]
+        yes: bool,
+        /// Print what would be migrated without writing anything
+        #[arg(long, conflicts_with = "yes")]
+        dry_run: bool,
+    },
     /// Promote high-citation patterns into extension CLAUDE.md prose
     Promote {
         /// Actually write files (default is dry-run)
@@ -235,6 +247,9 @@ async fn main() -> Result<()> {
             }
             PatternAction::PruneStale { yes, dry_run } => {
                 app::run_patterns_prune_stale(yes, dry_run)?;
+            }
+            PatternAction::MigrateToSkills { yes, dry_run } => {
+                app::run_patterns_migrate_to_skills(yes, dry_run)?;
             }
             PatternAction::Promote { apply, days } => {
                 app::run_patterns_promote(apply, days)?;

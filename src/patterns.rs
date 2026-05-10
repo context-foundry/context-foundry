@@ -226,8 +226,15 @@ pub fn load_patterns(dir: &Path) -> Vec<Pattern> {
     patterns
 }
 
-/// Convenience: load all patterns from `~/.foundry/patterns/`.
+/// Convenience: load all patterns. Reads from `~/.foundry/skills/` when
+/// any SKILL.md is present (post-T1.13 migration); falls back to the
+/// legacy `~/.foundry/patterns/` JSON store otherwise. The fallback is
+/// scheduled for removal in T1.15.
 pub fn load_patterns_from_global() -> Vec<Pattern> {
+    let skills = crate::skills::load_skills_as_patterns_from_global();
+    if !skills.is_empty() {
+        return skills;
+    }
     let dir = resolve_patterns_dir("~/.foundry/patterns");
     load_patterns(&dir)
 }
@@ -2380,5 +2387,78 @@ mod tests {
             s
         );
         assert!(s > 0, "decayed score should not be zero (got {})", s);
+    }
+
+    #[test]
+    #[serial_test::serial(home_env)]
+    fn load_patterns_from_global_falls_back_to_json_when_no_skills() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let prev_home = std::env::var("HOME").ok();
+        std::env::set_var("HOME", tmp.path());
+
+        let patterns_dir = tmp.path().join(".foundry").join("patterns");
+        std::fs::create_dir_all(&patterns_dir).expect("create patterns dir");
+        let json = serde_json::json!([{
+            "pattern_id": "from-json",
+            "title": "Title",
+            "frequency": 1,
+            "keywords": [],
+            "tech_stack": [],
+            "issue": "x",
+            "solution": {"planner": "do x", "reviewer": ""}
+        }]);
+        std::fs::write(
+            patterns_dir.join("common-issues.json"),
+            serde_json::to_string_pretty(&json).unwrap(),
+        )
+        .expect("write json");
+
+        let loaded = load_patterns_from_global();
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].pattern_id, "from-json");
+
+        match prev_home {
+            Some(v) => std::env::set_var("HOME", v),
+            None => std::env::remove_var("HOME"),
+        }
+    }
+
+    #[test]
+    #[serial_test::serial(home_env)]
+    fn load_patterns_from_global_prefers_skills_when_present() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let prev_home = std::env::var("HOME").ok();
+        std::env::set_var("HOME", tmp.path());
+
+        let patterns_dir = tmp.path().join(".foundry").join("patterns");
+        std::fs::create_dir_all(&patterns_dir).expect("create patterns dir");
+        let json = serde_json::json!([{
+            "pattern_id": "from-json",
+            "title": "Title",
+            "frequency": 1,
+            "keywords": [],
+            "tech_stack": [],
+            "issue": "x",
+            "solution": {"planner": "do x", "reviewer": ""}
+        }]);
+        std::fs::write(
+            patterns_dir.join("common-issues.json"),
+            serde_json::to_string_pretty(&json).unwrap(),
+        )
+        .expect("write json");
+
+        let skills_dir = tmp.path().join(".foundry").join("skills").join("test-skill");
+        std::fs::create_dir_all(&skills_dir).expect("create skills dir");
+        let skill_md = "---\nname: test-skill\ndescription: My Skill\nmetadata:\n  cf-stage: planner\n  cf-citations-pass: 0\n  cf-citations-wip: 0\n  cf-frequency: 1\n  cf-keywords:\n    - foo\n---\n\n## Issue\n\nx\n\n## Solution\n\ndo x\n";
+        std::fs::write(skills_dir.join("SKILL.md"), skill_md).expect("write skill md");
+
+        let loaded = load_patterns_from_global();
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].pattern_id, "test-skill");
+
+        match prev_home {
+            Some(v) => std::env::set_var("HOME", v),
+            None => std::env::remove_var("HOME"),
+        }
     }
 }

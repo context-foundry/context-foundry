@@ -13,6 +13,7 @@ use crate::agent::{AgentErrorKind, AgentOutputEvent, ModelProvider};
 use crate::config::Config;
 use crate::patterns;
 use crate::patterns::Pattern;
+use crate::skills;
 use crate::task::{self, Task};
 use crate::task_eval;
 use crate::update;
@@ -1183,6 +1184,147 @@ fn prune_stale_in_dir(patterns_dir: &Path, yes: bool, dry_run: bool) -> Result<(
     Ok(())
 }
 
+pub(super) fn run_patterns_migrate_to_skills(yes: bool, dry_run: bool) -> Result<()> {
+    let config = Config::load(&PathBuf::from("."));
+    let patterns_dir = patterns::resolve_patterns_dir(&config.patterns_dir);
+    let skills_dir = skills::resolve_skills_dir("~/.foundry/skills");
+    migrate_to_skills_in_dir(&patterns_dir, &skills_dir, yes, dry_run)
+}
+
+/// Pure inner function for the one-time skills migration. Reads
+/// `<patterns_dir>/common-issues.json`, walks each surviving pattern, and
+/// writes one or two SKILL.md files per pattern under `<skills_dir>/`.
+/// Refuses to overwrite existing skill SKILL.md files.
+fn migrate_to_skills_in_dir(
+    patterns_dir: &Path,
+    skills_dir: &Path,
+    yes: bool,
+    dry_run: bool,
+) -> Result<()> {
+    let source_path = patterns_dir.join("common-issues.json");
+
+    if !source_path.exists() {
+        println!(
+            "common-issues.json not found at {}; nothing to migrate.",
+            source_path.display()
+        );
+        return Ok(());
+    }
+
+    let content = std::fs::read_to_string(&source_path)
+        .with_context(|| format!("failed to read {}", source_path.display()))?;
+    let root: serde_json::Value = serde_json::from_str(&content)
+        .with_context(|| format!("failed to parse {} as JSON", source_path.display()))?;
+
+    let items: Vec<serde_json::Value> = if root.is_array() {
+        root.as_array().unwrap().clone()
+    } else if root.is_object() && root.get("patterns").and_then(|v| v.as_array()).is_some() {
+        root["patterns"].as_array().unwrap().clone()
+    } else {
+        anyhow::bail!(
+            "unrecognized format in {}: expected a top-level JSON array or an object with a \"patterns\" array",
+            source_path.display()
+        );
+    };
+
+    let total_patterns = items.len();
+    let mut warnings: Vec<String> = Vec::new();
+    let mut skipped: Vec<String> = Vec::new();
+    let mut planned: Vec<(String, String)> = Vec::new();
+
+    for v in items {
+        let id_for_warn = v
+            .get("pattern_id")
+            .and_then(|x| x.as_str())
+            .unwrap_or("(unknown)")
+            .to_string();
+        let p: Pattern = match serde_json::from_value::<Pattern>(v) {
+            Ok(p) => p,
+            Err(e) => {
+                warnings.push(format!("failed to deserialize pattern {}: {}", id_for_warn, e));
+                continue;
+            }
+        };
+        let files = skills::pattern_to_skill_files(&p);
+        if files.is_empty() {
+            skipped.push(format!("skipped {} (no solution)", p.pattern_id));
+        } else {
+            for (dir_name, contents) in files {
+                planned.push((dir_name, contents));
+            }
+        }
+    }
+
+    let planned_files = planned.len();
+    let skipped_count = skipped.len();
+
+    println!(
+        "common-issues.json: {} pattern(s) loaded",
+        total_patterns
+    );
+    println!(
+        "Planned: {} skill file(s); skipped {} pattern(s) with no solution",
+        planned_files, skipped_count
+    );
+    println!("Target: {}", skills_dir.display());
+    for line in &warnings {
+        eprintln!("warning: {}", line);
+    }
+
+    if dry_run {
+        println!("Dry-run: no files written.");
+        return Ok(());
+    }
+
+    if !yes {
+        eprint!("\nProceed? [y/N] ");
+        io::stderr().flush()?;
+        let mut line = String::new();
+        io::stdin().lock().read_line(&mut line)?;
+        let trimmed = line.trim();
+        if !trimmed.starts_with('y') && !trimmed.starts_with('Y') {
+            println!("Aborted.");
+            return Ok(());
+        }
+    }
+
+    let mut existing: Vec<String> = Vec::new();
+    for (dir_name, _) in &planned {
+        let target = skills_dir.join(dir_name).join("SKILL.md");
+        if target.exists() {
+            existing.push(dir_name.clone());
+        }
+    }
+    if !existing.is_empty() {
+        anyhow::bail!(
+            "{} skill file(s) already exist (e.g. {}); remove the conflicting directories under {} before re-running migrate-to-skills (this is a one-time migration)",
+            existing.len(),
+            existing.first().unwrap(),
+            skills_dir.display()
+        );
+    }
+
+    std::fs::create_dir_all(skills_dir)
+        .with_context(|| format!("failed to create {}", skills_dir.display()))?;
+
+    for (dir_name, contents) in &planned {
+        let dir = skills_dir.join(dir_name);
+        std::fs::create_dir_all(&dir)
+            .with_context(|| format!("failed to create {}", dir.display()))?;
+        let target = dir.join("SKILL.md");
+        atomic_write_file(&target, contents.as_bytes())
+            .with_context(|| format!("failed to write {}", target.display()))?;
+    }
+
+    println!(
+        "Migrated {} skill file(s) to {}.",
+        planned_files,
+        skills_dir.display()
+    );
+
+    Ok(())
+}
+
 pub(super) fn run_patterns_promote(apply: bool, days: u32) -> Result<()> {
     let obs_dir = crate::stats::observatory_dir()?;
 
@@ -1606,8 +1748,8 @@ mod tests {
     use std::collections::BTreeSet;
 
     use super::{
-        format_status_output, format_tasks_output, missing_provider_commands, prune_stale_in_dir,
-        ProviderCommandMode,
+        format_status_output, format_tasks_output, migrate_to_skills_in_dir,
+        missing_provider_commands, prune_stale_in_dir, ProviderCommandMode,
     };
     use crate::agent::ModelProvider;
     use crate::config::Config;
@@ -2162,5 +2304,203 @@ mod tests {
         assert_eq!(arr.len(), 2);
 
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    fn write_migration_source(patterns_dir: &Path, body: &serde_json::Value) {
+        std::fs::create_dir_all(patterns_dir).expect("create patterns dir");
+        let source = patterns_dir.join("common-issues.json");
+        std::fs::write(&source, serde_json::to_string_pretty(body).unwrap())
+            .expect("write source");
+    }
+
+    #[test]
+    fn migrate_to_skills_in_dir_writes_one_file_for_planner_only() {
+        let root = temp_dir("foundry-migrate-skills-planner-only");
+        let patterns_dir = root.join("patterns");
+        let skills_dir = root.join("skills");
+        write_migration_source(
+            &patterns_dir,
+            &serde_json::json!([{
+                "pattern_id": "p1",
+                "title": "Title",
+                "frequency": 1,
+                "keywords": ["alpha"],
+                "tech_stack": ["rust"],
+                "issue": "Bad thing",
+                "solution": {"planner": "Do X", "reviewer": ""}
+            }]),
+        );
+
+        migrate_to_skills_in_dir(&patterns_dir, &skills_dir, true, false).unwrap();
+
+        let p1_skill = skills_dir.join("p1").join("SKILL.md");
+        assert!(p1_skill.exists());
+        let contents = std::fs::read_to_string(&p1_skill).unwrap();
+        assert!(contents.contains("cf-stage: planner"));
+        assert!(contents.contains("Do X"));
+        assert!(!skills_dir.join("p1-reviewer").exists());
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn migrate_to_skills_in_dir_writes_two_files_for_both_stages() {
+        let root = temp_dir("foundry-migrate-skills-both");
+        let patterns_dir = root.join("patterns");
+        let skills_dir = root.join("skills");
+        write_migration_source(
+            &patterns_dir,
+            &serde_json::json!([{
+                "pattern_id": "p2",
+                "title": "Title",
+                "frequency": 2,
+                "keywords": [],
+                "tech_stack": [],
+                "issue": "Bad",
+                "solution": {"planner": "Plan it", "reviewer": "Check it"}
+            }]),
+        );
+
+        migrate_to_skills_in_dir(&patterns_dir, &skills_dir, true, false).unwrap();
+
+        let planner = skills_dir.join("p2-planner").join("SKILL.md");
+        let reviewer = skills_dir.join("p2-reviewer").join("SKILL.md");
+        assert!(planner.exists());
+        assert!(reviewer.exists());
+        assert!(std::fs::read_to_string(&planner)
+            .unwrap()
+            .contains("cf-stage: planner"));
+        assert!(std::fs::read_to_string(&reviewer)
+            .unwrap()
+            .contains("cf-stage: reviewer"));
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn migrate_to_skills_in_dir_handles_wrapper_format_input() {
+        let root = temp_dir("foundry-migrate-skills-wrapper");
+        let patterns_dir = root.join("patterns");
+        let skills_dir = root.join("skills");
+        write_migration_source(
+            &patterns_dir,
+            &serde_json::json!({
+                "pattern_type": "common-issues",
+                "domain": "global",
+                "patterns": [{
+                    "pattern_id": "wp1",
+                    "title": "Wrapped",
+                    "frequency": 3,
+                    "keywords": [],
+                    "tech_stack": [],
+                    "issue": "Bad",
+                    "solution": {"planner": "Plan", "reviewer": ""}
+                }]
+            }),
+        );
+
+        migrate_to_skills_in_dir(&patterns_dir, &skills_dir, true, false).unwrap();
+
+        assert!(skills_dir.join("wp1").join("SKILL.md").exists());
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn migrate_to_skills_in_dir_dry_run_writes_nothing() {
+        let root = temp_dir("foundry-migrate-skills-dry");
+        let patterns_dir = root.join("patterns");
+        let skills_dir = root.join("skills");
+        write_migration_source(
+            &patterns_dir,
+            &serde_json::json!([{
+                "pattern_id": "drypid",
+                "title": "Dry",
+                "frequency": 1,
+                "keywords": [],
+                "tech_stack": [],
+                "issue": "Bad",
+                "solution": {"planner": "Plan", "reviewer": ""}
+            }]),
+        );
+
+        migrate_to_skills_in_dir(&patterns_dir, &skills_dir, false, true).unwrap();
+
+        let no_files = !skills_dir.exists()
+            || std::fs::read_dir(&skills_dir)
+                .map(|mut e| e.next().is_none())
+                .unwrap_or(true);
+        assert!(no_files, "skills_dir must not contain files after dry-run");
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn migrate_to_skills_in_dir_skips_patterns_with_no_solution() {
+        let root = temp_dir("foundry-migrate-skills-no-solution");
+        let patterns_dir = root.join("patterns");
+        let skills_dir = root.join("skills");
+        write_migration_source(
+            &patterns_dir,
+            &serde_json::json!([{
+                "pattern_id": "nosol",
+                "title": "No",
+                "frequency": 1,
+                "keywords": [],
+                "tech_stack": [],
+                "issue": "Bad",
+                "solution": null
+            }]),
+        );
+
+        migrate_to_skills_in_dir(&patterns_dir, &skills_dir, true, false).unwrap();
+
+        assert!(!skills_dir.join("nosol").exists());
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn migrate_to_skills_in_dir_errors_on_collision() {
+        let root = temp_dir("foundry-migrate-skills-collision");
+        let patterns_dir = root.join("patterns");
+        let skills_dir = root.join("skills");
+        let collision_dir = skills_dir.join("colpid");
+        std::fs::create_dir_all(&collision_dir).expect("mkdir collision");
+        let collision_file = collision_dir.join("SKILL.md");
+        std::fs::write(&collision_file, "PRE-EXISTING").expect("write collision");
+        write_migration_source(
+            &patterns_dir,
+            &serde_json::json!([{
+                "pattern_id": "colpid",
+                "title": "Coll",
+                "frequency": 1,
+                "keywords": [],
+                "tech_stack": [],
+                "issue": "Bad",
+                "solution": {"planner": "Plan", "reviewer": ""}
+            }]),
+        );
+
+        let err = migrate_to_skills_in_dir(&patterns_dir, &skills_dir, true, false).unwrap_err();
+        assert!(format!("{:?}", err).contains("already exist"));
+        let unchanged = std::fs::read_to_string(&collision_file).unwrap();
+        assert_eq!(unchanged, "PRE-EXISTING");
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn migrate_to_skills_in_dir_missing_source_is_noop() {
+        let root = temp_dir("foundry-migrate-skills-missing");
+        let patterns_dir = root.join("patterns");
+        let skills_dir = root.join("skills");
+        std::fs::create_dir_all(&patterns_dir).expect("mkdir");
+
+        migrate_to_skills_in_dir(&patterns_dir, &skills_dir, true, false).unwrap();
+
+        assert!(!skills_dir.exists());
+
+        let _ = std::fs::remove_dir_all(root);
     }
 }
