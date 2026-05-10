@@ -89,7 +89,7 @@ pub async fn summarize_stage(
         log_tail.as_deref().unwrap_or(""),
     );
 
-    let result = invoke_haiku(&provider, &model, &prompt).await;
+    let result = invoke_haiku(&provider, &model, &prompt, config.summary_timeout_secs).await;
 
     match result {
         Ok(text) => {
@@ -125,8 +125,13 @@ pub async fn summarize_stage(
     }
 }
 
-async fn invoke_haiku(provider: &str, model: &str, prompt: &str) -> Result<String> {
-    let timeout_dur = Duration::from_secs(5);
+async fn invoke_haiku(
+    provider: &str,
+    model: &str,
+    prompt: &str,
+    timeout_secs: u64,
+) -> Result<String> {
+    let timeout_dur = Duration::from_secs(timeout_secs);
     match provider {
         "claude" => {
             let mut cmd = Command::new("claude");
@@ -145,7 +150,7 @@ async fn invoke_haiku(provider: &str, model: &str, prompt: &str) -> Result<Strin
             let fut = cmd.output();
             let output = timeout(timeout_dur, fut)
                 .await
-                .context("summary timed out after 5s")??;
+                .with_context(|| format!("summary timed out after {}s", timeout_secs))??;
             if !output.status.success() {
                 return Err(anyhow!(
                     "claude exit {}: {}",

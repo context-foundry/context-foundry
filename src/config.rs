@@ -28,6 +28,10 @@ fn default_summary_model() -> String {
     "haiku".to_string()
 }
 
+fn default_summary_timeout_secs() -> u64 {
+    20
+}
+
 fn default_prefer_file_open_over_summary() -> bool {
     false
 }
@@ -498,6 +502,12 @@ pub struct Config {
     pub summary_provider: String,
     #[serde(default = "default_summary_model")]
     pub summary_model: String,
+    /// Per-call timeout for the stage-summary subprocess (the small model that
+    /// summarizes a stage's log + artifacts when you click a pipeline card).
+    /// Claude CLI cold-start alone is 2-4s, so 5s is too tight; 20s covers the
+    /// long tail while still failing fast on a genuinely hung subprocess.
+    #[serde(default = "default_summary_timeout_secs")]
+    pub summary_timeout_secs: u64,
     #[serde(default = "default_prefer_file_open_over_summary")]
     pub prefer_file_open_over_summary: bool,
 
@@ -684,6 +694,7 @@ impl Default for Config {
             stage_overrides: Vec::new(),
             summary_provider: default_summary_provider(),
             summary_model: default_summary_model(),
+            summary_timeout_secs: default_summary_timeout_secs(),
             prefer_file_open_over_summary: default_prefer_file_open_over_summary(),
             model_catalog_refresh_secs: 86400,
             model_catalog_url_overrides: std::collections::HashMap::new(),

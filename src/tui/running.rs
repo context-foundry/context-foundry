@@ -9,7 +9,7 @@ use ratatui::{
 use super::{pane_border_style, pane_border_type};
 use crate::agent::AgentRole;
 use crate::app::{AppPhase, AppState, CurrentClassification, ExtensionDisplayInfo, StreamState, TuiPane};
-use crate::complexity::{TaskComplexity, TaskOverride};
+use crate::complexity::{classify_task_full, TaskComplexity, TaskOverride};
 use crate::utils::truncate_str;
 
 fn complexity_estimate_label(cls: &CurrentClassification) -> String {
@@ -957,10 +957,11 @@ pub(super) fn render_task_queue(frame: &mut Frame, area: Rect, state: &AppState,
 
             // T1.23: per-task complexity badge. For the current task, render
             // the live classification tier (`[S]`/`[M]`/`[C]`) with `*` when
-            // an override is set. For pending tasks with a parsed override
-            // flag, surface that hint as `[f]`/`[s]` (lowercase) so it does
-            // not collide visually with the uppercase tier badges on running
-            // rows. Completed tasks show no badge.
+            // an override is set. Pending tasks are pre-rated by the same
+            // heuristic so the queue surfaces upcoming complexity at a glance;
+            // an explicit `[fast]`/`[strict]` override displays as `[f]`/`[s]`
+            // (lowercase) to signal a user-pinned choice rather than a
+            // prediction. Completed tasks show no badge.
             let badge_text: String = if is_current {
                 if let Some(cls) = state.current_classification {
                     let tier_char = match cls.tier {
@@ -980,7 +981,15 @@ pub(super) fn render_task_queue(frame: &mut Frame, area: Rect, state: &AppState,
                 match task.override_flag {
                     TaskOverride::Fast => "[f]".to_string(),
                     TaskOverride::Strict => "[s]".to_string(),
-                    TaskOverride::None => "[?]".to_string(),
+                    TaskOverride::None => {
+                        let cls = classify_task_full(&task.description, TaskOverride::None);
+                        let tier_char = match cls.tier {
+                            TaskComplexity::Simple => 'S',
+                            TaskComplexity::Medium => 'M',
+                            TaskComplexity::Complex => 'C',
+                        };
+                        format!("[{}]", tier_char)
+                    }
                 }
             } else {
                 "   ".to_string()
