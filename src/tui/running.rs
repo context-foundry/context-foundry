@@ -8,7 +8,7 @@ use ratatui::{
 
 use super::{pane_border_style, pane_border_type};
 use crate::agent::AgentRole;
-use crate::app::{AppPhase, AppState, ExtensionDisplayInfo, TuiPane};
+use crate::app::{AppPhase, AppState, ExtensionDisplayInfo, StreamState, TuiPane};
 use crate::utils::truncate_str;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -292,10 +292,25 @@ pub(super) fn render_header(frame: &mut Frame, area: Rect, state: &AppState) {
         let spinner_chars = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
         let spinner = spinner_chars[state.tick_count % spinner_chars.len()];
 
-        let activity = if state.agent_output.is_empty() {
-            format!("{} thinking...", spinner)
-        } else {
-            format!("{} {} events", spinner, state.events_received)
+        let activity = match state.stream_state {
+            StreamState::WritingText => format!(
+                "{} writing... ({} chunks)",
+                spinner, state.stream_text_delta_count
+            ),
+            StreamState::Reading => {
+                if state.status_summary.is_empty() {
+                    format!("{} reading...", spinner)
+                } else {
+                    format!("{} {}", spinner, state.status_summary)
+                }
+            }
+            StreamState::Idle => {
+                if state.agent_output.is_empty() {
+                    format!("{} thinking...", spinner)
+                } else {
+                    format!("{} {} events", spinner, state.events_received)
+                }
+            }
         };
 
         format!(
@@ -569,6 +584,42 @@ pub(super) fn wrap_line(line: &str, width: usize) -> Vec<String> {
     result
 }
 
+/// Returns true if the given assistant-output line reads like a phase
+/// transition sentence ("Let me ...", "I'll now ...", a colon-terminated
+/// header). Used to render those sentences with extra emphasis. Skips
+/// lines that already carry a structured marker prefix (`[tool]`, etc.)
+/// so we don't double-style streaming tool output.
+pub(super) fn is_phase_transition(line: &str) -> bool {
+    let trimmed = line.trim();
+    if trimmed.is_empty() {
+        return false;
+    }
+    if trimmed.starts_with('[') {
+        return false;
+    }
+    let lower = trimmed.to_ascii_lowercase();
+    let prefixes = [
+        "let me ",
+        "i'll now ",
+        "i have enough ",
+        "now i'll ",
+        "i'll start ",
+        "let's ",
+    ];
+    for p in prefixes.iter() {
+        if lower.starts_with(p) {
+            return true;
+        }
+    }
+    if trimmed.ends_with(':')
+        && trimmed.chars().count() <= 80
+        && !trimmed.contains(['[', ']', '{', '}', '<', '>', '(', ')'])
+    {
+        return true;
+    }
+    false
+}
+
 pub(super) fn style_for_line(line: &str, theme: &super::theme::TuiTheme) -> Style {
     if line.starts_with("[stderr]") {
         Style::default().fg(theme.error)
@@ -606,16 +657,28 @@ pub(super) fn render_agent_output(
         (state.agent_output.clone(), state.scroll_offset)
     };
 
-    // Pre-wrap all lines
-    let wrapped: Vec<(String, Style)> = output_lines
-        .iter()
-        .flat_map(|line| {
+    // Pre-wrap all lines, emphasizing phase-transition sentences with a
+    // warning-colored bold style and surrounding blank lines.
+    let mut wrapped: Vec<(String, Style)> = Vec::new();
+    for line in output_lines.iter() {
+        if is_phase_transition(line) {
+            if wrapped.last().map(|(t, _)| !t.is_empty()).unwrap_or(false) {
+                wrapped.push((String::new(), Style::default()));
+            }
+            let style = Style::default()
+                .fg(state.tui_theme.warning)
+                .add_modifier(Modifier::BOLD);
+            for chunk in wrap_line(line, inner_width) {
+                wrapped.push((chunk, style));
+            }
+            wrapped.push((String::new(), Style::default()));
+        } else {
             let style = style_for_line(line, &state.tui_theme);
-            wrap_line(line, inner_width)
-                .into_iter()
-                .map(move |chunk| (chunk, style))
-        })
-        .collect();
+            for chunk in wrap_line(line, inner_width) {
+                wrapped.push((chunk, style));
+            }
+        }
+    }
 
     let max_lines = if state.dual_build.active {
         area.height.saturating_sub(3) as usize // 1 extra line for tab header
@@ -1431,5 +1494,66 @@ mod tests {
             Some(&AgentRole::Builder),
             &AgentRole::Builder,
         ));
+    }
+
+    #[test]
+    fn is_phase_transition_matches_let_me_phrasings() {
+        assert!(is_phase_transition("Let me write the implementation plan."));
+        assert!(is_phase_transition("Let's verify this works."));
+        assert!(is_phase_transition("I'll now write the test."));
+        assert!(is_phase_transition("I have enough context to start."));
+        assert!(is_phase_transition("Now I'll generate the plan:"));
+    }
+
+    #[test]
+    fn is_phase_transition_rejects_regular_text_and_code() {
+        assert!(!is_phase_transition("The function returns the correct value."));
+        assert!(!is_phase_transition("[tool] Read /tmp/x"));
+        assert!(!is_phase_transition("```rust"));
+        assert!(!is_phase_transition("{ \"key\": 1 }"));
+        assert!(!is_phase_transition("function foo() {"));
+    }
+
+    #[test]
+    fn spinner_activity_uses_writing_label_when_streaming() {
+        use chrono::Utc;
+        use ratatui::backend::TestBackend;
+        use ratatui::Terminal;
+        use std::path::PathBuf;
+
+        let mut state = AppState::new(PathBuf::from(".buildloop"));
+        state.current_agent = Some((AgentRole::Builder, Utc::now()));
+        state.current_agent_model = Some("Sonnet".to_string());
+        state.stream_state = StreamState::WritingText;
+        state.stream_text_delta_count = 5;
+
+        let backend = TestBackend::new(220, 8);
+        let mut terminal = Terminal::new(backend).expect("failed to create terminal");
+        terminal
+            .draw(|frame| render_header(frame, frame.area(), &state))
+            .expect("failed to draw header");
+
+        let buffer = terminal.backend().buffer();
+        let area = *buffer.area();
+        let rendered: String = (0..area.height)
+            .map(|y| {
+                (0..area.width)
+                    .map(|x| {
+                        buffer
+                            .cell((x, y))
+                            .map(|c| c.symbol().to_string())
+                            .unwrap_or_default()
+                    })
+                    .collect::<Vec<_>>()
+                    .join("")
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        assert!(
+            rendered.contains("writing... (5 chunks)"),
+            "rendered: {}",
+            rendered
+        );
     }
 }

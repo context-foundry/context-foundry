@@ -27,7 +27,7 @@ pub use self::state::FileEntry;
 pub use self::state::{
     settings_sections, Action, AppPhase, AppState, DualSelection, ExtensionDisplayInfo, FieldKind,
     ModelEntry, ModelPicker, OverlayRow, PatternEventKind, PickerItem, PlanStatus, PlanningState,
-    SectionKind, StartupAction, StartupScenario, StartupState, TuiPane,
+    SectionKind, StartupAction, StartupScenario, StartupState, StreamState, TuiPane,
 };
 use self::state::{AppEvent, AppendTasksRequest, LoopEvent, PendingTransition, PlanningOutcome};
 use crate::agent::{AgentErrorKind, AgentOutputEvent, AgentRole};
@@ -2054,6 +2054,7 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                     stages: [None, None],
                     stage_ids: [None, None],
                     stage_models: [String::new(), String::new()],
+                    last_event_was_delta: [false, false],
                 };
                 state.log(format!(
                     "Dual pipeline started: {} vs {}",
@@ -3004,7 +3005,13 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                     }
                 }
                 // Pipeline stage click (box rows)
-                let n_connected = config.pipeline_stages.iter().filter(|s| s.enabled).count();
+                let mut n_connected = config.pipeline_stages.iter().filter(|s| s.enabled).count();
+                if config.run_mode == "coach" {
+                    n_connected += 1;
+                }
+                if config.plan_review_enabled {
+                    n_connected += 1;
+                }
                 if let Some(click) =
                     tui::pipeline_click(pipeline_area, mouse.column, mouse.row, n_connected)
                 {
@@ -4040,12 +4047,30 @@ fn record_context_pct_for_stage(
 fn handle_agent_output(state: &mut AppState, output: AgentOutputEvent) {
     state.events_received += 1;
     match output {
+        AgentOutputEvent::TextDelta(ref chunk) => {
+            if state.stream_state != StreamState::WritingText {
+                state.stream_state = StreamState::WritingText;
+                state.stream_text_delta_count = 0;
+            }
+            state.stream_text_delta_count = state.stream_text_delta_count.saturating_add(1);
+            if state.stream_text_delta_count == 1 {
+                state.agent_output.push(chunk.clone());
+            } else if let Some(last) = state.agent_output.last_mut() {
+                last.push_str(chunk);
+            } else {
+                state.agent_output.push(chunk.clone());
+            }
+            state.status_summary =
+                format!("writing... ({} chunks)", state.stream_text_delta_count);
+        }
         AgentOutputEvent::Text(ref text) => {
             if text.starts_with("[rate limited]") {
                 // Show in status bar only -- don't pollute the output panel
                 state.status_summary = "Waiting for API retry".to_string();
             } else {
                 state.agent_output.push(text.clone());
+                state.stream_state = StreamState::Idle;
+                state.stream_text_delta_count = 0;
             }
         }
         AgentOutputEvent::ToolUse {
@@ -4082,6 +4107,8 @@ fn handle_agent_output(state: &mut AppState, output: AgentOutputEvent) {
                 }
                 _ => state.status_summary.clone(),
             };
+            state.stream_state = StreamState::Reading;
+            state.stream_text_delta_count = 0;
         }
         AgentOutputEvent::ToolResult { output_preview } => {
             if !output_preview.is_empty() {
@@ -4193,8 +4220,31 @@ fn handle_dual_build_output(state: &mut AppState, idx: usize, output: AgentOutpu
     state.dual_build.event_counts[idx] += 1;
 
     match &output {
+        AgentOutputEvent::TextDelta(chunk) => {
+            let last_was_delta = state
+                .dual_build
+                .last_event_was_delta
+                .get(idx)
+                .copied()
+                .unwrap_or(false);
+            if last_was_delta {
+                if let Some(last) = state.dual_build.streams[idx].last_mut() {
+                    last.push_str(chunk);
+                } else {
+                    state.dual_build.streams[idx].push(chunk.clone());
+                }
+            } else {
+                state.dual_build.streams[idx].push(chunk.clone());
+            }
+            if let Some(slot) = state.dual_build.last_event_was_delta.get_mut(idx) {
+                *slot = true;
+            }
+        }
         AgentOutputEvent::Text(text) => {
             state.dual_build.streams[idx].push(text.clone());
+            if let Some(slot) = state.dual_build.last_event_was_delta.get_mut(idx) {
+                *slot = false;
+            }
         }
         AgentOutputEvent::ToolUse {
             tool,
@@ -4206,6 +4256,9 @@ fn handle_dual_build_output(state: &mut AppState, idx: usize, output: AgentOutpu
                 format!("[tool] {} -- {}", tool, input_preview)
             };
             state.dual_build.streams[idx].push(msg);
+            if let Some(slot) = state.dual_build.last_event_was_delta.get_mut(idx) {
+                *slot = false;
+            }
         }
         AgentOutputEvent::ToolResult { output_preview } => {
             if !output_preview.is_empty() {
@@ -4646,9 +4699,21 @@ fn pipeline_click_artifact(
         .iter()
         .filter(|s| s.enabled)
         .collect();
+    // Build the same connected ordering used by the renderer so click index
+    // resolves correctly when virtual COACH and P+ stages are present.
+    let mut connected_ids: Vec<String> = Vec::new();
+    if config.run_mode == "coach" {
+        connected_ids.push("coach".to_string());
+    }
+    for stage in enabled_stages.iter() {
+        connected_ids.push(stage.id.clone());
+        if stage.id == "plan" && config.plan_review_enabled {
+            connected_ids.push("plan-review".to_string());
+        }
+    }
     match click {
         tui::PipelineClick::ConnectedStage(i) => {
-            let stage_id = enabled_stages.get(i).map(|s| s.id.as_str()).unwrap_or("");
+            let stage_id = connected_ids.get(i).map(|s| s.as_str()).unwrap_or("");
             let file = match stage_id {
                 "scout" => buildloop.join("scout-report.md"),
                 "query" => buildloop.join("questions.md"),
@@ -4656,6 +4721,8 @@ fn pipeline_click_artifact(
                 "plan" => buildloop.join("current-plan.md"),
                 "implement" => buildloop.join("build-claims.md"),
                 "doubt" => buildloop.join("review-report.md"),
+                "coach" => buildloop.join("intake-brief.md"),
+                "plan-review" => buildloop.join("plan-review-feedback.md"),
                 _ => return None,
             };
             Some(file)

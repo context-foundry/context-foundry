@@ -7666,8 +7666,8 @@ mod tests {
             (AgentRole::Research, "RESEARCH"),
             (AgentRole::Planner, "PLAN"),
             (AgentRole::PlanReview, "P+"),
-            (AgentRole::Builder, "IMPLEMENT"),
-            (AgentRole::Reviewer, "VERIFY"),
+            (AgentRole::Builder, "BUILD"),
+            (AgentRole::Reviewer, "AUDIT"),
         ];
 
         for (role, expected_display) in &roles {
@@ -7927,7 +7927,7 @@ mod tests {
             &budget::BudgetTargets::default(),
             10,
         );
-        assert_eq!(record.phase, "IMPLEMENT");
+        assert_eq!(record.phase, "BUILD");
         assert_eq!(record.actual_pct, 45);
         assert_eq!(record.tokens_in, 5000);
         assert_eq!(record.tokens_out, 2000);
@@ -7944,8 +7944,8 @@ mod tests {
         assert!(path.exists(), "budget-telemetry.json must exist");
         let content = std::fs::read_to_string(&path).unwrap();
         assert!(
-            content.contains("IMPLEMENT"),
-            "budget-telemetry.json must contain IMPLEMENT phase record"
+            content.contains("BUILD"),
+            "budget-telemetry.json must contain BUILD phase record"
         );
         assert!(
             content.contains("5000"),

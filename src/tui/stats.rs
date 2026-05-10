@@ -217,6 +217,18 @@ pub(super) fn render_dashboard_stats(
         .map(|ts| format_duration_hms(now.signed_duration_since(ts)))
         .unwrap_or_else(|| "--:--".to_string());
 
+    let task_label: String = if let Some(t) = state.current_task.as_ref() {
+        format!("task {}: ", t.id)
+    } else {
+        "task: ".to_string()
+    };
+
+    let stage_segments: Option<(String, String)> = state.current_agent.as_ref().map(|(role, started)| {
+        let stage_label = format!("stage {}: ", role);
+        let stage_str = format_duration_hms(now.signed_duration_since(*started));
+        (stage_label, stage_str)
+    });
+
     let (cost_label, cost_usd, input_tokens, output_tokens) = if state.dual_build.active {
         (
             format!(
@@ -293,22 +305,31 @@ pub(super) fn render_dashboard_stats(
     } else {
         (format!("Ollama: {}", ollama_label), ollama_color)
     };
-    lines.push(Line::from(vec![
-        Span::styled("  ", Style::default()),
-        Span::styled(
-            format!(
-                "{:<width$}",
-                ollama_left,
-                width = half_width.saturating_sub(2)
+    {
+        let mut spans = vec![
+            Span::styled("  ", Style::default()),
+            Span::styled(
+                format!(
+                    "{:<width$}",
+                    ollama_left,
+                    width = half_width.saturating_sub(2)
+                ),
+                Style::default().fg(ollama_left_color),
             ),
-            Style::default().fg(ollama_left_color),
-        ),
-        Span::styled("Timing    ", Style::default().fg(theme.info)),
-        Span::styled("session: ", Style::default().fg(theme.muted)),
-        Span::styled(&session_str, Style::default().fg(theme.text)),
-        Span::styled("  task: ", Style::default().fg(theme.muted)),
-        Span::styled(&task_str, Style::default().fg(theme.text)),
-    ]));
+            Span::styled("Timing    ", Style::default().fg(theme.info)),
+            Span::styled("session: ", Style::default().fg(theme.muted)),
+            Span::styled(session_str.clone(), Style::default().fg(theme.text)),
+            Span::styled("  ", Style::default()),
+            Span::styled(task_label.clone(), Style::default().fg(theme.muted)),
+            Span::styled(task_str.clone(), Style::default().fg(theme.text)),
+        ];
+        if let Some((stage_label, stage_str)) = stage_segments.as_ref() {
+            spans.push(Span::styled("  ", Style::default()));
+            spans.push(Span::styled(stage_label.clone(), Style::default().fg(theme.muted)));
+            spans.push(Span::styled(stage_str.clone(), Style::default().fg(theme.text)));
+        }
+        lines.push(Line::from(spans));
+    }
 
     // ─── Row 2b: Sandbox status ───
     {
@@ -895,6 +916,85 @@ mod tests {
 
         assert!(rendered.contains("B:44%"));
         assert!(rendered.contains(" S:77%"));
+    }
+
+    fn render_stats_text_tall(state: &AppState) -> String {
+        let backend = TestBackend::new(180, 16);
+        let mut terminal = Terminal::new(backend).expect("failed to create terminal");
+        terminal
+            .draw(|frame| render_dashboard_stats(frame, frame.area(), state, &Config::default()))
+            .expect("failed to draw stats");
+
+        let buffer = terminal.backend().buffer();
+        let area = *buffer.area();
+        (0..area.height)
+            .map(|y| {
+                (0..area.width)
+                    .map(|x| {
+                        buffer
+                            .cell((x, y))
+                            .map(|cell| cell.symbol().to_string())
+                            .unwrap_or_else(|| " ".to_string())
+                    })
+                    .collect::<Vec<_>>()
+                    .join("")
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    #[test]
+    fn timing_row_shows_three_labeled_timers_when_agent_active() {
+        use chrono::Utc;
+        let mut state = AppState::new(PathBuf::from(".buildloop"));
+        state.current_task = Some(crate::task::Task {
+            id: "T1.1".into(),
+            description: "x".into(),
+            line_number: 0,
+            completed: false,
+            pipeline_progress: None,
+        });
+        state.task_start = Some(Utc::now() - chrono::Duration::seconds(699));
+        state.current_agent = Some((AgentRole::Builder, Utc::now() - chrono::Duration::seconds(105)));
+
+        let rendered = render_stats_text_tall(&state);
+
+        assert!(rendered.contains("task T1.1:"), "rendered: {}", rendered);
+        assert!(rendered.contains("stage BUILD:"), "rendered: {}", rendered);
+        assert!(rendered.contains("session:"), "rendered: {}", rendered);
+    }
+
+    #[test]
+    fn timing_row_omits_stage_segment_when_agent_is_none() {
+        use chrono::Utc;
+        let mut state = AppState::new(PathBuf::from(".buildloop"));
+        state.current_task = Some(crate::task::Task {
+            id: "T1.1".into(),
+            description: "x".into(),
+            line_number: 0,
+            completed: false,
+            pipeline_progress: None,
+        });
+        state.task_start = Some(Utc::now() - chrono::Duration::seconds(699));
+        state.current_agent = None;
+
+        let rendered = render_stats_text_tall(&state);
+
+        assert!(rendered.contains("task T1.1:"), "rendered: {}", rendered);
+        assert!(rendered.contains("session:"), "rendered: {}", rendered);
+        assert!(!rendered.contains("stage "), "should not contain 'stage '. rendered: {}", rendered);
+    }
+
+    #[test]
+    fn timing_row_uses_generic_task_label_when_no_current_task() {
+        let mut state = AppState::new(PathBuf::from(".buildloop"));
+        state.current_task = None;
+        state.current_agent = None;
+
+        let rendered = render_stats_text_tall(&state);
+
+        assert!(rendered.contains("task: "), "rendered: {}", rendered);
+        assert!(!rendered.contains("task T"), "rendered: {}", rendered);
     }
 
     fn render_stats_text(state: &AppState) -> String {

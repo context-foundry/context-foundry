@@ -28,6 +28,17 @@ pub enum AppPhase {
     Running,
 }
 
+/// Coarse-grained classification of the current agent's activity for the
+/// spinner label. Updated by handle_agent_output as ToolUse / TextDelta /
+/// Text events flow in. Reset to Idle on AgentDone and on set_agent.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum StreamState {
+    #[default]
+    Idle,
+    Reading,
+    WritingText,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TuiPane {
     Explorer,
@@ -1277,6 +1288,10 @@ pub struct DualBuildState {
     pub stages: [Option<AgentRole>; 2], // Current QRPBA stage per pipeline
     pub stage_ids: [Option<String>; 2], // Current configured pipeline stage id per pipeline
     pub stage_models: [String; 2],      // Model label for current stage
+    /// Whether the most recent event for this pipeline index was a TextDelta.
+    /// Used by the dual-stream handler to decide whether to append to the
+    /// last entry in `streams[idx]` or push a new entry.
+    pub last_event_was_delta: [bool; 2],
 }
 
 pub struct AppState {
@@ -1402,6 +1417,10 @@ pub struct AppState {
     pub tui_theme: TuiTheme,
     pub ship_active: bool,
     pub status_summary: String,
+    pub stream_state: StreamState,
+    /// Number of TextDelta chunks accumulated for the current writing burst.
+    /// Reset to 0 on every set_agent and every state transition out of WritingText.
+    pub stream_text_delta_count: usize,
     pub parallel_builder_progress: Option<(usize, usize)>, // (total, done) when parallel builder active
     pub(super) pending_transition: Option<PendingTransition>,
     pub(super) tasks_file_lock: Arc<Mutex<()>>,
@@ -1560,6 +1579,8 @@ impl AppState {
             tui_theme: TuiTheme::default(),
             ship_active: false,
             status_summary: String::new(),
+            stream_state: StreamState::Idle,
+            stream_text_delta_count: 0,
             parallel_builder_progress: None,
             pending_transition: None,
             tasks_file_lock: Arc::new(Mutex::new(())),
@@ -1615,6 +1636,8 @@ impl AppState {
         self.current_agent_model = None;
         self.agent_output.clear();
         self.scroll_offset = 0;
+        self.stream_state = StreamState::Idle;
+        self.stream_text_delta_count = 0;
     }
 
     pub(super) fn reset_dual_build(&mut self) {
@@ -1632,6 +1655,8 @@ impl AppState {
         self.events_received = 0;
         self.agent_context_pct = None;
         self.status_summary = String::new();
+        self.stream_state = StreamState::Idle;
+        self.stream_text_delta_count = 0;
         self.current_agent_stage_id = Some(stage_id);
         self.current_agent = Some((role, Utc::now()));
         self.current_agent_model = Some(model.to_string());

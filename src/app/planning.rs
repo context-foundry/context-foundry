@@ -290,6 +290,11 @@ pub(super) async fn run_plan_mode(project_dir: &Path, max_iterations: u64) -> Re
         tokio::spawn(async move {
             while let Some(evt) = agent_rx.recv().await {
                 match evt {
+                    AgentOutputEvent::TextDelta(text) => {
+                        use std::io::Write;
+                        print!("{}", text);
+                        let _ = std::io::stdout().flush();
+                    }
                     AgentOutputEvent::Text(text) => println!("{}", text),
                     AgentOutputEvent::ToolUse {
                         tool,

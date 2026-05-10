@@ -541,6 +541,16 @@ pub(super) async fn run_headless(project_dir: &Path, output_format: Option<Strin
                     println!("{}", text);
                 }
             }
+            AppEvent::AgentOutput(AgentOutputEvent::TextDelta(text)) => {
+                use std::io::Write;
+                if json_output {
+                    eprint!("{}", text);
+                    let _ = std::io::stderr().flush();
+                } else {
+                    print!("{}", text);
+                    let _ = std::io::stdout().flush();
+                }
+            }
             AppEvent::AgentOutput(AgentOutputEvent::ToolUse {
                 tool,
                 input_preview,

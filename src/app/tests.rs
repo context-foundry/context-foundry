@@ -2483,3 +2483,36 @@ fn lmstudio_canonical_id_skips_lines_without_lmstudio_prefix() {
         Some("lmstudio/qwen3.6-27b")
     );
 }
+
+#[test]
+fn handle_agent_output_text_delta_appends_to_last_line() {
+    use super::state::StreamState;
+    let mut state = AppState::new(PathBuf::from(".buildloop"));
+    super::handle_agent_output(&mut state, AgentOutputEvent::TextDelta("Hello".into()));
+    assert_eq!(state.agent_output, vec!["Hello".to_string()]);
+
+    super::handle_agent_output(&mut state, AgentOutputEvent::TextDelta(", world".into()));
+    assert_eq!(state.agent_output, vec!["Hello, world".to_string()]);
+
+    assert_eq!(state.stream_state, StreamState::WritingText);
+    assert_eq!(state.stream_text_delta_count, 2);
+}
+
+#[test]
+fn handle_agent_output_text_delta_starts_new_burst_after_tool_use() {
+    use super::state::StreamState;
+    let mut state = AppState::new(PathBuf::from(".buildloop"));
+    super::handle_agent_output(&mut state, AgentOutputEvent::TextDelta("first".into()));
+    super::handle_agent_output(
+        &mut state,
+        AgentOutputEvent::ToolUse {
+            tool: "Read".into(),
+            input_preview: "/x.rs".into(),
+        },
+    );
+    super::handle_agent_output(&mut state, AgentOutputEvent::TextDelta("second".into()));
+
+    assert!(state.agent_output.contains(&"first".to_string()));
+    assert_eq!(state.agent_output.last().unwrap(), "second");
+    assert_eq!(state.stream_state, StreamState::WritingText);
+}

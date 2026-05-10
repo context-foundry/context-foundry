@@ -361,10 +361,10 @@ mod tests {
         assert!(phase_names.contains(&"PLAN"), "Missing PLAN record");
         assert!(phase_names.contains(&"P+"), "Missing P+ record");
         assert!(
-            phase_names.contains(&"IMPLEMENT"),
-            "Missing IMPLEMENT record"
+            phase_names.contains(&"BUILD"),
+            "Missing BUILD record"
         );
-        assert!(phase_names.contains(&"VERIFY"), "Missing VERIFY record");
+        assert!(phase_names.contains(&"AUDIT"), "Missing AUDIT record");
     }
 
     #[test]
@@ -514,7 +514,7 @@ mod tests {
             ..Default::default()
         };
         let record = evaluate_phase(&AgentRole::Reviewer, &usage, &BudgetTargets::default(), 10);
-        assert_eq!(record.phase, "VERIFY");
+        assert_eq!(record.phase, "AUDIT");
         assert_eq!(record.target_pct, 50);
         assert_eq!(record.actual_pct, 70);
         assert!(record.overrun);
@@ -536,7 +536,7 @@ mod tests {
             ..Default::default()
         };
         let record = evaluate_phase(&AgentRole::Reviewer, &usage, &BudgetTargets::default(), 10);
-        assert_eq!(record.phase, "VERIFY");
+        assert_eq!(record.phase, "AUDIT");
         assert_eq!(record.tokens_in, 15000);
         assert_eq!(record.tokens_out, 5000);
         assert!((record.cost_usd - 0.25).abs() < f64::EPSILON);

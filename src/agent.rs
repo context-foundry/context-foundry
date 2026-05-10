@@ -37,9 +37,9 @@ impl std::fmt::Display for AgentRole {
             AgentRole::Query => write!(f, "QUERY"),
             AgentRole::Research => write!(f, "RESEARCH"),
             AgentRole::Planner => write!(f, "PLAN"),
-            AgentRole::Builder => write!(f, "IMPLEMENT"),
-            AgentRole::Reviewer => write!(f, "VERIFY"),
-            AgentRole::Fixer => write!(f, "VERIFY"),
+            AgentRole::Builder => write!(f, "BUILD"),
+            AgentRole::Reviewer => write!(f, "AUDIT"),
+            AgentRole::Fixer => write!(f, "AUDIT"),
             AgentRole::PlanReview => write!(f, "P+"),
             AgentRole::Discovery => write!(f, "DISCOVERY"),
             AgentRole::Coach => write!(f, "COACH"),
@@ -164,6 +164,11 @@ pub enum AgentErrorKind {
 pub enum AgentOutputEvent {
     /// Assistant is generating text
     Text(String),
+    /// An incremental text chunk emitted while the assistant is still
+    /// generating a message. Only fires when --include-partial-messages
+    /// is enabled. The TUI appends these chunks to the current text line
+    /// rather than treating each as a standalone event.
+    TextDelta(String),
     /// Agent is calling a tool
     ToolUse { tool: String, input_preview: String },
     /// Tool returned a result
@@ -643,6 +648,7 @@ pub async fn run_provider_session(options: ProviderRunOptions<'_>) -> Result<Age
             cmd.arg("--output-format");
             cmd.arg("stream-json");
             cmd.arg("--verbose");
+            cmd.arg("--include-partial-messages");
             cmd.env("CLAUDECODE", "");
             cmd.arg("--append-system-prompt");
             cmd.arg(agent_system_directives());
@@ -713,6 +719,7 @@ pub async fn run_provider_session(options: ProviderRunOptions<'_>) -> Result<Age
                     args.push("--output-format".to_string());
                     args.push("stream-json".to_string());
                     args.push("--verbose".to_string());
+                    args.push("--include-partial-messages".to_string());
                     args.push("--append-system-prompt".to_string());
                     args.push(agent_system_directives());
                     (program, args, vec![("CLAUDECODE", "")])
@@ -1189,6 +1196,7 @@ async fn run_agent_pty(
     cmd.arg("--output-format");
     cmd.arg("stream-json");
     cmd.arg("--verbose");
+    cmd.arg("--include-partial-messages");
     // Override any CLAUDE.md instructions that conflict with foundry's orchestration.
     cmd.arg("--append-system-prompt");
     cmd.arg(agent_system_directives());
@@ -1217,6 +1225,7 @@ async fn run_agent_pty(
         args.push("--output-format".to_string());
         args.push("stream-json".to_string());
         args.push("--verbose".to_string());
+        args.push("--include-partial-messages".to_string());
         args.push("--append-system-prompt".to_string());
         args.push(agent_system_directives());
         args.push("--tools".to_string());
@@ -1983,10 +1992,13 @@ fn parse_claude_json(v: &Value, model_name: &str) -> ParsedClaudeLine {
                     LAST_TURN_INPUT_TOKENS.with(|c| c.set(turn_input));
                 }
             }
-            parse_claude_assistant_message(v)
+            parse_claude_assistant_message_skip_text_if_streamed(v)
                 .map(ParsedClaudeLine::Event)
                 .unwrap_or(ParsedClaudeLine::Ignore)
         }
+        "stream_event" => parse_claude_stream_event(v)
+            .map(ParsedClaudeLine::Event)
+            .unwrap_or(ParsedClaudeLine::Ignore),
         "user" => parse_claude_user_message(v)
             .map(ParsedClaudeLine::Event)
             .unwrap_or(ParsedClaudeLine::Ignore),
@@ -2040,9 +2052,71 @@ fn parse_claude_json(v: &Value, model_name: &str) -> ParsedClaudeLine {
     }
 }
 
+#[cfg(test)]
+#[allow(dead_code)]
 fn parse_claude_assistant_message(v: &Value) -> Option<AgentOutputEvent> {
     let content = v.get("message")?.get("content")?.as_array()?;
     content.iter().find_map(parse_claude_content_block)
+}
+
+/// Same as `parse_claude_assistant_message`, but suppresses text-only blocks
+/// when stream deltas already emitted text for the current message. Tool-use
+/// (and other non-text) blocks are still emitted normally. Resets the
+/// per-message flag at the end so subsequent messages start clean.
+fn parse_claude_assistant_message_skip_text_if_streamed(v: &Value) -> Option<AgentOutputEvent> {
+    let suppress_text = STREAM_DELTAS_EMITTED_FOR_CURRENT_MESSAGE.with(|c| c.get());
+    let content = match v.get("message").and_then(|m| m.get("content")).and_then(|c| c.as_array()) {
+        Some(arr) => arr,
+        None => {
+            STREAM_DELTAS_EMITTED_FOR_CURRENT_MESSAGE.with(|c| c.set(false));
+            return None;
+        }
+    };
+    let result = content
+        .iter()
+        .find_map(|block| parse_claude_content_block_filtered(block, suppress_text));
+    STREAM_DELTAS_EMITTED_FOR_CURRENT_MESSAGE.with(|c| c.set(false));
+    result
+}
+
+fn parse_claude_content_block_filtered(
+    block: &Value,
+    suppress_text: bool,
+) -> Option<AgentOutputEvent> {
+    let block_type = block.get("type").and_then(|value| value.as_str());
+    if suppress_text && block_type == Some("text") {
+        return None;
+    }
+    parse_claude_content_block(block)
+}
+
+/// Parse `stream_event` payloads emitted by Claude CLI when invoked with
+/// `--include-partial-messages`. Extracts incremental text deltas for the
+/// TUI to append in place; returns None for control events (message_start,
+/// message_stop) and for non-text deltas (e.g. input_json_delta).
+fn parse_claude_stream_event(v: &Value) -> Option<AgentOutputEvent> {
+    let event = v.get("event")?;
+    let event_type = event.get("type")?.as_str()?;
+    match event_type {
+        "message_start" => {
+            STREAM_DELTAS_EMITTED_FOR_CURRENT_MESSAGE.with(|c| c.set(false));
+            None
+        }
+        "content_block_delta" => {
+            let delta = event.get("delta")?;
+            if delta.get("type").and_then(|t| t.as_str()) == Some("text_delta") {
+                let text = delta.get("text")?.as_str()?;
+                if text.is_empty() {
+                    return None;
+                }
+                STREAM_DELTAS_EMITTED_FOR_CURRENT_MESSAGE.with(|c| c.set(true));
+                Some(AgentOutputEvent::TextDelta(text.to_string()))
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
 }
 
 fn parse_claude_content_block(block: &Value) -> Option<AgentOutputEvent> {
@@ -2326,6 +2400,10 @@ thread_local! {
 
 thread_local! {
     static LAST_TURN_INPUT_TOKENS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+thread_local! {
+    static STREAM_DELTAS_EMITTED_FOR_CURRENT_MESSAGE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
 fn parse_claude_system_event(v: &Value) -> Option<AgentOutputEvent> {
@@ -4238,6 +4316,9 @@ mod tests {
                 Some(AgentOutputEvent::Error { .. }) => {
                     panic!("fixture has no typed-error lines")
                 }
+                Some(AgentOutputEvent::TextDelta(_)) => {
+                    panic!("opencode fixture should not emit text deltas")
+                }
                 None => {} // session.start is suppressed -> None
             }
         }
@@ -4475,5 +4556,87 @@ mod tests {
             OpenCodeParseOutcome::Event(AgentOutputEvent::Text(t)) => assert_eq!(t, "hi"),
             other => panic!("expected Event(Text), got {:?}", other),
         }
+    }
+
+    #[test]
+    fn parse_stream_event_content_block_delta_emits_text_delta() {
+        STREAM_DELTAS_EMITTED_FOR_CURRENT_MESSAGE.with(|c| c.set(false));
+
+        let none1 = parse_stream_event(
+            r#"{"type":"stream_event","event":{"type":"message_start"}}"#,
+        );
+        assert!(none1.is_none(), "message_start should yield no event");
+
+        let chunk1 = parse_stream_event(
+            r#"{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"Hello"}}}"#,
+        );
+        match chunk1 {
+            Some(AgentOutputEvent::TextDelta(s)) => assert_eq!(s, "Hello"),
+            other => panic!("expected TextDelta(\"Hello\"), got {:?}", other),
+        }
+
+        let chunk2 = parse_stream_event(
+            r#"{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":" world"}}}"#,
+        );
+        match chunk2 {
+            Some(AgentOutputEvent::TextDelta(s)) => assert_eq!(s, " world"),
+            other => panic!("expected TextDelta(\" world\"), got {:?}", other),
+        }
+
+        let stop = parse_stream_event(r#"{"type":"stream_event","event":{"type":"message_stop"}}"#);
+        assert!(stop.is_none(), "message_stop should yield no event");
+
+        // Now feed an assistant message with text -- text should be suppressed
+        // because deltas already emitted text for this message.
+        let suppressed = parse_stream_event(
+            r#"{"type":"assistant","message":{"content":[{"type":"text","text":"Hello world"}]}}"#,
+        );
+        assert!(
+            suppressed.is_none(),
+            "assistant text should be suppressed after deltas, got {:?}",
+            suppressed
+        );
+
+        // Subsequent assistant message should pass through normally because
+        // the flag was reset after suppression.
+        let next = parse_stream_event(
+            r#"{"type":"assistant","message":{"content":[{"type":"text","text":"Next message"}]}}"#,
+        );
+        match next {
+            Some(AgentOutputEvent::Text(s)) => assert_eq!(s, "Next message"),
+            other => panic!("expected Text(\"Next message\"), got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_stream_event_input_json_delta_returns_none() {
+        STREAM_DELTAS_EMITTED_FOR_CURRENT_MESSAGE.with(|c| c.set(false));
+        let result = parse_stream_event(
+            r#"{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"{}"}}}"#,
+        );
+        assert!(result.is_none(), "input_json_delta should yield no event");
+    }
+
+    #[test]
+    fn parse_stream_event_malformed_returns_none() {
+        STREAM_DELTAS_EMITTED_FOR_CURRENT_MESSAGE.with(|c| c.set(false));
+        let r1 = parse_stream_event(r#"{"type":"stream_event"}"#);
+        assert!(r1.is_none(), "missing event field");
+        let r2 = parse_stream_event(r#"{"type":"stream_event","event":{}}"#);
+        assert!(r2.is_none(), "missing event.type field");
+    }
+
+    #[test]
+    fn agent_role_display_uses_qrpba_user_facing_names() {
+        assert_eq!(AgentRole::Scout.to_string(), "SCOUT");
+        assert_eq!(AgentRole::Query.to_string(), "QUERY");
+        assert_eq!(AgentRole::Research.to_string(), "RESEARCH");
+        assert_eq!(AgentRole::Planner.to_string(), "PLAN");
+        assert_eq!(AgentRole::Builder.to_string(), "BUILD");
+        assert_eq!(AgentRole::Reviewer.to_string(), "AUDIT");
+        assert_eq!(AgentRole::Fixer.to_string(), "AUDIT");
+        assert_eq!(AgentRole::PlanReview.to_string(), "P+");
+        assert_eq!(AgentRole::Discovery.to_string(), "DISCOVERY");
+        assert_eq!(AgentRole::Coach.to_string(), "COACH");
     }
 }
