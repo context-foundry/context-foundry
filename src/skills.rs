@@ -116,8 +116,14 @@ pub fn skill_to_pattern(s: SkillFile) -> Pattern {
         _ => (s.body.clone(), s.body.clone()),
     };
 
+    let pattern_id = if !s.dir_name.is_empty() {
+        s.dir_name.clone()
+    } else {
+        s.frontmatter.name.clone()
+    };
+
     Pattern {
-        pattern_id: s.frontmatter.name.clone(),
+        pattern_id,
         title: s.frontmatter.description.clone(),
         first_seen: String::new(),
         last_seen: String::new(),
@@ -657,5 +663,21 @@ mod tests {
         let raw = "---\nname: x\ndescription: d\nmetadata:\n  cf-stage: planner\n";
         let err = parse_skill_file("x", raw).unwrap_err();
         assert!(format!("{:?}", err).contains("missing closing"));
+    }
+
+    #[test]
+    fn skill_to_pattern_uses_dir_name_for_pattern_id() {
+        let raw = "---\nname: stale-or-renamed\ndescription: d\nmetadata:\n  cf-stage: planner\n  cf-citations-pass: 0\n  cf-citations-wip: 0\n  cf-frequency: 1\n  cf-keywords:\n    - foo\n---\n\n## Issue\n\nBad\n\n## Solution\n\nFix it\n";
+        let sf = parse_skill_file("on-disk-id", raw).expect("parse");
+        let p = skill_to_pattern(sf);
+        assert_eq!(p.pattern_id, "on-disk-id");
+    }
+
+    #[test]
+    fn skill_to_pattern_falls_back_to_name_when_dir_name_empty() {
+        let raw = "---\nname: only-name\ndescription: d\nmetadata:\n  cf-stage: planner\n  cf-citations-pass: 0\n  cf-citations-wip: 0\n  cf-frequency: 1\n  cf-keywords:\n    - foo\n---\n\n## Issue\n\nBad\n\n## Solution\n\nFix it\n";
+        let sf = parse_skill_file("", raw).expect("parse");
+        let p = skill_to_pattern(sf);
+        assert_eq!(p.pattern_id, "only-name");
     }
 }
