@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Skills and Plugins -- Context Foundry</title>
+  <meta name="description" content="From 2384 theatrical patterns to 248 retrievable skills. How Context Foundry adopted Anthropic's Agent Skills spec, and why one big file is the wrong answer.">
+  <meta property="og:title" content="Skills and Plugins -- Context Foundry">
+  <meta property="og:description" content="From 2384 theatrical patterns to 248 retrievable skills. How Context Foundry adopted Anthropic's Agent Skills spec, and why one big file is the wrong answer.">
+  <meta property="og:image" content="assets/og-card-1200x630.png">
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://contextfoundry.dev/skills-and-plugins.html">
+  <link rel="icon" type="image/png" href="assets/favicon-square-512.png">
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --border: #30363d;
+      --text: #e6edf3;
+      --text-muted: #8b949e;
+      --accent: #f0a500;
+      --accent-subtle: rgba(240, 165, 0, 0.15);
+      --radius: 4px;
+      --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+    }
+    * { box-sizing: border-box; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 0.9rem;
+      line-height: 1.7;
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 3rem 1.5rem;
+    }
+    h1 {
+      color: var(--accent);
+      font-size: 1.5rem;
+      border-bottom: 2px solid var(--accent);
+      padding-bottom: 0.5rem;
+      margin-bottom: 0.25rem;
+    }
+    h2 {
+      color: var(--accent);
+      font-size: 1.15rem;
+      border-left: 3px solid var(--accent);
+      padding-left: 0.75rem;
+      margin-top: 2.5rem;
+      margin-bottom: 0.75rem;
+    }
+    h3 {
+      color: var(--text);
+      font-size: 1rem;
+      margin-top: 1.75rem;
+      margin-bottom: 0.5rem;
+    }
+    p { margin: 0.75rem 0; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    pre {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem 1.25rem;
+      overflow-x: auto;
+      font-size: 0.85rem;
+      line-height: 1.5;
+    }
+    code {
+      background: var(--surface);
+      padding: 0.15rem 0.4rem;
+      border-radius: var(--radius);
+      font-size: 0.85rem;
+    }
+    pre code { background: none; padding: 0; }
+    blockquote {
+      border-left: 3px solid var(--accent);
+      margin: 1.25rem 0;
+      padding: 0.5rem 1rem;
+      background: var(--accent-subtle);
+      border-radius: 0 var(--radius) var(--radius) 0;
+    }
+    blockquote p { margin: 0.25rem 0; }
+    .hook {
+      font-size: 1.05rem;
+      color: var(--text);
+      margin-bottom: 0.25rem;
+    }
+    .subtitle {
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      margin-top: 0;
+    }
+    .muted { color: var(--text-muted); }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1rem 0;
+      font-size: 0.85rem;
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 0.5rem 0.75rem;
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      background: var(--surface);
+      color: var(--accent);
+    }
+    .callout {
+      background: var(--accent-subtle);
+      border: 1px solid var(--accent);
+      border-radius: var(--radius);
+      padding: 0.75rem 1rem;
+      margin: 1.25rem 0;
+    }
+    .callout p { margin: 0.25rem 0; }
+    .stat {
+      color: var(--accent);
+      font-weight: bold;
+    }
+    .ref-list {
+      list-style: none;
+      padding: 0;
+    }
+    .ref-list li {
+      padding: 0.35rem 0;
+      border-bottom: 1px dashed var(--border);
+      font-size: 0.85rem;
+    }
+    .ref-list li:last-child { border-bottom: none; }
+    footer {
+      margin-top: 3rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--border);
+      color: var(--text-muted);
+      font-size: 0.8rem;
+    }
+    @media print {
+      body { background: white; color: black; max-width: none; padding: 0.5in; }
+      pre { border: 1px solid #ccc; }
+      h1, h2 { color: #333; }
+      footer { color: #666; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <p class="muted"><a href="index.html">contextfoundry.dev</a></p>
+  <h1>Skills and Plugins</h1>
+  <p class="hook">From 2384 theatrical patterns to 248 retrievable skills.</p>
+  <p class="subtitle">How Context Foundry adopted Anthropic's Agent Skills spec, and why one big file is the wrong answer.</p>
+</header>
+
+<section id="what-is-a-skill">
+  <h2>What is a skill?</h2>
+  <p>A <em>skill</em>, in Anthropic's sense, is a progressively-disclosed knowledge unit. It is a folder containing a single <code>SKILL.md</code> file (plus any supporting assets) that an agent can choose to read when it judges the contents relevant to the task at hand. The agent does not see the body of every skill on every turn. It sees a short index of skill names and one-line descriptions, and pulls the full body in only when it decides to.</p>
+  <p>The format is minimal. A skill is a Markdown file with YAML frontmatter:</p>
+  <pre><code>---
+name: doubt-loop
+description: Run an adversarial audit pass on builder output. Use when a builder
+  agent claims a task is done and the diff has not been independently verified.
+---
+
+# Doubt Loop
+
+Read the build claims file. For every claim in DELTA_MANIFEST, verify against
+actual code. Re-run every CHECK in VERIFICATION_MATRIX. Report PASS or FAIL.
+...</code></pre>
+  <p>That is the whole specification. <code>name</code> and <code>description</code> are required. The body is free-form. The <a href="https://agentskills.io/specification">Agent Skills specification</a> calls this "progressive disclosure": the agent's context window holds only the index until the description matches the task, then the body is loaded on demand. Anthropic's own write-up frames skills as the unit you use to <a href="https://www.anthropic.com/engineering/equipping-agents-for-the-real-world-with-agent-skills">equip agents for the real world</a> -- discrete, named, addressable competencies that an agent can pick up the way a contractor picks up a tool from a truck.</p>
+  <p>The discovery model is the key insight. The agent is not handed a curriculum. It is handed a catalog. It reads the catalog, decides what is relevant, and loads the rest itself.</p>
+</section>
+
+<section id="patterns-to-skills">
+  <h2>Learnings from creating skills for Context Foundry</h2>
+  <p>Context Foundry did not start with skills. It started with <em>patterns</em>: auto-extracted JSON entries written to <code>~/.foundry/patterns/</code> at the end of every build. Each pattern was a tuple of <code>{pattern_id, title, severity, keywords, issue, solution, frequency}</code>. The theory was that the system would learn from itself -- every fixed bug becomes a pattern, every pattern becomes a hint for the next build.</p>
+  <p>The theory was wrong. Not subtly wrong. Theatrically wrong.</p>
+  <p>A fresh-context audit of the pattern system found:</p>
+  <ul>
+    <li><span class="stat">2384</span> patterns accumulated across all extensions</li>
+    <li><span class="stat">0.3%</span> utilization -- only 7 patterns were ever cited in a build that passed audit</li>
+    <li><span class="stat">95%</span> of patterns had <code>frequency=1</code>, meaning they had never recurred</li>
+    <li>The retrieval layer matched on keyword overlap, which produced false positives that the planner had to manually filter</li>
+  </ul>
+  <p>The auditor's verdict was unsparing:</p>
+  <blockquote>
+    <p>"You would not rebuild patterns/extensions today. The only reason to keep the current architecture is sunk cost."</p>
+  </blockquote>
+  <p>That report became tasks <code>T1.12</code> through <code>T1.16</code>. The migration ran in five stages, each its own RPID cycle:</p>
+  <div class="callout">
+    <p><strong>T1.12 -- Prune ruthlessly.</strong> Delete every pattern not cited in a passing build. 2384 entries down to 124 survivors. The <code>frequency=1</code> ones were never going to fire again; they were debris.</p>
+    <p><strong>T1.13 -- Migrate the survivors to the Skills format.</strong> Each surviving pattern became <code>SKILL.md</code> at <code>extensions/&lt;name&gt;/skills/&lt;topic&gt;/SKILL.md</code>. We split each one into two skills -- a <code>planner-&lt;topic&gt;</code> variant and a <code>reviewer-&lt;topic&gt;</code> variant -- because the planner needs to know the trap exists and the reviewer needs to check whether the builder fell into it. 124 patterns became 248 skills.</p>
+    <p><strong>T1.14 -- Convert extensions to plugins.</strong> Each <code>extensions/&lt;name&gt;/</code> directory got a <code>.claude-plugin/plugin.json</code> manifest matching Anthropic's <a href="https://code.claude.com/docs/en/plugins-reference">plugin reference</a>. The transport now matches the ecosystem standard. Plugins are shareable. Skills are addressable. Versioning is a directory rename.</p>
+    <p><strong>T1.15 -- Replace the matcher with skill-discovery plus a Context Foundry per-stage filter.</strong> The old keyword matcher is gone. The new retriever is hybrid: BM25 over <code>name + description</code> for lexical matches, nomic-embed-text cosine similarity for semantic matches, and a telemetry-driven popularity boost from skills that were cited in passing builds. Top-K results flow into the prompt for the stage that requested them.</p>
+    <p><strong>T1.16 -- Telemetry-driven popularity.</strong> Every time a skill is loaded and the build passes audit, the skill's score increments. Skills that get loaded but never cited decay. The retrieval ranking is now a feedback loop, not a static index.</p>
+  </div>
+  <p>The shape of the system flipped. Before: a flat JSON blob the planner scanned every run. After: a catalog the planner queries, a retriever that ranks, and a per-stage filter that picks the few skills that actually matter to the current task. The agent is no longer handed everything -- it is handed what the retriever judges relevant. This is the same architecture <a href="https://arxiv.org/abs/2504.06188">SkillFlow</a> and <a href="https://arxiv.org/abs/2505.03275">RAG-MCP</a> describe for tool retrieval at scale, and the same pattern <a href="https://github.com/langchain-ai/langgraph-bigtool">LangGraph BigTool</a> implements in production for agents with hundreds of tools.</p>
+</section>
+
+<section id="faq-one-big-file">
+  <h2>FAQ: Why not put everything in one big file organized by software stack?</h2>
+  <p>This is the question every observer asks. It is the obvious move. We have a hundred plus skills -- why not concatenate them into <code>skills.md</code>, organize by section (Rust / Python / React / Roblox / Workday), and hand the agent one document?</p>
+  <p>The answer has five parts, and they compound.</p>
+
+  <h3>1. Granularity and the discovery model</h3>
+  <p>Anthropic's progressive-disclosure spec works because the agent matches the <em>description</em> field of each skill against the task in front of it. One file is one description. The description has to summarize everything in the file, which means it cannot fire on anything specific. The agent ends up either loading the monolith on every run (defeating the purpose of progressive disclosure) or ignoring it entirely (because no single description matches the current task).</p>
+  <p>Many small skills with focused descriptions produce many discrete activation triggers. The retriever picks three skills out of a hundred. The monolith forces a binary choice: all or nothing.</p>
+
+  <h3>2. Token economy</h3>
+  <p>A hybrid retriever (BM25 plus cosine) ranks N skills and pulls the top K into the prompt. With <span class="stat">248</span> skills and K equal to <span class="stat">5</span>, a typical stage sees roughly two percent of the catalog in its prompt. The monolith inverts this: every prompt either eats the whole file or none of it. The middle ground -- parsing sections out of the monolith based on the task -- means re-inventing the SKILL.md format inside the file, badly.</p>
+  <p>Skills give you per-token-cost control. Monoliths give you a take-it-or-leave-it bill.</p>
+
+  <h3>3. Curation lifecycle</h3>
+  <p>Skills can be deprecated, versioned, archived, or rolled back independently. A directory rename moves a skill into <code>archive/</code>. A new version is a new directory. Git diff at the skill level is comprehensible.</p>
+  <p>A monolith requires surgical in-place edits. Two skills updated in the same commit produce one diff that looks like a refactor. Bisecting "which change broke the planner stage" turns into a line-level archaeology problem instead of a directory-level one.</p>
+
+  <h3>4. Marketplace distribution</h3>
+  <p>Anthropic's plugin ecosystem ships skills as installable modules. The user runs <code>claude /plugin install owner/repo</code> and the plugin's skills become available immediately. A monolith is not a unit anyone can install. You cannot subscribe to one section of someone else's <code>skills.md</code>. You can absolutely subscribe to <code>roblox-helpers/skills/cframe-not-position</code>.</p>
+  <p>This is also why Context Foundry's plugins now match Anthropic's plugin spec exactly. The transport is the marketplace's transport. Anyone with a Claude Code install can consume them without any Context Foundry awareness on their end.</p>
+
+  <h3>5. Composition</h3>
+  <p>Tasks combine skills dynamically. A single build might activate <code>planner-cframe-not-position</code>, <code>reviewer-cframe-not-position</code>, <code>doubt-loop</code>, and <code>spec-drift-check</code> -- four skills from three different domains, picked by the retriever based on what the task actually touches.</p>
+  <p>Hardcoding combinations into one file removes that flexibility. The retriever is doing real work: it observes the task and assembles a tailored prompt slice. A monolith has no observation, no assembly -- only a fixed table of contents.</p>
+
+  <h3>The amplifier risk</h3>
+  <p>There is a sixth reason, structural rather than functional. Patterns and skills are an amplification layer: every future build sees them. When they are atomic, a bad one can be removed without disturbing the good ones. When they are monolithic, a bad section poisons the whole file's relevance score and the agent either trusts the entire monolith or none of it. The blast radius of a mistake scales with the granularity of the unit. Skills make mistakes recoverable. Monoliths make mistakes contagious.</p>
+  <p>This is what the pattern audit was really telling us. The <span class="stat">2384</span> patterns were not <em>wrong</em> -- they were ungovernable. We could not delete the bad ones without auditing all of them. The migration to skills was, more than anything else, a move to make governance possible at all.</p>
+</section>
+
+<section id="plugins">
+  <h2>Plugins: Context Foundry vs Anthropic's plugin reference</h2>
+  <p>Context Foundry's domain modules used to be called <em>extensions</em>. After <code>T1.14</code> they are <em>plugins</em> -- specifically, plugins that conform to Anthropic's <a href="https://code.claude.com/docs/en/plugins-reference">plugin reference</a>. The folder layout is verbatim:</p>
+  <pre><code>extensions/
+  roblox/
+    .claude-plugin/
+      plugin.json          # Anthropic-spec manifest
+    skills/
+      cframe-not-position/
+        SKILL.md           # planner variant
+      cframe-not-position-review/
+        SKILL.md           # reviewer variant
+    commands/              # optional slash commands
+    CLAUDE.md              # extension-level guidance</code></pre>
+  <p>The <code>plugin.json</code> manifest carries the metadata Anthropic's loader expects: <code>name</code>, <code>version</code>, <code>description</code>, and an optional <code>commands</code> list for slash-command surfaces. Anthropic's loader can ingest these directly. Context Foundry's orchestrator can also ingest them -- but only as a consumer of the same transport, not as the owner of a competing format.</p>
+  <p>The division of labor:</p>
+  <table>
+    <tr>
+      <th>Concern</th>
+      <th>Owned by</th>
+    </tr>
+    <tr>
+      <td>Folder layout, <code>plugin.json</code>, <code>SKILL.md</code> format</td>
+      <td>Anthropic's plugin reference</td>
+    </tr>
+    <tr>
+      <td>Per-stage injection policy (which skill goes to which agent in which RPID stage)</td>
+      <td>Context Foundry orchestrator</td>
+    </tr>
+    <tr>
+      <td>Retrieval ranking (BM25 + cosine + popularity)</td>
+      <td>Context Foundry retriever</td>
+    </tr>
+    <tr>
+      <td>Telemetry feedback loop (popularity score updates after audit)</td>
+      <td>Context Foundry eval harness</td>
+    </tr>
+  </table>
+  <p>The split keeps the things that need to be standardized standardized, and the things that need to be opinionated opinionated. Anyone holding a Claude Code install can take a Context Foundry plugin and use it without Context Foundry. Anyone running Context Foundry can take a third-party Anthropic plugin and feed it through the retriever without any conversion. The transport is shared; the policy is not.</p>
+  <p>This is also why the broader <a href="https://agents.md/">AGENTS.md universal standard</a> matters. The transport layer for agent knowledge is converging -- skills, plugins, AGENTS.md, MCP servers -- and the projects that align with the convergence inherit the marketplace. The projects that build their own format become islands.</p>
+</section>
+
+<section id="closing">
+  <h2>What we learned</h2>
+  <p>The patterns-to-skills migration was painful because it forced an admission. The original system did not work, had not worked for months, and the only reason it was still there was that nobody had measured it. The audit measured it. The measurement was unambiguous. The migration followed.</p>
+  <p>The lesson is not "skills are better than patterns." The lesson is that every accumulation layer in an agent system needs a utilization gate. If a learned artifact is not getting cited in passing builds, it is not knowledge -- it is noise. Skills happen to have a better disclosure model and a better marketplace story, but their real win is that they are <em>countable</em>. You can ask "which skill fired on this build, and did the build pass?" and get an answer. Patterns could not answer that question without the rebuild that became <code>T1.12</code>-<code>T1.16</code>.</p>
+  <p>One big file would have been faster to write. It would also have been impossible to measure, impossible to share, and impossible to govern. The boring win of small files with strict frontmatter is that you can do all three.</p>
+</section>
+
+<section id="references">
+  <h2>References</h2>
+  <ul class="ref-list">
+    <li><a href="https://agentskills.io/specification">Agent Skills specification</a> -- the canonical SKILL.md format and progressive-disclosure model</li>
+    <li><a href="https://www.anthropic.com/engineering/equipping-agents-for-the-real-world-with-agent-skills">Equipping agents for the real world with Agent Skills</a> -- Anthropic's engineering write-up on why skills are the unit</li>
+    <li><a href="https://code.claude.com/docs/en/plugins-reference">Claude Code plugin reference</a> -- the <code>plugin.json</code> manifest and folder layout</li>
+    <li><a href="https://arxiv.org/abs/2504.06188">SkillFlow</a> -- retrieval-augmented skill selection at scale</li>
+    <li><a href="https://arxiv.org/abs/2505.03275">RAG-MCP</a> -- retrieval-augmented tool selection for MCP servers</li>
+    <li><a href="https://github.com/langchain-ai/langgraph-bigtool">LangGraph BigTool</a> -- production cross-tool retrieval pattern for agents with hundreds of tools</li>
+    <li><a href="https://agents.md/">AGENTS.md universal standard</a> -- the Linux Foundation effort to converge agent-knowledge transports</li>
+  </ul>
+</section>
+
+<footer>
+  <a href="index.html">Context Foundry</a> &middot;
+  <a href="https://github.com/context-foundry/context-foundry">GitHub</a> &middot;
+  Built on the migration tasks <a href="https://github.com/context-foundry/context-foundry/commits/main">T1.12 through T1.16</a>
+</footer>
+
+</body>
+</html>
