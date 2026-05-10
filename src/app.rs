@@ -904,6 +904,10 @@ fn spawn_build_loop(
     shutdown: &Arc<AtomicBool>,
 ) -> Result<()> {
     let plan_path = ContractPaths::resolve(project_dir).tasks_path;
+    state.tasks_file_path = Some(plan_path.clone());
+    state.tasks_file_mtime = std::fs::metadata(&plan_path)
+        .and_then(|m| m.modified())
+        .ok();
     if !plan_path.exists() {
         state.show_no_tasks_warning = true;
         anyhow::bail!(
@@ -2351,6 +2355,9 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
             LoopEvent::QueueUpdated(tasks) => {
                 state.task_queue = tasks;
             }
+            LoopEvent::TasksFileMtime(mtime) => {
+                state.tasks_file_mtime = mtime;
+            }
             LoopEvent::TaskReviewResult {
                 task_id,
                 fix_passes,
@@ -2983,6 +2990,9 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
         }
         AppEvent::Tick => {
             state.tick_count = state.tick_count.wrapping_add(1);
+            if state.tick_count % crate::app::state::TASKS_RELOAD_TICK_STRIDE == 0 {
+                let _ = state.handle_tasks_file_change();
+            }
         }
         AppEvent::UpdateAvailable(version) => {
             state.update_available = Some(version);

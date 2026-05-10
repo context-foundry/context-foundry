@@ -38,6 +38,19 @@ use crate::run_manifest::{
 };
 use crate::utils::atomic_write_file;
 
+/// Stat TASKS.md inside the held `tasks_file_lock` and notify the TUI of the
+/// new mtime via `LoopEvent::TasksFileMtime`. Used after every TASKS.md
+/// mutation so the live-reload watcher does not trigger on our own writes.
+fn emit_tasks_file_mtime(
+    plan_path: &std::path::Path,
+    tx: &mpsc::UnboundedSender<AppEvent>,
+) {
+    let mtime = std::fs::metadata(plan_path)
+        .and_then(|m| m.modified())
+        .ok();
+    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::TasksFileMtime(mtime)));
+}
+
 // ─── Eval Harness Helpers ────────────────────────────────────
 // Helpers used by the orchestrator to record one entry per agent invocation,
 // skip path, and task-completion path into the per-run manifest. All calls
@@ -3769,6 +3782,7 @@ async fn process_task(
                             .lock()
                             .unwrap_or_else(|e| e.into_inner());
                         let _ = task::update_task_progress(&ctx.plan_path, task_id, "Q.....");
+                        emit_tasks_file_mtime(&ctx.plan_path, tx);
                     }
                     stage_results.push(StageResult::failure(
                         "Query",
@@ -4066,6 +4080,7 @@ async fn process_task(
                             .lock()
                             .unwrap_or_else(|e| e.into_inner());
                         let _ = task::update_task_progress(&ctx.plan_path, task_id, "QR....");
+                        emit_tasks_file_mtime(&ctx.plan_path, tx);
                     }
                     stage_results.push(StageResult::failure(
                         "Research",
@@ -4486,6 +4501,7 @@ async fn process_task(
                         task_id,
                         &format!("{}{}P--!", query_char, research_char),
                     );
+                    emit_tasks_file_mtime(&ctx.plan_path, tx);
                 }
                 stage_results.push(StageResult::failure(
                     "Planner",
@@ -4538,6 +4554,7 @@ async fn process_task(
                         task_id,
                         &format!("{}{}P..", query_char, research_char),
                     );
+                    emit_tasks_file_mtime(&ctx.plan_path, tx);
                 }
                 stage_results.push(StageResult::failure(
                     "Planner",
@@ -4567,6 +4584,7 @@ async fn process_task(
                 task_id,
                 &format!("{}{}{}..", query_char, research_char, planner_char),
             );
+            emit_tasks_file_mtime(&ctx.plan_path, tx);
         }
     }
 
@@ -4610,6 +4628,7 @@ async fn process_task(
                     task_id,
                     &format!("{}{}{}--!", query_char, research_char, planner_char),
                 );
+                emit_tasks_file_mtime(&ctx.plan_path, tx);
             }
             stage_results.push(StageResult::failure(
                 "ExtensionGate",
@@ -4855,6 +4874,7 @@ async fn process_task(
                         task_id,
                         &format!("{}{}{}--!", query_char, research_char, planner_char),
                     );
+                    emit_tasks_file_mtime(&ctx.plan_path, tx);
                 }
                 stage_results.push(StageResult::failure(
                     "BuilderGate",
@@ -5171,6 +5191,7 @@ async fn process_task(
                             query_char, research_char, planner_char, plan_review_char
                         ),
                     );
+                    emit_tasks_file_mtime(&ctx.plan_path, tx);
                 }
                 stage_results.push(StageResult::failure(
                     "PlanReview",
@@ -5220,6 +5241,7 @@ async fn process_task(
                                 query_char, research_char, planner_char, plan_review_char
                             ),
                         );
+                        emit_tasks_file_mtime(&ctx.plan_path, tx);
                     }
                     let _ = commit_wip_for_mode(ctx, task_id, task_desc);
                     flush_budget_telemetry(
@@ -5655,6 +5677,7 @@ async fn process_task(
                         query_char, research_char, planner_char, plan_review_char
                     ),
                 );
+                emit_tasks_file_mtime(&ctx.plan_path, tx);
             }
             stage_results.push(StageResult::failure(
                 "Builder",
@@ -5689,6 +5712,7 @@ async fn process_task(
                     query_char, research_char, planner_char, plan_review_char
                 ),
             );
+            emit_tasks_file_mtime(&ctx.plan_path, tx);
         }
 
         {
@@ -5743,6 +5767,7 @@ async fn process_task(
                                 query_char, research_char, planner_char, plan_review_char
                             ),
                         );
+                        emit_tasks_file_mtime(&ctx.plan_path, tx);
                     }
                     stage_results.push(StageResult::failure(
                         "BuildGate",
@@ -6101,6 +6126,7 @@ async fn process_task(
         if validated {
             let _ = task::mark_done(&ctx.plan_path, task_info.line_number);
         }
+        emit_tasks_file_mtime(&ctx.plan_path, tx);
     }
 
     // Write budget telemetry

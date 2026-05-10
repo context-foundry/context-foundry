@@ -195,6 +195,117 @@ pub fn count_pending(tasks: &[Task]) -> usize {
     tasks.iter().filter(|t| !t.completed).count()
 }
 
+/// Diff report produced by `reconcile_with_loaded` for logging/test inspection.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ReconcileReport {
+    /// Task IDs newly appended from disk.
+    pub added: Vec<String>,
+    /// Task IDs dropped from the in-memory queue because they no longer exist on disk.
+    pub removed: Vec<String>,
+    /// Task IDs whose description text was refreshed from disk.
+    pub updated_descriptions: Vec<String>,
+    /// True when an external edit changed the running task's description (ignored).
+    pub locked_running_skipped: bool,
+    /// True when an external edit removed the currently-running task ID from disk.
+    pub running_task_missing_on_disk: bool,
+}
+
+/// Reconcile an in-memory task queue with a fresh `Vec<Task>` parsed from disk
+/// under T1.19's strict rules:
+/// - The currently-running task is locked: never remove or mutate.
+/// - Completed tasks are immutable: external `[x]`/`[ ]` flips are ignored.
+/// - Malformed `"TASK"` IDs are filtered out of the diff (no stable identity).
+/// - Pending tasks: refresh `line_number`, `pipeline_progress`, and `description`
+///   from disk. New tasks are appended in fresh-file order. Pending tasks that
+///   disappeared from disk are removed.
+pub fn reconcile_with_loaded(
+    in_memory: &mut Vec<Task>,
+    fresh: Vec<Task>,
+    current_task_id: Option<&str>,
+) -> ReconcileReport {
+    let mut report = ReconcileReport::default();
+
+    let fresh_id_to_index: std::collections::HashMap<String, usize> = fresh
+        .iter()
+        .enumerate()
+        .filter(|(_, t)| t.id != "TASK")
+        .map(|(i, t)| (t.id.clone(), i))
+        .collect();
+
+    let running_idx: Option<usize> =
+        current_task_id.and_then(|cid| in_memory.iter().position(|t| t.id == cid));
+
+    if let Some(cid) = current_task_id {
+        if let (Some(r_idx), Some(f_idx)) = (running_idx, fresh_id_to_index.get(cid)) {
+            if in_memory[r_idx].description != fresh[*f_idx].description {
+                report.locked_running_skipped = true;
+            }
+        }
+        if !fresh_id_to_index.contains_key(cid) {
+            report.running_task_missing_on_disk = true;
+        }
+    }
+
+    let mut removal_indices: Vec<usize> = Vec::new();
+    for (i, t) in in_memory.iter().enumerate() {
+        if Some(i) == running_idx {
+            continue;
+        }
+        if t.completed {
+            continue;
+        }
+        if t.id == "TASK" {
+            continue;
+        }
+        if !fresh_id_to_index.contains_key(&t.id) {
+            removal_indices.push(i);
+            report.removed.push(t.id.clone());
+        }
+    }
+    for i in removal_indices.into_iter().rev() {
+        in_memory.remove(i);
+    }
+
+    let in_memory_id_to_index: std::collections::HashMap<String, usize> = in_memory
+        .iter()
+        .enumerate()
+        .filter(|(_, t)| t.id != "TASK")
+        .map(|(i, t)| (t.id.clone(), i))
+        .collect();
+
+    for (id, fresh_idx) in fresh_id_to_index.iter() {
+        if let Some(mem_idx) = in_memory_id_to_index.get(id) {
+            if Some(id.as_str()) == current_task_id {
+                continue;
+            }
+            let mem = &mut in_memory[*mem_idx];
+            if mem.completed {
+                continue;
+            }
+            let disk = &fresh[*fresh_idx];
+            mem.line_number = disk.line_number;
+            mem.pipeline_progress = disk.pipeline_progress.clone();
+            if mem.description != disk.description {
+                mem.description = disk.description.clone();
+                report.updated_descriptions.push(id.clone());
+            }
+        }
+    }
+
+    for t in fresh.into_iter() {
+        if t.id == "TASK" {
+            continue;
+        }
+        if in_memory_id_to_index.contains_key(&t.id) {
+            continue;
+        }
+        report.added.push(t.id.clone());
+        in_memory.push(t);
+    }
+
+    report
+}
+
 pub fn highest_discovery_round(plan_path: &Path) -> usize {
     let content = match fs::read_to_string(plan_path) {
         Ok(c) => c,
@@ -776,5 +887,159 @@ See ARCHITECTURE.md for details.\n\
     fn test_extract_query_context_empty_input() {
         assert_eq!(extract_query_context(""), "");
         assert_eq!(extract_query_context("   \n  \n"), "");
+    }
+
+    fn mk_task(id: &str, desc: &str, completed: bool) -> Task {
+        Task {
+            id: id.to_string(),
+            description: desc.to_string(),
+            line_number: 1,
+            completed,
+            pipeline_progress: None,
+        }
+    }
+
+    #[test]
+    fn reconcile_appends_new_pending_tasks() {
+        let mut in_mem = vec![mk_task("T1.1", "first", false)];
+        let fresh = vec![
+            mk_task("T1.1", "first", false),
+            mk_task("T1.2", "second", false),
+            mk_task("T1.3", "third", false),
+        ];
+        let report = reconcile_with_loaded(&mut in_mem, fresh, None);
+        assert_eq!(in_mem.len(), 3);
+        assert_eq!(in_mem[0].id, "T1.1");
+        assert_eq!(in_mem[1].id, "T1.2");
+        assert_eq!(in_mem[2].id, "T1.3");
+        assert_eq!(report.added, vec!["T1.2".to_string(), "T1.3".to_string()]);
+        assert!(report.removed.is_empty());
+    }
+
+    #[test]
+    fn reconcile_removes_pending_tasks_dropped_from_disk() {
+        let mut in_mem = vec![
+            mk_task("T1.1", "first", false),
+            mk_task("T1.2", "second", false),
+            mk_task("T1.3", "third", false),
+        ];
+        let fresh = vec![mk_task("T1.1", "first", false)];
+        let report = reconcile_with_loaded(&mut in_mem, fresh, None);
+        assert_eq!(in_mem.len(), 1);
+        assert_eq!(in_mem[0].id, "T1.1");
+        assert_eq!(report.removed, vec!["T1.2".to_string(), "T1.3".to_string()]);
+        assert!(report.added.is_empty());
+    }
+
+    #[test]
+    fn reconcile_never_removes_completed_tasks() {
+        let mut in_mem = vec![
+            mk_task("T1.1", "done one", true),
+            mk_task("T1.2", "done two", true),
+            mk_task("T1.3", "pending", false),
+        ];
+        let fresh = vec![mk_task("T1.3", "pending", false)];
+        let report = reconcile_with_loaded(&mut in_mem, fresh, None);
+        assert_eq!(in_mem.len(), 3);
+        assert!(in_mem.iter().any(|t| t.id == "T1.1" && t.completed));
+        assert!(in_mem.iter().any(|t| t.id == "T1.2" && t.completed));
+        assert!(in_mem.iter().any(|t| t.id == "T1.3"));
+        assert!(report.removed.is_empty());
+    }
+
+    #[test]
+    fn reconcile_never_removes_running_task() {
+        let mut in_mem = vec![
+            mk_task("T1.1", "running", false),
+            mk_task("T1.2", "pending", false),
+        ];
+        let fresh: Vec<Task> = Vec::new();
+        let report = reconcile_with_loaded(&mut in_mem, fresh, Some("T1.1"));
+        assert_eq!(in_mem.len(), 1);
+        assert_eq!(in_mem[0].id, "T1.1");
+        assert!(report.running_task_missing_on_disk);
+        assert_eq!(report.removed, vec!["T1.2".to_string()]);
+    }
+
+    #[test]
+    fn reconcile_updates_pending_descriptions() {
+        let mut in_mem = vec![
+            mk_task("T1.1", "old desc", false),
+            mk_task("T1.2", "stable", false),
+        ];
+        let fresh = vec![
+            mk_task("T1.1", "new desc", false),
+            mk_task("T1.2", "stable", false),
+        ];
+        let report = reconcile_with_loaded(&mut in_mem, fresh, None);
+        assert_eq!(in_mem.len(), 2);
+        let t1 = in_mem.iter().find(|t| t.id == "T1.1").unwrap();
+        assert_eq!(t1.description, "new desc");
+        assert_eq!(report.updated_descriptions, vec!["T1.1".to_string()]);
+    }
+
+    #[test]
+    fn reconcile_does_not_touch_running_task_description() {
+        let mut in_mem = vec![mk_task("T1.1", "original", false)];
+        let fresh = vec![mk_task("T1.1", "edited externally", false)];
+        let report = reconcile_with_loaded(&mut in_mem, fresh, Some("T1.1"));
+        assert_eq!(in_mem.len(), 1);
+        assert_eq!(in_mem[0].description, "original");
+        assert!(report.locked_running_skipped);
+        assert!(report.updated_descriptions.is_empty());
+    }
+
+    #[test]
+    fn reconcile_ignores_external_complete_flips() {
+        let mut in_mem = vec![mk_task("T1.1", "pending", false)];
+        let fresh = vec![mk_task("T1.1", "pending", true)];
+        let report = reconcile_with_loaded(&mut in_mem, fresh, None);
+        assert_eq!(in_mem.len(), 1);
+        assert!(!in_mem[0].completed, "external [x] flip must be ignored");
+        assert!(report.added.is_empty());
+        assert!(report.removed.is_empty());
+        assert!(report.updated_descriptions.is_empty());
+
+        let mut in_mem2 = vec![mk_task("T2.1", "done", true)];
+        let fresh2 = vec![mk_task("T2.1", "done", false)];
+        let _ = reconcile_with_loaded(&mut in_mem2, fresh2, None);
+        assert_eq!(in_mem2.len(), 1);
+        assert!(in_mem2[0].completed, "external [ ] revert must be ignored on completed tasks");
+    }
+
+    #[test]
+    fn reconcile_skips_malformed_task_ids() {
+        let mut in_mem = vec![
+            mk_task("TASK", "no id line", false),
+            mk_task("T1.1", "real", false),
+        ];
+        let fresh = vec![
+            mk_task("TASK", "another no-id line", false),
+            mk_task("T1.1", "real", false),
+        ];
+        let report = reconcile_with_loaded(&mut in_mem, fresh, None);
+        assert!(report.added.is_empty());
+        assert!(report.removed.is_empty());
+        assert!(report.updated_descriptions.is_empty());
+    }
+
+    #[test]
+    fn reconcile_preserves_insertion_order() {
+        let mut in_mem = vec![mk_task("T1.1", "first", false)];
+        let fresh = vec![
+            mk_task("T1.1", "first", false),
+            mk_task("T1.2", "second", false),
+            mk_task("T1.3", "third", false),
+            mk_task("T1.4", "fourth", false),
+        ];
+        let report = reconcile_with_loaded(&mut in_mem, fresh, None);
+        assert_eq!(in_mem[0].id, "T1.1");
+        assert_eq!(in_mem[1].id, "T1.2");
+        assert_eq!(in_mem[2].id, "T1.3");
+        assert_eq!(in_mem[3].id, "T1.4");
+        assert_eq!(
+            report.added,
+            vec!["T1.2".to_string(), "T1.3".to_string(), "T1.4".to_string()]
+        );
     }
 }

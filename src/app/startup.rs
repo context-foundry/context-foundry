@@ -221,6 +221,9 @@ pub(super) fn handle_startup_event(state: &mut AppState, event: AppEvent, config
             if let Some(startup) = state.startup.as_mut() {
                 startup.placeholder_tick = startup.placeholder_tick.wrapping_add(1);
             }
+            if state.tick_count % super::state::TASKS_RELOAD_TICK_STRIDE == 0 {
+                let _ = state.handle_tasks_file_change();
+            }
         }
         AppEvent::UpdateAvailable(version) => {
             state.update_available = Some(version);
@@ -1349,6 +1352,10 @@ pub(super) fn enter_startup_surface_for_scenario(
 
 fn refresh_plan_counts(project_dir: &Path, state: &mut AppState) {
     let plan_path = ContractPaths::resolve(project_dir).tasks_path;
+    state.tasks_file_path = Some(plan_path.clone());
+    state.tasks_file_mtime = std::fs::metadata(&plan_path)
+        .and_then(|m| m.modified())
+        .ok();
     match task::parse_tasks(&plan_path) {
         Ok(tasks) => {
             state.update_counts(&tasks);

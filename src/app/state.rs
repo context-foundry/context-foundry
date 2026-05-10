@@ -19,6 +19,9 @@ use crate::tui::theme::TuiTheme;
 const LOG_MESSAGES_CAP: usize = 500;
 const TASK_HISTORY_CAP: usize = 200;
 
+/// 100ms tick * 20 = 2000ms cadence for the TASKS.md live-reload poll.
+pub(super) const TASKS_RELOAD_TICK_STRIDE: usize = 20;
+
 // ─── App State ───────────────────────────────────────────────
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1467,6 +1470,18 @@ pub struct AppState {
     /// Timestamp of the last scroll event, used to compute velocity multiplier.
     pub last_scroll_at: Option<std::time::Instant>,
     pub last_commit_brief: Option<crate::git::LastCommitBrief>,
+    /// Absolute path to TASKS.md for the current project. Set in `refresh_plan_counts`
+    /// during startup; consumed by the live-reload watcher in the Tick handlers.
+    pub(super) tasks_file_path: Option<PathBuf>,
+    /// Last mtime observed for `tasks_file_path`. The watcher polls every Nth tick
+    /// and triggers reconcile only when the on-disk mtime exceeds this value.
+    /// Refreshed on every successful reload AND on `LoopEvent::TasksFileMtime` so
+    /// the build loop's own writes are not double-counted as foreign edits.
+    pub(super) tasks_file_mtime: Option<SystemTime>,
+    /// Reserved for tick-aligned double-stat protection. Stays optional --
+    /// only adding now to avoid a future struct-shape migration.
+    #[allow(dead_code)]
+    pub(super) tasks_file_last_stat_tick: usize,
 }
 
 impl AppState {
@@ -1616,6 +1631,9 @@ impl AppState {
             dragging_split: false,
             last_scroll_at: None,
             last_commit_brief: None,
+            tasks_file_path: None,
+            tasks_file_mtime: None,
+            tasks_file_last_stat_tick: 0,
         }
     }
 
@@ -1675,6 +1693,78 @@ impl AppState {
         self.current_agent_stage_id = Some(stage_id);
         self.current_agent = Some((role, Utc::now()));
         self.current_agent_model = Some(model.to_string());
+    }
+
+    /// Poll TASKS.md and reconcile any external edits into the in-memory queue.
+    /// Returns `true` iff a reconcile actually ran. Skips silently when the
+    /// path is unset, mtime is unchanged, or the file cannot be parsed.
+    pub(super) fn handle_tasks_file_change(&mut self) -> bool {
+        let path = match self.tasks_file_path.as_ref() {
+            Some(p) => p.clone(),
+            None => return false,
+        };
+        let _lock = self
+            .tasks_file_lock
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let current_mtime = std::fs::metadata(&path).and_then(|m| m.modified()).ok();
+        if current_mtime == self.tasks_file_mtime {
+            return false;
+        }
+        let fresh = match task::parse_tasks(&path) {
+            Ok(t) => t,
+            Err(e) => {
+                let msg = format!("Live-reload: failed to parse {}: {}", path.display(), e);
+                drop(_lock);
+                self.log(msg);
+                return false;
+            }
+        };
+        let current_id = self.current_task.as_ref().map(|t| t.id.clone());
+        let report =
+            task::reconcile_with_loaded(&mut self.task_queue, fresh, current_id.as_deref());
+        self.total_count = self.task_queue.len();
+        self.completed_count = task::count_completed(&self.task_queue);
+        let max_scroll = self.task_queue.len().saturating_sub(1);
+        if self.task_queue_scroll > max_scroll {
+            self.task_queue_scroll = max_scroll;
+        }
+        self.tasks_file_mtime = current_mtime;
+        drop(_lock);
+        if !report.added.is_empty() {
+            self.log(format!(
+                "Live-reload: appended {} task(s): {}",
+                report.added.len(),
+                report.added.join(", ")
+            ));
+        }
+        if !report.removed.is_empty() {
+            self.log(format!(
+                "Live-reload: removed {} pending task(s): {}",
+                report.removed.len(),
+                report.removed.join(", ")
+            ));
+        }
+        if !report.updated_descriptions.is_empty() {
+            self.log(format!(
+                "Live-reload: updated description on {} task(s): {}",
+                report.updated_descriptions.len(),
+                report.updated_descriptions.join(", ")
+            ));
+        }
+        if report.locked_running_skipped {
+            self.log(
+                "Live-reload: external edit to currently-running task description ignored (running task is locked)"
+                    .to_string(),
+            );
+        }
+        if report.running_task_missing_on_disk {
+            self.log(
+                "Live-reload: external edit removed the currently-running task; run continues, will re-mark on next pipeline write"
+                    .to_string(),
+            );
+        }
+        true
     }
 
     pub(super) fn update_counts(&mut self, tasks: &[Task]) {
@@ -1821,6 +1911,10 @@ pub(super) enum LoopEvent {
     BackgroundLog(String),
     CountsUpdated(usize, usize),
     QueueUpdated(Vec<Task>),
+    /// Sent by the build loop after it writes TASKS.md (mark_done /
+    /// update_task_progress) so the TUI can update `state.tasks_file_mtime`
+    /// without the watcher reloading on the loop's own write.
+    TasksFileMtime(Option<SystemTime>),
     TaskReviewResult {
         task_id: String,
         fix_passes: usize,
