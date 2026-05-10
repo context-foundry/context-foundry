@@ -367,6 +367,7 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
     state.selected_local_model = config.local_model.clone();
     state.builder_model_specs = config.builder_models.clone();
     state.arena_mode = config.arena_mode.clone();
+    state.agent_pane_split = config.agent_pane_split.clamp(20, 80);
     {
         let (p, m) = config.active_routing_for_stage("build");
         state.build_stage_label = Config::display_provider_model(&p, &m);
@@ -3302,7 +3303,10 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                         }
                     }
                     MouseEventKind::Up(MouseButton::Left) => {
-                        state.dragging_split = false;
+                        if state.dragging_split {
+                            state.dragging_split = false;
+                            Config::save_agent_pane_split_global(state.agent_pane_split);
+                        }
                     }
                     _ => {}
                 }

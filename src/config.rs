@@ -24,6 +24,10 @@ fn default_history_retention_tasks() -> usize {
     50
 }
 
+fn default_agent_pane_split() -> u16 {
+    50
+}
+
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 #[serde(default)]
 pub struct PipelineStageConfig {
@@ -270,6 +274,12 @@ pub struct Config {
     /// Preview pane word-wrap preference (persisted to .foundry.json).
     #[serde(default = "default_true")]
     pub preview_wrap: bool,
+
+    /// Percentage of the running-screen middle row given to the agent output
+    /// pane (default 50, valid range 20-80). Persisted to ~/.foundry/config.json
+    /// when the user drags the vertical separator on the running screen.
+    #[serde(default = "default_agent_pane_split")]
+    pub agent_pane_split: u16,
 
     /// Poll interval (seconds) for checking PR review status in Review mode.
     pub pr_poll_interval_secs: u64,
@@ -590,6 +600,7 @@ impl Default for Config {
             extensions: Vec::new(),
             create_issue_on_wip: false,
             preview_wrap: false,
+            agent_pane_split: 50,
             pr_poll_interval_secs: 30,
             theme: "dark".into(),
             truecolor: None,
@@ -1949,6 +1960,45 @@ impl Config {
         }
     }
 
+    /// Persist the agent/task-queue pane split percentage to the global
+    /// `~/.foundry/config.json`. Pane split is a per-user preference, not a
+    /// per-project one, so saves go to the global file by default. Best-effort:
+    /// on missing HOME or write error, the in-memory value is kept and a warning
+    /// is logged.
+    pub fn save_agent_pane_split_global(pct: u16) {
+        let Some(config_path) = Self::global_config_path() else {
+            eprintln!(
+                "warning: cannot save agent_pane_split -- HOME or USERPROFILE not set"
+            );
+            return;
+        };
+        if let Some(parent) = config_path.parent() {
+            if let Err(e) = std::fs::create_dir_all(parent) {
+                eprintln!(
+                    "warning: failed to create {} -- agent_pane_split will not persist: {e}",
+                    parent.display(),
+                );
+                return;
+            }
+        }
+        let content = std::fs::read_to_string(&config_path).unwrap_or_else(|_| "{}".to_string());
+        let mut value: serde_json::Value = serde_json::from_str(&content).unwrap_or_else(|e| {
+            eprintln!(
+                "warning: {} contains invalid JSON ({e}) -- existing settings will be lost",
+                config_path.display(),
+            );
+            serde_json::json!({})
+        });
+        value["agent_pane_split"] = serde_json::json!(pct);
+        let json = serde_json::to_string_pretty(&value).unwrap_or_default();
+        if let Err(e) = crate::utils::atomic_write_file(&config_path, json.as_bytes()) {
+            eprintln!(
+                "warning: failed to save agent_pane_split to {} -- change will not persist across restarts: {e}",
+                config_path.display(),
+            );
+        }
+    }
+
     pub fn pipeline_b_config(&self) -> Config {
         let mut config = self.clone();
         // Only override stages that actually run per-pipeline in dual mode.
@@ -2850,6 +2900,77 @@ mod tests {
         std::env::remove_var("FOUNDRY_PR_REVIEW_PROVIDER");
         std::env::remove_var("FOUNDRY_AGENT_TIMEOUT_SECS");
         std::env::remove_var("FOUNDRY_PR_REVIEW_MULTIPASS_THRESHOLD");
+    }
+
+    #[test]
+    #[serial]
+    fn agent_pane_split_default_is_50() {
+        let config = Config::default();
+        assert_eq!(config.agent_pane_split, 50);
+    }
+
+    #[test]
+    #[serial]
+    fn agent_pane_split_deserializes_from_global_config() {
+        let dir = tempfile::tempdir().unwrap();
+        let foundry_dir = dir.path().join(".foundry");
+        fs::create_dir_all(&foundry_dir).unwrap();
+        fs::write(
+            foundry_dir.join("config.json"),
+            r#"{"agent_pane_split":70}"#,
+        )
+        .unwrap();
+        std::env::set_var("HOME", dir.path());
+        std::env::remove_var("FOUNDRY_PR_REVIEW_MODEL");
+        std::env::remove_var("FOUNDRY_AGENT_TIMEOUT_SECS");
+        std::env::remove_var("FOUNDRY_PR_REVIEW_CONCURRENCY");
+
+        let config = Config::load_global_only();
+        assert_eq!(config.agent_pane_split, 70);
+    }
+
+    #[test]
+    #[serial]
+    fn agent_pane_split_falls_back_to_default_when_missing() {
+        let dir = tempfile::tempdir().unwrap();
+        let foundry_dir = dir.path().join(".foundry");
+        fs::create_dir_all(&foundry_dir).unwrap();
+        // Config file present but without agent_pane_split -- serde default fires.
+        fs::write(foundry_dir.join("config.json"), r#"{"theme":"dark"}"#).unwrap();
+        std::env::set_var("HOME", dir.path());
+        std::env::remove_var("FOUNDRY_PR_REVIEW_MODEL");
+        std::env::remove_var("FOUNDRY_AGENT_TIMEOUT_SECS");
+        std::env::remove_var("FOUNDRY_PR_REVIEW_CONCURRENCY");
+
+        let config = Config::load_global_only();
+        assert_eq!(config.agent_pane_split, 50);
+    }
+
+    #[test]
+    #[serial]
+    fn save_agent_pane_split_round_trips_through_global_config() {
+        let dir = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", dir.path());
+        std::env::remove_var("FOUNDRY_PR_REVIEW_MODEL");
+        std::env::remove_var("FOUNDRY_AGENT_TIMEOUT_SECS");
+        std::env::remove_var("FOUNDRY_PR_REVIEW_CONCURRENCY");
+
+        Config::save_agent_pane_split_global(72);
+        let config = Config::load_global_only();
+        assert_eq!(config.agent_pane_split, 72);
+
+        // A second save replaces only the one field -- preserve other fields.
+        let foundry_dir = dir.path().join(".foundry");
+        let config_path = foundry_dir.join("config.json");
+        let before = std::fs::read_to_string(&config_path).unwrap();
+        let mut value: serde_json::Value = serde_json::from_str(&before).unwrap();
+        value["theme"] = serde_json::json!("solarized");
+        std::fs::write(&config_path, serde_json::to_string_pretty(&value).unwrap()).unwrap();
+
+        Config::save_agent_pane_split_global(33);
+        let config2 = Config::load_global_only();
+        assert_eq!(config2.agent_pane_split, 33);
+        assert_eq!(config2.theme, "solarized");
     }
 
     #[test]
