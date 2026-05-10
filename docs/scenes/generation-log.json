@@ -1251,5 +1251,32 @@
     "retries": 1,
     "api_retries": 0,
     "validation": "pass"
+  },
+  {
+    "ts": "2026-05-10T23:11:14.637Z",
+    "scene": "ring-buffer-saturn.js",
+    "seed_id": "ring-buffer-saturn",
+    "biome": "space",
+    "model": "gpt-4o-mini",
+    "input_tokens": 16654,
+    "output_tokens": 1353,
+    "cost_usd": 0.0033,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "fail",
+    "error": "Validation failed after 2 attempts: VALIDATION FAILED (1 error):\n- Too short: 66 lines (min 80)"
+  },
+  {
+    "ts": "2026-05-10T23:11:29.921Z",
+    "scene": "where-pigs-fly-and-swim.js",
+    "seed_id": "where-pigs-fly-and-swim",
+    "biome": "extreme",
+    "model": "gpt-4o-mini",
+    "input_tokens": 7415,
+    "output_tokens": 945,
+    "cost_usd": 0.0017,
+    "retries": 0,
+    "api_retries": 0,
+    "validation": "pass"
   }
 ]

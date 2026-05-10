@@ -727,6 +727,16 @@
       "model": "gpt-4o-mini",
       "lines": 105,
       "generation": 73
+    },
+    {
+      "file": "where-pigs-fly-and-swim.js",
+      "name": "Where Pigs Fly (and Swim)",
+      "location": "Big Major Cay, Exuma, Bahamas",
+      "biome": "extreme",
+      "generated": "2026-05-10T23:11:29.920Z",
+      "model": "gpt-4o-mini",
+      "lines": 104,
+      "generation": 74
     }
   ]
 }
