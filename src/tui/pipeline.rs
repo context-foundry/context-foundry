@@ -183,7 +183,14 @@ pub(super) fn render_pipeline_map(
             stage_id: Some(stage_cfg.id.clone()),
         });
 
-        if stage_cfg.id == "plan" && config.plan_review_enabled {
+        // Render P+ unconditionally between PLAN and BUILD. The
+        // `config.plan_review_enabled` flag does not actually gate
+        // when P+ fires at runtime, so gating only the diagram on it
+        // produced a latent rendering bug where P+ ran but never
+        // appeared in the pipeline view. The gate is retained as a
+        // config option (used by the build pipeline) but does not
+        // suppress the box.
+        if stage_cfg.id == "plan" {
             let pr_model =
                 truncate_str(&stage_model_label(&pipeline_configs, "plan-review"), 14).to_string();
             connected.push(StageInfo {
@@ -472,7 +479,9 @@ mod tests {
     }
 
     #[test]
-    fn pipeline_renders_five_boxes_for_default_config() {
+    fn pipeline_renders_six_boxes_for_default_config() {
+        // P+ is rendered unconditionally between PLAN and BUILD because
+        // plan-review can run regardless of `config.plan_review_enabled`.
         let state = AppState::new(PathBuf::from(".buildloop"));
         let config = Config::default();
         let rendered = render_pipeline_text(&state, &config);
@@ -480,10 +489,32 @@ mod tests {
         assert!(rendered.contains("QUERY"), "rendered: {}", rendered);
         assert!(rendered.contains("RESEARCH"), "rendered: {}", rendered);
         assert!(rendered.contains("PLAN"), "rendered: {}", rendered);
+        assert!(rendered.contains("P+"), "rendered: {}", rendered);
         assert!(rendered.contains("BUILD"), "rendered: {}", rendered);
         assert!(rendered.contains("AUDIT"), "rendered: {}", rendered);
         assert!(!rendered.contains("COACH"), "rendered: {}", rendered);
-        assert!(!rendered.contains("P+"), "rendered: {}", rendered);
+    }
+
+    #[test]
+    fn pipeline_renders_p_plus_even_when_plan_review_disabled() {
+        // Regression: previously P+ was gated on `plan_review_enabled`,
+        // but the runtime gate is broken (P+ fires anyway). The diagram
+        // must reflect what users actually experience.
+        let state = AppState::new(PathBuf::from(".buildloop"));
+        let config = Config {
+            plan_review_enabled: false,
+            ..Config::default()
+        };
+        let rendered = render_pipeline_text(&state, &config);
+
+        let plan_off = rendered.find("PLAN").expect("PLAN present");
+        let pplus_off = rendered.find("P+").expect("P+ present");
+        let build_off = rendered.find("BUILD").expect("BUILD present");
+        assert!(
+            plan_off < pplus_off && pplus_off < build_off,
+            "expected PLAN < P+ < BUILD; rendered: {}",
+            rendered
+        );
     }
 
     #[test]

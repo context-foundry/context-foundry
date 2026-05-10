@@ -305,18 +305,47 @@ pub(super) fn render_dashboard_stats(
     } else {
         (format!("Ollama: {}", ollama_label), ollama_color)
     };
-    {
-        let mut spans = vec![
-            Span::styled("  ", Style::default()),
-            Span::styled(
-                format!(
-                    "{:<width$}",
-                    ollama_left,
-                    width = half_width.saturating_sub(2)
-                ),
-                Style::default().fg(ollama_left_color),
+
+    let (sandbox_label, sandbox_color) = if state.sandbox_active {
+        (
+            format!("Sandbox: active ({})", config.sandbox_image),
+            theme.success,
+        )
+    } else if state.sandbox_enabled {
+        (
+            format!("Sandbox: degraded ({})", state.sandbox_status_label),
+            theme.warning,
+        )
+    } else {
+        (
+            "Sandbox: disabled (config override)".to_string(),
+            theme.error,
+        )
+    };
+
+    // ─── Row: Ollama/Tmux | Sandbox ───
+    // Co-located on one row so the Timing row below can use the full width.
+    lines.push(Line::from(vec![
+        Span::styled("  ", Style::default()),
+        Span::styled(
+            format!(
+                "{:<width$}",
+                ollama_left,
+                width = half_width.saturating_sub(2)
             ),
-            Span::styled("Timing    ", Style::default().fg(theme.info)),
+            Style::default().fg(ollama_left_color),
+        ),
+        Span::styled(sandbox_label, Style::default().fg(sandbox_color)),
+    ]));
+
+    // ─── Row: Timing (full width, three labeled timers) ───
+    // The stage timer was previously crammed onto the same row as the
+    // Ollama/Tmux indicator on the left half; on narrower terminals the
+    // third (stage) timer wrapped or clipped and the user only saw two
+    // timers. Giving Timing the full width keeps all three visible.
+    {
+        let mut timing_spans = vec![
+            Span::styled("  Timing    ", Style::default().fg(theme.info)),
             Span::styled("session: ", Style::default().fg(theme.muted)),
             Span::styled(session_str.clone(), Style::default().fg(theme.text)),
             Span::styled("  ", Style::default()),
@@ -324,35 +353,14 @@ pub(super) fn render_dashboard_stats(
             Span::styled(task_str.clone(), Style::default().fg(theme.text)),
         ];
         if let Some((stage_label, stage_str)) = stage_segments.as_ref() {
-            spans.push(Span::styled("  ", Style::default()));
-            spans.push(Span::styled(stage_label.clone(), Style::default().fg(theme.muted)));
-            spans.push(Span::styled(stage_str.clone(), Style::default().fg(theme.text)));
+            timing_spans.push(Span::styled("  ", Style::default()));
+            timing_spans.push(Span::styled(
+                stage_label.clone(),
+                Style::default().fg(theme.muted),
+            ));
+            timing_spans.push(Span::styled(stage_str.clone(), Style::default().fg(theme.text)));
         }
-        lines.push(Line::from(spans));
-    }
-
-    // ─── Row 2b: Sandbox status ───
-    {
-        let (sandbox_label, sandbox_color) = if state.sandbox_active {
-            (
-                format!("Sandbox: active ({})", config.sandbox_image),
-                theme.success,
-            )
-        } else if state.sandbox_enabled {
-            (
-                format!("Sandbox: degraded ({})", state.sandbox_status_label),
-                theme.warning,
-            )
-        } else {
-            (
-                "Sandbox: disabled (config override)".to_string(),
-                theme.error,
-            )
-        };
-        lines.push(Line::from(vec![
-            Span::styled("  ", Style::default()),
-            Span::styled(sandbox_label, Style::default().fg(sandbox_color)),
-        ]));
+        lines.push(Line::from(timing_spans));
     }
 
     // ─── Row 3: left empty | Agent status on right ───
@@ -962,6 +970,60 @@ mod tests {
         assert!(rendered.contains("task T1.1:"), "rendered: {}", rendered);
         assert!(rendered.contains("stage BUILD:"), "rendered: {}", rendered);
         assert!(rendered.contains("session:"), "rendered: {}", rendered);
+    }
+
+    fn render_stats_text_at(width: u16, height: u16, state: &AppState) -> String {
+        let backend = TestBackend::new(width, height);
+        let mut terminal = Terminal::new(backend).expect("failed to create terminal");
+        terminal
+            .draw(|frame| render_dashboard_stats(frame, frame.area(), state, &Config::default()))
+            .expect("failed to draw stats");
+
+        let buffer = terminal.backend().buffer();
+        let area = *buffer.area();
+        (0..area.height)
+            .map(|y| {
+                (0..area.width)
+                    .map(|x| {
+                        buffer
+                            .cell((x, y))
+                            .map(|cell| cell.symbol().to_string())
+                            .unwrap_or_else(|| " ".to_string())
+                    })
+                    .collect::<Vec<_>>()
+                    .join("")
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    #[test]
+    fn timing_row_renders_third_stage_timer_on_narrow_terminal() {
+        // Regression: the timing row used to share a line with the
+        // Ollama/Tmux indicator on the left half. On terminals narrower
+        // than ~150 cols the third (stage) timer wrapped or clipped and
+        // disappeared. Verify it survives at 100 cols wide with the P+
+        // role (the longest realistic stage label is around "stage RESEARCH:").
+        use chrono::Utc;
+        let mut state = AppState::new(PathBuf::from(".buildloop"));
+        state.current_task = Some(crate::task::Task {
+            id: "T1.1".into(),
+            description: "x".into(),
+            line_number: 0,
+            completed: false,
+            pipeline_progress: None,
+        });
+        state.task_start = Some(Utc::now() - chrono::Duration::seconds(699));
+        state.current_agent = Some((
+            AgentRole::PlanReview,
+            Utc::now() - chrono::Duration::seconds(235),
+        ));
+
+        let rendered = render_stats_text_at(100, 12, &state);
+
+        assert!(rendered.contains("session:"), "rendered: {}", rendered);
+        assert!(rendered.contains("task T1.1:"), "rendered: {}", rendered);
+        assert!(rendered.contains("stage P+:"), "rendered: {}", rendered);
     }
 
     #[test]
