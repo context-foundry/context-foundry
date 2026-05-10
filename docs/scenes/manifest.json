@@ -637,6 +637,16 @@
       "model": "gpt-4o-mini",
       "lines": 95,
       "generation": 64
+    },
+    {
+      "file": "delta-force-merge.js",
+      "name": "Delta Force Merge",
+      "location": "Mekong Delta, Vietnam",
+      "biome": "ocean",
+      "generated": "2026-05-10T04:18:45.680Z",
+      "model": "gpt-4o-mini",
+      "lines": 85,
+      "generation": 65
     }
   ]
 }
