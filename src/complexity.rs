@@ -4,13 +4,63 @@
 /// can route simple tasks to cheaper models and reserve expensive models
 /// for complex work.
 
+use std::sync::LazyLock;
+
+use regex::Regex;
+use serde::Serialize;
+
 // ─── Complexity Tier ────────────────────────────────────────────────
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum TaskComplexity {
     Simple,
     Medium,
     Complex,
+}
+
+/// Per-task user override read from `[fast]` / `[strict]` flags in TASKS.md.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TaskOverride {
+    None,
+    Fast,
+    Strict,
+}
+
+impl Default for TaskOverride {
+    fn default() -> Self {
+        TaskOverride::None
+    }
+}
+
+impl TaskOverride {
+    pub fn label(&self) -> &'static str {
+        match self {
+            TaskOverride::None => "",
+            TaskOverride::Fast => "fast",
+            TaskOverride::Strict => "strict",
+        }
+    }
+}
+
+/// Composition signals derived from the task description text.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct TaskSignals {
+    pub numbered_subfeatures: usize,
+    pub bundling_phrases: usize,
+    pub distinct_verbs: usize,
+    pub file_refs: usize,
+    pub word_count: usize,
+    pub bundling_score: usize,
+}
+
+/// Full classification result: tier, override applied, and the raw signals
+/// that produced the tier. Returned by `classify_task_full`.
+#[derive(Debug, Clone, Serialize)]
+pub struct TaskClassification {
+    pub tier: TaskComplexity,
+    pub override_flag: TaskOverride,
+    pub signals: TaskSignals,
 }
 
 // ─── Keywords ───────────────────────────────────────────────────────
@@ -32,6 +82,88 @@ const COMPLEX_KEYWORDS: &[&str] = &[
     "infrastructure",
     "overhaul",
 ];
+
+// ─── Composition Signals ────────────────────────────────────────────
+
+const BUNDLING_PHRASES: &[&str] = &[
+    "and also",
+    "and additionally",
+    " plus ",
+    "three layers",
+    "two layers",
+    "four layers",
+    "(1)",
+    "(2)",
+    "(3)",
+];
+
+static RE_NUMBERED_SUBFEATURE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\(\s*(\d+)\s*\)").unwrap());
+
+static RE_FILE_REF: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"`([A-Za-z0-9_\-./]+(?:[/.][A-Za-z0-9_\-./]+)+)`").unwrap());
+
+const VERB_TOKENS: &[&str] = &[
+    "add", "remove", "rename", "refactor", "wire", "upgrade", "build", "create", "delete",
+    "implement", "replace", "scale", "gate", "compute", "emit", "render", "show", "parse",
+    "extract", "inject", "split", "merge", "fix", "update", "introduce",
+];
+
+fn count_numbered_subfeatures(lower: &str) -> usize {
+    let mut set: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for caps in RE_NUMBERED_SUBFEATURE.captures_iter(lower) {
+        set.insert(caps[1].to_string());
+    }
+    set.len()
+}
+
+fn count_bundling_phrases(lower: &str) -> usize {
+    BUNDLING_PHRASES.iter().filter(|p| lower.contains(*p)).count()
+}
+
+fn count_distinct_verbs(lower: &str) -> usize {
+    let lead = lower.split('.').next().unwrap_or("");
+    let scan = if lead.len() < 3 { lower } else { lead };
+    let mut count = 0;
+    for verb in VERB_TOKENS {
+        if scan.contains(&format!(" {} ", verb)) || scan.starts_with(&format!("{} ", verb)) {
+            count += 1;
+        }
+    }
+    count
+}
+
+fn count_file_refs(text: &str) -> usize {
+    let mut set: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for caps in RE_FILE_REF.captures_iter(text) {
+        set.insert(caps[1].to_string());
+    }
+    set.len()
+}
+
+fn count_words(text: &str) -> usize {
+    text.split_whitespace().count()
+}
+
+fn compute_signals(task_desc: &str) -> TaskSignals {
+    let lower = task_desc.to_lowercase();
+    let numbered_subfeatures = count_numbered_subfeatures(&lower);
+    let bundling_phrases = count_bundling_phrases(&lower);
+    let distinct_verbs = count_distinct_verbs(&lower);
+    let file_refs = count_file_refs(task_desc);
+    let word_count = count_words(task_desc);
+    let bundling_score = numbered_subfeatures.saturating_add(bundling_phrases)
+        + (if distinct_verbs >= 3 { 1 } else { 0 })
+        + (if file_refs > 6 { 1 } else { 0 });
+    TaskSignals {
+        numbered_subfeatures,
+        bundling_phrases,
+        distinct_verbs,
+        file_refs,
+        word_count,
+        bundling_score,
+    }
+}
 
 // ─── Classifier ─────────────────────────────────────────────────────
 
@@ -68,6 +200,50 @@ pub fn classify_task_with_context(task_desc: &str, spec_line_count: usize) -> Ta
         TaskComplexity::Medium
     } else {
         base
+    }
+}
+
+/// Full classifier with composition-aware bundling bump and per-task override.
+///
+/// Computes `TaskSignals`, then:
+/// 1. Starts with the keyword/length-based `classify_task` tier (preserving
+///    existing behavior for un-flagged, non-bundled tasks).
+/// 2. If `bundling_score >= 3`, bumps tier by one (Simple -> Medium,
+///    Medium -> Complex, Complex stays Complex).
+/// 3. Applies the per-task override: Fast forces Simple, Strict forces Complex.
+pub fn classify_task_full(task_desc: &str, override_flag: TaskOverride) -> TaskClassification {
+    let signals = compute_signals(task_desc);
+    let base_tier = classify_task(task_desc);
+    let bumped_tier = if signals.bundling_score >= 3 {
+        match base_tier {
+            TaskComplexity::Simple => TaskComplexity::Medium,
+            TaskComplexity::Medium => TaskComplexity::Complex,
+            TaskComplexity::Complex => TaskComplexity::Complex,
+        }
+    } else {
+        base_tier
+    };
+    let final_tier = match override_flag {
+        TaskOverride::Fast => TaskComplexity::Simple,
+        TaskOverride::Strict => TaskComplexity::Complex,
+        TaskOverride::None => bumped_tier,
+    };
+    TaskClassification {
+        tier: final_tier,
+        override_flag,
+        signals,
+    }
+}
+
+/// Per-tier P+ iteration cap.
+/// - Simple: 0 (skip P+ entirely)
+/// - Medium: 1 (single review pass)
+/// - Complex: `configured_cycles + 1` (current default; saturating)
+pub fn p_plus_cycles_budget(tier: TaskComplexity, configured_cycles: usize) -> usize {
+    match tier {
+        TaskComplexity::Simple => 0,
+        TaskComplexity::Medium => 1,
+        TaskComplexity::Complex => configured_cycles.saturating_add(1),
     }
 }
 
@@ -193,5 +369,74 @@ mod tests {
             classify_task_with_context("fix typo in README", 500),
             TaskComplexity::Simple
         );
+    }
+
+    // ─── T1.23: composition signals + override + budget ────────────
+
+    #[test]
+    fn t116_bundled_task_classifies_complex_via_bundling_score() {
+        // Use a real fragment of T1.16-style description with (1)/(2)/(3) markers
+        // and enough words to bump bundling_score above 3.
+        let desc = "Wire the ranker into pattern injection (1) plumb the pipeline (2) BM25 upgrade with normalization and tf-idf weighting (3) telemetry boost for tracking outcomes -- this work spans multiple modules and requires changes to scoring, search, and the reporting layer to land coherently.";
+        let result = classify_task_full(desc, TaskOverride::None);
+        assert_eq!(result.tier, TaskComplexity::Complex);
+        assert!(result.signals.bundling_score >= 3, "signals: {:?}", result.signals);
+    }
+
+    #[test]
+    fn t117_short_config_field_classifies_simple() {
+        let desc = "add a `batch_doubt` field to Config";
+        let result = classify_task_full(desc, TaskOverride::None);
+        assert_eq!(result.tier, TaskComplexity::Simple);
+        assert_eq!(result.signals.bundling_score, 0);
+    }
+
+    #[test]
+    fn t118_modal_dispatch_classifies_medium() {
+        // ~150 chars, no (1)/(2) markers, no complex keywords, no simple keywords
+        // strong enough to fall in <80 + simple. Use vocabulary that avoids both.
+        let desc =
+            "implement modal dispatch logic across four ratatui panels covering escape and ctrl-c handling and the corresponding key event routing through the running view";
+        assert!(desc.len() > 80);
+        let result = classify_task_full(desc, TaskOverride::None);
+        assert_eq!(result.tier, TaskComplexity::Medium);
+    }
+
+    #[test]
+    fn fast_override_forces_simple() {
+        let desc = "refactor the entire authentication subsystem and migrate token storage to a new framework";
+        let result = classify_task_full(desc, TaskOverride::Fast);
+        assert_eq!(result.tier, TaskComplexity::Simple);
+    }
+
+    #[test]
+    fn strict_override_forces_complex() {
+        let desc = "fix typo";
+        let result = classify_task_full(desc, TaskOverride::Strict);
+        assert_eq!(result.tier, TaskComplexity::Complex);
+    }
+
+    #[test]
+    fn bundling_score_threshold_three_bumps_one_tier() {
+        // Medium-shape string (~100 chars, no complex keywords) with (1)/(2)/(3)
+        let desc = "implement caching across services with (1) policy (2) ttl knobs (3) eviction handling to round it out";
+        let result = classify_task_full(desc, TaskOverride::None);
+        assert_eq!(result.tier, TaskComplexity::Complex);
+        assert_eq!(result.signals.numbered_subfeatures, 3);
+    }
+
+    #[test]
+    fn signals_count_file_refs() {
+        let desc = "rewrite `src/app/build.rs` and `src/complexity.rs` and `src/task.rs` parser";
+        let result = classify_task_full(desc, TaskOverride::None);
+        assert!(result.signals.file_refs >= 3, "signals: {:?}", result.signals);
+    }
+
+    #[test]
+    fn p_plus_cycles_budget_per_tier() {
+        assert_eq!(p_plus_cycles_budget(TaskComplexity::Simple, 2), 0);
+        assert_eq!(p_plus_cycles_budget(TaskComplexity::Medium, 2), 1);
+        assert_eq!(p_plus_cycles_budget(TaskComplexity::Complex, 2), 3);
+        assert_eq!(p_plus_cycles_budget(TaskComplexity::Complex, 0), 1);
     }
 }

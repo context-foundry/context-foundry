@@ -25,13 +25,14 @@ use self::startup::{
 };
 pub use self::state::FileEntry;
 pub use self::state::{
-    settings_sections, Action, AppPhase, AppState, DualSelection, ExtensionDisplayInfo, FieldKind,
-    ModelEntry, ModelPicker, OverlayRow, PatternEventKind, PickerItem, PlanStatus, PlanningState,
-    RunningModalKind, SectionKind, StartupAction, StartupScenario, StartupState, StreamState,
-    TuiPane,
+    settings_sections, Action, AppPhase, AppState, CurrentClassification, DualSelection,
+    ExtensionDisplayInfo, FieldKind, ModelEntry, ModelPicker, OverlayRow, PatternEventKind,
+    PickerItem, PlanStatus, PlanningState, RunningModalKind, SectionKind, StartupAction,
+    StartupScenario, StartupState, StreamState, TuiPane,
 };
 use self::state::{AppEvent, AppendTasksRequest, LoopEvent, PendingTransition, PlanningOutcome};
 use crate::agent::{AgentErrorKind, AgentOutputEvent, AgentRole};
+use crate::complexity::TaskOverride;
 use crate::config::Config;
 use crate::eval;
 use crate::eval::report as eval_report;
@@ -2128,6 +2129,28 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                 state.spid_context_pcts = [None; 5];
                 state.stage_context_pcts.clear();
                 state.clear_agent();
+                state.current_classification = None;
+            }
+            LoopEvent::TaskClassified {
+                task_id,
+                tier,
+                override_flag,
+                p_plus_cycles_budget,
+            } => {
+                let override_suffix = if matches!(override_flag, TaskOverride::None) {
+                    String::new()
+                } else {
+                    format!(" [{}]", override_flag.label())
+                };
+                state.log(format!(
+                    "Task {} classified {:?}{} (P+ budget {})",
+                    task_id, tier, override_suffix, p_plus_cycles_budget,
+                ));
+                state.current_classification = Some(CurrentClassification {
+                    tier,
+                    override_flag,
+                    p_plus_cycles_budget,
+                });
             }
             LoopEvent::AgentStarted(role, model) => {
                 state.log(format!("{} spawned ({})", role, model));

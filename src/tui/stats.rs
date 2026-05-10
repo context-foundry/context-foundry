@@ -961,6 +961,7 @@ mod tests {
             line_number: 0,
             completed: false,
             pipeline_progress: None,
+            override_flag: crate::complexity::TaskOverride::None,
         });
         state.task_start = Some(Utc::now() - chrono::Duration::seconds(699));
         state.current_agent = Some((AgentRole::Builder, Utc::now() - chrono::Duration::seconds(105)));
@@ -1012,6 +1013,7 @@ mod tests {
             line_number: 0,
             completed: false,
             pipeline_progress: None,
+            override_flag: crate::complexity::TaskOverride::None,
         });
         state.task_start = Some(Utc::now() - chrono::Duration::seconds(699));
         state.current_agent = Some((
@@ -1036,6 +1038,7 @@ mod tests {
             line_number: 0,
             completed: false,
             pipeline_progress: None,
+            override_flag: crate::complexity::TaskOverride::None,
         });
         state.task_start = Some(Utc::now() - chrono::Duration::seconds(699));
         state.current_agent = None;

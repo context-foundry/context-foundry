@@ -119,6 +119,14 @@ pub enum ObservatoryEvent {
         actual_pct: u8,
         recovery_action: String,
     },
+    TaskClassified {
+        task_id: String,
+        complexity: String,
+        override_flag: String,
+        p_plus_cycles_budget: usize,
+        bundling_score: usize,
+        signals: serde_json::Value,
+    },
     PlanReviewLoopCapped {
         task_id: String,
         cycles_used: usize,
@@ -162,6 +170,7 @@ pub fn event_type_str(event: &ObservatoryEvent) -> &'static str {
         ObservatoryEvent::TaskCompleted { .. } => "task_completed",
         ObservatoryEvent::Committed { .. } => "committed",
         ObservatoryEvent::BudgetOverrun { .. } => "budget_overrun",
+        ObservatoryEvent::TaskClassified { .. } => "task_classified",
         ObservatoryEvent::PlanReviewLoopCapped { .. } => "plan_review_loop_capped",
         ObservatoryEvent::RateLimited { .. } => "rate_limited",
         ObservatoryEvent::DualPipelineStarted { .. } => "dual_pipeline_started",

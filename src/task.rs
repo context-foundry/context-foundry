@@ -4,10 +4,15 @@ use std::fs;
 use std::path::Path;
 use std::sync::LazyLock;
 
+use crate::complexity::TaskOverride;
 use crate::utils::{atomic_write_file, truncate_str};
 
-static RE_TASK_ID: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^([A-Za-z]?\d+\.\d+):\s*").unwrap());
+// Matches `T1.1:` and `T1.1 [fast]:` / `T1.1 [strict]:` (with optional
+// override flag between the ID and the colon). Group 1 is the task ID,
+// group 2 (if present) is the literal `fast` or `strict`.
+static RE_TASK_ID: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^([A-Za-z]?\d+\.\d+)(?:\s+\[(fast|strict)\])?:\s*").unwrap()
+});
 
 static RE_DISCOVERY_HEADER: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"## Discovery Round (\d+)").unwrap());
@@ -26,6 +31,12 @@ static RE_DISCOVERY_TASK_ID: LazyLock<Regex> =
 static RE_PIPELINE_PROGRESS: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"\s+\[([A-Z!.\-+]{4,7})\]\s*$").unwrap());
 
+// Matches a leading `[fast]` / `[strict]` token at the start of a description
+// (case-insensitive). Used as a fallback parser for the `T1.X: [fast] desc`
+// syntax variant; the primary parser embeds the flag into `RE_TASK_ID`.
+static RE_OVERRIDE_FLAG: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?i)^\s*\[(fast|strict)\]\s+").unwrap());
+
 #[derive(Debug, Clone)]
 pub struct Task {
     pub id: String,
@@ -33,6 +44,7 @@ pub struct Task {
     pub line_number: usize,
     pub completed: bool,
     pub pipeline_progress: Option<String>,
+    pub override_flag: TaskOverride,
 }
 
 impl Task {
@@ -64,12 +76,30 @@ pub fn parse_tasks_from_str(content: &str) -> Vec<Task> {
             continue;
         };
 
-        let (id, description) = if let Some(caps) = RE_TASK_ID.captures(&text) {
+        let (id, mut override_flag, description) = if let Some(caps) = RE_TASK_ID.captures(&text) {
             let id = caps[1].to_string();
+            let flag = caps
+                .get(2)
+                .map(|m| match m.as_str() {
+                    "fast" => TaskOverride::Fast,
+                    "strict" => TaskOverride::Strict,
+                    _ => TaskOverride::None,
+                })
+                .unwrap_or(TaskOverride::None);
             let desc = text[caps[0].len()..].to_string();
-            (id, desc)
+            (id, flag, desc)
         } else {
-            ("TASK".to_string(), text)
+            ("TASK".to_string(), TaskOverride::None, text)
+        };
+
+        // Fallback parse: if the flag wasn't between ID and colon, look for
+        // a `[fast]` / `[strict]` prefix on the description itself.
+        let description = if matches!(override_flag, TaskOverride::None) {
+            let (parsed_flag, stripped) = extract_override_flag(&description);
+            override_flag = parsed_flag;
+            stripped
+        } else {
+            description
         };
 
         // Extract pipeline progress indicator (e.g. `[PB..]`) from end of description.
@@ -88,10 +118,28 @@ pub fn parse_tasks_from_str(content: &str) -> Vec<Task> {
             line_number: i + 1,
             completed,
             pipeline_progress,
+            override_flag,
         });
     }
 
     tasks
+}
+
+/// Strip a leading `[fast]` / `[strict]` token off the description and
+/// return the parsed override + the remaining description.
+fn extract_override_flag(text: &str) -> (TaskOverride, String) {
+    if let Some(caps) = RE_OVERRIDE_FLAG.captures(text) {
+        let token = caps[1].to_lowercase();
+        let end = caps.get(0).unwrap().end();
+        let flag = match token.as_str() {
+            "fast" => TaskOverride::Fast,
+            "strict" => TaskOverride::Strict,
+            _ => TaskOverride::None,
+        };
+        (flag, text[end..].to_string())
+    } else {
+        (TaskOverride::None, text.to_string())
+    }
 }
 
 pub fn next_pending(tasks: &[Task]) -> Option<&Task> {
@@ -285,6 +333,7 @@ pub fn reconcile_with_loaded(
             let disk = &fresh[*fresh_idx];
             mem.line_number = disk.line_number;
             mem.pipeline_progress = disk.pipeline_progress.clone();
+            mem.override_flag = disk.override_flag;
             if mem.description != disk.description {
                 mem.description = disk.description.clone();
                 report.updated_descriptions.push(id.clone());
@@ -896,6 +945,7 @@ See ARCHITECTURE.md for details.\n\
             line_number: 1,
             completed,
             pipeline_progress: None,
+            override_flag: TaskOverride::None,
         }
     }
 
@@ -1021,6 +1071,61 @@ See ARCHITECTURE.md for details.\n\
         assert!(report.added.is_empty());
         assert!(report.removed.is_empty());
         assert!(report.updated_descriptions.is_empty());
+    }
+
+    // ─── T1.23: override flag parsing ────────────────────────────
+
+    #[test]
+    fn parse_fast_flag_after_id() {
+        let tasks = parse_tasks_from_str("- [ ] T1.1 [fast]: description here\n");
+        assert_eq!(tasks.len(), 1);
+        assert_eq!(tasks[0].id, "T1.1");
+        assert_eq!(tasks[0].description, "description here");
+        assert_eq!(tasks[0].override_flag, TaskOverride::Fast);
+    }
+
+    #[test]
+    fn parse_strict_flag_after_id() {
+        let tasks = parse_tasks_from_str("- [ ] T1.1 [strict]: description here\n");
+        assert_eq!(tasks.len(), 1);
+        assert_eq!(tasks[0].override_flag, TaskOverride::Strict);
+    }
+
+    #[test]
+    fn parse_no_flag_defaults_none() {
+        let tasks = parse_tasks_from_str("- [ ] T1.1: plain description\n");
+        assert_eq!(tasks.len(), 1);
+        assert_eq!(tasks[0].override_flag, TaskOverride::None);
+        assert_eq!(tasks[0].description, "plain description");
+    }
+
+    #[test]
+    fn parse_flag_coexists_with_pipeline_progress() {
+        let tasks = parse_tasks_from_str("- [x] T1.1 [fast]: shipped [QRPBA]\n");
+        assert_eq!(tasks.len(), 1);
+        assert_eq!(tasks[0].override_flag, TaskOverride::Fast);
+        assert_eq!(tasks[0].pipeline_progress, Some("QRPBA".to_string()));
+        assert_eq!(tasks[0].description, "shipped");
+    }
+
+    #[test]
+    fn parse_flag_after_colon_fallback() {
+        // The alternate `T1.1: [fast] desc` syntax is also accepted via
+        // the extract_override_flag fallback.
+        let tasks = parse_tasks_from_str("- [ ] T1.1: [fast] desc here\n");
+        assert_eq!(tasks.len(), 1);
+        assert_eq!(tasks[0].override_flag, TaskOverride::Fast);
+        assert_eq!(tasks[0].description, "desc here");
+    }
+
+    #[test]
+    fn reconcile_propagates_override_flag_change() {
+        let mut in_mem = vec![mk_task("T1.1", "old desc", false)];
+        let mut fresh_task = mk_task("T1.1", "new desc", false);
+        fresh_task.override_flag = TaskOverride::Fast;
+        let fresh = vec![fresh_task];
+        let _ = reconcile_with_loaded(&mut in_mem, fresh, None);
+        assert_eq!(in_mem[0].override_flag, TaskOverride::Fast);
     }
 
     #[test]

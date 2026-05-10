@@ -143,6 +143,7 @@ mod tests {
             line_number: 0,
             completed: false,
             pipeline_progress: None,
+            override_flag: crate::complexity::TaskOverride::None,
         });
         state.current_agent = Some((AgentRole::PlanReview, Utc::now()));
         state.current_agent_stage_id = Some("plan-review".into());

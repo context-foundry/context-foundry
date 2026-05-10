@@ -1105,6 +1105,7 @@ fn running_page_up_down_scrolls_task_queue() {
             line_number: i + 1,
             completed: false,
             pipeline_progress: None,
+            override_flag: crate::complexity::TaskOverride::None,
         });
     }
 
@@ -1239,6 +1240,7 @@ fn running_queue_updated_event_populates_task_queue() {
             line_number: 3,
             completed: true,
             pipeline_progress: None,
+            override_flag: crate::complexity::TaskOverride::None,
         },
         Task {
             id: "T1.2".to_string(),
@@ -1246,6 +1248,7 @@ fn running_queue_updated_event_populates_task_queue() {
             line_number: 4,
             completed: false,
             pipeline_progress: None,
+            override_flag: crate::complexity::TaskOverride::None,
         },
     ];
 
@@ -1735,6 +1738,7 @@ fn test_running_task_log_line_suppressed_when_dominated_by_task_id() {
         line_number: 47,
         completed: false,
         pipeline_progress: None,
+        override_flag: crate::complexity::TaskOverride::None,
     });
     state.log("Task T6.1 started".to_string());
     let (_ts, msg) = state.log_messages.last().unwrap();
@@ -2314,6 +2318,7 @@ fn test_active_pattern_keywords_cleared_on_task_start() {
         line_number: 0,
         completed: false,
         pipeline_progress: None,
+        override_flag: crate::complexity::TaskOverride::None,
     };
     let config = Config::default();
     handle_event(

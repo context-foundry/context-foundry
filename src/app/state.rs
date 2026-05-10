@@ -8,6 +8,7 @@ use crossterm::event::{self, MouseEvent};
 use std::path::PathBuf;
 
 use crate::agent::{AgentErrorKind, AgentOutputEvent, AgentRole};
+use crate::complexity::{TaskComplexity, TaskOverride};
 use crate::eval::report::EvalReportSnapshot;
 use crate::git;
 use crate::orchestrator::OrchestratorOutcome;
@@ -1317,6 +1318,13 @@ pub enum RunningModalKind {
     CtrlC,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct CurrentClassification {
+    pub tier: TaskComplexity,
+    pub override_flag: TaskOverride,
+    pub p_plus_cycles_budget: usize,
+}
+
 pub struct AppState {
     pub buildloop_dir: PathBuf,
     pub eval_report_cache: Option<EvalReportSnapshot>,
@@ -1324,6 +1332,7 @@ pub struct AppState {
     pub startup: Option<StartupState>,
     pub planning: Option<PlanningState>,
     pub current_task: Option<Task>,
+    pub current_classification: Option<CurrentClassification>,
     pub next_task_hint: Option<String>,
     pub current_agent: Option<(AgentRole, DateTime<Utc>)>,
     pub current_agent_stage_id: Option<String>,
@@ -1517,6 +1526,7 @@ impl AppState {
             startup: None,
             planning: None,
             current_task: None,
+            current_classification: None,
             next_task_hint: None,
             current_agent: None,
             current_agent_stage_id: None,
@@ -1891,6 +1901,12 @@ pub(super) enum AppEvent {
 
 pub(super) enum LoopEvent {
     TaskStarted(Task),
+    TaskClassified {
+        task_id: String,
+        tier: TaskComplexity,
+        override_flag: TaskOverride,
+        p_plus_cycles_budget: usize,
+    },
     AgentStarted(AgentRole, String),
     AgentStageStarted {
         role: AgentRole,

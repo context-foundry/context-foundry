@@ -656,6 +656,7 @@ pub(super) async fn run_headless(project_dir: &Path, output_format: Option<Strin
                 | LoopEvent::QueueUpdated(_)
                 | LoopEvent::TasksFileMtime(_)
                 | LoopEvent::TaskReviewResult { .. }
+                | LoopEvent::TaskClassified { .. }
                 | LoopEvent::ExtensionInjected { .. }
                 | LoopEvent::ExtensionKeywordsLoaded { .. }
                 | LoopEvent::SkillCitationsRecorded { .. }

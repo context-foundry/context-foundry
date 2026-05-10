@@ -8,8 +8,26 @@ use ratatui::{
 
 use super::{pane_border_style, pane_border_type};
 use crate::agent::AgentRole;
-use crate::app::{AppPhase, AppState, ExtensionDisplayInfo, StreamState, TuiPane};
+use crate::app::{AppPhase, AppState, CurrentClassification, ExtensionDisplayInfo, StreamState, TuiPane};
+use crate::complexity::{TaskComplexity, TaskOverride};
 use crate::utils::truncate_str;
+
+fn complexity_estimate_label(cls: &CurrentClassification) -> String {
+    let (time_label, cost_label) = match cls.tier {
+        TaskComplexity::Simple => ("~3-5 min", "~$0.50"),
+        TaskComplexity::Medium => ("~8-12 min", "~$2-4"),
+        TaskComplexity::Complex => ("~20-30 min", "~$5-10"),
+    };
+    let override_suffix = match cls.override_flag {
+        TaskOverride::None => String::new(),
+        TaskOverride::Fast => " [fast]".to_string(),
+        TaskOverride::Strict => " [strict]".to_string(),
+    };
+    format!(
+        "  {:?}{} | est {}, {} (P+ iterations: {})",
+        cls.tier, override_suffix, time_label, cost_label, cls.p_plus_cycles_budget
+    )
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RunningStatusBarAction {
@@ -544,6 +562,16 @@ pub(super) fn render_header(frame: &mut Frame, area: Rect, state: &AppState) {
     // Log line removed from header -- the agent name + timer on line 3 already
     // conveys the same info. The status bar at the bottom shows the latest log.
 
+    // T1.23: pre-flight estimate line. Renders when a task is running and we
+    // have a classification snapshot. Static cost/time bands per tier --
+    // future task may replace with a telemetry-percentile reader.
+    if let Some(ref cls) = state.current_classification {
+        header_text.push(Line::from(Span::styled(
+            complexity_estimate_label(cls),
+            Style::default().fg(state.tui_theme.muted),
+        )));
+    }
+
     let header = Paragraph::new(header_text).block(
         Block::default()
             .borders(Borders::BOTTOM)
@@ -927,12 +955,51 @@ pub(super) fn render_task_queue(frame: &mut Frame, area: Rect, state: &AppState,
                 vec![Span::styled(" ....", Style::default().fg(Color::DarkGray))]
             };
 
+            // T1.23: per-task complexity badge. For the current task, render
+            // the live classification tier (`[S]`/`[M]`/`[C]`) with `*` when
+            // an override is set. For pending tasks with a parsed override
+            // flag, surface that hint as `[f]`/`[s]` (lowercase) so it does
+            // not collide visually with the uppercase tier badges on running
+            // rows. Completed tasks show no badge.
+            let badge_text: String = if is_current {
+                if let Some(cls) = state.current_classification {
+                    let tier_char = match cls.tier {
+                        TaskComplexity::Simple => 'S',
+                        TaskComplexity::Medium => 'M',
+                        TaskComplexity::Complex => 'C',
+                    };
+                    let override_char = match cls.override_flag {
+                        TaskOverride::None => "",
+                        TaskOverride::Fast | TaskOverride::Strict => "*",
+                    };
+                    format!("[{}{}]", tier_char, override_char)
+                } else {
+                    "[?]".to_string()
+                }
+            } else if !task.completed {
+                match task.override_flag {
+                    TaskOverride::Fast => "[f]".to_string(),
+                    TaskOverride::Strict => "[s]".to_string(),
+                    TaskOverride::None => "[?]".to_string(),
+                }
+            } else {
+                "   ".to_string()
+            };
+            let badge_width = badge_text.chars().count();
+            let badge_color = match task.override_flag {
+                TaskOverride::Fast => Color::Cyan,
+                TaskOverride::Strict => Color::Magenta,
+                TaskOverride::None => prefix_color,
+            };
+
             let pipeline_width: usize = pipeline_spans.iter().map(|s| s.width()).sum();
-            let desc =
-                task.short_desc(inner_width.saturating_sub(task.id.len() + 5 + pipeline_width));
+            let desc = task.short_desc(
+                inner_width.saturating_sub(task.id.len() + 5 + pipeline_width + badge_width + 1),
+            );
             let mut spans = vec![
                 Span::styled(format!(" {} ", icon), style),
                 Span::styled(format!("{}: ", task.id), id_style),
+                Span::styled(format!("{} ", badge_text), Style::default().fg(badge_color)),
                 Span::styled(desc, style),
             ];
             spans.extend(pipeline_spans);

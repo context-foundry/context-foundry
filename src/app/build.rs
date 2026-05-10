@@ -6,7 +6,7 @@ use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
 use crate::agent::{self, AgentResult, AgentRole};
-use crate::complexity::{self, TaskComplexity};
+use crate::complexity::{self, TaskClassification, TaskComplexity};
 use crate::config::Config;
 use crate::{
     git, patterns, prompts,
@@ -3199,7 +3199,14 @@ async fn process_task(
     let _scout_report = ctx.buildloop_dir.join("scout-report.md");
     let questions_file = ctx.buildloop_dir.join("questions.md");
     let research_report = ctx.buildloop_dir.join("research-report.md");
-    let task_complexity = complexity::classify_task(task_desc);
+    let override_flag = task_info.override_flag;
+    let task_classification: TaskClassification =
+        complexity::classify_task_full(task_desc, override_flag);
+    let task_complexity = task_classification.tier;
+    let p_plus_budget = complexity::p_plus_cycles_budget(
+        task_complexity,
+        ctx.config.max_plan_review_cycles,
+    );
     observatory::log_event(
         &ctx.session_id,
         &ctx.project_dir,
@@ -3209,6 +3216,25 @@ async fn process_task(
             complexity: format!("{:?}", task_complexity),
         },
     );
+    observatory::log_event(
+        &ctx.session_id,
+        &ctx.project_dir,
+        ObservatoryEvent::TaskClassified {
+            task_id: task_id.to_string(),
+            complexity: format!("{:?}", task_classification.tier),
+            override_flag: task_classification.override_flag.label().to_string(),
+            p_plus_cycles_budget: p_plus_budget,
+            bundling_score: task_classification.signals.bundling_score,
+            signals: serde_json::to_value(&task_classification.signals)
+                .unwrap_or(serde_json::Value::Null),
+        },
+    );
+    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::TaskClassified {
+        task_id: task_id.to_string(),
+        tier: task_classification.tier,
+        override_flag: task_classification.override_flag,
+        p_plus_cycles_budget: p_plus_budget,
+    }));
     let skip_query = skip_scout
         || checkpoint_skip_query
         || (ctx.config.skip_scout_for_simple && task_complexity == TaskComplexity::Simple)
@@ -4921,7 +4947,8 @@ async fn process_task(
     }
     if !checkpoint_skip_plan_review
         && ctx.config.plan_review_enabled
-        && task_complexity == TaskComplexity::Complex
+        && task_complexity != TaskComplexity::Simple
+        && p_plus_budget > 0
         && (!skip_planner || checkpoint_skip_planner)
     {
         let plan_text = match std::fs::read_to_string(&ctx.current_plan) {
@@ -4977,10 +5004,8 @@ async fn process_task(
             ))));
 
             let mut orch_config = OrchestratorConfig::from_config(&ctx.config);
-            // T1.20: cap the P+ feedback loop at max_plan_review_cycles + 1 total iterations
-            // (original proposer pass + N revision cycles). Distinct from orchestrator_max_iterations
-            // so the orchestrator's general default (3) is preserved for non-P+ callers.
-            orch_config.max_iterations = ctx.config.max_plan_review_cycles.saturating_add(1);
+            // T1.23: scale P+ depth to task complexity (Simple=0/skipped, Medium=1, Complex=N+1).
+            orch_config.max_iterations = p_plus_budget;
 
             let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
             let fwd_tx = tx.clone();
@@ -5059,7 +5084,8 @@ async fn process_task(
                         }
                     } else {
                         let finding_count = outcome.unresolved_findings.len();
-                        let cycles_cap = ctx.config.max_plan_review_cycles;
+                        // T1.23: report the per-tier budget actually used, not the global config cap.
+                        let cycles_cap = p_plus_budget;
                         let cycles_used = outcome.iterations;
                         let feedback_summary = match append_unresolved_plan_review_feedback(
                             &ctx.current_plan,
