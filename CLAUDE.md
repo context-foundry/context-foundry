@@ -33,11 +33,11 @@ Patterns are stored in `~/.foundry/patterns/`. Read them before starting work:
 mcp__context-foundry__read_global_patterns("common-issues")
 ```
 
-## Extensions
+## Plugins
 
-Context Foundry has domain-specific extensions. **When working on tasks for a specific domain, read that extension's CLAUDE.md first.**
+Context Foundry has domain-specific plugins (formerly called "extensions"). **When working on tasks for a specific domain, read that plugin's CLAUDE.md first.** The on-disk directory name `extensions/` is preserved for path stability with existing projects and tooling; only the user-facing label changed to "Plugins".
 
-### Roblox Extension
+### Roblox Plugin
 **Location:** `extensions/roblox/`
 **When to read:** Any Roblox world generation, Lune scripting, or .rbxl/.rbxm work
 
@@ -50,7 +50,7 @@ Context Foundry has domain-specific extensions. **When working on tasks for a sp
 - Use CFrame, not Position, for moving parts
 - Don't generate worlds from scratch - load original and clone
 
-### Workday Extend Extension
+### Workday Extend Plugin
 **Location:** `extensions/extend/`
 **When to read:** Any Workday Extend app development, orchestrations, integrations, security configuration, BIRT reports, or Workday API work
 
@@ -68,7 +68,7 @@ Context Foundry has domain-specific extensions. **When working on tasks for a sp
 - Credentials never migrate between tenants
 - Test before every biannual Workday release
 
-### Recon Extension
+### Recon Plugin
 **Location:** `extensions/recon/`
 **When to read:** Any fleet checks, iDRAC queries, racadm commands, server inventory lookups, or batch ops from a management server
 
@@ -82,7 +82,7 @@ Context Foundry has domain-specific extensions. **When working on tasks for a sp
 - SSH to iDRAC needs `-o ConnectTimeout=5` to avoid hanging loops
 - Always label batch output with the current hostname
 
-### Workday Agents Extension
+### Workday Agents Plugin
 **Location:** `extensions/workday-agents/`
 **When to read:** Building any standalone compliance rule engine targeting the Workday Marketplace (ACA auditor, multi-state tax, Davis-Bacon, or similar)
 
@@ -98,11 +98,10 @@ Context Foundry has domain-specific extensions. **When working on tasks for a sp
 - Threshold comparisons (> vs >=) vary by jurisdiction -- make configurable
 - SPEC.md drifts from implementation every commit -- update counts and phase status
 
-### Other Extensions
-| Extension | Path | Domain |
+### Other Plugins
+| Plugin | Path | Domain |
 |-----------|------|--------|
 | Flowise | `extensions/flowise/` | Flowise AI workflows |
-| Workday | `extensions/workday/` | Workday learning patterns |
 
 ## MCP Tools Available
 
@@ -120,7 +119,7 @@ Context Foundry provides these MCP tools:
 
 When you solve a new problem, save the pattern:
 
-1. Add to the relevant extension's patterns file
+1. Add to the relevant plugin's patterns file
 2. Merge to global: `mcp__context-foundry__merge_project_patterns(path, "common-issues")`
 
 This helps future agents avoid the same issues.

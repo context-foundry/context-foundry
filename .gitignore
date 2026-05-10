@@ -30,14 +30,10 @@ Thumbs.db
 .foundry/
 .foundry.json
 
-# Private extensions
+# Private plugins (on-disk dir name `extensions/` preserved for path stability)
 extensions/roblox/
 extensions/flowise/
 extensions/extend/
-extensions/mindcraft/
-extensions/workday/
-extensions/workday-canvas/
-extensions/workday-transcripts/
 extensions/__pycache__/
 
 # Legacy Python package

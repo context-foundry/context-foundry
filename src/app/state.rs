@@ -836,13 +836,13 @@ pub fn settings_sections(dual_mode: bool) -> Vec<SectionDef> {
         },
         SectionDef {
             id: "extensions",
-            name: "Extensions & hooks",
+            name: "Plugins & hooks",
             default_expanded: false,
             fields: vec![
                 FieldDef {
                     id: "extensions",
-                    label: "Extensions",
-                    hint: "Active extension list",
+                    label: "Plugins",
+                    hint: "Active plugin list",
                     kind: FieldKind::Editor,
                 },
                 FieldDef {

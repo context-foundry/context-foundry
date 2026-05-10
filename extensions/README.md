@@ -1,14 +1,16 @@
-# Extensions
+# Plugins
 
-An **extension** (also called a **domain pack**) is a self-contained knowledge package that teaches foundry agents how to work with a specialized technology or domain. Extensions live in `extensions/<name>/` directories and are discovered automatically from three locations (highest priority wins):
+A **plugin** (also called a **domain pack**, formerly **extension**) is a self-contained knowledge package that teaches foundry agents how to work with a specialized technology or domain. Plugins live in `extensions/<name>/` directories and are discovered automatically from three locations (highest priority wins):
 
 1. `<project>/extensions/` (project-local)
 2. Ancestor directories' `extensions/` folders (closest wins)
 3. `~/.foundry/extensions/` (global)
 
+The on-disk directory name is preserved as `extensions/` for path stability with existing projects and tooling. The user-facing label is "Plugins" everywhere in the TUI.
+
 ## Taxonomy
 
-An extension is a directory containing any combination of these component types:
+A plugin is a directory containing any combination of these component types:
 
 | Component | Location | Purpose | Required? |
 |-----------|----------|---------|-----------|
@@ -70,9 +72,9 @@ extensions/<name>/
 
 Required fields: `pattern_id`, `title`. All other fields have defaults.
 
-## Using an Extension
+## Using a Plugin
 
-1. Create your extension folder:
+1. Create your plugin folder:
    ```bash
    mkdir -p extensions/my-tech/patterns
    ```
@@ -81,13 +83,13 @@ Required fields: `pattern_id`, `title`. All other fields have defaults.
 
 3. Reference it from your project's `CLAUDE.md`:
    ```markdown
-   ## Extension
+   ## Plugin
    Read /path/to/context-foundry/extensions/my-tech/CLAUDE.md for domain rules.
    ```
 
-4. Run foundry — agents read the extension docs during planning and building. The TUI startup screen shows each discovered extension with its name, pattern count, and a one-line description extracted from the first non-heading paragraph of its `CLAUDE.md`.
+4. Run foundry — agents read the plugin docs during planning and building. The TUI startup screen shows each discovered plugin with its name, pattern count, and a one-line description extracted from the first non-heading paragraph of its `CLAUDE.md`.
 
-## Extension Ideas
+## Plugin Ideas
 
 - **Game engines** — Roblox, Unity, Godot rules and patterns
 - **Frameworks** — Next.js, Rails, FastAPI conventions

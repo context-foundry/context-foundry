@@ -1208,7 +1208,7 @@ fn render_extensions_panel(frame: &mut Frame, area: Rect, state: &AppState) {
     let border_style = pane_border_style(state.focused_pane, TuiPane::Extensions, &state.tui_theme);
     let border_type = pane_border_type(state.focused_pane, TuiPane::Extensions);
     let title_span = Span::styled(
-        " Extensions ",
+        " Plugins ",
         Style::default()
             .fg(state.tui_theme.accent)
             .add_modifier(Modifier::BOLD),
@@ -1217,7 +1217,7 @@ fn render_extensions_panel(frame: &mut Frame, area: Rect, state: &AppState) {
     if state.available_extensions.is_empty() {
         let paragraph = Paragraph::new(vec![
             Line::from(Span::styled(
-                "  No extensions found.",
+                "  No plugins found.",
                 Style::default().fg(state.tui_theme.muted),
             )),
             Line::from(Span::styled(
@@ -1290,7 +1290,7 @@ fn render_extensions_panel(frame: &mut Frame, area: Rect, state: &AppState) {
 
 fn format_extensions_status(extensions: &[ExtensionDisplayInfo]) -> String {
     if extensions.is_empty() {
-        return "Ext: none".to_string();
+        return "Plugins: none".to_string();
     }
     let active: Vec<&str> = extensions
         .iter()
@@ -1298,10 +1298,10 @@ fn format_extensions_status(extensions: &[ExtensionDisplayInfo]) -> String {
         .map(|e| e.name.as_str())
         .collect();
     if active.is_empty() {
-        return format!("Ext: none ({} avail)", extensions.len());
+        return format!("Plugins: none ({} avail)", extensions.len());
     }
     let names = active.join(", ");
-    format!("Ext: {} ({} active)", names, active.len())
+    format!("Plugins: {} ({} active)", names, active.len())
 }
 
 #[cfg(test)]

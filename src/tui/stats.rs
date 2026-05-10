@@ -202,7 +202,7 @@ pub(super) fn render_dashboard_stats(
             })
             .collect();
         lines.push(Line::from(vec![
-            Span::styled("  Ext      ", Style::default().fg(theme.accent)),
+            Span::styled("  Plugins  ", Style::default().fg(theme.accent)),
             Span::styled(ext_parts.join("  "), Style::default().fg(theme.text)),
         ]));
     }

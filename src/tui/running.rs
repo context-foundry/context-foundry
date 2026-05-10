@@ -1081,12 +1081,12 @@ pub(super) fn render_extensions_used(
     let total = state.session_extensions_used.len();
     let total_inj: usize = state.extension_inject_count.values().sum();
     let total_ref: usize = state.extension_reference_count.values().sum();
-    let title = format!(" Extensions ({} inj, {} ref) ", total_inj, total_ref);
+    let title = format!(" Plugins ({} inj, {} ref) ", total_inj, total_ref);
     let max_lines = area.height.saturating_sub(2) as usize;
 
     if state.session_extensions_used.is_empty() {
         let empty = Paragraph::new(Span::styled(
-            " Extension usage will appear here.",
+            " Plugin usage will appear here.",
             Style::default().fg(state.tui_theme.muted),
         ))
         .block(
@@ -1099,7 +1099,7 @@ pub(super) fn render_extensions_used(
                 ))
                 .border_type(pane_border_type(focused, TuiPane::Extensions))
                 .title(Span::styled(
-                    " Extensions Used ",
+                    " Plugins Used ",
                     Style::default()
                         .fg(state.tui_theme.accent)
                         .add_modifier(Modifier::BOLD),
@@ -1472,7 +1472,7 @@ fn format_running_extensions_status(
         .map(|e| e.name.as_str())
         .collect();
     if active.is_empty() {
-        return "Ext: none".to_string();
+        return "Plugins: none".to_string();
     }
     let parts: Vec<String> = active
         .iter()
@@ -1486,7 +1486,7 @@ fn format_running_extensions_status(
             }
         })
         .collect();
-    format!("Ext: {}", parts.join(", "))
+    format!("Plugins: {}", parts.join(", "))
 }
 
 #[cfg(test)]
