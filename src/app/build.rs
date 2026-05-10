@@ -6579,6 +6579,22 @@ async fn process_task(
                         "Skill telemetry: {} skill(s) updated in sidecar DB",
                         n
                     ))));
+                    let unique_names: Vec<String> = {
+                        let mut names: Vec<String> = all_cited_by_role
+                            .iter()
+                            .map(|(skill, _role)| skill.clone())
+                            .collect();
+                        names.sort();
+                        names.dedup();
+                        names
+                    };
+                    if !unique_names.is_empty() {
+                        let _ = tx.send(AppEvent::LoopEvent(
+                            LoopEvent::SkillCitationsRecorded {
+                                skill_names: unique_names,
+                            },
+                        ));
+                    }
                 }
                 Err(e) => {
                     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(

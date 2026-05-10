@@ -1201,6 +1201,9 @@ fn handle_planning_event(state: &mut AppState, event: AppEvent, config: &Config)
                             }
                             tui::RunningStatusBarAction::Patterns => {
                                 state.show_patterns = !state.show_patterns;
+                                if state.show_patterns {
+                                    refresh_skill_citation_summary(state);
+                                }
                             }
                             tui::RunningStatusBarAction::Findings => {
                                 state.show_findings = !state.show_findings;
@@ -1214,6 +1217,13 @@ fn handle_planning_event(state: &mut AppState, event: AppEvent, config: &Config)
         AppEvent::Paste(_) => {}
         AppEvent::Tick => {
             state.tick_count = state.tick_count.wrapping_add(1);
+            let needs_refresh = match state.skill_citation_summary_loaded_at {
+                None => true,
+                Some(last) => last.elapsed() >= std::time::Duration::from_secs(30),
+            };
+            if needs_refresh {
+                refresh_skill_citation_summary(state);
+            }
         }
         AppEvent::UpdateAvailable(version) => {
             state.update_available = Some(version);
@@ -2030,6 +2040,7 @@ fn handle_planning_key(state: &mut AppState, key: event::KeyEvent, config: &Conf
             state.show_patterns = !state.show_patterns;
             if state.show_patterns {
                 refresh_patterns_cache(state, config);
+                refresh_skill_citation_summary(state);
             }
         }
         // Sandbox toggle removed -- config-only override for implementers.
@@ -2253,6 +2264,13 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                 }
                 state.pattern_inject_count += titles.len();
                 state.active_pattern_keywords = keywords_by_title.clone();
+            }
+            LoopEvent::SkillCitationsRecorded { ref skill_names } => {
+                state.session_skill_citation_count += skill_names.len();
+                for name in skill_names {
+                    state.session_skill_citations_set.insert(name.clone());
+                }
+                refresh_skill_citation_summary(state);
             }
             LoopEvent::BudgetOverrun {
                 phase,
@@ -2883,6 +2901,7 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                             } else {
                                 state.show_patterns = true;
                                 refresh_patterns_cache(state, config);
+                                refresh_skill_citation_summary(state);
                             }
                         }
                         KeyCode::Char('s') if !key.modifiers.contains(KeyModifiers::CONTROL) => {
@@ -2992,6 +3011,13 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
             state.tick_count = state.tick_count.wrapping_add(1);
             if state.tick_count % crate::app::state::TASKS_RELOAD_TICK_STRIDE == 0 {
                 let _ = state.handle_tasks_file_change();
+            }
+            let needs_refresh = match state.skill_citation_summary_loaded_at {
+                None => true,
+                Some(last) => last.elapsed() >= std::time::Duration::from_secs(30),
+            };
+            if needs_refresh {
+                refresh_skill_citation_summary(state);
             }
         }
         AppEvent::UpdateAvailable(version) => {
@@ -3331,6 +3357,9 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                                         }
                                         tui::RunningStatusBarAction::Patterns => {
                                             state.show_patterns = !state.show_patterns;
+                                            if state.show_patterns {
+                                                refresh_skill_citation_summary(state);
+                                            }
                                         }
                                         tui::RunningStatusBarAction::Stats => {
                                             if state.show_stats_overlay {
@@ -4089,6 +4118,52 @@ fn refresh_patterns_cache(state: &mut AppState, config: &Config) {
     let dir = patterns::resolve_patterns_dir(&config.patterns_dir);
     state.patterns_cache = Some(patterns::load_patterns(&dir));
     state.patterns_dir_cache = Some(dir);
+}
+
+fn refresh_skill_citation_summary(state: &mut AppState) {
+    let db_path = crate::skills_telemetry::db_path();
+    match crate::skills_telemetry::open_db(&db_path) {
+        Ok(conn) => {
+            let top_skills = crate::skills_telemetry::top_cited_skills(&conn, 50)
+                .unwrap_or_default();
+            let week_ago = chrono::Utc::now() - chrono::Duration::days(7);
+            let week_recent = crate::skills_telemetry::recent_citations(&conn, week_ago)
+                .unwrap_or_default();
+            let last_cited: Option<(String, String)> = top_skills
+                .iter()
+                .max_by(|a, b| a.last_used.cmp(&b.last_used))
+                .and_then(|r| {
+                    r.last_used
+                        .as_ref()
+                        .map(|d| (r.skill_name.clone(), d.clone()))
+                });
+            let all_skills = crate::skills_telemetry::top_cited_skills(&conn, 10_000)
+                .unwrap_or_default();
+            let top3: Vec<crate::skills_telemetry::TelemetryRecord> =
+                week_recent.into_iter().take(3).collect();
+            state.skill_citation_summary = Some(crate::app::state::SkillCitationSummary {
+                session_skills_cited: state.session_skill_citations_set.len(),
+                session_citations: state.session_skill_citation_count,
+                top_skills: top3,
+                last_cited,
+                all_skills,
+                db_available: true,
+                db_path,
+            });
+        }
+        Err(_) => {
+            state.skill_citation_summary = Some(crate::app::state::SkillCitationSummary {
+                session_skills_cited: state.session_skill_citations_set.len(),
+                session_citations: state.session_skill_citation_count,
+                top_skills: Vec::new(),
+                last_cited: None,
+                all_skills: Vec::new(),
+                db_available: false,
+                db_path,
+            });
+        }
+    }
+    state.skill_citation_summary_loaded_at = Some(std::time::Instant::now());
 }
 
 fn format_agent_error(kind: &AgentErrorKind) -> String {

@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 
 use anyhow::{Context, Result};
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection};
 
 use crate::patterns::CommitOutcome;
@@ -237,6 +238,122 @@ pub fn load_popularity_scores(conn: &Connection) -> Result<HashMap<String, Popul
     Ok(out)
 }
 
+pub fn top_cited_skills(conn: &Connection, limit: usize) -> Result<Vec<TelemetryRecord>> {
+    let mut stmt = conn
+        .prepare(
+            r#"SELECT skill_name, citations_pass, citations_wip, last_used,
+                      cited_by_planner, cited_by_reviewer, cited_by_builder, cited_by_scout
+               FROM skill_telemetry
+               ORDER BY citations_pass DESC, last_used DESC
+               LIMIT ?1"#,
+        )
+        .context("failed to prepare top_cited_skills")?;
+    let rows = stmt
+        .query_map(params![limit as i64], |row| {
+            let name: String = row.get(0)?;
+            let pass: i64 = row.get(1)?;
+            let wip: i64 = row.get(2)?;
+            let last_used: Option<String> = row.get(3)?;
+            let planner: i64 = row.get(4)?;
+            let reviewer: i64 = row.get(5)?;
+            let builder: i64 = row.get(6)?;
+            let scout: i64 = row.get(7)?;
+            let mut by_stage: HashMap<String, u64> = HashMap::new();
+            if planner > 0 {
+                by_stage.insert("planner".to_string(), planner as u64);
+            }
+            if reviewer > 0 {
+                by_stage.insert("reviewer".to_string(), reviewer as u64);
+            }
+            if builder > 0 {
+                by_stage.insert("builder".to_string(), builder as u64);
+            }
+            if scout > 0 {
+                by_stage.insert("scout".to_string(), scout as u64);
+            }
+            Ok(TelemetryRecord {
+                skill_name: name,
+                citations_pass: pass as u64,
+                citations_wip: wip as u64,
+                last_used,
+                cited_by_stage: by_stage,
+            })
+        })
+        .context("failed to query top_cited_skills rows")?;
+    let mut out: Vec<TelemetryRecord> = Vec::new();
+    for row in rows {
+        let rec = row.context("failed to read top_cited_skills row")?;
+        out.push(rec);
+    }
+    Ok(out)
+}
+
+pub fn recent_citations(
+    conn: &Connection,
+    since: DateTime<Utc>,
+) -> Result<Vec<TelemetryRecord>> {
+    let since_date = since.format("%Y-%m-%d").to_string();
+    let mut stmt = conn
+        .prepare(
+            r#"SELECT skill_name, citations_pass, citations_wip, last_used,
+                      cited_by_planner, cited_by_reviewer, cited_by_builder, cited_by_scout
+               FROM skill_telemetry
+               WHERE last_used >= ?1
+               ORDER BY citations_pass DESC, last_used DESC"#,
+        )
+        .context("failed to prepare recent_citations")?;
+    let rows = stmt
+        .query_map(params![since_date], |row| {
+            let name: String = row.get(0)?;
+            let pass: i64 = row.get(1)?;
+            let wip: i64 = row.get(2)?;
+            let last_used: Option<String> = row.get(3)?;
+            let planner: i64 = row.get(4)?;
+            let reviewer: i64 = row.get(5)?;
+            let builder: i64 = row.get(6)?;
+            let scout: i64 = row.get(7)?;
+            let mut by_stage: HashMap<String, u64> = HashMap::new();
+            if planner > 0 {
+                by_stage.insert("planner".to_string(), planner as u64);
+            }
+            if reviewer > 0 {
+                by_stage.insert("reviewer".to_string(), reviewer as u64);
+            }
+            if builder > 0 {
+                by_stage.insert("builder".to_string(), builder as u64);
+            }
+            if scout > 0 {
+                by_stage.insert("scout".to_string(), scout as u64);
+            }
+            Ok(TelemetryRecord {
+                skill_name: name,
+                citations_pass: pass as u64,
+                citations_wip: wip as u64,
+                last_used,
+                cited_by_stage: by_stage,
+            })
+        })
+        .context("failed to query recent_citations rows")?;
+    let mut out: Vec<TelemetryRecord> = Vec::new();
+    for row in rows {
+        let rec = row.context("failed to read recent_citations row")?;
+        out.push(rec);
+    }
+    Ok(out)
+}
+
+pub fn session_citation_count(conn: &Connection, since: SystemTime) -> Result<usize> {
+    let dt: DateTime<Utc> = since.into();
+    let since_date = dt.format("%Y-%m-%d").to_string();
+    let mut stmt = conn
+        .prepare("SELECT COUNT(*) FROM skill_telemetry WHERE last_used >= ?1")
+        .context("failed to prepare session_citation_count")?;
+    let count: i64 = stmt
+        .query_row(params![since_date], |row| row.get::<_, i64>(0))
+        .context("failed to query session_citation_count")?;
+    Ok(count as usize)
+}
+
 pub fn load_popularity_scores_or_default() -> HashMap<String, PopularityRecord> {
     let path = db_path();
     let conn = match open_db(&path) {
@@ -384,5 +501,83 @@ mod tests {
         .unwrap();
         let all = load_all(&conn).unwrap();
         assert_eq!(all.len(), 2);
+    }
+
+    #[test]
+    fn top_cited_skills_orders_by_pass_then_last_used() {
+        let (_tmp, path) = temp_db_path();
+        let mut conn = open_db(&path).unwrap();
+        // alpha: 3 passes
+        for _ in 0..3 {
+            record_citations_batch(
+                &mut conn,
+                &[("alpha".to_string(), "Planner".to_string())],
+                CommitOutcome::Pass,
+            )
+            .unwrap();
+        }
+        // beta: 1 pass
+        record_citations_batch(
+            &mut conn,
+            &[("beta".to_string(), "Planner".to_string())],
+            CommitOutcome::Pass,
+        )
+        .unwrap();
+        // gamma: 2 passes
+        for _ in 0..2 {
+            record_citations_batch(
+                &mut conn,
+                &[("gamma".to_string(), "Planner".to_string())],
+                CommitOutcome::Pass,
+            )
+            .unwrap();
+        }
+        let top = top_cited_skills(&conn, 10).unwrap();
+        assert_eq!(top.len(), 3);
+        assert_eq!(top[0].skill_name, "alpha");
+        assert_eq!(top[0].citations_pass, 3);
+        assert_eq!(top[1].skill_name, "gamma");
+        assert_eq!(top[1].citations_pass, 2);
+        assert_eq!(top[2].skill_name, "beta");
+        assert_eq!(top[2].citations_pass, 1);
+    }
+
+    #[test]
+    fn recent_citations_filters_by_date() {
+        let (_tmp, path) = temp_db_path();
+        let mut conn = open_db(&path).unwrap();
+        record_citations_batch(
+            &mut conn,
+            &[("alpha".to_string(), "Planner".to_string())],
+            CommitOutcome::Pass,
+        )
+        .unwrap();
+        let one_day_ago = Utc::now() - chrono::Duration::days(1);
+        let one_day_ahead = Utc::now() + chrono::Duration::days(1);
+        let recent = recent_citations(&conn, one_day_ago).unwrap();
+        assert_eq!(recent.len(), 1);
+        let future = recent_citations(&conn, one_day_ahead).unwrap();
+        assert_eq!(future.len(), 0);
+    }
+
+    #[test]
+    fn session_citation_count_returns_recent_total() {
+        let (_tmp, path) = temp_db_path();
+        let mut conn = open_db(&path).unwrap();
+        record_citations_batch(
+            &mut conn,
+            &[("alpha".to_string(), "Planner".to_string())],
+            CommitOutcome::Pass,
+        )
+        .unwrap();
+        record_citations_batch(
+            &mut conn,
+            &[("beta".to_string(), "Reviewer".to_string())],
+            CommitOutcome::Pass,
+        )
+        .unwrap();
+        let since = SystemTime::now() - std::time::Duration::from_secs(60 * 60);
+        let count = session_citation_count(&conn, since).unwrap();
+        assert_eq!(count, 2);
     }
 }

@@ -240,111 +240,102 @@ fn render_findings_status_bar(frame: &mut Frame, area: Rect, state: &AppState) {
     frame.render_widget(Paragraph::new(Line::from(spans)), area);
 }
 
-fn render_patterns_list(frame: &mut Frame, area: Rect, state: &AppState, config: &Config) {
+fn render_patterns_list(frame: &mut Frame, area: Rect, state: &AppState, _config: &Config) {
     let theme = &state.tui_theme;
-    use crate::patterns;
-
-    // Use cached patterns (populated when 'p' is pressed) to avoid
-    // loading 800+ patterns from disk on every render frame (10fps).
-    let fallback;
-    let (all_patterns, patterns_dir) =
-        if let (Some(cached), Some(dir)) = (&state.patterns_cache, &state.patterns_dir_cache) {
-            (cached.as_slice(), dir.clone())
-        } else {
-            let dir = patterns::resolve_patterns_dir(&config.patterns_dir);
-            fallback = patterns::load_patterns(&dir);
-            (fallback.as_slice(), dir)
-        };
-
-    if all_patterns.is_empty() {
-        let empty = Paragraph::new(vec![
-            Line::from(""),
-            Line::from(Span::styled(
-                "  No patterns learned yet.",
-                Style::default().fg(theme.muted),
-            )),
-            Line::from(""),
-            Line::from(Span::styled(
-                "  Patterns are extracted after each task completes.",
-                Style::default().fg(theme.muted),
-            )),
-            Line::from(Span::styled(
-                format!("  They will appear in: {}", patterns_dir.display()),
-                Style::default().fg(theme.muted),
-            )),
-        ])
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(theme.border))
-                .title(Span::styled(
-                    " Learned Patterns ",
-                    Style::default().fg(theme.info).add_modifier(Modifier::BOLD),
-                )),
-        );
-        frame.render_widget(empty, area);
-        return;
-    }
+    let summary_opt = state.skill_citation_summary.as_ref();
 
     let max_lines = area.height.saturating_sub(2) as usize;
     let inner_width = area.width.saturating_sub(4) as usize;
-
-    // Each pattern takes 3 display lines: title, issue, solution
     let mut display_lines: Vec<Line> = Vec::new();
 
-    for pattern in all_patterns {
-        let severity_style = match pattern.severity.as_deref() {
-            Some("HIGH") => Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
-            Some("MEDIUM") => Style::default().fg(Color::Yellow),
-            _ => Style::default().fg(Color::Gray),
-        };
-        let severity = pattern.severity.as_deref().unwrap_or("LOW");
-        let freq_label = if pattern.frequency > 1 {
-            format!(" (seen {}x)", pattern.frequency)
-        } else {
-            String::new()
-        };
-        let auto_label = if pattern.auto_apply { " [auto]" } else { "" };
+    let (title, db_path_str): (String, String) = match summary_opt {
+        Some(s) if s.db_available => (
+            format!(" Skill Citations ({} skills) ", s.all_skills.len()),
+            s.db_path.display().to_string(),
+        ),
+        Some(s) => (
+            " Skill Citations (telemetry unavailable) ".to_string(),
+            s.db_path.display().to_string(),
+        ),
+        None => (
+            " Skill Citations (loading...) ".to_string(),
+            String::new(),
+        ),
+    };
 
-        display_lines.push(Line::from(vec![
-            Span::styled(format!(" {} ", severity), severity_style),
-            Span::styled(
-                truncate_str(
-                    &pattern.title,
-                    inner_width
-                        .saturating_sub(severity.len() + freq_label.len() + auto_label.len() + 4),
-                ),
-                Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(
-                format!("{}{}", freq_label, auto_label),
-                Style::default().fg(theme.muted),
-            ),
-        ]));
-
-        if let Some(ref issue) = pattern.issue {
+    match summary_opt {
+        None => {
+            display_lines.push(Line::from(""));
             display_lines.push(Line::from(Span::styled(
-                format!(
-                    "      {}",
-                    truncate_str(issue, inner_width.saturating_sub(6))
-                ),
-                Style::default().fg(Color::Gray),
+                "  Loading skill citations...",
+                Style::default().fg(theme.muted),
             )));
         }
-
-        if let Some(ref solution) = pattern.solution {
-            if !solution.planner.is_empty() {
-                display_lines.push(Line::from(Span::styled(
-                    format!(
-                        "      Fix: {}",
-                        truncate_str(&solution.planner, inner_width.saturating_sub(11))
+        Some(summary) if !summary.db_available => {
+            display_lines.push(Line::from(""));
+            display_lines.push(Line::from(Span::styled(
+                "  Telemetry DB unavailable.",
+                Style::default().fg(theme.muted),
+            )));
+            display_lines.push(Line::from(Span::styled(
+                format!("  Expected at: {}", summary.db_path.display()),
+                Style::default().fg(theme.muted),
+            )));
+            display_lines.push(Line::from(""));
+            display_lines.push(Line::from(Span::styled(
+                "  Citations will appear here once the build loop records them.",
+                Style::default().fg(theme.muted),
+            )));
+        }
+        Some(summary) if summary.all_skills.is_empty() => {
+            display_lines.push(Line::from(""));
+            display_lines.push(Line::from(Span::styled(
+                "  No skill citations recorded yet.",
+                Style::default().fg(theme.muted),
+            )));
+            display_lines.push(Line::from(""));
+            display_lines.push(Line::from(Span::styled(
+                "  Run a task -- citations are recorded after each commit.",
+                Style::default().fg(theme.muted),
+            )));
+        }
+        Some(summary) => {
+            display_lines.push(Line::from(Span::styled(
+                format!(
+                    "  {:<40} {:>5} {:>5} {:>10} {:>10}",
+                    "skill", "pass", "wip", "stage", "last_used"
+                ),
+                Style::default().fg(theme.muted),
+            )));
+            for rec in &summary.all_skills {
+                let stage = derive_stage_label(&rec.skill_name, &rec.cited_by_stage);
+                let last_used_str = rec.last_used.clone().unwrap_or_else(|| "-".to_string());
+                let name_w = inner_width.saturating_sub(38).max(20);
+                let name_disp = truncate_str(&rec.skill_name, name_w);
+                display_lines.push(Line::from(vec![
+                    Span::styled(
+                        format!("  {:<40} ", name_disp),
+                        Style::default().fg(theme.text),
                     ),
-                    Style::default().fg(theme.info),
-                )));
+                    Span::styled(
+                        format!("{:>5} ", rec.citations_pass),
+                        Style::default().fg(Color::Green),
+                    ),
+                    Span::styled(
+                        format!("{:>5} ", rec.citations_wip),
+                        Style::default().fg(Color::Yellow),
+                    ),
+                    Span::styled(
+                        format!("{:>10} ", stage),
+                        Style::default().fg(theme.info),
+                    ),
+                    Span::styled(
+                        format!("{:>10}", last_used_str),
+                        Style::default().fg(theme.muted),
+                    ),
+                ]));
             }
         }
-
-        display_lines.push(Line::from(""));
     }
 
     let total_lines = display_lines.len();
@@ -357,22 +348,44 @@ fn render_patterns_list(frame: &mut Frame, area: Rect, state: &AppState, config:
         .take(max_lines)
         .collect();
 
-    let title = format!(
-        " Learned Patterns ({}) | {} ",
-        all_patterns.len(),
-        patterns_dir.display()
-    );
+    let full_title = if db_path_str.is_empty() {
+        title
+    } else {
+        format!("{}| {} ", title, db_path_str)
+    };
 
     let paragraph = Paragraph::new(visible).block(
         Block::default()
             .borders(Borders::ALL)
             .border_style(Style::default().fg(theme.border))
             .title(Span::styled(
-                title,
+                full_title,
                 Style::default().fg(theme.info).add_modifier(Modifier::BOLD),
             )),
     );
     frame.render_widget(paragraph, area);
+}
+
+fn derive_stage_label(
+    skill_name: &str,
+    by_stage: &std::collections::HashMap<String, u64>,
+) -> String {
+    if skill_name.ends_with("-planner") {
+        return "planner".to_string();
+    }
+    if skill_name.ends_with("-reviewer") {
+        return "reviewer".to_string();
+    }
+    let mut best: Option<(&str, u64)> = None;
+    for (stage, count) in by_stage {
+        let pair: (&str, u64) = (stage.as_str(), *count);
+        match best {
+            None => best = Some(pair),
+            Some((_, b)) if pair.1 > b => best = Some(pair),
+            _ => {}
+        }
+    }
+    best.map(|(s, _)| s.to_string()).unwrap_or_else(|| "-".to_string())
 }
 
 fn render_patterns_status_bar(frame: &mut Frame, area: Rect, state: &AppState) {

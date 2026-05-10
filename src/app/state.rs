@@ -72,6 +72,17 @@ pub enum PatternEventKind {
     Used,
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct SkillCitationSummary {
+    pub session_skills_cited: usize,
+    pub session_citations: usize,
+    pub top_skills: Vec<crate::skills_telemetry::TelemetryRecord>,
+    pub last_cited: Option<(String, String)>,
+    pub all_skills: Vec<crate::skills_telemetry::TelemetryRecord>,
+    pub db_available: bool,
+    pub db_path: std::path::PathBuf,
+}
+
 #[derive(Debug, Clone)]
 pub struct ExtensionEvent {
     pub name: String,
@@ -1392,6 +1403,10 @@ pub struct AppState {
     pub patterns_dir_cache: Option<std::path::PathBuf>,
     pub last_pattern_match_mode: Option<String>, // "semantic", "keyword-only", "cooldown"
     pub session_patterns: Vec<PatternEvent>,     // pattern activity (learned + used) this session
+    pub skill_citation_summary: Option<SkillCitationSummary>,
+    pub(super) skill_citation_summary_loaded_at: Option<std::time::Instant>,
+    pub session_skill_citations_set: std::collections::HashSet<String>,
+    pub session_skill_citation_count: usize,
     pub session_extensions_used: Vec<ExtensionEvent>, // extension injections this session
     pub session_feat_commits: usize,
     pub session_wip_commits: usize,
@@ -1578,6 +1593,10 @@ impl AppState {
             show_git_init_offer: false,
             gh_cli_available: false,
             session_patterns: Vec::new(),
+            skill_citation_summary: None,
+            skill_citation_summary_loaded_at: None,
+            session_skill_citations_set: std::collections::HashSet::new(),
+            session_skill_citation_count: 0,
             session_extensions_used: Vec::new(),
             session_patterns_learned: 0,
             session_review_high: 0,
@@ -1903,6 +1922,9 @@ pub(super) enum LoopEvent {
     PatternsUsed {
         titles: Vec<String>,
         keywords_by_title: HashMap<String, Vec<String>>,
+    },
+    SkillCitationsRecorded {
+        skill_names: Vec<String>,
     },
     ExtensionKeywordsLoaded {
         keywords: HashMap<String, Vec<String>>,

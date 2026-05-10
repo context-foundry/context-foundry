@@ -205,7 +205,7 @@ pub fn render(frame: &mut Frame, state: &AppState, config: &Config) {
             .split(middle_cols[1]);
         running::render_task_queue(frame, panel[0], state, state.focused_pane);
         narrative::render_narrative(frame, panel[1], state);
-        running::render_patterns(frame, panel[2], state, config, state.focused_pane);
+        running::render_skill_citations(frame, panel[2], state, config, state.focused_pane);
         running::render_extensions_used(frame, panel[3], state, state.focused_pane);
         panel
     } else {
@@ -219,7 +219,7 @@ pub fn render(frame: &mut Frame, state: &AppState, config: &Config) {
             .split(middle_cols[1]);
         running::render_task_queue(frame, panel[0], state, state.focused_pane);
         narrative::render_narrative(frame, panel[1], state);
-        running::render_patterns(frame, panel[2], state, config, state.focused_pane);
+        running::render_skill_citations(frame, panel[2], state, config, state.focused_pane);
         panel
     };
 

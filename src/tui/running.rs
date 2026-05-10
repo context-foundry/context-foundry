@@ -76,7 +76,7 @@ pub fn running_status_bar_hit_test(
                 " scroll  ",
                 RunningStatusBarAction::Quit,
             ), // non-actionable, skip
-            (" p ", " patterns", RunningStatusBarAction::Patterns),
+            (" p ", " skills", RunningStatusBarAction::Patterns),
         ];
         for &(key, label, action) in buttons {
             let w = key.chars().count() as u16 + label.chars().count() as u16;
@@ -118,7 +118,7 @@ pub fn running_status_bar_hit_test(
         (" \u{2191}\u{2193} ", " scroll  ", None),
         (" i ", " inject  ", Some(RunningStatusBarAction::Inject)),
         (" PgUp/PgDn ", " queue  ", None),
-        (" p ", " patterns  ", Some(RunningStatusBarAction::Patterns)),
+        (" p ", " skills  ", Some(RunningStatusBarAction::Patterns)),
         (" s ", " stats  ", Some(RunningStatusBarAction::Stats)),
         ("  ? ", " settings", Some(RunningStatusBarAction::Settings)),
     ];
@@ -966,99 +966,110 @@ pub(super) fn render_task_queue(frame: &mut Frame, area: Rect, state: &AppState,
     frame.render_widget(list, area);
 }
 
-pub(super) fn render_patterns(
+pub(super) fn render_skill_citations(
     frame: &mut Frame,
     area: Rect,
     state: &AppState,
     _config: &crate::config::Config,
     focused: TuiPane,
 ) {
-    use crate::app::PatternEventKind;
+    let theme = &state.tui_theme;
+    let summary_opt = state.skill_citation_summary.as_ref();
 
-    let used_count = state
-        .session_patterns
-        .iter()
-        .filter(|p| p.kind == PatternEventKind::Used)
-        .count();
-    let learned_count = state
-        .session_patterns
-        .iter()
-        .filter(|p| p.kind == PatternEventKind::Learned)
-        .count();
-    let title = format!(
-        " Patterns ({} injected, {} learned) ",
-        used_count, learned_count
-    );
-    let max_lines = area.height.saturating_sub(2) as usize;
+    let title = match summary_opt {
+        Some(s) if s.db_available => format!(
+            " Skill Citations ({} session / {} unique) ",
+            s.session_citations, s.session_skills_cited
+        ),
+        Some(_) => " Skill Citations (telemetry unavailable) ".to_string(),
+        None => " Skill Citations (loading...) ".to_string(),
+    };
 
-    if state.session_patterns.is_empty() {
-        let empty = Paragraph::new(Span::styled(
-            " Pattern activity will appear here.",
-            Style::default().fg(state.tui_theme.muted),
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(pane_border_style(
+            focused,
+            TuiPane::PatternsLearned,
+            &state.tui_theme,
         ))
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_style(pane_border_style(
-                    focused,
-                    TuiPane::PatternsLearned,
-                    &state.tui_theme,
-                ))
-                .border_type(pane_border_type(focused, TuiPane::PatternsLearned))
-                .title(Span::styled(
-                    " Patterns ",
-                    Style::default()
-                        .fg(state.tui_theme.info)
-                        .add_modifier(Modifier::BOLD),
-                )),
-        );
-        frame.render_widget(empty, area);
-        return;
+        .border_type(pane_border_type(focused, TuiPane::PatternsLearned))
+        .title(Span::styled(
+            title,
+            Style::default().fg(theme.info).add_modifier(Modifier::BOLD),
+        ));
+
+    let inner_width = area.width.saturating_sub(4) as usize;
+    let mut lines: Vec<Line> = Vec::new();
+
+    match summary_opt {
+        None => {
+            lines.push(Line::from(Span::styled(
+                " Skill citations will appear here.",
+                Style::default().fg(theme.muted),
+            )));
+        }
+        Some(summary) if !summary.db_available => {
+            lines.push(Line::from(Span::styled(
+                " Telemetry DB unavailable.",
+                Style::default().fg(theme.muted),
+            )));
+            lines.push(Line::from(Span::styled(
+                format!(
+                    " path: {}",
+                    truncate_str(
+                        &summary.db_path.display().to_string(),
+                        inner_width.saturating_sub(8)
+                    )
+                ),
+                Style::default().fg(theme.muted),
+            )));
+        }
+        Some(summary) => {
+            lines.push(Line::from(Span::styled(
+                format!(
+                    " session: {} skills cited / {} citations",
+                    summary.session_skills_cited, summary.session_citations
+                ),
+                Style::default().fg(theme.text),
+            )));
+            let top_label = if summary.top_skills.is_empty() {
+                " top this week: (none yet)".to_string()
+            } else {
+                let names: Vec<String> = summary
+                    .top_skills
+                    .iter()
+                    .take(3)
+                    .map(|r| r.skill_name.clone())
+                    .collect();
+                format!(" top this week: {}", names.join(", "))
+            };
+            lines.push(Line::from(Span::styled(
+                truncate_str(&top_label, inner_width).to_string(),
+                Style::default().fg(theme.text),
+            )));
+            let last_label = match summary.last_cited.as_ref() {
+                Some((name, date)) => format!(" last cited: {} ({})", name, date),
+                None => " last cited: (no citations yet)".to_string(),
+            };
+            lines.push(Line::from(Span::styled(
+                truncate_str(&last_label, inner_width).to_string(),
+                Style::default().fg(theme.text),
+            )));
+            lines.push(Line::from(Span::styled(
+                format!(
+                    " telemetry db: {}",
+                    truncate_str(
+                        &summary.db_path.display().to_string(),
+                        inner_width.saturating_sub(15)
+                    )
+                ),
+                Style::default().fg(theme.muted),
+            )));
+        }
     }
 
-    let total_patterns = state.session_patterns.len();
-    let scroll = state.patterns_scroll.min(total_patterns.saturating_sub(1));
-    let items: Vec<ListItem> = state
-        .session_patterns
-        .iter()
-        .rev()
-        .skip(scroll)
-        .take(max_lines)
-        .enumerate()
-        .map(|(i, event)| {
-            let num = total_patterns.saturating_sub(scroll + i);
-            let (label, color) = match event.kind {
-                PatternEventKind::Used => ("used", Color::Green),
-                PatternEventKind::Learned => ("new", Color::Yellow),
-            };
-            ListItem::new(Line::from(vec![
-                Span::styled(format!(" #{} ", num), Style::default().fg(color)),
-                Span::styled(format!("[{}] ", label), Style::default().fg(color)),
-                Span::styled(
-                    truncate_str(&event.title, area.width.saturating_sub(14) as usize),
-                    Style::default().fg(state.tui_theme.text),
-                ),
-            ]))
-        })
-        .collect();
-
-    let list = List::new(items).block(
-        Block::default()
-            .borders(Borders::ALL)
-            .border_style(pane_border_style(
-                focused,
-                TuiPane::PatternsLearned,
-                &state.tui_theme,
-            ))
-            .border_type(pane_border_type(focused, TuiPane::PatternsLearned))
-            .title(Span::styled(
-                title,
-                Style::default()
-                    .fg(state.tui_theme.info)
-                    .add_modifier(Modifier::BOLD),
-            )),
-    );
-    frame.render_widget(list, area);
+    let paragraph = Paragraph::new(lines).block(block);
+    frame.render_widget(paragraph, area);
 }
 
 pub(super) fn render_extensions_used(
@@ -1349,7 +1360,7 @@ pub(super) fn render_planning_status_bar(frame: &mut Frame, area: Rect, state: &
                 .bg(state.tui_theme.muted)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::raw(" patterns"),
+        Span::raw(" skills"),
     ];
 
     if state.last_orchestrator_outcome.is_some() {
