@@ -61,6 +61,17 @@ pub fn prior_artifact(stage: StageId) -> Option<&'static str> {
     }
 }
 
+// NOTE: keep predecessor_stage_map test (below) in sync. Adding a StageId variant must update both the match and the test.
+pub fn predecessor_stage(stage: StageId) -> Option<StageId> {
+    match stage {
+        StageId::Query => None,
+        StageId::Research => Some(StageId::Query),
+        StageId::Plan => Some(StageId::Research),
+        StageId::Build => Some(StageId::Plan),
+        StageId::Audit => Some(StageId::Build),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -117,5 +128,15 @@ mod tests {
         assert_eq!(prior_artifact(StageId::Plan), Some(".buildloop/research-report.md"));
         assert_eq!(prior_artifact(StageId::Build), Some(".buildloop/current-plan.md"));
         assert_eq!(prior_artifact(StageId::Audit), Some(".buildloop/build-claims.md"));
+    }
+
+    // NOTE: keep in sync with predecessor_stage above. Adding a StageId variant must be reflected here as well.
+    #[test]
+    fn predecessor_stage_map() {
+        assert_eq!(predecessor_stage(StageId::Query), None);
+        assert_eq!(predecessor_stage(StageId::Research), Some(StageId::Query));
+        assert_eq!(predecessor_stage(StageId::Plan), Some(StageId::Research));
+        assert_eq!(predecessor_stage(StageId::Build), Some(StageId::Plan));
+        assert_eq!(predecessor_stage(StageId::Audit), Some(StageId::Build));
     }
 }

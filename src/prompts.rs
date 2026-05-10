@@ -918,52 +918,70 @@ pub fn builder_direct_prompt(
     prompt_override: Option<&str>,
     task_id: &str,
     task_desc: &str,
+    inline_plan: Option<&str>,
     spec_file: &str,
     tasks_file: &str,
 ) -> String {
     if let Some(s) = prompt_override.filter(|s| !s.trim().is_empty()) {
         return s.to_string();
     }
+    let inline_plan_block = match inline_plan {
+        Some(s) if !s.trim().is_empty() => format!("\n## Inline Plan (fast-mode)\n{}\n", s),
+        _ => String::new(),
+    };
     format!(
         r#"You are the {stage_label} agent for an autonomous build loop.
 
-YOUR TASK: Implement the following task directly (no separate plan file exists for this task).
+YOUR TASK: Implement the task described below. No separate plan file exists; an inline plan follows.
 
 Task ID: {task_id}
 Task Description: {task_desc}
-
-This is a simple task — implement it directly without a plan file.
-
+{inline_plan_block}
 INSTRUCTIONS:
-1. Read {spec_file} for relevant context about the project
-2. Read {tasks_file} to understand where this task fits
-3. Look at any existing code to understand what is already built
-4. Implement the task as described above
-5. After implementation, run verification commands appropriate for the tech stack:
-   - Rust: cargo build, cargo clippy, cargo test
-   - Python: python -m py_compile, pytest
-   - Node/TS: tsc --noEmit, npm test
-   - Docker: docker compose config (syntax check only)
-6. If a verification step fails, fix the issue before finishing
+1. Read {spec_file} for project context.
+2. Read {tasks_file} to see where this task fits.
+3. Read existing relevant code.
+4. Implement the task as described above following the inline plan.
+5. Run language-appropriate verification (Rust: cargo build && cargo clippy && cargo test; Python: python3 -m py_compile && pytest; Node/TS: tsc --noEmit && npm test; Docker: docker compose config). Fix failures before finishing.
+6. AFTER all implementation and verification, write .buildloop/build-claims.md.
 
-Write your output file (build-claims.md) as your final action.
+CLAIMS FILE (.buildloop/build-claims.md):
+```
+# Build Claims -- {task_id}
 
-SUBAGENT STRATEGY:
-- Use parallel subagents for file reads and code searches — read as many files concurrently as needed
-- Use only 1 subagent for build commands, test execution, and verification steps (serialized backpressure)
-- The reasoning agent (you) stays focused on logic and decision-making; delegate I/O to subagents
+## Files Changed
+- [CREATE|MODIFY] path/to/file.ext -- one-line description of change
 
-7. AFTER all implementation and verification, write .buildloop/build-claims.md with:
-   - Files Changed (CREATE/MODIFY + path + description)
-   - Verification Results (Build/Tests/Lint: PASS/FAIL + command)
-   - Claims (checkboxes: specific verifiable statements about what was built)
-   - Gaps and Assumptions (anything you are not confident about)
+## Verification Results
+- Build: PASS|FAIL (exact command run)
+- Tests: PASS|FAIL|SKIPPED (exact command run)
+- Lint: PASS|FAIL|SKIPPED (exact command run)
 
-IMPORTANT:
-- Implement exactly what the task description says — do not add unrequested features
+## Claims
+- [ ] Claim 1: specific verifiable statement about what was built
+- [ ] Claim 2: another specific verifiable statement
+- [ ] ...
+
+## Wire-Up Evidence
+For every new function, struct field, or config field introduced in this task,
+list the EXACT call site that exercises it from production code (not tests).
+Each bullet must name a file:line and the calling function. Example:
+- src/app/build.rs:6452 calls patterns::update_used_counts(...) after each commit
+- src/config.rs:215 read by src/app/build.rs:3010 inside run_task()
+If this task adds no new functions/fields, write: "- N/A: no new public surface"
+
+## Gaps and Assumptions
+- anything you are NOT confident about
+- edge cases you did not test
+- decisions you made that deviate from the plan
+```
+
+RULES:
+- Implement exactly what the task description says -- do not add unrequested features
 - Do NOT modify {spec_file}, CLAUDE.md, or {tasks_file}
-- If a verification step fails, fix the issue before moving on
-- The claims file is your handoff to an auditor agent -- be specific, not vague
+- Do NOT read files in .buildloop/logs/
+- If a verification step fails, fix it before moving on
+- The claims file is your handoff to the auditor -- be specific, not vague
 
 PATTERN FEEDBACK:
 If any injected patterns (shown in "Known Patterns" above) helped your work,
@@ -3249,6 +3267,68 @@ mod prompt_override_tests {
     fn builder_prompt_requires_wire_up_evidence_section() {
         let p = builder_prompt("BUILD", None, "T1.6", "desc", "SPEC.md", "TASKS.md");
         assert!(p.contains("## Wire-Up Evidence"));
+        assert!(p.contains("file:line"));
+    }
+
+    #[test]
+    fn builder_direct_prompt_returns_override_when_some_non_empty() {
+        let out = builder_direct_prompt(
+            "IMPLEMENT",
+            Some("BUILD ANYTHING"),
+            "T1.1",
+            "desc",
+            None,
+            "SPEC.md",
+            "TASKS.md",
+        );
+        assert_eq!(out, "BUILD ANYTHING");
+    }
+
+    #[test]
+    fn builder_direct_prompt_includes_inline_plan_section() {
+        let plan = "1. Read SPEC.md\n2. Implement\n3. Verify";
+        let p = builder_direct_prompt(
+            "IMPLEMENT",
+            None,
+            "T1.1",
+            "desc",
+            Some(plan),
+            "SPEC.md",
+            "TASKS.md",
+        );
+        assert!(p.contains("## Inline Plan (fast-mode)"));
+        assert!(p.contains("1. Read SPEC.md"));
+    }
+
+    #[test]
+    fn builder_direct_prompt_omits_inline_plan_when_none() {
+        let p = builder_direct_prompt(
+            "IMPLEMENT",
+            None,
+            "T1.1",
+            "desc",
+            None,
+            "SPEC.md",
+            "TASKS.md",
+        );
+        assert!(!p.contains("## Inline Plan"));
+    }
+
+    #[test]
+    fn builder_direct_prompt_requires_four_build_claims_sections() {
+        let p = builder_direct_prompt(
+            "IMPLEMENT",
+            None,
+            "T1.1",
+            "desc",
+            None,
+            "SPEC.md",
+            "TASKS.md",
+        );
+        assert!(p.contains("## Files Changed"));
+        assert!(p.contains("## Verification Results"));
+        assert!(p.contains("## Wire-Up Evidence"));
+        assert!(p.contains("## Gaps and Assumptions"));
         assert!(p.contains("file:line"));
     }
 

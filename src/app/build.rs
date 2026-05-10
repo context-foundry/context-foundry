@@ -5392,6 +5392,7 @@ async fn process_task(
                 },
             );
 
+            let inline_plan = build_fast_mode_inline_plan(task_id, task_desc);
             let prompt = if skip_planner {
                 prompts::builder_direct_prompt(
                     &ctx.config.pipeline_stage_label("implement"),
@@ -5400,6 +5401,7 @@ async fn process_task(
                         .and_then(|s| s.prompt_override.as_deref()),
                     task_id,
                     task_desc,
+                    Some(inline_plan.as_str()),
                     &ctx.spec_file_prompt_path(),
                     &ctx.tasks_file_prompt_path(),
                 )
@@ -6729,6 +6731,13 @@ fn spawn_completion_hook(
             }
         }
     });
+}
+
+fn build_fast_mode_inline_plan(task_id: &str, task_desc: &str) -> String {
+    format!(
+        "Task {}: {}\n\n1. Read SPEC.md and TASKS.md for project context.\n2. Read existing relevant source files to understand the current state.\n3. Implement the change described in the Task Description above.\n4. Write .buildloop/build-claims.md with Files Changed, Verification Results, Wire-Up Evidence, and Gaps and Assumptions sections (verify per the INSTRUCTIONS section above before writing).",
+        task_id, task_desc
+    )
 }
 
 fn should_restart_docker(task_desc: &str) -> bool {

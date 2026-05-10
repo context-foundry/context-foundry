@@ -5,8 +5,8 @@ use crate::eval::checks::{
     StageCheckResult, Status,
 };
 use crate::eval::run::RunTranscripts;
-use crate::eval::stage_id::{prior_artifact, StageId};
-use crate::run_manifest::StageStatus;
+use crate::eval::stage_id::{predecessor_stage, prior_artifact, StageId};
+use crate::run_manifest::{StageInvocation, StageStatus};
 
 const ALL_STAGES: &[StageId] = &[
     StageId::Query,
@@ -379,6 +379,30 @@ impl Check for PriorArtifactReceived {
                     continue;
                 }
             };
+            let upstream = predecessor_stage(stage);
+            if let Some(up) = upstream {
+                let mut up_inv: Option<&StageInvocation> = None;
+                for (inv2, _) in run.invocations.iter() {
+                    if inv2.stage_id == Some(up) && non_superseded(inv2) {
+                        up_inv = Some(inv2);
+                    }
+                }
+                if let Some(m) = up_inv {
+                    if invocation_skip_status(m).is_some() {
+                        out.push(StageCheckResult {
+                            stage,
+                            invocation_id: inv.invocation_id,
+                            status: Status::Skip,
+                            evidence: format!(
+                                "upstream stage {:?} was skipped: {}",
+                                up,
+                                skip_evidence_for_status(m.status, &m.skip_reason)
+                            ),
+                        });
+                        continue;
+                    }
+                }
+            }
             let basename = std::path::Path::new(canonical)
                 .file_name()
                 .and_then(|n| n.to_str())
@@ -461,6 +485,30 @@ impl Check for PriorArtifactRead {
                     continue;
                 }
             };
+            let upstream = predecessor_stage(stage);
+            if let Some(up) = upstream {
+                let mut up_inv: Option<&StageInvocation> = None;
+                for (inv2, _) in run.invocations.iter() {
+                    if inv2.stage_id == Some(up) && non_superseded(inv2) {
+                        up_inv = Some(inv2);
+                    }
+                }
+                if let Some(m) = up_inv {
+                    if invocation_skip_status(m).is_some() {
+                        out.push(StageCheckResult {
+                            stage,
+                            invocation_id: inv.invocation_id,
+                            status: Status::Skip,
+                            evidence: format!(
+                                "upstream stage {:?} was skipped: {}",
+                                up,
+                                skip_evidence_for_status(m.status, &m.skip_reason)
+                            ),
+                        });
+                        continue;
+                    }
+                }
+            }
             let basename = std::path::Path::new(canonical)
                 .file_name()
                 .and_then(|n| n.to_str())
@@ -1007,6 +1055,124 @@ mod tests {
         let r = latest_run(&bl).unwrap();
         let results = run_check(PriorArtifactRead, &r);
         assert_eq!(results[0].status, Status::Fail);
+    }
+
+    #[test]
+    fn prior_artifact_received_skips_when_upstream_stage_skipped() {
+        let tmp = TempDir::new().unwrap();
+        let bl = make_buildloop(&tmp);
+        let h = ManifestHandle::new(&bl, "T1.1", Utc::now());
+        h.record_skip(
+            StageId::Plan,
+            AgentRole::Planner,
+            StageStatus::Skipped,
+            "fast_mode".to_string(),
+            None,
+        );
+        let id = h.record_invocation(empty_spec(StageId::Build, AgentRole::Builder, "sys", "user"));
+        h.record_exit(id, StageStatus::Ran, Utc::now(), AgentExitInfo::default());
+        h.flush().unwrap();
+        let r = latest_run(&bl).unwrap();
+        let results = run_check(PriorArtifactReceived, &r);
+        let build = results
+            .iter()
+            .find(|r| r.stage == StageId::Build)
+            .expect("build result");
+        assert_eq!(build.status, Status::Skip);
+        assert!(build.evidence.contains("upstream stage"));
+        assert!(build.evidence.contains("Plan"));
+    }
+
+    #[test]
+    fn prior_artifact_received_skips_when_upstream_stage_reused() {
+        let tmp = TempDir::new().unwrap();
+        let bl = make_buildloop(&tmp);
+        let h = ManifestHandle::new(&bl, "T1.1", Utc::now());
+        h.record_skip(
+            StageId::Plan,
+            AgentRole::Planner,
+            StageStatus::Reused,
+            "reused".to_string(),
+            None,
+        );
+        let id = h.record_invocation(empty_spec(StageId::Build, AgentRole::Builder, "sys", "user"));
+        h.record_exit(id, StageStatus::Ran, Utc::now(), AgentExitInfo::default());
+        h.flush().unwrap();
+        let r = latest_run(&bl).unwrap();
+        let results = run_check(PriorArtifactReceived, &r);
+        let build = results
+            .iter()
+            .find(|r| r.stage == StageId::Build)
+            .expect("build result");
+        assert_eq!(build.status, Status::Skip);
+        assert!(build.evidence.contains("upstream stage"));
+    }
+
+    #[test]
+    fn prior_artifact_received_passes_when_upstream_stage_ran_and_artifact_present() {
+        let tmp = TempDir::new().unwrap();
+        let bl = make_buildloop(&tmp);
+        let h = ManifestHandle::new(&bl, "T1.1", Utc::now());
+        let plan_id =
+            h.record_invocation(empty_spec(StageId::Plan, AgentRole::Planner, "sys", "user"));
+        h.record_exit(
+            plan_id,
+            StageStatus::Ran,
+            Utc::now(),
+            AgentExitInfo::default(),
+        );
+        let user = "see current-plan.md please";
+        let mut spec = empty_spec(StageId::Build, AgentRole::Builder, "sys", user);
+        spec.prior_artifact_paths = vec![PathBuf::from(".buildloop/current-plan.md")];
+        let id = h.record_invocation(spec);
+        h.record_exit(id, StageStatus::Ran, Utc::now(), AgentExitInfo::default());
+        h.flush().unwrap();
+        let r = latest_run(&bl).unwrap();
+        let results = run_check(PriorArtifactReceived, &r);
+        let build = results
+            .iter()
+            .find(|r| r.stage == StageId::Build)
+            .expect("build result");
+        assert_eq!(build.status, Status::Pass);
+    }
+
+    #[test]
+    fn prior_artifact_read_skips_when_upstream_stage_skipped() {
+        let tmp = TempDir::new().unwrap();
+        let bl = make_buildloop(&tmp);
+        let log_path = bl.join("PLAN-20260507-000010.jsonl");
+        fs::write(&log_path, FIXTURE).unwrap();
+        let h = ManifestHandle::new(&bl, "T1.1", Utc::now());
+        h.record_skip(
+            StageId::Plan,
+            AgentRole::Planner,
+            StageStatus::Skipped,
+            "fast_mode".to_string(),
+            None,
+        );
+        let mut spec = empty_spec(StageId::Build, AgentRole::Builder, "sys", "user");
+        spec.prior_artifact_paths = vec![PathBuf::from(".buildloop/current-plan.md")];
+        let id = h.record_invocation(spec);
+        h.record_exit(
+            id,
+            StageStatus::Ran,
+            Utc::now(),
+            AgentExitInfo {
+                log_path: Some(log_path),
+                actual_provider: "claude".to_string(),
+                actual_model: String::new(),
+                fallback_reason: None,
+            },
+        );
+        h.flush().unwrap();
+        let r = latest_run(&bl).unwrap();
+        let results = run_check(PriorArtifactRead, &r);
+        let build = results
+            .iter()
+            .find(|r| r.stage == StageId::Build)
+            .expect("build result");
+        assert_eq!(build.status, Status::Skip);
+        assert!(build.evidence.contains("upstream stage"));
     }
 
     #[test]
