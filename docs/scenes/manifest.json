@@ -697,6 +697,16 @@
       "model": "gpt-4o-mini",
       "lines": 80,
       "generation": 70
+    },
+    {
+      "file": "deprecated-mine-shaft.js",
+      "name": "Deprecated Mine Shaft",
+      "location": "Wieliczka Salt Mine, Krakow, Poland",
+      "biome": "underground",
+      "generated": "2026-05-10T17:15:45.596Z",
+      "model": "gpt-4o-mini",
+      "lines": 99,
+      "generation": 71
     }
   ]
 }

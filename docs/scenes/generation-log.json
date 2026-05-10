@@ -1142,5 +1142,32 @@
     "retries": 0,
     "api_retries": 0,
     "validation": "pass"
+  },
+  {
+    "ts": "2026-05-10T17:15:14.807Z",
+    "scene": "sudo-rm-rf-winter.js",
+    "seed_id": "sudo-rm-rf-winter",
+    "biome": "arctic",
+    "model": "gpt-4o-mini",
+    "input_tokens": 16288,
+    "output_tokens": 1388,
+    "cost_usd": 0.0033,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "fail",
+    "error": "Validation failed after 2 attempts: VALIDATION FAILED (2 errors):\n- Too short: 74 lines (min 80)\n- Insufficient animation: found 1 animation patterns (need 2+). Use osc(t,period,phase), Math.sin(t*speed), or Math.cos(t*speed) for time-based animation"
+  },
+  {
+    "ts": "2026-05-10T17:15:45.596Z",
+    "scene": "deprecated-mine-shaft.js",
+    "seed_id": "deprecated-mine-shaft",
+    "biome": "underground",
+    "model": "gpt-4o-mini",
+    "input_tokens": 14860,
+    "output_tokens": 1743,
+    "cost_usd": 0.0033,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "pass"
   }
 ]
