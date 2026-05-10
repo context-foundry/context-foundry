@@ -1210,5 +1210,46 @@
     "retries": 1,
     "api_retries": 0,
     "validation": "pass"
+  },
+  {
+    "ts": "2026-05-10T21:08:08.220Z",
+    "scene": "recursive-ridgeline.js",
+    "seed_id": "recursive-ridgeline",
+    "biome": "mountain",
+    "model": "gpt-4o-mini",
+    "input_tokens": 16294,
+    "output_tokens": 1433,
+    "cost_usd": 0.0033,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "fail",
+    "error": "Validation failed after 2 attempts: VALIDATION FAILED (1 error):\n- Too short: 74 lines (min 80)"
+  },
+  {
+    "ts": "2026-05-10T21:08:33.584Z",
+    "scene": "cold-storage-solutions.js",
+    "seed_id": "cold-storage-solutions",
+    "biome": "arctic",
+    "model": "gpt-4o-mini",
+    "input_tokens": 16286,
+    "output_tokens": 1494,
+    "cost_usd": 0.0033,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "fail",
+    "error": "Validation failed after 2 attempts: VALIDATION FAILED (1 error):\n- Too short: 72 lines (min 80)"
+  },
+  {
+    "ts": "2026-05-10T21:09:05.610Z",
+    "scene": "epoch-timestamp-desert.js",
+    "seed_id": "epoch-timestamp-desert",
+    "biome": "desert",
+    "model": "gpt-4o-mini",
+    "input_tokens": 16276,
+    "output_tokens": 1830,
+    "cost_usd": 0.0035,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "pass"
   }
 ]
