@@ -145,6 +145,47 @@ pub fn skill_to_pattern(s: SkillFile) -> Pattern {
     }
 }
 
+pub fn match_skills_for_stage<'a>(skills: &'a [SkillFile], stage: &str) -> Vec<&'a SkillFile> {
+    let stage_lc = stage.trim().to_lowercase();
+    skills
+        .iter()
+        .filter(|s| {
+            let cf = s.frontmatter.cf_stage.trim().to_lowercase();
+            cf == stage_lc || cf == "both" || cf.is_empty()
+        })
+        .collect()
+}
+
+pub fn format_skills_for_prompt(skills: &[&SkillFile], max_skills: usize) -> String {
+    if skills.is_empty() {
+        return String::new();
+    }
+    let limit = if max_skills == 0 { 10 } else { max_skills };
+    let mut out = String::from("\n\n---\n## Available Skills (decide which to apply)\n\n");
+    for (i, s) in skills.iter().take(limit).enumerate() {
+        out.push_str(&format!(
+            "### {}. {} [cf-stage: {}]\n",
+            i + 1,
+            s.frontmatter.name,
+            s.frontmatter.cf_stage
+        ));
+        if !s.frontmatter.description.is_empty() {
+            out.push_str(&format!(
+                "**Description:** {}\n",
+                s.frontmatter.description
+            ));
+        }
+        if !s.frontmatter.cf_keywords.is_empty() {
+            out.push_str(&format!(
+                "**Keywords:** {}\n",
+                s.frontmatter.cf_keywords.join(", ")
+            ));
+        }
+        out.push('\n');
+    }
+    out
+}
+
 fn extract_issue_from_body(body: &str) -> Option<String> {
     let marker = body.find("## Issue")?;
     let after_marker = &body[marker..];
@@ -679,5 +720,80 @@ mod tests {
         let sf = parse_skill_file("", raw).expect("parse");
         let p = skill_to_pattern(sf);
         assert_eq!(p.pattern_id, "only-name");
+    }
+
+    fn make_skill(name: &str, cf_stage: &str) -> SkillFile {
+        SkillFile {
+            dir_name: name.to_string(),
+            frontmatter: SkillFrontmatter {
+                name: name.to_string(),
+                description: String::new(),
+                cf_stage: cf_stage.to_string(),
+                cf_citations_pass: 0,
+                cf_citations_wip: 0,
+                cf_last_used: None,
+                cf_frequency: 0,
+                cf_severity: None,
+                cf_keywords: Vec::new(),
+            },
+            body: String::new(),
+        }
+    }
+
+    #[test]
+    fn match_skills_for_stage_filters_planner() {
+        let skills = vec![
+            make_skill("a", "planner"),
+            make_skill("b", "reviewer"),
+            make_skill("c", "both"),
+        ];
+        let result = match_skills_for_stage(&skills, "planner");
+        assert_eq!(result.len(), 2);
+        let names: Vec<&str> = result
+            .iter()
+            .map(|s| s.frontmatter.name.as_str())
+            .collect();
+        assert!(names.contains(&"a"));
+        assert!(names.contains(&"c"));
+    }
+
+    #[test]
+    fn match_skills_for_stage_keeps_empty_stage() {
+        let skills = vec![make_skill("a", "")];
+        let result = match_skills_for_stage(&skills, "reviewer");
+        assert_eq!(result.len(), 1);
+    }
+
+    #[test]
+    fn format_skills_for_prompt_lists_name_description_keywords() {
+        let skill = SkillFile {
+            dir_name: "sample".to_string(),
+            frontmatter: SkillFrontmatter {
+                name: "sample".to_string(),
+                description: "does X".to_string(),
+                cf_stage: "planner".to_string(),
+                cf_citations_pass: 0,
+                cf_citations_wip: 0,
+                cf_last_used: None,
+                cf_frequency: 0,
+                cf_severity: None,
+                cf_keywords: vec!["a".to_string(), "b".to_string()],
+            },
+            body: String::new(),
+        };
+        let refs: Vec<&SkillFile> = vec![&skill];
+        let out = format_skills_for_prompt(&refs, 10);
+        assert!(out.contains("## Available Skills"));
+        assert!(out.contains("sample"));
+        assert!(out.contains("does X"));
+        assert!(out.contains("a, b"));
+        assert!(out.contains("cf-stage: planner"));
+    }
+
+    #[test]
+    fn format_skills_for_prompt_returns_empty_when_no_skills() {
+        let empty: Vec<&SkillFile> = Vec::new();
+        let out = format_skills_for_prompt(&empty, 10);
+        assert_eq!(out, "");
     }
 }

@@ -31,6 +31,8 @@ use crate::eval::stage_id::{self as eval_stage_id, StageId};
 use crate::extensions;
 use crate::observatory::{self, AgentUsage, ObservatoryEvent};
 use crate::orchestrator::{self, OrchestratorConfig};
+use crate::skills;
+use crate::skills_telemetry;
 use crate::run_manifest::{
     AgentExitInfo, ArtifactSource, CompletionPath, PromptEvidenceSpec, StageStatus,
 };
@@ -612,22 +614,6 @@ fn spawn_lookahead_planner(
         let all_patterns = patterns::load_patterns(&patterns_dir);
 
         let detected_stack = patterns::detect_project_tech_stack(&ctx.project_dir);
-        let matched = if ctx.config.semantic_match_enabled {
-            let keyword_scores =
-                patterns::keyword_scores(&all_patterns, &task_desc, &detected_stack);
-            let (scored, _result) = crate::embeddings::match_patterns_semantic(
-                &all_patterns,
-                &task_desc,
-                &ctx.config.embedding_model,
-                ctx.config.embedding_timeout_ms,
-                &keyword_scores,
-                &ctx.config.ollama_url,
-            )
-            .await;
-            scored.into_iter().map(|(p, _)| p).collect::<Vec<_>>()
-        } else {
-            patterns::match_patterns(&all_patterns, &task_desc, &detected_stack)
-        };
 
         let lookahead_complexity = complexity::classify_task(&task_desc);
         let lookahead_pattern_count = patterns::scaled_injection_count(
@@ -635,8 +621,32 @@ fn spawn_lookahead_planner(
             ctx.config.max_pattern_injection,
             ctx.config.min_pattern_injection,
         );
-        let pattern_context =
-            patterns::format_patterns_for_prompt(&matched, "planner", lookahead_pattern_count);
+
+        let skills_dir_lookahead = skills::resolve_skills_dir("~/.foundry/skills");
+        let all_skills_lookahead = skills::load_skills(&skills_dir_lookahead);
+        let pattern_context = if !all_skills_lookahead.is_empty() {
+            let stage_skills =
+                skills::match_skills_for_stage(&all_skills_lookahead, "planner");
+            skills::format_skills_for_prompt(&stage_skills, lookahead_pattern_count)
+        } else {
+            let m = if ctx.config.semantic_match_enabled {
+                let keyword_scores =
+                    patterns::keyword_scores(&all_patterns, &task_desc, &detected_stack);
+                let (scored, _result) = crate::embeddings::match_patterns_semantic(
+                    &all_patterns,
+                    &task_desc,
+                    &ctx.config.embedding_model,
+                    ctx.config.embedding_timeout_ms,
+                    &keyword_scores,
+                    &ctx.config.ollama_url,
+                )
+                .await;
+                scored.into_iter().map(|(p, _)| p).collect::<Vec<_>>()
+            } else {
+                patterns::match_patterns(&all_patterns, &task_desc, &detected_stack)
+            };
+            patterns::format_patterns_for_prompt(&m, "planner", lookahead_pattern_count)
+        };
 
         let prompt = prompts::planner_lookahead_prompt(
             &ctx.config.pipeline_stage_label("plan"),
@@ -3310,27 +3320,6 @@ async fn process_task(
     );
 
     let detected_stack = patterns::detect_project_tech_stack(&ctx.project_dir);
-    let matched = if ctx.config.semantic_match_enabled {
-        let keyword_scores = patterns::keyword_scores(cached_patterns, task_desc, &detected_stack);
-        let (scored, result) = crate::embeddings::match_patterns_semantic(
-            cached_patterns,
-            task_desc,
-            &ctx.config.embedding_model,
-            ctx.config.embedding_timeout_ms,
-            &keyword_scores,
-            &ctx.config.ollama_url,
-        )
-        .await;
-        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-            "Pattern matching ({}): cache {}/{} hit",
-            result.mode,
-            result.cache_hits,
-            result.cache_hits + result.cache_misses
-        ))));
-        scored.into_iter().map(|(p, _)| p).collect::<Vec<_>>()
-    } else {
-        patterns::match_patterns(cached_patterns, task_desc, &detected_stack)
-    };
 
     let effective_pattern_count = patterns::scaled_injection_count(
         task_complexity,
@@ -3338,10 +3327,52 @@ async fn process_task(
         ctx.config.min_pattern_injection,
     );
 
-    let pattern_context =
-        patterns::format_patterns_for_prompt(&matched, "planner", effective_pattern_count);
-    let reviewer_pattern_context =
-        patterns::format_patterns_for_prompt(&matched, "reviewer", effective_pattern_count);
+    let skills_dir_main = skills::resolve_skills_dir("~/.foundry/skills");
+    let all_skills_main = skills::load_skills(&skills_dir_main);
+
+    let (matched, pattern_context, reviewer_pattern_context) = if !all_skills_main.is_empty() {
+        let planner_skills =
+            skills::match_skills_for_stage(&all_skills_main, "planner");
+        let reviewer_skills =
+            skills::match_skills_for_stage(&all_skills_main, "reviewer");
+        let planner_text =
+            skills::format_skills_for_prompt(&planner_skills, effective_pattern_count);
+        let reviewer_text =
+            skills::format_skills_for_prompt(&reviewer_skills, effective_pattern_count);
+        (
+            Vec::<&patterns::Pattern>::new(),
+            planner_text,
+            reviewer_text,
+        )
+    } else {
+        let m = if ctx.config.semantic_match_enabled {
+            let keyword_scores =
+                patterns::keyword_scores(cached_patterns, task_desc, &detected_stack);
+            let (scored, result) = crate::embeddings::match_patterns_semantic(
+                cached_patterns,
+                task_desc,
+                &ctx.config.embedding_model,
+                ctx.config.embedding_timeout_ms,
+                &keyword_scores,
+                &ctx.config.ollama_url,
+            )
+            .await;
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                "Pattern matching ({}): cache {}/{} hit",
+                result.mode,
+                result.cache_hits,
+                result.cache_hits + result.cache_misses
+            ))));
+            scored.into_iter().map(|(p, _)| p).collect::<Vec<_>>()
+        } else {
+            patterns::match_patterns(cached_patterns, task_desc, &detected_stack)
+        };
+        let planner_text =
+            patterns::format_patterns_for_prompt(&m, "planner", effective_pattern_count);
+        let reviewer_text =
+            patterns::format_patterns_for_prompt(&m, "reviewer", effective_pattern_count);
+        (m, planner_text, reviewer_text)
+    };
 
     if !matched.is_empty() {
         let actually_injected = matched.len().min(effective_pattern_count);
@@ -6393,7 +6424,6 @@ async fn process_task(
     // Scan build artifacts for pattern citations to track usefulness.
     // Recorded for both PASS and WIP runs so the success-rate ranker can learn.
     let mut all_cited_by_role: Vec<(String, String)> = Vec::new();
-    let mut all_cited: Vec<String> = Vec::new();
     if !injected_pattern_ids.is_empty() {
         let injected_refs: Vec<patterns::Pattern> = cached_patterns
             .iter()
@@ -6433,58 +6463,113 @@ async fn process_task(
                 }
             }
         }
+    }
 
-        all_cited = {
-            let mut v: Vec<String> = all_cited_by_role.iter().map(|(pid, _)| pid.clone()).collect();
-            v.sort();
-            v.dedup();
-            v
+    // Skill citation scan: independent of injected_pattern_ids because skill
+    // discovery does not pre-select skills -- the agent decides which to use.
+    {
+        let skills_dir_cite = skills::resolve_skills_dir("~/.foundry/skills");
+        let all_skills_for_cite = skills::load_skills(&skills_dir_cite);
+        if !all_skills_for_cite.is_empty() {
+            let skill_patterns: Vec<patterns::Pattern> = all_skills_for_cite
+                .into_iter()
+                .map(skills::skill_to_pattern)
+                .collect();
+            let artifacts_to_scan: Vec<(std::path::PathBuf, &str)> = vec![
+                (ctx.buildloop_dir.join("current-plan.md"), "Planner"),
+                (ctx.buildloop_dir.join("build-claims.md"), "Builder"),
+                (ctx.buildloop_dir.join("review-report.md"), "Reviewer"),
+            ];
+            for (artifact_path, role) in &artifacts_to_scan {
+                if let Ok(content) = std::fs::read_to_string(artifact_path) {
+                    if !content.is_empty() {
+                        let cited = patterns::scan_citations(&content, &skill_patterns);
+                        for pid in cited {
+                            all_cited_by_role.push((pid, role.to_lowercase()));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let all_cited: Vec<String> = {
+        let mut v: Vec<String> = all_cited_by_role.iter().map(|(pid, _)| pid.clone()).collect();
+        v.sort();
+        v.dedup();
+        v
+    };
+
+    if !all_cited.is_empty() {
+        let outcome = if validated {
+            patterns::CommitOutcome::Pass
+        } else {
+            patterns::CommitOutcome::Wip
         };
-
-        if !all_cited.is_empty() {
-            let outcome = if validated {
-                patterns::CommitOutcome::Pass
-            } else {
-                patterns::CommitOutcome::Wip
-            };
-            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                "Pattern citations: {} patterns referenced by agents (outcome: {:?})",
-                all_cited.len(),
-                outcome
-            ))));
-            match patterns::update_used_counts(patterns_dir, &all_cited_by_role, outcome) {
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+            "Pattern citations: {} patterns referenced by agents (outcome: {:?})",
+            all_cited.len(),
+            outcome
+        ))));
+        let telemetry_path = skills_telemetry::db_path();
+        match skills_telemetry::open_db(&telemetry_path) {
+            Ok(mut conn) => match skills_telemetry::record_citations_batch(
+                &mut conn,
+                &all_cited_by_role,
+                outcome,
+            ) {
                 Ok(n) => {
                     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                        "Pattern store updated: {} pattern(s) updated in global store",
+                        "Skill telemetry: {} skill(s) updated in sidecar DB",
                         n
                     ))));
                 }
                 Err(e) => {
                     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                        "Warning: failed to update pattern used_counts: {}",
+                        "Warning: failed to record skill telemetry: {}",
                         e
                     ))));
                 }
+            },
+            Err(e) => {
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                    "Warning: failed to open skill telemetry DB: {}",
+                    e
+                ))));
             }
-            let ext_infos = extensions::discover_extensions(&ctx.project_dir);
-            for ext_name in &ctx.config.extensions {
-                if let Some(ext) = ext_infos.iter().find(|e| &e.name == ext_name) {
-                    if let Some(ref pdir) = ext.patterns_dir {
-                        match patterns::update_used_counts(pdir, &all_cited_by_role, outcome) {
-                            Ok(n) if n > 0 => {
-                                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                                    "Pattern store updated: {} pattern(s) updated in extension '{}'",
-                                    n, ext_name
-                                ))));
-                            }
-                            Err(e) => {
-                                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                                    "Warning: failed to update pattern used_counts for extension '{}': {}",
-                                    ext_name, e
-                                ))));
-                            }
-                            _ => {}
+        }
+        match patterns::update_used_counts(patterns_dir, &all_cited_by_role, outcome) {
+            Ok(n) => {
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                    "Pattern store updated: {} pattern(s) updated in global store",
+                    n
+                ))));
+            }
+            Err(e) => {
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                    "Warning: failed to update pattern used_counts: {}",
+                    e
+                ))));
+            }
+        }
+        let ext_infos = extensions::discover_extensions(&ctx.project_dir);
+        for ext_name in &ctx.config.extensions {
+            if let Some(ext) = ext_infos.iter().find(|e| &e.name == ext_name) {
+                if let Some(ref pdir) = ext.patterns_dir {
+                    match patterns::update_used_counts(pdir, &all_cited_by_role, outcome) {
+                        Ok(n) if n > 0 => {
+                            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                                "Pattern store updated: {} pattern(s) updated in extension '{}'",
+                                n, ext_name
+                            ))));
                         }
+                        Err(e) => {
+                            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                                "Warning: failed to update pattern used_counts for extension '{}': {}",
+                                ext_name, e
+                            ))));
+                        }
+                        _ => {}
                     }
                 }
             }

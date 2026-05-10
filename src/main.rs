@@ -23,6 +23,7 @@ mod observatory;
 mod orchestrator;
 mod patterns;
 mod skills;
+mod skills_telemetry;
 mod prompts;
 mod review_pr;
 mod run_manifest;

@@ -7,6 +7,7 @@ use tokio::sync::mpsc;
 
 use crate::agent::{self, AgentOutputEvent, AgentRole};
 use crate::config::Config;
+use crate::skills;
 use crate::{patterns, prompts, task};
 
 use super::context::RunContext;
@@ -367,6 +368,12 @@ pub(super) async fn run_plan_mode(project_dir: &Path, max_iterations: u64) -> Re
 }
 
 fn load_gap_analysis_pattern_context(ctx: &RunContext) -> String {
+    let skills_dir = skills::resolve_skills_dir("~/.foundry/skills");
+    let all_skills = skills::load_skills(&skills_dir);
+    if !all_skills.is_empty() {
+        let planner_skills = skills::match_skills_for_stage(&all_skills, "planner");
+        return skills::format_skills_for_prompt(&planner_skills, ctx.config.max_pattern_injection);
+    }
     let patterns_dir = patterns::resolve_patterns_dir(&ctx.config.patterns_dir);
     let all_patterns = patterns::load_patterns(&patterns_dir);
     if all_patterns.is_empty() {
