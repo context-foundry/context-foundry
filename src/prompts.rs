@@ -2110,10 +2110,47 @@ pub fn stage_summary_prompt(
     artifacts: &[(String, String)],
     log_tail: &str,
 ) -> String {
+    match stage {
+        "query" => stage_summary_prompt_query(state, artifacts, log_tail),
+        "research" => stage_summary_prompt_research(state, artifacts, log_tail),
+        "plan" => stage_summary_prompt_plan(state, artifacts, log_tail),
+        "plan-review" => stage_summary_prompt_plan_review(state, artifacts, log_tail),
+        "implement" => stage_summary_prompt_build(state, artifacts, log_tail),
+        "doubt" => stage_summary_prompt_audit(state, artifacts, log_tail),
+        "ship" => stage_summary_prompt_ship(state, artifacts, log_tail),
+        "discover" => stage_summary_prompt_discover(state, artifacts, log_tail),
+        _ => {
+            let mut out = String::with_capacity(2048);
+            out.push_str(&format!(
+                "Pipeline stage: {}\nCurrent state: {}\n\n",
+                stage,
+                state.as_str()
+            ));
+            for (label, body) in artifacts {
+                out.push_str(&format!("=== {} ===\n{}\n", label, body));
+            }
+            if !log_tail.is_empty() {
+                out.push_str(&format!("=== recent log ===\n{}\n", log_tail));
+            }
+            out.push_str(
+                "\nWrite a 4-8-sentence friendly-but-technical summary of what this stage is doing right now. \
+                 Lead with the current state, then cite specific findings, iteration counts, file paths, or \
+                 error messages from the artifacts above. Cap output at 500 tokens. Plain text only, no \
+                 markdown headers.",
+            );
+            out
+        }
+    }
+}
+
+pub fn stage_summary_prompt_query(
+    state: &StageState,
+    artifacts: &[(String, String)],
+    log_tail: &str,
+) -> String {
     let mut out = String::with_capacity(2048);
     out.push_str(&format!(
-        "Pipeline stage: {}\nCurrent state: {}\n\n",
-        stage,
+        "Pipeline stage: QUERY (clarifying questions)\nCurrent state: {}\n\n",
         state.as_str()
     ));
     for (label, body) in artifacts {
@@ -2123,10 +2160,196 @@ pub fn stage_summary_prompt(
         out.push_str(&format!("=== recent log ===\n{}\n", log_tail));
     }
     out.push_str(
-        "\nWrite a 4-8-sentence friendly-but-technical summary of what this stage is doing right now. \
-         Lead with the current state, then cite specific findings, iteration counts, file paths, or \
-         error messages from the artifacts above. Cap output at 500 tokens. Plain text only, no \
-         markdown headers.",
+        "\nWrite a 4-8-sentence friendly-but-technical summary of the QUERY stage. \
+         List the structured questions the agent has produced (or will produce), \
+         explicitly call out which questions are marked HIGH priority, and note any \
+         questions still unanswered. If the questions.md artifact is empty or missing, \
+         say so plainly and explain that QUERY emits structured clarifying questions \
+         before research starts. Cap output at 500 tokens. Plain text only, no markdown headers.",
+    );
+    out
+}
+
+pub fn stage_summary_prompt_research(
+    state: &StageState,
+    artifacts: &[(String, String)],
+    log_tail: &str,
+) -> String {
+    let mut out = String::with_capacity(2048);
+    out.push_str(&format!(
+        "Pipeline stage: RESEARCH (codebase investigation)\nCurrent state: {}\n\n",
+        state.as_str()
+    ));
+    for (label, body) in artifacts {
+        out.push_str(&format!("=== {} ===\n{}\n", label, body));
+    }
+    if !log_tail.is_empty() {
+        out.push_str(&format!("=== recent log ===\n{}\n", log_tail));
+    }
+    out.push_str(
+        "\nWrite a 4-8-sentence friendly-but-technical summary of the RESEARCH stage. \
+         Lead with the tech stack detected and the two or three highest-risk findings \
+         from the research-report.md artifact above. Name specific file paths the \
+         researcher inspected. If research-report.md is empty or missing, say so plainly \
+         and explain that RESEARCH writes the report consumed by PLAN. Cap output at 500 \
+         tokens. Plain text only, no markdown headers.",
+    );
+    out
+}
+
+pub fn stage_summary_prompt_plan(
+    state: &StageState,
+    artifacts: &[(String, String)],
+    log_tail: &str,
+) -> String {
+    let mut out = String::with_capacity(2048);
+    out.push_str(&format!(
+        "Pipeline stage: PLAN (implementation plan)\nCurrent state: {}\n\n",
+        state.as_str()
+    ));
+    for (label, body) in artifacts {
+        out.push_str(&format!("=== {} ===\n{}\n", label, body));
+    }
+    if !log_tail.is_empty() {
+        out.push_str(&format!("=== recent log ===\n{}\n", log_tail));
+    }
+    out.push_str(
+        "\nWrite a 4-8-sentence friendly-but-technical summary of the PLAN stage. \
+         List the file operations the plan calls for (CREATE vs MODIFY counts, key file \
+         paths) and the verification commands declared (build, lint, test, smoke). Note \
+         whether the plan uses phased verification. If current-plan.md is empty or missing, \
+         say so plainly. Cap output at 500 tokens. Plain text only, no markdown headers.",
+    );
+    out
+}
+
+pub fn stage_summary_prompt_plan_review(
+    state: &StageState,
+    artifacts: &[(String, String)],
+    log_tail: &str,
+) -> String {
+    let mut out = String::with_capacity(2048);
+    out.push_str(&format!(
+        "Pipeline stage: PLAN-REVIEW (P+)\nCurrent state: {}\n\n",
+        state.as_str()
+    ));
+    for (label, body) in artifacts {
+        out.push_str(&format!("=== {} ===\n{}\n", label, body));
+    }
+    if !log_tail.is_empty() {
+        out.push_str(&format!("=== recent log ===\n{}\n", log_tail));
+    }
+    out.push_str(
+        "\nWrite a 4-8-sentence friendly-but-technical summary of what P+ is doing right now. \
+         Lead with the current state, then cite specific findings, iteration counts, file \
+         paths, or error messages from the artifacts above. Cap output at 500 tokens. Plain \
+         text only, no markdown headers.",
+    );
+    out
+}
+
+pub fn stage_summary_prompt_build(
+    state: &StageState,
+    artifacts: &[(String, String)],
+    log_tail: &str,
+) -> String {
+    let mut out = String::with_capacity(2048);
+    out.push_str(&format!(
+        "Pipeline stage: BUILD (implementation)\nCurrent state: {}\n\n",
+        state.as_str()
+    ));
+    for (label, body) in artifacts {
+        out.push_str(&format!("=== {} ===\n{}\n", label, body));
+    }
+    if !log_tail.is_empty() {
+        out.push_str(&format!("=== recent log ===\n{}\n", log_tail));
+    }
+    out.push_str(
+        "\nWrite a 4-8-sentence friendly-but-technical summary of the BUILD stage. From \
+         build-claims.md call out the DELTA_MANIFEST (counts and file paths), the \
+         VERIFICATION_MATRIX results (PASS/FAIL counts), and any KNOWN_GAPS the builder \
+         flagged. If build-claims.md is empty or missing, say so plainly. Cap output at 500 \
+         tokens. Plain text only, no markdown headers.",
+    );
+    out
+}
+
+pub fn stage_summary_prompt_audit(
+    state: &StageState,
+    artifacts: &[(String, String)],
+    log_tail: &str,
+) -> String {
+    let mut out = String::with_capacity(2048);
+    out.push_str(&format!(
+        "Pipeline stage: AUDIT (doubt)\nCurrent state: {}\n\n",
+        state.as_str()
+    ));
+    for (label, body) in artifacts {
+        out.push_str(&format!("=== {} ===\n{}\n", label, body));
+    }
+    if !log_tail.is_empty() {
+        out.push_str(&format!("=== recent log ===\n{}\n", log_tail));
+    }
+    out.push_str(
+        "\nWrite a 4-8-sentence friendly-but-technical summary of the AUDIT stage. From \
+         review-report.md bucket findings by severity (HIGH / MEDIUM / LOW), state which \
+         ones the auditor fixed in place and which remain open, and name the most important \
+         file:line citations. If review-report.md is empty or missing, say so plainly. Cap \
+         output at 500 tokens. Plain text only, no markdown headers.",
+    );
+    out
+}
+
+pub fn stage_summary_prompt_ship(
+    state: &StageState,
+    artifacts: &[(String, String)],
+    log_tail: &str,
+) -> String {
+    let mut out = String::with_capacity(2048);
+    out.push_str(&format!(
+        "Pipeline stage: SHIP (git commit / push)\nCurrent state: {}\n\n",
+        state.as_str()
+    ));
+    for (label, body) in artifacts {
+        out.push_str(&format!("=== {} ===\n{}\n", label, body));
+    }
+    if !log_tail.is_empty() {
+        out.push_str(&format!("=== recent log ===\n{}\n", log_tail));
+    }
+    out.push_str(
+        "\nWrite a 4-8-sentence friendly-but-technical summary of the SHIP stage. Cite the \
+         most recent commit subject and sha if present (from the recent log block above), \
+         state whether the working tree is clean or dirty, and note whether a push has \
+         occurred in this session. If the recent log block is empty, say plainly that no \
+         work has been shipped to git in this session. Cap output at 500 tokens. Plain text \
+         only, no markdown headers.",
+    );
+    out
+}
+
+pub fn stage_summary_prompt_discover(
+    state: &StageState,
+    artifacts: &[(String, String)],
+    log_tail: &str,
+) -> String {
+    let mut out = String::with_capacity(2048);
+    out.push_str(&format!(
+        "Pipeline stage: DISCOVER (new task proposals)\nCurrent state: {}\n\n",
+        state.as_str()
+    ));
+    for (label, body) in artifacts {
+        out.push_str(&format!("=== {} ===\n{}\n", label, body));
+    }
+    if !log_tail.is_empty() {
+        out.push_str(&format!("=== recent log ===\n{}\n", log_tail));
+    }
+    out.push_str(
+        "\nWrite a 4-8-sentence friendly-but-technical summary of the DISCOVER stage. From \
+         the tail of TASKS.md provided above, identify any 'Discovery Round N' section that \
+         has been added in this session, list the new task IDs proposed, and summarise the \
+         reasons (bug class, gap, missing feature). If no Discovery Round section is \
+         present, say plainly that discovery has not run yet OR found no new work. Cap \
+         output at 500 tokens. Plain text only, no markdown headers.",
     );
     out
 }
@@ -3365,5 +3588,136 @@ mod prompt_override_tests {
     fn research_prompt_returns_override_when_some_non_empty() {
         let out = research_prompt("RESEARCH", Some("CUSTOM RESEARCH"));
         assert_eq!(out, "CUSTOM RESEARCH");
+    }
+
+    fn artifacts_fixture() -> Vec<(String, String)> {
+        vec![("artifact.md".to_string(), "body".to_string())]
+    }
+
+    fn assert_common_scaffolding(prompt: &str) {
+        assert!(
+            prompt.contains("Pipeline stage:"),
+            "missing pipeline-stage header: {}",
+            prompt
+        );
+        assert!(
+            prompt.contains("running"),
+            "missing state string 'running': {}",
+            prompt
+        );
+        assert!(
+            prompt.contains("=== artifact.md ==="),
+            "missing artifact label: {}",
+            prompt
+        );
+        assert!(
+            prompt.contains("=== recent log ==="),
+            "missing recent-log block: {}",
+            prompt
+        );
+    }
+
+    #[test]
+    fn stage_summary_prompt_query_contains_stage_label_and_closing_instruction() {
+        let out = stage_summary_prompt_query(&StageState::Running, &artifacts_fixture(), "tail");
+        assert_common_scaffolding(&out);
+        assert!(
+            out.contains("HIGH priority"),
+            "query closing instruction missing HIGH priority keyword"
+        );
+    }
+
+    #[test]
+    fn stage_summary_prompt_research_contains_stage_label_and_closing_instruction() {
+        let out = stage_summary_prompt_research(&StageState::Running, &artifacts_fixture(), "tail");
+        assert_common_scaffolding(&out);
+        assert!(
+            out.contains("tech stack"),
+            "research closing instruction missing 'tech stack' keyword"
+        );
+    }
+
+    #[test]
+    fn stage_summary_prompt_plan_contains_stage_label_and_closing_instruction() {
+        let out = stage_summary_prompt_plan(&StageState::Running, &artifacts_fixture(), "tail");
+        assert_common_scaffolding(&out);
+        assert!(
+            out.contains("file operations"),
+            "plan closing instruction missing 'file operations' keyword"
+        );
+    }
+
+    #[test]
+    fn stage_summary_prompt_plan_review_contains_stage_label_and_closing_instruction() {
+        let out =
+            stage_summary_prompt_plan_review(&StageState::Running, &artifacts_fixture(), "tail");
+        assert_common_scaffolding(&out);
+        assert!(
+            out.contains("P+"),
+            "plan-review closing instruction missing 'P+' keyword"
+        );
+    }
+
+    #[test]
+    fn stage_summary_prompt_build_contains_stage_label_and_closing_instruction() {
+        let out = stage_summary_prompt_build(&StageState::Running, &artifacts_fixture(), "tail");
+        assert_common_scaffolding(&out);
+        assert!(
+            out.contains("DELTA_MANIFEST"),
+            "build closing instruction missing DELTA_MANIFEST keyword"
+        );
+    }
+
+    #[test]
+    fn stage_summary_prompt_audit_contains_stage_label_and_closing_instruction() {
+        let out = stage_summary_prompt_audit(&StageState::Running, &artifacts_fixture(), "tail");
+        assert_common_scaffolding(&out);
+        assert!(
+            out.contains("HIGH"),
+            "audit closing instruction missing HIGH severity keyword"
+        );
+    }
+
+    #[test]
+    fn stage_summary_prompt_ship_contains_stage_label_and_closing_instruction() {
+        let out = stage_summary_prompt_ship(&StageState::Running, &artifacts_fixture(), "tail");
+        assert_common_scaffolding(&out);
+        assert!(
+            out.contains("working tree"),
+            "ship closing instruction missing 'working tree' keyword"
+        );
+    }
+
+    #[test]
+    fn stage_summary_prompt_discover_contains_stage_label_and_closing_instruction() {
+        let out = stage_summary_prompt_discover(&StageState::Running, &artifacts_fixture(), "tail");
+        assert_common_scaffolding(&out);
+        assert!(
+            out.contains("Discovery Round"),
+            "discover closing instruction missing 'Discovery Round' keyword"
+        );
+    }
+
+    #[test]
+    fn stage_summary_prompt_dispatches_by_stage() {
+        let cases: &[(&str, &str)] = &[
+            ("query", "HIGH priority"),
+            ("research", "tech stack"),
+            ("plan", "file operations"),
+            ("plan-review", "P+"),
+            ("implement", "DELTA_MANIFEST"),
+            ("doubt", "HIGH"),
+            ("ship", "working tree"),
+            ("discover", "Discovery Round"),
+        ];
+        for (stage, keyword) in cases {
+            let out = stage_summary_prompt(stage, &StageState::Running, &[], "");
+            assert!(
+                out.contains(keyword),
+                "dispatcher for stage `{}` missing keyword `{}`",
+                stage,
+                keyword
+            );
+        }
     }
 }

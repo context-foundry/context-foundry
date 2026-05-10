@@ -28,6 +28,10 @@ fn default_summary_model() -> String {
     "haiku".to_string()
 }
 
+fn default_prefer_file_open_over_summary() -> bool {
+    false
+}
+
 fn default_history_retention_tasks() -> usize {
     50
 }
@@ -494,6 +498,8 @@ pub struct Config {
     pub summary_provider: String,
     #[serde(default = "default_summary_model")]
     pub summary_model: String,
+    #[serde(default = "default_prefer_file_open_over_summary")]
+    pub prefer_file_open_over_summary: bool,
 
     /// Background catalog refresh cadence in seconds. 0 disables refresh entirely
     /// (the on-disk catalog or baseline is used as-is). Default 86400 (24h).
@@ -678,6 +684,7 @@ impl Default for Config {
             stage_overrides: Vec::new(),
             summary_provider: default_summary_provider(),
             summary_model: default_summary_model(),
+            prefer_file_open_over_summary: default_prefer_file_open_over_summary(),
             model_catalog_refresh_secs: 86400,
             model_catalog_url_overrides: std::collections::HashMap::new(),
             arena_mode: "solo".into(),

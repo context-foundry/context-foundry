@@ -2057,8 +2057,14 @@ pub fn render_stage_summary_overlay(
     let status = Paragraph::new(status_text).style(status_style);
     frame.render_widget(status, chunks[3]);
 
+    let has_file = overlay.stage != "ship";
+    let footer_text = if has_file {
+        "[Esc] dismiss   [r] refresh   [f] open file"
+    } else {
+        "[Esc] dismiss   [r] refresh"
+    };
     let footer = Paragraph::new(Line::from(vec![Span::styled(
-        "[Esc] dismiss   [r] refresh",
+        footer_text,
         Style::default().fg(theme.muted),
     )]))
     .alignment(Alignment::Center);

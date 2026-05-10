@@ -2605,3 +2605,88 @@ fn ctrl_c_modal_1_arms_stop_and_quits() {
     assert!(state.running_screen_modal.is_none());
     let _ = std::fs::remove_dir_all(dir);
 }
+
+#[test]
+fn pipeline_click_routes_connected_stages_to_summary_by_default() {
+    use crate::tui;
+    let mut cfg = Config::default();
+    cfg.plan_review_enabled = true;
+    let dir = PathBuf::from(".");
+    let expected_ids = ["query", "research", "plan", "plan-review", "implement", "doubt"];
+    for (i, expected) in expected_ids.iter().enumerate() {
+        let target =
+            super::pipeline_click_target(tui::PipelineClick::ConnectedStage(i), &dir, &cfg);
+        match target {
+            super::PipelineClickTarget::StageSummary {
+                stage_id,
+                fallback_file,
+            } => {
+                assert_eq!(stage_id.as_str(), *expected, "wrong stage id at index {}", i);
+                assert!(
+                    fallback_file.is_some(),
+                    "fallback_file should be Some for stage {}",
+                    expected
+                );
+            }
+            other => panic!("expected StageSummary at index {}, got {:?}", i, other),
+        }
+    }
+}
+
+#[test]
+fn pipeline_click_routes_ship_and_discover_to_summary() {
+    use crate::tui;
+    let cfg = Config::default();
+    let dir = PathBuf::from(".");
+
+    let ship_target = super::pipeline_click_target(tui::PipelineClick::Ship, &dir, &cfg);
+    match ship_target {
+        super::PipelineClickTarget::StageSummary {
+            stage_id,
+            fallback_file,
+        } => {
+            assert_eq!(stage_id, "ship");
+            assert!(fallback_file.is_none(), "ship should have no fallback file");
+        }
+        other => panic!("expected ship to route to StageSummary, got {:?}", other),
+    }
+
+    let discover_target = super::pipeline_click_target(tui::PipelineClick::Discover, &dir, &cfg);
+    match discover_target {
+        super::PipelineClickTarget::StageSummary {
+            stage_id,
+            fallback_file,
+        } => {
+            assert_eq!(stage_id, "discover");
+            assert!(fallback_file.is_some(), "discover should fall back to TASKS.md");
+        }
+        other => panic!("expected discover to route to StageSummary, got {:?}", other),
+    }
+}
+
+#[test]
+fn pipeline_click_respects_prefer_file_open_over_summary() {
+    use crate::tui;
+    let mut cfg = Config::default();
+    cfg.prefer_file_open_over_summary = true;
+    let dir = PathBuf::from(".");
+
+    let stage_target =
+        super::pipeline_click_target(tui::PipelineClick::ConnectedStage(0), &dir, &cfg);
+    assert!(
+        matches!(stage_target, super::PipelineClickTarget::OpenFile(_)),
+        "expected OpenFile for connected stage with prefer_file_open_over_summary=true"
+    );
+
+    let ship_target = super::pipeline_click_target(tui::PipelineClick::Ship, &dir, &cfg);
+    assert!(
+        matches!(ship_target, super::PipelineClickTarget::None),
+        "expected None for ship with prefer_file_open_over_summary=true"
+    );
+
+    let discover_target = super::pipeline_click_target(tui::PipelineClick::Discover, &dir, &cfg);
+    assert!(
+        matches!(discover_target, super::PipelineClickTarget::OpenFile(_)),
+        "expected OpenFile for discover with prefer_file_open_over_summary=true"
+    );
+}

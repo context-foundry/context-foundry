@@ -2050,6 +2050,24 @@ fn handle_planning_key(state: &mut AppState, key: event::KeyEvent, config: &Conf
                 true,
             );
         }
+        KeyCode::Char('f')
+            if !state.show_settings_overlay && state.stage_summary_overlay.is_some() =>
+        {
+            let Some(overlay) = state.stage_summary_overlay.as_ref().cloned() else {
+                return;
+            };
+            let project_dir = state
+                .buildloop_dir
+                .parent()
+                .unwrap_or(std::path::Path::new("."))
+                .to_path_buf();
+            let target = match stage_fallback_file(&overlay.stage, &project_dir) {
+                Some(path) => PipelineClickTarget::OpenFile(path),
+                None => PipelineClickTarget::None,
+            };
+            state.stage_summary_overlay = None;
+            handle_pipeline_click_target(state, &project_dir, config, target);
+        }
         KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
             state.should_quit = true;
         }
@@ -2932,6 +2950,28 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                                 true,
                             );
                         }
+                        KeyCode::Char('f')
+                            if !state.show_settings_overlay
+                                && state.stage_summary_overlay.is_some() =>
+                        {
+                            let Some(overlay) =
+                                state.stage_summary_overlay.as_ref().cloned()
+                            else {
+                                return;
+                            };
+                            let project_dir = state
+                                .buildloop_dir
+                                .parent()
+                                .unwrap_or(std::path::Path::new("."))
+                                .to_path_buf();
+                            let target = match stage_fallback_file(&overlay.stage, &project_dir)
+                            {
+                                Some(path) => PipelineClickTarget::OpenFile(path),
+                                None => PipelineClickTarget::None,
+                            };
+                            state.stage_summary_overlay = None;
+                            handle_pipeline_click_target(state, &project_dir, config, target);
+                        }
                         KeyCode::Char('q') => {
                             if !state.show_settings_overlay
                                 && state.stage_summary_overlay.is_some()
@@ -3228,29 +3268,8 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                         .parent()
                         .unwrap_or(std::path::Path::new("."))
                         .to_path_buf();
-                    match pipeline_click_target(click, &project_dir, config) {
-                        PipelineClickTarget::StageSummary { stage_id } => {
-                            let already_in_flight = state
-                                .stage_summary_overlay
-                                .as_ref()
-                                .is_some_and(|o| o.stage == stage_id && o.in_flight);
-                            if !already_in_flight {
-                                let label = stage_label_for(&stage_id, config);
-                                trigger_stage_summary(
-                                    state,
-                                    &project_dir,
-                                    config,
-                                    &stage_id,
-                                    &label,
-                                    false,
-                                );
-                            }
-                        }
-                        PipelineClickTarget::OpenFile(path) => {
-                            navigate_explorer_to_file(state, &project_dir, &path);
-                        }
-                        PipelineClickTarget::None => {}
-                    }
+                    let target = pipeline_click_target(click, &project_dir, config);
+                    handle_pipeline_click_target(state, &project_dir, config, target);
                 }
             }
             if state.show_running_explorer {
@@ -4990,10 +5009,33 @@ pub fn run_patterns_promote(apply: bool, days: u32) -> Result<()> {
 
 // ─── Running Explorer Helpers ─────────────────────────────────
 
+#[derive(Debug)]
 enum PipelineClickTarget {
-    StageSummary { stage_id: String },
+    StageSummary {
+        stage_id: String,
+        fallback_file: Option<std::path::PathBuf>,
+    },
     OpenFile(std::path::PathBuf),
     None,
+}
+
+fn stage_fallback_file(
+    stage_id: &str,
+    project_dir: &std::path::Path,
+) -> Option<std::path::PathBuf> {
+    let buildloop = project_dir.join(".buildloop");
+    match stage_id {
+        "scout" => Some(buildloop.join("scout-report.md")),
+        "query" => Some(buildloop.join("questions.md")),
+        "research" => Some(buildloop.join("research-report.md")),
+        "plan" => Some(buildloop.join("current-plan.md")),
+        "implement" => Some(buildloop.join("build-claims.md")),
+        "doubt" => Some(buildloop.join("review-report.md")),
+        "coach" => Some(buildloop.join("intake-brief.md")),
+        "plan-review" => Some(buildloop.join("current-plan.md")),
+        "discover" => Some(ContractPaths::resolve(project_dir).tasks_path),
+        _ => None,
+    }
 }
 
 fn pipeline_click_target(
@@ -5001,7 +5043,6 @@ fn pipeline_click_target(
     project_dir: &std::path::Path,
     config: &Config,
 ) -> PipelineClickTarget {
-    let buildloop = project_dir.join(".buildloop");
     let enabled_stages: Vec<&crate::config::PipelineStageConfig> = config
         .pipeline_stages
         .iter()
@@ -5023,27 +5064,118 @@ fn pipeline_click_target(
                 Some(s) => s.as_str(),
                 None => return PipelineClickTarget::None,
             };
-            if stage_id == "plan-review" {
-                return PipelineClickTarget::StageSummary {
-                    stage_id: stage_id.to_string(),
+            let fallback_file = stage_fallback_file(stage_id, project_dir);
+            if config.prefer_file_open_over_summary {
+                return match fallback_file {
+                    Some(p) => PipelineClickTarget::OpenFile(p),
+                    None => PipelineClickTarget::None,
                 };
             }
-            let file = match stage_id {
-                "scout" => buildloop.join("scout-report.md"),
-                "query" => buildloop.join("questions.md"),
-                "research" => buildloop.join("research-report.md"),
-                "plan" => buildloop.join("current-plan.md"),
-                "implement" => buildloop.join("build-claims.md"),
-                "doubt" => buildloop.join("review-report.md"),
-                "coach" => buildloop.join("intake-brief.md"),
-                _ => return PipelineClickTarget::None,
-            };
-            PipelineClickTarget::OpenFile(file)
+            PipelineClickTarget::StageSummary {
+                stage_id: stage_id.to_string(),
+                fallback_file,
+            }
         }
         tui::PipelineClick::Discover => {
-            PipelineClickTarget::OpenFile(ContractPaths::resolve(project_dir).tasks_path)
+            let fallback = ContractPaths::resolve(project_dir).tasks_path;
+            if config.prefer_file_open_over_summary {
+                return PipelineClickTarget::OpenFile(fallback);
+            }
+            PipelineClickTarget::StageSummary {
+                stage_id: "discover".to_string(),
+                fallback_file: Some(fallback),
+            }
         }
-        tui::PipelineClick::Ship | tui::PipelineClick::Patterns => PipelineClickTarget::None,
+        tui::PipelineClick::Ship => {
+            if config.prefer_file_open_over_summary {
+                return PipelineClickTarget::None;
+            }
+            PipelineClickTarget::StageSummary {
+                stage_id: "ship".to_string(),
+                fallback_file: None,
+            }
+        }
+        tui::PipelineClick::Patterns => PipelineClickTarget::None,
+    }
+}
+
+fn stage_summary_inputs(
+    stage_id: &str,
+    project_dir: &std::path::Path,
+) -> (Vec<std::path::PathBuf>, Option<String>) {
+    let buildloop = project_dir.join(".buildloop");
+    match stage_id {
+        "query" => (vec![buildloop.join("questions.md")], None),
+        "research" => (vec![buildloop.join("research-report.md")], None),
+        "plan" => (vec![buildloop.join("current-plan.md")], None),
+        "plan-review" => (vec![buildloop.join("current-plan.md")], None),
+        "implement" => (vec![buildloop.join("build-claims.md")], None),
+        "doubt" => (vec![buildloop.join("review-report.md")], None),
+        "coach" => (vec![buildloop.join("intake-brief.md")], None),
+        "scout" => (vec![buildloop.join("scout-report.md")], None),
+        "discover" => (
+            vec![ContractPaths::resolve(project_dir).tasks_path],
+            None,
+        ),
+        "ship" => (Vec::new(), Some(collect_ship_log_blocking(project_dir))),
+        _ => (Vec::new(), None),
+    }
+}
+
+fn collect_ship_log_blocking(project_dir: &std::path::Path) -> String {
+    let dir_arg = project_dir.display().to_string();
+    let log_stdout = std::process::Command::new("git")
+        .args([
+            "-C",
+            &dir_arg,
+            "log",
+            "-1",
+            "--pretty=format:%h %s%n%an <%ae>%n%ad",
+            "--date=iso",
+        ])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+        .unwrap_or_default();
+    let status_stdout = std::process::Command::new("git")
+        .args(["-C", &dir_arg, "status", "--porcelain"])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+        .unwrap_or_default();
+    let combined = format!(
+        "git log -1:\n{}\ngit status --porcelain:\n{}",
+        log_stdout, status_stdout
+    );
+    crate::utils::truncate_str(&combined, 4096).to_string()
+}
+
+fn handle_pipeline_click_target(
+    state: &mut AppState,
+    project_dir: &std::path::Path,
+    config: &Config,
+    target: PipelineClickTarget,
+) {
+    match target {
+        PipelineClickTarget::StageSummary {
+            stage_id,
+            fallback_file: _,
+        } => {
+            let already_in_flight = state
+                .stage_summary_overlay
+                .as_ref()
+                .is_some_and(|o| o.stage == stage_id && o.in_flight);
+            if !already_in_flight {
+                let label = stage_label_for(&stage_id, config);
+                trigger_stage_summary(state, project_dir, config, &stage_id, &label, false);
+            }
+        }
+        PipelineClickTarget::OpenFile(path) => {
+            navigate_explorer_to_file(state, project_dir, &path);
+        }
+        PipelineClickTarget::None => {}
     }
 }
 
@@ -5085,6 +5217,8 @@ fn read_log_tail(buildloop_dir: &Path, stage_id: &str, max_bytes: usize) -> Opti
 fn stage_label_for(stage_id: &str, config: &Config) -> String {
     match stage_id {
         "plan-review" => "P+".to_string(),
+        "ship" => "SHIP".to_string(),
+        "discover" => "DISCOVER".to_string(),
         _ => config.pipeline_stage_label(stage_id),
     }
 }
@@ -5099,8 +5233,14 @@ fn trigger_stage_summary(
 ) {
     let buildloop_dir = state.buildloop_dir.clone();
     let stage_state = detect_stage_state(stage_id, state, &buildloop_dir);
-    let artifacts = vec![project_dir.join(".buildloop").join("current-plan.md")];
-    let log_tail = read_log_tail(&buildloop_dir, stage_id, 8192);
+    let (artifacts, extra_log) = stage_summary_inputs(stage_id, project_dir);
+    let disk_log = read_log_tail(&buildloop_dir, stage_id, 8192);
+    let log_tail = match (disk_log, extra_log) {
+        (Some(a), Some(b)) => Some(format!("{}\n{}", a, b)),
+        (None, Some(b)) => Some(b),
+        (Some(a), None) => Some(a),
+        (None, None) => None,
+    };
 
     let existing = state.stage_summary_overlay.take();
     let preserve_summary = if force_refresh {
