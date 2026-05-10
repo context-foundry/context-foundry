@@ -119,6 +119,13 @@ pub enum ObservatoryEvent {
         actual_pct: u8,
         recovery_action: String,
     },
+    PlanReviewLoopCapped {
+        task_id: String,
+        cycles_used: usize,
+        cycles_cap: usize,
+        finding_count: usize,
+        feedback_summary: String,
+    },
     RateLimited {
         provider: String,
         wait_secs: u64,
@@ -155,6 +162,7 @@ pub fn event_type_str(event: &ObservatoryEvent) -> &'static str {
         ObservatoryEvent::TaskCompleted { .. } => "task_completed",
         ObservatoryEvent::Committed { .. } => "committed",
         ObservatoryEvent::BudgetOverrun { .. } => "budget_overrun",
+        ObservatoryEvent::PlanReviewLoopCapped { .. } => "plan_review_loop_capped",
         ObservatoryEvent::RateLimited { .. } => "rate_limited",
         ObservatoryEvent::DualPipelineStarted { .. } => "dual_pipeline_started",
         ObservatoryEvent::DualPipelineCompleted { .. } => "dual_pipeline_completed",

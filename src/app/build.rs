@@ -4976,7 +4976,11 @@ async fn process_task(
                 task_id
             ))));
 
-            let orch_config = OrchestratorConfig::from_config(&ctx.config);
+            let mut orch_config = OrchestratorConfig::from_config(&ctx.config);
+            // T1.20: cap the P+ feedback loop at max_plan_review_cycles + 1 total iterations
+            // (original proposer pass + N revision cycles). Distinct from orchestrator_max_iterations
+            // so the orchestrator's general default (3) is preserved for non-P+ callers.
+            orch_config.max_iterations = ctx.config.max_plan_review_cycles.saturating_add(1);
 
             let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
             let fwd_tx = tx.clone();
@@ -5055,6 +5059,41 @@ async fn process_task(
                         }
                     } else {
                         let finding_count = outcome.unresolved_findings.len();
+                        let cycles_cap = ctx.config.max_plan_review_cycles;
+                        let cycles_used = outcome.iterations;
+                        let feedback_summary = match append_unresolved_plan_review_feedback(
+                            &ctx.current_plan,
+                            task_id,
+                            cycles_used,
+                            cycles_cap,
+                            &outcome.unresolved_findings,
+                        ) {
+                            Ok(block) => {
+                                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                                    "P+ cap hit ({} cycle(s)): appended {} unresolved finding(s) to current-plan.md",
+                                    cycles_used, finding_count
+                                ))));
+                                block
+                            }
+                            Err(e) => {
+                                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                                    "P+ cap hit but failed to append feedback to current-plan.md: {}",
+                                    e
+                                ))));
+                                String::new()
+                            }
+                        };
+                        observatory::log_event(
+                            &ctx.session_id,
+                            &ctx.project_dir,
+                            ObservatoryEvent::PlanReviewLoopCapped {
+                                task_id: task_id.to_string(),
+                                cycles_used,
+                                cycles_cap,
+                                finding_count,
+                                feedback_summary: crate::utils::truncate_str(&feedback_summary, 2000).to_string(),
+                            },
+                        );
                         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
                             "P+ did not accept plan after {} iteration(s) ({} unresolved findings) -- using original plan",
                             outcome.iterations, finding_count
@@ -7035,6 +7074,52 @@ fn prune_history(
             ))));
         }
     }
+}
+
+fn append_unresolved_plan_review_feedback(
+    current_plan_path: &std::path::Path,
+    task_id: &str,
+    cycles_used: usize,
+    cycles_cap: usize,
+    findings: &[crate::orchestrator::Finding],
+) -> std::io::Result<String> {
+    let mut bulleted = String::new();
+    for f in findings {
+        bulleted.push_str(&format!("- {} [{}]", f.description, f.severity));
+        if !f.location.is_empty() {
+            bulleted.push_str(&format!(" at {}", f.location));
+        }
+        bulleted.push('\n');
+        if !f.suggestion.is_empty() {
+            bulleted.push_str(&format!("  Suggestion: {}\n", f.suggestion));
+        }
+    }
+
+    let block = format!(
+        "\n--- BEGIN PLAN-REVIEW FEEDBACK (UNRESOLVED) ---\n\
+Task: {task_id}\n\
+Cycles used: {cycles_used} of {cycles_cap}\n\
+Generated: {timestamp}\n\
+\n\
+The P+ proposer/reviewer loop reached its cap without producing an accepted plan.\n\
+The latest plan has been shipped to BUILD with the following unresolved findings.\n\
+Treat each as a constraint to address during BUILD, or, if disagreed with, justify\n\
+in the build-claims.md gaps section so AUDIT can adjudicate.\n\
+\n\
+## Plan-Review Feedback (Unresolved)\n\
+{bulleted}\
+--- END PLAN-REVIEW FEEDBACK (UNRESOLVED) ---\n",
+        task_id = task_id,
+        cycles_used = cycles_used,
+        cycles_cap = cycles_cap,
+        timestamp = chrono::Utc::now().to_rfc3339(),
+        bulleted = bulleted,
+    );
+
+    let existing = std::fs::read_to_string(current_plan_path)?;
+    let combined = format!("{}{}", existing, block);
+    crate::utils::atomic_write_file(current_plan_path, combined.as_bytes())?;
+    Ok(block)
 }
 
 #[cfg(test)]
@@ -9680,5 +9765,59 @@ mod card_loop_tests {
         );
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
+#[cfg(test)]
+mod plan_review_cap_tests {
+    use super::append_unresolved_plan_review_feedback;
+    use crate::orchestrator::Finding;
+    use tempfile::tempdir;
+
+    #[test]
+    fn append_unresolved_plan_review_feedback_writes_marker_block() {
+        let dir = tempdir().unwrap();
+        let plan_path = dir.path().join("current-plan.md");
+        std::fs::write(&plan_path, "# Plan: T1.99\n\n## Verification\n- build: cargo build\n").unwrap();
+        let findings = vec![Finding {
+            severity: "high".into(),
+            description: "Plan omits error handling for X".into(),
+            location: "src/foo.rs:42".into(),
+            suggestion: "Wrap with ?".into(),
+        }];
+        let block = append_unresolved_plan_review_feedback(&plan_path, "T1.99", 2, 2, &findings).unwrap();
+        let contents = std::fs::read_to_string(&plan_path).unwrap();
+        assert!(contents.contains("--- BEGIN PLAN-REVIEW FEEDBACK (UNRESOLVED) ---"));
+        assert!(contents.contains("--- END PLAN-REVIEW FEEDBACK (UNRESOLVED) ---"));
+        assert!(contents.contains("Task: T1.99"));
+        assert!(contents.contains("Cycles used: 2 of 2"));
+        assert!(contents.contains("Plan omits error handling for X"));
+        assert!(contents.contains("[high]"));
+        assert!(contents.contains("at src/foo.rs:42"));
+        assert!(contents.contains("Suggestion: Wrap with ?"));
+        assert!(block.contains("--- BEGIN PLAN-REVIEW FEEDBACK (UNRESOLVED) ---"));
+    }
+
+    #[test]
+    fn append_unresolved_plan_review_feedback_handles_empty_findings() {
+        let dir = tempdir().unwrap();
+        let plan_path = dir.path().join("current-plan.md");
+        std::fs::write(&plan_path, "# Plan: T1.99\n").unwrap();
+        let block = append_unresolved_plan_review_feedback(&plan_path, "T1.99", 0, 0, &[]).unwrap();
+        let contents = std::fs::read_to_string(&plan_path).unwrap();
+        assert!(contents.contains("--- BEGIN PLAN-REVIEW FEEDBACK (UNRESOLVED) ---"));
+        assert!(contents.contains("Cycles used: 0 of 0"));
+        assert!(block.contains("Plan-Review Feedback (Unresolved)"));
+    }
+
+    #[test]
+    fn append_unresolved_plan_review_feedback_preserves_existing_content() {
+        let dir = tempdir().unwrap();
+        let plan_path = dir.path().join("current-plan.md");
+        let original = "# Plan: T1.99\n\n## File Operations\n- [CREATE] src/x.rs\n";
+        std::fs::write(&plan_path, original).unwrap();
+        let _ = append_unresolved_plan_review_feedback(&plan_path, "T1.99", 1, 2, &[]).unwrap();
+        let contents = std::fs::read_to_string(&plan_path).unwrap();
+        assert!(contents.starts_with(original), "original plan content must be preserved verbatim before the appended block");
     }
 }

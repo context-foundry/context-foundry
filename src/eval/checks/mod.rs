@@ -103,6 +103,7 @@ pub fn all_checks() -> Vec<Box<dyn Check>> {
         Box::new(heuristic::NewFunctionHasNonTestCaller),
         Box::new(heuristic::NewConfigFieldIsRead),
         Box::new(heuristic::BuildClaimsHasWireUpEvidence),
+        Box::new(heuristic::PlanReviewCyclesWithinCap),
     ]
 }
 
@@ -133,7 +134,7 @@ mod tests {
     }
 
     #[test]
-    fn all_checks_returns_twenty_five() {
-        assert_eq!(all_checks().len(), 25);
+    fn all_checks_returns_twenty_six() {
+        assert_eq!(all_checks().len(), 26);
     }
 }

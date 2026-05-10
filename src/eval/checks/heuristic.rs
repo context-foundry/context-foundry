@@ -38,6 +38,7 @@ pub struct NewStructFieldHasWriter;
 pub struct NewFunctionHasNonTestCaller;
 pub struct NewConfigFieldIsRead;
 pub struct BuildClaimsHasWireUpEvidence;
+pub struct PlanReviewCyclesWithinCap;
 
 fn project_root_for(run: &RunTranscripts) -> PathBuf {
     run.manifest
@@ -2347,6 +2348,67 @@ impl Check for BuildClaimsHasWireUpEvidence {
                         });
                     }
                 }
+            }
+        }
+        out
+    }
+}
+
+impl Check for PlanReviewCyclesWithinCap {
+    fn name(&self) -> &'static str {
+        "plan_review_cycles_within_cap"
+    }
+    fn category(&self) -> Category {
+        Category::Heuristic
+    }
+    fn severity(&self) -> Severity {
+        Severity::Standard
+    }
+    fn applies_to(&self) -> &[StageId] {
+        STAGES_PLAN
+    }
+    fn run(&self, run: &RunTranscripts) -> Vec<StageCheckResult> {
+        let mut out: Vec<StageCheckResult> = Vec::new();
+        for (inv, _) in run
+            .invocations
+            .iter()
+            .filter(|(inv, _)| non_superseded(inv) && inv.stage_id == Some(StageId::Plan))
+        {
+            if invocation_skip_status(inv).is_some() {
+                out.push(StageCheckResult {
+                    stage: StageId::Plan,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Skip,
+                    evidence: skip_evidence_for_status(inv.status, &inv.skip_reason),
+                });
+                continue;
+            }
+            let root = project_root_for(run);
+            let plan_text = read_artifact(&root, CURRENT_PLAN).unwrap_or_default();
+            if plan_text.is_empty() {
+                out.push(StageCheckResult {
+                    stage: StageId::Plan,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Skip,
+                    evidence: "current-plan.md missing or unreadable".to_string(),
+                });
+                continue;
+            }
+            if plan_text.contains("--- BEGIN PLAN-REVIEW FEEDBACK (UNRESOLVED) ---") {
+                out.push(StageCheckResult {
+                    stage: StageId::Plan,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Fail,
+                    evidence: "P+ cap hit -- current-plan.md contains unresolved feedback block"
+                        .to_string(),
+                });
+            } else {
+                out.push(StageCheckResult {
+                    stage: StageId::Plan,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Pass,
+                    evidence: "P+ accepted plan or feedback loop completed within cap".to_string(),
+                });
             }
         }
         out

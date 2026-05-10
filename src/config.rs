@@ -28,6 +28,10 @@ fn default_agent_pane_split() -> u16 {
     30
 }
 
+fn default_max_plan_review_cycles() -> usize {
+    2
+}
+
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 #[serde(default)]
 pub struct PipelineStageConfig {
@@ -208,6 +212,15 @@ pub struct Config {
     pub orchestrator_reviewer_model: String,
     /// Orchestrator: max proposal/review iterations.
     pub orchestrator_max_iterations: usize,
+    /// Maximum P+ revision cycles allowed after the first proposer pass.
+    /// Total proposer/reviewer iterations = max_plan_review_cycles + 1.
+    /// Defaults to 2 (3 total: original + 2 revisions). 0 disables the
+    /// feedback loop -- a single proposer/reviewer pass runs and ships to
+    /// BUILD with any unresolved findings appended to current-plan.md.
+    /// Distinct from `orchestrator_max_iterations` so future orchestrator
+    /// callers (non-P+) keep their own budget.
+    #[serde(default = "default_max_plan_review_cycles")]
+    pub max_plan_review_cycles: usize,
     /// Orchestrator: acceptance policy ("no-high", "no-high-medium", "no-findings").
     pub orchestrator_accept_policy: String,
 
@@ -592,6 +605,7 @@ impl Default for Config {
             orchestrator_reviewer_provider: "claude".into(),
             orchestrator_reviewer_model: "opus".into(),
             orchestrator_max_iterations: 3,
+            max_plan_review_cycles: 2,
             orchestrator_accept_policy: "no-high-medium".into(),
             plan_review_enabled: false,
             review_mode: "diff-only".into(),
