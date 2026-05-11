@@ -200,10 +200,12 @@ pub(super) fn render_dashboard_stats(
                 .aggregate_badge
                 .strip_prefix("EVAL ")
                 .unwrap_or(&report.aggregate_badge);
-            let badge_color = if stale {
-                theme.muted
+            let badge_style = if stale {
+                Style::default()
+                    .fg(theme.muted)
+                    .add_modifier(Modifier::ITALIC)
             } else {
-                badge_color_for(&report.aggregate_badge, theme)
+                Style::default().fg(badge_color_for(&report.aggregate_badge, theme))
             };
             let badge_text = if stale {
                 format!("(last) {}", badge_no_prefix)
@@ -214,7 +216,7 @@ pub(super) fn render_dashboard_stats(
                 Span::styled(commits_label, Style::default().fg(theme.info)),
                 Span::styled(commits_left, Style::default().fg(theme.text)),
                 Span::styled("Eval      ", Style::default().fg(theme.info)),
-                Span::styled(badge_text, Style::default().fg(badge_color)),
+                Span::styled(badge_text, badge_style),
             ]));
         }
     } else if state.current_task.is_some() {
@@ -313,11 +315,16 @@ pub(super) fn render_dashboard_stats(
         (cost_str, cost_color)
     };
 
-    // feat/WIP commits used to live here -- they moved to the Commits row
-    // above so the Skills column is just skill telemetry.
+    // feat/WIP commits moved to the Commits row above so the Skills column
+    // is just skill telemetry. `learned` is the count of new SKILL.md files
+    // added by the post-AUDIT extractor this session -- surfacing it puts
+    // the learn loop visible on the dashboard (the counter was already being
+    // incremented but never displayed after the T1.21 panel retirement).
     let patterns_left = format!(
-        "{} inj, {} applied",
-        state.pattern_inject_count, state.pattern_apply_count,
+        "{} inj, {} applied, {} learned",
+        state.pattern_inject_count,
+        state.pattern_apply_count,
+        state.session_patterns_learned,
     );
     lines.push(Line::from(vec![
         Span::styled("  Skills   ", Style::default().fg(theme.info)),
@@ -562,7 +569,22 @@ fn badge_color_for(badge: &str, theme: &crate::tui::theme::TuiTheme) -> Color {
 }
 
 fn eval_badge_is_stale(state: &AppState) -> bool {
-    state.current_task.is_some() && state.eval_report_cache.is_some()
+    let Some(ref task) = state.current_task else {
+        return false;
+    };
+    let Some(ref report) = state.eval_report_cache else {
+        return false;
+    };
+    if report.task_id != task.id {
+        return true;
+    }
+    match (state.eval_report_mtime, state.task_start) {
+        (Some(mtime), Some(start)) => {
+            let start_sys: std::time::SystemTime = start.into();
+            mtime < start_sys
+        }
+        _ => true,
+    }
 }
 
 #[allow(dead_code)]
@@ -1171,7 +1193,7 @@ mod tests {
     }
 
     #[test]
-    fn eval_badge_renders_last_prefix_when_task_in_flight_with_cached_report_for_same_task() {
+    fn eval_badge_renders_without_last_prefix_when_cached_report_matches_current_task_and_is_fresh() {
         let mut state = AppState::new(PathBuf::from(".buildloop"));
         state.current_task = Some(Task {
             id: "T1.22".to_string(),
@@ -1181,6 +1203,41 @@ mod tests {
             pipeline_progress: None,
             override_flag: TaskOverride::None,
         });
+        state.task_start = Some(chrono::Utc::now() - chrono::Duration::seconds(60));
+        state.eval_report_cache = Some(EvalReportSnapshot {
+            schema_version: 1,
+            run_id: "run-curr-same-id".to_string(),
+            task_id: "T1.22".to_string(),
+            aggregate_badge: "EVAL Q\u{2713}R\u{2713}P\u{2713}B\u{2713}A\u{2713}".to_string(),
+            completion_path: None,
+            stages: Default::default(),
+            notes: Vec::new(),
+        });
+        state.eval_report_mtime = Some(std::time::SystemTime::now());
+
+        let rendered = render_stats_text(&state);
+
+        assert!(
+            rendered.contains("Q\u{2713}R\u{2713}P\u{2713}B\u{2713}A\u{2713}"),
+            "rendered: {}",
+            rendered
+        );
+        assert!(!rendered.contains("(last)"), "rendered: {}", rendered);
+        assert!(!rendered.contains("(no eval yet)"), "rendered: {}", rendered);
+    }
+
+    #[test]
+    fn eval_badge_renders_last_prefix_when_cached_report_matches_current_task_but_is_stale_by_mtime() {
+        let mut state = AppState::new(PathBuf::from(".buildloop"));
+        state.current_task = Some(Task {
+            id: "T1.22".to_string(),
+            description: "re-running".to_string(),
+            line_number: 1,
+            completed: false,
+            pipeline_progress: None,
+            override_flag: TaskOverride::None,
+        });
+        state.task_start = Some(chrono::Utc::now());
         state.eval_report_cache = Some(EvalReportSnapshot {
             schema_version: 1,
             run_id: "run-prev-same-id".to_string(),
@@ -1190,6 +1247,9 @@ mod tests {
             stages: Default::default(),
             notes: Vec::new(),
         });
+        state.eval_report_mtime = Some(
+            std::time::SystemTime::now() - std::time::Duration::from_secs(3600),
+        );
 
         let rendered = render_stats_text(&state);
 
@@ -1244,5 +1304,77 @@ mod tests {
         assert!(rendered.contains("(no eval yet)"), "rendered: {}", rendered);
         assert!(!rendered.contains("(last)"), "rendered: {}", rendered);
         assert!(!rendered.contains("Q\u{2713}"), "rendered: {}", rendered);
+    }
+
+    #[test]
+    fn eval_badge_uses_italic_modifier_when_stale() {
+        let mut state = AppState::new(PathBuf::from(".buildloop"));
+        state.current_task = Some(Task {
+            id: "T1.30".to_string(),
+            description: "running".to_string(),
+            line_number: 1,
+            completed: false,
+            pipeline_progress: None,
+            override_flag: TaskOverride::None,
+        });
+        state.task_start = Some(chrono::Utc::now());
+        state.eval_report_cache = Some(EvalReportSnapshot {
+            schema_version: 1,
+            run_id: "run-prev".to_string(),
+            task_id: "T1.29".to_string(),
+            aggregate_badge: "EVAL Q\u{2713}R\u{2713}P\u{2713}B\u{26A0}A-".to_string(),
+            completion_path: None,
+            stages: Default::default(),
+            notes: Vec::new(),
+        });
+        state.eval_report_mtime = Some(
+            std::time::SystemTime::now() - std::time::Duration::from_secs(3600),
+        );
+
+        let backend = TestBackend::new(160, 6);
+        let mut terminal = Terminal::new(backend).expect("failed to create terminal");
+        terminal
+            .draw(|frame| render_dashboard_stats(frame, frame.area(), &state, &Config::default()))
+            .expect("failed to draw stats");
+        let buffer = terminal.backend().buffer();
+        let area = *buffer.area();
+
+        // Locate the Eval row by symbol search rather than hard-coding y=2,
+        // so layout tweaks don't silently break the test.
+        let mut eval_row_y: Option<u16> = None;
+        'outer: for y in 0..area.height {
+            for x in 0..area.width.saturating_sub(4) {
+                let mut matched = true;
+                for (i, expected) in ['E', 'v', 'a', 'l'].iter().enumerate() {
+                    let sym = buffer
+                        .cell((x + i as u16, y))
+                        .map(|c| c.symbol().to_string())
+                        .unwrap_or_default();
+                    if sym.chars().next() != Some(*expected) {
+                        matched = false;
+                        break;
+                    }
+                }
+                if matched {
+                    eval_row_y = Some(y);
+                    break 'outer;
+                }
+            }
+        }
+        let row_y = eval_row_y.expect("Eval row should be present in the buffer");
+
+        let mut found_italic_in_badge = false;
+        for x in 0..area.width {
+            if let Some(cell) = buffer.cell((x, row_y)) {
+                if cell.modifier.contains(Modifier::ITALIC) {
+                    found_italic_in_badge = true;
+                    break;
+                }
+            }
+        }
+        assert!(
+            found_italic_in_badge,
+            "expected the stale badge text on the Eval row to carry Modifier::ITALIC"
+        );
     }
 }
