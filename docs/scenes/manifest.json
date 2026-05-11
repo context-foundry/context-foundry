@@ -757,6 +757,16 @@
       "model": "gpt-4o-mini",
       "lines": 111,
       "generation": 76
+    },
+    {
+      "file": "segfault-in-the-canopy.js",
+      "name": "Segfault in the Canopy",
+      "location": "Amazon Rainforest, Manaus, Brazil",
+      "biome": "forest",
+      "generated": "2026-05-11T21:43:58.238Z",
+      "model": "gpt-4o-mini",
+      "lines": 80,
+      "generation": 77
     }
   ]
 }

@@ -1332,5 +1332,32 @@
     "retries": 0,
     "api_retries": 0,
     "validation": "pass"
+  },
+  {
+    "ts": "2026-05-11T21:43:42.028Z",
+    "scene": "pampas-parallel-processing.js",
+    "seed_id": "pampas-parallel-processing",
+    "biome": "savanna",
+    "model": "gpt-4o-mini",
+    "input_tokens": 15229,
+    "output_tokens": 1742,
+    "cost_usd": 0.0033,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "fail",
+    "error": "Validation failed after 2 attempts: VALIDATION FAILED (1 error):\n- Too short: 79 lines (min 80)"
+  },
+  {
+    "ts": "2026-05-11T21:43:58.239Z",
+    "scene": "segfault-in-the-canopy.js",
+    "seed_id": "segfault-in-the-canopy",
+    "biome": "forest",
+    "model": "gpt-4o-mini",
+    "input_tokens": 8127,
+    "output_tokens": 842,
+    "cost_usd": 0.0017,
+    "retries": 0,
+    "api_retries": 0,
+    "validation": "pass"
   }
 ]
