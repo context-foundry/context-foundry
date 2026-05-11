@@ -2140,7 +2140,33 @@ pub fn render_stage_summary_overlay(
     frame.render_widget(title, chunks[0]);
 
     let body: Paragraph = if overlay.in_flight && overlay.summary.is_none() {
-        Paragraph::new("  summarizing...").style(Style::default().fg(theme.muted))
+        // Spinner + elapsed-time animation while waiting on the LLM. The TUI
+        // re-renders every 100ms (frame tick), so the spinner advances one
+        // braille frame per tick. Elapsed seconds counter tells the user how
+        // close we are to the configured summary_timeout_secs cap.
+        const SPINNER_FRAMES: &[char] = &[
+            '\u{280B}', '\u{2819}', '\u{2839}', '\u{2838}', '\u{283C}',
+            '\u{2834}', '\u{2826}', '\u{2827}', '\u{2807}', '\u{280F}',
+        ];
+        let elapsed = overlay.started_at.elapsed();
+        let frame_idx =
+            ((elapsed.as_millis() / 100) as usize) % SPINNER_FRAMES.len();
+        let spinner = SPINNER_FRAMES[frame_idx];
+        let secs = elapsed.as_secs();
+        let line = Line::from(vec![
+            Span::styled(
+                format!("  {} ", spinner),
+                Style::default()
+                    .fg(theme.accent)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled("summarizing...", Style::default().fg(theme.muted)),
+            Span::styled(
+                format!("  ({}s)", secs),
+                Style::default().fg(theme.muted),
+            ),
+        ]);
+        Paragraph::new(line)
     } else if let Some(text) = &overlay.summary {
         Paragraph::new(text.as_str())
             .wrap(ratatui::widgets::Wrap { trim: false })

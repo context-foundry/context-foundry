@@ -1339,6 +1339,10 @@ pub struct StageSummaryOverlay {
     /// Body scroll offset in display rows. Up/Down/PgUp/PgDn keys and the
     /// mouse wheel mutate this; the renderer applies it via Paragraph::scroll.
     pub scroll_offset: u16,
+    /// Wall-clock instant the summarizer was kicked off. Used by the renderer
+    /// to drive the spinner frame and the elapsed-seconds counter while
+    /// `in_flight && summary.is_none()`.
+    pub started_at: std::time::Instant,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

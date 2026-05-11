@@ -5393,6 +5393,7 @@ fn trigger_stage_summary(
         } else {
             existing.as_ref().map(|o| o.scroll_offset).unwrap_or(0)
         },
+        started_at: std::time::Instant::now(),
     });
     drop(existing);
 
