@@ -275,7 +275,7 @@ pub(super) fn render_dashboard_stats(
         state.session_wip_commits,
     );
     lines.push(Line::from(vec![
-        Span::styled("  Patterns ", Style::default().fg(theme.info)),
+        Span::styled("  Skills   ", Style::default().fg(theme.info)),
         Span::styled(
             format!(
                 "{:<width$}",
