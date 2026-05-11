@@ -637,7 +637,7 @@ fn spawn_lookahead_planner(
 
         let skills_dir_lookahead = skills::resolve_skills_dir("~/.foundry/skills");
         let all_skills_lookahead = skills::load_skills(&skills_dir_lookahead);
-        let pattern_context = if !all_skills_lookahead.is_empty() {
+        let mut pattern_context = if !all_skills_lookahead.is_empty() {
             let stage_skills =
                 skills::match_skills_for_stage(&all_skills_lookahead, "planner");
             let ranked = skills::rank_skills_for_task(
@@ -670,6 +670,23 @@ fn spawn_lookahead_planner(
             };
             patterns::format_patterns_for_prompt(&m, "planner", lookahead_pattern_count)
         };
+
+        // T1.27: append the opted-in external skills (AGENTS.md, etc.) to the
+        // lookahead planner context. Best-effort: if config or discovery
+        // fails for any reason, the lookahead planner just runs without them.
+        let enabled_external_lookahead = crate::skill_discovery::load_enabled_external_skills(
+            &ctx.project_dir,
+            &ctx.config.external_skills_enabled,
+        );
+        if !enabled_external_lookahead.is_empty() {
+            let entries: Vec<(crate::skill_discovery::SkillSource, &crate::skill_discovery::DiscoveredSkill)> =
+                enabled_external_lookahead
+                    .iter()
+                    .map(|d| (d.source, d))
+                    .collect();
+            let block = skills::format_discovered_skills_for_prompt(&entries);
+            pattern_context.push_str(&block);
+        }
 
         let prompt = prompts::planner_lookahead_prompt(
             &ctx.config.pipeline_stage_label("plan"),
@@ -3379,6 +3396,25 @@ async fn process_task(
     let skills_dir_main = skills::resolve_skills_dir("~/.foundry/skills");
     let all_skills_main = skills::load_skills(&skills_dir_main);
 
+    // T1.27: discover external skills (AGENTS.md, .cursorrules,
+    // .claude/skills/) opted in by the user via the per-project allowlist.
+    // Empty unless the user has explicitly enabled at least one in the
+    // startup-screen "External Skills" section.
+    let enabled_external_skills = crate::skill_discovery::load_enabled_external_skills(
+        &ctx.project_dir,
+        &ctx.config.external_skills_enabled,
+    );
+    let external_skills_block = if enabled_external_skills.is_empty() {
+        String::new()
+    } else {
+        let entries: Vec<(crate::skill_discovery::SkillSource, &crate::skill_discovery::DiscoveredSkill)> =
+            enabled_external_skills
+                .iter()
+                .map(|d| (d.source, d))
+                .collect();
+        skills::format_discovered_skills_for_prompt(&entries)
+    };
+
     // Collect skill IDs injected into either planner or reviewer prompts so
     // the downstream PatternsUsed emit can report a non-zero inj count even
     // when no legacy patterns matched. T1.30: previously the skills branch
@@ -3386,7 +3422,7 @@ async fn process_task(
     // permanently stuck at 0 despite skills being injected.
     let mut injected_skill_titles: Vec<String> = Vec::new();
     let mut injected_skill_keywords: HashMap<String, Vec<String>> = HashMap::new();
-    let (matched, pattern_context, reviewer_pattern_context) = if !all_skills_main.is_empty() {
+    let (matched, mut pattern_context, mut reviewer_pattern_context) = if !all_skills_main.is_empty() {
         let planner_skills =
             skills::match_skills_for_stage(&all_skills_main, "planner");
         let reviewer_skills =
@@ -3481,6 +3517,18 @@ async fn process_task(
             patterns::format_patterns_for_prompt(&m, "reviewer", effective_pattern_count);
         (m, planner_text, reviewer_text)
     };
+
+    // T1.27: append the external-skills block (if any) to both planner and
+    // reviewer contexts. External skills are stage-agnostic by design; the
+    // agent decides per-task which to apply.
+    if !external_skills_block.is_empty() {
+        pattern_context.push_str(&external_skills_block);
+        reviewer_pattern_context.push_str(&external_skills_block);
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+            "Injected {} external skill(s) into planner/reviewer prompts",
+            enabled_external_skills.len()
+        ))));
+    }
 
     if !matched.is_empty() {
         let actually_injected = matched.len().min(effective_pattern_count);

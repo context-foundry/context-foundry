@@ -295,6 +295,15 @@ pub struct Config {
     /// Selected extension names (e.g., ["roblox", "extend"]).
     pub extensions: Vec<String>,
 
+    /// Per-project opt-in for externally-discovered skills (T1.27).
+    /// Keyed by the absolute path of the discovered file (AGENTS.md,
+    /// .cursorrules, or `.claude/skills/<topic>/SKILL.md`). When the value is
+    /// `true`, the discovered skill is loaded into the planner-prompt context
+    /// for this project. Default empty -- discovered skills do not affect the
+    /// pipeline unless the user explicitly opts them in via the startup UI.
+    #[serde(default)]
+    pub external_skills_enabled: std::collections::HashMap<String, bool>,
+
     /// When true, auto-create a GitHub issue when a task commits as WIP
     /// (validation failed). The issue body includes review findings from
     /// .buildloop/review-report.md.
@@ -650,6 +659,7 @@ impl Default for Config {
             pipeline_mode: "full".into(),
             batch_doubt: true,
             extensions: Vec::new(),
+            external_skills_enabled: std::collections::HashMap::new(),
             create_issue_on_wip: false,
             preview_wrap: false,
             agent_pane_split: 30,
@@ -1145,6 +1155,32 @@ impl Config {
         if let Err(e) = crate::utils::atomic_write_file(&config_path, json.as_bytes()) {
             eprintln!(
                 "warning: failed to save extensions to {} -- change will not persist across restarts: {e}",
+                config_path.display(),
+            );
+        }
+    }
+
+    /// Persist the per-project external-skills opt-in map to .foundry.json.
+    /// T1.27: paths point at AGENTS.md / .cursorrules / .claude/skills SKILL.md
+    /// files outside CF's native skill store. Map values: `true` = opted in.
+    pub fn save_external_skills_enabled(
+        project_dir: &Path,
+        enabled: &std::collections::HashMap<String, bool>,
+    ) {
+        let config_path = project_dir.join(".foundry.json");
+        let content = std::fs::read_to_string(&config_path).unwrap_or_else(|_| "{}".to_string());
+        let mut value: serde_json::Value = serde_json::from_str(&content).unwrap_or_else(|e| {
+            eprintln!(
+                "warning: {} contains invalid JSON ({e}) -- existing settings will be lost",
+                config_path.display(),
+            );
+            serde_json::json!({})
+        });
+        value["external_skills_enabled"] = serde_json::json!(enabled);
+        let json = serde_json::to_string_pretty(&value).unwrap_or_default();
+        if let Err(e) = crate::utils::atomic_write_file(&config_path, json.as_bytes()) {
+            eprintln!(
+                "warning: failed to save external_skills_enabled to {} -- change will not persist: {e}",
                 config_path.display(),
             );
         }

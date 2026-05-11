@@ -370,7 +370,7 @@ pub(super) async fn run_plan_mode(project_dir: &Path, max_iterations: u64) -> Re
 async fn load_gap_analysis_pattern_context(ctx: &RunContext) -> String {
     let skills_dir = skills::resolve_skills_dir("~/.foundry/skills");
     let all_skills = skills::load_skills(&skills_dir);
-    if !all_skills.is_empty() {
+    let mut base = if !all_skills.is_empty() {
         let planner_skills = skills::match_skills_for_stage(&all_skills, "planner");
         let task_seed = ctx.spec_file_prompt_path();
         let detected_stack = patterns::detect_project_tech_stack(&ctx.project_dir);
@@ -384,16 +384,38 @@ async fn load_gap_analysis_pattern_context(ctx: &RunContext) -> String {
             &ctx.config.ollama_url,
         )
         .await;
-        return skills::format_skills_for_prompt(&ranked, ctx.config.max_pattern_injection);
-    }
-    let patterns_dir = patterns::resolve_patterns_dir(&ctx.config.patterns_dir);
-    let all_patterns = patterns::load_patterns(&patterns_dir);
-    if all_patterns.is_empty() {
-        String::new()
+        skills::format_skills_for_prompt(&ranked, ctx.config.max_pattern_injection)
     } else {
-        let refs: Vec<&patterns::Pattern> = all_patterns.iter().collect();
-        patterns::format_patterns_for_prompt(&refs, "planner", ctx.config.max_pattern_injection)
+        let patterns_dir = patterns::resolve_patterns_dir(&ctx.config.patterns_dir);
+        let all_patterns = patterns::load_patterns(&patterns_dir);
+        if all_patterns.is_empty() {
+            String::new()
+        } else {
+            let refs: Vec<&patterns::Pattern> = all_patterns.iter().collect();
+            patterns::format_patterns_for_prompt(
+                &refs,
+                "planner",
+                ctx.config.max_pattern_injection,
+            )
+        }
+    };
+
+    // T1.27: append opted-in external skills so gap-analysis planning sees
+    // them too. Read-only and best-effort.
+    let enabled_external = crate::skill_discovery::load_enabled_external_skills(
+        &ctx.project_dir,
+        &ctx.config.external_skills_enabled,
+    );
+    if !enabled_external.is_empty() {
+        let entries: Vec<(crate::skill_discovery::SkillSource, &crate::skill_discovery::DiscoveredSkill)> =
+            enabled_external
+                .iter()
+                .map(|d| (d.source, d))
+                .collect();
+        base.push_str(&skills::format_discovered_skills_for_prompt(&entries));
     }
+
+    base
 }
 
 async fn run_gap_analysis_iteration(

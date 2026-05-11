@@ -111,6 +111,8 @@ pub enum StartupMouseTarget {
     FileEntry(usize),
     PreviewLine,
     ExtensionEntry(usize),
+    /// T1.27: row index into `state.available_external_skills`.
+    ExternalSkillEntry(usize),
     ExpandAllToggle,
     WrapToggle,
     DashboardTab,
@@ -132,8 +134,8 @@ pub(super) struct StartupLayout {
 }
 
 pub(super) fn render_startup(frame: &mut Frame, state: &AppState) {
-    let ext_count = state.available_extensions.len();
-    let layout = startup_layout(frame.area(), ext_count);
+    let panel_count = combined_panel_row_count(state);
+    let layout = startup_layout(frame.area(), panel_count);
 
     render_startup_summary(frame, layout.summary, state);
     render_file_explorer(frame, layout.explorer, state);
@@ -143,6 +145,23 @@ pub(super) fn render_startup(frame: &mut Frame, state: &AppState) {
     render_startup_status_bar(frame, layout.status, state);
 }
 
+/// T1.27: total rows the Plugins panel needs to display extensions plus
+/// (optionally) a divider + external-skill rows. When external skills are
+/// empty, returns just the extension count so the existing layout is
+/// unchanged.
+fn combined_panel_row_count(state: &AppState) -> usize {
+    let ext = state.available_extensions.len();
+    let xs = state.available_external_skills.len();
+    if xs == 0 {
+        ext
+    } else if ext == 0 {
+        // 1 header row ("External Skills:") + xs rows
+        xs + 1
+    } else {
+        ext + 1 + xs // ext rows + divider + external skill rows
+    }
+}
+
 pub(super) fn startup_hit_test(
     terminal_size: (u16, u16),
     state: &AppState,
@@ -150,8 +169,8 @@ pub(super) fn startup_hit_test(
     row: u16,
 ) -> Option<StartupMouseTarget> {
     let area = Rect::new(0, 0, terminal_size.0, terminal_size.1);
-    let ext_count = state.available_extensions.len();
-    let layout = startup_layout(area, ext_count);
+    let panel_count = combined_panel_row_count(state);
+    let layout = startup_layout(area, panel_count);
 
     // Check Dashboard/Explore tab clicks on the first summary row
     if row == layout.summary.y {
@@ -189,7 +208,9 @@ pub(super) fn startup_layout(area: Rect, extension_count: usize) -> StartupLayou
     let ext_panel_height = if extension_count == 0 {
         4u16 // "No extensions found" + borders
     } else {
-        (extension_count as u16 + 2).min(8) // rows + borders, capped at 8
+        // T1.27: cap raised slightly so 4-5 .claude/skills entries fit alongside
+        // a couple of plugins; very large lists scroll within the panel.
+        (extension_count as u16 + 2).min(12) // rows + borders, capped at 12
     };
 
     let vertical = Layout::default()
@@ -321,7 +342,9 @@ fn extensions_panel_hit_test(
     if !rect_contains(area, column, row) {
         return None;
     }
-    if state.available_extensions.is_empty() {
+    let ext_count = state.available_extensions.len();
+    let xs_count = state.available_external_skills.len();
+    if ext_count == 0 && xs_count == 0 {
         return None;
     }
     let inner_top = area.y + 1;
@@ -330,8 +353,23 @@ fn extensions_panel_hit_test(
         return None;
     }
     let relative_row = (row - inner_top) as usize;
-    if relative_row < state.available_extensions.len() {
-        Some(StartupMouseTarget::ExtensionEntry(relative_row))
+    // Layout: [extensions...] [optional divider] [optional "External Skills:" header] [external skills...]
+    if relative_row < ext_count {
+        return Some(StartupMouseTarget::ExtensionEntry(relative_row));
+    }
+    if xs_count == 0 {
+        return None;
+    }
+    // Divider row (only present when both groups are non-empty).
+    let divider_rows = if ext_count > 0 { 1 } else { 0 };
+    let header_row = 1; // "External Skills" header
+    let xs_start = ext_count + divider_rows + header_row;
+    if relative_row < xs_start {
+        return None;
+    }
+    let xs_index = relative_row - xs_start;
+    if xs_index < xs_count {
+        Some(StartupMouseTarget::ExternalSkillEntry(xs_index))
     } else {
         None
     }
@@ -1214,7 +1252,9 @@ fn render_extensions_panel(frame: &mut Frame, area: Rect, state: &AppState) {
             .add_modifier(Modifier::BOLD),
     );
 
-    if state.available_extensions.is_empty() {
+    let inner_width = area.width.saturating_sub(2) as usize;
+
+    if state.available_extensions.is_empty() && state.available_external_skills.is_empty() {
         let paragraph = Paragraph::new(vec![
             Line::from(Span::styled(
                 "  No plugins found.",
@@ -1236,8 +1276,7 @@ fn render_extensions_panel(frame: &mut Frame, area: Rect, state: &AppState) {
         return;
     }
 
-    let inner_width = area.width.saturating_sub(2) as usize;
-    let lines: Vec<Line> = state
+    let mut lines: Vec<Line> = state
         .available_extensions
         .iter()
         .enumerate()
@@ -1277,6 +1316,73 @@ fn render_extensions_panel(frame: &mut Frame, area: Rect, state: &AppState) {
             ])
         })
         .collect();
+
+    // T1.27: render the External Skills group below extensions when present.
+    if !state.available_external_skills.is_empty() {
+        if !state.available_extensions.is_empty() {
+            // Visual divider row.
+            lines.push(Line::from(Span::styled(
+                " ─── External Skills ───",
+                Style::default().fg(state.tui_theme.muted),
+            )));
+        } else {
+            lines.push(Line::from(Span::styled(
+                " External Skills:",
+                Style::default()
+                    .fg(state.tui_theme.accent)
+                    .add_modifier(Modifier::BOLD),
+            )));
+        }
+
+        let ext_count = state.available_extensions.len();
+        for (i, xs) in state.available_external_skills.iter().enumerate() {
+            let checkbox = if xs.selected { "[x]" } else { "[ ]" };
+            let cursor_idx = ext_count + i;
+            let is_cursor = cursor_idx == state.extensions_cursor
+                && state.focused_pane == TuiPane::Extensions;
+
+            let label = format!(
+                "{} {} [{}]",
+                checkbox,
+                xs.derived_name,
+                xs.source.ui_label()
+            );
+            let path_str = xs.path.to_string_lossy();
+            let desc_width = inner_width.saturating_sub(label.len() + 3);
+            let mut desc_text = truncate_str(&path_str, desc_width).to_string();
+            if let Some(winner) = &xs.shadowed_by {
+                let trimmed_winner = std::path::Path::new(winner)
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("(other)");
+                desc_text = format!("shadowed by {}", trimmed_winner);
+            }
+
+            let name_style = if is_cursor {
+                Style::default()
+                    .fg(Color::Black)
+                    .bg(state.tui_theme.accent)
+                    .add_modifier(Modifier::BOLD)
+            } else if xs.shadowed_by.is_some() {
+                Style::default().fg(state.tui_theme.muted)
+            } else if xs.selected {
+                Style::default().fg(Color::Green)
+            } else {
+                Style::default().fg(state.tui_theme.text)
+            };
+
+            let desc_style = if is_cursor {
+                Style::default().fg(Color::Black).bg(state.tui_theme.accent)
+            } else {
+                Style::default().fg(state.tui_theme.muted)
+            };
+
+            lines.push(Line::from(vec![
+                Span::styled(format!(" {} ", label), name_style),
+                Span::styled(desc_text, desc_style),
+            ]));
+        }
+    }
 
     let paragraph = Paragraph::new(lines).block(
         Block::default()

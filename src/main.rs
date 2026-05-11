@@ -23,6 +23,7 @@ mod model_catalog;
 mod observatory;
 mod orchestrator;
 mod patterns;
+mod skill_discovery;
 mod skills;
 mod skills_telemetry;
 mod prompts;

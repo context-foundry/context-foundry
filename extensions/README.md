@@ -87,6 +87,16 @@ Required fields: `pattern_id`, `title`. All other fields have defaults.
    Read /path/to/context-foundry/extensions/my-tech/CLAUDE.md for domain rules.
    ```
 
+## External skills
+
+If your project already has skill / instruction files authored for other AI
+tools (`AGENTS.md`, `.cursorrules`, or project-local
+`.claude/skills/<topic>/SKILL.md`), CF surfaces them in a startup-screen
+"External Skills" section and lets you opt them into the planner-prompt
+context per project. Read-only -- CF never modifies those files. See
+[`docs/cross-provider-skills.md`](../docs/cross-provider-skills.md) for the
+full reference.
+
 4. Run foundry — agents read the plugin docs during planning and building. The TUI startup screen shows each discovered plugin with its name, pattern count, and a one-line description extracted from the first non-heading paragraph of its `CLAUDE.md`.
 
 ## Plugin Ideas

@@ -6,6 +6,7 @@ use chrono::{NaiveDate, Utc};
 
 use crate::embeddings;
 use crate::patterns::{Pattern, PatternSolution};
+use crate::skill_discovery::{DiscoveredSkill, SkillSource};
 use crate::skills_telemetry;
 use crate::utils::atomic_write_file;
 
@@ -146,6 +147,102 @@ pub fn skill_to_pattern(s: SkillFile) -> Pattern {
         cited_in_wip: s.frontmatter.cf_citations_wip,
         cited_by_stage: std::collections::HashMap::new(),
     }
+}
+
+/// Synthesize a `SkillFile` from an externally-discovered skill (AGENTS.md,
+/// .cursorrules, or a project-local `.claude/skills/<topic>/SKILL.md`).
+///
+/// For `ClaudeProjectSkill` sources whose files have valid SKILL.md
+/// frontmatter, the parsed `name` and `description` are reused verbatim. For
+/// AGENTS.md and .cursorrules (plain markdown, no frontmatter), the name is
+/// derived and the description is a stub indicating import provenance.
+///
+/// `cf-stage` defaults to `both` so the skill is offered to both planner and
+/// reviewer prompts -- external skills don't carry CF's per-stage targeting.
+///
+/// T1.27 ships the prompt-injection path via `format_discovered_skills_for_prompt`
+/// so this helper is currently only exercised by tests, but it is the
+/// canonical converter for any future ranker integration.
+#[allow(dead_code)]
+pub fn discovered_to_skill_file(disc: &DiscoveredSkill) -> SkillFile {
+    let (name, description, cf_stage) = match (&disc.frontmatter, disc.source) {
+        (Some(fm), SkillSource::ClaudeProjectSkill) => {
+            let name = if !fm.name.is_empty() {
+                fm.name.clone()
+            } else {
+                disc.derived_name.clone()
+            };
+            let description = if !fm.description.is_empty() {
+                fm.description.clone()
+            } else {
+                format!("Imported from {}", disc.source.ui_label())
+            };
+            let stage = if fm.cf_stage.trim().is_empty() {
+                "both".to_string()
+            } else {
+                fm.cf_stage.clone()
+            };
+            (name, description, stage)
+        }
+        _ => (
+            disc.derived_name.clone(),
+            format!("Imported from {}", disc.source.ui_label()),
+            "both".to_string(),
+        ),
+    };
+
+    let frontmatter = SkillFrontmatter {
+        name,
+        description,
+        cf_stage,
+        cf_citations_pass: 0,
+        cf_citations_wip: 0,
+        cf_last_used: None,
+        cf_frequency: 0,
+        cf_severity: None,
+        cf_keywords: Vec::new(),
+    };
+
+    SkillFile {
+        // Use derived_name as a stable dir_name placeholder so collision
+        // resolution and the matcher's pattern_id derivation work consistently.
+        dir_name: disc.derived_name.clone(),
+        frontmatter,
+        body: disc.body.clone(),
+    }
+}
+
+/// Render a discovered external skill as a prompt-embeddable Markdown block
+/// with an explicit `source: <label>` so the agent sees provenance and the
+/// post-AUDIT citation scanner can attribute the contribution.
+///
+/// Each block is prefixed with the source label and the file path, then the
+/// raw body is included verbatim. Returns an empty string if `discovered` is
+/// empty.
+pub fn format_discovered_skills_for_prompt(discovered: &[(SkillSource, &DiscoveredSkill)]) -> String {
+    if discovered.is_empty() {
+        return String::new();
+    }
+    let mut out = String::from("\n\n---\n## External Skills (decide which to apply)\n\n");
+    for (source, disc) in discovered {
+        out.push_str(&format!(
+            "### `{}` [source: {}]\n",
+            disc.derived_name,
+            source.prompt_label()
+        ));
+        out.push_str(&format!("**Path:** `{}`\n\n", disc.path.display()));
+        let body = disc.body.trim();
+        if !body.is_empty() {
+            out.push_str(body);
+            out.push('\n');
+        }
+        out.push('\n');
+    }
+    out.push_str(
+        "**Citation instruction:** when you apply guidance from any external skill above, \
+list its name in a `**Skills referenced:**` footer at the bottom of your output.\n",
+    );
+    out
 }
 
 /// Hybrid retrieval over a stage-filtered set of skills. Combines BM25 keyword
@@ -1283,5 +1380,137 @@ mod tests {
         assert!(parsed.body.contains("Body text"));
         assert!(parsed.body.contains("Do X"));
         assert!(!after.contains('\r'), "re-rendered file should be LF-only");
+    }
+
+    #[test]
+    fn discovered_to_skill_file_agents_md_uses_default_name_and_stub_description() {
+        let disc = DiscoveredSkill {
+            source: SkillSource::AgentsMd,
+            path: PathBuf::from("/tmp/AGENTS.md"),
+            body: "Some agents rules.".to_string(),
+            derived_name: "agents-md".to_string(),
+            frontmatter: None,
+        };
+        let sf = discovered_to_skill_file(&disc);
+        assert_eq!(sf.frontmatter.name, "agents-md");
+        assert_eq!(sf.frontmatter.cf_stage, "both");
+        assert!(
+            sf.frontmatter.description.contains("AGENTS.md"),
+            "expected description to mention AGENTS.md, got: {}",
+            sf.frontmatter.description
+        );
+        assert_eq!(sf.body, "Some agents rules.");
+        assert_eq!(sf.dir_name, "agents-md");
+    }
+
+    #[test]
+    fn discovered_to_skill_file_claude_skill_reuses_existing_frontmatter() {
+        let mut fm = SkillFrontmatter::default();
+        fm.name = "audit-flowise".to_string();
+        fm.description = "Audit a Flowise flow.".to_string();
+        let disc = DiscoveredSkill {
+            source: SkillSource::ClaudeProjectSkill,
+            path: PathBuf::from("/tmp/.claude/skills/audit-flowise/SKILL.md"),
+            body: "Do audit.".to_string(),
+            derived_name: "audit-flowise".to_string(),
+            frontmatter: Some(fm),
+        };
+        let sf = discovered_to_skill_file(&disc);
+        assert_eq!(sf.frontmatter.name, "audit-flowise");
+        assert_eq!(sf.frontmatter.description, "Audit a Flowise flow.");
+        // No cf_stage configured -> default to "both".
+        assert_eq!(sf.frontmatter.cf_stage, "both");
+        assert_eq!(sf.body, "Do audit.");
+    }
+
+    #[test]
+    fn discovered_to_skill_file_claude_skill_falls_back_to_derived_name_when_blank() {
+        let fm = SkillFrontmatter::default(); // empty name + description
+        let disc = DiscoveredSkill {
+            source: SkillSource::ClaudeProjectSkill,
+            path: PathBuf::from("/tmp/.claude/skills/topic/SKILL.md"),
+            body: "body".to_string(),
+            derived_name: "topic".to_string(),
+            frontmatter: Some(fm),
+        };
+        let sf = discovered_to_skill_file(&disc);
+        assert_eq!(sf.frontmatter.name, "topic");
+        assert!(
+            sf.frontmatter.description.contains(".claude/skills"),
+            "expected description fallback to mention path label, got: {}",
+            sf.frontmatter.description
+        );
+    }
+
+    #[test]
+    fn format_discovered_skills_returns_empty_when_none() {
+        let out = format_discovered_skills_for_prompt(&[]);
+        assert_eq!(out, "");
+    }
+
+    #[test]
+    fn format_discovered_skills_includes_source_label_and_path() {
+        let disc = DiscoveredSkill {
+            source: SkillSource::AgentsMd,
+            path: PathBuf::from("/tmp/AGENTS.md"),
+            body: "Imported agent rules go here.".to_string(),
+            derived_name: "agents-md".to_string(),
+            frontmatter: None,
+        };
+        let entries: Vec<(SkillSource, &DiscoveredSkill)> =
+            vec![(SkillSource::AgentsMd, &disc)];
+        let out = format_discovered_skills_for_prompt(&entries);
+        assert!(out.contains("## External Skills"));
+        assert!(
+            out.contains("source: agents-md"),
+            "expected source label, got: {}",
+            out
+        );
+        assert!(out.contains("/tmp/AGENTS.md"));
+        assert!(out.contains("Imported agent rules"));
+        assert!(
+            out.contains("Skills referenced:"),
+            "expected citation instruction footer, got: {}",
+            out
+        );
+    }
+
+    #[test]
+    fn format_discovered_skills_renders_each_source_with_distinct_label() {
+        let agents = DiscoveredSkill {
+            source: SkillSource::AgentsMd,
+            path: PathBuf::from("/p/AGENTS.md"),
+            body: "agents body".to_string(),
+            derived_name: "agents-md".to_string(),
+            frontmatter: None,
+        };
+        let cursor = DiscoveredSkill {
+            source: SkillSource::CursorRules,
+            path: PathBuf::from("/p/.cursorrules"),
+            body: "cursor body".to_string(),
+            derived_name: "cursorrules".to_string(),
+            frontmatter: None,
+        };
+        let claude = DiscoveredSkill {
+            source: SkillSource::ClaudeProjectSkill,
+            path: PathBuf::from("/p/.claude/skills/x/SKILL.md"),
+            body: "claude body".to_string(),
+            derived_name: "x".to_string(),
+            frontmatter: None,
+        };
+        let entries: Vec<(SkillSource, &DiscoveredSkill)> = vec![
+            (SkillSource::ClaudeProjectSkill, &claude),
+            (SkillSource::AgentsMd, &agents),
+            (SkillSource::CursorRules, &cursor),
+        ];
+        let out = format_discovered_skills_for_prompt(&entries);
+        assert!(out.contains("source: claude-project"));
+        assert!(out.contains("source: agents-md"));
+        assert!(out.contains("source: cursor"));
+        assert!(out.contains("agents body"));
+        assert!(out.contains("cursor body"));
+        assert!(out.contains("claude body"));
+        // Footer appears exactly once.
+        assert_eq!(out.matches("Citation instruction:").count(), 1);
     }
 }

@@ -61,6 +61,22 @@ pub struct ExtensionDisplayInfo {
     pub pattern_count: usize,
 }
 
+/// Display info for an externally-discovered skill surfaced under the
+/// "External Skills" section of the startup screen (T1.27). Each entry maps
+/// 1:1 to a `crate::skill_discovery::DiscoveredSkill` and tracks the
+/// per-project opt-in flag persisted to `.foundry.json`.
+#[derive(Debug, Clone)]
+pub struct ExternalSkillDisplayInfo {
+    pub source: crate::skill_discovery::SkillSource,
+    pub path: std::path::PathBuf,
+    pub derived_name: String,
+    pub selected: bool,
+    /// True when another higher-precedence source contributes a skill with
+    /// the same `derived_name`; the UI displays this as "shadowed by ..." so
+    /// the user can see which file wins.
+    pub shadowed_by: Option<String>,
+}
+
 #[derive(Debug, Clone)]
 pub struct PatternEvent {
     pub title: String,
@@ -1460,6 +1476,11 @@ pub struct AppState {
     pub stage_summary_overlay: Option<StageSummaryOverlay>,
     pub available_extensions: Vec<ExtensionDisplayInfo>,
     pub extensions_cursor: usize,
+    /// Externally-discovered skills surfaced under the "External Skills"
+    /// section of the startup screen (T1.27). Empty until the project's
+    /// startup-state initializer scans for AGENTS.md / .cursorrules /
+    /// `.claude/skills/`.
+    pub available_external_skills: Vec<ExternalSkillDisplayInfo>,
     // ─── Extension & Pattern Telemetry Counters ───
     pub extension_inject_count: HashMap<String, usize>,
     pub extension_reference_count: HashMap<String, usize>,
@@ -1643,6 +1664,7 @@ impl AppState {
             stage_summary_overlay: None,
             available_extensions: Vec::new(),
             extensions_cursor: 0,
+            available_external_skills: Vec::new(),
             extension_inject_count: HashMap::new(),
             extension_reference_count: HashMap::new(),
             pattern_inject_count: 0,

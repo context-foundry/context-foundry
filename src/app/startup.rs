@@ -4,6 +4,7 @@ use std::path::Path;
 use crate::agent::AgentRole;
 use crate::config::Config;
 use crate::extensions;
+use crate::skill_discovery;
 use crate::utils::truncate_str;
 use crate::{task, tui};
 
@@ -295,9 +296,9 @@ pub(super) fn handle_startup_key(state: &mut AppState, key: event::KeyEvent, con
     }
 
     // Extension panel navigation (when focused on extensions pane)
-    if state.focused_pane == crate::app::state::TuiPane::Extensions
-        && !state.available_extensions.is_empty()
-    {
+    let total_panel_rows =
+        state.available_extensions.len() + state.available_external_skills.len();
+    if state.focused_pane == crate::app::state::TuiPane::Extensions && total_panel_rows > 0 {
         match key.code {
             KeyCode::Up => {
                 if state.extensions_cursor > 0 {
@@ -306,51 +307,22 @@ pub(super) fn handle_startup_key(state: &mut AppState, key: event::KeyEvent, con
                 return;
             }
             KeyCode::Down => {
-                if state.extensions_cursor + 1 < state.available_extensions.len() {
+                if state.extensions_cursor + 1 < total_panel_rows {
                     state.extensions_cursor += 1;
                 }
                 return;
             }
             KeyCode::Char(' ') => {
-                // Toggle selection
-                if let Some(ext) = state.available_extensions.get_mut(state.extensions_cursor) {
-                    ext.selected = !ext.selected;
-                }
-                // Persist to .foundry.json
-                let project_dir = state
-                    .buildloop_dir
-                    .parent()
-                    .unwrap_or(std::path::Path::new("."));
-                let selected: Vec<String> = state
-                    .available_extensions
-                    .iter()
-                    .filter(|e| e.selected)
-                    .map(|e| e.name.clone())
-                    .collect();
-                Config::save_extensions(project_dir, &selected);
+                toggle_panel_row_at_cursor(state);
                 return;
             }
             KeyCode::Enter => {
-                // Toggle if input is empty; otherwise fall through to submit
                 let input_empty = state
                     .startup
                     .as_ref()
                     .is_none_or(|s| s.intent_input.is_empty());
                 if input_empty {
-                    if let Some(ext) = state.available_extensions.get_mut(state.extensions_cursor) {
-                        ext.selected = !ext.selected;
-                    }
-                    let project_dir = state
-                        .buildloop_dir
-                        .parent()
-                        .unwrap_or(std::path::Path::new("."));
-                    let selected: Vec<String> = state
-                        .available_extensions
-                        .iter()
-                        .filter(|e| e.selected)
-                        .map(|e| e.name.clone())
-                        .collect();
-                    Config::save_extensions(project_dir, &selected);
+                    toggle_panel_row_at_cursor(state);
                     return;
                 }
                 // Fall through to normal Enter handling
@@ -967,6 +939,29 @@ pub(super) fn handle_startup_mouse_at(
                             .collect();
                         Config::save_extensions(project_dir, &selected);
                     }
+                    tui::StartupMouseTarget::ExternalSkillEntry(index) => {
+                        state.focused_pane = crate::app::state::TuiPane::Extensions;
+                        let cursor_index =
+                            state.available_extensions.len().saturating_add(index);
+                        state.extensions_cursor = cursor_index;
+                        if let Some(xs) = state.available_external_skills.get_mut(index) {
+                            xs.selected = !xs.selected;
+                        }
+                        let project_dir = state
+                            .buildloop_dir
+                            .parent()
+                            .unwrap_or(std::path::Path::new("."))
+                            .to_path_buf();
+                        let mut enabled: std::collections::HashMap<String, bool> =
+                            std::collections::HashMap::new();
+                        for xs in &state.available_external_skills {
+                            enabled.insert(
+                                xs.path.to_string_lossy().into_owned(),
+                                xs.selected,
+                            );
+                        }
+                        Config::save_external_skills_enabled(&project_dir, &enabled);
+                    }
                     tui::StartupMouseTarget::ExpandAllToggle => {
                         state.focused_pane = crate::app::state::TuiPane::Explorer;
                         if let Some(startup) = state.startup.as_mut() {
@@ -1109,6 +1104,108 @@ pub(super) fn enter_home_surface(
             }
         })
         .collect();
+
+    state.available_external_skills =
+        build_external_skill_display(project_dir, &config);
+}
+
+/// Resolve `state.extensions_cursor` to either an extension row or an
+/// external-skill row and toggle the corresponding selection. T1.27: the
+/// cursor traverses both groups as one combined list (extensions first,
+/// then external skills) so existing keyboard muscle memory keeps working.
+fn toggle_panel_row_at_cursor(state: &mut AppState) {
+    let project_dir = state
+        .buildloop_dir
+        .parent()
+        .unwrap_or(std::path::Path::new("."))
+        .to_path_buf();
+
+    let cursor = state.extensions_cursor;
+    let ext_count = state.available_extensions.len();
+    if cursor < ext_count {
+        if let Some(ext) = state.available_extensions.get_mut(cursor) {
+            ext.selected = !ext.selected;
+        }
+        let selected: Vec<String> = state
+            .available_extensions
+            .iter()
+            .filter(|e| e.selected)
+            .map(|e| e.name.clone())
+            .collect();
+        Config::save_extensions(&project_dir, &selected);
+        return;
+    }
+
+    let xs_index = cursor - ext_count;
+    if let Some(xs) = state.available_external_skills.get_mut(xs_index) {
+        xs.selected = !xs.selected;
+    }
+    let mut enabled: std::collections::HashMap<String, bool> =
+        std::collections::HashMap::new();
+    for xs in &state.available_external_skills {
+        enabled.insert(xs.path.to_string_lossy().into_owned(), xs.selected);
+    }
+    Config::save_external_skills_enabled(&project_dir, &enabled);
+}
+
+/// Build the display rows for the External Skills startup panel (T1.27).
+/// Reads the per-project opt-in map from `.foundry.json` and annotates each
+/// row with its shadowing status when collisions occur.
+pub(super) fn build_external_skill_display(
+    project_dir: &Path,
+    config: &Config,
+) -> Vec<crate::app::state::ExternalSkillDisplayInfo> {
+    let discovered = skill_discovery::discover_external_skills(project_dir);
+    if discovered.is_empty() {
+        return Vec::new();
+    }
+
+    // Resolve precedence: a `derived_name` collision is won by the source
+    // with the highest precedence (claude > agents > cursor); the loser is
+    // marked as shadowed so the user sees why their skill is inert.
+    let mut winner_path_per_name: std::collections::HashMap<String, std::path::PathBuf> =
+        std::collections::HashMap::new();
+    for d in &discovered {
+        match winner_path_per_name.get(&d.derived_name) {
+            None => {
+                winner_path_per_name.insert(d.derived_name.clone(), d.path.clone());
+            }
+            Some(prev_path) => {
+                let prev_source = discovered
+                    .iter()
+                    .find(|p| &p.path == prev_path)
+                    .map(|p| p.source)
+                    .unwrap_or(d.source);
+                if d.source.precedence() > prev_source.precedence() {
+                    winner_path_per_name.insert(d.derived_name.clone(), d.path.clone());
+                }
+            }
+        }
+    }
+
+    discovered
+        .into_iter()
+        .map(|d| {
+            let path_key = d.path.to_string_lossy().into_owned();
+            let selected = config
+                .external_skills_enabled
+                .get(&path_key)
+                .copied()
+                .unwrap_or(false);
+            let winner_path = winner_path_per_name.get(&d.derived_name);
+            let shadowed_by = match winner_path {
+                Some(p) if p != &d.path => Some(p.to_string_lossy().into_owned()),
+                _ => None,
+            };
+            crate::app::state::ExternalSkillDisplayInfo {
+                source: d.source,
+                path: d.path,
+                derived_name: d.derived_name,
+                selected,
+                shadowed_by,
+            }
+        })
+        .collect()
 }
 
 fn is_qrpba_progress(chars: &[char]) -> bool {
@@ -1314,6 +1411,9 @@ pub(super) fn enter_startup_surface(
             }
         })
         .collect();
+
+    state.available_external_skills =
+        build_external_skill_display(project_dir, &config);
 }
 
 pub(super) fn enter_startup_surface_for_scenario(
