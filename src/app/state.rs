@@ -1364,6 +1364,13 @@ pub struct CurrentClassification {
 pub struct AppState {
     pub buildloop_dir: PathBuf,
     pub eval_report_cache: Option<EvalReportSnapshot>,
+    /// Mtime of `<buildloop_dir>/eval-report.json` at the moment
+    /// `eval_report_cache` was populated. Used by the stats renderer to
+    /// distinguish a fresh eval (`mtime >= task_start`) from a stale one
+    /// (`mtime < task_start`) without touching disk on every render. `None`
+    /// means the report does not exist yet or the mtime probe failed; the
+    /// predicate treats that case as stale (conservative).
+    pub eval_report_mtime: Option<SystemTime>,
     pub phase: AppPhase,
     pub startup: Option<StartupState>,
     pub planning: Option<PlanningState>,
@@ -1559,11 +1566,17 @@ impl AppState {
         // populates the cache when opened (see open_settings_overlay in
         // app.rs), but the status meter renders directly from this field
         // and won't see anything until something forces a refresh.
+        let initial_eval_mtime = std::fs::metadata(
+            buildloop_dir.join(crate::eval::report::EVAL_REPORT_FILENAME),
+        )
+        .ok()
+        .and_then(|m| m.modified().ok());
         let initial_eval_cache =
             crate::eval::report::read_report(&buildloop_dir);
         Self {
             buildloop_dir,
             eval_report_cache: initial_eval_cache,
+            eval_report_mtime: initial_eval_mtime,
             phase: AppPhase::Startup,
             startup: None,
             planning: None,

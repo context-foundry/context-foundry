@@ -1440,8 +1440,23 @@ fn mark_settings_dirty(state: &mut AppState) {
 }
 
 fn refresh_eval_report_cache(state: &mut AppState) {
+    // Probe mtime BEFORE reading content. If an atomic rename happens
+    // between probe and read, we end up with a fresh snapshot paired
+    // with a slightly-older mtime, which the staleness predicate
+    // handles conservatively (marks as stale for one extra render
+    // cycle until the next refresh). The reverse order would let an
+    // old snapshot pair with a fresh mtime -- exactly the false-fresh
+    // bug T1.29 is fixing.
+    let mtime = std::fs::metadata(
+        state
+            .buildloop_dir
+            .join(eval_report::EVAL_REPORT_FILENAME),
+    )
+    .ok()
+    .and_then(|m| m.modified().ok());
     let snap = eval_report::read_report(&state.buildloop_dir);
     state.eval_report_cache = snap.clone();
+    state.eval_report_mtime = mtime;
     if let Some(ref mut ov) = state.settings_overlay {
         ov.eval_report_cache = snap;
     }
