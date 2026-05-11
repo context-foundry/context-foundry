@@ -1188,10 +1188,62 @@ fn handle_planning_event(state: &mut AppState, event: AppEvent, config: &Config)
         AppEvent::Key(key) => handle_planning_key(state, key, config),
         AppEvent::Mouse(mouse) => {
             use crossterm::event::{MouseButton, MouseEventKind};
+            let terminal_size = crossterm::terminal::size().unwrap_or((120, 40));
+            let area = ratatui::layout::Rect::new(0, 0, terminal_size.0, terminal_size.1);
+            // Layout must match tui::render: header(5) + pipeline(5) + middle + stats + status.
+            let chunks = ratatui::layout::Layout::default()
+                .direction(ratatui::layout::Direction::Vertical)
+                .constraints([
+                    ratatui::layout::Constraint::Length(5),
+                    ratatui::layout::Constraint::Length(5),
+                    ratatui::layout::Constraint::Min(8),
+                    ratatui::layout::Constraint::Length(8),
+                    ratatui::layout::Constraint::Length(1),
+                ])
+                .split(area);
+            let pipeline_area = chunks[1];
+            let status_bar = chunks[4];
+            let mut n_connected = config.pipeline_stages.iter().filter(|s| s.enabled).count();
+            if config.run_mode == "coach" {
+                n_connected += 1;
+            }
+            if config.plan_review_enabled {
+                n_connected += 1;
+            }
+
+            // Hover anywhere updates the pipeline-tile tooltip label so the
+            // status bar can surface the long name (Q -> QUERY, SH -> SHIP, etc.).
+            if matches!(mouse.kind, MouseEventKind::Moved) {
+                state.hovered_pipeline_label = tui::pipeline_click(
+                    pipeline_area,
+                    mouse.column,
+                    mouse.row,
+                    n_connected,
+                )
+                .map(|click| match click {
+                    tui::PipelineClick::ConnectedStage(i) => {
+                        let mut labels: Vec<String> = Vec::new();
+                        if config.run_mode == "coach" {
+                            labels.push("COACH".to_string());
+                        }
+                        for stage_cfg in
+                            config.pipeline_stages.iter().filter(|s| s.enabled)
+                        {
+                            labels.push(stage_cfg.label.clone());
+                            if stage_cfg.id == "plan" && config.plan_review_enabled {
+                                labels.push("P+".to_string());
+                            }
+                        }
+                        labels.get(i).cloned().unwrap_or_else(|| "?".to_string())
+                    }
+                    tui::PipelineClick::Ship => "SHIP".to_string(),
+                    tui::PipelineClick::Discover => "DISCOVER".to_string(),
+                    tui::PipelineClick::Patterns => "SKILLS".to_string(),
+                });
+            }
+
             if matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
-                let terminal_size = crossterm::terminal::size().unwrap_or((120, 40));
                 if state.confirm_quit {
-                    let area = ratatui::layout::Rect::new(0, 0, terminal_size.0, terminal_size.1);
                     if let Some(action) = tui::quit_confirm_hit_test(area, mouse.column, mouse.row)
                     {
                         match action {
@@ -1204,18 +1256,21 @@ fn handle_planning_event(state: &mut AppState, event: AppEvent, config: &Config)
                 if handle_settings_overlay_mouse(state, mouse, terminal_size) {
                     return;
                 }
-                let area = ratatui::layout::Rect::new(0, 0, terminal_size.0, terminal_size.1);
-                let chunks = ratatui::layout::Layout::default()
-                    .direction(ratatui::layout::Direction::Vertical)
-                    .constraints([
-                        ratatui::layout::Constraint::Length(5),
-                        ratatui::layout::Constraint::Length(9),
-                        ratatui::layout::Constraint::Min(8),
-                        ratatui::layout::Constraint::Length(8),
-                        ratatui::layout::Constraint::Length(1),
-                    ])
-                    .split(area);
-                let status_bar = chunks[4];
+                // Pipeline tile click -- opens the AI summary modal, same as
+                // during RUNNING. Necessary in PLANNING because the dashboard
+                // is fully visible even while the initial scan runs.
+                if let Some(click) =
+                    tui::pipeline_click(pipeline_area, mouse.column, mouse.row, n_connected)
+                {
+                    let project_dir = state
+                        .buildloop_dir
+                        .parent()
+                        .unwrap_or(std::path::Path::new("."))
+                        .to_path_buf();
+                    let target = pipeline_click_target(click, &project_dir, config);
+                    handle_pipeline_click_target(state, &project_dir, config, target);
+                    return;
+                }
                 if mouse.row == status_bar.y {
                     if let Some(action) =
                         tui::running_status_bar_hit_test(status_bar, mouse.column, state)

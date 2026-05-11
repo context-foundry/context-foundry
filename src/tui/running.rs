@@ -1543,6 +1543,20 @@ pub(super) fn render_planning_status_bar(frame: &mut Frame, area: Rect, state: &
         ));
     }
 
+    // Pipeline-tile hover tooltip (also surfaced in the running status bar).
+    if let Some(label) = state.hovered_pipeline_label.as_deref() {
+        spans.push(Span::styled(
+            format!("  {} ", label),
+            Style::default()
+                .fg(state.tui_theme.accent)
+                .add_modifier(Modifier::BOLD),
+        ));
+        spans.push(Span::styled(
+            "click for AI summary ",
+            Style::default().fg(state.tui_theme.muted),
+        ));
+    }
+
     frame.render_widget(Paragraph::new(Line::from(spans)), area);
 }
 
