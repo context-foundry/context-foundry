@@ -281,7 +281,10 @@ pub(super) fn render_pipeline_map(
             stage_id: None,
         },
         StageInfo {
-            label: "PATTERNS".to_string(),
+            // T1.26 strangled the legacy pattern abstraction in favor of
+            // Anthropic Skills. The internal stage id stays "pattern_extraction"
+            // for path stability, but the visible label is "SKILLS".
+            label: "SKILLS".to_string(),
             model_label: truncate_str(&patterns_model, 14).to_string(),
             kind_label: "~/.foundry/".to_string(),
             border_color: if patterns_used {
@@ -294,7 +297,7 @@ pub(super) fn render_pipeline_map(
             } else {
                 Style::default().fg(theme.muted)
             },
-            stage_id: None,
+            stage_id: Some("pattern_extraction".to_string()),
         },
     ];
 

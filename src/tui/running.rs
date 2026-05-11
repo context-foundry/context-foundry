@@ -462,7 +462,14 @@ pub(super) fn render_header(frame: &mut Frame, area: Rect, state: &AppState) {
                 &agent_line,
                 Style::default().fg(state.tui_theme.muted),
             )];
-            if !state.status_summary.is_empty() && !agent_line.is_empty() {
+            // Reading state already includes the status summary inside
+            // agent_line (see StreamState::Reading branch above), so appending
+            // it again here would render "{spinner} {summary} | {summary}".
+            // Only append externally for Writing/Idle states.
+            if !state.status_summary.is_empty()
+                && !agent_line.is_empty()
+                && state.stream_state != StreamState::Reading
+            {
                 let prefix = " | ";
                 let used = agent_line.len() + prefix.len();
                 let avail = (area.width as usize).saturating_sub(used);

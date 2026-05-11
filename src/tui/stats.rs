@@ -173,18 +173,64 @@ pub(super) fn render_dashboard_stats(
     }
     lines.push(Line::from(row1_spans));
 
+    // Commits column on the left half (always shown when there are session
+    // commits or a current task), Eval column on the right half. Previously
+    // commits lived on the Skills row -- moving them here puts them next to
+    // the Eval data (both are pipeline outcomes) and fills the previously-
+    // blank left half of the Eval row. The "EVAL " prefix on the aggregate
+    // badge string is also stripped so it doesn't duplicate the "Eval" label.
+    let stale = eval_badge_is_stale(state);
+    let commits_label = "  Commits  ";
+    let commits_text = format!(
+        "feat: {}  WIP: {}",
+        state.session_feat_commits, state.session_wip_commits
+    );
+    let commits_left_pad_width = half_width
+        .saturating_sub(commits_label.len())
+        .saturating_sub(commits_text.len());
+    let commits_left = format!(
+        "{}{:<width$}",
+        commits_text,
+        "",
+        width = commits_left_pad_width
+    );
     if let Some(ref report) = state.eval_report_cache {
         if !report.aggregate_badge.is_empty() {
-            let badge_color = badge_color_for(&report.aggregate_badge, theme);
+            let badge_no_prefix = report
+                .aggregate_badge
+                .strip_prefix("EVAL ")
+                .unwrap_or(&report.aggregate_badge);
+            let badge_color = if stale {
+                theme.muted
+            } else {
+                badge_color_for(&report.aggregate_badge, theme)
+            };
+            let badge_text = if stale {
+                format!("(last) {}", badge_no_prefix)
+            } else {
+                badge_no_prefix.to_string()
+            };
             lines.push(Line::from(vec![
-                Span::styled(
-                    format!("{:<width$}", "", width = half_width),
-                    Style::default(),
-                ),
+                Span::styled(commits_label, Style::default().fg(theme.info)),
+                Span::styled(commits_left, Style::default().fg(theme.text)),
                 Span::styled("Eval      ", Style::default().fg(theme.info)),
-                Span::styled(report.aggregate_badge.clone(), Style::default().fg(badge_color)),
+                Span::styled(badge_text, Style::default().fg(badge_color)),
             ]));
         }
+    } else if state.current_task.is_some() {
+        lines.push(Line::from(vec![
+            Span::styled(commits_label, Style::default().fg(theme.info)),
+            Span::styled(commits_left, Style::default().fg(theme.text)),
+            Span::styled("Eval      ", Style::default().fg(theme.info)),
+            Span::styled("(no eval yet)", Style::default().fg(theme.muted)),
+        ]));
+    } else if state.session_feat_commits + state.session_wip_commits > 0 {
+        // No eval and no in-flight task, but the session has commits -- still
+        // surface the commits count rather than rendering an empty row.
+        lines.push(Line::from(vec![
+            Span::styled(commits_label, Style::default().fg(theme.info)),
+            Span::styled(commits_text.clone(), Style::default().fg(theme.text)),
+        ]));
     }
 
     // ─── Row 2: Extensions ───
@@ -267,12 +313,11 @@ pub(super) fn render_dashboard_stats(
         (cost_str, cost_color)
     };
 
+    // feat/WIP commits used to live here -- they moved to the Commits row
+    // above so the Skills column is just skill telemetry.
     let patterns_left = format!(
-        "{} inj, {} applied  feat: {}  WIP: {}",
-        state.pattern_inject_count,
-        state.pattern_apply_count,
-        state.session_feat_commits,
-        state.session_wip_commits,
+        "{} inj, {} applied",
+        state.pattern_inject_count, state.pattern_apply_count,
     );
     lines.push(Line::from(vec![
         Span::styled("  Skills   ", Style::default().fg(theme.info)),
@@ -516,6 +561,10 @@ fn badge_color_for(badge: &str, theme: &crate::tui::theme::TuiTheme) -> Color {
     }
 }
 
+fn eval_badge_is_stale(state: &AppState) -> bool {
+    state.current_task.is_some() && state.eval_report_cache.is_some()
+}
+
 #[allow(dead_code)]
 pub(super) fn render_session_config(frame: &mut Frame, area: Rect, config: &Config) {
     let header = Row::new(vec![
@@ -729,6 +778,9 @@ mod tests {
     use ratatui::backend::TestBackend;
     use ratatui::Terminal;
     use std::path::PathBuf;
+    use crate::complexity::TaskOverride;
+    use crate::eval::report::EvalReportSnapshot;
+    use crate::task::Task;
 
     #[test]
     fn render_dashboard_stats_uses_selected_dual_pipeline_metrics() {
@@ -1089,5 +1141,108 @@ mod tests {
             })
             .collect::<Vec<_>>()
             .join("\n")
+    }
+
+    #[test]
+    fn eval_badge_renders_last_prefix_when_task_in_flight_with_cached_report_for_different_task() {
+        let mut state = AppState::new(PathBuf::from(".buildloop"));
+        state.current_task = Some(Task {
+            id: "T1.22".to_string(),
+            description: "running".to_string(),
+            line_number: 1,
+            completed: false,
+            pipeline_progress: None,
+            override_flag: TaskOverride::None,
+        });
+        state.eval_report_cache = Some(EvalReportSnapshot {
+            schema_version: 1,
+            run_id: "run-prev".to_string(),
+            task_id: "T1.21".to_string(),
+            aggregate_badge: "EVAL Q\u{2713}R\u{2713}P\u{2713}B\u{26A0}A-".to_string(),
+            completion_path: None,
+            stages: Default::default(),
+            notes: Vec::new(),
+        });
+
+        let rendered = render_stats_text(&state);
+
+        assert!(rendered.contains("(last) Q\u{2713}"), "rendered: {}", rendered);
+        assert!(!rendered.contains("(no eval yet)"), "rendered: {}", rendered);
+    }
+
+    #[test]
+    fn eval_badge_renders_last_prefix_when_task_in_flight_with_cached_report_for_same_task() {
+        let mut state = AppState::new(PathBuf::from(".buildloop"));
+        state.current_task = Some(Task {
+            id: "T1.22".to_string(),
+            description: "re-running".to_string(),
+            line_number: 1,
+            completed: false,
+            pipeline_progress: None,
+            override_flag: TaskOverride::None,
+        });
+        state.eval_report_cache = Some(EvalReportSnapshot {
+            schema_version: 1,
+            run_id: "run-prev-same-id".to_string(),
+            task_id: "T1.22".to_string(),
+            aggregate_badge: "EVAL Q-R-P-B\u{26A0}A-".to_string(),
+            completion_path: None,
+            stages: Default::default(),
+            notes: Vec::new(),
+        });
+
+        let rendered = render_stats_text(&state);
+
+        assert!(
+            rendered.contains("(last) Q-R-P-B\u{26A0}A-"),
+            "rendered: {}",
+            rendered
+        );
+        assert!(!rendered.contains("(no eval yet)"), "rendered: {}", rendered);
+    }
+
+    #[test]
+    fn eval_badge_renders_without_last_prefix_when_no_task_in_flight() {
+        let mut state = AppState::new(PathBuf::from(".buildloop"));
+        state.current_task = None;
+        state.eval_report_cache = Some(EvalReportSnapshot {
+            schema_version: 1,
+            run_id: "run-curr".to_string(),
+            task_id: "T1.22".to_string(),
+            aggregate_badge: "EVAL Q\u{2713}R\u{2713}P\u{2713}B\u{2713}A\u{2713}".to_string(),
+            completion_path: None,
+            stages: Default::default(),
+            notes: Vec::new(),
+        });
+
+        let rendered = render_stats_text(&state);
+
+        assert!(
+            rendered.contains("Q\u{2713}R\u{2713}P\u{2713}B\u{2713}A\u{2713}"),
+            "rendered: {}",
+            rendered
+        );
+        assert!(!rendered.contains("(last)"), "rendered: {}", rendered);
+        assert!(!rendered.contains("(no eval yet)"), "rendered: {}", rendered);
+    }
+
+    #[test]
+    fn eval_badge_renders_no_eval_yet_placeholder_when_task_in_flight_without_cache() {
+        let mut state = AppState::new(PathBuf::from(".buildloop"));
+        state.current_task = Some(Task {
+            id: "T1.22".to_string(),
+            description: "first run".to_string(),
+            line_number: 1,
+            completed: false,
+            pipeline_progress: None,
+            override_flag: TaskOverride::None,
+        });
+        state.eval_report_cache = None;
+
+        let rendered = render_stats_text(&state);
+
+        assert!(rendered.contains("(no eval yet)"), "rendered: {}", rendered);
+        assert!(!rendered.contains("(last)"), "rendered: {}", rendered);
+        assert!(!rendered.contains("Q\u{2713}"), "rendered: {}", rendered);
     }
 }

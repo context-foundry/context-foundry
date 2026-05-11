@@ -2061,12 +2061,36 @@ fn handle_planning_key(state: &mut AppState, key: event::KeyEvent, config: &Conf
                 .parent()
                 .unwrap_or(std::path::Path::new("."))
                 .to_path_buf();
-            let target = match stage_fallback_file(&overlay.stage, &project_dir) {
-                Some(path) => PipelineClickTarget::OpenFile(path),
-                None => PipelineClickTarget::None,
+            match stage_fallback_file(&overlay.stage, &project_dir) {
+                Some(path) if path.exists() => {
+                    state.stage_summary_overlay = None;
+                    handle_pipeline_click_target(
+                        state,
+                        &project_dir,
+                        config,
+                        PipelineClickTarget::OpenFile(path),
+                    );
+                }
+                Some(path) => {
+                    // File would be the fallback but doesn't exist yet (stage
+                    // hasn't run for the current task, was cleaned up, etc.).
+                    // Keep the overlay open so the user sees why nothing happened.
+                    if let Some(o) = state.stage_summary_overlay.as_mut() {
+                        o.last_error = Some(format!(
+                            "No file to open: {} (not written yet)",
+                            path.display()
+                        ));
+                    }
+                }
+                None => {
+                    if let Some(o) = state.stage_summary_overlay.as_mut() {
+                        o.last_error = Some(format!(
+                            "No fallback file defined for stage \"{}\"",
+                            overlay.stage
+                        ));
+                    }
+                }
             };
-            state.stage_summary_overlay = None;
-            handle_pipeline_click_target(state, &project_dir, config, target);
         }
         // Scroll the AI summary body. Keys claim the event only when the
         // overlay is open so they don't steal Up/Down from the running screen.
@@ -3299,20 +3323,40 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                                     .parent()
                                     .unwrap_or(std::path::Path::new("."))
                                     .to_path_buf();
-                                let target = match stage_fallback_file(
+                                match stage_fallback_file(
                                     &overlay.stage,
                                     &project_dir,
                                 ) {
-                                    Some(path) => PipelineClickTarget::OpenFile(path),
-                                    None => PipelineClickTarget::None,
-                                };
-                                state.stage_summary_overlay = None;
-                                handle_pipeline_click_target(
-                                    state,
-                                    &project_dir,
-                                    config,
-                                    target,
-                                );
+                                    Some(path) if path.exists() => {
+                                        state.stage_summary_overlay = None;
+                                        handle_pipeline_click_target(
+                                            state,
+                                            &project_dir,
+                                            config,
+                                            PipelineClickTarget::OpenFile(path),
+                                        );
+                                    }
+                                    Some(path) => {
+                                        if let Some(o) =
+                                            state.stage_summary_overlay.as_mut()
+                                        {
+                                            o.last_error = Some(format!(
+                                                "No file to open: {} (not written yet)",
+                                                path.display()
+                                            ));
+                                        }
+                                    }
+                                    None => {
+                                        if let Some(o) =
+                                            state.stage_summary_overlay.as_mut()
+                                        {
+                                            o.last_error = Some(format!(
+                                                "No fallback file defined for stage \"{}\"",
+                                                overlay.stage
+                                            ));
+                                        }
+                                    }
+                                }
                                 return;
                             }
                             Some(tui::SummaryModalAction::None) => {
@@ -5219,7 +5263,19 @@ fn pipeline_click_target(
                 fallback_file: None,
             }
         }
-        tui::PipelineClick::Patterns => PipelineClickTarget::None,
+        tui::PipelineClick::Patterns => {
+            // The "SKILLS" card (formerly PATTERNS) extracts new skills into
+            // ~/.foundry/skills/ after a passing build. There's no single
+            // artifact file to fall back to, but the summarizer can still
+            // describe the stage from its log tail.
+            if config.prefer_file_open_over_summary {
+                return PipelineClickTarget::None;
+            }
+            PipelineClickTarget::StageSummary {
+                stage_id: "pattern_extraction".to_string(),
+                fallback_file: None,
+            }
+        }
     }
 }
 
@@ -5242,6 +5298,9 @@ fn stage_summary_inputs(
             None,
         ),
         "ship" => (Vec::new(), Some(collect_ship_log_blocking(project_dir))),
+        // No single artifact -- the extractor writes per-skill SKILL.md files
+        // into ~/.foundry/skills/. The summarizer reads the stage log instead.
+        "pattern_extraction" => (Vec::new(), None),
         _ => (Vec::new(), None),
     }
 }
@@ -5343,6 +5402,7 @@ fn stage_label_for(stage_id: &str, config: &Config) -> String {
         "plan-review" => "P+".to_string(),
         "ship" => "SHIP".to_string(),
         "discover" => "DISCOVER".to_string(),
+        "pattern_extraction" => "SKILLS".to_string(),
         _ => config.pipeline_stage_label(stage_id),
     }
 }
