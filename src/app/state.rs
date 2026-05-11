@@ -1336,6 +1336,9 @@ pub struct StageSummaryOverlay {
     pub last_cache_hit: bool,
     pub last_model: String,
     pub last_provider: String,
+    /// Body scroll offset in display rows. Up/Down/PgUp/PgDn keys and the
+    /// mouse wheel mutate this; the renderer applies it via Paragraph::scroll.
+    pub scroll_offset: u16,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -28,8 +28,9 @@ use crate::utils::truncate_str_from_end;
 pub use overlays::{
     close_btn_rect, confirm_banner_hit_test, git_init_offer_hit_test, model_picker_hit_test,
     quit_confirm_hit_test, render_git_init_offer, render_no_tasks_warning, render_quit_confirm,
-    render_running_modal, settings_modal_rect, settings_overlay_row_hit_test, ConfirmBannerAction,
-    GitInitOfferAction, ModelPickerMouseTarget, QuitConfirmAction,
+    render_running_modal, settings_modal_rect, settings_overlay_row_hit_test,
+    summary_modal_hit_test, ConfirmBannerAction, GitInitOfferAction, ModelPickerMouseTarget,
+    QuitConfirmAction, SummaryModalAction,
 };
 pub fn render_stage_summary_overlay(frame: &mut Frame, state: &AppState) {
     if let Some(overlay) = state.stage_summary_overlay.as_ref() {

@@ -1963,24 +1963,134 @@ pub fn render_quit_confirm(frame: &mut Frame, theme: &crate::tui::theme::TuiThem
     frame.render_widget(buttons, chunks[4]);
 }
 
+/// Action returned by `summary_modal_hit_test` when the user clicks inside
+/// (or on a button of) the AI stage-summary modal.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SummaryModalAction {
+    /// Click on the `[ X ]` close button OR the `[Esc] dismiss` footer button.
+    Dismiss,
+    /// Click on the `[r] refresh` footer button.
+    Refresh,
+    /// Click on the `[f] open file` footer button (only present when the stage
+    /// has a fallback file -- not for ship).
+    OpenFile,
+    /// Click landed inside the modal but not on any actionable button.
+    /// Returned so callers know the click was inside the modal (and should
+    /// not fall through to underlying-screen handlers).
+    None,
+}
+
+/// Geometry of the AI summary modal -- centered, fixed width/height.
+/// Shared by renderer and hit-tester so the rects line up exactly.
+fn summary_modal_rect(area: Rect) -> Option<Rect> {
+    let w: u16 = 78.min(area.width.saturating_sub(2));
+    let h: u16 = 18.min(area.height.saturating_sub(2));
+    if w < 20 || h < 5 {
+        return None;
+    }
+    let x = area.x + (area.width.saturating_sub(w)) / 2;
+    let y = area.y + (area.height.saturating_sub(h)) / 2;
+    Some(Rect {
+        x,
+        y,
+        width: w,
+        height: h,
+    })
+}
+
+/// Rect of the footer `[Esc] dismiss   [r] refresh   [f] open file` line within
+/// the modal. The footer text is center-aligned; segment widths are constant.
+/// Returns `(esc_btn, r_btn, f_btn)` -- f_btn is None when the stage has no
+/// fallback file (ship).
+fn summary_footer_button_rects(
+    modal: Rect,
+    has_file: bool,
+) -> (Rect, Rect, Option<Rect>) {
+    // The full footer text (left-to-right):
+    //   "[Esc] dismiss   [r] refresh   [f] open file"
+    //    0    5         15  18       28  31         43
+    // Each `[X]` segment is the clickable region; we accept clicks on the
+    // bracket + the label that follows so the whole thing feels button-y.
+    let footer_text_len: u16 = if has_file { 43 } else { 28 };
+    let inner_w = modal.width.saturating_sub(2); // minus the L/R borders
+    let pad = inner_w.saturating_sub(footer_text_len) / 2;
+    let footer_x = modal.x + 1 + pad;
+    let footer_y = modal.y + modal.height.saturating_sub(2);
+
+    // Widths sized to "[Esc] dismiss" (13), "[r] refresh" (11), "[f] open file" (13).
+    let esc_btn = Rect {
+        x: footer_x,
+        y: footer_y,
+        width: 13,
+        height: 1,
+    };
+    let r_btn = Rect {
+        x: footer_x + 16,
+        y: footer_y,
+        width: 11,
+        height: 1,
+    };
+    let f_btn = if has_file {
+        Some(Rect {
+            x: footer_x + 30,
+            y: footer_y,
+            width: 13,
+            height: 1,
+        })
+    } else {
+        None
+    };
+    (esc_btn, r_btn, f_btn)
+}
+
+/// Hit-test a mouse click against the AI summary modal. Returns `None` if the
+/// modal isn't rendered (terminal too small); returns `SummaryModalAction::None`
+/// if the click was inside the modal but not on any button (callers should
+/// still treat this as "consumed" so it doesn't fall through to the screen
+/// beneath).
+pub fn summary_modal_hit_test(
+    area: Rect,
+    col: u16,
+    row: u16,
+    has_file: bool,
+) -> Option<SummaryModalAction> {
+    let modal = summary_modal_rect(area)?;
+    if !rect_contains_xy(modal, col, row) {
+        return None;
+    }
+    // [ X ] top-right close button -- shares geometry helper with the settings modal.
+    let x_btn = close_btn_rect(modal);
+    if rect_contains_xy(x_btn, col, row) {
+        return Some(SummaryModalAction::Dismiss);
+    }
+    let (esc_btn, r_btn, f_btn) = summary_footer_button_rects(modal, has_file);
+    if rect_contains_xy(esc_btn, col, row) {
+        return Some(SummaryModalAction::Dismiss);
+    }
+    if rect_contains_xy(r_btn, col, row) {
+        return Some(SummaryModalAction::Refresh);
+    }
+    if let Some(b) = f_btn {
+        if rect_contains_xy(b, col, row) {
+            return Some(SummaryModalAction::OpenFile);
+        }
+    }
+    Some(SummaryModalAction::None)
+}
+
+fn rect_contains_xy(r: Rect, col: u16, row: u16) -> bool {
+    col >= r.x && col < r.x + r.width && row >= r.y && row < r.y + r.height
+}
+
 pub fn render_stage_summary_overlay(
     frame: &mut Frame,
     theme: &crate::tui::theme::TuiTheme,
     overlay: &StageSummaryOverlay,
 ) {
     let area = frame.area();
-    let w: u16 = 78.min(area.width.saturating_sub(2));
-    let h: u16 = 18.min(area.height.saturating_sub(2));
-    if w < 20 || h < 5 {
-        return;
-    }
-    let x = area.width.saturating_sub(w) / 2;
-    let y = area.height.saturating_sub(h) / 2;
-    let modal = Rect {
-        x,
-        y,
-        width: w,
-        height: h,
+    let modal = match summary_modal_rect(area) {
+        Some(r) => r,
+        None => return,
     };
 
     frame.render_widget(Clear, modal);
@@ -1995,6 +2105,19 @@ pub fn render_stage_summary_overlay(
         .style(Style::default().bg(theme.surface).fg(theme.text));
     let inner = block.inner(modal);
     frame.render_widget(block, modal);
+
+    // Draw [ X ] close button on the top border, top-right.
+    let x_btn = close_btn_rect(modal);
+    let buf = frame.buffer_mut();
+    let x_btn_style = Style::default()
+        .fg(Color::Yellow)
+        .add_modifier(Modifier::BOLD);
+    for (i, ch) in "[ X ]".chars().enumerate() {
+        let col = x_btn.x + i as u16;
+        if col < buf.area().width && x_btn.y < buf.area().height {
+            buf[(col, x_btn.y)].set_char(ch).set_style(x_btn_style);
+        }
+    }
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -2021,6 +2144,7 @@ pub fn render_stage_summary_overlay(
     } else if let Some(text) = &overlay.summary {
         Paragraph::new(text.as_str())
             .wrap(ratatui::widgets::Wrap { trim: false })
+            .scroll((overlay.scroll_offset, 0))
             .style(Style::default().fg(theme.text))
     } else {
         Paragraph::new("")
@@ -2057,17 +2181,28 @@ pub fn render_stage_summary_overlay(
     let status = Paragraph::new(status_text).style(status_style);
     frame.render_widget(status, chunks[3]);
 
+    // Footer hints styled as button-like spans: the `[Key]` brackets are
+    // accent+bold (look clickable), the label text is muted. Hit regions for
+    // mouse clicks are computed by `summary_footer_button_rects` -- if you
+    // change the text widths here, change them there too.
     let has_file = overlay.stage != "ship";
-    let footer_text = if has_file {
-        "[Esc] dismiss   [r] refresh   [f] open file"
-    } else {
-        "[Esc] dismiss   [r] refresh"
-    };
-    let footer = Paragraph::new(Line::from(vec![Span::styled(
-        footer_text,
-        Style::default().fg(theme.muted),
-    )]))
-    .alignment(Alignment::Center);
+    let btn_brackets = Style::default()
+        .fg(theme.accent)
+        .add_modifier(Modifier::BOLD | Modifier::UNDERLINED);
+    let btn_label = Style::default().fg(theme.muted);
+    let mut spans: Vec<Span> = vec![
+        Span::styled("[Esc]", btn_brackets),
+        Span::styled(" dismiss", btn_label),
+        Span::styled("   ", btn_label),
+        Span::styled("[r]", btn_brackets),
+        Span::styled(" refresh", btn_label),
+    ];
+    if has_file {
+        spans.push(Span::styled("   ", btn_label));
+        spans.push(Span::styled("[f]", btn_brackets));
+        spans.push(Span::styled(" open file", btn_label));
+    }
+    let footer = Paragraph::new(Line::from(spans)).alignment(Alignment::Center);
     frame.render_widget(footer, chunks[4]);
 }
 

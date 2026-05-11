@@ -2068,6 +2068,36 @@ fn handle_planning_key(state: &mut AppState, key: event::KeyEvent, config: &Conf
             state.stage_summary_overlay = None;
             handle_pipeline_click_target(state, &project_dir, config, target);
         }
+        // Scroll the AI summary body. Keys claim the event only when the
+        // overlay is open so they don't steal Up/Down from the running screen.
+        KeyCode::Up
+            if !state.show_settings_overlay && state.stage_summary_overlay.is_some() =>
+        {
+            if let Some(o) = state.stage_summary_overlay.as_mut() {
+                o.scroll_offset = o.scroll_offset.saturating_sub(1);
+            }
+        }
+        KeyCode::Down
+            if !state.show_settings_overlay && state.stage_summary_overlay.is_some() =>
+        {
+            if let Some(o) = state.stage_summary_overlay.as_mut() {
+                o.scroll_offset = o.scroll_offset.saturating_add(1);
+            }
+        }
+        KeyCode::PageUp
+            if !state.show_settings_overlay && state.stage_summary_overlay.is_some() =>
+        {
+            if let Some(o) = state.stage_summary_overlay.as_mut() {
+                o.scroll_offset = o.scroll_offset.saturating_sub(8);
+            }
+        }
+        KeyCode::PageDown
+            if !state.show_settings_overlay && state.stage_summary_overlay.is_some() =>
+        {
+            if let Some(o) = state.stage_summary_overlay.as_mut() {
+                o.scroll_offset = o.scroll_offset.saturating_add(8);
+            }
+        }
         KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
             state.should_quit = true;
         }
@@ -3203,6 +3233,100 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                     }
                 }
                 return;
+            }
+            // AI summary overlay claims the mouse before anything else when open:
+            // wheel scrolls the body; left-click dispatches to the [X]/Esc/R/F buttons.
+            if !state.show_settings_overlay && state.stage_summary_overlay.is_some() {
+                let area = ratatui::layout::Rect::new(0, 0, terminal_size.0, terminal_size.1);
+                match mouse.kind {
+                    MouseEventKind::ScrollUp => {
+                        if let Some(o) = state.stage_summary_overlay.as_mut() {
+                            o.scroll_offset = o.scroll_offset.saturating_sub(3);
+                        }
+                        return;
+                    }
+                    MouseEventKind::ScrollDown => {
+                        if let Some(o) = state.stage_summary_overlay.as_mut() {
+                            o.scroll_offset = o.scroll_offset.saturating_add(3);
+                        }
+                        return;
+                    }
+                    MouseEventKind::Down(MouseButton::Left) => {
+                        let has_file = state
+                            .stage_summary_overlay
+                            .as_ref()
+                            .map(|o| o.stage != "ship")
+                            .unwrap_or(false);
+                        match tui::summary_modal_hit_test(
+                            area,
+                            mouse.column,
+                            mouse.row,
+                            has_file,
+                        ) {
+                            Some(tui::SummaryModalAction::Dismiss) => {
+                                state.stage_summary_overlay = None;
+                                return;
+                            }
+                            Some(tui::SummaryModalAction::Refresh) => {
+                                let Some(overlay) =
+                                    state.stage_summary_overlay.as_ref().cloned()
+                                else {
+                                    return;
+                                };
+                                let project_dir = state
+                                    .buildloop_dir
+                                    .parent()
+                                    .unwrap_or(std::path::Path::new("."))
+                                    .to_path_buf();
+                                trigger_stage_summary(
+                                    state,
+                                    &project_dir,
+                                    config,
+                                    &overlay.stage,
+                                    &overlay.stage_label,
+                                    true,
+                                );
+                                return;
+                            }
+                            Some(tui::SummaryModalAction::OpenFile) => {
+                                let Some(overlay) =
+                                    state.stage_summary_overlay.as_ref().cloned()
+                                else {
+                                    return;
+                                };
+                                let project_dir = state
+                                    .buildloop_dir
+                                    .parent()
+                                    .unwrap_or(std::path::Path::new("."))
+                                    .to_path_buf();
+                                let target = match stage_fallback_file(
+                                    &overlay.stage,
+                                    &project_dir,
+                                ) {
+                                    Some(path) => PipelineClickTarget::OpenFile(path),
+                                    None => PipelineClickTarget::None,
+                                };
+                                state.stage_summary_overlay = None;
+                                handle_pipeline_click_target(
+                                    state,
+                                    &project_dir,
+                                    config,
+                                    target,
+                                );
+                                return;
+                            }
+                            Some(tui::SummaryModalAction::None) => {
+                                // Click was inside the modal but not on a button.
+                                // Consume it -- do not fall through to underlying screen.
+                                return;
+                            }
+                            None => {
+                                // Click was outside the modal. Falls through.
+                            }
+                        }
+                    }
+                    _ => {}
+                }
             }
             if handle_settings_overlay_mouse(state, mouse, terminal_size) {
                 return;
@@ -5264,6 +5388,11 @@ fn trigger_stage_summary(
             .as_ref()
             .map(|o| o.last_provider.clone())
             .unwrap_or_default(),
+        scroll_offset: if force_refresh {
+            0
+        } else {
+            existing.as_ref().map(|o| o.scroll_offset).unwrap_or(0)
+        },
     });
     drop(existing);
 
