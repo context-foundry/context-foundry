@@ -304,6 +304,12 @@ pub struct Config {
     #[serde(default)]
     pub external_skills_enabled: std::collections::HashMap<String, bool>,
 
+    /// When true, restrict each pipeline stage to skills whose `cf-stage`
+    /// frontmatter matches that stage (legacy T1.13 behavior). Default
+    /// false: skills are eligible for every stage and the ranker decides.
+    #[serde(default)]
+    pub skills_stage_filter_strict: bool,
+
     /// When true, auto-create a GitHub issue when a task commits as WIP
     /// (validation failed). The issue body includes review findings from
     /// .buildloop/review-report.md.
@@ -660,6 +666,7 @@ impl Default for Config {
             batch_doubt: true,
             extensions: Vec::new(),
             external_skills_enabled: std::collections::HashMap::new(),
+            skills_stage_filter_strict: false,
             create_issue_on_wip: false,
             preview_wrap: false,
             agent_pane_split: 30,
@@ -1742,6 +1749,7 @@ impl Config {
             "embedding_model" => self.embedding_model.clone(),
             "embedding_timeout_ms" => self.embedding_timeout_ms.to_string(),
             "semantic_match_enabled" => self.semantic_match_enabled.to_string(),
+            "skills_stage_filter_strict" => self.skills_stage_filter_strict.to_string(),
             "sandbox" => self.sandbox.to_string(),
             "sandbox_image" => self.sandbox_image.clone(),
             "phase_isolation" => self.phase_isolation.to_string(),
@@ -1809,6 +1817,7 @@ impl Config {
             | "adaptive_pauses"
             | "budget_recovery_enabled"
             | "semantic_match_enabled"
+            | "skills_stage_filter_strict"
             | "sandbox"
             | "phase_isolation"
             | "semgrep_enabled"

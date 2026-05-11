@@ -106,6 +106,13 @@ a `metadata` map carrying CF-specific extensions: `cf-stage`
 `cf-last-used`, `cf-frequency`, `cf-severity`, and `cf-keywords`. The
 body has `## Issue` and `## Solution` sections.
 
+**T1.31 update (2026-05-10):** the `cf-stage` field is preserved on every
+SKILL.md but is no longer a hard filter on stage matching. Every stage
+(QUERY, RESEARCH, PLAN, P+, BUILD, AUDIT, DISCOVER) now sees every
+skill, ranked independently. Set `skills_stage_filter_strict: true` in
+`~/.foundry/config.json` to restore the legacy planner/reviewer/both
+gate.
+
 When a pattern has both planner and reviewer advice, two files are
 written: `<pattern_id>-planner/SKILL.md` and
 `<pattern_id>-reviewer/SKILL.md`. Otherwise a single

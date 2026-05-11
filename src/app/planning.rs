@@ -371,7 +371,11 @@ async fn load_gap_analysis_pattern_context(ctx: &RunContext) -> String {
     let skills_dir = skills::resolve_skills_dir("~/.foundry/skills");
     let all_skills = skills::load_skills(&skills_dir);
     let mut base = if !all_skills.is_empty() {
-        let planner_skills = skills::match_skills_for_stage(&all_skills, "planner");
+        let planner_skills = skills::select_skills_for_stage(
+            &all_skills,
+            "planner",
+            ctx.config.skills_stage_filter_strict,
+        );
         let task_seed = ctx.spec_file_prompt_path();
         let detected_stack = patterns::detect_project_tech_stack(&ctx.project_dir);
         let ranked = skills::rank_skills_for_task(

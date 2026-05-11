@@ -51,6 +51,65 @@ fn emit_tasks_file_mtime(
     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::TasksFileMtime(mtime)));
 }
 
+/// Rank and format skills for one pipeline stage. Returns the rendered
+/// `## Available Skills` block (or an empty string if no skills match).
+/// Updates the caller's `seen_ids` / `injected_titles` / `injected_keywords`
+/// accumulators so the union of skills injected across stages drives the
+/// downstream `LoopEvent::PatternsUsed` count.
+#[allow(clippy::too_many_arguments)]
+async fn rank_and_format_skills_for_stage(
+    all_skills: &[skills::SkillFile],
+    stage: &str,
+    task_desc: &str,
+    detected_stack: &[String],
+    max_skills: usize,
+    cfg: &Config,
+    seen_ids: &mut std::collections::HashSet<String>,
+    injected_titles: &mut Vec<String>,
+    injected_keywords: &mut std::collections::HashMap<String, Vec<String>>,
+) -> String {
+    if all_skills.is_empty() {
+        return String::new();
+    }
+    let stage_skills =
+        skills::select_skills_for_stage(all_skills, stage, cfg.skills_stage_filter_strict);
+    if stage_skills.is_empty() {
+        return String::new();
+    }
+    let ranked = skills::rank_skills_for_task(
+        &stage_skills,
+        task_desc,
+        detected_stack,
+        cfg.semantic_match_enabled,
+        &cfg.embedding_model,
+        cfg.embedding_timeout_ms,
+        &cfg.ollama_url,
+    )
+    .await;
+    let text = skills::format_skills_for_prompt(&ranked, max_skills);
+    for s in ranked.iter().take(max_skills) {
+        let id = if !s.dir_name.is_empty() {
+            s.dir_name.clone()
+        } else {
+            s.frontmatter.name.clone()
+        };
+        if seen_ids.insert(id.clone()) {
+            if !s.frontmatter.cf_keywords.is_empty() {
+                injected_keywords.insert(
+                    id.clone(),
+                    s.frontmatter
+                        .cf_keywords
+                        .iter()
+                        .map(|k| k.to_lowercase())
+                        .collect(),
+                );
+            }
+            injected_titles.push(id);
+        }
+    }
+    text
+}
+
 // ─── Eval Harness Helpers ────────────────────────────────────
 // Helpers used by the orchestrator to record one entry per agent invocation,
 // skip path, and task-completion path into the per-run manifest. All calls
@@ -336,6 +395,9 @@ async fn run_custom_card(
         task_desc,
         &ctx.spec_file_prompt_path(),
         &ctx.tasks_file_prompt_path(),
+        // Custom cards predate the per-stage skill plumbing and intentionally
+        // bypass it (they run with a fully user-provided prompt_override).
+        "",
     );
     let prompt = prompts::wrap_with_extensions(&prompt, extension_context);
 
@@ -638,19 +700,23 @@ fn spawn_lookahead_planner(
         let skills_dir_lookahead = skills::resolve_skills_dir("~/.foundry/skills");
         let all_skills_lookahead = skills::load_skills(&skills_dir_lookahead);
         let mut pattern_context = if !all_skills_lookahead.is_empty() {
-            let stage_skills =
-                skills::match_skills_for_stage(&all_skills_lookahead, "planner");
-            let ranked = skills::rank_skills_for_task(
-                &stage_skills,
+            let mut lookahead_seen: std::collections::HashSet<String> =
+                std::collections::HashSet::new();
+            let mut lookahead_titles: Vec<String> = Vec::new();
+            let mut lookahead_keywords: std::collections::HashMap<String, Vec<String>> =
+                std::collections::HashMap::new();
+            rank_and_format_skills_for_stage(
+                &all_skills_lookahead,
+                "planner",
                 &task_desc,
                 &detected_stack,
-                ctx.config.semantic_match_enabled,
-                &ctx.config.embedding_model,
-                ctx.config.embedding_timeout_ms,
-                &ctx.config.ollama_url,
+                lookahead_pattern_count,
+                &ctx.config,
+                &mut lookahead_seen,
+                &mut lookahead_titles,
+                &mut lookahead_keywords,
             )
-            .await;
-            skills::format_skills_for_prompt(&ranked, lookahead_pattern_count)
+            .await
         } else {
             let m = if ctx.config.semantic_match_enabled {
                 let keyword_scores =
@@ -1279,13 +1345,10 @@ async fn run_parallel_builder(
             &joined_blocks,
             &ctx.spec_file_prompt_path(),
             &ctx.tasks_file_prompt_path(),
+            pattern_context,
         );
-        // Inject matched patterns so parallel builders can see and give feedback
-        let prompt = if !pattern_context.is_empty() {
-            format!("{}\n\n--- BEGIN REFERENCE DATA (non-authoritative) ---{}\n--- END REFERENCE DATA ---", prompt, pattern_context)
-        } else {
-            prompt
-        };
+        // T1.31: parallel_builder_prompt now wraps `pattern_context` in its
+        // own BEGIN REFERENCE DATA block; the old manual wrap is removed.
         let prompt = prompts::wrap_with_extensions(&prompt, extension_context);
 
         let provider = Config::parse_provider(&ctx.config.builder_provider);
@@ -2798,11 +2861,42 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
             } else {
                 Some(session_build_claims.join("\n\n"))
             };
+            // T1.31: rank discovery-stage skills locally because discovery runs
+            // in the outer build loop, not the per-task scope. Seed the ranker
+            // with recent session activity (build history) instead of just the
+            // round number so embedding-based ranking has meaningful signal.
+            let discover_skills_dir = skills::resolve_skills_dir("~/.foundry/skills");
+            let discover_all_skills = skills::load_skills(&discover_skills_dir);
+            let discover_stack = patterns::detect_project_tech_stack(&ctx.project_dir);
+            let discover_seed = if let Some(history) = build_history.as_deref() {
+                let trimmed: String = history.chars().take(2000).collect();
+                format!("Discovery round {} -- recent work:\n{}", discovery_round, trimmed)
+            } else {
+                format!("Discovery round {}", discovery_round)
+            };
+            let mut discover_seen_ids: std::collections::HashSet<String> =
+                std::collections::HashSet::new();
+            let mut discover_titles: Vec<String> = Vec::new();
+            let mut discover_keywords: std::collections::HashMap<String, Vec<String>> =
+                std::collections::HashMap::new();
+            let discover_skill_text = rank_and_format_skills_for_stage(
+                &discover_all_skills,
+                "discover",
+                &discover_seed,
+                &discover_stack,
+                ctx.config.max_pattern_injection,
+                &ctx.config,
+                &mut discover_seen_ids,
+                &mut discover_titles,
+                &mut discover_keywords,
+            )
+            .await;
             let prompt = prompts::discovery_prompt(
                 discovery_round,
                 &ctx.spec_file_prompt_path(),
                 &ctx.tasks_file_prompt_path(),
                 build_history.as_deref(),
+                &discover_skill_text,
             );
             // Discovery finds new work -- skip extension context to save tokens.
             let discovery_start = Instant::now();
@@ -3415,79 +3509,141 @@ async fn process_task(
         skills::format_discovered_skills_for_prompt(&entries)
     };
 
-    // Collect skill IDs injected into either planner or reviewer prompts so
-    // the downstream PatternsUsed emit can report a non-zero inj count even
-    // when no legacy patterns matched. T1.30: previously the skills branch
-    // returned an empty `matched` vec, leaving `state.pattern_inject_count`
-    // permanently stuck at 0 despite skills being injected.
+    // Collect skill IDs injected into any stage prompt so the downstream
+    // PatternsUsed emit can report a non-zero inj count even when no legacy
+    // patterns matched. T1.30: previously the skills branch returned an empty
+    // `matched` vec, leaving `state.pattern_inject_count` permanently stuck at
+    // 0 despite skills being injected. T1.31: shared accumulator across all
+    // stages so the reported union reflects every stage's injection.
     let mut injected_skill_titles: Vec<String> = Vec::new();
     let mut injected_skill_keywords: HashMap<String, Vec<String>> = HashMap::new();
-    let (matched, mut pattern_context, mut reviewer_pattern_context) = if !all_skills_main.is_empty() {
-        let planner_skills =
-            skills::match_skills_for_stage(&all_skills_main, "planner");
-        let reviewer_skills =
-            skills::match_skills_for_stage(&all_skills_main, "reviewer");
-        let ranked_planner = skills::rank_skills_for_task(
-            &planner_skills,
-            task_desc,
-            &detected_stack,
-            ctx.config.semantic_match_enabled,
-            &ctx.config.embedding_model,
-            ctx.config.embedding_timeout_ms,
-            &ctx.config.ollama_url,
-        )
-        .await;
-        let ranked_reviewer = skills::rank_skills_for_task(
-            &reviewer_skills,
-            task_desc,
-            &detected_stack,
-            ctx.config.semantic_match_enabled,
-            &ctx.config.embedding_model,
-            ctx.config.embedding_timeout_ms,
-            &ctx.config.ollama_url,
-        )
-        .await;
-        let planner_text =
-            skills::format_skills_for_prompt(&ranked_planner, effective_pattern_count);
-        let reviewer_text =
-            skills::format_skills_for_prompt(&ranked_reviewer, effective_pattern_count);
+    let mut seen_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
 
-        // Build the deduped union of skill_ids actually formatted into either
-        // prompt. `format_skills_for_prompt` takes the first `effective_pattern_count`
-        // skills from each list -- match that here so the reported count
-        // reflects what the agent actually saw.
-        let mut seen_ids: std::collections::HashSet<String> =
-            std::collections::HashSet::new();
-        let mut collect = |ranked: &[&skills::SkillFile]| {
-            for s in ranked.iter().take(effective_pattern_count) {
-                let id = if !s.dir_name.is_empty() {
-                    s.dir_name.clone()
-                } else {
-                    s.frontmatter.name.clone()
-                };
-                if seen_ids.insert(id.clone()) {
-                    if !s.frontmatter.cf_keywords.is_empty() {
-                        injected_skill_keywords.insert(
-                            id.clone(),
-                            s.frontmatter
-                                .cf_keywords
-                                .iter()
-                                .map(|k| k.to_lowercase())
-                                .collect(),
-                        );
-                    }
-                    injected_skill_titles.push(id);
-                }
-            }
-        };
-        collect(&ranked_planner);
-        collect(&ranked_reviewer);
-
-        (
-            Vec::<&patterns::Pattern>::new(),
-            planner_text,
-            reviewer_text,
-        )
+    let (
+        matched,
+        mut pattern_context,
+        mut reviewer_pattern_context,
+        mut query_skill_text,
+        mut research_skill_text,
+        mut build_skill_text,
+        mut discover_skill_text,
+        mut plan_review_skill_text,
+    ) = if !all_skills_main.is_empty() {
+        // T1.31: in the default (non-strict) mode every stage receives the
+        // same union of skills, so the ranker output is identical across
+        // stages. Compute it once and reuse to avoid 5x Ollama embedding
+        // traffic per task. In strict mode, the cf-stage filter changes the
+        // candidate set per stage, so we rank per stage.
+        if !ctx.config.skills_stage_filter_strict {
+            let unified = rank_and_format_skills_for_stage(
+                &all_skills_main,
+                "planner",
+                task_desc,
+                &detected_stack,
+                effective_pattern_count,
+                &ctx.config,
+                &mut seen_ids,
+                &mut injected_skill_titles,
+                &mut injected_skill_keywords,
+            )
+            .await;
+            (
+                Vec::<&patterns::Pattern>::new(),
+                unified.clone(),
+                unified.clone(),
+                unified.clone(),
+                unified.clone(),
+                unified.clone(),
+                unified.clone(),
+                unified,
+            )
+        } else {
+            let planner_text = rank_and_format_skills_for_stage(
+                &all_skills_main,
+                "planner",
+                task_desc,
+                &detected_stack,
+                effective_pattern_count,
+                &ctx.config,
+                &mut seen_ids,
+                &mut injected_skill_titles,
+                &mut injected_skill_keywords,
+            )
+            .await;
+            let reviewer_text = rank_and_format_skills_for_stage(
+                &all_skills_main,
+                "reviewer",
+                task_desc,
+                &detected_stack,
+                effective_pattern_count,
+                &ctx.config,
+                &mut seen_ids,
+                &mut injected_skill_titles,
+                &mut injected_skill_keywords,
+            )
+            .await;
+            let query_text = rank_and_format_skills_for_stage(
+                &all_skills_main,
+                "query",
+                task_desc,
+                &detected_stack,
+                effective_pattern_count,
+                &ctx.config,
+                &mut seen_ids,
+                &mut injected_skill_titles,
+                &mut injected_skill_keywords,
+            )
+            .await;
+            let research_text = rank_and_format_skills_for_stage(
+                &all_skills_main,
+                "research",
+                task_desc,
+                &detected_stack,
+                effective_pattern_count,
+                &ctx.config,
+                &mut seen_ids,
+                &mut injected_skill_titles,
+                &mut injected_skill_keywords,
+            )
+            .await;
+            let build_text = rank_and_format_skills_for_stage(
+                &all_skills_main,
+                "builder",
+                task_desc,
+                &detected_stack,
+                effective_pattern_count,
+                &ctx.config,
+                &mut seen_ids,
+                &mut injected_skill_titles,
+                &mut injected_skill_keywords,
+            )
+            .await;
+            let discover_text = rank_and_format_skills_for_stage(
+                &all_skills_main,
+                "discover",
+                task_desc,
+                &detected_stack,
+                effective_pattern_count,
+                &ctx.config,
+                &mut seen_ids,
+                &mut injected_skill_titles,
+                &mut injected_skill_keywords,
+            )
+            .await;
+            // P+ uses planner-shaped guidance because the proposer is what
+            // actually plans; the reviewer agent inside P+ is downstream of it.
+            let plan_review_text = planner_text.clone();
+            (
+                Vec::<&patterns::Pattern>::new(),
+                planner_text,
+                reviewer_text,
+                query_text,
+                research_text,
+                build_text,
+                discover_text,
+                plan_review_text,
+            )
+        }
     } else {
         let m = if ctx.config.semantic_match_enabled {
             let keyword_scores =
@@ -3515,17 +3671,39 @@ async fn process_task(
             patterns::format_patterns_for_prompt(&m, "planner", effective_pattern_count);
         let reviewer_text =
             patterns::format_patterns_for_prompt(&m, "reviewer", effective_pattern_count);
-        (m, planner_text, reviewer_text)
+        // T1.31: propagate the legacy-patterns context to every per-stage
+        // string so users with patterns-but-no-skills don't lose visibility
+        // when the per-stage skill plumbing is empty.
+        let query_text = planner_text.clone();
+        let research_text = planner_text.clone();
+        let build_text = planner_text.clone();
+        let discover_text = planner_text.clone();
+        let plan_review_text = planner_text.clone();
+        (
+            m,
+            planner_text,
+            reviewer_text,
+            query_text,
+            research_text,
+            build_text,
+            discover_text,
+            plan_review_text,
+        )
     };
 
-    // T1.27: append the external-skills block (if any) to both planner and
-    // reviewer contexts. External skills are stage-agnostic by design; the
-    // agent decides per-task which to apply.
+    // T1.27: append the external-skills block (if any) to every stage's
+    // context. External skills are stage-agnostic by design; the agent
+    // decides per-task which to apply.
     if !external_skills_block.is_empty() {
         pattern_context.push_str(&external_skills_block);
         reviewer_pattern_context.push_str(&external_skills_block);
+        query_skill_text.push_str(&external_skills_block);
+        research_skill_text.push_str(&external_skills_block);
+        build_skill_text.push_str(&external_skills_block);
+        discover_skill_text.push_str(&external_skills_block);
+        plan_review_skill_text.push_str(&external_skills_block);
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-            "Injected {} external skill(s) into planner/reviewer prompts",
+            "Injected {} external skill(s) into all stage prompts",
             enabled_external_skills.len()
         ))));
     }
@@ -3769,6 +3947,7 @@ async fn process_task(
                     updated_specs.as_deref(),
                     spec_content.as_deref(),
                     tasks_content.as_deref(),
+                    &query_skill_text,
                 );
                 let query_spec = build_evidence_spec(
                     StageId::Query,
@@ -3781,12 +3960,10 @@ async fn process_task(
                     None,
                     "",
                     &query_prompt_text,
-                    // Query does NOT inject patterns into its prompt
-                    // (`prompts::query_prompt` has no pattern_context parameter).
-                    // Passing an empty Vec ensures the `patterns_injected`
-                    // eval check correctly Skips for this stage rather than
-                    // false-failing on matched-but-not-found.
-                    Vec::new(),
+                    // T1.31: surface injected skill IDs so the eval
+                    // harness's `patterns_injected` check grades this stage
+                    // instead of silently skipping it.
+                    injected_skill_titles.clone(),
                     ctx.config.extensions.clone(),
                 );
                 let query_inv_id = ctx.manifest.record_invocation(query_spec);
@@ -4027,6 +4204,7 @@ async fn process_task(
                     research_card_idx
                         .and_then(|i| ctx.config.pipeline_stages.get(i))
                         .and_then(|s| s.prompt_override.as_deref()),
+                    &research_skill_text,
                 );
                 let research_spec = build_evidence_spec(
                     StageId::Research,
@@ -4039,10 +4217,8 @@ async fn process_task(
                     None,
                     "",
                     &research_prompt_text,
-                    // Research does NOT inject patterns into its prompt
-                    // (`prompts::research_prompt` has no pattern_context parameter).
-                    // See the matching note at the Query call site above.
-                    Vec::new(),
+                    // T1.31: surface injected skill IDs so eval grades this stage.
+                    injected_skill_titles.clone(),
                     ctx.config.extensions.clone(),
                 );
                 let research_inv_id = ctx.manifest.record_invocation(research_spec);
@@ -5141,6 +5317,7 @@ async fn process_task(
                 },
                 Some(agent_tx),
                 Some(ctx.shutdown.clone()),
+                &plan_review_skill_text,
             )
             .await;
 
@@ -5564,7 +5741,10 @@ async fn process_task(
                 file_ops,
                 groups,
                 extension_context,
-                &pattern_context,
+                // T1.31: pass the builder-stage skill text (or legacy
+                // patterns) so parallel slots see the same reference data
+                // as the serial builder.
+                &build_skill_text,
             )
             .await;
 
@@ -5662,6 +5842,7 @@ async fn process_task(
                     Some(inline_plan.as_str()),
                     &ctx.spec_file_prompt_path(),
                     &ctx.tasks_file_prompt_path(),
+                    &build_skill_text,
                 )
             } else {
                 prompts::builder_prompt(
@@ -5673,14 +5854,12 @@ async fn process_task(
                     task_desc,
                     &ctx.spec_file_prompt_path(),
                     &ctx.tasks_file_prompt_path(),
+                    &build_skill_text,
                 )
             };
-            // Inject matched patterns so the builder can see and give feedback on them
-            let prompt = if !pattern_context.is_empty() {
-                format!("{}\n\n--- BEGIN REFERENCE DATA (non-authoritative) ---{}\n--- END REFERENCE DATA ---", prompt, pattern_context)
-            } else {
-                prompt
-            };
+            // T1.31: the builder prompt now wraps `pattern_context` (here:
+            // build_skill_text) internally inside its own BEGIN REFERENCE
+            // DATA block, so the old manual wrap is no longer needed.
             let prompt = prompts::wrap_with_extensions(&prompt, extension_context);
             let prompt = if let Some(summary) = budget_summary_for_next.take() {
                 format!("{}\n\n{}", summary, prompt)
@@ -5710,6 +5889,15 @@ async fn process_task(
             };
             let eff_builder_provider_str: String =
                 format!("{:?}", eff_builder_provider).to_ascii_lowercase();
+            let builder_matched_ids: Vec<String> = {
+                let mut v = injected_pattern_ids.clone();
+                for t in &injected_skill_titles {
+                    if !v.contains(t) {
+                        v.push(t.clone());
+                    }
+                }
+                v
+            };
             let builder_spec = build_evidence_spec(
                 StageId::Build,
                 AgentRole::Builder,
@@ -5721,7 +5909,9 @@ async fn process_task(
                 builder_override_reason.clone(),
                 "",
                 &prompt,
-                injected_pattern_ids.clone(),
+                // T1.31: include injected skill IDs alongside legacy pattern
+                // IDs so the eval harness grades skill injection for BUILD.
+                builder_matched_ids,
                 ctx.config.extensions.clone(),
             );
             let builder_inv_id = ctx.manifest.record_invocation(builder_spec);
@@ -6706,10 +6896,18 @@ async fn process_task(
                 .into_iter()
                 .map(skills::skill_to_pattern)
                 .collect();
+            // T1.31: scan all stage artifacts so query/research/discovery
+            // citations also reach skill_telemetry. The cited_by_X column is
+            // limited by the SQLite schema (planner/reviewer/builder/scout);
+            // query/research/discovery citations are recorded under the
+            // existing `cited_by_scout` column.
             let artifacts_to_scan: Vec<(std::path::PathBuf, &str)> = vec![
+                (ctx.buildloop_dir.join("questions.md"), "Scout"),
+                (ctx.buildloop_dir.join("research-report.md"), "Scout"),
                 (ctx.buildloop_dir.join("current-plan.md"), "Planner"),
                 (ctx.buildloop_dir.join("build-claims.md"), "Builder"),
                 (ctx.buildloop_dir.join("review-report.md"), "Reviewer"),
+                (ctx.buildloop_dir.join("discovery-summary.md"), "Scout"),
             ];
             for (artifact_path, role) in &artifacts_to_scan {
                 if let Ok(content) = std::fs::read_to_string(artifact_path) {

@@ -348,6 +348,26 @@ pub fn match_skills_for_stage<'a>(skills: &'a [SkillFile], stage: &str) -> Vec<&
         .collect()
 }
 
+/// Stage-tolerant skill selector. When `strict == false` (the default),
+/// returns every skill so the ranker can decide what is relevant for the
+/// requested stage. When `strict == true`, falls back to the legacy
+/// `match_skills_for_stage` behavior that filters on the `cf-stage`
+/// frontmatter field.
+pub fn select_skills_for_stage<'a>(
+    skills: &'a [SkillFile],
+    stage: &str,
+    strict: bool,
+) -> Vec<&'a SkillFile> {
+    if strict {
+        return match_skills_for_stage(skills, stage);
+    }
+    let mut out: Vec<&'a SkillFile> = Vec::with_capacity(skills.len());
+    for s in skills {
+        out.push(s);
+    }
+    out
+}
+
 /// Render the matched skills as a prompt-embeddable Markdown block.
 ///
 /// Each skill block leads with its kebab-case `skill_id` (from
@@ -1085,6 +1105,41 @@ mod tests {
         let skills = vec![make_skill("a", "")];
         let result = match_skills_for_stage(&skills, "reviewer");
         assert_eq!(result.len(), 1);
+    }
+
+    #[test]
+    fn select_skills_for_stage_non_strict_returns_all_regardless_of_cf_stage() {
+        let skills = vec![
+            make_skill("a", "planner"),
+            make_skill("b", "reviewer"),
+            make_skill("c", "both"),
+            make_skill("d", ""),
+        ];
+        let result = select_skills_for_stage(&skills, "builder", false);
+        assert_eq!(result.len(), 4);
+    }
+
+    #[test]
+    fn select_skills_for_stage_strict_matches_legacy_filter() {
+        let skills = vec![
+            make_skill("a", "planner"),
+            make_skill("b", "reviewer"),
+            make_skill("c", "both"),
+            make_skill("d", ""),
+        ];
+        let result = select_skills_for_stage(&skills, "planner", true);
+        assert_eq!(result.len(), 3);
+        let names: Vec<&str> = result.iter().map(|s| s.frontmatter.name.as_str()).collect();
+        assert!(!names.contains(&"b"));
+    }
+
+    #[test]
+    fn select_skills_for_stage_non_strict_preserves_input_order() {
+        let skills = vec![make_skill("z", "planner"), make_skill("a", "reviewer")];
+        let result = select_skills_for_stage(&skills, "query", false);
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].frontmatter.name, "z");
+        assert_eq!(result[1].frontmatter.name, "a");
     }
 
     #[test]
