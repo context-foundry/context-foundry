@@ -3451,7 +3451,8 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                             && !state.show_stats_overlay
                             && !state.show_patterns
                             && !state.show_findings
-                            && !state.show_settings_overlay =>
+                            && !state.show_settings_overlay
+                            && state.stage_summary_overlay.is_none() =>
                     {
                         // Hover instantly switches focused pane -- no click required.
                         let terminal_size = crossterm::terminal::size().unwrap_or((120, 40));
