@@ -1,3 +1,4 @@
+mod modal_spec;
 mod narrative;
 mod overlays;
 mod pipeline;
@@ -25,6 +26,11 @@ use crate::app::{AppPhase, AppState, TuiPane};
 use crate::config::Config;
 use crate::utils::truncate_str_from_end;
 
+#[allow(unused_imports)]
+pub use modal_spec::{
+    compute_modal_layout, modal_rect, render_unified_modal, unified_modal_hit_test, ModalButton,
+    ModalLayout, ModalSize, ModalSpec,
+};
 pub use overlays::{
     close_btn_rect, confirm_banner_hit_test, context_menu_hit_test, git_init_offer_hit_test,
     model_picker_hit_test, quit_confirm_hit_test, render_git_init_offer,
@@ -114,7 +120,7 @@ pub fn running_layout(area: Rect, has_extensions: bool, split_pct: u16) -> Runni
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(5),
-            Constraint::Length(6),
+            Constraint::Length(9), // Pipeline map (header + 2 rows of 3-line tiles + spacer + bottom border)
             Constraint::Min(8),
             Constraint::Length(8),
             Constraint::Length(1),
@@ -175,7 +181,7 @@ pub fn render(frame: &mut Frame, state: &AppState, config: &Config) {
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(5), // Header
-            Constraint::Length(6), // Pipeline map (5 box lines + bottom border)
+            Constraint::Length(9), // Pipeline map (header + 2 rows of 3-line tiles + spacer + bottom border)
             Constraint::Min(8),    // Middle: agent output + task queue
             Constraint::Length(8), // Bottom: stats (progress bar + 5 content rows + borders)
             Constraint::Length(1), // Status bar
@@ -333,7 +339,7 @@ pub fn render_running_explorer(frame: &mut Frame, state: &AppState, config: &Con
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(5),
-            Constraint::Length(6),
+            Constraint::Length(9), // Pipeline map (header + 2 rows of 3-line tiles + spacer + bottom border)
             Constraint::Min(8),
             Constraint::Length(8),
             Constraint::Length(1),

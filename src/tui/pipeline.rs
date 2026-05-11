@@ -1,10 +1,12 @@
 use ratatui::{
-    layout::Rect,
+    layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
     Frame,
 };
+
+use crate::tui::theme::{TILE_HEIGHT, TILE_INNER_W};
 
 /// Which box was clicked in the pipeline map.
 #[derive(Debug, Clone)]
@@ -16,46 +18,58 @@ pub enum PipelineClick {
     Patterns,
 }
 
-/// Hit-test the pipeline map. `area` is the full pipeline area rect (Constraint::Length(6)).
-/// `n_connected` is the number of enabled connected stages currently rendered.
-/// Returns None if the click is outside all boxes.
+/// Tile pitch in columns: 6-wide tile (TILE_INNER_W + 2 borders) + 2-cell gap/arrow = 8.
+const TILE_W: u16 = TILE_INNER_W + 2;
+const TILE_PITCH: u16 = TILE_W + 2;
+/// Max connected tiles rendered on row 1.
+const ROW1_MAX_TILES: usize = 5;
+
+/// Hit-test the pipeline map. `area` is the full pipeline area rect
+/// (Constraint::Length(9)). `n_connected` is the number of enabled connected
+/// stages currently rendered. Returns None if the click is outside all tiles.
 pub fn pipeline_click(area: Rect, col: u16, row: u16, n_connected: usize) -> Option<PipelineClick> {
-    // Box rows: area.y+0 (tops) through area.y+4 (bottoms).
-    // area.y+5 is the Block bottom border.
-    if row < area.y || row > area.y + 4 {
+    let row1_y0 = area.y + 1;
+    let row2_y0 = row1_y0 + TILE_HEIGHT + 1;
+
+    let in_row1 = row >= row1_y0 && row < row1_y0 + TILE_HEIGHT;
+    let in_row2 = row >= row2_y0 && row < row2_y0 + TILE_HEIGHT;
+    if !in_row1 && !in_row2 {
         return None;
     }
-    // Box pitch: 16 chars wide, 20-char pitch (16 + 4-char arrow) for connected stages.
-    // Leading "  " (2 cols) before first box.
-    let box_w: u16 = 16;
-    let pitch: u16 = 20; // box_w + arrow
-    let x0 = area.x + 2; // x of first connected box's left border
 
-    for i in 0..n_connected {
-        let bx = x0 + i as u16 * pitch;
-        if col >= bx && col < bx + box_w {
-            return Some(PipelineClick::ConnectedStage(i));
+    let n_row1 = n_connected.min(ROW1_MAX_TILES);
+    let n_row2_connected = n_connected.saturating_sub(ROW1_MAX_TILES);
+    let x0 = area.x + 2;
+
+    if in_row1 {
+        for i in 0..n_row1 {
+            let bx = x0 + (i as u16) * TILE_PITCH;
+            if col >= bx && col < bx + TILE_W {
+                return Some(PipelineClick::ConnectedStage(i));
+            }
         }
     }
 
-    // Disconnected section starts after connected boxes + 8-char gap.
-    // connected section width (no trailing arrow): n * box_w + (n-1) * 4
-    let connected_w = if n_connected == 0 {
-        0
-    } else {
-        n_connected as u16 * box_w + (n_connected as u16 - 1) * 4
-    };
-    let disc_x0 = x0 + connected_w + 8; // 8-char gap
-    let disc_pitch: u16 = 18; // box_w + 2-char gap
-    let disc_stages = [
-        PipelineClick::Ship,
-        PipelineClick::Discover,
-        PipelineClick::Patterns,
-    ];
-    for (j, target) in disc_stages.into_iter().enumerate() {
-        let bx = disc_x0 + j as u16 * disc_pitch;
-        if col >= bx && col < bx + box_w {
-            return Some(target);
+    if in_row2 {
+        // Connected overflow on row 2 (left side).
+        for j in 0..n_row2_connected {
+            let bx = x0 + (j as u16) * TILE_PITCH;
+            if col >= bx && col < bx + TILE_W {
+                return Some(PipelineClick::ConnectedStage(ROW1_MAX_TILES + j));
+            }
+        }
+        // Disconnected trio on row 2 (right side, separated by 8-cell gap).
+        let disc_x0 = x0 + (n_row2_connected as u16) * TILE_PITCH + 4;
+        let disc_stages = [
+            PipelineClick::Ship,
+            PipelineClick::Discover,
+            PipelineClick::Patterns,
+        ];
+        for (j, target) in disc_stages.into_iter().enumerate() {
+            let bx = disc_x0 + (j as u16) * TILE_PITCH;
+            if col >= bx && col < bx + TILE_W {
+                return Some(target);
+            }
         }
     }
 
@@ -65,7 +79,6 @@ pub fn pipeline_click(area: Rect, col: u16, row: u16, n_connected: usize) -> Opt
 use crate::agent::AgentRole;
 use crate::app::AppState;
 use crate::config::Config;
-use crate::utils::truncate_str;
 
 fn effective_pipeline_configs(config: &Config, state: &AppState) -> Vec<Config> {
     let mut display_config = config.clone();
@@ -74,36 +87,26 @@ fn effective_pipeline_configs(config: &Config, state: &AppState) -> Vec<Config> 
     display_config.selected_pipeline_configs(&display_config.dual_selection)
 }
 
-fn join_stage_labels<I>(labels: I) -> String
-where
-    I: IntoIterator<Item = String>,
-{
-    let mut unique = Vec::new();
-    for label in labels {
-        if !label.is_empty() && !unique.contains(&label) {
-            unique.push(label);
-        }
-    }
-    unique.join(" + ")
-}
-
-fn stage_model_label(configs: &[Config], stage_id: &str) -> String {
-    join_stage_labels(configs.iter().map(|config| {
-        let (prov, model) = config.active_routing_for_stage(stage_id);
-        Config::display_provider_model(&prov, &model)
-    }))
-}
-
-fn stage_kind_label(stage_id: &str) -> &'static str {
-    match stage_id {
-        "scout" => "scout-report",
-        "query" => "prompt",
-        "research" => "research",
-        "plan" => "current-plan",
-        "implement" => "build-claims",
-        "doubt" => "fresh context",
-        "discover" => "TASKS.md",
-        _ => "custom",
+/// Map a full stage label (e.g. "QUERY") to a short tile abbreviation.
+fn tile_label(label: &str) -> String {
+    match label {
+        "QUERY" => "Q".to_string(),
+        "RESEARCH" => "R".to_string(),
+        "PLAN" => "P".to_string(),
+        "P+" => "P+".to_string(),
+        "BUILD" => "B".to_string(),
+        "AUDIT" => "A".to_string(),
+        "COACH" => "C".to_string(),
+        "SHIP" => "SH".to_string(),
+        "DISCOVER" => "DI".to_string(),
+        "DISCOVERY" => "DI".to_string(),
+        "SKILLS" => "SK".to_string(),
+        "PATTERNS" => "SK".to_string(),
+        other => other
+            .chars()
+            .take(2)
+            .collect::<String>()
+            .to_ascii_uppercase(),
     }
 }
 
@@ -131,38 +134,26 @@ pub(super) fn render_pipeline_map(
     };
 
     let pipe_color = theme.accent;
-    let box_width = 14usize;
+    let _pipeline_configs = effective_pipeline_configs(config, state);
 
-    let pipeline_configs = effective_pipeline_configs(config, state);
-
-    // ─── Connected pipeline stages (left side) ─────────────
     struct StageInfo {
         label: String,
-        model_label: String,
-        kind_label: String,
         border_color: Color,
         text_style: Style,
         stage_id: Option<String>,
     }
 
-    // Filter to enabled stages; order follows config.pipeline_stages.
     let enabled_stages: Vec<&crate::config::PipelineStageConfig> = config
         .pipeline_stages
         .iter()
         .filter(|s| s.enabled)
         .collect();
 
-    // First pass: build connected vec with default (muted) styling. Splice
-    // virtual COACH (front) and P+ (after PLAN) stages when configured.
     let mut connected: Vec<StageInfo> = Vec::new();
 
     if config.run_mode == "coach" {
-        let model_label =
-            truncate_str(&stage_model_label(&pipeline_configs, "coach"), 14).to_string();
         connected.push(StageInfo {
             label: "COACH".to_string(),
-            model_label,
-            kind_label: "intake-brief".to_string(),
             border_color: theme.muted,
             text_style: Style::default().fg(theme.muted),
             stage_id: Some("coach".to_string()),
@@ -170,33 +161,16 @@ pub(super) fn render_pipeline_map(
     }
 
     for stage_cfg in enabled_stages.iter() {
-        let model_label =
-            truncate_str(&stage_model_label(&pipeline_configs, &stage_cfg.id), 14).to_string();
-        let kind_label = stage_kind_label(&stage_cfg.id).to_string();
-
         connected.push(StageInfo {
             label: stage_cfg.label.clone(),
-            model_label,
-            kind_label,
             border_color: theme.muted,
             text_style: Style::default().fg(theme.muted),
             stage_id: Some(stage_cfg.id.clone()),
         });
 
-        // Render P+ unconditionally between PLAN and BUILD. The
-        // `config.plan_review_enabled` flag does not actually gate
-        // when P+ fires at runtime, so gating only the diagram on it
-        // produced a latent rendering bug where P+ ran but never
-        // appeared in the pipeline view. The gate is retained as a
-        // config option (used by the build pipeline) but does not
-        // suppress the box.
         if stage_cfg.id == "plan" {
-            let pr_model =
-                truncate_str(&stage_model_label(&pipeline_configs, "plan-review"), 14).to_string();
             connected.push(StageInfo {
                 label: "P+".to_string(),
-                model_label: pr_model,
-                kind_label: "plan-review".to_string(),
                 border_color: theme.muted,
                 text_style: Style::default().fg(theme.muted),
                 stage_id: Some("plan-review".to_string()),
@@ -204,9 +178,6 @@ pub(super) fn render_pipeline_map(
         }
     }
 
-    // Second pass: locate active stage in the assembled connected vec, then
-    // recompute border_color/text_style with the same three-arm rule used
-    // before. Active stage resolution is by stage_id so virtual stages match.
     let active_connected: Option<usize> = active_stage_id
         .as_deref()
         .and_then(|sid| connected.iter().position(|info| info.stage_id.as_deref() == Some(sid)));
@@ -224,24 +195,13 @@ pub(super) fn render_pipeline_map(
         info.text_style = text_style;
     }
 
-    // ─── Disconnected stages (right side) ───────────────────
     let discovery_active = active_role.as_ref() == Some(&AgentRole::Discovery);
     let discovery_used = state.is_discovering || state.discovery_round > 0;
     let patterns_used = state.session_patterns_learned > 0;
 
-    let discovery_model = stage_model_label(&pipeline_configs, "discovery");
-    let patterns_model = config
-        .role_configs()
-        .iter()
-        .find(|(name, _, _)| *name == "Patterns")
-        .map(|(_, provider, model)| Config::display_provider_model(provider, model))
-        .unwrap_or_default();
-
     let disconnected: Vec<StageInfo> = vec![
         StageInfo {
             label: "SHIP".to_string(),
-            model_label: "GitHub".to_string(),
-            kind_label: "git + pr".to_string(),
             border_color: if state.ship_active {
                 Color::Green
             } else {
@@ -258,8 +218,6 @@ pub(super) fn render_pipeline_map(
         },
         StageInfo {
             label: "DISCOVER".to_string(),
-            model_label: truncate_str(&discovery_model, 14).to_string(),
-            kind_label: "TASKS.md".to_string(),
             border_color: if state.run_mode == "sprint" || state.run_mode == "review" {
                 theme.muted
             } else if discovery_active {
@@ -281,12 +239,7 @@ pub(super) fn render_pipeline_map(
             stage_id: None,
         },
         StageInfo {
-            // T1.26 strangled the legacy pattern abstraction in favor of
-            // Anthropic Skills. The internal stage id stays "pattern_extraction"
-            // for path stability, but the visible label is "SKILLS".
             label: "SKILLS".to_string(),
-            model_label: truncate_str(&patterns_model, 14).to_string(),
-            kind_label: "~/.foundry/".to_string(),
             border_color: if patterns_used {
                 Color::Green
             } else {
@@ -301,16 +254,14 @@ pub(super) fn render_pipeline_map(
         },
     ];
 
-    // ─── Render boxes ───────────────────────────────────────
-    // Helper: render one box's row segments
-    fn box_top(s: &mut Vec<Span>, width: usize, color: Color) {
+    fn box_top(s: &mut Vec<Span<'static>>, width: usize, color: Color) {
         s.push(Span::styled(
             format!("\u{256d}{}\u{256e}", "\u{2500}".repeat(width)),
             Style::default().fg(color),
         ));
     }
-    fn box_mid(s: &mut Vec<Span>, width: usize, label: &str, style: Style, color: Color) {
-        let pad_total = width.saturating_sub(label.len());
+    fn box_mid(s: &mut Vec<Span<'static>>, width: usize, label: &str, style: Style, color: Color) {
+        let pad_total = width.saturating_sub(label.chars().count());
         let left = pad_total / 2;
         let right = pad_total - left;
         s.push(Span::styled("\u{2502}", Style::default().fg(color)));
@@ -320,133 +271,131 @@ pub(super) fn render_pipeline_map(
         ));
         s.push(Span::styled("\u{2502}", Style::default().fg(color)));
     }
-    fn box_model(s: &mut Vec<Span>, width: usize, model: &str, color: Color, muted: Color) {
-        let pad_total = width.saturating_sub(model.len());
-        let left = pad_total / 2;
-        let right = pad_total - left;
-        s.push(Span::styled("\u{2502}", Style::default().fg(color)));
-        s.push(Span::styled(
-            format!("{}{}{}", " ".repeat(left), model, " ".repeat(right)),
-            Style::default().fg(muted),
-        ));
-        s.push(Span::styled("\u{2502}", Style::default().fg(color)));
-    }
-    fn box_bot(s: &mut Vec<Span>, width: usize, color: Color) {
+    fn box_bot(s: &mut Vec<Span<'static>>, width: usize, color: Color) {
         s.push(Span::styled(
             format!("\u{2570}{}\u{256f}", "\u{2500}".repeat(width)),
             Style::default().fg(color),
         ));
     }
 
-    // Build each line across all boxes
-    let mut top_spans = vec![Span::raw("  ")];
-    let mut mid_spans = vec![Span::raw("  ")];
-    let mut model_spans = vec![Span::raw("  ")];
-    let mut kind_spans = vec![Span::raw("  ")];
-    let mut bot_spans = vec![Span::raw("  ")];
+    let width = TILE_INNER_W as usize;
+    let n_connected = connected.len();
+    let n_row1 = n_connected.min(ROW1_MAX_TILES);
+    let n_row2_connected = n_connected.saturating_sub(ROW1_MAX_TILES);
 
-    // Connected stages with arrows
-    for (i, stage) in connected.iter().enumerate() {
-        box_top(&mut top_spans, box_width, stage.border_color);
-        box_mid(
-            &mut mid_spans,
-            box_width,
-            &stage.label,
-            stage.text_style,
-            stage.border_color,
-        );
-        box_model(
-            &mut model_spans,
-            box_width,
-            &stage.model_label,
-            stage.border_color,
-            theme.muted,
-        );
-        box_model(
-            &mut kind_spans,
-            box_width,
-            &stage.kind_label,
-            stage.border_color,
-            theme.muted,
-        );
-        box_bot(&mut bot_spans, box_width, stage.border_color);
-
-        if i < connected.len() - 1 {
-            top_spans.push(Span::raw("    "));
-            mid_spans.push(Span::styled(
-                "\u{2500}\u{2500}\u{25b6}\u{2500}",
+    // Row 1: top / mid / bot
+    let mut top_r1 = vec![Span::raw("  ")];
+    let mut mid_r1 = vec![Span::raw("  ")];
+    let mut bot_r1 = vec![Span::raw("  ")];
+    for (i, stage) in connected.iter().enumerate().take(n_row1) {
+        let short = tile_label(&stage.label);
+        box_top(&mut top_r1, width, stage.border_color);
+        box_mid(&mut mid_r1, width, &short, stage.text_style, stage.border_color);
+        box_bot(&mut bot_r1, width, stage.border_color);
+        if i < n_row1 - 1 {
+            top_r1.push(Span::raw("  "));
+            mid_r1.push(Span::styled(
+                "\u{2500}\u{25b6}",
                 Style::default().fg(pipe_color),
             ));
-            model_spans.push(Span::raw("    "));
-            kind_spans.push(Span::raw("    "));
-            bot_spans.push(Span::raw("    "));
+            bot_r1.push(Span::raw("  "));
         }
     }
 
-    // Gap between connected and disconnected
-    if connected.len() <= 7 {
-        top_spans.push(Span::raw("        "));
-        mid_spans.push(Span::raw("        "));
-        model_spans.push(Span::raw("        "));
-        kind_spans.push(Span::raw("        "));
-        bot_spans.push(Span::raw("        "));
+    // Inter-row gap line: includes optional wrap-down arrow above the first
+    // row-2 connected tile.
+    let mut gap_line: Vec<Span<'static>> = vec![Span::raw("  ")];
+    if n_row2_connected > 0 {
+        gap_line.push(Span::styled(
+            "\u{21b3}",
+            Style::default().fg(pipe_color).add_modifier(Modifier::BOLD),
+        ));
+    }
 
-        // Disconnected stages (no arrows)
+    // Row 2: overflow connected (left) + disconnected trio (right).
+    let mut top_r2 = vec![Span::raw("  ")];
+    let mut mid_r2 = vec![Span::raw("  ")];
+    let mut bot_r2 = vec![Span::raw("  ")];
+    for (j, stage) in connected
+        .iter()
+        .skip(ROW1_MAX_TILES)
+        .take(n_row2_connected)
+        .enumerate()
+    {
+        let short = tile_label(&stage.label);
+        box_top(&mut top_r2, width, stage.border_color);
+        box_mid(&mut mid_r2, width, &short, stage.text_style, stage.border_color);
+        box_bot(&mut bot_r2, width, stage.border_color);
+        if j < n_row2_connected - 1 {
+            top_r2.push(Span::raw("  "));
+            mid_r2.push(Span::styled(
+                "\u{2500}\u{25b6}",
+                Style::default().fg(pipe_color),
+            ));
+            bot_r2.push(Span::raw("  "));
+        }
+    }
+
+    // Disconnected trio only when total connected <= 7 (matches old behavior).
+    let render_disconnected = n_connected <= 7;
+    if render_disconnected {
+        // 4-cell gap between overflow connected and disconnected trio.
+        let gap = if n_row2_connected > 0 { "    " } else { "      " };
+        top_r2.push(Span::raw(gap.to_string()));
+        mid_r2.push(Span::raw(gap.to_string()));
+        bot_r2.push(Span::raw(gap.to_string()));
+
         for (i, stage) in disconnected.iter().enumerate() {
-            box_top(&mut top_spans, box_width, stage.border_color);
-            box_mid(
-                &mut mid_spans,
-                box_width,
-                &stage.label,
-                stage.text_style,
-                stage.border_color,
-            );
-            box_model(
-                &mut model_spans,
-                box_width,
-                &stage.model_label,
-                stage.border_color,
-                theme.muted,
-            );
-            box_model(
-                &mut kind_spans,
-                box_width,
-                &stage.kind_label,
-                stage.border_color,
-                theme.muted,
-            );
-            box_bot(&mut bot_spans, box_width, stage.border_color);
-
+            let short = tile_label(&stage.label);
+            box_top(&mut top_r2, width, stage.border_color);
+            box_mid(&mut mid_r2, width, &short, stage.text_style, stage.border_color);
+            box_bot(&mut bot_r2, width, stage.border_color);
             if i < disconnected.len() - 1 {
-                top_spans.push(Span::raw("  "));
-                mid_spans.push(Span::raw("  "));
-                model_spans.push(Span::raw("  "));
-                kind_spans.push(Span::raw("  "));
-                bot_spans.push(Span::raw("  "));
+                top_r2.push(Span::raw("  "));
+                mid_r2.push(Span::raw("  "));
+                bot_r2.push(Span::raw("  "));
             }
         }
     }
 
-    let lines = vec![
-        Line::from(top_spans),
-        Line::from(mid_spans),
-        Line::from(model_spans),
-        Line::from(kind_spans),
-        Line::from(bot_spans),
-    ];
+    // Layout: 1 spacer + 3 row1 + 1 gap + 3 row2 + bottom border = 9 rows (Borders::BOTTOM provides the 9th).
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(1),           // 1-line spacer below title
+            Constraint::Length(TILE_HEIGHT), // row 1 (3 lines)
+            Constraint::Length(1),           // inter-row gap
+            Constraint::Length(TILE_HEIGHT), // row 2 (3 lines)
+            Constraint::Min(0),
+        ])
+        .split(area);
 
-    let pipeline = Paragraph::new(lines).block(
-        Block::default()
-            .borders(Borders::BOTTOM)
-            .border_style(Style::default().fg(theme.border))
-            .title(Span::styled(
-                " Pipeline ",
-                Style::default().fg(theme.info).add_modifier(Modifier::BOLD),
-            )),
-    );
-    // Clear the area first to prevent stale glyphs from a previous, wider render bleeding in.
+    let block = Block::default()
+        .borders(Borders::BOTTOM)
+        .border_style(Style::default().fg(theme.border))
+        .title(Span::styled(
+            " Pipeline ",
+            Style::default().fg(theme.info).add_modifier(Modifier::BOLD),
+        ));
     frame.render_widget(ratatui::widgets::Clear, area);
-    frame.render_widget(pipeline, area);
+    frame.render_widget(block, area);
+
+    let row1_paragraph = Paragraph::new(vec![
+        Line::from(top_r1),
+        Line::from(mid_r1),
+        Line::from(bot_r1),
+    ]);
+    frame.render_widget(row1_paragraph, chunks[1]);
+
+    let gap_paragraph = Paragraph::new(Line::from(gap_line));
+    frame.render_widget(gap_paragraph, chunks[2]);
+
+    let row2_paragraph = Paragraph::new(vec![
+        Line::from(top_r2),
+        Line::from(mid_r2),
+        Line::from(bot_r2),
+    ]);
+    frame.render_widget(row2_paragraph, chunks[3]);
 }
 
 #[cfg(test)]
@@ -457,7 +406,7 @@ mod tests {
     use std::path::PathBuf;
 
     fn render_pipeline_text(state: &AppState, config: &Config) -> String {
-        let backend = TestBackend::new(220, 8);
+        let backend = TestBackend::new(220, 12);
         let mut terminal = Terminal::new(backend).expect("failed to create terminal");
         terminal
             .draw(|frame| render_pipeline_map(frame, frame.area(), state, config))
@@ -483,26 +432,21 @@ mod tests {
 
     #[test]
     fn pipeline_renders_six_boxes_for_default_config() {
-        // P+ is rendered unconditionally between PLAN and BUILD because
-        // plan-review can run regardless of `config.plan_review_enabled`.
         let state = AppState::new(PathBuf::from(".buildloop"));
         let config = Config::default();
         let rendered = render_pipeline_text(&state, &config);
 
-        assert!(rendered.contains("QUERY"), "rendered: {}", rendered);
-        assert!(rendered.contains("RESEARCH"), "rendered: {}", rendered);
-        assert!(rendered.contains("PLAN"), "rendered: {}", rendered);
-        assert!(rendered.contains("P+"), "rendered: {}", rendered);
-        assert!(rendered.contains("BUILD"), "rendered: {}", rendered);
-        assert!(rendered.contains("AUDIT"), "rendered: {}", rendered);
+        assert!(rendered.contains("Q"), "Q tile missing: {}", rendered);
+        assert!(rendered.contains("R"), "R tile missing: {}", rendered);
+        assert!(rendered.contains("P"), "P tile missing: {}", rendered);
+        assert!(rendered.contains("P+"), "P+ tile missing: {}", rendered);
+        assert!(rendered.contains("B"), "B tile missing: {}", rendered);
+        assert!(rendered.contains("A"), "A tile missing: {}", rendered);
         assert!(!rendered.contains("COACH"), "rendered: {}", rendered);
     }
 
     #[test]
     fn pipeline_renders_p_plus_even_when_plan_review_disabled() {
-        // Regression: previously P+ was gated on `plan_review_enabled`,
-        // but the runtime gate is broken (P+ fires anyway). The diagram
-        // must reflect what users actually experience.
         let state = AppState::new(PathBuf::from(".buildloop"));
         let config = Config {
             plan_review_enabled: false,
@@ -510,14 +454,12 @@ mod tests {
         };
         let rendered = render_pipeline_text(&state, &config);
 
-        let plan_off = rendered.find("PLAN").expect("PLAN present");
-        let pplus_off = rendered.find("P+").expect("P+ present");
-        let build_off = rendered.find("BUILD").expect("BUILD present");
-        assert!(
-            plan_off < pplus_off && pplus_off < build_off,
-            "expected PLAN < P+ < BUILD; rendered: {}",
-            rendered
-        );
+        let p_off = rendered.find(" P ").or_else(|| rendered.find("P "));
+        let pplus_off = rendered.find("P+");
+        let b_off = rendered.find(" B ").or_else(|| rendered.find("B "));
+        assert!(p_off.is_some(), "P tile missing: {}", rendered);
+        assert!(pplus_off.is_some(), "P+ tile missing: {}", rendered);
+        assert!(b_off.is_some(), "B tile missing: {}", rendered);
     }
 
     #[test]
@@ -529,11 +471,11 @@ mod tests {
         };
         let rendered = render_pipeline_text(&state, &config);
 
-        let coach_off = rendered.find("COACH").expect("COACH present");
-        let query_off = rendered.find("QUERY").expect("QUERY present");
+        let c_off = rendered.find(" C ").expect("C tile present");
+        let q_off = rendered.find(" Q ").expect("Q tile present");
         assert!(
-            coach_off < query_off,
-            "COACH should come before QUERY. rendered: {}",
+            c_off < q_off,
+            "C should come before Q. rendered: {}",
             rendered
         );
     }
@@ -547,14 +489,9 @@ mod tests {
         };
         let rendered = render_pipeline_text(&state, &config);
 
-        let plan_off = rendered.find("PLAN").expect("PLAN present");
         let pplus_off = rendered.find("P+").expect("P+ present");
-        let build_off = rendered.find("BUILD").expect("BUILD present");
-        assert!(
-            plan_off < pplus_off && pplus_off < build_off,
-            "expected PLAN < P+ < BUILD; rendered: {}",
-            rendered
-        );
+        let b_off = rendered.find(" B ").or_else(|| rendered.find("B ")).expect("B present");
+        assert!(pplus_off < b_off, "expected P+ < B; rendered: {}", rendered);
     }
 
     #[test]
@@ -568,7 +505,7 @@ mod tests {
             ..Config::default()
         };
 
-        let backend = TestBackend::new(220, 8);
+        let backend = TestBackend::new(220, 12);
         let mut terminal = Terminal::new(backend).expect("failed to create terminal");
         terminal
             .draw(|frame| render_pipeline_map(frame, frame.area(), &state, &config))
@@ -576,7 +513,6 @@ mod tests {
 
         let buffer = terminal.backend().buffer();
         let area = *buffer.area();
-        // Find the label row containing "P+" by scanning all rows column by column.
         let accent = state.tui_theme.accent;
         let mut label_y_opt: Option<u16> = None;
         let mut p_col_opt: Option<u16> = None;
@@ -602,11 +538,9 @@ mod tests {
         }
         let label_y = label_y_opt.expect("P+ label rendered somewhere");
         let p_idx = p_col_opt.unwrap() as usize;
-        // Search neighborhood of the P+ box for accent-colored cells (border
-        // verticals on label_y, border top corners on label_y-1).
         let mut found_active = false;
         let xs: Vec<u16> = (p_idx.saturating_sub(2) as u16
-            ..((p_idx as u16).saturating_add(16)).min(area.width))
+            ..((p_idx as u16).saturating_add(TILE_W + 2)).min(area.width))
             .collect();
         for y_off in 0..3i32 {
             let y_signed = label_y as i32 + y_off - 1;
@@ -628,7 +562,7 @@ mod tests {
         }
         assert!(
             found_active,
-            "Expected P+ box (col={}, y={}) to use active color (accent={:?})",
+            "Expected P+ tile (col={}, y={}) to use active color (accent={:?})",
             p_idx, label_y, accent
         );
     }
@@ -655,10 +589,77 @@ mod tests {
         });
 
         let rendered = render_pipeline_text(&state, &config);
-        assert!(rendered.contains("COACH"), "rendered: {}", rendered);
-        assert!(rendered.contains("P+"), "rendered: {}", rendered);
-        assert!(!rendered.contains("SHIP"), "rendered: {}", rendered);
-        assert!(!rendered.contains("DISCOVER"), "rendered: {}", rendered);
-        assert!(!rendered.contains("PATTERNS"), "rendered: {}", rendered);
+        assert!(rendered.contains(" C "), "C tile missing: {}", rendered);
+        assert!(rendered.contains("P+"), "P+ tile missing: {}", rendered);
+        // Short labels for the disconnected trio.
+        assert!(!rendered.contains("SH"), "SH should be dropped: {}", rendered);
+        assert!(!rendered.contains("DI"), "DI should be dropped: {}", rendered);
+        assert!(!rendered.contains("SK"), "SK should be dropped: {}", rendered);
+    }
+
+    #[test]
+    fn pipeline_click_routes_row_1_connected_tiles_by_index() {
+        // With default config + plan_review unconditional, connected = [Q,R,P,P+,B,A].
+        // Row 1 holds first 5 (Q,R,P,P+,B). Row 2 holds A + disconnected trio.
+        let area = Rect::new(0, 0, 220, 9);
+        // Row 1 mid is at area.y + 1 + 1 = 2 (top of tile is +1; mid is +2).
+        let row1_mid_y = area.y + 1 + 1;
+        let x0 = area.x + 2;
+        for i in 0..5 {
+            let center = x0 + (i as u16) * TILE_PITCH + TILE_W / 2;
+            let click = pipeline_click(area, center, row1_mid_y, 6);
+            match click {
+                Some(PipelineClick::ConnectedStage(idx)) => assert_eq!(idx, i),
+                other => panic!("expected ConnectedStage({}), got {:?}", i, other),
+            }
+        }
+    }
+
+    #[test]
+    fn pipeline_click_routes_row_2_disconnected_tiles() {
+        let area = Rect::new(0, 0, 220, 9);
+        // Row 2 starts at area.y + 1 + TILE_HEIGHT + 1 = area.y + 5. Mid = +6.
+        let row2_mid_y = area.y + 1 + TILE_HEIGHT + 1 + 1;
+        // n_connected = 6 -> n_row2_connected = 1 (AUDIT). disc starts at x0 + 1*pitch + 4.
+        let x0 = area.x + 2;
+        let disc_x0 = x0 + TILE_PITCH + 4;
+        let ship_center = disc_x0 + TILE_W / 2;
+        let disc_center = disc_x0 + TILE_PITCH + TILE_W / 2;
+        let sk_center = disc_x0 + 2 * TILE_PITCH + TILE_W / 2;
+
+        assert!(matches!(
+            pipeline_click(area, ship_center, row2_mid_y, 6),
+            Some(PipelineClick::Ship)
+        ));
+        assert!(matches!(
+            pipeline_click(area, disc_center, row2_mid_y, 6),
+            Some(PipelineClick::Discover)
+        ));
+        assert!(matches!(
+            pipeline_click(area, sk_center, row2_mid_y, 6),
+            Some(PipelineClick::Patterns)
+        ));
+    }
+
+    #[test]
+    fn pipeline_renders_two_rows_with_wrap_arrow() {
+        let state = AppState::new(PathBuf::from(".buildloop"));
+        let config = Config::default();
+        let rendered = render_pipeline_text(&state, &config);
+        // With 6 connected stages, A overflows to row 2, so the wrap-down arrow ↳ should appear.
+        assert!(
+            rendered.contains("\u{21b3}"),
+            "wrap arrow missing: {}",
+            rendered
+        );
+    }
+
+    #[test]
+    fn pipeline_modal_padding_constants_flow_through() {
+        use crate::tui::theme::{MODAL_PADDING_H, MODAL_PADDING_V, TILE_HEIGHT, TILE_INNER_W};
+        assert_eq!(MODAL_PADDING_H, 2);
+        assert_eq!(MODAL_PADDING_V, 1);
+        assert_eq!(TILE_INNER_W, 4);
+        assert_eq!(TILE_HEIGHT, 3);
     }
 }

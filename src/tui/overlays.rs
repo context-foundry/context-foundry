@@ -1,71 +1,129 @@
 use ratatui::{
-    layout::{Alignment, Constraint, Direction, Layout, Margin, Rect},
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{
-        Block, BorderType, Borders, Clear, Paragraph, Scrollbar, ScrollbarOrientation,
-        ScrollbarState,
-    },
+    widgets::{Block, BorderType, Borders, Clear, Paragraph},
     Frame,
 };
 
 use crate::app::AppState;
 use crate::app::{ExplorerContextMenu, SurfaceSummaryOverlay};
 use crate::config::Config;
+use crate::tui::modal_spec::{
+    compute_modal_layout, modal_rect, render_unified_modal, unified_modal_hit_test, ModalButton,
+    ModalSize, ModalSpec,
+};
 use crate::utils::truncate_str;
 
 pub(super) fn render_patterns(frame: &mut Frame, state: &AppState, config: &Config) {
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Min(10),   // Patterns list
-            Constraint::Length(1), // Status bar
-        ])
-        .split(frame.area());
-
-    render_patterns_list(frame, chunks[0], state, config);
-    render_patterns_status_bar(frame, chunks[1], state);
+    let theme = &state.tui_theme;
+    let area = frame.area();
+    let inner_width = area.width.saturating_sub(6) as usize;
+    let (title, body) = patterns_body_lines(state, config, inner_width);
+    let spec = ModalSpec {
+        title,
+        body,
+        footer_buttons: vec![
+            ModalButton {
+                key: "p".into(),
+                label: " back".into(),
+                action_id: "back".into(),
+            },
+            ModalButton {
+                key: "\u{2191}\u{2193}".into(),
+                label: " scroll".into(),
+                action_id: "scroll".into(),
+            },
+            ModalButton {
+                key: "q".into(),
+                label: " quit".into(),
+                action_id: "quit".into(),
+            },
+        ],
+        status_line: None,
+        size: ModalSize::Custom(area),
+        scroll_offset: state.patterns_scroll as u16,
+        show_close_button: true,
+        border_color: theme.info,
+        status_color: theme.muted,
+    };
+    let _ = render_unified_modal(frame, theme, &spec);
 }
 
 pub(super) fn render_findings(frame: &mut Frame, state: &AppState) {
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Min(10),   // Findings list
-            Constraint::Length(1), // Status bar
-        ])
-        .split(frame.area());
-
-    render_findings_list(frame, chunks[0], state);
-    render_findings_status_bar(frame, chunks[1], state);
+    let theme = &state.tui_theme;
+    let area = frame.area();
+    let inner_width = area.width.saturating_sub(6) as usize;
+    let (title, body) = findings_body_lines(state, inner_width);
+    let spec = ModalSpec {
+        title,
+        body,
+        footer_buttons: vec![
+            ModalButton {
+                key: "f".into(),
+                label: " back".into(),
+                action_id: "back".into(),
+            },
+            ModalButton {
+                key: "\u{2191}\u{2193}".into(),
+                label: " scroll".into(),
+                action_id: "scroll".into(),
+            },
+            ModalButton {
+                key: "q".into(),
+                label: " quit".into(),
+                action_id: "quit".into(),
+            },
+        ],
+        status_line: None,
+        size: ModalSize::Custom(area),
+        scroll_offset: state.findings_scroll as u16,
+        show_close_button: true,
+        border_color: theme.info,
+        status_color: theme.muted,
+    };
+    let _ = render_unified_modal(frame, theme, &spec);
 }
 
-fn render_findings_list(frame: &mut Frame, area: Rect, state: &AppState) {
+fn findings_body_lines(state: &AppState, inner_width: usize) -> (String, Vec<Line<'static>>) {
     let theme = &state.tui_theme;
     let Some(ref outcome) = state.last_orchestrator_outcome else {
-        let empty = Paragraph::new(vec![
+        let lines: Vec<Line<'static>> = vec![
             Line::from(""),
             Line::from(Span::styled(
                 "  No review findings available.",
                 Style::default().fg(theme.muted),
             )),
-        ])
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(theme.border))
-                .title(Span::styled(
-                    " Review Findings ",
-                    Style::default().fg(theme.info).add_modifier(Modifier::BOLD),
-                )),
-        );
-        frame.render_widget(empty, area);
-        return;
+        ];
+        return (" Review Findings ".to_string(), lines);
     };
 
-    let max_lines = area.height.saturating_sub(2) as usize;
-    let inner_width = area.width.saturating_sub(4) as usize;
-    let mut display_lines: Vec<Line> = Vec::new();
+    let mut display_lines: Vec<Line<'static>> = Vec::new();
+
+    let status_color = if outcome.accepted {
+        Color::Green
+    } else {
+        Color::Yellow
+    };
+    let status_label = if outcome.accepted {
+        "accepted"
+    } else {
+        "unresolved findings"
+    };
+    display_lines.push(Line::from(vec![
+        Span::styled("  Status: ", Style::default().fg(theme.text)),
+        Span::styled(
+            status_label,
+            Style::default()
+                .fg(status_color)
+                .add_modifier(Modifier::BOLD),
+        ),
+    ]));
+    display_lines.push(Line::from(Span::styled(
+        format!("  Iterations: {}", outcome.iterations),
+        Style::default().fg(theme.text),
+    )));
+    display_lines.push(Line::from(""));
 
     // Summary
     let status_color = if outcome.accepted {
@@ -176,81 +234,24 @@ fn render_findings_list(frame: &mut Frame, area: Rect, state: &AppState) {
         }
     }
 
-    let total_lines = display_lines.len();
-    let scroll = state
-        .findings_scroll
-        .min(total_lines.saturating_sub(max_lines));
-    let visible: Vec<Line> = display_lines
-        .into_iter()
-        .skip(scroll)
-        .take(max_lines)
-        .collect();
-
     let title = if outcome.accepted {
-        " Review Findings "
+        " Review Findings ".to_string()
     } else {
-        " Review Findings (unresolved) "
+        " Review Findings (unresolved) ".to_string()
     };
 
-    let paragraph = Paragraph::new(visible).block(
-        Block::default()
-            .borders(Borders::ALL)
-            .border_style(Style::default().fg(theme.border))
-            .title(Span::styled(
-                title,
-                Style::default().fg(theme.info).add_modifier(Modifier::BOLD),
-            )),
-    );
-    frame.render_widget(paragraph, area);
+    (title, display_lines)
 }
 
-fn render_findings_status_bar(frame: &mut Frame, area: Rect, state: &AppState) {
-    let mut spans = vec![
-        Span::styled(
-            " f ",
-            Style::default()
-                .fg(Color::Black)
-                .bg(state.tui_theme.info)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::raw(" back  "),
-        Span::styled(
-            " ↑↓ ",
-            Style::default()
-                .fg(Color::Black)
-                .bg(state.tui_theme.muted)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::raw(" scroll  "),
-        Span::styled(
-            " q ",
-            Style::default()
-                .fg(Color::Black)
-                .bg(state.tui_theme.muted)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::raw(" quit"),
-    ];
-
-    if let Some(ref version) = state.update_available {
-        spans.push(Span::styled(
-            format!(" | v{} available", version),
-            Style::default()
-                .fg(state.tui_theme.success)
-                .add_modifier(Modifier::BOLD),
-        ));
-    }
-
-    frame.render_widget(Paragraph::new(Line::from(spans)), area);
-}
-
-fn render_patterns_list(frame: &mut Frame, area: Rect, state: &AppState, _config: &Config) {
+fn patterns_body_lines(
+    state: &AppState,
+    _config: &Config,
+    inner_width: usize,
+) -> (String, Vec<Line<'static>>) {
     let theme = &state.tui_theme;
     let summary_opt = state.skill_citation_summary.as_ref();
 
-    let max_lines = area.height.saturating_sub(2) as usize;
-    let inner_width = area.width.saturating_sub(4) as usize;
-    let mut display_lines: Vec<Line> = Vec::new();
+    let mut display_lines: Vec<Line<'static>> = Vec::new();
 
     let (title, db_path_str): (String, String) = match summary_opt {
         Some(s) if s.db_available => (
@@ -342,32 +343,13 @@ fn render_patterns_list(frame: &mut Frame, area: Rect, state: &AppState, _config
         }
     }
 
-    let total_lines = display_lines.len();
-    let scroll = state
-        .patterns_scroll
-        .min(total_lines.saturating_sub(max_lines));
-    let visible: Vec<Line> = display_lines
-        .into_iter()
-        .skip(scroll)
-        .take(max_lines)
-        .collect();
-
     let full_title = if db_path_str.is_empty() {
         title
     } else {
         format!("{}| {} ", title, db_path_str)
     };
 
-    let paragraph = Paragraph::new(visible).block(
-        Block::default()
-            .borders(Borders::ALL)
-            .border_style(Style::default().fg(theme.border))
-            .title(Span::styled(
-                full_title,
-                Style::default().fg(theme.info).add_modifier(Modifier::BOLD),
-            )),
-    );
-    frame.render_widget(paragraph, area);
+    (full_title, display_lines)
 }
 
 fn derive_stage_label(
@@ -392,87 +374,62 @@ fn derive_stage_label(
     best.map(|(s, _)| s.to_string()).unwrap_or_else(|| "-".to_string())
 }
 
-fn render_patterns_status_bar(frame: &mut Frame, area: Rect, state: &AppState) {
-    let back_label = " back  ";
-    let mut spans = vec![
-        Span::styled(
-            " p ",
-            Style::default()
-                .fg(Color::Black)
-                .bg(state.tui_theme.info)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::raw(back_label),
-        Span::styled(
-            " ↑↓ ",
-            Style::default()
-                .fg(Color::Black)
-                .bg(state.tui_theme.muted)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::raw(" scroll  "),
-        Span::styled(
-            " q ",
-            Style::default()
-                .fg(Color::Black)
-                .bg(state.tui_theme.muted)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::raw(" quit"),
-    ];
-
-    if let Some(ref version) = state.update_available {
-        spans.push(Span::styled(
-            format!(" | v{} available", version),
-            Style::default()
-                .fg(state.tui_theme.success)
-                .add_modifier(Modifier::BOLD),
-        ));
-    }
-
-    frame.render_widget(Paragraph::new(Line::from(spans)), area);
-}
-
 // ─── Stats Overlay ──────────────────────────────────────────
 
 pub(super) fn render_stats_overlay(frame: &mut Frame, state: &AppState) {
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Min(10),   // Content area
-            Constraint::Length(1), // Status bar
-        ])
-        .split(frame.area());
-
-    render_stats_overlay_content(frame, chunks[0], state);
-    render_stats_overlay_status_bar(frame, chunks[1], state);
+    let theme = &state.tui_theme;
+    let area = frame.area();
+    let (title, body) = stats_body_lines(state);
+    let spec = ModalSpec {
+        title,
+        body,
+        footer_buttons: vec![
+            ModalButton {
+                key: "s".into(),
+                label: " back".into(),
+                action_id: "back".into(),
+            },
+            ModalButton {
+                key: "Esc".into(),
+                label: " back".into(),
+                action_id: "dismiss".into(),
+            },
+            ModalButton {
+                key: "\u{2191}\u{2193}".into(),
+                label: " scroll".into(),
+                action_id: "scroll".into(),
+            },
+            ModalButton {
+                key: "q".into(),
+                label: " quit".into(),
+                action_id: "quit".into(),
+            },
+        ],
+        status_line: None,
+        size: ModalSize::Custom(area),
+        scroll_offset: state.stats_overlay_scroll as u16,
+        show_close_button: true,
+        border_color: theme.info,
+        status_color: theme.muted,
+    };
+    let _ = render_unified_modal(frame, theme, &spec);
 }
 
-fn render_stats_overlay_content(frame: &mut Frame, area: Rect, state: &AppState) {
+fn stats_body_lines(state: &AppState) -> (String, Vec<Line<'static>>) {
     let theme = &state.tui_theme;
 
     let Some(ref report) = state.stats_overlay_report else {
-        let empty = Paragraph::new(vec![
+        let lines: Vec<Line<'static>> = vec![
             Line::from(""),
             Line::from(Span::styled(
                 "  No stats data available.",
                 Style::default().fg(theme.muted),
             )),
-        ])
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(theme.border))
-                .title(Span::styled(
-                    " Stats Report ",
-                    Style::default().fg(theme.info).add_modifier(Modifier::BOLD),
-                )),
-        );
-        frame.render_widget(empty, area);
-        return;
+        ];
+        return (" Stats Report ".to_string(), lines);
     };
 
-    let mut display_lines: Vec<Line> = Vec::new();
+    let mut display_lines: Vec<Line<'static>> = Vec::new();
 
     // ── Session Summary ──
     display_lines.push(Line::from(Span::styled(
@@ -778,76 +735,7 @@ fn render_stats_overlay_content(frame: &mut Frame, area: Rect, state: &AppState)
         display_lines.push(Line::from(""));
     }
 
-    // ── Render with scroll ──
-    let total_lines = display_lines.len();
-    let max_lines = area.height.saturating_sub(2) as usize;
-    let scroll = state
-        .stats_overlay_scroll
-        .min(total_lines.saturating_sub(max_lines));
-    let visible: Vec<Line> = display_lines
-        .into_iter()
-        .skip(scroll)
-        .take(max_lines)
-        .collect();
-
-    let paragraph = Paragraph::new(visible).block(
-        Block::default()
-            .borders(Borders::ALL)
-            .border_style(Style::default().fg(theme.border))
-            .title(Span::styled(
-                " Stats Report ",
-                Style::default().fg(theme.info).add_modifier(Modifier::BOLD),
-            )),
-    );
-    frame.render_widget(paragraph, area);
-}
-
-fn render_stats_overlay_status_bar(frame: &mut Frame, area: Rect, state: &AppState) {
-    let mut spans = vec![
-        Span::styled(
-            " s ",
-            Style::default()
-                .fg(Color::Black)
-                .bg(state.tui_theme.info)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::raw(" back  "),
-        Span::styled(
-            " Esc ",
-            Style::default()
-                .fg(Color::Black)
-                .bg(state.tui_theme.muted)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::raw(" back  "),
-        Span::styled(
-            " ↑↓ ",
-            Style::default()
-                .fg(Color::Black)
-                .bg(state.tui_theme.muted)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::raw(" scroll  "),
-        Span::styled(
-            " q ",
-            Style::default()
-                .fg(Color::Black)
-                .bg(state.tui_theme.muted)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::raw(" quit"),
-    ];
-
-    if let Some(ref version) = state.update_available {
-        spans.push(Span::styled(
-            format!(" | v{} available", version),
-            Style::default()
-                .fg(state.tui_theme.success)
-                .add_modifier(Modifier::BOLD),
-        ));
-    }
-
-    frame.render_widget(Paragraph::new(Line::from(spans)), area);
+    (" Stats Report ".to_string(), display_lines)
 }
 
 fn fmt_overlay_tokens(n: u64) -> String {
@@ -1030,69 +918,74 @@ pub(super) fn render_settings_overlay(frame: &mut Frame, state: &AppState) {
     let theme = &state.tui_theme;
     let modal = settings_modal_rect(frame.area());
 
-    // Shadow: 1 col right + 1 row down
-    let shadow = Rect {
-        x: modal.x + 1,
-        y: modal.y + 1,
-        width: modal
-            .width
-            .min(frame.area().width.saturating_sub(modal.x + 1)),
-        height: modal
-            .height
-            .min(frame.area().height.saturating_sub(modal.y + 1)),
+    let ov = state.settings_overlay.as_ref();
+    let focus = ov.map(|o| o.focus).unwrap_or(0);
+    let expanded = ov.map(|o| &o.expanded_sections);
+    let scroll_offset = ov.map(|o| o.scroll_offset).unwrap_or(0);
+    let editing = ov.and_then(|o| o.editing.as_ref());
+    let has_picker = ov.is_some_and(|o| o.picker.is_some());
+
+    let status_text = if let Some(editing) = editing {
+        editing
+            .error
+            .as_deref()
+            .map(str::to_string)
+            .unwrap_or_else(|| {
+                format!("  editing {} -- Enter save, Ctrl+U clear", editing.field_id)
+            })
+    } else if has_picker {
+        "  Click a row to select or toggle a provider group".to_string()
+    } else {
+        "  Click a row to toggle, edit, or open the model picker".to_string()
     };
-    frame.render_widget(Clear, shadow);
-    frame.render_widget(
-        Paragraph::new("").style(Style::default().bg(Color::DarkGray)),
-        shadow,
-    );
-
-    frame.render_widget(Clear, modal);
-    frame.render_widget(
-        Block::default()
-            .borders(Borders::ALL)
-            .border_style(Style::default().fg(theme.accent))
-            .style(Style::default().bg(theme.surface))
-            .title(Span::styled(
-                " Settings -- Foundry ",
-                Style::default()
-                    .fg(theme.accent)
-                    .add_modifier(Modifier::BOLD),
-            )),
-        modal,
-    );
-
-    // Draw [ X ] close button
-    let btn = close_btn_rect(modal);
-    let buf = frame.buffer_mut();
-    let btn_style = Style::default()
-        .fg(Color::Yellow)
-        .add_modifier(Modifier::BOLD);
-    for (i, ch) in "[ X ]".chars().enumerate() {
-        let col = btn.x + i as u16;
-        if col < buf.area().width && btn.y < buf.area().height {
-            buf[(col, btn.y)].set_char(ch).set_style(btn_style);
-        }
-    }
-
-    let inner = Rect {
-        x: modal.x + 1,
-        y: modal.y + 1,
-        width: modal.width.saturating_sub(2),
-        height: modal.height.saturating_sub(2),
+    let status_color = if editing.and_then(|inline| inline.error.as_ref()).is_some() {
+        Color::Yellow
+    } else {
+        theme.muted
     };
+
+    let spec = ModalSpec {
+        title: " Settings -- Foundry ".to_string(),
+        body: Vec::new(),
+        footer_buttons: vec![
+            ModalButton {
+                key: "\u{2191}\u{2193}".into(),
+                label: " navigate".into(),
+                action_id: "nav".into(),
+            },
+            ModalButton {
+                key: "Enter".into(),
+                label: " toggle/edit".into(),
+                action_id: "toggle".into(),
+            },
+            ModalButton {
+                key: "Esc".into(),
+                label: " close".into(),
+                action_id: "dismiss".into(),
+            },
+        ],
+        status_line: Some(Line::from(Span::styled(
+            status_text,
+            Style::default().fg(status_color),
+        ))),
+        size: ModalSize::Custom(modal),
+        scroll_offset: 0,
+        show_close_button: true,
+        border_color: theme.accent,
+        status_color,
+    };
+    let layout = match render_unified_modal(frame, theme, &spec) {
+        Some(l) => l,
+        None => return,
+    };
+
+    let inner = layout.body;
 
     let highlight_bg = if theme.surface == Color::Reset {
         Color::DarkGray
     } else {
         theme.surface
     };
-
-    let ov = state.settings_overlay.as_ref();
-    let focus = ov.map(|o| o.focus).unwrap_or(0);
-    let expanded = ov.map(|o| &o.expanded_sections);
-    let scroll_offset = ov.map(|o| o.scroll_offset).unwrap_or(0);
-    let editing = ov.and_then(|o| o.editing.as_ref());
 
     // Build the config snapshot for field values
     let config_path = state
@@ -1111,7 +1004,7 @@ pub(super) fn render_settings_overlay(frame: &mut Frame, state: &AppState) {
         .as_ref()
         .is_some_and(|ov| ov.dual_mode);
     let sections = settings_sections(dual_mode);
-    let content_height = inner.height.saturating_sub(2) as usize; // reserve 2 rows for hint bar
+    let content_height = inner.height as usize;
     let mut row_idx: usize = 0;
     let mut render_y: u16 = inner.y;
 
@@ -1418,59 +1311,6 @@ pub(super) fn render_settings_overlay(frame: &mut Frame, state: &AppState) {
             }
         }
     }
-
-    let status_y = inner.y + inner.height.saturating_sub(2);
-    let hint_y = inner.y + inner.height.saturating_sub(1);
-    let has_picker = ov.is_some_and(|o| o.picker.is_some());
-    let status_text = if let Some(editing) = editing {
-        editing
-            .error
-            .as_deref()
-            .map(str::to_string)
-            .unwrap_or_else(|| {
-                format!("  editing {} -- Enter save, Ctrl+U clear", editing.field_id)
-            })
-    } else if has_picker {
-        "  Click a row to select or toggle a provider group".to_string()
-    } else {
-        "  Click a row to toggle, edit, or open the model picker".to_string()
-    };
-    frame.render_widget(
-        Paragraph::new(Line::from(Span::styled(
-            status_text,
-            if editing.and_then(|inline| inline.error.as_ref()).is_some() {
-                Style::default().fg(Color::Yellow)
-            } else {
-                Style::default().fg(theme.muted)
-            },
-        ))),
-        Rect {
-            x: inner.x,
-            y: status_y,
-            width: inner.width,
-            height: 1,
-        },
-    );
-
-    let hint_text = if has_picker {
-        "  \u{2191}\u{2193} move  Enter select  / filter  Esc close picker"
-    } else if editing.is_some() {
-        "  Type to edit  Enter save  Backspace delete  Esc close"
-    } else {
-        "  \u{2191}\u{2193} move  Enter/Space toggle  \u{2190}\u{2192} cycle  Esc close"
-    };
-    frame.render_widget(
-        Paragraph::new(Line::from(Span::styled(
-            hint_text,
-            Style::default().fg(theme.muted),
-        ))),
-        Rect {
-            x: inner.x,
-            y: hint_y,
-            width: inner.width,
-            height: 1,
-        },
-    );
 
     // Model picker popup (rendered on top of the settings overlay)
     if let Some(ov_state) = ov {
@@ -1821,149 +1661,69 @@ pub enum QuitConfirmAction {
 }
 
 pub fn quit_confirm_hit_test(area: Rect, col: u16, row: u16) -> Option<QuitConfirmAction> {
-    let w: u16 = 54.min(area.width.saturating_sub(2));
-    let h: u16 = 9.min(area.height.saturating_sub(2));
-    if w < 20 || h < 5 {
-        return None;
-    }
-    let x = area.width.saturating_sub(w) / 2;
-    let y = area.height.saturating_sub(h) / 2;
-    let inner_x = x + 1;
-    let inner_y = y + 1;
-    let inner_w = w.saturating_sub(2);
-    let btn_row = inner_y + 4;
-    if row != btn_row {
-        return None;
-    }
-    if col < inner_x || col >= inner_x + inner_w {
-        return None;
-    }
-    let mid = inner_x + inner_w / 2;
-    if col < mid {
-        Some(QuitConfirmAction::Quit)
-    } else {
-        Some(QuitConfirmAction::Cancel)
-    }
+    let modal = modal_rect(area, ModalSize::Confirm)?;
+    let layout = compute_modal_layout(modal);
+    let spec = ModalSpec {
+        title: String::new(),
+        body: Vec::new(),
+        footer_buttons: vec![
+            ModalButton {
+                key: "Y/Enter".into(),
+                label: " Quit".into(),
+                action_id: "quit".into(),
+            },
+            ModalButton {
+                key: "N".into(),
+                label: " Cancel".into(),
+                action_id: "cancel".into(),
+            },
+        ],
+        status_line: None,
+        size: ModalSize::Confirm,
+        scroll_offset: 0,
+        show_close_button: true,
+        border_color: Color::Reset,
+        status_color: Color::Reset,
+    };
+    let id = unified_modal_hit_test(&layout, &spec, col, row)?;
+    Some(match id.as_str() {
+        "quit" => QuitConfirmAction::Quit,
+        "cancel" | "dismiss" => QuitConfirmAction::Cancel,
+        _ => return None,
+    })
 }
 
 pub fn render_quit_confirm(frame: &mut Frame, theme: &crate::tui::theme::TuiTheme) {
-    let area = frame.area();
-    let w: u16 = 54.min(area.width.saturating_sub(2));
-    let h: u16 = 9.min(area.height.saturating_sub(2));
-    if w < 20 || h < 5 {
-        // Terminal too small for the full modal -- fall back to a single line.
-        let text = "  Quit foundry?  [Y/Enter] quit  [N] cancel  ";
-        let fw = (text.len() as u16 + 2).min(area.width);
-        let fx = area.width.saturating_sub(fw) / 2;
-        let fy = area.height.saturating_sub(3) / 2;
-        let banner = Rect {
-            x: fx,
-            y: fy,
-            width: fw,
-            height: 3,
-        };
-        frame.render_widget(Clear, banner);
-        let block = Block::default()
-            .borders(Borders::ALL)
-            .border_style(Style::default().fg(theme.accent))
-            .style(Style::default().bg(theme.surface));
-        let inner = block.inner(banner);
-        frame.render_widget(block, banner);
-        frame.render_widget(
-            Paragraph::new(Line::from(text)).style(Style::default().fg(theme.text)),
-            inner,
-        );
-        return;
-    }
-
-    let x = area.width.saturating_sub(w) / 2;
-    let y = area.height.saturating_sub(h) / 2;
-    let modal = Rect {
-        x,
-        y,
-        width: w,
-        height: h,
+    let body = vec![
+        Line::from(""),
+        Line::from(Span::styled(
+            "Any in-flight work will be left as-is.",
+            Style::default().fg(theme.muted),
+        )),
+    ];
+    let spec = ModalSpec {
+        title: "Quit foundry?".to_string(),
+        body,
+        footer_buttons: vec![
+            ModalButton {
+                key: "Y/Enter".into(),
+                label: " Quit".into(),
+                action_id: "quit".into(),
+            },
+            ModalButton {
+                key: "N".into(),
+                label: " Cancel".into(),
+                action_id: "cancel".into(),
+            },
+        ],
+        status_line: None,
+        size: ModalSize::Confirm,
+        scroll_offset: 0,
+        show_close_button: true,
+        border_color: theme.accent,
+        status_color: theme.muted,
     };
-
-    // Drop shadow: offset right 2, down 1, painted in the muted color so the
-    // modal looks lifted off the surface behind it.
-    let sx = modal.x.saturating_add(2);
-    let sy = modal.y.saturating_add(1);
-    let sw = modal.width.min(area.width.saturating_sub(sx));
-    let sh = modal.height.min(area.height.saturating_sub(sy));
-    if sw > 0 && sh > 0 {
-        let shadow = Rect {
-            x: sx,
-            y: sy,
-            width: sw,
-            height: sh,
-        };
-        frame.render_widget(Clear, shadow);
-        frame.render_widget(
-            Block::default().style(Style::default().bg(theme.muted)),
-            shadow,
-        );
-    }
-
-    // Main modal -- double border in accent, surface fill.
-    frame.render_widget(Clear, modal);
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_type(BorderType::Double)
-        .border_style(
-            Style::default()
-                .fg(theme.accent)
-                .add_modifier(Modifier::BOLD),
-        )
-        .style(Style::default().bg(theme.surface).fg(theme.text));
-    let inner = block.inner(modal);
-    frame.render_widget(block, modal);
-
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(1), // title
-            Constraint::Length(1), // spacer
-            Constraint::Length(1), // message
-            Constraint::Length(1), // spacer
-            Constraint::Length(1), // buttons
-            Constraint::Min(0),
-        ])
-        .split(inner);
-
-    let title = Paragraph::new(Line::from(Span::styled(
-        "Quit foundry?",
-        Style::default()
-            .fg(theme.accent)
-            .add_modifier(Modifier::BOLD),
-    )))
-    .alignment(Alignment::Center);
-    frame.render_widget(title, chunks[0]);
-
-    let msg = Paragraph::new(Line::from(Span::styled(
-        "Any in-flight work will be left as-is.",
-        Style::default().fg(theme.muted),
-    )))
-    .alignment(Alignment::Center);
-    frame.render_widget(msg, chunks[2]);
-
-    let quit_btn = Span::styled(
-        "  [Y/Enter] Quit  ",
-        Style::default()
-            .bg(theme.error)
-            .fg(theme.text)
-            .add_modifier(Modifier::BOLD),
-    );
-    let cancel_btn = Span::styled(
-        "  [N] Cancel  ",
-        Style::default()
-            .bg(theme.border)
-            .fg(theme.text)
-            .add_modifier(Modifier::BOLD),
-    );
-    let buttons = Paragraph::new(Line::from(vec![quit_btn, Span::raw("    "), cancel_btn]))
-        .alignment(Alignment::Center);
-    frame.render_widget(buttons, chunks[4]);
+    let _ = render_unified_modal(frame, theme, &spec);
 }
 
 /// Action returned by `summary_modal_hit_test` when the user clicks inside
@@ -1983,67 +1743,27 @@ pub enum SummaryModalAction {
     None,
 }
 
-/// Geometry of the AI summary modal -- centered, fixed width/height.
-/// Shared by renderer and hit-tester so the rects line up exactly.
-fn summary_modal_rect(area: Rect) -> Option<Rect> {
-    let w: u16 = 78.min(area.width.saturating_sub(2));
-    let h: u16 = 18.min(area.height.saturating_sub(2));
-    if w < 20 || h < 5 {
-        return None;
+fn summary_footer_buttons(has_file: bool) -> Vec<ModalButton> {
+    let mut buttons = vec![
+        ModalButton {
+            key: "Esc".into(),
+            label: " dismiss".into(),
+            action_id: "dismiss".into(),
+        },
+        ModalButton {
+            key: "r".into(),
+            label: " refresh".into(),
+            action_id: "refresh".into(),
+        },
+    ];
+    if has_file {
+        buttons.push(ModalButton {
+            key: "f".into(),
+            label: " open file".into(),
+            action_id: "open-file".into(),
+        });
     }
-    let x = area.x + (area.width.saturating_sub(w)) / 2;
-    let y = area.y + (area.height.saturating_sub(h)) / 2;
-    Some(Rect {
-        x,
-        y,
-        width: w,
-        height: h,
-    })
-}
-
-/// Rect of the footer `[Esc] dismiss   [r] refresh   [f] open file` line within
-/// the modal. The footer text is center-aligned; segment widths are constant.
-/// Returns `(esc_btn, r_btn, f_btn)` -- f_btn is None when the stage has no
-/// fallback file (ship).
-fn summary_footer_button_rects(
-    modal: Rect,
-    has_file: bool,
-) -> (Rect, Rect, Option<Rect>) {
-    // The full footer text (left-to-right):
-    //   "[Esc] dismiss   [r] refresh   [f] open file"
-    //    0    5         15  18       28  31         43
-    // Each `[X]` segment is the clickable region; we accept clicks on the
-    // bracket + the label that follows so the whole thing feels button-y.
-    let footer_text_len: u16 = if has_file { 43 } else { 28 };
-    let inner_w = modal.width.saturating_sub(2); // minus the L/R borders
-    let pad = inner_w.saturating_sub(footer_text_len) / 2;
-    let footer_x = modal.x + 1 + pad;
-    let footer_y = modal.y + modal.height.saturating_sub(2);
-
-    // Widths sized to "[Esc] dismiss" (13), "[r] refresh" (11), "[f] open file" (13).
-    let esc_btn = Rect {
-        x: footer_x,
-        y: footer_y,
-        width: 13,
-        height: 1,
-    };
-    let r_btn = Rect {
-        x: footer_x + 16,
-        y: footer_y,
-        width: 11,
-        height: 1,
-    };
-    let f_btn = if has_file {
-        Some(Rect {
-            x: footer_x + 30,
-            y: footer_y,
-            width: 13,
-            height: 1,
-        })
-    } else {
-        None
-    };
-    (esc_btn, r_btn, f_btn)
+    buttons
 }
 
 /// Hit-test a mouse click against the AI summary modal. Returns `None` if the
@@ -2057,32 +1777,27 @@ pub fn summary_modal_hit_test(
     row: u16,
     has_file: bool,
 ) -> Option<SummaryModalAction> {
-    let modal = summary_modal_rect(area)?;
-    if !rect_contains_xy(modal, col, row) {
-        return None;
-    }
-    // [ X ] top-right close button -- shares geometry helper with the settings modal.
-    let x_btn = close_btn_rect(modal);
-    if rect_contains_xy(x_btn, col, row) {
-        return Some(SummaryModalAction::Dismiss);
-    }
-    let (esc_btn, r_btn, f_btn) = summary_footer_button_rects(modal, has_file);
-    if rect_contains_xy(esc_btn, col, row) {
-        return Some(SummaryModalAction::Dismiss);
-    }
-    if rect_contains_xy(r_btn, col, row) {
-        return Some(SummaryModalAction::Refresh);
-    }
-    if let Some(b) = f_btn {
-        if rect_contains_xy(b, col, row) {
-            return Some(SummaryModalAction::OpenFile);
-        }
-    }
-    Some(SummaryModalAction::None)
-}
-
-fn rect_contains_xy(r: Rect, col: u16, row: u16) -> bool {
-    col >= r.x && col < r.x + r.width && row >= r.y && row < r.y + r.height
+    let modal = modal_rect(area, ModalSize::Small)?;
+    let layout = compute_modal_layout(modal);
+    let footer_buttons = summary_footer_buttons(has_file);
+    let spec = ModalSpec {
+        title: String::new(),
+        body: Vec::new(),
+        footer_buttons,
+        status_line: None,
+        size: ModalSize::Small,
+        scroll_offset: 0,
+        show_close_button: true,
+        border_color: Color::Reset,
+        status_color: Color::Reset,
+    };
+    let id = unified_modal_hit_test(&layout, &spec, col, row)?;
+    Some(match id.as_str() {
+        "dismiss" => SummaryModalAction::Dismiss,
+        "refresh" => SummaryModalAction::Refresh,
+        "open-file" => SummaryModalAction::OpenFile,
+        _ => SummaryModalAction::None,
+    })
 }
 
 pub fn render_surface_summary_overlay(
@@ -2090,70 +1805,10 @@ pub fn render_surface_summary_overlay(
     theme: &crate::tui::theme::TuiTheme,
     overlay: &SurfaceSummaryOverlay,
 ) {
-    let area = frame.area();
-    let modal = match summary_modal_rect(area) {
-        Some(r) => r,
-        None => return,
-    };
+    let has_file = overlay.stage != "ship";
+    let footer_buttons = summary_footer_buttons(has_file);
 
-    frame.render_widget(Clear, modal);
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_type(BorderType::Double)
-        .border_style(
-            Style::default()
-                .fg(theme.accent)
-                .add_modifier(Modifier::BOLD),
-        )
-        .style(Style::default().bg(theme.surface).fg(theme.text));
-    let inner = block.inner(modal);
-    frame.render_widget(block, modal);
-
-    // Draw [ X ] close button on the top border, top-right.
-    let x_btn = close_btn_rect(modal);
-    let buf = frame.buffer_mut();
-    let x_btn_style = Style::default()
-        .fg(Color::Yellow)
-        .add_modifier(Modifier::BOLD);
-    for (i, ch) in "[ X ]".chars().enumerate() {
-        let col = x_btn.x + i as u16;
-        if col < buf.area().width && x_btn.y < buf.area().height {
-            buf[(col, x_btn.y)].set_char(ch).set_style(x_btn_style);
-        }
-    }
-
-    // Inner padding: 2 columns horizontal, 1 row vertical inside the border.
-    // Without this the body text presses up against the double-line border
-    // and feels cramped. The padded rect is what the layout splits over.
-    let padded = inner.inner(Margin {
-        horizontal: 2,
-        vertical: 1,
-    });
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(1), // title
-            Constraint::Length(1), // spacer
-            Constraint::Min(0),    // body (scrollable)
-            Constraint::Length(1), // status
-            Constraint::Length(1), // footer hints
-        ])
-        .split(padded);
-
-    let title = Paragraph::new(Line::from(Span::styled(
-        format!("{} -- AI summary", overlay.stage_label),
-        Style::default()
-            .fg(theme.accent)
-            .add_modifier(Modifier::BOLD),
-    )))
-    .alignment(Alignment::Center);
-    frame.render_widget(title, chunks[0]);
-
-    let body: Paragraph = if overlay.in_flight && overlay.summary.is_none() {
-        // Spinner + elapsed-time animation while waiting on the LLM. The TUI
-        // re-renders every 100ms (frame tick), so the spinner advances one
-        // braille frame per tick. Elapsed seconds counter tells the user how
-        // close we are to the configured summary_timeout_secs cap.
+    let body: Vec<Line<'static>> = if overlay.in_flight && overlay.summary.is_none() {
         const SPINNER_FRAMES: &[char] = &[
             '\u{280B}', '\u{2819}', '\u{2839}', '\u{2838}', '\u{283C}',
             '\u{2834}', '\u{2826}', '\u{2827}', '\u{2807}', '\u{280F}',
@@ -2163,7 +1818,7 @@ pub fn render_surface_summary_overlay(
             ((elapsed.as_millis() / 100) as usize) % SPINNER_FRAMES.len();
         let spinner = SPINNER_FRAMES[frame_idx];
         let secs = elapsed.as_secs();
-        let line = Line::from(vec![
+        vec![Line::from(vec![
             Span::styled(
                 format!("  {} ", spinner),
                 Style::default()
@@ -2175,54 +1830,14 @@ pub fn render_surface_summary_overlay(
                 format!("  ({}s)", secs),
                 Style::default().fg(theme.muted),
             ),
-        ]);
-        Paragraph::new(line)
+        ])]
     } else if let Some(text) = &overlay.summary {
-        Paragraph::new(text.as_str())
-            .wrap(ratatui::widgets::Wrap { trim: false })
-            .scroll((overlay.scroll_offset, 0))
-            .style(Style::default().fg(theme.text))
+        text.lines()
+            .map(|l| Line::from(Span::styled(l.to_string(), Style::default().fg(theme.text))))
+            .collect()
     } else {
-        Paragraph::new("")
+        Vec::new()
     };
-    frame.render_widget(body, chunks[2]);
-
-    // Proportional scrollbar on the right edge of the body when content
-    // overflows the viewport. We estimate total wrapped lines by counting
-    // newlines + adding the wrap overflow from each source line whose char
-    // count exceeds the body width. ScrollbarState handles the proportional
-    // sizing of the thumb automatically.
-    if let Some(text) = &overlay.summary {
-        let body_width = chunks[2].width.max(1) as usize;
-        let body_height = chunks[2].height.max(1) as usize;
-        let total_lines: usize = text
-            .lines()
-            .map(|l| {
-                let chars = l.chars().count();
-                if chars == 0 {
-                    1
-                } else {
-                    chars.div_ceil(body_width)
-                }
-            })
-            .sum();
-        if total_lines > body_height {
-            let mut sb_state = ScrollbarState::new(total_lines.saturating_sub(body_height))
-                .position(overlay.scroll_offset as usize);
-            let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-                .begin_symbol(None)
-                .end_symbol(None)
-                .track_style(Style::default().fg(theme.muted))
-                .thumb_style(
-                    Style::default()
-                        .fg(theme.accent)
-                        .add_modifier(Modifier::BOLD),
-                );
-            // Anchor the scrollbar to the body chunk so it shares vertical extent
-            // exactly. ratatui renders into the rightmost column of the rect.
-            frame.render_stateful_widget(scrollbar, chunks[2], &mut sb_state);
-        }
-    }
 
     let model_label = if overlay.last_model.is_empty() {
         "(default)"
@@ -2246,37 +1861,28 @@ pub fn render_surface_summary_overlay(
             model_label,
         )
     };
-    let status_style = if overlay.last_error.is_some() {
-        Style::default().fg(theme.error)
+    let status_color = if overlay.last_error.is_some() {
+        theme.error
     } else {
-        Style::default().fg(theme.muted)
+        theme.muted
     };
-    let status = Paragraph::new(status_text).style(status_style);
-    frame.render_widget(status, chunks[3]);
+    let status_line = Some(Line::from(Span::styled(
+        status_text,
+        Style::default().fg(status_color),
+    )));
 
-    // Footer hints styled as button-like spans: the `[Key]` brackets are
-    // accent+bold (look clickable), the label text is muted. Hit regions for
-    // mouse clicks are computed by `summary_footer_button_rects` -- if you
-    // change the text widths here, change them there too.
-    let has_file = overlay.stage != "ship";
-    let btn_brackets = Style::default()
-        .fg(theme.accent)
-        .add_modifier(Modifier::BOLD | Modifier::UNDERLINED);
-    let btn_label = Style::default().fg(theme.muted);
-    let mut spans: Vec<Span> = vec![
-        Span::styled("[Esc]", btn_brackets),
-        Span::styled(" dismiss", btn_label),
-        Span::styled("   ", btn_label),
-        Span::styled("[r]", btn_brackets),
-        Span::styled(" refresh", btn_label),
-    ];
-    if has_file {
-        spans.push(Span::styled("   ", btn_label));
-        spans.push(Span::styled("[f]", btn_brackets));
-        spans.push(Span::styled(" open file", btn_label));
-    }
-    let footer = Paragraph::new(Line::from(spans)).alignment(Alignment::Center);
-    frame.render_widget(footer, chunks[4]);
+    let spec = ModalSpec {
+        title: format!("{} -- AI summary", overlay.stage_label),
+        body,
+        footer_buttons,
+        status_line,
+        size: ModalSize::Small,
+        scroll_offset: overlay.scroll_offset,
+        show_close_button: true,
+        border_color: theme.accent,
+        status_color,
+    };
+    let _ = render_unified_modal(frame, theme, &spec);
 }
 
 pub fn render_running_modal(
@@ -2285,309 +1891,118 @@ pub fn render_running_modal(
     kind: crate::app::RunningModalKind,
 ) {
     use crate::app::RunningModalKind;
-    let area = frame.area();
-    let (w, h): (u16, u16) = match kind {
-        RunningModalKind::StopRun => (
-            60.min(area.width.saturating_sub(2)),
-            9.min(area.height.saturating_sub(2)),
-        ),
-        RunningModalKind::CtrlC => (
-            64.min(area.width.saturating_sub(2)),
-            13.min(area.height.saturating_sub(2)),
-        ),
-    };
-    if w < 30 || h < 5 {
-        // Terminal too small for the full modal -- fall back to a single line.
-        let text = match kind {
-            RunningModalKind::StopRun => "  Stop this run?  [Y] yes  [N] no  ",
-            RunningModalKind::CtrlC => "  Ctrl+C menu  [1] exit  [2] startup  [3] cancel  ",
-        };
-        let fw = (text.len() as u16 + 2).min(area.width);
-        let fx = area.width.saturating_sub(fw) / 2;
-        let fy = area.height.saturating_sub(3) / 2;
-        let banner = Rect {
-            x: fx,
-            y: fy,
-            width: fw,
-            height: 3,
-        };
-        frame.render_widget(Clear, banner);
-        let block = Block::default()
-            .borders(Borders::ALL)
-            .border_style(Style::default().fg(theme.accent))
-            .style(Style::default().bg(theme.surface));
-        let inner = block.inner(banner);
-        frame.render_widget(block, banner);
-        frame.render_widget(
-            Paragraph::new(Line::from(text)).style(Style::default().fg(theme.text)),
-            inner,
-        );
-        return;
-    }
-
-    let x = area.width.saturating_sub(w) / 2;
-    let y = area.height.saturating_sub(h) / 2;
-    let modal = Rect {
-        x,
-        y,
-        width: w,
-        height: h,
-    };
-
-    // Drop shadow: offset right 2, down 1.
-    let sx = modal.x.saturating_add(2);
-    let sy = modal.y.saturating_add(1);
-    let sw = modal.width.min(area.width.saturating_sub(sx));
-    let sh = modal.height.min(area.height.saturating_sub(sy));
-    if sw > 0 && sh > 0 {
-        let shadow = Rect {
-            x: sx,
-            y: sy,
-            width: sw,
-            height: sh,
-        };
-        frame.render_widget(Clear, shadow);
-        frame.render_widget(
-            Block::default().style(Style::default().bg(theme.muted)),
-            shadow,
-        );
-    }
-
-    // Main modal -- double border in accent, surface fill.
-    frame.render_widget(Clear, modal);
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_type(BorderType::Double)
-        .border_style(
-            Style::default()
-                .fg(theme.accent)
-                .add_modifier(Modifier::BOLD),
-        )
-        .style(Style::default().bg(theme.surface).fg(theme.text));
-    let inner = block.inner(modal);
-    frame.render_widget(block, modal);
-
     match kind {
         RunningModalKind::StopRun => {
-            let chunks = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([
-                    Constraint::Length(1), // title
-                    Constraint::Length(1), // spacer
-                    Constraint::Length(1), // message
-                    Constraint::Length(1), // spacer
-                    Constraint::Length(1), // buttons
-                    Constraint::Min(0),
-                ])
-                .split(inner);
-
-            let title = Paragraph::new(Line::from(Span::styled(
-                "Stop this run?",
-                Style::default()
-                    .fg(theme.accent)
-                    .add_modifier(Modifier::BOLD),
-            )))
-            .alignment(Alignment::Center);
-            frame.render_widget(title, chunks[0]);
-
-            let msg = Paragraph::new(Line::from(Span::styled(
-                "It will halt after the current stage completes. The run can be resumed later.",
-                Style::default().fg(theme.muted),
-            )))
-            .alignment(Alignment::Center);
-            frame.render_widget(msg, chunks[2]);
-
-            let stop_btn = Span::styled(
-                "  [Y] Stop after current stage  ",
-                Style::default()
-                    .bg(theme.error)
-                    .fg(theme.text)
-                    .add_modifier(Modifier::BOLD),
-            );
-            let cancel_btn = Span::styled(
-                "  [N] Cancel  ",
-                Style::default()
-                    .bg(theme.border)
-                    .fg(theme.text)
-                    .add_modifier(Modifier::BOLD),
-            );
-            let buttons =
-                Paragraph::new(Line::from(vec![stop_btn, Span::raw("    "), cancel_btn]))
-                    .alignment(Alignment::Center);
-            frame.render_widget(buttons, chunks[4]);
+            let body = vec![
+                Line::from(""),
+                Line::from(Span::styled(
+                    "It will halt after the current stage completes. The run can be resumed later.",
+                    Style::default().fg(theme.muted),
+                )),
+            ];
+            let spec = ModalSpec {
+                title: "Stop this run?".to_string(),
+                body,
+                footer_buttons: vec![
+                    ModalButton {
+                        key: "Y".into(),
+                        label: " Stop after current stage".into(),
+                        action_id: "stop".into(),
+                    },
+                    ModalButton {
+                        key: "N".into(),
+                        label: " Cancel".into(),
+                        action_id: "cancel".into(),
+                    },
+                ],
+                status_line: None,
+                size: ModalSize::Confirm,
+                scroll_offset: 0,
+                show_close_button: true,
+                border_color: theme.error,
+                status_color: theme.muted,
+            };
+            let _ = render_unified_modal(frame, theme, &spec);
         }
         RunningModalKind::CtrlC => {
-            let chunks = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([
-                    Constraint::Length(1), // title
-                    Constraint::Length(1), // spacer
-                    Constraint::Length(1), // prompt
-                    Constraint::Length(1), // spacer
-                    Constraint::Length(1), // opt1
-                    Constraint::Length(1), // opt2
-                    Constraint::Length(1), // opt3
-                    Constraint::Length(1), // spacer
-                    Constraint::Length(1), // hint
-                    Constraint::Min(0),
-                ])
-                .split(inner);
-
-            let title = Paragraph::new(Line::from(Span::styled(
-                "Ctrl+C -- what would you like to do?",
-                Style::default()
-                    .fg(theme.accent)
-                    .add_modifier(Modifier::BOLD),
-            )))
-            .alignment(Alignment::Center);
-            frame.render_widget(title, chunks[0]);
-
-            let prompt = Paragraph::new(Line::from(Span::styled(
-                "Choose an option:",
-                Style::default().fg(theme.muted),
-            )))
-            .alignment(Alignment::Center);
-            frame.render_widget(prompt, chunks[2]);
-
-            let opt1 = Paragraph::new(Line::from(Span::styled(
-                "  [1] Stop run and exit Foundry",
-                Style::default().fg(theme.text),
-            )))
-            .alignment(Alignment::Left);
-            frame.render_widget(opt1, chunks[4]);
-
-            let opt2 = Paragraph::new(Line::from(Span::styled(
-                "  [2] Stop run and return to startup screen",
-                Style::default().fg(theme.text),
-            )))
-            .alignment(Alignment::Left);
-            frame.render_widget(opt2, chunks[5]);
-
-            let opt3 = Paragraph::new(Line::from(Span::styled(
-                "  [3] Cancel (keep running)",
-                Style::default().fg(theme.text),
-            )))
-            .alignment(Alignment::Left);
-            frame.render_widget(opt3, chunks[6]);
-
-            let hint = Paragraph::new(Line::from(Span::styled(
-                "Press Ctrl+C again to force-quit immediately",
-                Style::default()
-                    .fg(theme.muted)
-                    .add_modifier(Modifier::ITALIC),
-            )))
-            .alignment(Alignment::Center);
-            frame.render_widget(hint, chunks[8]);
+            let body = vec![
+                Line::from(""),
+                Line::from(Span::styled(
+                    "  [1] Stop run and exit Foundry",
+                    Style::default().fg(theme.text),
+                )),
+                Line::from(Span::styled(
+                    "  [2] Stop run and return to startup screen",
+                    Style::default().fg(theme.text),
+                )),
+                Line::from(Span::styled(
+                    "  [3] Cancel (keep running)",
+                    Style::default().fg(theme.text),
+                )),
+                Line::from(""),
+                Line::from(Span::styled(
+                    "Press Ctrl+C again to force-quit immediately",
+                    Style::default()
+                        .fg(theme.muted)
+                        .add_modifier(Modifier::ITALIC),
+                )),
+            ];
+            let spec = ModalSpec {
+                title: "Ctrl+C -- what would you like to do?".to_string(),
+                body,
+                footer_buttons: vec![
+                    ModalButton {
+                        key: "1".into(),
+                        label: " exit".into(),
+                        action_id: "ctrlc-1".into(),
+                    },
+                    ModalButton {
+                        key: "2".into(),
+                        label: " startup".into(),
+                        action_id: "ctrlc-2".into(),
+                    },
+                    ModalButton {
+                        key: "3".into(),
+                        label: " cancel".into(),
+                        action_id: "ctrlc-3".into(),
+                    },
+                ],
+                status_line: None,
+                size: ModalSize::MenuMedium,
+                scroll_offset: 0,
+                show_close_button: true,
+                border_color: theme.accent,
+                status_color: theme.muted,
+            };
+            let _ = render_unified_modal(frame, theme, &spec);
         }
     }
 }
 
 pub fn render_no_tasks_warning(frame: &mut Frame, theme: &crate::tui::theme::TuiTheme) {
-    let area = frame.area();
-    let w: u16 = 58.min(area.width.saturating_sub(2));
-    let h: u16 = 9.min(area.height.saturating_sub(2));
-    if w < 20 || h < 5 {
-        let text = "  No TASKS.md found -- describe work first  [Enter] OK  ";
-        let fw = (text.len() as u16 + 2).min(area.width);
-        let fx = area.width.saturating_sub(fw) / 2;
-        let fy = area.height.saturating_sub(3) / 2;
-        let banner = Rect {
-            x: fx,
-            y: fy,
-            width: fw,
-            height: 3,
-        };
-        frame.render_widget(Clear, banner);
-        let block = Block::default()
-            .borders(Borders::ALL)
-            .border_style(Style::default().fg(theme.warning))
-            .style(Style::default().bg(theme.surface));
-        let inner = block.inner(banner);
-        frame.render_widget(block, banner);
-        frame.render_widget(
-            Paragraph::new(Line::from(text)).style(Style::default().fg(theme.text)),
-            inner,
-        );
-        return;
-    }
-
-    let x = area.width.saturating_sub(w) / 2;
-    let y = area.height.saturating_sub(h) / 2;
-    let modal = Rect {
-        x,
-        y,
-        width: w,
-        height: h,
+    let body = vec![
+        Line::from(""),
+        Line::from(Span::styled(
+            "Describe work or scan the project to create TASKS.md.",
+            Style::default().fg(theme.muted),
+        )),
+    ];
+    let spec = ModalSpec {
+        title: "No task queue found".to_string(),
+        body,
+        footer_buttons: vec![ModalButton {
+            key: "Enter".into(),
+            label: " OK".into(),
+            action_id: "ok".into(),
+        }],
+        status_line: None,
+        size: ModalSize::Confirm,
+        scroll_offset: 0,
+        show_close_button: true,
+        border_color: theme.warning,
+        status_color: theme.muted,
     };
-
-    let sx = modal.x.saturating_add(2);
-    let sy = modal.y.saturating_add(1);
-    let sw = modal.width.min(area.width.saturating_sub(sx));
-    let sh = modal.height.min(area.height.saturating_sub(sy));
-    if sw > 0 && sh > 0 {
-        let shadow = Rect {
-            x: sx,
-            y: sy,
-            width: sw,
-            height: sh,
-        };
-        frame.render_widget(Clear, shadow);
-        frame.render_widget(
-            Block::default().style(Style::default().bg(theme.muted)),
-            shadow,
-        );
-    }
-
-    frame.render_widget(Clear, modal);
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_type(BorderType::Double)
-        .border_style(
-            Style::default()
-                .fg(theme.warning)
-                .add_modifier(Modifier::BOLD),
-        )
-        .style(Style::default().bg(theme.surface).fg(theme.text));
-    let inner = block.inner(modal);
-    frame.render_widget(block, modal);
-
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(1), // title
-            Constraint::Length(1), // spacer
-            Constraint::Length(1), // message
-            Constraint::Length(1), // spacer
-            Constraint::Length(1), // button
-            Constraint::Min(0),
-        ])
-        .split(inner);
-
-    let title = Paragraph::new(Line::from(Span::styled(
-        "No task queue found",
-        Style::default()
-            .fg(theme.warning)
-            .add_modifier(Modifier::BOLD),
-    )))
-    .alignment(Alignment::Center);
-    frame.render_widget(title, chunks[0]);
-
-    let msg = Paragraph::new(Line::from(Span::styled(
-        "Describe work or scan the project to create TASKS.md.",
-        Style::default().fg(theme.muted),
-    )))
-    .alignment(Alignment::Center);
-    frame.render_widget(msg, chunks[2]);
-
-    let ok_btn = Span::styled(
-        "  [Enter] OK  ",
-        Style::default()
-            .bg(theme.accent)
-            .fg(Color::Black)
-            .add_modifier(Modifier::BOLD),
-    );
-    let buttons = Paragraph::new(Line::from(ok_btn)).alignment(Alignment::Center);
-    frame.render_widget(buttons, chunks[4]);
+    let _ = render_unified_modal(frame, theme, &spec);
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

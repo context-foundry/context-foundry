@@ -1,5 +1,14 @@
 use ratatui::style::Color;
 
+/// Modal inner horizontal padding (cells) -- applied via `Margin { horizontal: MODAL_PADDING_H, .. }`.
+pub const MODAL_PADDING_H: u16 = 2;
+/// Modal inner vertical padding (cells) -- applied via `Margin { vertical: MODAL_PADDING_V, .. }`.
+pub const MODAL_PADDING_V: u16 = 1;
+/// Pipeline tile inner width (cells inside the L/R borders).
+pub const TILE_INNER_W: u16 = 4;
+/// Pipeline tile height (cells: top border + label row + bottom border).
+pub const TILE_HEIGHT: u16 = 3;
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct TuiTheme {
     pub accent: Color,

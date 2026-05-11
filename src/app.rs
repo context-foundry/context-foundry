@@ -1209,7 +1209,7 @@ fn handle_planning_event(state: &mut AppState, event: AppEvent, config: &Config)
                     .direction(ratatui::layout::Direction::Vertical)
                     .constraints([
                         ratatui::layout::Constraint::Length(5),
-                        ratatui::layout::Constraint::Length(6),
+                        ratatui::layout::Constraint::Length(9),
                         ratatui::layout::Constraint::Min(8),
                         ratatui::layout::Constraint::Length(8),
                         ratatui::layout::Constraint::Length(1),
@@ -3346,7 +3346,7 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                     .direction(ratatui::layout::Direction::Vertical)
                     .constraints([
                         ratatui::layout::Constraint::Length(5),
-                        ratatui::layout::Constraint::Length(6),
+                        ratatui::layout::Constraint::Length(9),
                         ratatui::layout::Constraint::Min(8),
                         ratatui::layout::Constraint::Length(8),
                         ratatui::layout::Constraint::Length(1),
@@ -3429,7 +3429,7 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                             .direction(ratatui::layout::Direction::Vertical)
                             .constraints([
                                 ratatui::layout::Constraint::Length(5),
-                                ratatui::layout::Constraint::Length(6),
+                                ratatui::layout::Constraint::Length(9),
                                 ratatui::layout::Constraint::Min(8),
                                 ratatui::layout::Constraint::Length(8),
                                 ratatui::layout::Constraint::Length(1),
@@ -3549,7 +3549,7 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                             .direction(ratatui::layout::Direction::Vertical)
                             .constraints([
                                 ratatui::layout::Constraint::Length(5),
-                                ratatui::layout::Constraint::Length(6),
+                                ratatui::layout::Constraint::Length(9),
                                 ratatui::layout::Constraint::Min(8),
                                 ratatui::layout::Constraint::Length(8),
                                 ratatui::layout::Constraint::Length(1),
@@ -3616,7 +3616,7 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                                 .direction(ratatui::layout::Direction::Vertical)
                                 .constraints([
                                     ratatui::layout::Constraint::Length(5),
-                                    ratatui::layout::Constraint::Length(6),
+                                    ratatui::layout::Constraint::Length(9),
                                     ratatui::layout::Constraint::Min(8),
                                     ratatui::layout::Constraint::Length(8),
                                     ratatui::layout::Constraint::Length(1),
@@ -5949,7 +5949,7 @@ fn handle_startup_mouse_at_for_running(
         .direction(ratatui::layout::Direction::Vertical)
         .constraints([
             ratatui::layout::Constraint::Length(5),
-            ratatui::layout::Constraint::Length(6),
+            ratatui::layout::Constraint::Length(9),
             ratatui::layout::Constraint::Min(10),
             ratatui::layout::Constraint::Length(6),
             ratatui::layout::Constraint::Length(1),
