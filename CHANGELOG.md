@@ -5,6 +5,45 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.0] - 2026-05-11
+
+### Added
+- **Skills migration complete** (T1.12-T1.16): legacy patterns abstraction strangled in favor of Anthropic Skills (SKILL.md files in `~/.foundry/skills/`). Hybrid retriever (BM25 + nomic-embed-text cosine + telemetry popularity boost) ranks candidates per task. Sidecar telemetry at `~/.foundry/skills-telemetry.db`.
+- **AI stage summaries** (T1.24/T1.25): clicking any pipeline card opens an AI-generated summary of that stage's log + artifacts. Spinner + elapsed-seconds counter while waiting. Proportional scrollbar when output overflows. Clickable [X]/Esc/R/F buttons.
+- **AI summary everywhere** (T1.33): clicking any dashboard pane (task queue, narrative, skill citations, stats, agent output) opens a contextual AI summary. Right-click in Explore view opens an "AI summary" context menu for files.
+- **Cross-provider skill discovery** (T1.27/T1.28): CF discovers skills authored for other AI tools — AGENTS.md (Linux Foundation standard), `.cursorrules`, `.claude/skills/*/SKILL.md`, and `.github/copilot-instructions.md`. Surfaced in the startup screen's External Skills section with per-source opt-in.
+- **Skills at every pipeline stage** (T1.31): skills now inject into QUERY, RESEARCH, PLAN, P+, BUILD, AUDIT, SHIP, and DISCOVER. The cf-stage hint is optional; the ranker decides relevance per stage.
+- **Skill citation telemetry honest end-to-end** (T1.30): post-AUDIT scanner finds `**Skills referenced:** skill_id` footers in artifacts and writes to the sidecar DB. Success-rate-weighted ranker now learns from real outcomes (pass vs WIP).
+- **Pre-task complexity badges** (T1.23): every task in the queue shows `[S]/[M]/[C]` complexity tier (predicted heuristically) or `[f]/[s]` (user-pinned via `[fast]`/`[strict]` flags). Drives per-task P+ depth.
+- **Live-reload TASKS.md** (T1.19): external edits to TASKS.md appear in the running queue without restarting CF.
+- **Esc + Ctrl+C confirmation dialogs** (T1.18): destructive single-tap behavior replaced by 2-option (Esc) and 3-option (Ctrl+C) confirmation modals.
+- **Eval badge stale-vs-live distinction** (T1.29): the EVAL badge in the stats panel prefixes with `(last)` and dims when showing a previous task's eval during in-flight work.
+- **Persisted pane split** (T1.17): the agent/task-queue split bar position survives CF restarts.
+- **Per-stage routing**: each pipeline stage can use a different provider/model. Configured via `stage_overrides` in `.foundry.json`.
+- **Unified TUI conventions**: shared modal padding, proportional scrollbars, accent-colored clickable buttons, X-button top-right close affordance, hover-locks-background, single-row pipeline tile layout with hover tooltips.
+
+### Changed
+- **Plugins rename** (T1.22): the user-facing label "Extensions" is now "Plugins" everywhere (TUI, docs, settings). On-disk directory name `extensions/` preserved for path stability.
+- **P+ depth complexity-aware** (T1.23): plan-review iteration cap scales by task complexity tier (Simple = 1, Medium = 2, Complex = 3). Default cap added (T1.20) to prevent unbounded re-plan cycles.
+- **Patterns panel → Skills Citations panel** (T1.21): the legacy patterns overlay was retired and replaced with a live Skill Citations panel backed by the sidecar telemetry DB.
+- **Pattern extractor writes SKILL.md** (T1.26): post-task pattern extraction writes SKILL.md format directly to `~/.foundry/skills/` instead of `common-issues.json`. Closes the learn loop on the new format.
+- **Stats panel reorganized**: dedicated Commits row (`feat: N  WIP: N`), Skills row shows `N inj, N applied, N learned`, EVAL prefix stripped from badge text to avoid label duplication.
+- **Pipeline tile layout**: 9 tiles (Q/R/P/P+/B/A/SH/DI/SK) render on a single row with small 6-cell tiles, full names shown on hover via status bar tooltip.
+- **Stage-summary subprocess timeout**: configurable via `summary_timeout_secs` in `.foundry.json` (default 20s, up from a hardcoded 5s that frequently timed out on Claude CLI cold-start).
+
+### Fixed
+- UTF-8 panic in `extract_prior_task_id`: raw byte-slicing of artifact files panicked when byte 1024 landed inside a multi-byte UTF-8 sequence. Now uses the shared `truncate_str` helper.
+- AI summary modal hover focus leak: background panes used to flicker focus highlights while the modal was open.
+- Pipeline tile click + hover during PLANNING phase: the initial "Scan project" phase had no pipeline click handler and a stale layout chunk. Now wired identically to RUNNING.
+- Summarizer result event dropped during PLANNING phase: `handle_planning_event` had an empty match arm for `SurfaceSummaryReady`, causing summaries opened during planning to spin forever. Now applied.
+- Duplicate "Reading stats.rs" in stage tail when stream state is `Reading`.
+- Open-file action surfaces error message when stage has no fallback file or file doesn't exist (was silently closing the modal).
+- Observatory subsystem residue (T1.32): orphaned `observatory.db` removed; JSONL retention policy added.
+
+## [3.1.0] - 2026-04-30
+
+(Tagged release; CHANGELOG was not updated at the time. See `git log v3.0.0..v3.1.0` for commits.)
+
 ## [3.0.0] - 2026-04-25
 
 ### Added
