@@ -602,6 +602,12 @@ pub fn settings_sections(dual_mode: bool) -> Vec<SectionDef> {
                     hint: "Min files to trigger parallel build",
                     kind: FieldKind::Number,
                 },
+                FieldDef {
+                    id: "observatory_jsonl_retention_days",
+                    label: "Observatory Retention (days)",
+                    hint: "0 disables; orphan .db files always archived",
+                    kind: FieldKind::Number,
+                },
             ],
             kind: SectionKind::Standard,
         },

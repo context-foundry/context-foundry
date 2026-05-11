@@ -1,7 +1,7 @@
 use std::io::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
-use chrono::Utc;
+use chrono::{NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::agent::AgentOutputEvent;
@@ -188,6 +188,146 @@ pub fn event_type_str(event: &ObservatoryEvent) -> &'static str {
     }
 }
 
+/// Return `~/.foundry/observatory/` (best-effort: falls back to `./.foundry/observatory`
+/// when `HOME` is unset).
+pub fn observatory_dir_path() -> PathBuf {
+    let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+    PathBuf::from(home).join(".foundry").join("observatory")
+}
+
+/// Outcome of a single `run_retention_cleanup` invocation. Counts and any
+/// best-effort errors are bubbled up so the caller can log them.
+#[derive(Debug, Default, Clone)]
+pub struct RetentionReport {
+    pub db_archived: usize,
+    pub jsonl_archived: usize,
+    pub errors: Vec<String>,
+}
+
+/// Archive orphan SQLite files and stale daily JSONL files from the observatory
+/// directory. Idempotent and best-effort: every failure is pushed into
+/// `RetentionReport::errors` and the pass continues with the next file.
+///
+/// SQLite cleanup is narrow: only the legacy `observatory.db` family
+/// (`observatory.db`, `observatory.db-wal`, `observatory.db-shm`,
+/// `observatory.db-journal`) is archived. Other `*.db` files are left alone so
+/// users may keep ad-hoc analysis files in this directory.
+///
+/// JSONL retention: files matching `events-YYYY-MM-DD.jsonl` whose date is
+/// strictly older than `today_utc - retention_days` are archived. Today's
+/// active file is never touched. `retention_days == 0` disables JSONL pruning
+/// entirely (orphan SQLite cleanup still runs).
+pub fn run_retention_cleanup(retention_days: usize) -> RetentionReport {
+    let mut report = RetentionReport::default();
+    let obs_dir = observatory_dir_path();
+    if !obs_dir.exists() {
+        return report;
+    }
+
+    let archived_dir = obs_dir.join(".archived");
+    if let Err(e) = std::fs::create_dir_all(&archived_dir) {
+        report
+            .errors
+            .push(format!("create {}: {}", archived_dir.display(), e));
+        return report;
+    }
+
+    let today = Utc::now().date_naive();
+    let jsonl_cutoff = if retention_days == 0 {
+        None
+    } else {
+        Some(today - chrono::Duration::days(retention_days as i64))
+    };
+
+    let entries = match std::fs::read_dir(&obs_dir) {
+        Ok(e) => e,
+        Err(e) => {
+            report
+                .errors
+                .push(format!("read_dir {}: {}", obs_dir.display(), e));
+            return report;
+        }
+    };
+
+    for entry in entries {
+        let entry = match entry {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+
+        let is_file = entry
+            .file_type()
+            .map(|t| t.is_file())
+            .unwrap_or(false);
+        if !is_file {
+            continue;
+        }
+
+        let fname = entry.file_name().to_string_lossy().into_owned();
+
+        if matches!(
+            fname.as_str(),
+            "observatory.db"
+                | "observatory.db-wal"
+                | "observatory.db-shm"
+                | "observatory.db-journal"
+        ) {
+            if move_to_archive(&entry.path(), &archived_dir, &mut report) {
+                report.db_archived += 1;
+            }
+            continue;
+        }
+
+        if fname.starts_with("events-") && fname.ends_with(".jsonl") {
+            let date_part = &fname[7..fname.len() - 6];
+            let file_date = match NaiveDate::parse_from_str(date_part, "%Y-%m-%d") {
+                Ok(d) => d,
+                Err(_) => continue,
+            };
+            if file_date == today {
+                continue;
+            }
+            let cutoff = match jsonl_cutoff {
+                Some(c) => c,
+                None => continue,
+            };
+            if file_date < cutoff
+                && move_to_archive(&entry.path(), &archived_dir, &mut report)
+            {
+                report.jsonl_archived += 1;
+            }
+        }
+    }
+
+    report
+}
+
+/// Move `src` into `archived_dir`. If the destination already exists (the
+/// idempotent case), leave the source untouched. Returns `true` if the file
+/// was moved successfully.
+fn move_to_archive(src: &Path, archived_dir: &Path, report: &mut RetentionReport) -> bool {
+    let file_name = match src.file_name() {
+        Some(n) => n,
+        None => return false,
+    };
+    let dest = archived_dir.join(file_name);
+    if dest.exists() {
+        return false;
+    }
+    match std::fs::rename(src, &dest) {
+        Ok(()) => true,
+        Err(e) => {
+            report.errors.push(format!(
+                "rename {} -> {}: {}",
+                src.display(),
+                dest.display(),
+                e
+            ));
+            false
+        }
+    }
+}
+
 /// Append a single JSON line to the daily events file. Best-effort -- never panics or blocks.
 pub fn log_event(session_id: &str, project_dir: &Path, event: ObservatoryEvent) {
     let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
@@ -269,6 +409,8 @@ impl AgentUsage {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
+    use std::fs;
 
     #[test]
     fn event_type_str_includes_stage_summary_requested() {
@@ -282,5 +424,159 @@ mod tests {
             error: None,
         };
         assert_eq!(event_type_str(&ev), "stage_summary_requested");
+    }
+
+    /// Run `body` with `HOME` pointed at a fresh temp dir. Restores the prior
+    /// HOME after the closure returns (or unsets it if it was unset before).
+    fn with_temp_home<F: FnOnce(&Path)>(body: F) {
+        let prev = std::env::var("HOME").ok();
+        let tmp = tempfile::tempdir().expect("tempdir");
+        std::env::set_var("HOME", tmp.path());
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            body(tmp.path());
+        }));
+        match prev {
+            Some(v) => std::env::set_var("HOME", v),
+            None => std::env::remove_var("HOME"),
+        }
+        if let Err(e) = result {
+            std::panic::resume_unwind(e);
+        }
+    }
+
+    fn obs_dir(home: &Path) -> PathBuf {
+        home.join(".foundry").join("observatory")
+    }
+
+    #[test]
+    #[serial]
+    fn retention_cleanup_archives_orphan_db() {
+        with_temp_home(|home| {
+            let dir = obs_dir(home);
+            fs::create_dir_all(&dir).unwrap();
+            for name in ["observatory.db", "observatory.db-wal", "observatory.db-shm"] {
+                fs::write(dir.join(name), b"x").unwrap();
+            }
+            let report = run_retention_cleanup(30);
+            assert_eq!(report.db_archived, 3, "{:?}", report);
+            assert_eq!(report.jsonl_archived, 0);
+            assert!(report.errors.is_empty(), "{:?}", report.errors);
+            for name in ["observatory.db", "observatory.db-wal", "observatory.db-shm"] {
+                assert!(!dir.join(name).exists(), "src {} still present", name);
+                assert!(
+                    dir.join(".archived").join(name).exists(),
+                    "{} missing in archived",
+                    name
+                );
+            }
+        });
+    }
+
+    #[test]
+    #[serial]
+    fn retention_cleanup_spares_today_and_recent_jsonl() {
+        with_temp_home(|home| {
+            let dir = obs_dir(home);
+            fs::create_dir_all(&dir).unwrap();
+            let today = Utc::now().date_naive();
+            let recent = today - chrono::Duration::days(5);
+            let stale = today - chrono::Duration::days(60);
+            let today_name = format!("events-{}.jsonl", today.format("%Y-%m-%d"));
+            let recent_name = format!("events-{}.jsonl", recent.format("%Y-%m-%d"));
+            let stale_name = format!("events-{}.jsonl", stale.format("%Y-%m-%d"));
+            fs::write(dir.join(&today_name), b"{}\n").unwrap();
+            fs::write(dir.join(&recent_name), b"{}\n").unwrap();
+            fs::write(dir.join(&stale_name), b"{}\n").unwrap();
+
+            let report = run_retention_cleanup(30);
+            assert_eq!(report.jsonl_archived, 1, "{:?}", report);
+            assert_eq!(report.db_archived, 0);
+            assert!(report.errors.is_empty(), "{:?}", report.errors);
+            assert!(dir.join(&today_name).exists(), "today's file moved!");
+            assert!(dir.join(&recent_name).exists(), "5-day-old file moved!");
+            assert!(!dir.join(&stale_name).exists(), "stale file still in obs dir");
+            assert!(
+                dir.join(".archived").join(&stale_name).exists(),
+                "stale file missing from archive"
+            );
+        });
+    }
+
+    #[test]
+    #[serial]
+    fn retention_cleanup_is_idempotent() {
+        with_temp_home(|home| {
+            let dir = obs_dir(home);
+            fs::create_dir_all(&dir).unwrap();
+            let stale = Utc::now().date_naive() - chrono::Duration::days(60);
+            let stale_name = format!("events-{}.jsonl", stale.format("%Y-%m-%d"));
+            fs::write(dir.join(&stale_name), b"{}\n").unwrap();
+
+            let first = run_retention_cleanup(30);
+            let second = run_retention_cleanup(30);
+            assert_eq!(first.jsonl_archived, 1);
+            assert_eq!(second.jsonl_archived, 0);
+            assert!(first.errors.is_empty(), "{:?}", first.errors);
+            assert!(second.errors.is_empty(), "{:?}", second.errors);
+            assert!(
+                dir.join(".archived").join(&stale_name).exists(),
+                "archived file missing after second pass"
+            );
+        });
+    }
+
+    #[test]
+    #[serial]
+    fn retention_cleanup_disabled_skips_jsonl_but_archives_db() {
+        with_temp_home(|home| {
+            let dir = obs_dir(home);
+            fs::create_dir_all(&dir).unwrap();
+            let stale = Utc::now().date_naive() - chrono::Duration::days(365);
+            let stale_name = format!("events-{}.jsonl", stale.format("%Y-%m-%d"));
+            fs::write(dir.join(&stale_name), b"{}\n").unwrap();
+            fs::write(dir.join("observatory.db"), b"x").unwrap();
+
+            let report = run_retention_cleanup(0);
+            assert_eq!(report.db_archived, 1, "{:?}", report);
+            assert_eq!(report.jsonl_archived, 0, "{:?}", report);
+            assert!(report.errors.is_empty(), "{:?}", report.errors);
+            assert!(dir.join(&stale_name).exists(), "JSONL was archived despite retention=0");
+            assert!(
+                !dir.join("observatory.db").exists(),
+                "orphan db not archived"
+            );
+        });
+    }
+
+    #[test]
+    #[serial]
+    fn retention_cleanup_leaves_user_db_files_untouched() {
+        with_temp_home(|home| {
+            let dir = obs_dir(home);
+            fs::create_dir_all(&dir).unwrap();
+            fs::write(dir.join("analytics.db"), b"x").unwrap();
+            fs::write(dir.join("cache.db-wal"), b"x").unwrap();
+            fs::write(dir.join("notes.txt"), b"x").unwrap();
+
+            let report = run_retention_cleanup(30);
+            assert_eq!(report.db_archived, 0, "{:?}", report);
+            assert!(report.errors.is_empty(), "{:?}", report.errors);
+            assert!(dir.join("analytics.db").exists(), "analytics.db archived");
+            assert!(dir.join("cache.db-wal").exists(), "cache.db-wal archived");
+            assert!(dir.join("notes.txt").exists(), "notes.txt archived");
+        });
+    }
+
+    #[test]
+    #[serial]
+    fn retention_cleanup_no_obs_dir_is_noop() {
+        with_temp_home(|home| {
+            // obs dir never created
+            let report = run_retention_cleanup(30);
+            assert_eq!(report.db_archived, 0);
+            assert_eq!(report.jsonl_archived, 0);
+            assert!(report.errors.is_empty());
+            assert!(!home.join(".foundry").join("observatory").exists());
+        });
     }
 }

@@ -40,6 +40,10 @@ fn default_history_retention_tasks() -> usize {
     50
 }
 
+fn default_observatory_jsonl_retention_days() -> usize {
+    30
+}
+
 fn default_agent_pane_split() -> u16 {
     30
 }
@@ -363,6 +367,14 @@ pub struct Config {
     #[serde(default = "default_history_retention_tasks")]
     pub history_retention_tasks: usize,
 
+    /// Days of `events-YYYY-MM-DD.jsonl` files to keep under
+    /// `~/.foundry/observatory/`. Files older than this window are moved
+    /// to `~/.foundry/observatory/.archived/` on Foundry startup.
+    /// Today's active file is never touched. 0 disables the retention
+    /// pass entirely. Default: 30.
+    #[serde(default = "default_observatory_jsonl_retention_days")]
+    pub observatory_jsonl_retention_days: usize,
+
     /// Multi-pass review threshold: when changed file count exceeds this,
     /// split review into per-file passes plus an integration pass.
     /// 0 disables multi-pass (always single-pass review).
@@ -679,6 +691,7 @@ impl Default for Config {
             archive_keep_first: 3,
             archive_keep_last: 3,
             history_retention_tasks: 50,
+            observatory_jsonl_retention_days: 30,
             review_multipass_threshold: 8,
             confidence_threshold: 0.5,
             parallel_builder: false,
@@ -1762,6 +1775,9 @@ impl Config {
             "max_pattern_injection" => self.max_pattern_injection.to_string(),
             "min_pattern_injection" => self.min_pattern_injection.to_string(),
             "history_search_results" => self.history_search_results.to_string(),
+            "observatory_jsonl_retention_days" => {
+                self.observatory_jsonl_retention_days.to_string()
+            }
             "auto_push_remote" => self.auto_push_remote.clone().unwrap_or_default(),
             "create_issue_on_wip" => self.create_issue_on_wip.to_string(),
             "pr_review_concurrency" => self.pr_review_concurrency.to_string(),
@@ -1852,6 +1868,7 @@ impl Config {
             | "max_pattern_injection"
             | "min_pattern_injection"
             | "history_search_results"
+            | "observatory_jsonl_retention_days"
             | "pr_review_concurrency"
             | "embedding_timeout_ms"
             | "budget_overrun_threshold"

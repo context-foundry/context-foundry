@@ -435,6 +435,27 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
         }
     }
 
+    // Observatory retention cleanup: archive orphan SQLite + stale JSONL files.
+    {
+        let report =
+            crate::observatory::run_retention_cleanup(config.observatory_jsonl_retention_days);
+        if report.db_archived > 0 {
+            state.log(format!(
+                "Observatory: archived {} orphan SQLite file(s) to ~/.foundry/observatory/.archived/",
+                report.db_archived
+            ));
+        }
+        if report.jsonl_archived > 0 {
+            state.log(format!(
+                "Observatory: archived {} stale event log(s) older than {} day(s)",
+                report.jsonl_archived, config.observatory_jsonl_retention_days
+            ));
+        }
+        for err in &report.errors {
+            state.log(format!("Observatory cleanup warning: {}", err));
+        }
+    }
+
     // Git/GH readiness checks
     if git::is_git_repo(project_dir) {
         for msg in git::check_git_readiness(project_dir) {
