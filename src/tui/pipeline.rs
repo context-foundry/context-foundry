@@ -503,46 +503,15 @@ mod tests {
     }
 
     #[test]
-    fn pipeline_drops_disconnected_trio_when_seven_or_more_connected() {
-        let state = AppState::new(PathBuf::from(".buildloop"));
-        let mut config = Config {
-            run_mode: "coach".into(),
-            plan_review_enabled: true,
-            ..Config::default()
-        };
-        config.pipeline_stages.push(crate::config::PipelineStageConfig {
-            id: "security".to_string(),
-            label: "SECURITY".to_string(),
-            enabled: true,
-            prompt_override: None,
-        });
-        config.pipeline_stages.push(crate::config::PipelineStageConfig {
-            id: "lint".to_string(),
-            label: "LINT".to_string(),
-            enabled: true,
-            prompt_override: None,
-        });
-
-        let rendered = render_pipeline_text(&state, &config);
-        assert!(rendered.contains(" C "), "C tile missing: {}", rendered);
-        assert!(rendered.contains("P+"), "P+ tile missing: {}", rendered);
-        // Short labels for the disconnected trio.
-        assert!(!rendered.contains("SH"), "SH should be dropped: {}", rendered);
-        assert!(!rendered.contains("DI"), "DI should be dropped: {}", rendered);
-        assert!(!rendered.contains("SK"), "SK should be dropped: {}", rendered);
-    }
-
-    #[test]
-    fn pipeline_click_routes_row_1_connected_tiles_by_index() {
-        // With default config + plan_review unconditional, connected = [Q,R,P,P+,B,A].
-        // Row 1 holds first 5 (Q,R,P,P+,B). Row 2 holds A + disconnected trio.
-        let area = Rect::new(0, 0, 220, 9);
-        // Row 1 mid is at area.y + 1 + 1 = 2 (top of tile is +1; mid is +2).
-        let row1_mid_y = area.y + 1 + 1;
+    fn pipeline_click_routes_connected_tiles_by_index() {
+        // Default config + plan_review enabled = [Q, R, P, P+, B, A] = 6 connected tiles
+        // all on a single row at area.y + 1 .. area.y + 1 + TILE_HEIGHT.
+        let area = Rect::new(0, 0, 220, 5);
+        let tile_mid_y = area.y + 1 + 1; // top of tile is +1; mid label is +2.
         let x0 = area.x + 2;
-        for i in 0..5 {
+        for i in 0..6 {
             let center = x0 + (i as u16) * TILE_PITCH + TILE_W / 2;
-            let click = pipeline_click(area, center, row1_mid_y, 6);
+            let click = pipeline_click(area, center, tile_mid_y, 6);
             match click {
                 Some(PipelineClick::ConnectedStage(idx)) => assert_eq!(idx, i),
                 other => panic!("expected ConnectedStage({}), got {:?}", i, other),
@@ -551,42 +520,42 @@ mod tests {
     }
 
     #[test]
-    fn pipeline_click_routes_row_2_disconnected_tiles() {
-        let area = Rect::new(0, 0, 220, 9);
-        // Row 2 starts at area.y + 1 + TILE_HEIGHT + 1 = area.y + 5. Mid = +6.
-        let row2_mid_y = area.y + 1 + TILE_HEIGHT + 1 + 1;
-        // n_connected = 6 -> n_row2_connected = 1 (AUDIT). disc starts at x0 + 1*pitch + 4.
+    fn pipeline_click_routes_disconnected_tiles_after_gap() {
+        // Single-row layout: disconnected trio (SHIP/DISCOVER/SKILLS) follows
+        // the connected chain after a 4-cell gap on the same row.
+        let area = Rect::new(0, 0, 220, 5);
+        let tile_mid_y = area.y + 1 + 1;
         let x0 = area.x + 2;
-        let disc_x0 = x0 + TILE_PITCH + 4;
+        let disc_x0 = x0 + 6 * TILE_PITCH + 4;
         let ship_center = disc_x0 + TILE_W / 2;
         let disc_center = disc_x0 + TILE_PITCH + TILE_W / 2;
         let sk_center = disc_x0 + 2 * TILE_PITCH + TILE_W / 2;
 
         assert!(matches!(
-            pipeline_click(area, ship_center, row2_mid_y, 6),
+            pipeline_click(area, ship_center, tile_mid_y, 6),
             Some(PipelineClick::Ship)
         ));
         assert!(matches!(
-            pipeline_click(area, disc_center, row2_mid_y, 6),
+            pipeline_click(area, disc_center, tile_mid_y, 6),
             Some(PipelineClick::Discover)
         ));
         assert!(matches!(
-            pipeline_click(area, sk_center, row2_mid_y, 6),
+            pipeline_click(area, sk_center, tile_mid_y, 6),
             Some(PipelineClick::Patterns)
         ));
     }
 
     #[test]
-    fn pipeline_renders_two_rows_with_wrap_arrow() {
+    fn pipeline_renders_all_tiles_on_single_row_with_disconnected_trio() {
+        // After 48a3fae the wrap-down arrow is gone; all tiles render on one
+        // row including the disconnected trio (SHIP/DISCOVER/SKILLS).
         let state = AppState::new(PathBuf::from(".buildloop"));
         let config = Config::default();
         let rendered = render_pipeline_text(&state, &config);
-        // With 6 connected stages, A overflows to row 2, so the wrap-down arrow ↳ should appear.
-        assert!(
-            rendered.contains("\u{21b3}"),
-            "wrap arrow missing: {}",
-            rendered
-        );
+        assert!(!rendered.contains("\u{21b3}"), "wrap arrow should not appear: {}", rendered);
+        assert!(rendered.contains("SH"), "SH tile missing: {}", rendered);
+        assert!(rendered.contains("DI"), "DI tile missing: {}", rendered);
+        assert!(rendered.contains("SK"), "SK tile missing: {}", rendered);
     }
 
     #[test]
