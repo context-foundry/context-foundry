@@ -120,7 +120,7 @@ pub fn running_layout(area: Rect, has_extensions: bool, split_pct: u16) -> Runni
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(5),
-            Constraint::Length(9), // Pipeline map (header + 2 rows of 3-line tiles + spacer + bottom border)
+            Constraint::Length(5), // Pipeline map (header + 1 row of 3-line tiles + bottom border)
             Constraint::Min(8),
             Constraint::Length(8),
             Constraint::Length(1),
@@ -181,7 +181,7 @@ pub fn render(frame: &mut Frame, state: &AppState, config: &Config) {
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(5), // Header
-            Constraint::Length(9), // Pipeline map (header + 2 rows of 3-line tiles + spacer + bottom border)
+            Constraint::Length(5), // Pipeline map (header + 1 row of 3-line tiles + bottom border)
             Constraint::Min(8),    // Middle: agent output + task queue
             Constraint::Length(8), // Bottom: stats (progress bar + 5 content rows + borders)
             Constraint::Length(1), // Status bar
@@ -339,7 +339,7 @@ pub fn render_running_explorer(frame: &mut Frame, state: &AppState, config: &Con
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(5),
-            Constraint::Length(9), // Pipeline map (header + 2 rows of 3-line tiles + spacer + bottom border)
+            Constraint::Length(5), // Pipeline map (header + 1 row of 3-line tiles + bottom border)
             Constraint::Min(8),
             Constraint::Length(8),
             Constraint::Length(1),

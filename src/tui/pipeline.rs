@@ -21,55 +21,38 @@ pub enum PipelineClick {
 /// Tile pitch in columns: 6-wide tile (TILE_INNER_W + 2 borders) + 2-cell gap/arrow = 8.
 const TILE_W: u16 = TILE_INNER_W + 2;
 const TILE_PITCH: u16 = TILE_W + 2;
-/// Max connected tiles rendered on row 1.
-const ROW1_MAX_TILES: usize = 5;
 
 /// Hit-test the pipeline map. `area` is the full pipeline area rect
-/// (Constraint::Length(9)). `n_connected` is the number of enabled connected
-/// stages currently rendered. Returns None if the click is outside all tiles.
+/// (Constraint::Length(5) for single-row layout). `n_connected` is the
+/// number of enabled connected stages currently rendered. Returns None
+/// if the click is outside all tiles.
 pub fn pipeline_click(area: Rect, col: u16, row: u16, n_connected: usize) -> Option<PipelineClick> {
-    let row1_y0 = area.y + 1;
-    let row2_y0 = row1_y0 + TILE_HEIGHT + 1;
-
-    let in_row1 = row >= row1_y0 && row < row1_y0 + TILE_HEIGHT;
-    let in_row2 = row >= row2_y0 && row < row2_y0 + TILE_HEIGHT;
-    if !in_row1 && !in_row2 {
+    let tile_y0 = area.y + 1;
+    if row < tile_y0 || row >= tile_y0 + TILE_HEIGHT {
         return None;
     }
 
-    let n_row1 = n_connected.min(ROW1_MAX_TILES);
-    let n_row2_connected = n_connected.saturating_sub(ROW1_MAX_TILES);
     let x0 = area.x + 2;
 
-    if in_row1 {
-        for i in 0..n_row1 {
-            let bx = x0 + (i as u16) * TILE_PITCH;
-            if col >= bx && col < bx + TILE_W {
-                return Some(PipelineClick::ConnectedStage(i));
-            }
+    // Connected chain comes first.
+    for i in 0..n_connected {
+        let bx = x0 + (i as u16) * TILE_PITCH;
+        if col >= bx && col < bx + TILE_W {
+            return Some(PipelineClick::ConnectedStage(i));
         }
     }
 
-    if in_row2 {
-        // Connected overflow on row 2 (left side).
-        for j in 0..n_row2_connected {
-            let bx = x0 + (j as u16) * TILE_PITCH;
-            if col >= bx && col < bx + TILE_W {
-                return Some(PipelineClick::ConnectedStage(ROW1_MAX_TILES + j));
-            }
-        }
-        // Disconnected trio on row 2 (right side, separated by 8-cell gap).
-        let disc_x0 = x0 + (n_row2_connected as u16) * TILE_PITCH + 4;
-        let disc_stages = [
-            PipelineClick::Ship,
-            PipelineClick::Discover,
-            PipelineClick::Patterns,
-        ];
-        for (j, target) in disc_stages.into_iter().enumerate() {
-            let bx = disc_x0 + (j as u16) * TILE_PITCH;
-            if col >= bx && col < bx + TILE_W {
-                return Some(target);
-            }
+    // Disconnected trio after a 4-cell gap.
+    let disc_x0 = x0 + (n_connected as u16) * TILE_PITCH + 4;
+    let disc_stages = [
+        PipelineClick::Ship,
+        PipelineClick::Discover,
+        PipelineClick::Patterns,
+    ];
+    for (j, target) in disc_stages.into_iter().enumerate() {
+        let bx = disc_x0 + (j as u16) * TILE_PITCH;
+        if col >= bx && col < bx + TILE_W {
+            return Some(target);
         }
     }
 
@@ -280,92 +263,54 @@ pub(super) fn render_pipeline_map(
 
     let width = TILE_INNER_W as usize;
     let n_connected = connected.len();
-    let n_row1 = n_connected.min(ROW1_MAX_TILES);
-    let n_row2_connected = n_connected.saturating_sub(ROW1_MAX_TILES);
 
-    // Row 1: top / mid / bot
-    let mut top_r1 = vec![Span::raw("  ")];
-    let mut mid_r1 = vec![Span::raw("  ")];
-    let mut bot_r1 = vec![Span::raw("  ")];
-    for (i, stage) in connected.iter().enumerate().take(n_row1) {
+    // Single-row layout: all connected tiles + a gap + disconnected trio
+    // (SHIP / DISCOVER / SKILLS). User reverted T1.34's two-row design --
+    // standard terminal widths comfortably fit 9 x 8-cell tiles + margins.
+    let mut top = vec![Span::raw("  ")];
+    let mut mid = vec![Span::raw("  ")];
+    let mut bot = vec![Span::raw("  ")];
+    for (i, stage) in connected.iter().enumerate() {
         let short = tile_label(&stage.label);
-        box_top(&mut top_r1, width, stage.border_color);
-        box_mid(&mut mid_r1, width, &short, stage.text_style, stage.border_color);
-        box_bot(&mut bot_r1, width, stage.border_color);
-        if i < n_row1 - 1 {
-            top_r1.push(Span::raw("  "));
-            mid_r1.push(Span::styled(
+        box_top(&mut top, width, stage.border_color);
+        box_mid(&mut mid, width, &short, stage.text_style, stage.border_color);
+        box_bot(&mut bot, width, stage.border_color);
+        if i < n_connected - 1 {
+            top.push(Span::raw("  "));
+            mid.push(Span::styled(
                 "\u{2500}\u{25b6}",
                 Style::default().fg(pipe_color),
             ));
-            bot_r1.push(Span::raw("  "));
+            bot.push(Span::raw("  "));
         }
     }
 
-    // Inter-row gap line: includes optional wrap-down arrow above the first
-    // row-2 connected tile.
-    let mut gap_line: Vec<Span<'static>> = vec![Span::raw("  ")];
-    if n_row2_connected > 0 {
-        gap_line.push(Span::styled(
-            "\u{21b3}",
-            Style::default().fg(pipe_color).add_modifier(Modifier::BOLD),
-        ));
-    }
-
-    // Row 2: overflow connected (left) + disconnected trio (right).
-    let mut top_r2 = vec![Span::raw("  ")];
-    let mut mid_r2 = vec![Span::raw("  ")];
-    let mut bot_r2 = vec![Span::raw("  ")];
-    for (j, stage) in connected
-        .iter()
-        .skip(ROW1_MAX_TILES)
-        .take(n_row2_connected)
-        .enumerate()
-    {
-        let short = tile_label(&stage.label);
-        box_top(&mut top_r2, width, stage.border_color);
-        box_mid(&mut mid_r2, width, &short, stage.text_style, stage.border_color);
-        box_bot(&mut bot_r2, width, stage.border_color);
-        if j < n_row2_connected - 1 {
-            top_r2.push(Span::raw("  "));
-            mid_r2.push(Span::styled(
-                "\u{2500}\u{25b6}",
-                Style::default().fg(pipe_color),
-            ));
-            bot_r2.push(Span::raw("  "));
-        }
-    }
-
-    // Disconnected trio only when total connected <= 7 (matches old behavior).
-    let render_disconnected = n_connected <= 7;
-    if render_disconnected {
-        // 4-cell gap between overflow connected and disconnected trio.
-        let gap = if n_row2_connected > 0 { "    " } else { "      " };
-        top_r2.push(Span::raw(gap.to_string()));
-        mid_r2.push(Span::raw(gap.to_string()));
-        bot_r2.push(Span::raw(gap.to_string()));
+    // 4-cell gap separates the connected chain from the disconnected trio.
+    if !disconnected.is_empty() {
+        let gap = "    ";
+        top.push(Span::raw(gap.to_string()));
+        mid.push(Span::raw(gap.to_string()));
+        bot.push(Span::raw(gap.to_string()));
 
         for (i, stage) in disconnected.iter().enumerate() {
             let short = tile_label(&stage.label);
-            box_top(&mut top_r2, width, stage.border_color);
-            box_mid(&mut mid_r2, width, &short, stage.text_style, stage.border_color);
-            box_bot(&mut bot_r2, width, stage.border_color);
+            box_top(&mut top, width, stage.border_color);
+            box_mid(&mut mid, width, &short, stage.text_style, stage.border_color);
+            box_bot(&mut bot, width, stage.border_color);
             if i < disconnected.len() - 1 {
-                top_r2.push(Span::raw("  "));
-                mid_r2.push(Span::raw("  "));
-                bot_r2.push(Span::raw("  "));
+                top.push(Span::raw("  "));
+                mid.push(Span::raw("  "));
+                bot.push(Span::raw("  "));
             }
         }
     }
 
-    // Layout: 1 spacer + 3 row1 + 1 gap + 3 row2 + bottom border = 9 rows (Borders::BOTTOM provides the 9th).
+    // Single-row layout: spacer + tile row + bottom border = 5 rows.
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(1),           // 1-line spacer below title
-            Constraint::Length(TILE_HEIGHT), // row 1 (3 lines)
-            Constraint::Length(1),           // inter-row gap
-            Constraint::Length(TILE_HEIGHT), // row 2 (3 lines)
+            Constraint::Length(TILE_HEIGHT), // tile row (3 lines)
             Constraint::Min(0),
         ])
         .split(area);
@@ -380,22 +325,12 @@ pub(super) fn render_pipeline_map(
     frame.render_widget(ratatui::widgets::Clear, area);
     frame.render_widget(block, area);
 
-    let row1_paragraph = Paragraph::new(vec![
-        Line::from(top_r1),
-        Line::from(mid_r1),
-        Line::from(bot_r1),
+    let row_paragraph = Paragraph::new(vec![
+        Line::from(top),
+        Line::from(mid),
+        Line::from(bot),
     ]);
-    frame.render_widget(row1_paragraph, chunks[1]);
-
-    let gap_paragraph = Paragraph::new(Line::from(gap_line));
-    frame.render_widget(gap_paragraph, chunks[2]);
-
-    let row2_paragraph = Paragraph::new(vec![
-        Line::from(top_r2),
-        Line::from(mid_r2),
-        Line::from(bot_r2),
-    ]);
-    frame.render_widget(row2_paragraph, chunks[3]);
+    frame.render_widget(row_paragraph, chunks[1]);
 }
 
 #[cfg(test)]
