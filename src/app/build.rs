@@ -7161,7 +7161,11 @@ fn extract_prior_task_id(buildloop_dir: &Path) -> Option<String> {
             Ok(c) => c,
             Err(_) => continue,
         };
-        let head = &content[..content.len().min(1024)];
+        // UTF-8 safe truncation via the shared helper. Direct byte slicing
+        // here previously panicked ("byte index N is not a char boundary")
+        // when artifacts contained multi-byte sequences (emoji, em dashes,
+        // accented characters) near the 1024 cut point.
+        let head = crate::utils::truncate_str(&content, 1024);
         if let Some(captures) = RE_PRIOR_TASK.captures(head) {
             return Some(captures[1].to_string());
         }
