@@ -1,8 +1,11 @@
 use ratatui::{
-    layout::{Alignment, Constraint, Direction, Layout, Rect},
+    layout::{Alignment, Constraint, Direction, Layout, Margin, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, Clear, Paragraph},
+    widgets::{
+        Block, BorderType, Borders, Clear, Paragraph, Scrollbar, ScrollbarOrientation,
+        ScrollbarState,
+    },
     Frame,
 };
 
@@ -2119,16 +2122,23 @@ pub fn render_stage_summary_overlay(
         }
     }
 
+    // Inner padding: 2 columns horizontal, 1 row vertical inside the border.
+    // Without this the body text presses up against the double-line border
+    // and feels cramped. The padded rect is what the layout splits over.
+    let padded = inner.inner(Margin {
+        horizontal: 2,
+        vertical: 1,
+    });
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(1),
-            Constraint::Length(1),
-            Constraint::Min(0),
-            Constraint::Length(1),
-            Constraint::Length(1),
+            Constraint::Length(1), // title
+            Constraint::Length(1), // spacer
+            Constraint::Min(0),    // body (scrollable)
+            Constraint::Length(1), // status
+            Constraint::Length(1), // footer hints
         ])
-        .split(inner);
+        .split(padded);
 
     let title = Paragraph::new(Line::from(Span::styled(
         format!("{} -- AI summary", overlay.stage_label),
@@ -2176,6 +2186,43 @@ pub fn render_stage_summary_overlay(
         Paragraph::new("")
     };
     frame.render_widget(body, chunks[2]);
+
+    // Proportional scrollbar on the right edge of the body when content
+    // overflows the viewport. We estimate total wrapped lines by counting
+    // newlines + adding the wrap overflow from each source line whose char
+    // count exceeds the body width. ScrollbarState handles the proportional
+    // sizing of the thumb automatically.
+    if let Some(text) = &overlay.summary {
+        let body_width = chunks[2].width.max(1) as usize;
+        let body_height = chunks[2].height.max(1) as usize;
+        let total_lines: usize = text
+            .lines()
+            .map(|l| {
+                let chars = l.chars().count();
+                if chars == 0 {
+                    1
+                } else {
+                    chars.div_ceil(body_width)
+                }
+            })
+            .sum();
+        if total_lines > body_height {
+            let mut sb_state = ScrollbarState::new(total_lines.saturating_sub(body_height))
+                .position(overlay.scroll_offset as usize);
+            let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
+                .begin_symbol(None)
+                .end_symbol(None)
+                .track_style(Style::default().fg(theme.muted))
+                .thumb_style(
+                    Style::default()
+                        .fg(theme.accent)
+                        .add_modifier(Modifier::BOLD),
+                );
+            // Anchor the scrollbar to the body chunk so it shares vertical extent
+            // exactly. ratatui renders into the rightmost column of the rect.
+            frame.render_stateful_widget(scrollbar, chunks[2], &mut sb_state);
+        }
+    }
 
     let model_label = if overlay.last_model.is_empty() {
         "(default)"
