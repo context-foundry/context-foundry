@@ -1291,5 +1291,46 @@
     "retries": 0,
     "api_retries": 0,
     "validation": "pass"
+  },
+  {
+    "ts": "2026-05-11T16:49:35.325Z",
+    "scene": "cold-storage-solutions.js",
+    "seed_id": "cold-storage-solutions",
+    "biome": "arctic",
+    "model": "gpt-4o-mini",
+    "input_tokens": 16286,
+    "output_tokens": 1467,
+    "cost_usd": 0.0033,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "fail",
+    "error": "Validation failed after 2 attempts: VALIDATION FAILED (1 error):\n- Too short: 71 lines (min 80)"
+  },
+  {
+    "ts": "2026-05-11T16:50:07.595Z",
+    "scene": "dead-code-elimination-forest.js",
+    "seed_id": "dead-code-elimination-forest",
+    "biome": "forest",
+    "model": "gpt-4o-mini",
+    "input_tokens": 16290,
+    "output_tokens": 1504,
+    "cost_usd": 0.0033,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "fail",
+    "error": "Validation failed after 2 attempts: VALIDATION FAILED (1 error):\n- Too short: 77 lines (min 80)"
+  },
+  {
+    "ts": "2026-05-11T16:50:34.515Z",
+    "scene": "kubernetes-pod-of-dolphins.js",
+    "seed_id": "kubernetes-pod-of-dolphins",
+    "biome": "ocean",
+    "model": "gpt-4o-mini",
+    "input_tokens": 8310,
+    "output_tokens": 1124,
+    "cost_usd": 0.0019,
+    "retries": 0,
+    "api_retries": 0,
+    "validation": "pass"
   }
 ]
