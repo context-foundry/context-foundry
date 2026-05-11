@@ -7,7 +7,7 @@ use ratatui::{
 };
 
 use crate::agent::{AgentRole, ModelProvider};
-use crate::app::AppState;
+use crate::app::{AppState, TuiPane};
 use crate::config::Config;
 
 /// Single-letter abbreviation for a pipeline stage's QRPBA indicator
@@ -35,6 +35,7 @@ pub(super) fn render_dashboard_stats(
     area: Rect,
     state: &AppState,
     config: &Config,
+    focused: TuiPane,
 ) {
     let theme = &state.tui_theme;
     let mut lines = Vec::new();
@@ -459,15 +460,33 @@ pub(super) fn render_dashboard_stats(
     }
     lines.push(Line::from(agent_spans));
 
+    let title_line = if focused == TuiPane::Stats {
+        Line::from(vec![
+            Span::styled(
+                " Stats ",
+                Style::default().fg(theme.info).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(" (click for AI summary) ", Style::default().fg(theme.muted)),
+        ])
+    } else {
+        Line::from(Span::styled(
+            " Stats ",
+            Style::default().fg(theme.info).add_modifier(Modifier::BOLD),
+        ))
+    };
+    let border_style = if focused == TuiPane::Stats {
+        Style::default()
+            .fg(theme.accent)
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(theme.border)
+    };
     let stats_block = Paragraph::new(lines)
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(theme.border))
-                .title(Span::styled(
-                    " Stats ",
-                    Style::default().fg(theme.info).add_modifier(Modifier::BOLD),
-                )),
+                .border_style(border_style)
+                .title(title_line),
         )
         .wrap(Wrap { trim: false });
     frame.render_widget(stats_block, area);
@@ -1004,7 +1023,7 @@ mod tests {
         let backend = TestBackend::new(180, 16);
         let mut terminal = Terminal::new(backend).expect("failed to create terminal");
         terminal
-            .draw(|frame| render_dashboard_stats(frame, frame.area(), state, &Config::default()))
+            .draw(|frame| render_dashboard_stats(frame, frame.area(), state, &Config::default(), TuiPane::AgentOutput))
             .expect("failed to draw stats");
 
         let buffer = terminal.backend().buffer();
@@ -1051,7 +1070,7 @@ mod tests {
         let backend = TestBackend::new(width, height);
         let mut terminal = Terminal::new(backend).expect("failed to create terminal");
         terminal
-            .draw(|frame| render_dashboard_stats(frame, frame.area(), state, &Config::default()))
+            .draw(|frame| render_dashboard_stats(frame, frame.area(), state, &Config::default(), TuiPane::AgentOutput))
             .expect("failed to draw stats");
 
         let buffer = terminal.backend().buffer();
@@ -1144,7 +1163,7 @@ mod tests {
         let backend = TestBackend::new(160, 6);
         let mut terminal = Terminal::new(backend).expect("failed to create terminal");
         terminal
-            .draw(|frame| render_dashboard_stats(frame, frame.area(), state, config))
+            .draw(|frame| render_dashboard_stats(frame, frame.area(), state, config, TuiPane::AgentOutput))
             .expect("failed to draw stats");
 
         let buffer = terminal.backend().buffer();
@@ -1334,7 +1353,7 @@ mod tests {
         let backend = TestBackend::new(160, 6);
         let mut terminal = Terminal::new(backend).expect("failed to create terminal");
         terminal
-            .draw(|frame| render_dashboard_stats(frame, frame.area(), &state, &Config::default()))
+            .draw(|frame| render_dashboard_stats(frame, frame.area(), &state, &Config::default(), TuiPane::AgentOutput))
             .expect("failed to draw stats");
         let buffer = terminal.backend().buffer();
         let area = *buffer.area();

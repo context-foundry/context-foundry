@@ -26,15 +26,15 @@ use crate::config::Config;
 use crate::utils::truncate_str_from_end;
 
 pub use overlays::{
-    close_btn_rect, confirm_banner_hit_test, git_init_offer_hit_test, model_picker_hit_test,
-    quit_confirm_hit_test, render_git_init_offer, render_no_tasks_warning, render_quit_confirm,
-    render_running_modal, settings_modal_rect, settings_overlay_row_hit_test,
-    summary_modal_hit_test, ConfirmBannerAction, GitInitOfferAction, ModelPickerMouseTarget,
-    QuitConfirmAction, SummaryModalAction,
+    close_btn_rect, confirm_banner_hit_test, context_menu_hit_test, git_init_offer_hit_test,
+    model_picker_hit_test, quit_confirm_hit_test, render_git_init_offer,
+    render_no_tasks_warning, render_quit_confirm, render_running_modal, settings_modal_rect,
+    settings_overlay_row_hit_test, summary_modal_hit_test, ConfirmBannerAction, ContextMenuHit,
+    GitInitOfferAction, ModelPickerMouseTarget, QuitConfirmAction, SummaryModalAction,
 };
-pub fn render_stage_summary_overlay(frame: &mut Frame, state: &AppState) {
-    if let Some(overlay) = state.stage_summary_overlay.as_ref() {
-        overlays::render_stage_summary_overlay(frame, &state.tui_theme, overlay);
+pub fn render_surface_summary_overlay(frame: &mut Frame, state: &AppState) {
+    if let Some(overlay) = state.surface_summary_overlay.as_ref() {
+        overlays::render_surface_summary_overlay(frame, &state.tui_theme, overlay);
     }
 }
 pub use pipeline::{pipeline_click, PipelineClick};
@@ -210,7 +210,7 @@ pub fn render(frame: &mut Frame, state: &AppState, config: &Config) {
             ])
             .split(middle_cols[1]);
         running::render_task_queue(frame, panel[0], state, state.focused_pane);
-        narrative::render_narrative(frame, panel[1], state);
+        narrative::render_narrative(frame, panel[1], state, state.focused_pane);
         running::render_skill_citations(frame, panel[2], state, config, state.focused_pane);
         running::render_extensions_used(frame, panel[3], state, state.focused_pane);
         panel
@@ -224,19 +224,35 @@ pub fn render(frame: &mut Frame, state: &AppState, config: &Config) {
             ])
             .split(middle_cols[1]);
         running::render_task_queue(frame, panel[0], state, state.focused_pane);
-        narrative::render_narrative(frame, panel[1], state);
+        narrative::render_narrative(frame, panel[1], state, state.focused_pane);
         running::render_skill_citations(frame, panel[2], state, config, state.focused_pane);
         panel
     };
 
     // Bottom: stats panel (full width)
-    stats::render_dashboard_stats(frame, chunks[3], state, config);
+    stats::render_dashboard_stats(frame, chunks[3], state, config, state.focused_pane);
 
     // Use startup status bar when viewing dashboard from startup (Tab toggle)
     if matches!(state.phase, AppPhase::Startup) {
         startup::render_startup_status_bar(frame, chunks[4], state);
     } else {
         running::render_status_bar(frame, chunks[4], state);
+    }
+
+    // Two-arrow resize indicator on the vertical separator when mouse is hovering.
+    if state.mouse_over_separator {
+        let middle = chunks[2];
+        let sep_col = middle_cols[1].x;
+        let row = middle.y + middle.height / 2;
+        if sep_col < frame.area().width && row < frame.area().height {
+            let buf = frame.buffer_mut();
+            let arrow_style = Style::default()
+                .fg(state.tui_theme.warning)
+                .add_modifier(Modifier::BOLD);
+            buf[(sep_col, row)]
+                .set_char('\u{2194}')
+                .set_style(arrow_style);
+        }
     }
 
     // Overlay inject input bar at bottom of agent output area
@@ -356,8 +372,12 @@ pub fn render_running_explorer(frame: &mut Frame, state: &AppState, config: &Con
         );
     }
 
-    stats::render_dashboard_stats(frame, chunks[3], state, config);
+    stats::render_dashboard_stats(frame, chunks[3], state, config, state.focused_pane);
     running::render_running_explorer_status_bar(frame, chunks[4], state);
+
+    if let Some(ref menu) = state.explorer_context_menu {
+        overlays::render_explorer_context_menu(frame, &state.tui_theme, menu);
+    }
 }
 
 pub fn render_startup(frame: &mut Frame, state: &AppState) {

@@ -788,6 +788,17 @@ pub(super) fn render_agent_output(
     }
     all_items.extend(items);
 
+    let title_line = if focused == TuiPane::AgentOutput && !state.dual_build.active {
+        Line::from(vec![
+            title,
+            Span::styled(
+                " (click for AI summary) ",
+                Style::default().fg(state.tui_theme.muted),
+            ),
+        ])
+    } else {
+        Line::from(title)
+    };
     let list = List::new(all_items).block(
         Block::default()
             .borders(Borders::ALL)
@@ -797,7 +808,7 @@ pub(super) fn render_agent_output(
                 &state.tui_theme,
             ))
             .border_type(pane_border_type(focused, TuiPane::AgentOutput))
-            .title(title),
+            .title(title_line),
     );
 
     frame.render_widget(list, area);
@@ -1029,6 +1040,27 @@ pub(super) fn render_task_queue(frame: &mut Frame, area: Rect, state: &AppState,
         state.completed_count, total, pending
     );
 
+    let title_line = if focused == TuiPane::TaskQueue {
+        Line::from(vec![
+            Span::styled(
+                title,
+                Style::default()
+                    .fg(state.tui_theme.text)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                " (click for AI summary) ",
+                Style::default().fg(state.tui_theme.muted),
+            ),
+        ])
+    } else {
+        Line::from(Span::styled(
+            title,
+            Style::default()
+                .fg(state.tui_theme.text)
+                .add_modifier(Modifier::BOLD),
+        ))
+    };
     let list = List::new(items).block(
         Block::default()
             .borders(Borders::ALL)
@@ -1038,12 +1070,7 @@ pub(super) fn render_task_queue(frame: &mut Frame, area: Rect, state: &AppState,
                 &state.tui_theme,
             ))
             .border_type(pane_border_type(focused, TuiPane::TaskQueue))
-            .title(Span::styled(
-                title,
-                Style::default()
-                    .fg(state.tui_theme.text)
-                    .add_modifier(Modifier::BOLD),
-            )),
+            .title(title_line),
     );
 
     frame.render_widget(list, area);
@@ -1068,6 +1095,20 @@ pub(super) fn render_skill_citations(
         None => " Skill Citations (loading...) ".to_string(),
     };
 
+    let title_line = if focused == TuiPane::PatternsLearned {
+        Line::from(vec![
+            Span::styled(
+                title,
+                Style::default().fg(theme.info).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(" (click for AI summary) ", Style::default().fg(theme.muted)),
+        ])
+    } else {
+        Line::from(Span::styled(
+            title,
+            Style::default().fg(theme.info).add_modifier(Modifier::BOLD),
+        ))
+    };
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(pane_border_style(
@@ -1076,10 +1117,7 @@ pub(super) fn render_skill_citations(
             &state.tui_theme,
         ))
         .border_type(pane_border_type(focused, TuiPane::PatternsLearned))
-        .title(Span::styled(
-            title,
-            Style::default().fg(theme.info).add_modifier(Modifier::BOLD),
-        ));
+        .title(title_line);
 
     let inner_width = area.width.saturating_sub(4) as usize;
     let mut lines: Vec<Line> = Vec::new();
@@ -1406,9 +1444,33 @@ pub(super) fn render_status_bar(frame: &mut Frame, area: Rect, state: &AppState)
         ));
     }
 
+    let hint = cursor_hint_for_state(state);
+    if !hint.is_empty() {
+        spans.push(Span::styled(
+            format!("  {} ", hint),
+            Style::default().fg(state.tui_theme.muted),
+        ));
+    }
+
     let status = Line::from(spans);
     let bar = Paragraph::new(status);
     frame.render_widget(bar, area);
+}
+
+fn cursor_hint_for_state(state: &AppState) -> &'static str {
+    if state.mouse_over_separator {
+        return "drag to resize";
+    }
+    match state.focused_pane {
+        TuiPane::AgentOutput
+        | TuiPane::TaskQueue
+        | TuiPane::PatternsLearned
+        | TuiPane::Narrative
+        | TuiPane::Stats
+        | TuiPane::Extensions => "click for AI summary",
+        TuiPane::Explorer => "right-click for menu",
+        TuiPane::Preview => "",
+    }
 }
 
 pub(super) fn render_planning_status_bar(frame: &mut Frame, area: Rect, state: &AppState) {

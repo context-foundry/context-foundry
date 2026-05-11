@@ -25,17 +25,18 @@ use self::startup::{
 };
 pub use self::state::FileEntry;
 pub use self::state::{
-    settings_sections, Action, AppPhase, AppState, CurrentClassification, DualSelection,
-    ExtensionDisplayInfo, FieldKind, ModelEntry, ModelPicker, OverlayRow, PatternEventKind,
-    PickerItem, PlanStatus, PlanningState, RunningModalKind, SectionKind, StageSummaryOverlay,
-    StartupAction, StartupScenario, StartupState, StreamState, TuiPane,
+    settings_sections, Action, AppPhase, AppState, ClickableSurface, CurrentClassification,
+    DualSelection, ExplorerContextMenu, ExtensionDisplayInfo, FieldKind, ModelEntry, ModelPicker,
+    OverlayRow, PatternEventKind, PickerItem, PlanStatus, PlanningState, RunningModalKind,
+    SectionKind, StartupAction, StartupScenario, StartupState, StreamState,
+    SurfaceSummaryOverlay, TuiPane,
 };
 use self::state::{AppEvent, AppendTasksRequest, LoopEvent, PendingTransition, PlanningOutcome};
 use crate::agent::{AgentErrorKind, AgentOutputEvent, AgentRole};
 use crate::complexity::TaskOverride;
 use crate::config::Config;
 use crate::eval;
-use crate::llm::summary::summarize_stage;
+use crate::llm::summary::summarize_surface;
 use crate::llm::summary_cache::StageState;
 use crate::eval::report as eval_report;
 use crate::git;
@@ -647,8 +648,8 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
                 if state.show_settings_overlay {
                     tui::render_settings_overlay(frame, &state);
                 }
-                if state.stage_summary_overlay.is_some() {
-                    tui::render_stage_summary_overlay(frame, &state);
+                if state.surface_summary_overlay.is_some() {
+                    tui::render_surface_summary_overlay(frame, &state);
                 }
                 // Warning/confirmation banners on top of everything
                 if state.show_git_init_offer {
@@ -1314,7 +1315,7 @@ fn handle_planning_event(state: &mut AppState, event: AppEvent, config: &Config)
                 state.welcome_message = msg;
             }
         }
-        AppEvent::StageSummaryReady { .. } => {}
+        AppEvent::SurfaceSummaryReady { .. } => {}
         AppEvent::NarrativeRefresh(brief) => {
             state.last_commit_brief = brief;
         }
@@ -2050,8 +2051,8 @@ fn handle_planning_key(state: &mut AppState, key: event::KeyEvent, config: &Conf
     }
     match key.code {
         KeyCode::Char('q') | KeyCode::Esc => {
-            if !state.show_settings_overlay && state.stage_summary_overlay.is_some() {
-                state.stage_summary_overlay = None;
+            if !state.show_settings_overlay && state.surface_summary_overlay.is_some() {
+                state.surface_summary_overlay = None;
                 return;
             }
             if handle_overlay_esc(state) {
@@ -2067,9 +2068,9 @@ fn handle_planning_key(state: &mut AppState, key: event::KeyEvent, config: &Conf
             }
         }
         KeyCode::Char('r')
-            if !state.show_settings_overlay && state.stage_summary_overlay.is_some() =>
+            if !state.show_settings_overlay && state.surface_summary_overlay.is_some() =>
         {
-            let Some(overlay) = state.stage_summary_overlay.as_ref().cloned() else {
+            let Some(overlay) = state.surface_summary_overlay.as_ref().cloned() else {
                 return;
             };
             let project_dir = state
@@ -2077,19 +2078,18 @@ fn handle_planning_key(state: &mut AppState, key: event::KeyEvent, config: &Conf
                 .parent()
                 .unwrap_or(std::path::Path::new("."))
                 .to_path_buf();
-            trigger_stage_summary(
+            trigger_surface_summary(
                 state,
                 &project_dir,
                 config,
-                &overlay.stage,
-                &overlay.stage_label,
+                overlay.surface.clone(),
                 true,
             );
         }
         KeyCode::Char('f')
-            if !state.show_settings_overlay && state.stage_summary_overlay.is_some() =>
+            if !state.show_settings_overlay && state.surface_summary_overlay.is_some() =>
         {
-            let Some(overlay) = state.stage_summary_overlay.as_ref().cloned() else {
+            let Some(overlay) = state.surface_summary_overlay.as_ref().cloned() else {
                 return;
             };
             let project_dir = state
@@ -2097,64 +2097,35 @@ fn handle_planning_key(state: &mut AppState, key: event::KeyEvent, config: &Conf
                 .parent()
                 .unwrap_or(std::path::Path::new("."))
                 .to_path_buf();
-            match stage_fallback_file(&overlay.stage, &project_dir) {
-                Some(path) if path.exists() => {
-                    state.stage_summary_overlay = None;
-                    handle_pipeline_click_target(
-                        state,
-                        &project_dir,
-                        config,
-                        PipelineClickTarget::OpenFile(path),
-                    );
-                }
-                Some(path) => {
-                    // File would be the fallback but doesn't exist yet (stage
-                    // hasn't run for the current task, was cleaned up, etc.).
-                    // Keep the overlay open so the user sees why nothing happened.
-                    if let Some(o) = state.stage_summary_overlay.as_mut() {
-                        o.last_error = Some(format!(
-                            "No file to open: {} (not written yet)",
-                            path.display()
-                        ));
-                    }
-                }
-                None => {
-                    if let Some(o) = state.stage_summary_overlay.as_mut() {
-                        o.last_error = Some(format!(
-                            "No fallback file defined for stage \"{}\"",
-                            overlay.stage
-                        ));
-                    }
-                }
-            };
+            surface_open_file(state, &project_dir, config, &overlay);
         }
         // Scroll the AI summary body. Keys claim the event only when the
         // overlay is open so they don't steal Up/Down from the running screen.
         KeyCode::Up
-            if !state.show_settings_overlay && state.stage_summary_overlay.is_some() =>
+            if !state.show_settings_overlay && state.surface_summary_overlay.is_some() =>
         {
-            if let Some(o) = state.stage_summary_overlay.as_mut() {
+            if let Some(o) = state.surface_summary_overlay.as_mut() {
                 o.scroll_offset = o.scroll_offset.saturating_sub(1);
             }
         }
         KeyCode::Down
-            if !state.show_settings_overlay && state.stage_summary_overlay.is_some() =>
+            if !state.show_settings_overlay && state.surface_summary_overlay.is_some() =>
         {
-            if let Some(o) = state.stage_summary_overlay.as_mut() {
+            if let Some(o) = state.surface_summary_overlay.as_mut() {
                 o.scroll_offset = o.scroll_offset.saturating_add(1);
             }
         }
         KeyCode::PageUp
-            if !state.show_settings_overlay && state.stage_summary_overlay.is_some() =>
+            if !state.show_settings_overlay && state.surface_summary_overlay.is_some() =>
         {
-            if let Some(o) = state.stage_summary_overlay.as_mut() {
+            if let Some(o) = state.surface_summary_overlay.as_mut() {
                 o.scroll_offset = o.scroll_offset.saturating_sub(8);
             }
         }
         KeyCode::PageDown
-            if !state.show_settings_overlay && state.stage_summary_overlay.is_some() =>
+            if !state.show_settings_overlay && state.surface_summary_overlay.is_some() =>
         {
-            if let Some(o) = state.stage_summary_overlay.as_mut() {
+            if let Some(o) = state.surface_summary_overlay.as_mut() {
                 o.scroll_offset = o.scroll_offset.saturating_add(8);
             }
         }
@@ -3019,10 +2990,10 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                         _ if handle_settings_overlay_key(state, key) => {}
                         KeyCode::Char('r')
                             if !state.show_settings_overlay
-                                && state.stage_summary_overlay.is_some() =>
+                                && state.surface_summary_overlay.is_some() =>
                         {
                             let Some(overlay) =
-                                state.stage_summary_overlay.as_ref().cloned()
+                                state.surface_summary_overlay.as_ref().cloned()
                             else {
                                 return;
                             };
@@ -3031,21 +3002,20 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                                 .parent()
                                 .unwrap_or(std::path::Path::new("."))
                                 .to_path_buf();
-                            trigger_stage_summary(
+                            trigger_surface_summary(
                                 state,
                                 &project_dir,
                                 config,
-                                &overlay.stage,
-                                &overlay.stage_label,
+                                overlay.surface.clone(),
                                 true,
                             );
                         }
                         KeyCode::Char('f')
                             if !state.show_settings_overlay
-                                && state.stage_summary_overlay.is_some() =>
+                                && state.surface_summary_overlay.is_some() =>
                         {
                             let Some(overlay) =
-                                state.stage_summary_overlay.as_ref().cloned()
+                                state.surface_summary_overlay.as_ref().cloned()
                             else {
                                 return;
                             };
@@ -3054,19 +3024,13 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                                 .parent()
                                 .unwrap_or(std::path::Path::new("."))
                                 .to_path_buf();
-                            let target = match stage_fallback_file(&overlay.stage, &project_dir)
-                            {
-                                Some(path) => PipelineClickTarget::OpenFile(path),
-                                None => PipelineClickTarget::None,
-                            };
-                            state.stage_summary_overlay = None;
-                            handle_pipeline_click_target(state, &project_dir, config, target);
+                            surface_open_file(state, &project_dir, config, &overlay);
                         }
                         KeyCode::Char('q') => {
                             if !state.show_settings_overlay
-                                && state.stage_summary_overlay.is_some()
+                                && state.surface_summary_overlay.is_some()
                             {
-                                state.stage_summary_overlay = None;
+                                state.surface_summary_overlay = None;
                             } else if handle_overlay_esc(state) {
                                 // overlay closed
                             } else if state.show_stats_overlay {
@@ -3086,9 +3050,9 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                         }
                         KeyCode::Esc
                             if !state.show_settings_overlay
-                                && state.stage_summary_overlay.is_some() =>
+                                && state.surface_summary_overlay.is_some() =>
                         {
-                            state.stage_summary_overlay = None;
+                            state.surface_summary_overlay = None;
                         }
                         KeyCode::Esc if !handle_overlay_esc(state) && state.show_stats_overlay => {
                             state.show_stats_overlay = false;
@@ -3296,27 +3260,25 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
             }
             // AI summary overlay claims the mouse before anything else when open:
             // wheel scrolls the body; left-click dispatches to the [X]/Esc/R/F buttons.
-            if !state.show_settings_overlay && state.stage_summary_overlay.is_some() {
+            if !state.show_settings_overlay && state.surface_summary_overlay.is_some() {
                 let area = ratatui::layout::Rect::new(0, 0, terminal_size.0, terminal_size.1);
                 match mouse.kind {
                     MouseEventKind::ScrollUp => {
-                        if let Some(o) = state.stage_summary_overlay.as_mut() {
+                        if let Some(o) = state.surface_summary_overlay.as_mut() {
                             o.scroll_offset = o.scroll_offset.saturating_sub(3);
                         }
                         return;
                     }
                     MouseEventKind::ScrollDown => {
-                        if let Some(o) = state.stage_summary_overlay.as_mut() {
+                        if let Some(o) = state.surface_summary_overlay.as_mut() {
                             o.scroll_offset = o.scroll_offset.saturating_add(3);
                         }
                         return;
                     }
                     MouseEventKind::Down(MouseButton::Left) => {
-                        let has_file = state
-                            .stage_summary_overlay
-                            .as_ref()
-                            .map(|o| o.stage != "ship")
-                            .unwrap_or(false);
+                        let has_file = surface_has_fallback_file(
+                            state.surface_summary_overlay.as_ref(),
+                        );
                         match tui::summary_modal_hit_test(
                             area,
                             mouse.column,
@@ -3324,12 +3286,12 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                             has_file,
                         ) {
                             Some(tui::SummaryModalAction::Dismiss) => {
-                                state.stage_summary_overlay = None;
+                                state.surface_summary_overlay = None;
                                 return;
                             }
                             Some(tui::SummaryModalAction::Refresh) => {
                                 let Some(overlay) =
-                                    state.stage_summary_overlay.as_ref().cloned()
+                                    state.surface_summary_overlay.as_ref().cloned()
                                 else {
                                     return;
                                 };
@@ -3338,19 +3300,18 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                                     .parent()
                                     .unwrap_or(std::path::Path::new("."))
                                     .to_path_buf();
-                                trigger_stage_summary(
+                                trigger_surface_summary(
                                     state,
                                     &project_dir,
                                     config,
-                                    &overlay.stage,
-                                    &overlay.stage_label,
+                                    overlay.surface.clone(),
                                     true,
                                 );
                                 return;
                             }
                             Some(tui::SummaryModalAction::OpenFile) => {
                                 let Some(overlay) =
-                                    state.stage_summary_overlay.as_ref().cloned()
+                                    state.surface_summary_overlay.as_ref().cloned()
                                 else {
                                     return;
                                 };
@@ -3359,40 +3320,7 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                                     .parent()
                                     .unwrap_or(std::path::Path::new("."))
                                     .to_path_buf();
-                                match stage_fallback_file(
-                                    &overlay.stage,
-                                    &project_dir,
-                                ) {
-                                    Some(path) if path.exists() => {
-                                        state.stage_summary_overlay = None;
-                                        handle_pipeline_click_target(
-                                            state,
-                                            &project_dir,
-                                            config,
-                                            PipelineClickTarget::OpenFile(path),
-                                        );
-                                    }
-                                    Some(path) => {
-                                        if let Some(o) =
-                                            state.stage_summary_overlay.as_mut()
-                                        {
-                                            o.last_error = Some(format!(
-                                                "No file to open: {} (not written yet)",
-                                                path.display()
-                                            ));
-                                        }
-                                    }
-                                    None => {
-                                        if let Some(o) =
-                                            state.stage_summary_overlay.as_mut()
-                                        {
-                                            o.last_error = Some(format!(
-                                                "No fallback file defined for stage \"{}\"",
-                                                overlay.stage
-                                            ));
-                                        }
-                                    }
-                                }
+                                surface_open_file(state, &project_dir, config, &overlay);
                                 return;
                             }
                             Some(tui::SummaryModalAction::None) => {
@@ -3479,7 +3407,7 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
             if state.show_running_explorer {
                 // Delegate to running explorer mouse handler
                 let terminal_size = crossterm::terminal::size().unwrap_or((120, 40));
-                handle_startup_mouse_at_for_running(state, mouse, terminal_size);
+                handle_startup_mouse_at_for_running(state, mouse, terminal_size, config);
             } else {
                 match mouse.kind {
                     MouseEventKind::Moved
@@ -3488,7 +3416,7 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                             && !state.show_patterns
                             && !state.show_findings
                             && !state.show_settings_overlay
-                            && state.stage_summary_overlay.is_none() =>
+                            && state.surface_summary_overlay.is_none() =>
                     {
                         // Hover instantly switches focused pane -- no click required.
                         let terminal_size = crossterm::terminal::size().unwrap_or((120, 40));
@@ -3497,10 +3425,22 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                         let has_ext = state.available_extensions.iter().any(|e| e.selected)
                             || !state.session_extensions_used.is_empty();
                         let panes = tui::running_layout(area, has_ext, state.agent_pane_split);
+                        let bottom_chunks = ratatui::layout::Layout::default()
+                            .direction(ratatui::layout::Direction::Vertical)
+                            .constraints([
+                                ratatui::layout::Constraint::Length(5),
+                                ratatui::layout::Constraint::Length(6),
+                                ratatui::layout::Constraint::Min(8),
+                                ratatui::layout::Constraint::Length(8),
+                                ratatui::layout::Constraint::Length(1),
+                            ])
+                            .split(area);
                         if tui::rect_contains(panes.agent_output, mouse.column, mouse.row) {
                             state.focused_pane = state::TuiPane::AgentOutput;
                         } else if tui::rect_contains(panes.task_queue, mouse.column, mouse.row) {
                             state.focused_pane = state::TuiPane::TaskQueue;
+                        } else if tui::rect_contains(panes.narrative, mouse.column, mouse.row) {
+                            state.focused_pane = state::TuiPane::Narrative;
                         } else if tui::rect_contains(panes.patterns, mouse.column, mouse.row) {
                             state.focused_pane = state::TuiPane::PatternsLearned;
                         } else if panes
@@ -3508,7 +3448,13 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                             .is_some_and(|r| tui::rect_contains(r, mouse.column, mouse.row))
                         {
                             state.focused_pane = state::TuiPane::Extensions;
+                        } else if tui::rect_contains(bottom_chunks[3], mouse.column, mouse.row) {
+                            state.focused_pane = state::TuiPane::Stats;
                         }
+                        state.mouse_over_separator = (mouse.column == panes.separator_col
+                            || mouse.column + 1 == panes.separator_col)
+                            && mouse.row >= panes.agent_output.y
+                            && mouse.row < panes.agent_output.y + panes.agent_output.height;
                     }
                     MouseEventKind::ScrollUp => {
                         let lines = wheel_lines(state.last_scroll_at);
@@ -3592,17 +3538,68 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                         let has_ext = state.available_extensions.iter().any(|e| e.selected)
                             || !state.session_extensions_used.is_empty();
                         let panes = tui::running_layout(area, has_ext, state.agent_pane_split);
+                        // Bottom stats rect (used for both hit-test and dispatch)
+                        let bottom_full = ratatui::layout::Rect::new(
+                            0,
+                            0,
+                            terminal_size.0,
+                            terminal_size.1,
+                        );
+                        let bottom_chunks = ratatui::layout::Layout::default()
+                            .direction(ratatui::layout::Direction::Vertical)
+                            .constraints([
+                                ratatui::layout::Constraint::Length(5),
+                                ratatui::layout::Constraint::Length(6),
+                                ratatui::layout::Constraint::Min(8),
+                                ratatui::layout::Constraint::Length(8),
+                                ratatui::layout::Constraint::Length(1),
+                            ])
+                            .split(bottom_full);
+                        let stats_rect = bottom_chunks[3];
                         // Check if clicking on the vertical separator (±1 column tolerance)
                         let on_sep = mouse.column == panes.separator_col
                             || mouse.column + 1 == panes.separator_col;
                         let in_middle = mouse.row >= panes.agent_output.y
                             && mouse.row < panes.agent_output.y + panes.agent_output.height;
+                        // Dispatch surface click only when no blocking modal is open.
+                        let dispatch_allowed = state.surface_summary_overlay.is_none()
+                            && !state.show_stats_overlay
+                            && !state.show_patterns
+                            && !state.show_findings
+                            && !state.show_settings_overlay
+                            && !state.show_git_init_offer
+                            && !state.show_no_tasks_warning
+                            && !state.awaiting_commit_approval
+                            && state.running_screen_modal.is_none()
+                            && state.inject_input.is_none();
+                        let surface_for_click: Option<ClickableSurface> = if on_sep && in_middle {
+                            None
+                        } else if tui::rect_contains(panes.agent_output, mouse.column, mouse.row) {
+                            Some(ClickableSurface::AgentOutput)
+                        } else if tui::rect_contains(panes.task_queue, mouse.column, mouse.row) {
+                            Some(ClickableSurface::TaskQueue)
+                        } else if tui::rect_contains(panes.narrative, mouse.column, mouse.row) {
+                            Some(ClickableSurface::Narrative)
+                        } else if tui::rect_contains(panes.patterns, mouse.column, mouse.row) {
+                            Some(ClickableSurface::SkillCitations)
+                        } else if panes
+                            .extensions_used
+                            .is_some_and(|r| tui::rect_contains(r, mouse.column, mouse.row))
+                        {
+                            None // Extensions pane has no specific surface yet
+                        } else if tui::rect_contains(stats_rect, mouse.column, mouse.row) {
+                            Some(ClickableSurface::Stats)
+                        } else {
+                            None
+                        };
                         if on_sep && in_middle {
                             state.dragging_split = true;
                         } else if tui::rect_contains(panes.agent_output, mouse.column, mouse.row) {
                             state.focused_pane = state::TuiPane::AgentOutput;
                         } else if tui::rect_contains(panes.task_queue, mouse.column, mouse.row) {
                             state.focused_pane = state::TuiPane::TaskQueue;
+                        } else if tui::rect_contains(panes.narrative, mouse.column, mouse.row) {
+                            state.focused_pane = state::TuiPane::Narrative;
                         } else if tui::rect_contains(panes.patterns, mouse.column, mouse.row) {
                             state.focused_pane = state::TuiPane::PatternsLearned;
                         } else if panes
@@ -3610,6 +3607,8 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                             .is_some_and(|r| tui::rect_contains(r, mouse.column, mouse.row))
                         {
                             state.focused_pane = state::TuiPane::Extensions;
+                        } else if tui::rect_contains(stats_rect, mouse.column, mouse.row) {
+                            state.focused_pane = state::TuiPane::Stats;
                         } else {
                             let full_area =
                                 ratatui::layout::Rect::new(0, 0, terminal_size.0, terminal_size.1);
@@ -3714,6 +3713,19 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                                 }
                             }
                         }
+                        // Per-pane AI summary dispatch (T1.33). Triggered after
+                        // focused_pane updates. Gated by modal-focus barriers so
+                        // open overlays/modals consume the click instead.
+                        if let Some(s) = surface_for_click {
+                            if dispatch_allowed {
+                                let project_dir = state
+                                    .buildloop_dir
+                                    .parent()
+                                    .unwrap_or(std::path::Path::new("."))
+                                    .to_path_buf();
+                                handle_surface_click(state, &project_dir, config, s);
+                            }
+                        }
                     }
                     MouseEventKind::Drag(MouseButton::Left) if state.dragging_split => {
                         let terminal_size = crossterm::terminal::size().unwrap_or((120, 40));
@@ -3754,9 +3766,9 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
             state.log("Ignoring late orchestrator result while running");
         }
         AppEvent::WelcomeMessage(_) => {}
-        AppEvent::StageSummaryReady { stage, outcome } => {
-            if let Some(overlay) = state.stage_summary_overlay.as_mut() {
-                if overlay.stage == stage {
+        AppEvent::SurfaceSummaryReady { surface, outcome } => {
+            if let Some(overlay) = state.surface_summary_overlay.as_mut() {
+                if overlay.surface == surface {
                     overlay.in_flight = false;
                     overlay.summary = Some(outcome.summary);
                     overlay.last_cache_hit = outcome.cache_hit;
@@ -5384,7 +5396,7 @@ fn handle_pipeline_click_target(
             fallback_file: _,
         } => {
             let already_in_flight = state
-                .stage_summary_overlay
+                .surface_summary_overlay
                 .as_ref()
                 .is_some_and(|o| o.stage == stage_id && o.in_flight);
             if !already_in_flight {
@@ -5452,10 +5464,35 @@ fn trigger_stage_summary(
     stage_label: &str,
     force_refresh: bool,
 ) {
+    let _ = stage_label; // surface.label() now drives the label
+    trigger_surface_summary(
+        state,
+        project_dir,
+        config,
+        ClickableSurface::PipelineStage(stage_id.to_string()),
+        force_refresh,
+    );
+}
+
+fn trigger_surface_summary(
+    state: &mut AppState,
+    project_dir: &Path,
+    config: &Config,
+    surface: ClickableSurface,
+    force_refresh: bool,
+) {
     let buildloop_dir = state.buildloop_dir.clone();
-    let stage_state = detect_stage_state(stage_id, state, &buildloop_dir);
-    let (artifacts, extra_log) = stage_summary_inputs(stage_id, project_dir);
-    let disk_log = read_log_tail(&buildloop_dir, stage_id, 8192);
+    let (stage_state, stage_id_for_log) = match &surface {
+        ClickableSurface::PipelineStage(sid) => (
+            detect_stage_state(sid, state, &buildloop_dir),
+            Some(sid.clone()),
+        ),
+        _ => (StageState::Running, None),
+    };
+    let (artifacts, extra_log) = surface_summary_inputs(&surface, state, project_dir);
+    let disk_log = stage_id_for_log
+        .as_deref()
+        .and_then(|sid| read_log_tail(&buildloop_dir, sid, 8192));
     let log_tail = match (disk_log, extra_log) {
         (Some(a), Some(b)) => Some(format!("{}\n{}", a, b)),
         (None, Some(b)) => Some(b),
@@ -5463,15 +5500,22 @@ fn trigger_stage_summary(
         (None, None) => None,
     };
 
-    let existing = state.stage_summary_overlay.take();
+    let stage_id_string = match &surface {
+        ClickableSurface::PipelineStage(sid) => sid.clone(),
+        _ => surface.tag().to_string(),
+    };
+    let stage_label_string = surface.label();
+
+    let existing = state.surface_summary_overlay.take();
     let preserve_summary = if force_refresh {
         None
     } else {
         existing.as_ref().and_then(|o| o.summary.clone())
     };
-    state.stage_summary_overlay = Some(StageSummaryOverlay {
-        stage: stage_id.to_string(),
-        stage_label: stage_label.to_string(),
+    state.surface_summary_overlay = Some(SurfaceSummaryOverlay {
+        surface: surface.clone(),
+        stage: stage_id_string,
+        stage_label: stage_label_string,
         state: stage_state.clone(),
         summary: preserve_summary,
         in_flight: true,
@@ -5495,7 +5539,7 @@ fn trigger_stage_summary(
     drop(existing);
 
     let cfg = config.clone();
-    let stage_owned = stage_id.to_string();
+    let surface_owned = surface.clone();
     let state_clone = stage_state;
     let event_tx = match state.event_tx.clone() {
         Some(t) => t,
@@ -5505,8 +5549,8 @@ fn trigger_stage_summary(
     let proj = project_dir.to_path_buf();
 
     tokio::spawn(async move {
-        let outcome = summarize_stage(
-            &stage_owned,
+        let outcome = summarize_surface(
+            surface_owned.clone(),
             state_clone,
             artifacts,
             log_tail,
@@ -5527,11 +5571,147 @@ fn trigger_stage_summary(
                 error: outcome.error.clone(),
             },
         );
-        let _ = event_tx.send(AppEvent::StageSummaryReady {
-            stage: stage_owned,
+        let _ = event_tx.send(AppEvent::SurfaceSummaryReady {
+            surface: surface_owned,
             outcome,
         });
     });
+}
+
+fn handle_surface_click(
+    state: &mut AppState,
+    project_dir: &Path,
+    config: &Config,
+    surface: ClickableSurface,
+) {
+    // If the user explicitly prefers file-open over summary AND the surface is
+    // a pipeline stage with a known fallback file, open that file instead.
+    if let ClickableSurface::PipelineStage(ref stage_id) = surface {
+        if config.prefer_file_open_over_summary {
+            if let Some(path) = stage_fallback_file(stage_id, project_dir) {
+                navigate_explorer_to_file(state, project_dir, &path);
+                return;
+            }
+        }
+    }
+    let already_in_flight = state
+        .surface_summary_overlay
+        .as_ref()
+        .is_some_and(|o| o.surface == surface && o.in_flight);
+    if !already_in_flight {
+        trigger_surface_summary(state, project_dir, config, surface, false);
+    }
+}
+
+fn surface_summary_inputs(
+    surface: &ClickableSurface,
+    state: &AppState,
+    project_dir: &std::path::Path,
+) -> (Vec<std::path::PathBuf>, Option<String>) {
+    match surface {
+        ClickableSurface::PipelineStage(stage_id) => stage_summary_inputs(stage_id, project_dir),
+        ClickableSurface::TaskQueue => (
+            vec![ContractPaths::resolve(project_dir).tasks_path],
+            None,
+        ),
+        ClickableSurface::Narrative => {
+            let mut s = String::new();
+            if let Some(brief) = state.last_commit_brief.as_ref() {
+                s.push_str(&format!(
+                    "Last commit: {} ({}, {})\n",
+                    brief.subject, brief.short_sha, brief.relative_age
+                ));
+            } else {
+                s.push_str("Last commit: none\n");
+            }
+            if let Some(task) = state.current_task.as_ref() {
+                s.push_str(&format!(
+                    "Current task: {} -- {}\n",
+                    task.id,
+                    task.short_desc(120)
+                ));
+            } else {
+                s.push_str("Current task: none\n");
+            }
+            if let Some(stage) = state.current_agent_stage_id.as_deref() {
+                s.push_str(&format!("Active stage: {}\n", stage));
+            }
+            if let Some(hint) = state.next_task_hint.as_ref() {
+                s.push_str(&format!("Next task hint: {}\n", hint));
+            }
+            s.push_str(&format!("Events received: {}\n", state.events_received));
+            let truncated = crate::utils::truncate_str(&s, 4096).to_string();
+            (vec![], Some(truncated))
+        }
+        ClickableSurface::SkillCitations => {
+            let mut s = String::new();
+            if let Some(summary) = state.skill_citation_summary.as_ref() {
+                s.push_str(&format!(
+                    "DB reachable: {}\n",
+                    if summary.db_available { "yes" } else { "no" }
+                ));
+                s.push_str(&format!(
+                    "Session citations: {}\n",
+                    summary.session_citations
+                ));
+                s.push_str(&format!(
+                    "Session unique skills cited: {}\n",
+                    summary.session_skills_cited
+                ));
+                s.push_str("Top skills:\n");
+                for row in summary.top_skills.iter().take(8) {
+                    s.push_str(&format!("- {}\n", row.skill_name));
+                }
+                if !state.session_skill_citations_set.is_empty() {
+                    s.push_str("Cited this session:\n");
+                    for name in state.session_skill_citations_set.iter().take(8) {
+                        s.push_str(&format!("- {}\n", name));
+                    }
+                }
+            } else {
+                s.push_str("no skill citation data loaded");
+            }
+            let truncated = crate::utils::truncate_str(&s, 4096).to_string();
+            (vec![], Some(truncated))
+        }
+        ClickableSurface::Stats => {
+            let mut s = String::new();
+            s.push_str(&format!(
+                "Session cost: ${:.4}\n",
+                state.session_cost_usd
+            ));
+            s.push_str(&format!("Input tokens: {}\n", state.session_input_tokens));
+            s.push_str(&format!(
+                "Output tokens: {}\n",
+                state.session_output_tokens
+            ));
+            s.push_str(&format!(
+                "Completed: {} / {} tasks\n",
+                state.completed_count, state.total_count
+            ));
+            if let Some(report) = state.eval_report_cache.as_ref() {
+                s.push_str(&format!("Eval cache present: {} stages\n", report.stages.len()));
+            } else {
+                s.push_str("Eval report: not yet written\n");
+            }
+            let truncated = crate::utils::truncate_str(&s, 4096).to_string();
+            (vec![], Some(truncated))
+        }
+        ClickableSurface::AgentOutput => {
+            let mut chrono: Vec<String> = state
+                .agent_output
+                .iter()
+                .rev()
+                .take(80)
+                .cloned()
+                .collect();
+            chrono.reverse();
+            let joined = chrono.join("\n");
+            let truncated = crate::utils::truncate_str(&joined, 4096).to_string();
+            (vec![], Some(truncated))
+        }
+        ClickableSurface::ExplorerFile(path) => (vec![path.clone()], None),
+    }
 }
 
 /// Map a pipeline click to the artifact file path for that stage.
@@ -5577,6 +5757,58 @@ fn pipeline_click_artifact(
         }
         tui::PipelineClick::Discover => Some(ContractPaths::resolve(project_dir).tasks_path),
         tui::PipelineClick::Ship | tui::PipelineClick::Patterns => None,
+    }
+}
+
+fn surface_has_fallback_file(overlay: Option<&SurfaceSummaryOverlay>) -> bool {
+    let Some(o) = overlay else { return false };
+    match &o.surface {
+        ClickableSurface::PipelineStage(stage_id) => stage_id != "ship",
+        ClickableSurface::TaskQueue => true,
+        ClickableSurface::ExplorerFile(_) => true,
+        ClickableSurface::Narrative
+        | ClickableSurface::SkillCitations
+        | ClickableSurface::Stats
+        | ClickableSurface::AgentOutput => false,
+    }
+}
+
+fn surface_open_file(
+    state: &mut AppState,
+    project_dir: &std::path::Path,
+    config: &Config,
+    overlay: &SurfaceSummaryOverlay,
+) {
+    let resolved: Option<std::path::PathBuf> = match &overlay.surface {
+        ClickableSurface::PipelineStage(stage_id) => stage_fallback_file(stage_id, project_dir),
+        ClickableSurface::TaskQueue => Some(ContractPaths::resolve(project_dir).tasks_path),
+        ClickableSurface::ExplorerFile(path) => Some(path.clone()),
+        _ => None,
+    };
+    match resolved {
+        Some(path) if path.exists() => {
+            state.surface_summary_overlay = None;
+            handle_pipeline_click_target(
+                state,
+                project_dir,
+                config,
+                PipelineClickTarget::OpenFile(path),
+            );
+        }
+        Some(path) => {
+            if let Some(o) = state.surface_summary_overlay.as_mut() {
+                o.last_error = Some(format!(
+                    "No file to open: {} (not written yet)",
+                    path.display()
+                ));
+            }
+        }
+        None => {
+            if let Some(o) = state.surface_summary_overlay.as_mut() {
+                o.last_error =
+                    Some(format!("No fallback file defined for {}", overlay.stage_label));
+            }
+        }
     }
 }
 
@@ -5695,6 +5927,7 @@ fn handle_startup_mouse_at_for_running(
     state: &mut AppState,
     mouse: crossterm::event::MouseEvent,
     terminal_size: (u16, u16),
+    config: &Config,
 ) {
     use crossterm::event::{MouseButton, MouseEventKind};
     if state.confirm_quit && matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
@@ -5733,7 +5966,56 @@ fn handle_startup_mouse_at_for_running(
     let preview_area = middle_cols[1];
 
     match mouse.kind {
+        MouseEventKind::Down(MouseButton::Right) => {
+            // Right-click opens an AI-summary context menu on a file entry.
+            if tui::rect_contains(explorer_area, mouse.column, mouse.row) {
+                if let Some(ref explorer) = state.running_explorer {
+                    let inner_top = explorer_area.y + 1;
+                    let inner_bottom = explorer_area.y + explorer_area.height.saturating_sub(1);
+                    if mouse.row >= inner_top && mouse.row < inner_bottom {
+                        let relative_row = (mouse.row - inner_top) as usize;
+                        let vis = explorer.visible_indices();
+                        let vis_index = explorer.explorer_scroll + relative_row;
+                        if let Some(&tree_idx) = vis.get(vis_index) {
+                            if let Some(entry) = explorer.file_tree.get(tree_idx) {
+                                if !entry.is_dir {
+                                    state.explorer_context_menu = Some(ExplorerContextMenu {
+                                        anchor_col: mouse.column,
+                                        anchor_row: mouse.row,
+                                        file_path: entry.path.clone(),
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            return;
+        }
         MouseEventKind::Down(MouseButton::Left) => {
+            // If a context menu is open, the click either fires the AI-summary
+            // action (when on the label row) or dismisses the menu.
+            if let Some(menu) = state.explorer_context_menu.clone() {
+                if let Some(hit) = tui::context_menu_hit_test(&menu, mouse.column, mouse.row) {
+                    state.explorer_context_menu = None;
+                    if hit == tui::ContextMenuHit::AiSummary {
+                        let project_dir = state
+                            .buildloop_dir
+                            .parent()
+                            .unwrap_or(std::path::Path::new("."))
+                            .to_path_buf();
+                        handle_surface_click(
+                            state,
+                            &project_dir,
+                            config,
+                            ClickableSurface::ExplorerFile(menu.file_path),
+                        );
+                    }
+                    return;
+                }
+                // Click outside the menu: dismiss and continue normal handling.
+                state.explorer_context_menu = None;
+            }
             // Check toggle buttons first (border row)
             if let Some(ref explorer) = state.running_explorer {
                 if let Some(tui::StartupMouseTarget::ExpandAllToggle) =

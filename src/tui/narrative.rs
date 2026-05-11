@@ -7,10 +7,15 @@ use ratatui::{
     Frame,
 };
 
-use crate::app::AppState;
+use crate::app::{AppState, TuiPane};
 use crate::utils::truncate_str;
 
-pub(super) fn render_narrative(frame: &mut Frame, area: Rect, state: &AppState) {
+pub(super) fn render_narrative(
+    frame: &mut Frame,
+    area: Rect,
+    state: &AppState,
+    focused: TuiPane,
+) {
     let inner_width = area.width.saturating_sub(4) as usize;
     let body_max = inner_width.saturating_sub(7);
 
@@ -79,15 +84,38 @@ pub(super) fn render_narrative(frame: &mut Frame, area: Rect, state: &AppState) 
         Span::styled(next_body, text),
     ]);
 
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(state.tui_theme.border))
-        .title(Span::styled(
+    let title_line = if focused == TuiPane::Narrative {
+        Line::from(vec![
+            Span::styled(
+                " Narrative ",
+                Style::default()
+                    .fg(state.tui_theme.info)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                " (click for AI summary) ",
+                Style::default().fg(state.tui_theme.muted),
+            ),
+        ])
+    } else {
+        Line::from(Span::styled(
             " Narrative ",
             Style::default()
                 .fg(state.tui_theme.info)
                 .add_modifier(Modifier::BOLD),
-        ));
+        ))
+    };
+    let border_style = if focused == TuiPane::Narrative {
+        Style::default()
+            .fg(state.tui_theme.accent)
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(state.tui_theme.border)
+    };
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(border_style)
+        .title(title_line);
 
     let paragraph = Paragraph::new(vec![line1, line2, line3]).block(block);
     frame.render_widget(paragraph, area);
@@ -109,7 +137,7 @@ mod tests {
         let backend = TestBackend::new(80, 6);
         let mut terminal = Terminal::new(backend).expect("failed to create terminal");
         terminal
-            .draw(|frame| render_narrative(frame, frame.area(), state))
+            .draw(|frame| render_narrative(frame, frame.area(), state, TuiPane::AgentOutput))
             .expect("failed to draw");
         let buffer = terminal.backend().buffer();
         let area = *buffer.area();

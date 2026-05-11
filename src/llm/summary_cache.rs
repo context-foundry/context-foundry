@@ -24,6 +24,7 @@ impl StageState {
 
 #[derive(Debug, Clone)]
 pub struct CacheKeyInput<'a> {
+    pub surface_tag: &'a str,
     pub stage: &'a str,
     pub state: &'a StageState,
     pub artifacts: &'a [PathBuf],
@@ -42,6 +43,8 @@ pub fn global() -> &'static StageSummaryCache {
 
 pub fn compute_key(input: &CacheKeyInput<'_>) -> String {
     let mut hasher = blake3::Hasher::new();
+    hasher.update(input.surface_tag.as_bytes());
+    hasher.update(b"\0");
     hasher.update(input.stage.as_bytes());
     hasher.update(b"|");
     hasher.update(input.state.as_str().as_bytes());
@@ -104,6 +107,7 @@ mod tests {
         let artifacts = vec![path.clone()];
 
         let key1 = compute_key(&CacheKeyInput {
+            surface_tag: "pipeline_stage",
             stage: "plan-review",
             state: &StageState::Running,
             artifacts: &artifacts,
@@ -113,6 +117,7 @@ mod tests {
         std::fs::write(&path, b"b").unwrap();
 
         let key2 = compute_key(&CacheKeyInput {
+            surface_tag: "pipeline_stage",
             stage: "plan-review",
             state: &StageState::Running,
             artifacts: &artifacts,
@@ -129,11 +134,13 @@ mod tests {
         let artifacts = vec![path];
 
         let key_running = compute_key(&CacheKeyInput {
+            surface_tag: "pipeline_stage",
             stage: "plan-review",
             state: &StageState::Running,
             artifacts: &artifacts,
         });
         let key_complete = compute_key(&CacheKeyInput {
+            surface_tag: "pipeline_stage",
             stage: "plan-review",
             state: &StageState::Complete,
             artifacts: &artifacts,

@@ -10,7 +10,7 @@ use ratatui::{
 };
 
 use crate::app::AppState;
-use crate::app::StageSummaryOverlay;
+use crate::app::{ExplorerContextMenu, SurfaceSummaryOverlay};
 use crate::config::Config;
 use crate::utils::truncate_str;
 
@@ -2085,10 +2085,10 @@ fn rect_contains_xy(r: Rect, col: u16, row: u16) -> bool {
     col >= r.x && col < r.x + r.width && row >= r.y && row < r.y + r.height
 }
 
-pub fn render_stage_summary_overlay(
+pub fn render_surface_summary_overlay(
     frame: &mut Frame,
     theme: &crate::tui::theme::TuiTheme,
-    overlay: &StageSummaryOverlay,
+    overlay: &SurfaceSummaryOverlay,
 ) {
     let area = frame.area();
     let modal = match summary_modal_rect(area) {
@@ -2852,6 +2852,67 @@ pub fn render_git_init_offer(
     }
 }
 
+// ─── Explorer right-click context menu ───────────────────────
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ContextMenuHit {
+    AiSummary,
+}
+
+fn context_menu_rect(menu: &ExplorerContextMenu, frame_area: Rect) -> Rect {
+    let width: u16 = 18;
+    let height: u16 = 3;
+    let x = menu
+        .anchor_col
+        .min(frame_area.x + frame_area.width.saturating_sub(width));
+    let y = menu
+        .anchor_row
+        .min(frame_area.y + frame_area.height.saturating_sub(height));
+    Rect::new(x, y, width, height)
+}
+
+pub fn render_explorer_context_menu(
+    frame: &mut Frame,
+    theme: &crate::tui::theme::TuiTheme,
+    menu: &ExplorerContextMenu,
+) {
+    let area = frame.area();
+    let rect = context_menu_rect(menu, area);
+    frame.render_widget(Clear, rect);
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Plain)
+        .border_style(Style::default().fg(theme.accent))
+        .style(Style::default().bg(theme.surface).fg(theme.text));
+    let inner = block.inner(rect);
+    frame.render_widget(block, rect);
+    let line = Paragraph::new(Line::from(Span::styled(
+        " AI summary ",
+        Style::default().fg(theme.text),
+    )));
+    frame.render_widget(line, inner);
+}
+
+pub fn context_menu_hit_test(
+    menu: &ExplorerContextMenu,
+    col: u16,
+    row: u16,
+) -> Option<ContextMenuHit> {
+    // Use a generous frame area so the rect calculation only clamps when the
+    // anchor was placed beyond a sensible terminal size; click hit-tests do
+    // not have access to the live frame area so we assume "fits in 200x80".
+    let frame_area = Rect::new(0, 0, 200, 80);
+    let rect = context_menu_rect(menu, frame_area);
+    if col >= rect.x + 1
+        && col < rect.x + rect.width.saturating_sub(1)
+        && row == rect.y + 1
+    {
+        Some(ContextMenuHit::AiSummary)
+    } else {
+        None
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2919,5 +2980,18 @@ mod tests {
             model_picker_hit_test(parent, &picker, popup.x + 1, popup.y + 3),
             None
         );
+    }
+
+    #[test]
+    fn context_menu_hit_test_returns_ai_summary_on_label_row() {
+        let menu = ExplorerContextMenu {
+            anchor_col: 10,
+            anchor_row: 5,
+            file_path: std::path::PathBuf::from("/x/y.rs"),
+        };
+        let hit = context_menu_hit_test(&menu, 11, 6);
+        assert_eq!(hit, Some(ContextMenuHit::AiSummary));
+        let miss = context_menu_hit_test(&menu, 0, 0);
+        assert!(miss.is_none());
     }
 }

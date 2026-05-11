@@ -2732,3 +2732,30 @@ fn pipeline_click_respects_prefer_file_open_over_summary() {
         "expected OpenFile for discover with prefer_file_open_over_summary=true"
     );
 }
+
+#[test]
+fn handle_surface_click_opens_surface_summary_overlay_for_each_variant() {
+    use crate::app::ClickableSurface;
+    let dir = temp_project_dir("surface_click");
+    let cfg = Config::default();
+    let cases: Vec<ClickableSurface> = vec![
+        ClickableSurface::TaskQueue,
+        ClickableSurface::Narrative,
+        ClickableSurface::SkillCitations,
+        ClickableSurface::Stats,
+        ClickableSurface::AgentOutput,
+        ClickableSurface::PipelineStage("plan".to_string()),
+        ClickableSurface::ExplorerFile(PathBuf::from("/tmp/x.rs")),
+    ];
+    for surface in cases {
+        let mut state = AppState::new(dir.join(".buildloop"));
+        super::handle_surface_click(&mut state, &dir, &cfg, surface.clone());
+        assert!(
+            state.surface_summary_overlay.is_some(),
+            "expected overlay for surface {:?}",
+            surface.tag()
+        );
+        let ov = state.surface_summary_overlay.as_ref().unwrap();
+        assert_eq!(ov.surface.tag(), surface.tag());
+    }
+}

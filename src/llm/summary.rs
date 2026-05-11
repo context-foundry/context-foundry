@@ -5,17 +5,20 @@ use anyhow::{anyhow, Context as _, Result};
 use tokio::process::Command;
 use tokio::time::timeout;
 
+use crate::app::ClickableSurface;
 use crate::config::Config;
 use crate::llm::summary_cache::{
     compute_key, global as cache_global, insert as cache_insert, invalidate as cache_invalidate,
     lookup as cache_lookup, CacheKeyInput, StageState,
 };
-use crate::prompts::stage_summary_prompt;
+use crate::prompts::surface_summary_prompt;
 use crate::utils::truncate_str;
 
 #[derive(Debug, Clone)]
 pub struct SummaryOutcome {
+    pub surface_tag: String,
     pub stage: String,
+    pub surface_label: String,
     pub state: StageState,
     pub summary: String,
     pub cache_hit: bool,
@@ -39,8 +42,8 @@ pub fn read_artifact_excerpt(path: &Path, max_bytes: usize) -> Option<String> {
     }
 }
 
-pub async fn summarize_stage(
-    stage: &str,
+pub async fn summarize_surface(
+    surface: ClickableSurface,
     state: StageState,
     artifacts: Vec<PathBuf>,
     log_tail: Option<String>,
@@ -48,8 +51,18 @@ pub async fn summarize_stage(
     force_refresh: bool,
 ) -> SummaryOutcome {
     let started = Instant::now();
+    let tag = surface.tag();
+    let label = surface.label();
+    // For pipeline surfaces, the canonical id is the stage id; for everything
+    // else the tag itself is stable enough to act as the cache "stage" string.
+    let stage_str = match &surface {
+        ClickableSurface::PipelineStage(sid) => sid.clone(),
+        _ => tag.to_string(),
+    };
+
     let key_input = CacheKeyInput {
-        stage,
+        surface_tag: tag,
+        stage: &stage_str,
         state: &state,
         artifacts: &artifacts,
     };
@@ -59,7 +72,9 @@ pub async fn summarize_stage(
     if !force_refresh {
         if let Some(cached) = cache_lookup(cache, &key) {
             return SummaryOutcome {
-                stage: stage.to_string(),
+                surface_tag: tag.to_string(),
+                stage: stage_str.clone(),
+                surface_label: label,
                 state,
                 summary: cached,
                 cache_hit: true,
@@ -82,8 +97,8 @@ pub async fn summarize_stage(
         }
     }
 
-    let prompt = stage_summary_prompt(
-        stage,
+    let prompt = surface_summary_prompt(
+        &surface,
         &state,
         &excerpts,
         log_tail.as_deref().unwrap_or(""),
@@ -96,7 +111,9 @@ pub async fn summarize_stage(
             let trimmed = truncate_str(text.trim(), 4096).to_string();
             cache_insert(cache, key, trimmed.clone());
             SummaryOutcome {
-                stage: stage.to_string(),
+                surface_tag: tag.to_string(),
+                stage: stage_str,
+                surface_label: label,
                 state,
                 summary: trimmed,
                 cache_hit: false,
@@ -109,10 +126,12 @@ pub async fn summarize_stage(
         Err(e) => {
             let fallback = format!(
                 "summary unavailable -- check the log directly at .buildloop/logs/{}.jsonl ({})",
-                stage, e
+                stage_str, e
             );
             SummaryOutcome {
-                stage: stage.to_string(),
+                surface_tag: tag.to_string(),
+                stage: stage_str,
+                surface_label: label,
                 state,
                 summary: fallback,
                 cache_hit: false,
@@ -177,8 +196,8 @@ mod tests {
         cfg.summary_provider = "nonexistent".into();
         cfg.summary_model = "x".into();
 
-        let outcome = summarize_stage(
-            "plan-review",
+        let outcome = summarize_surface(
+            ClickableSurface::PipelineStage("plan-review".to_string()),
             StageState::Running,
             vec![],
             None,
@@ -194,5 +213,6 @@ mod tests {
             outcome.summary
         );
         assert!(!outcome.cache_hit, "cache_hit must be false on miss");
+        assert_eq!(outcome.surface_label, "plan-review");
     }
 }

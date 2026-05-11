@@ -51,6 +51,48 @@ pub enum TuiPane {
     TaskQueue,
     PatternsLearned,
     Extensions,
+    Narrative,
+    Stats,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ClickableSurface {
+    PipelineStage(String),
+    TaskQueue,
+    Narrative,
+    SkillCitations,
+    Stats,
+    AgentOutput,
+    ExplorerFile(std::path::PathBuf),
+}
+
+impl ClickableSurface {
+    pub fn tag(&self) -> &'static str {
+        match self {
+            ClickableSurface::PipelineStage(_) => "pipeline_stage",
+            ClickableSurface::TaskQueue => "task_queue",
+            ClickableSurface::Narrative => "narrative",
+            ClickableSurface::SkillCitations => "skill_citations",
+            ClickableSurface::Stats => "stats",
+            ClickableSurface::AgentOutput => "agent_output",
+            ClickableSurface::ExplorerFile(_) => "explorer_file",
+        }
+    }
+    pub fn label(&self) -> String {
+        match self {
+            ClickableSurface::PipelineStage(s) => s.clone(),
+            ClickableSurface::TaskQueue => "Task Queue".to_string(),
+            ClickableSurface::Narrative => "Narrative".to_string(),
+            ClickableSurface::SkillCitations => "Skill Citations".to_string(),
+            ClickableSurface::Stats => "Stats".to_string(),
+            ClickableSurface::AgentOutput => "Agent Output".to_string(),
+            ClickableSurface::ExplorerFile(p) => p
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("file")
+                .to_string(),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -1332,7 +1374,8 @@ pub struct DualBuildState {
 }
 
 #[derive(Debug, Clone)]
-pub struct StageSummaryOverlay {
+pub struct SurfaceSummaryOverlay {
+    pub surface: ClickableSurface,
     pub stage: String,
     pub stage_label: String,
     pub state: crate::llm::summary_cache::StageState,
@@ -1349,6 +1392,13 @@ pub struct StageSummaryOverlay {
     /// to drive the spinner frame and the elapsed-seconds counter while
     /// `in_flight && summary.is_none()`.
     pub started_at: std::time::Instant,
+}
+
+#[derive(Debug, Clone)]
+pub struct ExplorerContextMenu {
+    pub anchor_col: u16,
+    pub anchor_row: u16,
+    pub file_path: std::path::PathBuf,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1493,7 +1543,9 @@ pub struct AppState {
     pub focused_pane: TuiPane,
     pub running_explorer: Option<StartupState>,
     pub show_running_explorer: bool,
-    pub stage_summary_overlay: Option<StageSummaryOverlay>,
+    pub surface_summary_overlay: Option<SurfaceSummaryOverlay>,
+    pub explorer_context_menu: Option<ExplorerContextMenu>,
+    pub mouse_over_separator: bool,
     pub available_extensions: Vec<ExtensionDisplayInfo>,
     pub extensions_cursor: usize,
     /// Externally-discovered skills surfaced under the "External Skills"
@@ -1687,7 +1739,9 @@ impl AppState {
             focused_pane: TuiPane::Explorer,
             running_explorer: None,
             show_running_explorer: false,
-            stage_summary_overlay: None,
+            surface_summary_overlay: None,
+            explorer_context_menu: None,
+            mouse_over_separator: false,
             available_extensions: Vec::new(),
             extensions_cursor: 0,
             available_external_skills: Vec::new(),
@@ -1960,8 +2014,8 @@ pub(super) enum AppEvent {
         codex_available: bool,
         copilot_available: bool,
     },
-    StageSummaryReady {
-        stage: String,
+    SurfaceSummaryReady {
+        surface: ClickableSurface,
         outcome: crate::llm::summary::SummaryOutcome,
     },
 }

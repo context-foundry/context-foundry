@@ -1,5 +1,6 @@
 // T23.1: Headless build ran successfully — confirmed by autonomous build loop.
 
+use crate::app::ClickableSurface;
 use crate::llm::summary_cache::StageState;
 
 /// Authoritative skill-citation instruction injected into the planner prompts'
@@ -2446,6 +2447,191 @@ pub fn stage_summary_prompt_discover(
     out
 }
 
+pub fn surface_summary_prompt(
+    surface: &ClickableSurface,
+    state: &StageState,
+    artifacts: &[(String, String)],
+    log_tail: &str,
+) -> String {
+    match surface {
+        ClickableSurface::PipelineStage(stage_id) => {
+            stage_summary_prompt(stage_id, state, artifacts, log_tail)
+        }
+        ClickableSurface::TaskQueue => task_queue_summary_prompt(state, artifacts, log_tail),
+        ClickableSurface::Narrative => narrative_summary_prompt(state, artifacts, log_tail),
+        ClickableSurface::SkillCitations => {
+            skill_citations_summary_prompt(state, artifacts, log_tail)
+        }
+        ClickableSurface::Stats => stats_summary_prompt(state, artifacts, log_tail),
+        ClickableSurface::AgentOutput => agent_output_summary_prompt(state, artifacts, log_tail),
+        ClickableSurface::ExplorerFile(path) => explorer_file_summary_prompt(
+            path.to_string_lossy().as_ref(),
+            state,
+            artifacts,
+            log_tail,
+        ),
+    }
+}
+
+pub fn task_queue_summary_prompt(
+    state: &StageState,
+    artifacts: &[(String, String)],
+    log_tail: &str,
+) -> String {
+    let mut out = String::with_capacity(2048);
+    out.push_str(&format!(
+        "Pane: TASK QUEUE\nCurrent state: {}\n\n",
+        state.as_str()
+    ));
+    for (label, body) in artifacts {
+        out.push_str(&format!("=== {} ===\n{}\n", label, body));
+    }
+    if !log_tail.is_empty() {
+        out.push_str(&format!("=== recent log ===\n{}\n", log_tail));
+    }
+    out.push_str(
+        "\nWrite a 4-8-sentence friendly-but-technical summary of the Task Queue. \
+         List the next 3 pending task IDs and their short descriptions, call out any \
+         [fast]/[strict] override flags, note the current QRPBA indicators on \
+         completed-but-visible tasks, and mention how many tasks remain. If TASKS.md is \
+         missing or empty, say so plainly. Cap output at 500 tokens. Plain text only, no \
+         markdown headers.",
+    );
+    out
+}
+
+pub fn narrative_summary_prompt(
+    state: &StageState,
+    artifacts: &[(String, String)],
+    log_tail: &str,
+) -> String {
+    let mut out = String::with_capacity(2048);
+    out.push_str(&format!(
+        "Pane: NARRATIVE\nCurrent state: {}\n\n",
+        state.as_str()
+    ));
+    for (label, body) in artifacts {
+        out.push_str(&format!("=== {} ===\n{}\n", label, body));
+    }
+    if !log_tail.is_empty() {
+        out.push_str(&format!("=== recent log ===\n{}\n", log_tail));
+    }
+    out.push_str(
+        "\nWrite a 4-8-sentence friendly-but-technical summary of the Narrative pane. \
+         Cite the last commit subject and short SHA, the current task id and active stage, \
+         and the next queued task hint. Mention how long the current stage has been running \
+         and how many agent events have been received in this session. Cap output at 500 \
+         tokens. Plain text only, no markdown headers.",
+    );
+    out
+}
+
+pub fn skill_citations_summary_prompt(
+    state: &StageState,
+    artifacts: &[(String, String)],
+    log_tail: &str,
+) -> String {
+    let mut out = String::with_capacity(2048);
+    out.push_str(&format!(
+        "Pane: SKILL CITATIONS\nCurrent state: {}\n\n",
+        state.as_str()
+    ));
+    for (label, body) in artifacts {
+        out.push_str(&format!("=== {} ===\n{}\n", label, body));
+    }
+    if !log_tail.is_empty() {
+        out.push_str(&format!("=== recent log ===\n{}\n", log_tail));
+    }
+    out.push_str(
+        "\nWrite a 4-8-sentence friendly-but-technical summary of the Skill Citations pane. \
+         From the artifacts above (telemetry rows and any session-cited skill list), name \
+         the top three cited skills by name, call out any cited this session, and state \
+         whether the skills telemetry database is reachable. If no citations have happened \
+         yet, say so plainly. Cap output at 500 tokens. Plain text only, no markdown headers.",
+    );
+    out
+}
+
+pub fn stats_summary_prompt(
+    state: &StageState,
+    artifacts: &[(String, String)],
+    log_tail: &str,
+) -> String {
+    let mut out = String::with_capacity(2048);
+    out.push_str(&format!(
+        "Pane: STATS\nCurrent state: {}\n\n",
+        state.as_str()
+    ));
+    for (label, body) in artifacts {
+        out.push_str(&format!("=== {} ===\n{}\n", label, body));
+    }
+    if !log_tail.is_empty() {
+        out.push_str(&format!("=== recent log ===\n{}\n", log_tail));
+    }
+    out.push_str(
+        "\nWrite a 4-8-sentence friendly-but-technical summary of the Stats pane. Cite \
+         session cost (USD), input/output tokens, completed task count, eval-report \
+         top-line, and how the current run's pace compares to the displayed estimates. If \
+         no eval report exists yet, say so plainly. Cap output at 500 tokens. Plain text \
+         only, no markdown headers.",
+    );
+    out
+}
+
+pub fn agent_output_summary_prompt(
+    state: &StageState,
+    artifacts: &[(String, String)],
+    log_tail: &str,
+) -> String {
+    let mut out = String::with_capacity(2048);
+    out.push_str(&format!(
+        "Pane: AGENT OUTPUT\nCurrent state: {}\n\n",
+        state.as_str()
+    ));
+    for (label, body) in artifacts {
+        out.push_str(&format!("=== {} ===\n{}\n", label, body));
+    }
+    if !log_tail.is_empty() {
+        out.push_str(&format!("=== recent log ===\n{}\n", log_tail));
+    }
+    out.push_str(
+        "\nWrite a 4-8-sentence friendly-but-technical summary of the agent output buffer. \
+         Lead with what the agent is currently doing (tool calls, text deltas, idle), cite \
+         the two or three most recent specific actions or file paths from the tail above, \
+         and call out any error or warning messages. If the buffer is empty, say so \
+         plainly. Cap output at 500 tokens. Plain text only, no markdown headers.",
+    );
+    out
+}
+
+pub fn explorer_file_summary_prompt(
+    file_path: &str,
+    state: &StageState,
+    artifacts: &[(String, String)],
+    log_tail: &str,
+) -> String {
+    let mut out = String::with_capacity(2048);
+    out.push_str(&format!(
+        "Pane: EXPLORER FILE\nFile: {}\nCurrent state: {}\n\n",
+        file_path,
+        state.as_str()
+    ));
+    for (label, body) in artifacts {
+        out.push_str(&format!("=== {} ===\n{}\n", label, body));
+    }
+    if !log_tail.is_empty() {
+        out.push_str(&format!("=== recent log ===\n{}\n", log_tail));
+    }
+    out.push_str(
+        "\nWrite a 4-8-sentence friendly-but-technical summary of the selected file. \
+         Describe its purpose (what it is, what consumes it), call out the top-level items \
+         (functions/structs/sections), and tie it to the currently running task if \
+         relevant. If the file is empty or binary, say so plainly. Cap output at 500 \
+         tokens. Plain text only, no markdown headers.",
+    );
+    out
+}
+
 pub fn pattern_extraction_prompt(task_id: &str, task_desc: &str) -> String {
     format!(
         r#"Extract 0-5 reusable patterns from this task's build artifacts.
@@ -4087,5 +4273,41 @@ mod prompt_override_tests {
                 keyword
             );
         }
+    }
+
+    #[test]
+    fn surface_summary_prompt_dispatches_by_surface() {
+        use crate::app::ClickableSurface;
+        let cases: Vec<(ClickableSurface, &str)> = vec![
+            (ClickableSurface::TaskQueue, "Task Queue"),
+            (ClickableSurface::Narrative, "Narrative pane"),
+            (ClickableSurface::SkillCitations, "Skill Citations pane"),
+            (ClickableSurface::Stats, "Stats pane"),
+            (ClickableSurface::AgentOutput, "agent output buffer"),
+            (
+                ClickableSurface::ExplorerFile(std::path::PathBuf::from("/x/y.rs")),
+                "selected file",
+            ),
+        ];
+        for (surface, keyword) in cases {
+            let out = surface_summary_prompt(&surface, &StageState::Running, &[], "");
+            assert!(
+                out.contains(keyword),
+                "surface dispatcher missing keyword {} (surface tag {}); got: {}",
+                keyword,
+                surface.tag(),
+                out
+            );
+        }
+        let pipe = surface_summary_prompt(
+            &ClickableSurface::PipelineStage("query".to_string()),
+            &StageState::Running,
+            &[],
+            "",
+        );
+        assert!(
+            pipe.contains("HIGH priority"),
+            "PipelineStage(query) must delegate to stage_summary_prompt_query"
+        );
     }
 }
