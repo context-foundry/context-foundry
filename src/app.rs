@@ -1370,7 +1370,21 @@ fn handle_planning_event(state: &mut AppState, event: AppEvent, config: &Config)
                 state.welcome_message = msg;
             }
         }
-        AppEvent::SurfaceSummaryReady { .. } => {}
+        AppEvent::SurfaceSummaryReady { surface, outcome } => {
+            // Same logic as the running-phase handler -- without this the
+            // summarizer completes but the modal stays stuck on "summarizing..."
+            // because the overlay never gets the result populated.
+            if let Some(overlay) = state.surface_summary_overlay.as_mut() {
+                if overlay.surface == surface {
+                    overlay.in_flight = false;
+                    overlay.summary = Some(outcome.summary);
+                    overlay.last_cache_hit = outcome.cache_hit;
+                    overlay.last_model = outcome.model;
+                    overlay.last_provider = outcome.provider;
+                    overlay.last_error = outcome.error;
+                }
+            }
+        }
         AppEvent::NarrativeRefresh(brief) => {
             state.last_commit_brief = brief;
         }
