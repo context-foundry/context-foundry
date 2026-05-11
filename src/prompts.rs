@@ -2,6 +2,19 @@
 
 use crate::llm::summary_cache::StageState;
 
+/// Authoritative skill-citation instruction injected into the planner prompts'
+/// IMPORTANT block. Lives outside the non-authoritative reference-data block
+/// so the agent treats it as a real instruction rather than reference text.
+/// T1.30: closes the citation feedback loop by anchoring the footer
+/// requirement to the actual writing protocol of `current-plan.md`.
+pub const SKILL_CITATION_INSTRUCTION_PLAN: &str = "- If any of the skills you were shown actually shaped your plan, end `current-plan.md` with a final line of the form `**Skills referenced:** \\`skill-id-1\\`, \\`skill-id-2\\``. Cite skill_ids verbatim (kebab-case, backtick-quoted, comma-separated). Omit the line entirely if you applied no skills -- never write an empty footer or invent skill_ids.";
+
+/// Builder-flavored variant: the artifact is `build-claims.md`.
+pub const SKILL_CITATION_INSTRUCTION_BUILD: &str = "- If any skill from the planner's `**Skills referenced:**` footer (in `current-plan.md`) actually shaped your implementation, end `build-claims.md` with a final line of the form `**Skills referenced:** \\`skill-id-1\\`, \\`skill-id-2\\``. Cite skill_ids verbatim (kebab-case, backtick-quoted, comma-separated). Omit the line if no skill shaped the build -- never write an empty footer or invent skill_ids.";
+
+/// Reviewer-flavored variant: the artifact is `review-report.md`.
+pub const SKILL_CITATION_INSTRUCTION_REVIEW: &str = "- If any of the skills you were shown sharpened your audit (or if a finding maps directly to a skill's guidance), end `review-report.md` with a final line of the form `**Skills referenced:** \\`skill-id-1\\`, \\`skill-id-2\\``. Cite skill_ids verbatim (kebab-case, backtick-quoted, comma-separated). Omit the line if no skill informed the review -- never write an empty footer or invent skill_ids.";
+
 /// Cache-aligned system directives appended via `--append-system-prompt` to every
 /// spawned agent. Consolidates all static, role-invariant directives into a single
 /// block so the system prompt prefix stays byte-stable across invocations, enabling
@@ -459,6 +472,8 @@ pub fn planner_prompt(
         )
     };
 
+    let skill_citation = SKILL_CITATION_INSTRUCTION_PLAN;
+
     format!(
         r####"You are the {stage_label} agent for an autonomous build loop.
 
@@ -647,7 +662,8 @@ IMPORTANT:
 - Do NOT implement the code -- only write the plan
 - Do NOT modify {spec_file}, CLAUDE.md, {tasks_file}, or .buildloop/ (except current-plan.md)
 - Do NOT read files in .buildloop/logs/ -- these are internal agent logs, not project files
-- Write the plan to: .buildloop/current-plan.md{patterns_block}"####
+- Write the plan to: .buildloop/current-plan.md
+{skill_citation}{patterns_block}"####
     )
 }
 
@@ -679,6 +695,8 @@ pub fn planner_lookahead_prompt(
 --- END REFERENCE DATA ---"#
         )
     };
+
+    let skill_citation = SKILL_CITATION_INSTRUCTION_PLAN;
 
     format!(
         r#"You are the {stage_label} agent for an autonomous build loop.
@@ -758,7 +776,8 @@ IMPORTANT:
 - Do NOT implement the code -- only write the plan
 - Do NOT modify {spec_file}, CLAUDE.md, {tasks_file}, or .buildloop/ (except .buildloop/{plan_filename})
 - Do NOT read files in .buildloop/logs/
-- Write the plan to: .buildloop/{plan_filename}{patterns_block}"#
+- Write the plan to: .buildloop/{plan_filename}
+{skill_citation}{patterns_block}"#
     )
 }
 
@@ -773,6 +792,7 @@ pub fn builder_prompt(
     if let Some(s) = prompt_override.filter(|s| !s.trim().is_empty()) {
         return s.to_string();
     }
+    let skill_citation = SKILL_CITATION_INSTRUCTION_BUILD;
     format!(
         r#"You are the {stage_label} agent for an autonomous build loop.
 
@@ -830,6 +850,7 @@ RULES:
 - Do NOT read files in .buildloop/logs/
 - If a verification step fails, fix it before moving on
 - The claims file is your handoff to the auditor -- be specific, not vague
+{skill_citation}
 
 PATTERN FEEDBACK:
 If any injected patterns (shown in "Known Patterns" above) helped your work,
@@ -858,6 +879,7 @@ pub fn parallel_builder_prompt(
     if let Some(s) = prompt_override.filter(|s| !s.trim().is_empty()) {
         return s.to_string();
     }
+    let skill_citation = SKILL_CITATION_INSTRUCTION_BUILD;
     format!(
         r#"You are a PARALLEL {stage_label} agent for an autonomous build loop.
 
@@ -900,6 +922,7 @@ RULES:
 - Do NOT read files in .buildloop/logs/
 - If a verification step fails on YOUR files, fix it before moving on
 - The claims file is your handoff to the auditor -- be specific, not vague
+{skill_citation}
 
 PATTERN FEEDBACK:
 If any injected patterns (shown in "Known Patterns" above) helped your work,
@@ -931,6 +954,7 @@ pub fn builder_direct_prompt(
         Some(s) if !s.trim().is_empty() => format!("\n## Inline Plan (fast-mode)\n{}\n", s),
         _ => String::new(),
     };
+    let skill_citation = SKILL_CITATION_INSTRUCTION_BUILD;
     format!(
         r#"You are the {stage_label} agent for an autonomous build loop.
 
@@ -984,6 +1008,7 @@ RULES:
 - Do NOT read files in .buildloop/logs/
 - If a verification step fails, fix it before moving on
 - The claims file is your handoff to the auditor -- be specific, not vague
+{skill_citation}
 
 PATTERN FEEDBACK:
 If any injected patterns (shown in "Known Patterns" above) helped your work,
@@ -1049,6 +1074,8 @@ If a finding is a false positive, note it as such in your report with reasoning.
         Some(d) => format!("CHANGES (git diff):\n```diff\n{}\n```", d),
         None => format!("FILES CHANGED:\n{}", files_changed),
     };
+
+    let skill_citation = SKILL_CITATION_INSTRUCTION_REVIEW;
 
     format!(
         r#"Audit and validate these claims. Find the gaps.
@@ -1200,7 +1227,7 @@ VERDICT: PASS if all runtime checks pass and all HIGH/MEDIUM issues were fixed; 
 RULES:
 - Do NOT modify CLAUDE.md, {spec_file}, {tasks_file}, or .buildloop/ (except review-report.md)
 - Do NOT read files in .buildloop/logs/
-{patterns_block}{semgrep_block}"#
+{skill_citation}{patterns_block}{semgrep_block}"#
     )
 }
 
@@ -1836,6 +1863,8 @@ If a finding is a false positive, note it as such in your report with reasoning.
         None => format!("FILES CHANGED:\n{}", files_changed),
     };
 
+    let skill_citation = SKILL_CITATION_INSTRUCTION_REVIEW;
+
     format!(
         r#"You are the INTEGRATION reviewer for an autonomous build loop.
 Per-file reviews have already been completed. Your job is to find CROSS-FILE
@@ -2006,7 +2035,7 @@ RULES:
 - LOW findings: report only, do not fix
 - HIGH/MEDIUM findings: fix, then verify the fix works
 - Be surgical -- fix the issue, not the style
-{patterns_block}{semgrep_block}"#
+{skill_citation}{patterns_block}{semgrep_block}"#
     )
 }
 
@@ -2642,6 +2671,162 @@ mod tests {
             !reviewer.contains("BEGIN REFERENCE DATA"),
             "empty pattern context should not produce a reference block"
         );
+    }
+
+    #[test]
+    fn planner_prompt_includes_authoritative_skill_citation_instruction() {
+        // T1.30: the citation instruction must live in the IMPORTANT block,
+        // outside the BEGIN REFERENCE DATA wrap, so the agent treats it as a
+        // real instruction rather than reference text.
+        let out = planner_prompt(
+            "PLAN",
+            None,
+            "T1",
+            "test task",
+            "ignored",
+            "SPEC.md",
+            "TASKS.md",
+        );
+        assert!(
+            out.contains("**Skills referenced:**"),
+            "planner prompt must mention the Skills referenced footer; got: {}",
+            out
+        );
+        let footer_pos = out.find("**Skills referenced:**").unwrap();
+        let ref_pos = out.find("BEGIN REFERENCE DATA").unwrap_or(out.len());
+        assert!(
+            footer_pos < ref_pos,
+            "Skills referenced instruction must appear before BEGIN REFERENCE DATA"
+        );
+    }
+
+    #[test]
+    fn planner_lookahead_prompt_includes_authoritative_skill_citation_instruction() {
+        let out = planner_lookahead_prompt(
+            "PLAN",
+            None,
+            "T1",
+            "test task",
+            "ignored",
+            "SPEC.md",
+            "TASKS.md",
+            "current-plan.md",
+        );
+        assert!(out.contains("**Skills referenced:**"));
+        let footer_pos = out.find("**Skills referenced:**").unwrap();
+        let ref_pos = out.find("BEGIN REFERENCE DATA").unwrap_or(out.len());
+        assert!(footer_pos < ref_pos);
+    }
+
+    #[test]
+    fn builder_prompt_includes_skill_citation_instruction() {
+        let out = builder_prompt(
+            "BUILD",
+            None,
+            "T1",
+            "test task",
+            "SPEC.md",
+            "TASKS.md",
+        );
+        assert!(
+            out.contains("**Skills referenced:**"),
+            "builder prompt must instruct agent to write the Skills referenced footer in build-claims.md"
+        );
+        assert!(
+            out.contains("build-claims.md"),
+            "builder citation instruction must name build-claims.md as the artifact"
+        );
+    }
+
+    #[test]
+    fn parallel_builder_prompt_includes_skill_citation_instruction() {
+        let out = parallel_builder_prompt(
+            "BUILD",
+            None,
+            "T1",
+            "test task",
+            "- [MODIFY] src/foo.rs -- thing",
+            "SPEC.md",
+            "TASKS.md",
+        );
+        assert!(out.contains("**Skills referenced:**"));
+        assert!(out.contains("build-claims.md"));
+    }
+
+    #[test]
+    fn builder_direct_prompt_includes_skill_citation_instruction() {
+        let out = builder_direct_prompt(
+            "BUILD",
+            None,
+            "T1",
+            "test task",
+            None,
+            "SPEC.md",
+            "TASKS.md",
+        );
+        assert!(out.contains("**Skills referenced:**"));
+        assert!(out.contains("build-claims.md"));
+    }
+
+    #[test]
+    fn reviewer_prompt_includes_authoritative_skill_citation_instruction() {
+        let out = reviewer_prompt(
+            "T1",
+            "test task",
+            "src/foo.rs",
+            1,
+            "ignored",
+            None,
+            "SPEC.md",
+            "TASKS.md",
+            "",
+        );
+        assert!(out.contains("**Skills referenced:**"));
+        assert!(out.contains("review-report.md"));
+        let footer_pos = out.find("**Skills referenced:**").unwrap();
+        let ref_pos = out.find("BEGIN REFERENCE DATA").unwrap_or(out.len());
+        assert!(
+            footer_pos < ref_pos,
+            "Skills referenced instruction must appear before BEGIN REFERENCE DATA"
+        );
+    }
+
+    #[test]
+    fn reviewer_integration_prompt_includes_skill_citation_instruction() {
+        let out = reviewer_integration_prompt(
+            "T1",
+            "test task",
+            "src/foo.rs",
+            "[]",
+            "ignored",
+            None,
+            "SPEC.md",
+            "TASKS.md",
+            "",
+        );
+        assert!(out.contains("**Skills referenced:**"));
+        assert!(out.contains("review-report.md"));
+        let footer_pos = out.find("**Skills referenced:**").unwrap();
+        let ref_pos = out.find("BEGIN REFERENCE DATA").unwrap_or(out.len());
+        assert!(
+            footer_pos < ref_pos,
+            "Skills referenced instruction must appear before BEGIN REFERENCE DATA"
+        );
+    }
+
+    #[test]
+    fn skill_citation_instruction_constants_are_self_consistent() {
+        // Every variant must mention the literal footer marker and the verb
+        // 'Cite skill_ids verbatim' so audit cannot drift the wording silently.
+        for s in [
+            SKILL_CITATION_INSTRUCTION_PLAN,
+            SKILL_CITATION_INSTRUCTION_BUILD,
+            SKILL_CITATION_INSTRUCTION_REVIEW,
+        ] {
+            assert!(s.contains("**Skills referenced:**"), "{}", s);
+            assert!(s.contains("verbatim"), "{}", s);
+            assert!(s.starts_with("- "), "instruction must render as a bullet: {}", s);
+        }
     }
 
     #[test]

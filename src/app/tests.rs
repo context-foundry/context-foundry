@@ -2245,6 +2245,48 @@ fn test_patterns_used_event_increments_counters() {
 }
 
 #[test]
+fn test_patterns_used_with_skill_ids_increments_inject_counter() {
+    // T1.30: regression test for the skills branch wiring at src/app/build.rs:3574-3597.
+    // Asserts the emit shape (titles populated with kebab-case skill_ids,
+    // keywords_by_title keyed by skill_id) increments pattern_inject_count
+    // and pushes per-id entries into session_patterns.
+    let dir = temp_project_dir("skills-inject-count");
+    let mut state = AppState::new(dir.join(".buildloop"));
+    let config = Config::default();
+    let titles = vec![
+        "plan-file-token-overflow-planner".to_string(),
+        "shared-gate-in-derived-contexts-planner".to_string(),
+        "shared-gate-in-derived-contexts-reviewer".to_string(),
+    ];
+    let keywords_by_title = HashMap::from([
+        (
+            "plan-file-token-overflow-planner".to_string(),
+            vec!["plan".to_string(), "tokens".to_string()],
+        ),
+        (
+            "shared-gate-in-derived-contexts-planner".to_string(),
+            vec!["arc".to_string(), "gate".to_string()],
+        ),
+    ]);
+    handle_event(
+        &mut state,
+        AppEvent::LoopEvent(LoopEvent::PatternsUsed {
+            titles: titles.clone(),
+            keywords_by_title: keywords_by_title.clone(),
+        }),
+        &config,
+    );
+    assert_eq!(state.pattern_inject_count, 3);
+    assert_eq!(state.session_patterns.len(), 3);
+    assert!(state
+        .session_patterns
+        .iter()
+        .any(|p| p.title == "plan-file-token-overflow-planner"));
+    assert_eq!(state.active_pattern_keywords.len(), 2);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
 fn test_build_completion_warns_unused_extensions() {
     let dir = temp_project_dir("ext-warn-unused");
     let mut state = AppState::new(dir.join(".buildloop"));
