@@ -3346,7 +3346,9 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                     .direction(ratatui::layout::Direction::Vertical)
                     .constraints([
                         ratatui::layout::Constraint::Length(5),
-                        ratatui::layout::Constraint::Length(9),
+                        // Pipeline area: must match tui::render and running_layout.
+                        // Changed from 9 -> 5 in 48a3fae (single-row revert).
+                        ratatui::layout::Constraint::Length(5),
                         ratatui::layout::Constraint::Min(8),
                         ratatui::layout::Constraint::Length(8),
                         ratatui::layout::Constraint::Length(1),
@@ -3455,6 +3457,63 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                             || mouse.column + 1 == panes.separator_col)
                             && mouse.row >= panes.agent_output.y
                             && mouse.row < panes.agent_output.y + panes.agent_output.height;
+
+                        // Pipeline tile hover -- look up the full label so the
+                        // status bar can render a tooltip explaining the
+                        // single-letter abbreviation (Q/R/P/P+/B/A/SH/DI/SK).
+                        let pipe_layout_chunks =
+                            ratatui::layout::Layout::default()
+                                .direction(ratatui::layout::Direction::Vertical)
+                                .constraints([
+                                    ratatui::layout::Constraint::Length(5),
+                                    ratatui::layout::Constraint::Length(5),
+                                    ratatui::layout::Constraint::Min(8),
+                                    ratatui::layout::Constraint::Length(8),
+                                    ratatui::layout::Constraint::Length(1),
+                                ])
+                                .split(area);
+                        let pipeline_area = pipe_layout_chunks[1];
+                        let mut n_connected = config
+                            .pipeline_stages
+                            .iter()
+                            .filter(|s| s.enabled)
+                            .count();
+                        if config.run_mode == "coach" {
+                            n_connected += 1;
+                        }
+                        if config.plan_review_enabled {
+                            n_connected += 1;
+                        }
+                        state.hovered_pipeline_label = tui::pipeline_click(
+                            pipeline_area,
+                            mouse.column,
+                            mouse.row,
+                            n_connected,
+                        )
+                        .map(|click| match click {
+                            tui::PipelineClick::ConnectedStage(i) => {
+                                let mut labels: Vec<String> = Vec::new();
+                                if config.run_mode == "coach" {
+                                    labels.push("COACH".to_string());
+                                }
+                                for stage_cfg in config
+                                    .pipeline_stages
+                                    .iter()
+                                    .filter(|s| s.enabled)
+                                {
+                                    labels.push(stage_cfg.label.clone());
+                                    if stage_cfg.id == "plan"
+                                        && config.plan_review_enabled
+                                    {
+                                        labels.push("P+".to_string());
+                                    }
+                                }
+                                labels.get(i).cloned().unwrap_or_else(|| "?".to_string())
+                            }
+                            tui::PipelineClick::Ship => "SHIP".to_string(),
+                            tui::PipelineClick::Discover => "DISCOVER".to_string(),
+                            tui::PipelineClick::Patterns => "SKILLS".to_string(),
+                        });
                     }
                     MouseEventKind::ScrollUp => {
                         let lines = wheel_lines(state.last_scroll_at);

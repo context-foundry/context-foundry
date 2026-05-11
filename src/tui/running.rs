@@ -1444,12 +1444,27 @@ pub(super) fn render_status_bar(frame: &mut Frame, area: Rect, state: &AppState)
         ));
     }
 
-    let hint = cursor_hint_for_state(state);
-    if !hint.is_empty() {
+    // Pipeline-tile hover tooltip: when the mouse is over a tile, the long
+    // name is unambiguous even though the tile renders as a 1-2 char abbrev.
+    if let Some(label) = state.hovered_pipeline_label.as_deref() {
         spans.push(Span::styled(
-            format!("  {} ", hint),
+            format!("  {} ", label),
+            Style::default()
+                .fg(state.tui_theme.accent)
+                .add_modifier(Modifier::BOLD),
+        ));
+        spans.push(Span::styled(
+            "click for AI summary ",
             Style::default().fg(state.tui_theme.muted),
         ));
+    } else {
+        let hint = cursor_hint_for_state(state);
+        if !hint.is_empty() {
+            spans.push(Span::styled(
+                format!("  {} ", hint),
+                Style::default().fg(state.tui_theme.muted),
+            ));
+        }
     }
 
     let status = Line::from(spans);

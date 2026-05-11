@@ -1546,6 +1546,11 @@ pub struct AppState {
     pub surface_summary_overlay: Option<SurfaceSummaryOverlay>,
     pub explorer_context_menu: Option<ExplorerContextMenu>,
     pub mouse_over_separator: bool,
+    /// Full uppercase label of the pipeline tile the mouse is currently
+    /// hovering over (e.g. Some("QUERY"), Some("SHIP")). None when the
+    /// cursor isn't over a tile. Status bar reads this to surface the long
+    /// name since rendered tiles use 1-2 char abbreviations.
+    pub hovered_pipeline_label: Option<String>,
     pub available_extensions: Vec<ExtensionDisplayInfo>,
     pub extensions_cursor: usize,
     /// Externally-discovered skills surfaced under the "External Skills"
@@ -1742,6 +1747,7 @@ impl AppState {
             surface_summary_overlay: None,
             explorer_context_menu: None,
             mouse_over_separator: false,
+            hovered_pipeline_label: None,
             available_extensions: Vec::new(),
             extensions_cursor: 0,
             available_external_skills: Vec::new(),
