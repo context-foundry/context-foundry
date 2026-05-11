@@ -1513,4 +1513,54 @@ mod tests {
         // Footer appears exactly once.
         assert_eq!(out.matches("Citation instruction:").count(), 1);
     }
+
+    #[test]
+    fn discovered_to_skill_file_copilot_uses_default_name_and_stub_description() {
+        let disc = DiscoveredSkill {
+            source: SkillSource::CopilotInstructions,
+            path: PathBuf::from("/tmp/.github/copilot-instructions.md"),
+            body: "Use anyhow.".to_string(),
+            derived_name: "copilot-instructions".to_string(),
+            frontmatter: None,
+        };
+        let sf = discovered_to_skill_file(&disc);
+        assert_eq!(sf.frontmatter.name, "copilot-instructions");
+        assert_eq!(sf.frontmatter.cf_stage, "both");
+        assert!(
+            sf.frontmatter
+                .description
+                .contains(".github/copilot-instructions.md"),
+            "expected description to mention the ui_label, got: {}",
+            sf.frontmatter.description
+        );
+        assert_eq!(sf.body, "Use anyhow.");
+        assert_eq!(sf.dir_name, "copilot-instructions");
+    }
+
+    #[test]
+    fn format_discovered_skills_renders_copilot_source_label() {
+        let disc = DiscoveredSkill {
+            source: SkillSource::CopilotInstructions,
+            path: PathBuf::from("/tmp/.github/copilot-instructions.md"),
+            body: "Imported copilot instructions go here.".to_string(),
+            derived_name: "copilot-instructions".to_string(),
+            frontmatter: None,
+        };
+        let entries: Vec<(SkillSource, &DiscoveredSkill)> =
+            vec![(SkillSource::CopilotInstructions, &disc)];
+        let out = format_discovered_skills_for_prompt(&entries);
+        assert!(out.contains("## External Skills"));
+        assert!(
+            out.contains("source: copilot"),
+            "expected copilot source label, got: {}",
+            out
+        );
+        assert!(out.contains("/tmp/.github/copilot-instructions.md"));
+        assert!(out.contains("Imported copilot instructions"));
+        assert!(
+            out.contains("Skills referenced:"),
+            "expected citation instruction footer, got: {}",
+            out
+        );
+    }
 }

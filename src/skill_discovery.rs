@@ -12,6 +12,8 @@ pub enum SkillSource {
     CursorRules,
     /// `<project>/.claude/skills/<topic>/SKILL.md` (Anthropic Claude Code).
     ClaudeProjectSkill,
+    /// `<project>/.github/copilot-instructions.md` (GitHub Copilot custom instructions).
+    CopilotInstructions,
 }
 
 impl SkillSource {
@@ -22,6 +24,7 @@ impl SkillSource {
             Self::AgentsMd => "agents-md",
             Self::CursorRules => "cursor",
             Self::ClaudeProjectSkill => "claude-project",
+            Self::CopilotInstructions => "copilot",
         }
     }
 
@@ -31,6 +34,7 @@ impl SkillSource {
             Self::AgentsMd => "AGENTS.md",
             Self::CursorRules => ".cursorrules",
             Self::ClaudeProjectSkill => ".claude/skills/",
+            Self::CopilotInstructions => ".github/copilot-instructions.md",
         }
     }
 
@@ -41,6 +45,7 @@ impl SkillSource {
             Self::ClaudeProjectSkill => 3,
             Self::AgentsMd => 2,
             Self::CursorRules => 1,
+            Self::CopilotInstructions => 2,
         }
     }
 }
@@ -67,17 +72,20 @@ pub struct DiscoveredSkill {
 /// other AI tools. Discovery is read-only -- CF never writes back to any of
 /// these paths.
 ///
-/// Three sources are scanned:
+/// Four sources are scanned:
 ///  1. `<project>/.claude/skills/<topic>/SKILL.md` (project root only -- the
 ///     Claude Code convention is project-local).
-///  2. `<project>/AGENTS.md`, plus each ancestor directory up to (and
+///  2. `<project>/AGENTS.md`, then `<project>/.github/copilot-instructions.md`
+///     (Copilot is project-local only and is inserted between the project-root
+///     AGENTS.md and the ancestor AGENTS.md walk so the on-screen order is
+///     "closest first"), then each ancestor directory's AGENTS.md up to (and
 ///     including) the user's home directory.
 ///  3. `<project>/.cursorrules` (project root only).
 ///
 /// Results are returned in stable order (claude-project skills first, then the
-/// project AGENTS.md, then ancestor AGENTS.md walking outward, then
-/// .cursorrules) so the UI surface and the precedence resolver are
-/// deterministic.
+/// project AGENTS.md, then `.github/copilot-instructions.md`, then ancestor
+/// AGENTS.md walking outward, then .cursorrules) so the UI surface and the
+/// precedence resolver are deterministic.
 pub fn discover_external_skills(project_dir: &Path) -> Vec<DiscoveredSkill> {
     let mut out = Vec::new();
 
@@ -139,33 +147,19 @@ pub fn discover_external_skills(project_dir: &Path) -> Vec<DiscoveredSkill> {
         }
     }
 
-    // 2. AGENTS.md -- project root + each ancestor up to (and including) HOME.
+    // 2. AGENTS.md split: project root first, then Copilot, then ancestor
+    //    AGENTS.md (closest first, stop at HOME inclusive).
     let canonical = project_dir
         .canonicalize()
         .unwrap_or_else(|_| project_dir.to_path_buf());
     let home = crate::utils::home_dir();
-    let mut agents_md_paths: Vec<PathBuf> = Vec::new();
-    let mut cur: Option<&Path> = Some(canonical.as_path());
-    while let Some(dir) = cur {
-        let candidate = dir.join("AGENTS.md");
-        if candidate.is_file() {
-            agents_md_paths.push(candidate);
-        }
-        // Stop at HOME (inclusive of HOME) to avoid reading global rules
-        // outside the user's home directory.
-        if let Some(h) = home.as_ref() {
-            if dir == h.as_path() {
-                break;
-            }
-        }
-        cur = dir.parent();
-    }
-    for path in agents_md_paths {
+
+    let push_agents_md = |out: &mut Vec<DiscoveredSkill>, path: PathBuf| {
         let content = match std::fs::read_to_string(&path) {
             Ok(c) => c,
             Err(e) => {
                 eprintln!("warning: failed to read {}: {}", path.display(), e);
-                continue;
+                return;
             }
         };
         // Derive a stable name from the parent dir so the user sees which
@@ -188,6 +182,55 @@ pub fn discover_external_skills(project_dir: &Path) -> Vec<DiscoveredSkill> {
             derived_name,
             frontmatter: None,
         });
+    };
+
+    // 2a. Project-root AGENTS.md.
+    let project_agents_md = canonical.join("AGENTS.md");
+    if project_agents_md.is_file() {
+        push_agents_md(&mut out, project_agents_md);
+    }
+
+    // 2b. .github/copilot-instructions.md (project root only, no ancestor walk).
+    let copilot_path = project_dir.join(".github").join("copilot-instructions.md");
+    if copilot_path.is_file() {
+        match std::fs::read_to_string(&copilot_path) {
+            Ok(content) => out.push(DiscoveredSkill {
+                source: SkillSource::CopilotInstructions,
+                path: copilot_path,
+                body: content,
+                derived_name: "copilot-instructions".to_string(),
+                frontmatter: None,
+            }),
+            Err(e) => eprintln!(
+                "warning: failed to read {}: {}",
+                copilot_path.display(),
+                e
+            ),
+        }
+    }
+
+    // 2c. Ancestor AGENTS.md (closest first, stop at HOME inclusive).
+    // Guard: when project_dir IS home, 2a already wrote home/AGENTS.md; skip
+    // the ancestor walk entirely to avoid escaping out of HOME and reading
+    // global AGENTS.md outside the user's home directory.
+    let starts_at_home = home
+        .as_ref()
+        .map(|h| canonical.as_path() == h.as_path())
+        .unwrap_or(false);
+    if !starts_at_home {
+        let mut cur: Option<&Path> = canonical.parent();
+        while let Some(dir) = cur {
+            let candidate = dir.join("AGENTS.md");
+            if candidate.is_file() {
+                push_agents_md(&mut out, candidate);
+            }
+            if let Some(h) = home.as_ref() {
+                if dir == h.as_path() {
+                    break;
+                }
+            }
+            cur = dir.parent();
+        }
     }
 
     // 3. .cursorrules (project root only).
@@ -460,5 +503,197 @@ mod tests {
                 names
             );
         }
+    }
+
+    #[test]
+    fn discovers_copilot_instructions_in_project_root() {
+        let tmp = tempfile::tempdir().unwrap();
+        let github_dir = tmp.path().join(".github");
+        std::fs::create_dir_all(&github_dir).unwrap();
+        std::fs::write(
+            github_dir.join("copilot-instructions.md"),
+            "Use Rust. Prefer anyhow.",
+        )
+        .unwrap();
+        let result = discover_external_skills(tmp.path());
+        let copilot: Vec<&DiscoveredSkill> = result
+            .iter()
+            .filter(|d| d.source == SkillSource::CopilotInstructions)
+            .collect();
+        assert_eq!(
+            copilot.len(),
+            1,
+            "expected one Copilot entry, got {:?}",
+            result
+        );
+        assert!(copilot[0].body.contains("Prefer anyhow"));
+        assert_eq!(copilot[0].derived_name, "copilot-instructions");
+        assert!(copilot[0].frontmatter.is_none());
+    }
+
+    #[test]
+    fn copilot_instructions_does_not_recurse_into_ancestors() {
+        let tmp = tempfile::tempdir().unwrap();
+        // .github/copilot-instructions.md only at the ROOT, not at the child
+        // "project_dir".
+        let github_dir = tmp.path().join(".github");
+        std::fs::create_dir_all(&github_dir).unwrap();
+        std::fs::write(
+            github_dir.join("copilot-instructions.md"),
+            "Use anyhow.",
+        )
+        .unwrap();
+        let child = tmp.path().join("child");
+        std::fs::create_dir_all(&child).unwrap();
+
+        let result = discover_external_skills(&child);
+        let copilot_count = result
+            .iter()
+            .filter(|d| d.source == SkillSource::CopilotInstructions)
+            .count();
+        assert_eq!(
+            copilot_count, 0,
+            "ancestor walk for .github/copilot-instructions.md MUST NOT happen, got {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn copilot_precedence_ties_agents_md_and_exceeds_cursorrules() {
+        assert_eq!(
+            SkillSource::CopilotInstructions.precedence(),
+            SkillSource::AgentsMd.precedence()
+        );
+        assert!(
+            SkillSource::CopilotInstructions.precedence()
+                > SkillSource::CursorRules.precedence()
+        );
+        assert!(
+            SkillSource::ClaudeProjectSkill.precedence()
+                > SkillSource::CopilotInstructions.precedence()
+        );
+    }
+
+    #[test]
+    fn copilot_appears_between_project_and_ancestor_agents_md() {
+        let tmp = tempfile::tempdir().unwrap();
+        // Layout: tmp/AGENTS.md (ancestor) + tmp/child/AGENTS.md (project) +
+        // tmp/child/.github/copilot-instructions.md.
+        std::fs::write(tmp.path().join("AGENTS.md"), "# ancestor agents").unwrap();
+        let child = tmp.path().join("child");
+        std::fs::create_dir_all(&child).unwrap();
+        std::fs::write(child.join("AGENTS.md"), "# child agents").unwrap();
+        let github_dir = child.join(".github");
+        std::fs::create_dir_all(&github_dir).unwrap();
+        std::fs::write(
+            github_dir.join("copilot-instructions.md"),
+            "# copilot",
+        )
+        .unwrap();
+
+        let result = discover_external_skills(&child);
+        let agents_idxs: Vec<usize> = result
+            .iter()
+            .enumerate()
+            .filter(|(_, d)| d.source == SkillSource::AgentsMd)
+            .map(|(i, _)| i)
+            .collect();
+        assert_eq!(
+            agents_idxs.len(),
+            2,
+            "expected exactly two AGENTS.md entries, got {:?}",
+            result
+        );
+        let copilot_idx = result
+            .iter()
+            .position(|d| d.source == SkillSource::CopilotInstructions)
+            .expect("expected one Copilot entry");
+        assert!(
+            agents_idxs[0] < copilot_idx,
+            "project AGENTS.md should precede Copilot, got result={:?}",
+            result
+        );
+        assert!(
+            copilot_idx < agents_idxs[1],
+            "Copilot should precede ancestor AGENTS.md, got result={:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn copilot_appears_between_project_agents_md_and_cursorrules_in_discovery_order() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("AGENTS.md"), "# agents").unwrap();
+        let github_dir = tmp.path().join(".github");
+        std::fs::create_dir_all(&github_dir).unwrap();
+        std::fs::write(
+            github_dir.join("copilot-instructions.md"),
+            "# copilot",
+        )
+        .unwrap();
+        std::fs::write(tmp.path().join(".cursorrules"), "rules").unwrap();
+
+        let result = discover_external_skills(tmp.path());
+        let agents_idx = result
+            .iter()
+            .position(|d| d.source == SkillSource::AgentsMd)
+            .expect("expected AGENTS.md");
+        let copilot_idx = result
+            .iter()
+            .position(|d| d.source == SkillSource::CopilotInstructions)
+            .expect("expected Copilot");
+        let cursor_idx = result
+            .iter()
+            .position(|d| d.source == SkillSource::CursorRules)
+            .expect("expected .cursorrules");
+        assert!(
+            agents_idx < copilot_idx && copilot_idx < cursor_idx,
+            "expected AGENTS.md < Copilot < .cursorrules, got result={:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn prompt_labels_include_copilot() {
+        assert_eq!(
+            SkillSource::CopilotInstructions.prompt_label(),
+            "copilot"
+        );
+        assert_eq!(
+            SkillSource::CopilotInstructions.ui_label(),
+            ".github/copilot-instructions.md"
+        );
+    }
+
+    #[test]
+    fn load_enabled_external_skills_with_copilot_path() {
+        let tmp = tempfile::tempdir().unwrap();
+        let github_dir = tmp.path().join(".github");
+        std::fs::create_dir_all(&github_dir).unwrap();
+        std::fs::write(
+            github_dir.join("copilot-instructions.md"),
+            "Use anyhow.",
+        )
+        .unwrap();
+        // Discover once to recover the canonical path string (mirrors
+        // load_enabled_includes_only_opted_in_paths -- macOS canonicalizes
+        // /var to /private/var so the map key must come from the discovered
+        // path, not the tempdir's raw path).
+        let discovered = discover_external_skills(tmp.path());
+        let mut enabled: std::collections::HashMap<String, bool> =
+            std::collections::HashMap::new();
+        for d in &discovered {
+            if d.source == SkillSource::CopilotInstructions {
+                enabled.insert(d.path.to_string_lossy().into_owned(), true);
+            }
+        }
+        let result = load_enabled_external_skills(tmp.path(), &enabled);
+        assert_eq!(
+            result.len(),
+            1,
+            "expected only Copilot to be enabled, got {:?}",
+            result
+        );
+        assert_eq!(result[0].source, SkillSource::CopilotInstructions);
     }
 }
