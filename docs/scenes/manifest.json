@@ -787,6 +787,16 @@
       "model": "gpt-4o-mini",
       "lines": 91,
       "generation": 79
+    },
+    {
+      "file": "async-caldera.js",
+      "name": "Async Caldera",
+      "location": "Crater Lake, Oregon, USA",
+      "biome": "volcanic",
+      "generated": "2026-05-12T10:43:14.014Z",
+      "model": "gpt-4o-mini",
+      "lines": 94,
+      "generation": 80
     }
   ]
 }

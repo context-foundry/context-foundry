@@ -1399,5 +1399,18 @@
     "retries": 0,
     "api_retries": 0,
     "validation": "pass"
+  },
+  {
+    "ts": "2026-05-12T10:43:14.015Z",
+    "scene": "async-caldera.js",
+    "seed_id": "async-caldera",
+    "biome": "volcanic",
+    "model": "gpt-4o-mini",
+    "input_tokens": 7409,
+    "output_tokens": 897,
+    "cost_usd": 0.0016,
+    "retries": 0,
+    "api_retries": 0,
+    "validation": "pass"
   }
 ]
