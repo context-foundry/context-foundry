@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>An Evolving Harness -- Context Foundry</title>
+  <meta name="description" content="May 2026 retrospective: how Context Foundry got to v3.2.0. QUERY and RESEARCH before PLAN, P+ rigor, the local Ollama citation loop, and why the shape of an autonomous-build harness should change as the agents underneath it do.">
+  <meta property="og:title" content="An Evolving Harness -- Context Foundry">
+  <meta property="og:description" content="May 2026 retrospective: how Context Foundry got to v3.2.0. QUERY and RESEARCH before PLAN, P+ rigor, the local Ollama citation loop, and why the shape of an autonomous-build harness should change as the agents underneath it do.">
+  <meta property="og:image" content="assets/og-card-1200x630.png">
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://contextfoundry.dev/may-2026.html">
+  <link rel="icon" type="image/png" href="assets/favicon-square-512.png">
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --border: #30363d;
+      --text: #e6edf3;
+      --text-muted: #8b949e;
+      --accent: #f0a500;
+      --accent-subtle: rgba(240, 165, 0, 0.15);
+      --radius: 4px;
+      --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+    }
+    * { box-sizing: border-box; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 0.9rem;
+      line-height: 1.7;
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 3rem 1.5rem;
+    }
+    h1 {
+      color: var(--accent);
+      font-size: 1.5rem;
+      border-bottom: 2px solid var(--accent);
+      padding-bottom: 0.5rem;
+      margin-bottom: 0.25rem;
+    }
+    h2 {
+      color: var(--accent);
+      font-size: 1.15rem;
+      border-left: 3px solid var(--accent);
+      padding-left: 0.75rem;
+      margin-top: 2.5rem;
+      margin-bottom: 0.75rem;
+    }
+    h3 {
+      color: var(--text);
+      font-size: 1rem;
+      margin-top: 1.75rem;
+      margin-bottom: 0.5rem;
+    }
+    p { margin: 0.75rem 0; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    pre {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem 1.25rem;
+      overflow-x: auto;
+      font-size: 0.85rem;
+      line-height: 1.5;
+    }
+    code {
+      background: var(--surface);
+      padding: 0.15rem 0.4rem;
+      border-radius: var(--radius);
+      font-size: 0.85rem;
+    }
+    pre code { background: none; padding: 0; }
+    blockquote {
+      border-left: 3px solid var(--accent);
+      margin: 1.25rem 0;
+      padding: 0.5rem 1rem;
+      background: var(--accent-subtle);
+      border-radius: 0 var(--radius) var(--radius) 0;
+    }
+    blockquote p { margin: 0.25rem 0; }
+    .hook {
+      font-size: 1.05rem;
+      color: var(--text);
+      margin-bottom: 0.25rem;
+    }
+    .subtitle {
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      margin-top: 0;
+    }
+    .muted { color: var(--text-muted); }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1rem 0;
+      font-size: 0.85rem;
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 0.5rem 0.75rem;
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      background: var(--surface);
+      color: var(--accent);
+    }
+    .callout {
+      background: var(--accent-subtle);
+      border: 1px solid var(--accent);
+      border-radius: var(--radius);
+      padding: 0.75rem 1rem;
+      margin: 1.25rem 0;
+    }
+    .callout p { margin: 0.25rem 0; }
+    .stat {
+      color: var(--accent);
+      font-weight: bold;
+    }
+    .kpi-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1rem;
+      margin: 1.5rem 0;
+    }
+    .kpi {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 0.85rem 0.5rem;
+      text-align: center;
+    }
+    .kpi-val {
+      color: var(--accent);
+      font-size: 1.75rem;
+      font-weight: bold;
+      line-height: 1.1;
+    }
+    .kpi-label {
+      color: var(--text-muted);
+      font-size: 0.75rem;
+      margin-top: 0.35rem;
+    }
+    footer {
+      margin-top: 3rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--border);
+      color: var(--text-muted);
+      font-size: 0.8rem;
+    }
+    @media (max-width: 600px) {
+      .kpi-row { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media print {
+      body { background: white; color: black; max-width: none; padding: 0.5in; }
+      pre { border: 1px solid #ccc; }
+      h1, h2 { color: #333; }
+      footer { color: #666; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <p class="muted"><a href="index.html">contextfoundry.dev</a> &middot; May 2026</p>
+  <h1>An Evolving Harness</h1>
+  <p class="hook">Three months ago we added a QUERY stage. Last month we added AI summaries everywhere. Today we shipped v3.2.0.</p>
+  <p class="subtitle">A retrospective on how the shape of an autonomous-build harness changes as the agents underneath it do -- and why that change is the point.</p>
+</header>
+
+<section id="opening">
+  <p>Context Foundry is a self-hosted Rust binary that runs AI coding agents through a multi-stage pipeline against your codebase. It plans, builds, audits, ships, and learns. The pipeline today has nine stages. The pipeline a year ago had four. Some of the stages that exist now did not exist three months ago. None of that is accidental. It is the central premise.</p>
+  <p>The most useful thing we have learned shipping Context Foundry is this: as coding agents and their tooling evolve, so should the harness that runs them. A pipeline that was right last quarter is wrong now. A skill format that was sensible last release is the wrong abstraction this release. The harness's job is to be the thing that changes when the agents change underneath it -- not the thing that calcifies around how the agents used to work.</p>
+  <p>This article is the May snapshot. It walks through the shape of the system as of v3.2.0, the recent changes, and the reasoning behind each one. Some of it will be wrong by November. That is fine. We will write the November snapshot in November.</p>
+</section>
+
+<section id="problem">
+  <h2>The problem the harness exists to solve</h2>
+  <p>AI coding agents are remarkable at one-shot tasks. Give a frontier model a clear prompt and a single change to make, and the output is often production-quality on the first attempt. The problem is not the one-shot. The problem is the loop.</p>
+  <p>Run an agent autonomously across ten tasks in sequence and the failure modes compound:</p>
+  <ul>
+    <li>Task 3 builds on task 2's mistakes, which built on task 1's mistakes. There is no gate that catches a drifting plan before the next task adopts it.</li>
+    <li>No fresh-context review means the agent grades its own homework. Self-review converges on self-justification.</li>
+    <li>No learning means the same mistakes repeat every run. The system has no memory of what it did wrong last week.</li>
+    <li>No task composition discipline means a single bundled "do three things" task pays a thrashing tax that a well-shaped task would not.</li>
+  </ul>
+  <p>The harness is the answer to those four failure modes. It is the scaffolding around the agent that makes a sequence of one-shots add up to something coherent. Take the scaffolding away and you are back to one agent in a loop, drifting.</p>
+</section>
+
+<section id="pipeline">
+  <h2>The pipeline today</h2>
+  <p>Every task in <code>TASKS.md</code> flows through nine stages. Each stage is a separate agent invocation with a fresh context window. Each stage writes a single named artifact that the next stage reads.</p>
+  <pre><code>Q ──&gt; R ──&gt; P ──&gt; P+ ──&gt; B ──&gt; A    SHIP   DISCOVER   SKILLS
+                                     │        │
+                                     ▼        ▼
+                                  git push   scan TASKS.md
+                                               │
+                                               ▼
+                                             extract
+                                             SKILL.md</code></pre>
+  <table>
+    <tr><th>Stage</th><th>Question it answers</th><th>Output</th></tr>
+    <tr><td>Q&nbsp;&nbsp;QUERY</td><td>What clarifying questions about this task?</td><td><code>questions.md</code></td></tr>
+    <tr><td>R&nbsp;&nbsp;RESEARCH</td><td>What's already in the codebase?</td><td><code>research-report.md</code></td></tr>
+    <tr><td>P&nbsp;&nbsp;PLAN</td><td>What exact edits, what verification?</td><td><code>current-plan.md</code></td></tr>
+    <tr><td>P+ PLAN-REVIEW</td><td>Does this plan stand up to fresh review?</td><td>plan iterates</td></tr>
+    <tr><td>B&nbsp;&nbsp;BUILD</td><td>Make the edits, run tests, fix breaks.</td><td><code>build-claims.md</code></td></tr>
+    <tr><td>A&nbsp;&nbsp;AUDIT</td><td>Does the code match the claims?</td><td><code>review-report.md</code></td></tr>
+    <tr><td>SHIP</td><td>Commit and push.</td><td><code>feat()</code> or <code>WIP()</code></td></tr>
+    <tr><td>DISCOVER</td><td>What's left to do in TASKS.md?</td><td>appends tasks</td></tr>
+    <tr><td>SKILLS</td><td>What did we learn from this run?</td><td><code>SKILL.md</code> files</td></tr>
+  </table>
+  <p>The fresh-context boundary is the key invariant. The planner never sees the builder's diff. The auditor never sees the planner's reasoning. Each agent reads only the artifacts that came before it. The artifacts are the only memory.</p>
+</section>
+
+<section id="why-q-and-r">
+  <h2>Why QUERY and RESEARCH come before PLAN</h2>
+  <p>Plans are cheap to write and expensive to live with. The two stages before PLAN exist to make sure the plan is grounded.</p>
+  <p>QUERY is the cheapest stage in the pipeline and one of the highest-leverage. The agent reads the task description and writes back the clarifying questions it would ask if it could ask. Ambiguity surfaces here, before the plan locks it in. If the task says "add retry logic to the upload handler" and there are three plausible interpretations of what "retry" means, QUERY catches that. The plan does not have to.</p>
+  <p>RESEARCH is the grounding pass. A fresh-context agent reads the actual codebase -- not what the planner assumes the codebase looks like, but the files as they are right now. It writes <code>research-report.md</code>: tech stack, relevant files, architecture notes, risks, suggested approach. The planner inherits this artifact and writes <code>current-plan.md</code> against known reality.</p>
+  <p>Without QUERY, ambiguity is resolved by the planner's first guess. Without RESEARCH, the plan is fiction. The builder discovers it the hard way, and the audit catches the gap a stage too late.</p>
+  <p>QUERY was added in v3.0 (February). RESEARCH was added in v3.1 (April). Neither existed in v0.7. That is the harness changing shape as the agents change underneath it -- the moment frontier models got good enough at conversational clarification, the cheapest place to spend a thousand tokens was on questions instead of guesses.</p>
+</section>
+
+<section id="doubt">
+  <h2>Doubt in the loop: why we doubt the plan harder than the build</h2>
+  <p>The hardest thing to undo in a codebase is a bad architectural decision. The easiest thing to fix is a bug. So Context Foundry doubts the plan harder than it doubts the build. Two reasons:</p>
+  <div class="callout">
+    <p><strong>Architecture is forever.</strong> A badly shaped feature haunts the codebase for months. Refactoring out a wrong abstraction is more expensive than getting it right the first time -- often by an order of magnitude.</p>
+    <p><strong>Bug fixes are routine.</strong> Code defects can be fixed any day of the week. A wrong loop iterator, an off-by-one, a missing null check -- these are 30-minute fixes once spotted. The audit catches them, the builder fixes them, the system moves on.</p>
+  </div>
+  <p>So PLAN runs through a plan-review stage (P+) before BUILD ever starts. P+ is a fresh-context agent that re-reads the plan, greps the cited files, and rejects the plan if claims don't match. The plan goes back to the planner with the rejection notes appended.</p>
+  <p>P+ depth scales by task complexity:</p>
+  <ul>
+    <li><strong>Simple</strong> tasks: 1 P+ pass. Bug fixes, single-file changes, well-specified config tweaks.</li>
+    <li><strong>Medium</strong> tasks: up to 2 passes. New features in known territory.</li>
+    <li><strong>Complex</strong> tasks: up to 3 passes. Cross-cutting changes, new subsystems, anything that touches more than four modules.</li>
+  </ul>
+  <p>Per-task overrides are <code>[fast]</code> (skip P+ entirely; trust BUILD+AUDIT) and <code>[strict]</code> (force the full three iterations even on Simple tasks). The complexity engine reads the task description heuristically; the user can pin it.</p>
+  <p>AUDIT runs after BUILD with the same fresh-context discipline. It reads <code>build-claims.md</code>, greps the diff, runs the verification commands, and decides between a <code>feat()</code> commit (audit passed) and a <code>WIP()</code> commit (audit found gaps). The builder never sees the audit until the run is over.</p>
+  <p>One number captures the philosophy: catch a bad plan in thirty seconds, or catch a bad architecture six months from now. The math favors the thirty seconds.</p>
+</section>
+
+<section id="composition">
+  <h2>Task composition is the upstream lever</h2>
+  <p>The complexity engine is downstream of how the user writes the task. The same scope can land cheaply or thrash for an hour depending on how it is composed.</p>
+  <p>Two examples from real runs in the project's own history:</p>
+  <table>
+    <tr><th>Task</th><th>Description</th><th>Cost</th></tr>
+    <tr><td><code>T1.16</code></td><td>"(1) wire ranker (2) BM25 upgrade (3) telemetry boost" -- three concerns in one task.</td><td><span class="stat">$20</span>, 63 min, 4 PLAN attempts, P+ rejected the plan three times.</td></tr>
+    <tr><td><code>T1.17</code></td><td>"Persist one config field across restart." -- single change.</td><td><span class="stat">$2</span>, 8 min, first-pass through. No rejections.</td></tr>
+  </table>
+  <p>Same level of underlying complexity, ten-times cost difference. The lever is composition. The rule of thumb is one mental model change per task. Signs that a task is over-bundled and should be split:</p>
+  <ul>
+    <li>Numbered sub-features in the description: "(1) ... (2) ... (3) ..."</li>
+    <li>Lead sentence contains "and also," "plus," "three layers," "additionally"</li>
+    <li>Multiple distinct verbs in the opening clause</li>
+    <li>File references span more than ~6 paths (real blast radius)</li>
+    <li>Description exceeds ~500 words</li>
+  </ul>
+  <p>The harness can do a lot to absorb a badly composed task, but it cannot do everything. Composition is upstream of every other lever in the system.</p>
+</section>
+
+<section id="skills">
+  <h2>Patterns became skills</h2>
+  <p>Context Foundry shipped for two years with a "patterns" abstraction -- JSON blobs at <code>~/.foundry/patterns/</code>, each pattern a tuple of <code>{pattern_id, severity, keywords, issue, solution, frequency}</code>. The planner scanned them every run, did a keyword-overlap match, injected the top ten into the prompt. It worked, mostly. It also accumulated <span class="stat">2384</span> entries before we audited it and found that only seven had ever been cited in a build that passed audit. The rest were debris.</p>
+  <p>In v3.2.0, the patterns abstraction was retired. The new abstraction is <em>skills</em>, following Anthropic's <a href="https://agentskills.io/specification">Agent Skills specification</a>. A skill is a directory with a <code>SKILL.md</code> file containing YAML frontmatter (name, description, metadata) and a free-form Markdown body:</p>
+  <pre><code>~/.foundry/skills/plan-file-token-overflow-planner/SKILL.md
+
+---
+name: plan-file-token-overflow-planner
+description: Use when a current-plan.md grows past ~30KB. The planner
+  starts emitting noise instead of file:line specs. Split the task.
+metadata:
+  cf-stage: planner
+  cf-keywords: [planning, token-budget, current-plan, overflow]
+  cf-citations-pass: 4
+  cf-citations-wip: 1
+  cf-last-used: 2026-05-11
+---
+
+When planning, watch for current-plan.md exceeding 30KB...</code></pre>
+  <p>The format change matters less than the discovery model. Anthropic Skills are progressively-disclosed -- the agent reads a short catalog of <code>(name, description)</code> pairs and pulls the body in only when it judges the skill relevant. Context Foundry's planner stage sees roughly 2% of the catalog in any given prompt, ranked by a hybrid retriever.</p>
+  <p>The cross-tool dividend was unexpected and significant. Skills authored for Claude Code work in Context Foundry. Skills authored for Cursor projects work in Context Foundry. <code>AGENTS.md</code> files -- the Linux Foundation cross-vendor standard adopted by Codex, Cursor, Aider, Gemini, and Copilot -- get discovered and surfaced. We dedicate a section of the startup screen to external skills with per-source opt-in. CF reads them; it never modifies them. The user's existing investment in any of those formats works in this pipeline without conversion.</p>
+  <p>For the longer write-up on why one big <code>skills.md</code> file would have been a mistake despite being the obvious move, see <a href="skills-and-plugins.html">Skills and Plugins</a>.</p>
+</section>
+
+<section id="retrieval">
+  <h2>Hybrid retrieval, not vibes</h2>
+  <p>The ranker that decides which skills to inject is a three-signal combination computed per skill, per stage, per task:</p>
+  <ul>
+    <li><strong>BM25 keyword match</strong> -- sparse: task description intersected with skill keywords and tech-stack tags. Cheap and exact. Catches "the task says <em>migration</em> and this skill has <em>migration</em> in its description" without needing to embed anything.</li>
+    <li><strong>Cosine similarity</strong> -- dense: the task description and each skill's <code>(name + description)</code> are embedded with <a href="https://ollama.com/library/nomic-embed-text">nomic-embed-text</a>, a 137M-parameter model served by a local <a href="https://ollama.com">Ollama</a> instance. 768-dimensional vectors, roughly 50ms per call on a laptop CPU, cached to disk so subsequent runs don't re-embed unchanged skill descriptions. The dense signal catches semantic overlap that the sparse signal misses -- "the task is about <em>token budget</em>" matching a skill described as <em>"prompt size overflow"</em>.</li>
+    <li><strong>Telemetry boost</strong> -- success-rate weighting: every skill carries <code>cf-citations-pass</code> and <code>cf-citations-wip</code> counters. Skills cited in builds that passed audit rank higher. New skills start neutral and earn rank only by shipping.</li>
+  </ul>
+  <p>An optional fourth signal is the <code>cf-stage</code> metadata field. A skill can hint that it is most relevant to the planner, the reviewer, or both. As of v3.2.0 (T1.31) this is a non-binding hint -- the ranker weights it, but does not filter on it. Skills are eligible for every pipeline stage. Set <code>skills_stage_filter_strict: true</code> in <code>~/.foundry/config.json</code> to restore the legacy gate.</p>
+  <p>The detail that matters most is the embedding location: <strong>everything runs on the user's machine.</strong> No embedding API call leaves the laptop. No third-party sees the task description. The catalog ships with 271 skills, the retriever ranks all 271 per stage per task, and the top N (default <code>max_pattern_injection = 10</code>, tunable) get injected into that stage's prompt. With one Ollama process and a typical skills directory, the whole retrieval loop adds well under a second per stage.</p>
+  <p>This is the same architecture that <a href="https://arxiv.org/abs/2504.06188">SkillFlow</a>, <a href="https://arxiv.org/abs/2505.03275">RAG-MCP</a>, and <a href="https://github.com/langchain-ai/langgraph-bigtool">LangGraph BigTool</a> describe for tool retrieval at scale. The differentiator here is that the embedding step is on-device by default. The user does not pay an embedding bill, and the data does not leave the workstation.</p>
+</section>
+
+<section id="citation-loop">
+  <h2>The citation loop -- how the catalog learns</h2>
+  <p>The retriever picks ten skills to inject. The interesting question is which ten of the ten the agent actually used.</p>
+  <p>Skill citations close that loop. Each skill has a stable <code>skill_id</code> matching its directory name. The agent prompt instructs each stage that uses a skill to end its artifact with a citation footer:</p>
+  <pre><code>**Skills referenced:** plan-file-token-overflow-planner, async-lock-while-not-if-planner</code></pre>
+  <p>That footer is the agent's self-report. The system verifies it post-hoc. After AUDIT runs, a scanner greps every committed artifact -- <code>current-plan.md</code>, <code>build-claims.md</code>, <code>review-report.md</code> -- for <code>**Skills referenced:**</code> footers. Every hit writes a row to a SQLite sidecar at <code>~/.foundry/skills-telemetry.db</code>:</p>
+  <pre><code> 1.  INJECT       Retriever ranks 271 skills. Top N injected into PLAN's
+                   prompt, scoped by cf-stage.
+
+ 2.  CITE         Planner self-reports usage. current-plan.md ends with:
+
+                   **Skills referenced:** plan-file-token-overflow-planner
+
+ 3.  BUILD + AUDIT run normally. build-claims.md and review-report.md
+                   may also append their own **Skills referenced:** footers.
+
+ 4.  SCAN         Post-AUDIT scanner greps every committed artifact for
+                   skill_id footers. Verifies the agent's self-report
+                   against the actual on-disk text.
+
+ 5.  RECORD       Hits write to ~/.foundry/skills-telemetry.db:
+                     - commit feat()  →  citations_pass++
+                     - commit WIP()   →  citations_wip++
+                     - last_used = now()
+
+ 6.  RE-RANK      Next task's ranker reads the DB. Success-rate
+                   weighting boosts skills that ship and demotes
+                   skills that fail. Compounding by the run.</code></pre>
+  <p>The success-rate weighting is the part worth dwelling on. A skill that gets injected into the prompt but never cited gains nothing. A skill that gets cited in a build that passes audit gains rank for next time. A skill that gets cited in a build that ships as <code>WIP()</code> -- because the audit found a gap -- loses rank.</p>
+  <p>The catalog learns from real outcomes, not from being injected. Skills that ship rise. Skills that fail fall. The harness has its own ground truth.</p>
+</section>
+
+<section id="numbers">
+  <h2>The learn loop, in numbers</h2>
+  <p>One overnight session in the first week of May:</p>
+  <div class="kpi-row">
+    <div class="kpi"><div class="kpi-val">5</div><div class="kpi-label">feat() commits</div></div>
+    <div class="kpi"><div class="kpi-val">0</div><div class="kpi-label">WIP() commits</div></div>
+    <div class="kpi"><div class="kpi-val">11</div><div class="kpi-label">new skills learned</div></div>
+    <div class="kpi"><div class="kpi-val">14</div><div class="kpi-label">citations recorded</div></div>
+  </div>
+  <p style="text-align: center;"><span class="stat">$141</span> over <span class="stat">10h&nbsp;25m</span> &middot; <span class="stat">$28</span> per [Complex] task average &middot; <span class="stat">0</span> re-runs</p>
+  <p>The five tasks ranged from a skills-telemetry honesty fix to a cross-pipeline AI-summary feature -- all rated [C] by the complexity engine. The skill cited in T1.29 (<code>rust-struct-literal-field-explosion</code>) was ranked top-3 for T1.30 and T1.31 by the success-rate boost. Subsequent runs got the lesson without re-deriving it. The catalog learned overnight.</p>
+  <p>This is the property we cared about when we started. A single passing build produces a tiny amount of evidence. A hundred passing builds, with citations, produces a useful ranking. The harness compounds where one-shot agent runs do not.</p>
+</section>
+
+<section id="ai-summary">
+  <h2>AI summaries everywhere</h2>
+  <p>The other v3.2.0 change worth naming explicitly is the AI-summary feature in the TUI. Click anything on the running dashboard -- a pipeline tile, the task queue, the narrative pane, the skill citations panel, the stats meter, the agent output -- and a modal opens with a Claude Haiku summary of what that surface means right now.</p>
+  <p>The summary is contextual. The summary for the QUERY pipeline tile reads the questions artifact and tells you what the eight questions are about. The summary for the AUDIT pipeline tile reads the review report and tells you what the auditor flagged. The summary for the stats panel reads the run state and tells you whether the project is on track.</p>
+  <p>The user does not need to read the log. The harness explains itself.</p>
+  <p>This is the kind of feature that did not exist in the harness six months ago and was not obviously a good idea even three months ago. It became obviously a good idea once Claude Haiku 4.5 priced fast summarization at fractions of a cent and once the modal infrastructure existed to display the result without leaving the dashboard. The harness got a new explanatory surface because the underlying capability got cheap.</p>
+  <p>That is the recurring loop. When a frontier capability gets cheap, we ask what shape of harness that capability unlocks. We added QUERY when conversational clarification got cheap. We added AI summaries everywhere when fast summarization got cheap. We will add something else when the next capability lands.</p>
+</section>
+
+<section id="ship">
+  <h2>What v3.2.0 ships</h2>
+  <p>Ninety-seven commits since v3.1.0. The highlights:</p>
+  <ul>
+    <li><strong>Skills migration complete</strong> (T1.12-T1.16) -- patterns retired, Anthropic Skills format shipped, hybrid retriever in place.</li>
+    <li><strong>AI summary everywhere</strong> (T1.24/T1.25/T1.33) -- every dashboard surface clickable; right-click context menu for files in Explore view.</li>
+    <li><strong>Cross-provider skill discovery</strong> (T1.27/T1.28) -- AGENTS.md, .cursorrules, .claude/skills, .github/copilot-instructions.md, all surfaced read-only with per-source opt-in.</li>
+    <li><strong>Skills at every pipeline stage</strong> (T1.31) -- the cf-stage filter is now a ranker hint, not a hard gate. Skills inject into QUERY, RESEARCH, PLAN, P+, BUILD, AUDIT, SHIP, DISCOVER.</li>
+    <li><strong>Honest skill telemetry</strong> (T1.30) -- the post-audit citation scanner closes the learn loop. Citations counted against real commit outcomes.</li>
+    <li><strong>Complexity-aware P+</strong> (T1.20/T1.23) -- depth scales by tier; <code>[fast]</code> and <code>[strict]</code> overrides for per-task control.</li>
+    <li><strong>Live-reload TASKS.md</strong> (T1.19) -- edit the queue while CF is running, no restart needed.</li>
+    <li><strong>Plugins rename</strong> (T1.22) -- the user-facing label "extensions" became "plugins" everywhere. On-disk directory name preserved for path stability.</li>
+    <li><strong>Unified TUI conventions</strong> (T1.34) -- shared modal renderer, padding, proportional scrollbars, hover-locked focus, single-row pipeline tiles with full-name tooltips.</li>
+    <li><strong>Eval badge stale-vs-live distinction</strong> (T1.29) -- the EVAL meter dims and prefixes with <code>(last)</code> when showing a previous task's grade during in-flight work.</li>
+    <li><strong>UTF-8 panic fix</strong> -- raw byte-slicing of artifact files panicked when byte 1024 fell inside a multi-byte UTF-8 sequence. Now uses the shared <code>truncate_str</code> helper.</li>
+  </ul>
+  <p>Binaries for macOS (arm64 and x86_64), Linux (x86_64), and Windows (x86_64). Install via <code>cargo install foundry</code>, <code>npm install -g context-foundry</code>, Homebrew, winget, or download from the <a href="https://github.com/context-foundry/context-foundry/releases/tag/v3.2.0">GitHub release</a>.</p>
+</section>
+
+<section id="closing">
+  <h2>What's next</h2>
+  <p>The honest answer is: whatever the next model release makes worth trying.</p>
+  <p>Three months ago we added QUERY because models got good enough at conversational clarification to make it cheap. Six weeks ago we added the local Ollama embedding loop because nomic-embed-text became a credible drop-in for hosted embedding APIs and we wanted the data to stay on the laptop. Last month we added AI summaries everywhere because fast summarization stopped being a meaningful line item. None of those features were on a roadmap when the previous release shipped. They became obvious as soon as the underlying capability was real.</p>
+  <p>The next change will follow the same pattern. Some capability will get cheap or get good. We will ask what shape of harness that unlocks. We will ship the change. The harness will look different by November.</p>
+  <p>That is the point. A harness that does not change as the agents change is a harness that calcified around how the agents used to work. The whole value proposition of building this in the open as a Rust binary with a TUI -- instead of buying into a single vendor's all-in-one product -- is that the shape stays editable. We change the shape. You see the change. The next release ships with it.</p>
+  <p>If you want to follow along, the repo is at <a href="https://github.com/context-foundry/context-foundry">github.com/context-foundry/context-foundry</a>. PRs, issues, and ideas are welcome. The whole system is the project's own dogfood -- every feature in this article was built by Context Foundry building Context Foundry.</p>
+</section>
+
+<footer>
+  <p>Context Foundry &middot; v3.2.0 &middot; May 2026 &middot;
+  <a href="https://github.com/context-foundry/context-foundry">GitHub</a> &middot;
+  <a href="index.html">Back to index</a> &middot;
+  MIT License</p>
+</footer>
+
+</body>
+</html>
