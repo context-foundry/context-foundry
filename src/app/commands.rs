@@ -657,8 +657,8 @@ pub(super) async fn run_headless(project_dir: &Path, output_format: Option<Strin
                 | LoopEvent::TasksFileMtime(_)
                 | LoopEvent::TaskReviewResult { .. }
                 | LoopEvent::TaskClassified { .. }
-                | LoopEvent::ExtensionInjected { .. }
-                | LoopEvent::ExtensionKeywordsLoaded { .. }
+                | LoopEvent::PluginInjected { .. }
+                | LoopEvent::PluginKeywordsLoaded { .. }
                 | LoopEvent::SkillCitationsRecorded { .. }
                 | LoopEvent::PrPollChecked
                 | LoopEvent::ShipStarted
@@ -1405,11 +1405,11 @@ pub(super) fn run_patterns_promote(apply: bool, days: u32) -> Result<()> {
         return Ok(());
     }
 
-    // Group promotable patterns by their primary tech stack (extension target)
+    // Group promotable patterns by their primary tech stack (plugin target)
     let home_path = crate::utils::home_dir().context("HOME or USERPROFILE not set")?;
-    let ext_dir = home_path.join(".foundry").join("extensions");
+    let ext_dir = home_path.join(".foundry").join("plugins");
 
-    let mut by_extension: BTreeMap<String, Vec<&String>> = BTreeMap::new();
+    let mut by_plugin: BTreeMap<String, Vec<&String>> = BTreeMap::new();
     for id in &promotable {
         let (pattern, _) = &pattern_map[*id];
         let ext_name = pattern
@@ -1417,17 +1417,17 @@ pub(super) fn run_patterns_promote(apply: bool, days: u32) -> Result<()> {
             .first()
             .map(|s| s.to_lowercase())
             .unwrap_or_else(|| "general".to_string());
-        by_extension.entry(ext_name).or_default().push(id);
+        by_plugin.entry(ext_name).or_default().push(id);
     }
 
     let today = Utc::now().format("%Y-%m-%d").to_string();
     // (pattern_id, ext_name, relative_path)
     let mut promotion_log: Vec<(String, String, String)> = Vec::new();
 
-    for (ext_name, pattern_ids) in &by_extension {
+    for (ext_name, pattern_ids) in &by_plugin {
         let target_dir = ext_dir.join(ext_name);
         let target_claude_md = target_dir.join("CLAUDE.md");
-        let relative_path = format!("extensions/{}/CLAUDE.md", ext_name);
+        let relative_path = format!("plugins/{}/CLAUDE.md", ext_name);
 
         // Read existing CLAUDE.md content for deduplication
         let existing_content = if target_claude_md.exists() {
@@ -1460,7 +1460,7 @@ pub(super) fn run_patterns_promote(apply: bool, days: u32) -> Result<()> {
         }
 
         if apply && !prose_blocks.is_empty() {
-            // Create extension directory and patterns/ subdirectory
+            // Create plugin directory and patterns/ subdirectory
             std::fs::create_dir_all(&target_dir)?;
             std::fs::create_dir_all(target_dir.join("patterns"))?;
 
@@ -1486,7 +1486,7 @@ pub(super) fn run_patterns_promote(apply: bool, days: u32) -> Result<()> {
                     }
                 };
                 format!(
-                    "# Context Foundry - {} Extension\n\n## Promoted Patterns\n\n{}",
+                    "# Context Foundry - {} Plugin\n\n## Promoted Patterns\n\n{}",
                     title, prose_blocks
                 )
             };
@@ -1494,7 +1494,7 @@ pub(super) fn run_patterns_promote(apply: bool, days: u32) -> Result<()> {
             atomic_write_file(&target_claude_md, content.as_bytes())?;
         } else if !apply {
             // Dry-run: print what would be promoted
-            println!("--- Extension: {} ({})", ext_name, target_dir.display());
+            println!("--- Plugin: {} ({})", ext_name, target_dir.display());
             for id in pattern_ids {
                 // Skip already-promoted patterns in dry-run output too
                 if existing_content.contains(&format!("`{}`", *id)) {
@@ -1634,7 +1634,7 @@ pub(super) fn run_patterns_promote(apply: bool, days: u32) -> Result<()> {
                 .push(pattern_id.as_str());
         }
         println!(
-            "Promoted {} pattern(s) to {} extension(s).",
+            "Promoted {} pattern(s) to {} plugin(s).",
             promotion_log.len(),
             promoted_by_ext.len(),
         );

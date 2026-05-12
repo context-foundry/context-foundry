@@ -10,7 +10,7 @@ use ratatui::{
 };
 
 use super::{pane_border_style, pane_border_type};
-use crate::app::{AppState, ExtensionDisplayInfo, FileEntry, StartupState, TuiPane};
+use crate::app::{AppState, PluginDisplayInfo, FileEntry, StartupState, TuiPane};
 use crate::utils::truncate_str;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -110,7 +110,7 @@ pub(super) fn project_dir_label(path: &std::path::Path) -> String {
 pub enum StartupMouseTarget {
     FileEntry(usize),
     PreviewLine,
-    ExtensionEntry(usize),
+    PluginEntry(usize),
     /// T1.27: row index into `state.available_external_skills`.
     ExternalSkillEntry(usize),
     ExpandAllToggle,
@@ -128,7 +128,7 @@ pub(super) struct StartupLayout {
     pub(super) summary: Rect,
     pub(super) status: Rect,
     pub(super) explorer: Rect,
-    pub(super) extensions: Rect,
+    pub(super) plugins: Rect,
     pub(super) preview: Rect,
     pub(super) input: Rect,
 }
@@ -139,18 +139,18 @@ pub(super) fn render_startup(frame: &mut Frame, state: &AppState) {
 
     render_startup_summary(frame, layout.summary, state);
     render_file_explorer(frame, layout.explorer, state);
-    render_extensions_panel(frame, layout.extensions, state);
+    render_plugins_panel(frame, layout.plugins, state);
     render_file_preview(frame, layout.preview, state);
     render_input_prompt(frame, layout.input, state);
     render_startup_status_bar(frame, layout.status, state);
 }
 
-/// T1.27: total rows the Plugins panel needs to display extensions plus
+/// T1.27: total rows the Plugins panel needs to display plugins plus
 /// (optionally) a divider + external-skill rows. When external skills are
-/// empty, returns just the extension count so the existing layout is
+/// empty, returns just the plugin count so the existing layout is
 /// unchanged.
 fn combined_panel_row_count(state: &AppState) -> usize {
-    let ext = state.available_extensions.len();
+    let ext = state.available_plugins.len();
     let xs = state.available_external_skills.len();
     if xs == 0 {
         ext
@@ -197,20 +197,20 @@ pub(super) fn startup_hit_test(
         return Some(target);
     }
 
-    if let Some(target) = extensions_panel_hit_test(layout.extensions, state, column, row) {
+    if let Some(target) = plugins_panel_hit_test(layout.plugins, state, column, row) {
         return Some(target);
     }
 
     startup_preview_hit_test(layout.preview, state, column, row)
 }
 
-pub(super) fn startup_layout(area: Rect, extension_count: usize) -> StartupLayout {
-    let ext_panel_height = if extension_count == 0 {
-        4u16 // "No extensions found" + borders
+pub(super) fn startup_layout(area: Rect, plugin_count: usize) -> StartupLayout {
+    let ext_panel_height = if plugin_count == 0 {
+        4u16 // "No plugins found" + borders
     } else {
         // T1.27: cap raised slightly so 4-5 .claude/skills entries fit alongside
         // a couple of plugins; very large lists scroll within the panel.
-        (extension_count as u16 + 2).min(12) // rows + borders, capped at 12
+        (plugin_count as u16 + 2).min(12) // rows + borders, capped at 12
     };
 
     let vertical = Layout::default()
@@ -228,12 +228,12 @@ pub(super) fn startup_layout(area: Rect, extension_count: usize) -> StartupLayou
         .constraints([Constraint::Percentage(36), Constraint::Percentage(64)])
         .split(vertical[1]);
 
-    // Split left column: file explorer (top) + extensions panel (bottom)
+    // Split left column: file explorer (top) + plugins panel (bottom)
     let left_split = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Min(5),                   // file explorer (flexible)
-            Constraint::Length(ext_panel_height), // extensions panel (fixed)
+            Constraint::Length(ext_panel_height), // plugins panel (fixed)
         ])
         .split(columns[0]);
 
@@ -241,7 +241,7 @@ pub(super) fn startup_layout(area: Rect, extension_count: usize) -> StartupLayou
         summary: vertical[0],
         status: vertical[3],
         explorer: left_split[0],
-        extensions: left_split[1],
+        plugins: left_split[1],
         preview: columns[1],
         input: vertical[2],
     }
@@ -333,7 +333,7 @@ fn startup_preview_hit_test(
     Some(StartupMouseTarget::PreviewLine)
 }
 
-fn extensions_panel_hit_test(
+fn plugins_panel_hit_test(
     area: Rect,
     state: &AppState,
     column: u16,
@@ -342,7 +342,7 @@ fn extensions_panel_hit_test(
     if !rect_contains(area, column, row) {
         return None;
     }
-    let ext_count = state.available_extensions.len();
+    let ext_count = state.available_plugins.len();
     let xs_count = state.available_external_skills.len();
     if ext_count == 0 && xs_count == 0 {
         return None;
@@ -353,9 +353,9 @@ fn extensions_panel_hit_test(
         return None;
     }
     let relative_row = (row - inner_top) as usize;
-    // Layout: [extensions...] [optional divider] [optional "External Skills:" header] [external skills...]
+    // Layout: [plugins...] [optional divider] [optional "External Skills:" header] [external skills...]
     if relative_row < ext_count {
-        return Some(StartupMouseTarget::ExtensionEntry(relative_row));
+        return Some(StartupMouseTarget::PluginEntry(relative_row));
     }
     if xs_count == 0 {
         return None;
@@ -1224,8 +1224,8 @@ pub(super) fn render_startup_status_bar(frame: &mut Frame, area: Rect, state: &A
         ));
     }
 
-    // Extensions indicator (always shown)
-    let ext_status = format_extensions_status(&state.available_extensions);
+    // Plugins indicator (always shown)
+    let ext_status = format_plugins_status(&state.available_plugins);
     spans.push(Span::styled(
         format!("  {} ", ext_status),
         Style::default().fg(state.tui_theme.accent),
@@ -1242,9 +1242,9 @@ pub(super) fn render_startup_status_bar(frame: &mut Frame, area: Rect, state: &A
     frame.render_widget(Paragraph::new(Line::from(spans)), area);
 }
 
-fn render_extensions_panel(frame: &mut Frame, area: Rect, state: &AppState) {
-    let border_style = pane_border_style(state.focused_pane, TuiPane::Extensions, &state.tui_theme);
-    let border_type = pane_border_type(state.focused_pane, TuiPane::Extensions);
+fn render_plugins_panel(frame: &mut Frame, area: Rect, state: &AppState) {
+    let border_style = pane_border_style(state.focused_pane, TuiPane::Plugins, &state.tui_theme);
+    let border_type = pane_border_type(state.focused_pane, TuiPane::Plugins);
     let title_span = Span::styled(
         " Plugins ",
         Style::default()
@@ -1254,14 +1254,14 @@ fn render_extensions_panel(frame: &mut Frame, area: Rect, state: &AppState) {
 
     let inner_width = area.width.saturating_sub(2) as usize;
 
-    if state.available_extensions.is_empty() && state.available_external_skills.is_empty() {
+    if state.available_plugins.is_empty() && state.available_external_skills.is_empty() {
         let paragraph = Paragraph::new(vec![
             Line::from(Span::styled(
                 "  No plugins found.",
                 Style::default().fg(state.tui_theme.muted),
             )),
             Line::from(Span::styled(
-                "  Add to ~/.foundry/extensions/",
+                "  Add to ~/.foundry/plugins/",
                 Style::default().fg(state.tui_theme.muted),
             )),
         ])
@@ -1277,13 +1277,13 @@ fn render_extensions_panel(frame: &mut Frame, area: Rect, state: &AppState) {
     }
 
     let mut lines: Vec<Line> = state
-        .available_extensions
+        .available_plugins
         .iter()
         .enumerate()
         .map(|(i, ext)| {
             let checkbox = if ext.selected { "[x]" } else { "[ ]" };
             let is_cursor =
-                i == state.extensions_cursor && state.focused_pane == TuiPane::Extensions;
+                i == state.plugins_cursor && state.focused_pane == TuiPane::Plugins;
             let pattern_label = if ext.pattern_count > 0 {
                 format!(" ({}p)", ext.pattern_count)
             } else {
@@ -1317,9 +1317,9 @@ fn render_extensions_panel(frame: &mut Frame, area: Rect, state: &AppState) {
         })
         .collect();
 
-    // T1.27: render the External Skills group below extensions when present.
+    // T1.27: render the External Skills group below plugins when present.
     if !state.available_external_skills.is_empty() {
-        if !state.available_extensions.is_empty() {
+        if !state.available_plugins.is_empty() {
             // Visual divider row.
             lines.push(Line::from(Span::styled(
                 " ─── External Skills ───",
@@ -1334,12 +1334,12 @@ fn render_extensions_panel(frame: &mut Frame, area: Rect, state: &AppState) {
             )));
         }
 
-        let ext_count = state.available_extensions.len();
+        let ext_count = state.available_plugins.len();
         for (i, xs) in state.available_external_skills.iter().enumerate() {
             let checkbox = if xs.selected { "[x]" } else { "[ ]" };
             let cursor_idx = ext_count + i;
-            let is_cursor = cursor_idx == state.extensions_cursor
-                && state.focused_pane == TuiPane::Extensions;
+            let is_cursor = cursor_idx == state.plugins_cursor
+                && state.focused_pane == TuiPane::Plugins;
 
             let label = format!(
                 "{} {} [{}]",
@@ -1394,17 +1394,17 @@ fn render_extensions_panel(frame: &mut Frame, area: Rect, state: &AppState) {
     frame.render_widget(paragraph, area);
 }
 
-fn format_extensions_status(extensions: &[ExtensionDisplayInfo]) -> String {
-    if extensions.is_empty() {
+fn format_plugins_status(plugins: &[PluginDisplayInfo]) -> String {
+    if plugins.is_empty() {
         return "Plugins: none".to_string();
     }
-    let active: Vec<&str> = extensions
+    let active: Vec<&str> = plugins
         .iter()
         .filter(|e| e.selected)
         .map(|e| e.name.as_str())
         .collect();
     if active.is_empty() {
-        return format!("Plugins: none ({} avail)", extensions.len());
+        return format!("Plugins: none ({} avail)", plugins.len());
     }
     let names = active.join(", ");
     format!("Plugins: {} ({} active)", names, active.len())

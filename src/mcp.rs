@@ -5,7 +5,7 @@ use std::io::{self, BufRead, Write};
 use std::path::Path;
 
 use crate::config::Config;
-use crate::extensions;
+use crate::plugins;
 use crate::patterns;
 
 // ─── JSON-RPC 2.0 Types ────────────────────────────────────
@@ -71,9 +71,9 @@ struct PatternCatalogEntry {
     frequency: usize,
 }
 
-/// A single entry in the extension index resource
+/// A single entry in the plugin index resource
 #[derive(Debug, Serialize)]
-struct ExtensionIndexEntry {
+struct PluginIndexEntry {
     name: String,
     description: String,
     source: String,
@@ -128,9 +128,9 @@ fn handle_resources_list(request: &JsonRpcRequest) -> JsonRpcResponse {
             mime_type: "application/json".to_string(),
         },
         Resource {
-            uri: "foundry://extensions/index".to_string(),
-            name: "Extension Index".to_string(),
-            description: "Available extensions with name, domain description, and pattern count".to_string(),
+            uri: "foundry://plugins/index".to_string(),
+            name: "Plugin Index".to_string(),
+            description: "Available plugins with name, domain description, and pattern count".to_string(),
             mime_type: "application/json".to_string(),
         },
     ];
@@ -160,7 +160,7 @@ fn handle_resources_read(
 
     let content = match uri.as_str() {
         "foundry://patterns/catalog" => build_pattern_catalog(config),
-        "foundry://extensions/index" => build_extension_index(project_dir),
+        "foundry://plugins/index" => build_plugin_index(project_dir),
         _ => return make_error_response(id, -32602, &format!("unknown resource URI: {uri}")),
     };
 
@@ -207,20 +207,20 @@ fn build_pattern_catalog(config: &Config) -> Result<String> {
     Ok(serde_json::to_string_pretty(&entries)?)
 }
 
-fn build_extension_index(project_dir: &Path) -> Result<String> {
-    let all_extensions = extensions::discover_extensions(project_dir);
+fn build_plugin_index(project_dir: &Path) -> Result<String> {
+    let all_plugins = plugins::discover_plugins(project_dir);
 
-    let mut entries: Vec<ExtensionIndexEntry> = all_extensions
+    let mut entries: Vec<PluginIndexEntry> = all_plugins
         .into_iter()
         .map(|ext| {
-            let description = extensions::extract_description(&ext.claude_md_path);
-            let pattern_count = extensions::count_extension_patterns(&ext.patterns_dir);
+            let description = plugins::extract_description(&ext.claude_md_path);
+            let pattern_count = plugins::count_plugin_patterns(&ext.patterns_dir);
             let source = match ext.source {
-                extensions::ExtensionSource::Global => "global".to_string(),
-                extensions::ExtensionSource::Ancestor => "ancestor".to_string(),
-                extensions::ExtensionSource::ProjectLocal => "project-local".to_string(),
+                plugins::PluginSource::Global => "global".to_string(),
+                plugins::PluginSource::Ancestor => "ancestor".to_string(),
+                plugins::PluginSource::ProjectLocal => "project-local".to_string(),
             };
-            ExtensionIndexEntry {
+            PluginIndexEntry {
                 name: ext.name,
                 description,
                 source,
@@ -330,7 +330,7 @@ mod tests {
         let resources = result["resources"].as_array().unwrap();
         assert_eq!(resources.len(), 2);
         assert_eq!(resources[0]["uri"], "foundry://patterns/catalog");
-        assert_eq!(resources[1]["uri"], "foundry://extensions/index");
+        assert_eq!(resources[1]["uri"], "foundry://plugins/index");
         assert_eq!(resources[0]["mimeType"], "application/json");
         assert_eq!(resources[1]["mimeType"], "application/json");
     }
@@ -391,19 +391,19 @@ mod tests {
     }
 
     #[test]
-    fn test_build_extension_index() {
+    fn test_build_plugin_index() {
         let dir = tempfile::tempdir().unwrap();
-        let ext_dir = dir.path().join("extensions").join("testext");
+        let ext_dir = dir.path().join("plugins").join("testext");
         std::fs::create_dir_all(&ext_dir).unwrap();
         std::fs::write(
             ext_dir.join("CLAUDE.md"),
-            "# Test Extension\n\nA test extension for unit testing.\n",
+            "# Test Plugin\n\nA test plugin for unit testing.\n",
         )
         .unwrap();
 
-        let index = build_extension_index(dir.path()).unwrap();
+        let index = build_plugin_index(dir.path()).unwrap();
         let entries: Vec<Value> = serde_json::from_str(&index).unwrap();
-        // Filter to project-local only; global/ancestor extensions from the
+        // Filter to project-local only; global/ancestor plugins from the
         // host environment may also appear.
         let local: Vec<&Value> = entries
             .iter()
@@ -415,7 +415,7 @@ mod tests {
         assert!(local[0]["description"]
             .as_str()
             .unwrap()
-            .contains("test extension"));
+            .contains("test plugin"));
     }
 
     #[test]

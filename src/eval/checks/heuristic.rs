@@ -1598,7 +1598,7 @@ impl Check for PatternCitationsPersisted {
                     invocation_id: inv.invocation_id,
                     status: Status::Skip,
                     evidence: format!(
-                        "none of the {} cited pattern(s) were found in patterns_dir (likely extension-only patterns)",
+                        "none of the {} cited pattern(s) were found in patterns_dir (likely plugin-only patterns)",
                         cited.len()
                     ),
                 });
@@ -2451,7 +2451,7 @@ mod tests {
             system_prompt: system,
             user_prompt: user,
             matched_pattern_ids: Vec::new(),
-            selected_extension_names: Vec::new(),
+            selected_plugin_names: Vec::new(),
             prior_artifact_paths: Vec::new(),
         }
     }
@@ -3186,7 +3186,7 @@ mod tests {
             system_prompt: "sys",
             user_prompt: "user",
             matched_pattern_ids: ids,
-            selected_extension_names: Vec::new(),
+            selected_plugin_names: Vec::new(),
             prior_artifact_paths: Vec::new(),
         }
     }

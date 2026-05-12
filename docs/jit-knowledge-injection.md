@@ -31,9 +31,9 @@ Teaching an LLM domain knowledge not in its training data, at conversation time.
 
 Your `.md` files are already tool-agnostic markdown. No changes needed to:
 
-- `extensions/flowise/CLAUDE.md`
-- `extensions/extend/CLAUDE.md`
-- `extensions/extend/WORKDAY_EXTEND_DEVELOPER_GUIDE.md`
+- `plugins/flowise/CLAUDE.md`
+- `plugins/extend/CLAUDE.md`
+- `plugins/extend/WORKDAY_EXTEND_DEVELOPER_GUIDE.md`
 - Any future extension you create
 
 ### Step 2: Create the Copilot entry point
@@ -50,9 +50,9 @@ before answering questions in that domain.
 ## Extensions
 | Domain | Read first |
 |--------|-----------|
-| Flowise | extensions/flowise/CLAUDE.md |
-| Workday Extend | extensions/extend/CLAUDE.md |
-| Roblox | extensions/roblox/CLAUDE.md |
+| Flowise | plugins/flowise/CLAUDE.md |
+| Workday Extend | plugins/extend/CLAUDE.md |
+| Roblox | plugins/roblox/CLAUDE.md |
 ```
 
 ### Step 3: Wire up auto-loading
@@ -62,10 +62,10 @@ before answering questions in that domain.
 ```json
 {
   "github.copilot.chat.codeGeneration.instructions": [
-    { "file": "extensions/flowise/CLAUDE.md" },
-    { "file": "extensions/extend/CLAUDE.md" },
-    { "file": "extensions/extend/WORKDAY_EXTEND_DEVELOPER_GUIDE.md" },
-    { "file": "extensions/roblox/CLAUDE.md" }
+    { "file": "plugins/flowise/CLAUDE.md" },
+    { "file": "plugins/extend/CLAUDE.md" },
+    { "file": "plugins/extend/WORKDAY_EXTEND_DEVELOPER_GUIDE.md" },
+    { "file": "plugins/roblox/CLAUDE.md" }
   ]
 }
 ```
@@ -77,7 +77,7 @@ This injects all extension knowledge into every Copilot chat session automatical
 Same pattern you already follow:
 
 ```
-extensions/new-domain/
+plugins/new-domain/
 ├── CLAUDE.md              <- write your JIT knowledge here
 ├── patterns/              <- optional
 └── docs/                  <- optional deep guides
@@ -86,7 +86,7 @@ extensions/new-domain/
 Then add one line to `settings.json`:
 
 ```json
-{ "file": "extensions/new-domain/CLAUDE.md" }
+{ "file": "plugins/new-domain/CLAUDE.md" }
 ```
 
 ### That's it

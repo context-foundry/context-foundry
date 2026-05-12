@@ -81,7 +81,7 @@ pub fn all_checks() -> Vec<Box<dyn Check>> {
         Box::new(plumbing::StageCompletedSuccessfully),
         Box::new(plumbing::SystemPromptPresent),
         Box::new(plumbing::ModelMatchesConfig),
-        Box::new(plumbing::ExtensionLoaded),
+        Box::new(plumbing::PluginLoaded),
         Box::new(plumbing::PatternsInjected),
         Box::new(plumbing::PriorArtifactReceived),
         Box::new(plumbing::PriorArtifactRead),

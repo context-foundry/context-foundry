@@ -236,14 +236,14 @@ pub(super) fn render_dashboard_stats(
         ]));
     }
 
-    // ─── Row 2: Extensions ───
-    if !state.extension_inject_count.is_empty() {
+    // ─── Row 2: Plugins ───
+    if !state.plugin_inject_count.is_empty() {
         let ext_parts: Vec<String> = state
-            .extension_inject_count
+            .plugin_inject_count
             .iter()
             .map(|(name, inj)| {
                 let refs = state
-                    .extension_reference_count
+                    .plugin_reference_count
                     .get(name)
                     .copied()
                     .unwrap_or(0);

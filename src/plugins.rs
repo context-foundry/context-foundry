@@ -4,11 +4,11 @@ use crate::patterns::{self, Pattern};
 use crate::utils::truncate_str;
 
 #[derive(Debug, Clone)]
-pub struct ExtensionInfo {
+pub struct PluginInfo {
     pub name: String,
     pub claude_md_path: PathBuf,
     pub patterns_dir: Option<PathBuf>,
-    pub source: ExtensionSource,
+    pub source: PluginSource,
     // Discovered for the modern plugin layout; reserved for future plugin tooling.
     #[allow(dead_code)]
     pub plugin_manifest: Option<PathBuf>,
@@ -16,14 +16,14 @@ pub struct ExtensionInfo {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ExtensionSource {
+pub enum PluginSource {
     Global,
-    /// Found in an ancestor directory's `extensions/` folder.
+    /// Found in an ancestor directory's `plugins/` folder.
     Ancestor,
     ProjectLocal,
 }
 
-impl ExtensionSource {
+impl PluginSource {
     /// Higher number = higher priority when deduplicating.
     fn priority(self) -> u8 {
         match self {
@@ -34,49 +34,134 @@ impl ExtensionSource {
     }
 }
 
-/// Discover extensions by scanning three sources (highest priority wins):
+/// Resolve the global plugins directory (`~/.foundry/plugins/`).
+/// One-time migration: if the legacy `~/.foundry/extensions/` directory exists
+/// and the new `~/.foundry/plugins/` directory does not, rename the legacy
+/// directory in place and print a single info line.
+fn resolve_global_plugins_dir(home: &Path) -> PathBuf {
+    let new_dir = home.join(".foundry").join("plugins");
+    let legacy_dir = home.join(".foundry").join("extensions");
+    if legacy_dir.is_dir() && !new_dir.exists() {
+        match std::fs::rename(&legacy_dir, &new_dir) {
+            Ok(()) => {
+                eprintln!(
+                    "info: Migrated {} -> {} (one-time)",
+                    legacy_dir.display(),
+                    new_dir.display()
+                );
+            }
+            Err(e) => {
+                eprintln!(
+                    "warning: failed to migrate {} -> {}: {}",
+                    legacy_dir.display(),
+                    new_dir.display(),
+                    e
+                );
+            }
+        }
+    }
+    new_dir
+}
+
+/// Resolve a project-local plugins directory (`<project>/plugins/`).
+/// One-time migration: if `<project>/extensions/` exists and `<project>/plugins/`
+/// does not, rename the legacy directory in place.
+fn resolve_project_plugins_dir(project_dir: &Path) -> PathBuf {
+    let new_dir = project_dir.join("plugins");
+    let legacy_dir = project_dir.join("extensions");
+    if legacy_dir.is_dir() && !new_dir.exists() {
+        match std::fs::rename(&legacy_dir, &new_dir) {
+            Ok(()) => {
+                eprintln!(
+                    "info: Migrated {} -> {} (one-time)",
+                    legacy_dir.display(),
+                    new_dir.display()
+                );
+            }
+            Err(e) => {
+                eprintln!(
+                    "warning: failed to migrate {} -> {}: {}",
+                    legacy_dir.display(),
+                    new_dir.display(),
+                    e
+                );
+            }
+        }
+    }
+    new_dir
+}
+
+/// Resolve an ancestor plugins directory. If `<ancestor>/extensions/` exists
+/// but `<ancestor>/plugins/` does not, rename it. Returns the path that
+/// callers should scan (may not exist on disk).
+fn resolve_ancestor_plugins_dir(ancestor: &Path) -> PathBuf {
+    let new_dir = ancestor.join("plugins");
+    let legacy_dir = ancestor.join("extensions");
+    if legacy_dir.is_dir() && !new_dir.exists() {
+        match std::fs::rename(&legacy_dir, &new_dir) {
+            Ok(()) => {
+                eprintln!(
+                    "info: Migrated {} -> {} (one-time)",
+                    legacy_dir.display(),
+                    new_dir.display()
+                );
+            }
+            Err(e) => {
+                eprintln!(
+                    "warning: failed to migrate {} -> {}: {}",
+                    legacy_dir.display(),
+                    new_dir.display(),
+                    e
+                );
+            }
+        }
+    }
+    new_dir
+}
+
+/// Discover plugins by scanning three sources (highest priority wins):
 ///
-/// 1. **ProjectLocal** -- `<project_dir>/extensions/`
+/// 1. **ProjectLocal** -- `<project_dir>/plugins/`
 /// 2. **Ancestor** -- walk up from `project_dir` checking each ancestor for
-///    an `extensions/` subdirectory (closest ancestor wins)
-/// 3. **Global** -- `~/.foundry/extensions/`
+///    a `plugins/` subdirectory (closest ancestor wins)
+/// 3. **Global** -- `~/.foundry/plugins/`
 ///
-/// When the same extension name appears in multiple sources the higher-priority
+/// When the same plugin name appears in multiple sources the higher-priority
 /// source wins.
-pub fn discover_extensions(project_dir: &Path) -> Vec<ExtensionInfo> {
+pub fn discover_plugins(project_dir: &Path) -> Vec<PluginInfo> {
     let mut results = Vec::new();
 
-    // Global extensions dir: ~/.foundry/extensions/
+    // Global plugins dir: ~/.foundry/plugins/
     if let Some(home) = crate::utils::home_dir() {
-        let global_dir = home.join(".foundry").join("extensions");
-        scan_extensions_dir(&global_dir, ExtensionSource::Global, &mut results);
+        let global_dir = resolve_global_plugins_dir(&home);
+        scan_plugins_dir(&global_dir, PluginSource::Global, &mut results);
     }
 
-    // Ancestor extensions: walk up from project_dir, collect ancestor
-    // `extensions/` dirs, then scan farthest-first so closer ancestors appear
+    // Ancestor plugins: walk up from project_dir, collect ancestor
+    // `plugins/` dirs, then scan farthest-first so closer ancestors appear
     // later in `results` and win during dedup (via `>=`).
     {
         let canonical = project_dir
             .canonicalize()
             .unwrap_or_else(|_| project_dir.to_path_buf());
-        let mut ancestor_ext_dirs = Vec::new();
+        let mut ancestor_plugin_dirs = Vec::new();
         let mut cur = canonical.parent();
         while let Some(dir) = cur {
-            let ext_dir = dir.join("extensions");
-            if ext_dir.is_dir() {
-                ancestor_ext_dirs.push(ext_dir);
+            let plugin_dir = resolve_ancestor_plugins_dir(dir);
+            if plugin_dir.is_dir() {
+                ancestor_plugin_dirs.push(plugin_dir);
             }
             cur = dir.parent();
         }
         // Reverse so farthest ancestor is scanned first, closest last (wins dedup).
-        for ext_dir in ancestor_ext_dirs.into_iter().rev() {
-            scan_extensions_dir(&ext_dir, ExtensionSource::Ancestor, &mut results);
+        for plugin_dir in ancestor_plugin_dirs.into_iter().rev() {
+            scan_plugins_dir(&plugin_dir, PluginSource::Ancestor, &mut results);
         }
     }
 
-    // Project-local extensions dir: <project_dir>/extensions/
-    let local_dir = project_dir.join("extensions");
-    scan_extensions_dir(&local_dir, ExtensionSource::ProjectLocal, &mut results);
+    // Project-local plugins dir: <project_dir>/plugins/
+    let local_dir = resolve_project_plugins_dir(project_dir);
+    scan_plugins_dir(&local_dir, PluginSource::ProjectLocal, &mut results);
 
     // Deduplicate: higher-priority source wins
     let mut seen: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
@@ -89,12 +174,12 @@ pub fn discover_extensions(project_dir: &Path) -> Vec<ExtensionInfo> {
             seen.insert(ext.name.clone(), i);
         }
     }
-    let mut deduped: Vec<ExtensionInfo> = seen.into_values().map(|i| results[i].clone()).collect();
+    let mut deduped: Vec<PluginInfo> = seen.into_values().map(|i| results[i].clone()).collect();
     deduped.sort_by(|a, b| a.name.cmp(&b.name));
     deduped
 }
 
-fn scan_extensions_dir(dir: &Path, source: ExtensionSource, results: &mut Vec<ExtensionInfo>) {
+fn scan_plugins_dir(dir: &Path, source: PluginSource, results: &mut Vec<PluginInfo>) {
     let entries = match std::fs::read_dir(dir) {
         Ok(e) => e,
         Err(_) => return,
@@ -130,7 +215,7 @@ fn scan_extensions_dir(dir: &Path, source: ExtensionSource, results: &mut Vec<Ex
         let name = entry.file_name().to_string_lossy().into_owned();
         let pdir = path.join("patterns");
         let patterns_dir = if pdir.is_dir() { Some(pdir) } else { None };
-        results.push(ExtensionInfo {
+        results.push(PluginInfo {
             name,
             claude_md_path,
             patterns_dir,
@@ -234,8 +319,8 @@ pub fn extract_description(claude_md_path: &Path) -> String {
     "(no description)".to_string()
 }
 
-/// Count JSON pattern files in an extension's patterns directory.
-pub fn count_extension_patterns(patterns_dir: &Option<PathBuf>) -> usize {
+/// Count JSON pattern files in a plugin's patterns directory.
+pub fn count_plugin_patterns(patterns_dir: &Option<PathBuf>) -> usize {
     let Some(dir) = patterns_dir else {
         return 0;
     };
@@ -254,16 +339,16 @@ pub fn count_extension_patterns(patterns_dir: &Option<PathBuf>) -> usize {
         .count()
 }
 
-/// Build the concatenated agent-prompt context block for selected extensions.
+/// Build the concatenated agent-prompt context block for selected plugins.
 /// Prefers `skills/*/SKILL.md` content (modern plugin layout) and falls back to
-/// `CLAUDE.md` (legacy layout). Each extension's body is wrapped in the
-/// `--- BEGIN/END EXTENSION CONTEXT ---` delimiter pair (format unchanged).
-pub fn load_extension_context(extensions: &[ExtensionInfo], selected: &[String]) -> String {
+/// `CLAUDE.md` (legacy layout). Each plugin's body is wrapped in the
+/// `--- BEGIN/END PLUGIN CONTEXT ---` delimiter pair.
+pub fn load_plugin_context(plugins: &[PluginInfo], selected: &[String]) -> String {
     let mut context = String::new();
     for name in selected {
-        let Some(ext) = extensions.iter().find(|e| e.name == *name) else {
+        let Some(ext) = plugins.iter().find(|e| e.name == *name) else {
             eprintln!(
-                "warning: selected extension '{}' not found in discovered extensions",
+                "warning: selected plugin '{}' not found in discovered plugins",
                 name
             );
             continue;
@@ -275,7 +360,7 @@ pub fn load_extension_context(extensions: &[ExtensionInfo], selected: &[String])
                 Ok(c) => c,
                 Err(e) => {
                     eprintln!(
-                        "warning: failed to read CLAUDE.md for extension '{}': {}",
+                        "warning: failed to read CLAUDE.md for plugin '{}': {}",
                         name, e
                     );
                     String::new()
@@ -286,7 +371,7 @@ pub fn load_extension_context(extensions: &[ExtensionInfo], selected: &[String])
             continue;
         }
         context.push_str(&format!(
-            "\n--- BEGIN EXTENSION CONTEXT: {} ---\n{}\n--- END EXTENSION CONTEXT: {} ---\n",
+            "\n--- BEGIN PLUGIN CONTEXT: {} ---\n{}\n--- END PLUGIN CONTEXT: {} ---\n",
             name,
             body.trim(),
             name
@@ -295,19 +380,19 @@ pub fn load_extension_context(extensions: &[ExtensionInfo], selected: &[String])
     context
 }
 
-/// Verify all configured extensions have usable content -- either a non-empty
+/// Verify all configured plugins have usable content -- either a non-empty
 /// `skills/*/SKILL.md` body (modern plugin layout) or a non-empty `CLAUDE.md`
 /// (legacy layout). Called before the IMPLEMENT stage as a prerequisite gate.
-pub fn validate_extensions(
-    extensions: &[ExtensionInfo],
+pub fn validate_plugins(
+    plugins: &[PluginInfo],
     selected: &[String],
 ) -> Result<(), Vec<String>> {
     let mut errors = Vec::new();
     for name in selected {
-        match extensions.iter().find(|e| e.name == *name) {
+        match plugins.iter().find(|e| e.name == *name) {
             None => {
                 errors.push(format!(
-                    "Extension '{}' is configured but not found in ~/.foundry/extensions/, ancestor directories, or project extensions/",
+                    "Plugin '{}' is configured but not found in ~/.foundry/plugins/, ancestor directories, or project plugins/",
                     name
                 ));
             }
@@ -324,7 +409,7 @@ pub fn validate_extensions(
 
                 if !has_skills_body && !has_claude_md_body {
                     errors.push(format!(
-                        "Extension '{}' is configured but has no usable content (no skills/*/SKILL.md and no non-empty CLAUDE.md at {})",
+                        "Plugin '{}' is configured but has no usable content (no skills/*/SKILL.md and no non-empty CLAUDE.md at {})",
                         name,
                         ext.claude_md_path.display()
                     ));
@@ -339,7 +424,7 @@ pub fn validate_extensions(
     }
 }
 
-/// Extract domain-specific keywords from an extension's CLAUDE.md for reference detection.
+/// Extract domain-specific keywords from a plugin's CLAUDE.md for reference detection.
 /// Pulls inline code spans (backtick-delimited) and bold text (**-delimited) as keyword candidates.
 pub fn extract_keywords(claude_md_path: &Path) -> Vec<String> {
     let content = match std::fs::read_to_string(claude_md_path) {
@@ -381,11 +466,11 @@ pub fn extract_keywords(claude_md_path: &Path) -> Vec<String> {
     result
 }
 
-/// Load all pattern JSON files from selected extensions' patterns directories.
-pub fn load_extension_patterns(extensions: &[ExtensionInfo], selected: &[String]) -> Vec<Pattern> {
+/// Load all pattern JSON files from selected plugins' patterns directories.
+pub fn load_plugin_patterns(plugins: &[PluginInfo], selected: &[String]) -> Vec<Pattern> {
     let mut all_patterns = Vec::new();
     for name in selected {
-        let Some(ext) = extensions.iter().find(|e| e.name == *name) else {
+        let Some(ext) = plugins.iter().find(|e| e.name == *name) else {
             continue;
         };
         let Some(ref pdir) = ext.patterns_dir else {
@@ -403,18 +488,18 @@ mod tests {
 
     #[test]
     fn test_ancestor_discovery() {
-        // Create: /tmp/xxx/extensions/testext/CLAUDE.md
+        // Create: /tmp/xxx/plugins/testext/CLAUDE.md
         //         /tmp/xxx/child/grandchild/   <-- project_dir
         // The ancestor walk from grandchild should find testext.
         let root = tempfile::tempdir().unwrap();
-        let ext_dir = root.path().join("extensions").join("testext");
+        let ext_dir = root.path().join("plugins").join("testext");
         std::fs::create_dir_all(&ext_dir).unwrap();
         std::fs::write(ext_dir.join("CLAUDE.md"), "# Test\n\nA test.\n").unwrap();
 
         let project_dir = root.path().join("child").join("grandchild");
         std::fs::create_dir_all(&project_dir).unwrap();
 
-        let discovered = discover_extensions(&project_dir);
+        let discovered = discover_plugins(&project_dir);
         let names: Vec<&str> = discovered.iter().map(|e| e.name.as_str()).collect();
         assert!(
             names.contains(&"testext"),
@@ -422,38 +507,38 @@ mod tests {
             names
         );
         let testext = discovered.iter().find(|e| e.name == "testext").unwrap();
-        assert_eq!(testext.source, ExtensionSource::Ancestor);
+        assert_eq!(testext.source, PluginSource::Ancestor);
     }
 
     #[test]
     fn test_project_local_overrides_ancestor() {
-        // Both ancestor and project-local have "samename" extension.
+        // Both ancestor and project-local have "samename" plugin.
         // Project-local should win.
         let root = tempfile::tempdir().unwrap();
 
         // Ancestor version
-        let ancestor_ext = root.path().join("extensions").join("samename");
+        let ancestor_ext = root.path().join("plugins").join("samename");
         std::fs::create_dir_all(&ancestor_ext).unwrap();
         std::fs::write(ancestor_ext.join("CLAUDE.md"), "# Ancestor\n\nOld.\n").unwrap();
 
         // Project-local version
         let project_dir = root.path().join("child");
         std::fs::create_dir_all(&project_dir).unwrap();
-        let local_ext = project_dir.join("extensions").join("samename");
+        let local_ext = project_dir.join("plugins").join("samename");
         std::fs::create_dir_all(&local_ext).unwrap();
         std::fs::write(local_ext.join("CLAUDE.md"), "# Local\n\nNew.\n").unwrap();
 
-        let discovered = discover_extensions(&project_dir);
+        let discovered = discover_plugins(&project_dir);
         let ext = discovered.iter().find(|e| e.name == "samename").unwrap();
-        assert_eq!(ext.source, ExtensionSource::ProjectLocal);
+        assert_eq!(ext.source, PluginSource::ProjectLocal);
     }
 
     #[test]
-    fn test_plugin_only_extension_is_discovered() {
+    fn test_plugin_only_plugin_is_discovered() {
         let root = tempfile::tempdir().unwrap();
         let ext_dir = root
             .path()
-            .join("extensions")
+            .join("plugins")
             .join("onlyplugin")
             .join(".claude-plugin");
         std::fs::create_dir_all(&ext_dir).unwrap();
@@ -466,19 +551,19 @@ mod tests {
         let project_dir = root.path().join("child");
         std::fs::create_dir_all(&project_dir).unwrap();
 
-        let discovered = discover_extensions(&project_dir);
+        let discovered = discover_plugins(&project_dir);
         let ext = discovered
             .iter()
             .find(|e| e.name == "onlyplugin")
-            .expect("plugin-only extension should be discovered");
+            .expect("plugin-only plugin should be discovered");
         assert!(ext.plugin_manifest.is_some());
         assert!(ext.skills_dir.is_none());
     }
 
     #[test]
-    fn test_load_extension_context_prefers_skills_over_claude_md() {
+    fn test_load_plugin_context_prefers_skills_over_claude_md() {
         let root = tempfile::tempdir().unwrap();
-        let ext_root = root.path().join("extensions").join("dual");
+        let ext_root = root.path().join("plugins").join("dual");
         std::fs::create_dir_all(&ext_root).unwrap();
         std::fs::write(ext_root.join("CLAUDE.md"), "LEGACY-BODY").unwrap();
 
@@ -497,14 +582,14 @@ mod tests {
         )
         .unwrap();
 
-        // Use a child project_dir so root.path()/extensions/dual is found via ancestor walk.
+        // Use a child project_dir so root.path()/plugins/dual is found via ancestor walk.
         let project_dir = root.path().join("child");
         std::fs::create_dir_all(&project_dir).unwrap();
-        let extensions = discover_extensions(&project_dir);
-        let result = load_extension_context(&extensions, &vec!["dual".to_string()]);
+        let plugins = discover_plugins(&project_dir);
+        let result = load_plugin_context(&plugins, &vec!["dual".to_string()]);
 
         assert!(
-            result.contains("--- BEGIN EXTENSION CONTEXT: dual ---"),
+            result.contains("--- BEGIN PLUGIN CONTEXT: dual ---"),
             "missing BEGIN delimiter: {}",
             result
         );
@@ -532,16 +617,16 @@ mod tests {
     }
 
     #[test]
-    fn test_load_extension_context_falls_back_to_claude_md() {
+    fn test_load_plugin_context_falls_back_to_claude_md() {
         let root = tempfile::tempdir().unwrap();
-        let ext_root = root.path().join("extensions").join("legacy");
+        let ext_root = root.path().join("plugins").join("legacy");
         std::fs::create_dir_all(&ext_root).unwrap();
         std::fs::write(ext_root.join("CLAUDE.md"), "LEGACY-FALLBACK-BODY").unwrap();
 
         let project_dir = root.path().join("child");
         std::fs::create_dir_all(&project_dir).unwrap();
-        let extensions = discover_extensions(&project_dir);
-        let result = load_extension_context(&extensions, &vec!["legacy".to_string()]);
+        let plugins = discover_plugins(&project_dir);
+        let result = load_plugin_context(&plugins, &vec!["legacy".to_string()]);
 
         assert!(
             result.contains("LEGACY-FALLBACK-BODY"),
@@ -549,7 +634,7 @@ mod tests {
             result
         );
         assert!(
-            result.contains("--- BEGIN EXTENSION CONTEXT: legacy ---"),
+            result.contains("--- BEGIN PLUGIN CONTEXT: legacy ---"),
             "missing BEGIN delimiter: {}",
             result
         );

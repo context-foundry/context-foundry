@@ -50,7 +50,7 @@ pub enum TuiPane {
     AgentOutput,
     TaskQueue,
     PatternsLearned,
-    Extensions,
+    Plugins,
     Narrative,
     Stats,
 }
@@ -96,7 +96,7 @@ impl ClickableSurface {
 }
 
 #[derive(Debug, Clone)]
-pub struct ExtensionDisplayInfo {
+pub struct PluginDisplayInfo {
     pub name: String,
     pub selected: bool,
     pub description: String,
@@ -143,7 +143,7 @@ pub struct SkillCitationSummary {
 }
 
 #[derive(Debug, Clone)]
-pub struct ExtensionEvent {
+pub struct PluginEvent {
     pub name: String,
     #[allow(dead_code)]
     pub agent_role: String,
@@ -900,12 +900,12 @@ pub fn settings_sections(dual_mode: bool) -> Vec<SectionDef> {
             kind: SectionKind::Standard,
         },
         SectionDef {
-            id: "extensions",
+            id: "plugins",
             name: "Plugins & hooks",
             default_expanded: false,
             fields: vec![
                 FieldDef {
-                    id: "extensions",
+                    id: "plugins",
                     label: "Plugins",
                     hint: "Active plugin list",
                     kind: FieldKind::Editor,
@@ -1515,7 +1515,7 @@ pub struct AppState {
     pub(super) skill_citation_summary_loaded_at: Option<std::time::Instant>,
     pub session_skill_citations_set: std::collections::HashSet<String>,
     pub session_skill_citation_count: usize,
-    pub session_extensions_used: Vec<ExtensionEvent>, // extension injections this session
+    pub session_plugins_used: Vec<PluginEvent>, // plugin injections this session
     pub session_feat_commits: usize,
     pub session_wip_commits: usize,
     pub git_initialized: bool,
@@ -1551,19 +1551,19 @@ pub struct AppState {
     /// cursor isn't over a tile. Status bar reads this to surface the long
     /// name since rendered tiles use 1-2 char abbreviations.
     pub hovered_pipeline_label: Option<String>,
-    pub available_extensions: Vec<ExtensionDisplayInfo>,
-    pub extensions_cursor: usize,
+    pub available_plugins: Vec<PluginDisplayInfo>,
+    pub plugins_cursor: usize,
     /// Externally-discovered skills surfaced under the "External Skills"
     /// section of the startup screen (T1.27). Empty until the project's
     /// startup-state initializer scans for AGENTS.md / .cursorrules /
     /// `.claude/skills/`.
     pub available_external_skills: Vec<ExternalSkillDisplayInfo>,
-    // ─── Extension & Pattern Telemetry Counters ───
-    pub extension_inject_count: HashMap<String, usize>,
-    pub extension_reference_count: HashMap<String, usize>,
+    // ─── Plugin & Pattern Telemetry Counters ───
+    pub plugin_inject_count: HashMap<String, usize>,
+    pub plugin_reference_count: HashMap<String, usize>,
     pub pattern_inject_count: usize,
     pub pattern_apply_count: usize,
-    pub extension_keywords: HashMap<String, Vec<String>>,
+    pub plugin_keywords: HashMap<String, Vec<String>>,
     pub active_pattern_keywords: HashMap<String, Vec<String>>,
     pub tui_theme: TuiTheme,
     pub ship_active: bool,
@@ -1725,7 +1725,7 @@ impl AppState {
             skill_citation_summary_loaded_at: None,
             session_skill_citations_set: std::collections::HashSet::new(),
             session_skill_citation_count: 0,
-            session_extensions_used: Vec::new(),
+            session_plugins_used: Vec::new(),
             session_patterns_learned: 0,
             session_review_high: 0,
             session_review_medium: 0,
@@ -1748,14 +1748,14 @@ impl AppState {
             explorer_context_menu: None,
             mouse_over_separator: false,
             hovered_pipeline_label: None,
-            available_extensions: Vec::new(),
-            extensions_cursor: 0,
+            available_plugins: Vec::new(),
+            plugins_cursor: 0,
             available_external_skills: Vec::new(),
-            extension_inject_count: HashMap::new(),
-            extension_reference_count: HashMap::new(),
+            plugin_inject_count: HashMap::new(),
+            plugin_reference_count: HashMap::new(),
             pattern_inject_count: 0,
             pattern_apply_count: 0,
-            extension_keywords: HashMap::new(),
+            plugin_keywords: HashMap::new(),
             active_pattern_keywords: HashMap::new(),
             tui_theme: TuiTheme::default(),
             ship_active: false,
@@ -1942,8 +1942,8 @@ impl AppState {
             && self.current_agent.is_none()
     }
 
-    pub fn selected_extension_names(&self) -> Vec<String> {
-        self.available_extensions
+    pub fn selected_plugin_names(&self) -> Vec<String> {
+        self.available_plugins
             .iter()
             .filter(|e| e.selected)
             .map(|e| e.name.clone())
@@ -2057,7 +2057,7 @@ pub(super) enum LoopEvent {
     NextTaskUpdated(Option<String>),
     DiscoveryStarted(usize),
     DiscoveryCompleted(usize),
-    ExtensionInjected {
+    PluginInjected {
         name: String,
         agent_role: String,
         task_id: String,
@@ -2069,7 +2069,7 @@ pub(super) enum LoopEvent {
     SkillCitationsRecorded {
         skill_names: Vec<String>,
     },
-    ExtensionKeywordsLoaded {
+    PluginKeywordsLoaded {
         keywords: HashMap<String, Vec<String>>,
     },
     Log(String),
@@ -2135,73 +2135,73 @@ mod tests {
     use std::path::PathBuf;
 
     #[test]
-    fn test_selected_extension_names_filters_by_selected_flag() {
+    fn test_selected_plugin_names_filters_by_selected_flag() {
         let mut state = AppState::new(PathBuf::from("/tmp/foundry-test-p261-1"));
-        state.available_extensions = vec![
-            ExtensionDisplayInfo {
+        state.available_plugins = vec![
+            PluginDisplayInfo {
                 name: "rust".to_string(),
                 selected: true,
                 description: String::new(),
                 pattern_count: 0,
             },
-            ExtensionDisplayInfo {
+            PluginDisplayInfo {
                 name: "python".to_string(),
                 selected: false,
                 description: String::new(),
                 pattern_count: 0,
             },
-            ExtensionDisplayInfo {
+            PluginDisplayInfo {
                 name: "roblox".to_string(),
                 selected: true,
                 description: String::new(),
                 pattern_count: 0,
             },
-            ExtensionDisplayInfo {
+            PluginDisplayInfo {
                 name: "extend".to_string(),
                 selected: false,
                 description: String::new(),
                 pattern_count: 0,
             },
         ];
-        let names = state.selected_extension_names();
+        let names = state.selected_plugin_names();
         assert_eq!(names, vec!["rust".to_string(), "roblox".to_string()]);
     }
 
     #[test]
-    fn test_selected_extension_names_returns_empty_when_none_selected() {
+    fn test_selected_plugin_names_returns_empty_when_none_selected() {
         let mut state = AppState::new(PathBuf::from("/tmp/foundry-test-p261-2"));
-        state.available_extensions = vec![ExtensionDisplayInfo {
+        state.available_plugins = vec![PluginDisplayInfo {
             name: "rust".to_string(),
             selected: false,
             description: String::new(),
             pattern_count: 0,
         }];
-        assert!(state.selected_extension_names().is_empty());
+        assert!(state.selected_plugin_names().is_empty());
     }
 
     #[test]
-    fn test_selected_extension_names_returns_empty_when_no_extensions() {
+    fn test_selected_plugin_names_returns_empty_when_no_plugins() {
         let state = AppState::new(PathBuf::from("/tmp/foundry-test-p261-3"));
-        assert!(state.selected_extension_names().is_empty());
+        assert!(state.selected_plugin_names().is_empty());
     }
 
     #[test]
-    fn test_selected_extension_names_preserves_order() {
+    fn test_selected_plugin_names_preserves_order() {
         let mut state = AppState::new(PathBuf::from("/tmp/foundry-test-p261-4"));
-        state.available_extensions = vec![
-            ExtensionDisplayInfo {
+        state.available_plugins = vec![
+            PluginDisplayInfo {
                 name: "alpha".to_string(),
                 selected: true,
                 description: String::new(),
                 pattern_count: 0,
             },
-            ExtensionDisplayInfo {
+            PluginDisplayInfo {
                 name: "beta".to_string(),
                 selected: false,
                 description: String::new(),
                 pattern_count: 0,
             },
-            ExtensionDisplayInfo {
+            PluginDisplayInfo {
                 name: "gamma".to_string(),
                 selected: true,
                 description: String::new(),
@@ -2209,7 +2209,7 @@ mod tests {
             },
         ];
         assert_eq!(
-            state.selected_extension_names(),
+            state.selected_plugin_names(),
             vec!["alpha".to_string(), "gamma".to_string()]
         );
     }

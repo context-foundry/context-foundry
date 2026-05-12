@@ -524,37 +524,37 @@
   <!-- SECTION 7: THE POSSE -->
   <h2>The Posse</h2>
 
-  <p>Specialist deputies, each with their own jurisdiction. Extensions provide domain-specific knowledge to agents. They are discovered from <code>~/.foundry/extensions/</code> (global) and <code>&lt;project&gt;/extensions/</code> (local). Each extension directory contains a <code>CLAUDE.md</code> file whose contents are prepended to agent prompts.</p>
+  <p>Specialist deputies, each with their own jurisdiction. Extensions provide domain-specific knowledge to agents. They are discovered from <code>~/.foundry/plugins/</code> (global) and <code>&lt;project&gt;/plugins/</code> (local). Each extension directory contains a <code>CLAUDE.md</code> file whose contents are prepended to agent prompts.</p>
 
   <div class="card-grid">
 
     <div class="card">
       <h3>Roblox</h3>
-      <span class="archetype">extensions/roblox/</span>
+      <span class="archetype">plugins/roblox/</span>
       <p>World generation using Lune scripting and .rbxl/.rbxm files. Key files: <code>CLAUDE.md</code>, <code>patterns/roblox-common-issues.json</code>. Gotcha: use <code>add_to_world.luau</code>, never <code>generate_world.luau</code> -- terrain has varying elevations that cause floating objects.</p>
     </div>
 
     <div class="card">
       <h3>Workday Extend</h3>
-      <span class="archetype">extensions/extend/</span>
+      <span class="archetype">plugins/extend/</span>
       <p>Workday Extend PaaS application development. Key files: <code>CLAUDE.md</code>, <code>WORKDAY_EXTEND_DEVELOPER_GUIDE.md</code>, <code>WORKDAY_EXTEND_ARCHITECTURE.md</code>. Gotcha: apps are metadata-driven with no arbitrary code execution -- WIDs are tenant-specific, always use Reference IDs instead.</p>
     </div>
 
     <div class="card">
       <h3>Recon</h3>
-      <span class="archetype">extensions/recon/</span>
+      <span class="archetype">plugins/recon/</span>
       <p>Fleet reconnaissance from a management server -- inventory lookups, iDRAC queries, racadm commands against Dell servers. Key files: <code>CLAUDE.md</code>, <code>config/inventory-schema.json</code>. Gotcha: always use <code>grep -w</code> for hostname lookups and label batch output with the current hostname.</p>
     </div>
 
     <div class="card">
       <h3>Flowise</h3>
-      <span class="archetype">extensions/flowise/</span>
+      <span class="archetype">plugins/flowise/</span>
       <p>Building Flowise AgentFlow v2 workflows. Output is single JSON files. Key files: <code>CLAUDE.md</code>, <code>FLOWISE.md</code>, <code>node-templates/*.json</code>. Gotcha: use HTML span format for all variable references and follow the validation checklist before importing.</p>
     </div>
 
     <div class="card">
       <h3>Mindcraft</h3>
-      <span class="archetype">extensions/mindcraft/</span>
+      <span class="archetype">plugins/mindcraft/</span>
       <p>Python orchestrator for an AI Minecraft bot that plays autonomously. Monitors bot state, assigns goals, recalls the bot if it wanders too far from spawn. Architecture: client, detector, goals, learner, monitor, orchestrator, persistence, planner modules.</p>
     </div>
 

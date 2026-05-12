@@ -296,8 +296,9 @@ pub struct Config {
     /// session. The final doubt audits all accumulated changes.
     pub batch_doubt: bool,
 
-    /// Selected extension names (e.g., ["roblox", "extend"]).
-    pub extensions: Vec<String>,
+    /// Selected plugin names (e.g., ["roblox", "extend"]).
+    #[serde(alias = "extensions")]
+    pub plugins: Vec<String>,
 
     /// Per-project opt-in for externally-discovered skills (T1.27).
     /// Keyed by the absolute path of the discovered file (AGENTS.md,
@@ -676,7 +677,7 @@ impl Default for Config {
             run_mode: "auto".into(),
             pipeline_mode: "full".into(),
             batch_doubt: true,
-            extensions: Vec::new(),
+            plugins: Vec::new(),
             external_skills_enabled: std::collections::HashMap::new(),
             skills_stage_filter_strict: false,
             create_issue_on_wip: false,
@@ -1160,7 +1161,7 @@ impl Config {
         }
     }
 
-    pub fn save_extensions(project_dir: &Path, extensions: &[String]) {
+    pub fn save_plugins(project_dir: &Path, plugins: &[String]) {
         let config_path = project_dir.join(".foundry.json");
         let content = std::fs::read_to_string(&config_path).unwrap_or_else(|_| "{}".to_string());
         let mut value: serde_json::Value = serde_json::from_str(&content).unwrap_or_else(|e| {
@@ -1170,11 +1171,16 @@ impl Config {
             );
             serde_json::json!({})
         });
-        value["extensions"] = serde_json::json!(extensions);
+        // Write the new key name; drop the legacy "extensions" key if present so
+        // there is exactly one source of truth on disk after the migration.
+        if let Some(obj) = value.as_object_mut() {
+            obj.remove("extensions");
+        }
+        value["plugins"] = serde_json::json!(plugins);
         let json = serde_json::to_string_pretty(&value).unwrap_or_default();
         if let Err(e) = crate::utils::atomic_write_file(&config_path, json.as_bytes()) {
             eprintln!(
-                "warning: failed to save extensions to {} -- change will not persist across restarts: {e}",
+                "warning: failed to save plugins to {} -- change will not persist across restarts: {e}",
                 config_path.display(),
             );
         }
@@ -1785,7 +1791,7 @@ impl Config {
             "dashboard_port" => self.dashboard_port.to_string(),
             "theme" => self.theme.clone(),
             "preview_wrap" => self.preview_wrap.to_string(),
-            "extensions" => self.extensions.join(", "),
+            "plugins" => self.plugins.join(", "),
             "on_task_complete" => self.on_task_complete.clone().unwrap_or_default(),
             "build_command" => self.build_command.clone().unwrap_or_default(),
             "patterns_dir" => self.patterns_dir.clone(),

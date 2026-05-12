@@ -1,0 +1,96 @@
+---
+paths:
+  - "plugins/**/*"
+---
+
+# Plugins (on-disk: `extensions/`)
+
+Plugins are domain-specific knowledge packages under `extensions/`. The directory is still named `extensions/` for path stability (T1.22 was a UI rename only); the user-facing label everywhere else is "Plugins."
+
+## Taxonomy
+
+A **plugin** (or **domain pack**) is a directory containing any combination of:
+
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| **Instructions** | `CLAUDE.md` | Authored domain rules; always injected into agent prompts |
+| **Skills** | `skills/<topic>/SKILL.md` | Learned domain pitfalls in Anthropic Agent Skills format; retriever ranks per stage |
+| **Docs** | `docs/` | Reference guides, specs, API docs, asset inventories |
+| **Templates** | `templates/` | Starter blueprints, command templates |
+| **Examples** | `examples/` | Working reference implementations |
+| **Patterns (legacy)** | `patterns/*.json` | Pre-T1.13 JSON. Read-only fallback. Do not add new entries. |
+
+## Structure Convention
+```
+extensions/<name>/
+├── CLAUDE.md                       # Domain rules (read before any work in this domain)
+├── skills/
+│   └── <topic>/SKILL.md            # One skill per directory (Anthropic Skills format)
+├── docs/                           # Reference guides, specs, asset catalogs
+├── templates/                      # Starter blueprints, command templates
+├── examples/                       # Working reference projects
+├── scripts/                        # Utility scripts
+├── config/                         # Configuration
+└── patterns/                       # Legacy JSON (deprecated, read-only fallback)
+```
+
+## What Belongs Where
+
+| File type | Correct location | NOT in |
+|-----------|-----------------|--------|
+| Learned pitfalls (`name`, `description`, body) | `skills/<topic>/SKILL.md` | `docs/`, `patterns/` |
+| API docs, specs, developer guides | `docs/` | `skills/` |
+| Asset inventories, catalog JSON, governance lists | `docs/` | `skills/` |
+| Analyzer output, expertise metadata | `docs/` | `skills/` |
+| Command templates, starter configs | `templates/` | `skills/` |
+| Sample projects, demo flows | `examples/` | `docs/` |
+
+**Rule: new learnings go to `skills/<topic>/SKILL.md`, not `patterns/*.json`.** The loader at `src/patterns.rs:233` reads `skills/` first and falls back to `patterns/` only when no skills exist. Pattern JSON is deprecated; do not add new entries to it.
+
+### SKILL.md schema
+
+```markdown
+---
+name: kebab-case-skill-id
+description: One-sentence "use when..." trigger. Retriever matches against this.
+metadata:
+  cf-stage: planner          # planner | reviewer | both — hint, not filter
+  cf-keywords: [searchable, terms, tech-stack-tags]
+  cf-severity: HIGH
+  cf-citations-pass: 0       # auto-updated by post-AUDIT scanner
+  cf-citations-wip: 0
+---
+
+## Issue
+What goes wrong.
+
+## Solution
+What planner should do, what reviewer should check for.
+```
+
+Required frontmatter: `name`, `description`. All `metadata.cf-*` fields default.
+
+## Available Plugins
+
+| Plugin | Domain | Key Trigger |
+|--------|--------|-------------|
+| `roblox` | Roblox world gen, Lune scripting | .rbxl/.rbxm files, Roblox work |
+| `extend` | Workday Extend apps | Orchestrations, integrations, BIRT |
+| `workday-agents` | Workday Marketplace compliance agents | ACA, multi-state tax, compliance rule engines |
+| `flowise` | Flowise AI workflows | AgentFlow v2, chatflows |
+| `recon` | Fleet ops, iDRAC queries | Server inventory, batch ops |
+
+## Rules
+- **Always read the plugin's CLAUDE.md** before working in that domain.
+- Plugin CLAUDE.md files are discovered automatically when Claude reads files in those directories.
+- When solving new domain issues, write a new `skills/<topic>/SKILL.md` in the relevant plugin. Do NOT add to `patterns/*.json`.
+- **Never put non-skill files in `skills/`.** Reference docs, asset catalogs, and analyzer output go in `docs/`.
+
+## MCP Tools
+| Tool | Purpose |
+|------|---------|
+| `read_global_patterns` | Load learned skills/patterns before starting (reads skills first, JSON fallback) |
+| `save_global_patterns` | Save new discoveries (writes SKILL.md) |
+| `merge_project_patterns` | Promote project skills to global |
+| `delegate_to_claude_code` | Spawn fresh agent for subtasks |
+| `search_skills` | Find reusable skills |

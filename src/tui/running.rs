@@ -8,7 +8,7 @@ use ratatui::{
 
 use super::{pane_border_style, pane_border_type};
 use crate::agent::AgentRole;
-use crate::app::{AppPhase, AppState, CurrentClassification, ExtensionDisplayInfo, StreamState, TuiPane};
+use crate::app::{AppPhase, AppState, CurrentClassification, PluginDisplayInfo, StreamState, TuiPane};
 use crate::complexity::{classify_task_full, TaskComplexity, TaskOverride};
 use crate::utils::truncate_str;
 
@@ -1193,19 +1193,19 @@ pub(super) fn render_skill_citations(
     frame.render_widget(paragraph, area);
 }
 
-pub(super) fn render_extensions_used(
+pub(super) fn render_plugins_used(
     frame: &mut Frame,
     area: Rect,
     state: &AppState,
     focused: TuiPane,
 ) {
-    let total = state.session_extensions_used.len();
-    let total_inj: usize = state.extension_inject_count.values().sum();
-    let total_ref: usize = state.extension_reference_count.values().sum();
+    let total = state.session_plugins_used.len();
+    let total_inj: usize = state.plugin_inject_count.values().sum();
+    let total_ref: usize = state.plugin_reference_count.values().sum();
     let title = format!(" Plugins ({} inj, {} ref) ", total_inj, total_ref);
     let max_lines = area.height.saturating_sub(2) as usize;
 
-    if state.session_extensions_used.is_empty() {
+    if state.session_plugins_used.is_empty() {
         let empty = Paragraph::new(Span::styled(
             " Plugin usage will appear here.",
             Style::default().fg(state.tui_theme.muted),
@@ -1215,10 +1215,10 @@ pub(super) fn render_extensions_used(
                 .borders(Borders::ALL)
                 .border_style(pane_border_style(
                     focused,
-                    TuiPane::Extensions,
+                    TuiPane::Plugins,
                     &state.tui_theme,
                 ))
-                .border_type(pane_border_type(focused, TuiPane::Extensions))
+                .border_type(pane_border_type(focused, TuiPane::Plugins))
                 .title(Span::styled(
                     " Plugins Used ",
                     Style::default()
@@ -1231,7 +1231,7 @@ pub(super) fn render_extensions_used(
     }
 
     let items: Vec<ListItem> = state
-        .session_extensions_used
+        .session_plugins_used
         .iter()
         .rev()
         .take(max_lines)
@@ -1262,10 +1262,10 @@ pub(super) fn render_extensions_used(
             .borders(Borders::ALL)
             .border_style(pane_border_style(
                 focused,
-                TuiPane::Extensions,
+                TuiPane::Plugins,
                 &state.tui_theme,
             ))
-            .border_type(pane_border_type(focused, TuiPane::Extensions))
+            .border_type(pane_border_type(focused, TuiPane::Plugins))
             .title(Span::styled(
                 title,
                 Style::default()
@@ -1422,11 +1422,11 @@ pub(super) fn render_status_bar(frame: &mut Frame, area: Rect, state: &AppState)
         " explore"
     }));
 
-    // Extensions indicator (read-only during running)
-    let ext_status = format_running_extensions_status(
-        &state.available_extensions,
-        &state.extension_inject_count,
-        &state.extension_reference_count,
+    // Plugins indicator (read-only during running)
+    let ext_status = format_running_plugins_status(
+        &state.available_plugins,
+        &state.plugin_inject_count,
+        &state.plugin_reference_count,
     );
     if !ext_status.is_empty() {
         spans.push(Span::styled(
@@ -1482,7 +1482,7 @@ fn cursor_hint_for_state(state: &AppState) -> &'static str {
         | TuiPane::PatternsLearned
         | TuiPane::Narrative
         | TuiPane::Stats
-        | TuiPane::Extensions => "click for AI summary",
+        | TuiPane::Plugins => "click for AI summary",
         TuiPane::Explorer => "right-click for menu",
         TuiPane::Preview => "",
     }
@@ -1607,11 +1607,11 @@ pub(super) fn render_running_explorer_status_bar(frame: &mut Frame, area: Rect, 
         Span::raw(" dashboard"),
     ];
 
-    // Extensions indicator
-    let ext_status = format_running_extensions_status(
-        &state.available_extensions,
-        &state.extension_inject_count,
-        &state.extension_reference_count,
+    // Plugins indicator
+    let ext_status = format_running_plugins_status(
+        &state.available_plugins,
+        &state.plugin_inject_count,
+        &state.plugin_reference_count,
     );
     if !ext_status.is_empty() {
         spans.push(Span::styled(
@@ -1632,15 +1632,15 @@ pub(super) fn render_running_explorer_status_bar(frame: &mut Frame, area: Rect, 
     frame.render_widget(Paragraph::new(Line::from(spans)), area);
 }
 
-fn format_running_extensions_status(
-    extensions: &[ExtensionDisplayInfo],
+fn format_running_plugins_status(
+    plugins: &[PluginDisplayInfo],
     inject_count: &std::collections::HashMap<String, usize>,
     reference_count: &std::collections::HashMap<String, usize>,
 ) -> String {
-    if extensions.is_empty() {
+    if plugins.is_empty() {
         return String::new();
     }
-    let active: Vec<&str> = extensions
+    let active: Vec<&str> = plugins
         .iter()
         .filter(|e| e.selected)
         .map(|e| e.name.as_str())

@@ -1,6 +1,6 @@
 [package]
 name = "foundry"
-version = "3.2.0"
+version = "3.3.0"
 edition = "2021"
 description = "Autonomous build loop — the engine of Context Foundry"
 license = "MIT"

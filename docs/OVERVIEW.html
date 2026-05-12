@@ -1317,8 +1317,8 @@ zones, with the middle zone split 60/40 horizontally.
 
 <p>
 Extensions provide domain-specific knowledge to agents. They are discovered from
-<code>~/.foundry/extensions/</code> (global), ancestor directories' <code>extensions/</code>
-folders, and <code>&lt;project&gt;/extensions/</code> (local). Each extension directory
+<code>~/.foundry/plugins/</code> (global), ancestor directories' <code>plugins/</code>
+folders, and <code>&lt;project&gt;/plugins/</code> (local). Each extension directory
 must contain a <code>CLAUDE.md</code> file. Project-local extensions override global
 ones with the same name. Extension context is built by <code>load_extension_context()</code> and
 prepended to agent prompts via <code>wrap_with_extensions()</code>.
@@ -1377,7 +1377,7 @@ Every file in <code>patterns/</code> must be parseable by the pattern loader
 catalogs, expertise metadata, and governance lists belong in <code>docs/</code>.
 </p>
 
-<pre><code>extensions/&lt;name&gt;/
+<pre><code>plugins/&lt;name&gt;/
 ├── CLAUDE.md                          # Instructions (required)
 ├── patterns/
 │   └── &lt;name&gt;-common-issues.json      # Canonical pattern JSON only
@@ -1389,7 +1389,7 @@ catalogs, expertise metadata, and governance lists belong in <code>docs/</code>.
 </code></pre>
 
 <h3>8.1 Roblox</h3>
-<p><code>extensions/roblox/</code></p>
+<p><code>plugins/roblox/</code></p>
 <ul>
   <li><strong>Purpose:</strong> Domain knowledge for Roblox world generation using Lune scripting and .rbxl/.rbxm files.</li>
   <li><strong>Key files:</strong> <code>CLAUDE.md</code>, <code>patterns/roblox-common-issues.json</code></li>
@@ -1404,7 +1404,7 @@ catalogs, expertise metadata, and governance lists belong in <code>docs/</code>.
 </ul>
 
 <h3>8.2 Workday Extend</h3>
-<p><code>extensions/extend/</code></p>
+<p><code>plugins/extend/</code></p>
 <ul>
   <li><strong>Purpose:</strong> Workday Extend PaaS application development -- building custom apps inside Workday tenants.</li>
   <li><strong>Key files:</strong> <code>CLAUDE.md</code>, <code>WORKDAY_EXTEND_DEVELOPER_GUIDE.md</code>, <code>WORKDAY_EXTEND_ARCHITECTURE.md</code>, <code>orchestrations-integrations-guide.md</code>, <code>security-reporting-birt-notes.md</code>, <code>LATEST_DEVELOPMENTS.md</code>, <code>patterns/extend-common-issues.json</code></li>
@@ -1422,7 +1422,7 @@ catalogs, expertise metadata, and governance lists belong in <code>docs/</code>.
 </ul>
 
 <h3>8.3 Recon</h3>
-<p><code>extensions/recon/</code></p>
+<p><code>plugins/recon/</code></p>
 <ul>
   <li><strong>Purpose:</strong> Fleet reconnaissance from a management server -- inventory lookups, iDRAC queries, racadm commands, batch operations against Dell servers.</li>
   <li><strong>Key files:</strong> <code>CLAUDE.md</code>, <code>config/inventory-schema.json</code>, <code>templates/idrac-checks.md</code>, <code>templates/batch-loops.md</code>, <code>patterns/recon-common-issues.json</code></li>
@@ -1438,7 +1438,7 @@ catalogs, expertise metadata, and governance lists belong in <code>docs/</code>.
 </ul>
 
 <h3>8.4 Flowise</h3>
-<p><code>extensions/flowise/</code></p>
+<p><code>plugins/flowise/</code></p>
 <ul>
   <li><strong>Purpose:</strong> Building Flowise AgentFlow v2 workflows. Output is single JSON files.</li>
   <li><strong>Key files:</strong> <code>CLAUDE.md</code>, <code>FLOWISE.md</code>, <code>docs/flowise-expertise.json</code>, <code>example-flows/masterclass-2025/*.json</code>, <code>node-templates/*.json</code></li>
@@ -1453,7 +1453,7 @@ catalogs, expertise metadata, and governance lists belong in <code>docs/</code>.
 </ul>
 
 <h3>8.5 Mindcraft</h3>
-<p><code>extensions/mindcraft/</code></p>
+<p><code>plugins/mindcraft/</code></p>
 <ul>
   <li><strong>Purpose:</strong> Python orchestrator for an AI Minecraft bot ("Andy") that plays autonomously.</li>
   <li><strong>Key files:</strong> No CLAUDE.md. Only <code>__pycache__</code> remnants of Python modules: <code>client</code>, <code>detector</code>, <code>goals</code>, <code>learner</code>, <code>models</code>, <code>monitor</code>, <code>orchestrator</code>, <code>persistence</code>, <code>planner</code>. Config in <code>config/</code>.</li>
@@ -1644,7 +1644,7 @@ writing new tasks to TASKS.md.
 
 <footer>
   Context Foundry Technical Reference -- Generated 2026-03-19 -- foundry v0.6.1<br>
-  Source: <code>src/</code> (Rust), <code>extensions/</code> (domain knowledge), <code>~/.foundry/patterns/</code> (learned patterns)
+  Source: <code>src/</code> (Rust), <code>plugins/</code> (domain knowledge), <code>~/.foundry/patterns/</code> (learned patterns)
 </footer>
 
 <script>

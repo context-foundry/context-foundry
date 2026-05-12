@@ -348,7 +348,7 @@ pub(super) async fn run_review_loop(
     task_desc: &str,
     ctx: &RunContext,
     pattern_context: &str,
-    extension_context: &str,
+    plugin_context: &str,
     tx: &mpsc::UnboundedSender<AppEvent>,
     pattern_ids: &[String],
 ) -> (
@@ -499,7 +499,7 @@ pub(super) async fn run_review_loop(
             system_prompt: "",
             user_prompt: "",
             matched_pattern_ids: Vec::new(),
-            selected_extension_names: Vec::new(),
+            selected_plugin_names: Vec::new(),
             prior_artifact_paths: Vec::new(),
         };
         let codex_doubt_inv_id: StageInvocationId =
@@ -554,7 +554,7 @@ pub(super) async fn run_review_loop(
             task_desc,
             ctx,
             pattern_context,
-            extension_context,
+            plugin_context,
             tx,
             &files_changed,
             &files_list,
@@ -633,10 +633,10 @@ pub(super) async fn run_review_loop(
         &ctx.tasks_file_prompt_path(),
         &semgrep_findings,
     );
-    let prompt = prompts::wrap_with_extensions(&prompt, extension_context);
-    if !extension_context.is_empty() {
-        for ext_name in &ctx.config.extensions {
-            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::ExtensionInjected {
+    let prompt = prompts::wrap_with_plugins(&prompt, plugin_context);
+    if !plugin_context.is_empty() {
+        for ext_name in &ctx.config.plugins {
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::PluginInjected {
                 name: ext_name.clone(),
                 agent_role: AgentRole::Reviewer.to_string(),
                 task_id: task_id.to_string(),
@@ -655,7 +655,7 @@ pub(super) async fn run_review_loop(
         "",
         &prompt,
         pattern_ids.to_vec(),
-        ctx.config.extensions.clone(),
+        ctx.config.plugins.clone(),
     );
     let reviewer_inv_id: StageInvocationId = ctx.manifest.record_invocation(reviewer_spec);
     let reviewer_start = Instant::now();
@@ -879,7 +879,7 @@ async fn run_multipass_review(
     task_desc: &str,
     ctx: &RunContext,
     pattern_context: &str,
-    extension_context: &str,
+    plugin_context: &str,
     tx: &mpsc::UnboundedSender<AppEvent>,
     files_changed: &[String],
     files_list: &str,
@@ -931,9 +931,9 @@ async fn run_multipass_review(
             &ctx.tasks_file_prompt_path(),
         );
 
-        // The per-file prompt is NOT extension-wrapped (only single-pass and
-        // integration prompts are). Recording an empty selected_extension_names
-        // makes E1.5's `extension_loaded` Skip cleanly per the E1.5 spec.
+        // The per-file prompt is NOT plugin-wrapped (only single-pass and
+        // integration prompts are). Recording an empty selected_plugin_names
+        // makes E1.5's `plugin_loaded` Skip cleanly per the E1.5 spec.
         let per_file_spec = build_evidence_spec(
             StageId::Audit,
             AgentRole::Reviewer,
@@ -1082,11 +1082,11 @@ async fn run_multipass_review(
         &ctx.tasks_file_prompt_path(),
         semgrep_findings,
     );
-    let prompt = prompts::wrap_with_extensions(&prompt, extension_context);
+    let prompt = prompts::wrap_with_plugins(&prompt, plugin_context);
 
-    if !extension_context.is_empty() {
-        for ext_name in &ctx.config.extensions {
-            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::ExtensionInjected {
+    if !plugin_context.is_empty() {
+        for ext_name in &ctx.config.plugins {
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::PluginInjected {
                 name: ext_name.clone(),
                 agent_role: AgentRole::Reviewer.to_string(),
                 task_id: task_id.to_string(),
@@ -1106,7 +1106,7 @@ async fn run_multipass_review(
         "",
         &prompt,
         pattern_ids.to_vec(),
-        ctx.config.extensions.clone(),
+        ctx.config.plugins.clone(),
     );
     let integration_inv_id: StageInvocationId = ctx.manifest.record_invocation(integration_spec);
 

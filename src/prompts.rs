@@ -91,15 +91,15 @@ pub fn agent_system_directives() -> String {
     out
 }
 
-/// Prepend extension context to any agent prompt.
-/// If extension_context is empty, return prompt unchanged.
+/// Prepend plugin context to any agent prompt.
+/// If plugin_context is empty, return prompt unchanged.
 /// Static directives (execution style, large file handling, platform preamble)
 /// are now in agent_system_directives() via --append-system-prompt, not here.
-pub fn wrap_with_extensions(prompt: &str, extension_context: &str) -> String {
-    if extension_context.trim().is_empty() {
+pub fn wrap_with_plugins(prompt: &str, plugin_context: &str) -> String {
+    if plugin_context.trim().is_empty() {
         prompt.to_string()
     } else {
-        format!("{}\n\n{}", extension_context, prompt)
+        format!("{}\n\n{}", plugin_context, prompt)
     }
 }
 

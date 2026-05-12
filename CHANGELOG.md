@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.0] - 2026-05-12
+
+### Changed (BREAKING with auto-migration)
+- **`extensions/` → `plugins/` on disk.** The T1.22 rename was previously label-only — the on-disk directory was still named `extensions/`. v3.3.0 completes the rename. The repo directory is now `plugins/`, the user's global directory is `~/.foundry/plugins/`, and Foundry auto-migrates legacy `extensions/` directories on first startup (global, project-local, and ancestor lookups). The migration is one-shot and logs `info: Migrated <legacy> -> <new> (one-time)` to stderr.
+- **`Config.extensions` field renamed to `Config.plugins`.** `.foundry.json` files that still use the legacy `"extensions": [...]` field name continue to deserialize via `#[serde(alias = "extensions")]`. On next save, Foundry rewrites the field to `"plugins"`. The legacy key is dropped on write.
+- **MCP resource URI**: `foundry://extensions/index` → `foundry://plugins/index`. External MCP clients targeting the old URI must update.
+- **Rust API**: `mod extensions` → `mod plugins`; `discover_extensions`, `load_extension_context`, `validate_extensions`, `count_extension_patterns`, `load_extension_patterns`, `save_extensions` and related identifiers all renamed. `ExtensionInfo`/`ExtensionSource` → `PluginInfo`/`PluginSource`. `LoopEvent::Extension*` events → `LoopEvent::Plugin*`. `TuiPane::Extensions` → `TuiPane::Plugins`.
+
+### Removed
+- **Plugin-internal `patterns/` directories strangled.** Each plugin's legacy `patterns/*.json` was either migrated to an aggregated `skills/<topic>-pitfalls/SKILL.md` (Anthropic Skills format) or moved to `docs/` when the content was expertise metadata rather than learned pitfalls. Affected plugins: extend (30 pitfalls), flowise (13 pitfalls + 1 parallel-execution skill), recon (4 pitfalls), roblox (5 pitfalls + 1 metadata file moved to docs), workday-agents (6 pitfalls). The `~/.foundry/patterns/` legacy global JSON store remains as read-only fallback only (loader prefers `~/.foundry/skills/` when it exists).
+
+### Documentation
+- `.claude/rules/extensions.md` renamed to `.claude/rules/plugins.md` with new paths glob (`plugins/**/*`).
+- `extensions/README.md` (now `plugins/README.md`) and the agent-facing rule file both rewritten to make `skills/<topic>/SKILL.md` the canonical primary structure. Patterns demoted to "legacy, read-only fallback — do not add new entries."
+- Active site docs (`skills-and-plugins.html`, `OVERVIEW.html`, `cca-alignment.html`, `ROUNDUP.html`, `cross-provider-skills.md`, `jit-knowledge-injection.md`, `extensions-as-plugins.md`, `SPEC_flowise-portable-kit.md`) swept for `extensions/` → `plugins/` path references.
+- Project-level `CLAUDE.md` plugin section updated; all stale `patterns/<name>-common-issues.json` references replaced with new `skills/<name>-common-pitfalls/SKILL.md` paths.
+
 ## [3.2.0] - 2026-05-11
 
 ### Added

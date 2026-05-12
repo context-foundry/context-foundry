@@ -3,7 +3,7 @@ use std::path::Path;
 
 use crate::agent::AgentRole;
 use crate::config::Config;
-use crate::extensions;
+use crate::plugins;
 use crate::skill_discovery;
 use crate::utils::truncate_str;
 use crate::{task, tui};
@@ -295,20 +295,20 @@ pub(super) fn handle_startup_key(state: &mut AppState, key: event::KeyEvent, con
         return;
     }
 
-    // Extension panel navigation (when focused on extensions pane)
+    // Plugin panel navigation (when focused on plugins pane)
     let total_panel_rows =
-        state.available_extensions.len() + state.available_external_skills.len();
-    if state.focused_pane == crate::app::state::TuiPane::Extensions && total_panel_rows > 0 {
+        state.available_plugins.len() + state.available_external_skills.len();
+    if state.focused_pane == crate::app::state::TuiPane::Plugins && total_panel_rows > 0 {
         match key.code {
             KeyCode::Up => {
-                if state.extensions_cursor > 0 {
-                    state.extensions_cursor -= 1;
+                if state.plugins_cursor > 0 {
+                    state.plugins_cursor -= 1;
                 }
                 return;
             }
             KeyCode::Down => {
-                if state.extensions_cursor + 1 < total_panel_rows {
-                    state.extensions_cursor += 1;
+                if state.plugins_cursor + 1 < total_panel_rows {
+                    state.plugins_cursor += 1;
                 }
                 return;
             }
@@ -405,13 +405,13 @@ pub(super) fn handle_startup_key(state: &mut AppState, key: event::KeyEvent, con
     match key.code {
         KeyCode::Char('e')
             if key.modifiers.contains(KeyModifiers::CONTROL)
-                && !state.available_extensions.is_empty() =>
+                && !state.available_plugins.is_empty() =>
         {
-            if state.focused_pane == crate::app::state::TuiPane::Extensions {
+            if state.focused_pane == crate::app::state::TuiPane::Plugins {
                 state.focused_pane = crate::app::state::TuiPane::Explorer;
             } else {
-                state.focused_pane = crate::app::state::TuiPane::Extensions;
-                state.extensions_cursor = 0;
+                state.focused_pane = crate::app::state::TuiPane::Plugins;
+                state.plugins_cursor = 0;
             }
         }
         KeyCode::Tab | KeyCode::BackTab => {
@@ -920,11 +920,11 @@ pub(super) fn handle_startup_mouse_at(
                     tui::StartupMouseTarget::PreviewLine => {
                         state.focused_pane = crate::app::state::TuiPane::Preview;
                     }
-                    tui::StartupMouseTarget::ExtensionEntry(index) => {
-                        state.focused_pane = crate::app::state::TuiPane::Extensions;
-                        state.extensions_cursor = index;
-                        // Toggle the clicked extension
-                        if let Some(ext) = state.available_extensions.get_mut(index) {
+                    tui::StartupMouseTarget::PluginEntry(index) => {
+                        state.focused_pane = crate::app::state::TuiPane::Plugins;
+                        state.plugins_cursor = index;
+                        // Toggle the clicked plugin
+                        if let Some(ext) = state.available_plugins.get_mut(index) {
                             ext.selected = !ext.selected;
                         }
                         let project_dir = state
@@ -932,18 +932,18 @@ pub(super) fn handle_startup_mouse_at(
                             .parent()
                             .unwrap_or(std::path::Path::new("."));
                         let selected: Vec<String> = state
-                            .available_extensions
+                            .available_plugins
                             .iter()
                             .filter(|e| e.selected)
                             .map(|e| e.name.clone())
                             .collect();
-                        Config::save_extensions(project_dir, &selected);
+                        Config::save_plugins(project_dir, &selected);
                     }
                     tui::StartupMouseTarget::ExternalSkillEntry(index) => {
-                        state.focused_pane = crate::app::state::TuiPane::Extensions;
+                        state.focused_pane = crate::app::state::TuiPane::Plugins;
                         let cursor_index =
-                            state.available_extensions.len().saturating_add(index);
-                        state.extensions_cursor = cursor_index;
+                            state.available_plugins.len().saturating_add(index);
+                        state.plugins_cursor = cursor_index;
                         if let Some(xs) = state.available_external_skills.get_mut(index) {
                             xs.selected = !xs.selected;
                         }
@@ -1019,7 +1019,7 @@ pub(super) fn handle_startup_mouse_at(
                         return;
                     }
                 }
-                // Clicked outside file/preview/extension panes (e.g. input area)
+                // Clicked outside file/preview/plugin panes (e.g. input area)
                 // Reset focus so Enter submits instead of opening editor
                 state.focused_pane = crate::app::state::TuiPane::AgentOutput;
             }
@@ -1087,16 +1087,16 @@ pub(super) fn enter_home_surface(
     let scenario = detect_startup_scenario(project_dir);
     enter_startup_surface_for_scenario(project_dir, state, scenario, status_message);
 
-    // Discover extensions and merge with config selection
-    let discovered = extensions::discover_extensions(project_dir);
+    // Discover plugins and merge with config selection
+    let discovered = plugins::discover_plugins(project_dir);
     let config = Config::load(project_dir);
-    state.available_extensions = discovered
+    state.available_plugins = discovered
         .iter()
         .map(|ext| {
-            let selected = config.extensions.contains(&ext.name);
-            let description = extensions::extract_description(&ext.claude_md_path);
-            let pattern_count = extensions::count_extension_patterns(&ext.patterns_dir);
-            crate::app::state::ExtensionDisplayInfo {
+            let selected = config.plugins.contains(&ext.name);
+            let description = plugins::extract_description(&ext.claude_md_path);
+            let pattern_count = plugins::count_plugin_patterns(&ext.patterns_dir);
+            crate::app::state::PluginDisplayInfo {
                 name: ext.name.clone(),
                 selected,
                 description,
@@ -1109,9 +1109,9 @@ pub(super) fn enter_home_surface(
         build_external_skill_display(project_dir, &config);
 }
 
-/// Resolve `state.extensions_cursor` to either an extension row or an
+/// Resolve `state.plugins_cursor` to either a plugin row or an
 /// external-skill row and toggle the corresponding selection. T1.27: the
-/// cursor traverses both groups as one combined list (extensions first,
+/// cursor traverses both groups as one combined list (plugins first,
 /// then external skills) so existing keyboard muscle memory keeps working.
 fn toggle_panel_row_at_cursor(state: &mut AppState) {
     let project_dir = state
@@ -1120,19 +1120,19 @@ fn toggle_panel_row_at_cursor(state: &mut AppState) {
         .unwrap_or(std::path::Path::new("."))
         .to_path_buf();
 
-    let cursor = state.extensions_cursor;
-    let ext_count = state.available_extensions.len();
+    let cursor = state.plugins_cursor;
+    let ext_count = state.available_plugins.len();
     if cursor < ext_count {
-        if let Some(ext) = state.available_extensions.get_mut(cursor) {
+        if let Some(ext) = state.available_plugins.get_mut(cursor) {
             ext.selected = !ext.selected;
         }
         let selected: Vec<String> = state
-            .available_extensions
+            .available_plugins
             .iter()
             .filter(|e| e.selected)
             .map(|e| e.name.clone())
             .collect();
-        Config::save_extensions(&project_dir, &selected);
+        Config::save_plugins(&project_dir, &selected);
         return;
     }
 
@@ -1394,16 +1394,16 @@ pub(super) fn enter_startup_surface(
     let scenario = detect_startup_scenario(project_dir);
     enter_startup_surface_for_scenario(project_dir, state, scenario, status_message);
 
-    // Discover extensions and merge with config selection
-    let discovered = extensions::discover_extensions(project_dir);
+    // Discover plugins and merge with config selection
+    let discovered = plugins::discover_plugins(project_dir);
     let config = Config::load(project_dir);
-    state.available_extensions = discovered
+    state.available_plugins = discovered
         .iter()
         .map(|ext| {
-            let selected = config.extensions.contains(&ext.name);
-            let description = extensions::extract_description(&ext.claude_md_path);
-            let pattern_count = extensions::count_extension_patterns(&ext.patterns_dir);
-            crate::app::state::ExtensionDisplayInfo {
+            let selected = config.plugins.contains(&ext.name);
+            let description = plugins::extract_description(&ext.claude_md_path);
+            let pattern_count = plugins::count_plugin_patterns(&ext.patterns_dir);
+            crate::app::state::PluginDisplayInfo {
                 name: ext.name.clone(),
                 selected,
                 description,

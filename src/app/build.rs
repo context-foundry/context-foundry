@@ -28,7 +28,7 @@ use crate::budget;
 use crate::doubt_confidence;
 use crate::eval;
 use crate::eval::stage_id::{self as eval_stage_id, StageId};
-use crate::extensions;
+use crate::plugins;
 use crate::observatory::{self, AgentUsage, ObservatoryEvent};
 use crate::orchestrator::{self, OrchestratorConfig};
 use crate::skills;
@@ -173,7 +173,7 @@ pub(super) fn build_evidence_spec<'a>(
     system_prompt: &'a str,
     user_prompt: &'a str,
     matched_pattern_ids: Vec<String>,
-    selected_extension_names: Vec<String>,
+    selected_plugin_names: Vec<String>,
 ) -> PromptEvidenceSpec<'a> {
     let prior_artifact_paths: Vec<PathBuf> = match eval_stage_id::prior_artifact(stage_id) {
         Some(p) => vec![PathBuf::from(p)],
@@ -202,7 +202,7 @@ pub(super) fn build_evidence_spec<'a>(
         system_prompt: effective_system_prompt,
         user_prompt,
         matched_pattern_ids,
-        selected_extension_names,
+        selected_plugin_names,
         prior_artifact_paths,
     }
 }
@@ -368,7 +368,7 @@ async fn run_custom_card(
     task_info: &Task,
     ctx: &RunContext,
     tx: &mpsc::UnboundedSender<AppEvent>,
-    extension_context: &str,
+    plugin_context: &str,
     last_rate_limited: &mut bool,
 ) -> bool {
     let task_id = &task_info.id;
@@ -399,7 +399,7 @@ async fn run_custom_card(
         // bypass it (they run with a fully user-provided prompt_override).
         "",
     );
-    let prompt = prompts::wrap_with_extensions(&prompt, extension_context);
+    let prompt = prompts::wrap_with_plugins(&prompt, plugin_context);
 
     let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
     let fwd_tx = tx.clone();
@@ -496,7 +496,7 @@ async fn run_custom_cards_in_range(
     task_info: &Task,
     ctx: &RunContext,
     tx: &mpsc::UnboundedSender<AppEvent>,
-    extension_context: &str,
+    plugin_context: &str,
     last_rate_limited: &mut bool,
 ) {
     let start = prev_known_card_idx.map(|i| i + 1).unwrap_or(0);
@@ -538,7 +538,7 @@ async fn run_custom_cards_in_range(
             task_info,
             ctx,
             tx,
-            extension_context,
+            plugin_context,
             last_rate_limited,
         )
         .await;
@@ -764,7 +764,7 @@ fn spawn_lookahead_planner(
             &ctx.tasks_file_prompt_path(),
             &plan_file,
         );
-        // Lookahead planner writes plans, not code -- skip extension context.
+        // Lookahead planner writes plans, not code -- skip plugin context.
 
         let (agent_tx, _agent_rx) = mpsc::unbounded_channel();
         // lookahead planner manifest recording deferred -- this invocation is
@@ -1165,7 +1165,7 @@ async fn run_parallel_builder(
     tx: &mpsc::UnboundedSender<AppEvent>,
     ops: &[FileOp],
     groups: &[Vec<usize>],
-    extension_context: &str,
+    plugin_context: &str,
     pattern_context: &str,
 ) -> (bool, bool, AgentUsage) {
     let cc_version = ctx.cc_version.clone();
@@ -1349,7 +1349,7 @@ async fn run_parallel_builder(
         );
         // T1.31: parallel_builder_prompt now wraps `pattern_context` in its
         // own BEGIN REFERENCE DATA block; the old manual wrap is removed.
-        let prompt = prompts::wrap_with_extensions(&prompt, extension_context);
+        let prompt = prompts::wrap_with_plugins(&prompt, plugin_context);
 
         let provider = Config::parse_provider(&ctx.config.builder_provider);
         let model = ctx.config.builder_model.clone();
@@ -1379,7 +1379,7 @@ async fn run_parallel_builder(
         let slot_orig_model = ctx.config.builder_model.clone();
         let slot_eff_provider = ctx.config.builder_provider.clone();
         let slot_eff_model = ctx.config.builder_model.clone();
-        let slot_extensions = ctx.config.extensions.clone();
+        let slot_plugins = ctx.config.plugins.clone();
         let slot_pattern_ids: Vec<String> = Vec::new();
 
         let fut = async move {
@@ -1432,7 +1432,7 @@ async fn run_parallel_builder(
                 "",
                 &slot_prompt,
                 slot_pattern_ids.clone(),
-                slot_extensions.clone(),
+                slot_plugins.clone(),
             );
             let slot_inv_id = slot_manifest.record_invocation(slot_spec);
 
@@ -1727,7 +1727,7 @@ fn run_dual_pipelines<'a>(
     tx: &'a mpsc::UnboundedSender<AppEvent>,
     cached_patterns: &'a [patterns::Pattern],
     patterns_dir: &'a std::path::Path,
-    extension_context: &'a str,
+    plugin_context: &'a str,
     configs: [Config; 2],
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = (bool, bool)> + Send + 'a>> {
     Box::pin(async move {
@@ -1895,8 +1895,8 @@ fn run_dual_pipelines<'a>(
 
         let patterns0 = cached_patterns.to_vec();
         let patterns1 = cached_patterns.to_vec();
-        let ext0 = extension_context.to_string();
-        let ext1 = extension_context.to_string();
+        let ext0 = plugin_context.to_string();
+        let ext1 = plugin_context.to_string();
         let pdir0 = patterns_dir.to_path_buf();
         let pdir1 = patterns_dir.to_path_buf();
 
@@ -2058,16 +2058,16 @@ fn last_commit_touched_structural(project_dir: &std::path::Path) -> bool {
     }
 }
 
-fn emit_extension_injections(
+fn emit_plugin_injections(
     tx: &mpsc::UnboundedSender<AppEvent>,
-    extensions: &[String],
-    extension_context: &str,
+    plugins: &[String],
+    plugin_context: &str,
     agent_role: &AgentRole,
     task_id: &str,
 ) {
-    if !extension_context.is_empty() {
-        for ext_name in extensions {
-            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::ExtensionInjected {
+    if !plugin_context.is_empty() {
+        for ext_name in plugins {
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::PluginInjected {
                 name: ext_name.clone(),
                 agent_role: agent_role.to_string(),
                 task_id: task_id.to_string(),
@@ -2167,30 +2167,30 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
         };
     }
 
-    // ─── Extension Context Loading ──────────────────────────────
-    let discovered_extensions = extensions::discover_extensions(&ctx.project_dir);
-    let extension_context =
-        extensions::load_extension_context(&discovered_extensions, &ctx.config.extensions);
-    if !ctx.config.extensions.is_empty() {
+    // ─── Plugin Context Loading ──────────────────────────────
+    let discovered_plugins = plugins::discover_plugins(&ctx.project_dir);
+    let plugin_context =
+        plugins::load_plugin_context(&discovered_plugins, &ctx.config.plugins);
+    if !ctx.config.plugins.is_empty() {
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-            "Extensions active: {}",
-            ctx.config.extensions.join(", ")
+            "Plugins active: {}",
+            ctx.config.plugins.join(", ")
         ))));
     }
 
-    // Extract and send extension keywords for reference detection
+    // Extract and send plugin keywords for reference detection
     {
         let mut kw_map: HashMap<String, Vec<String>> = HashMap::new();
-        for ext_name in &ctx.config.extensions {
-            if let Some(ext) = discovered_extensions.iter().find(|e| e.name == *ext_name) {
-                let keywords = extensions::extract_keywords(&ext.claude_md_path);
+        for ext_name in &ctx.config.plugins {
+            if let Some(ext) = discovered_plugins.iter().find(|e| e.name == *ext_name) {
+                let keywords = plugins::extract_keywords(&ext.claude_md_path);
                 if !keywords.is_empty() {
                     kw_map.insert(ext_name.clone(), keywords);
                 }
             }
         }
         if !kw_map.is_empty() {
-            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::ExtensionKeywordsLoaded {
+            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::PluginKeywordsLoaded {
                 keywords: kw_map,
             }));
         }
@@ -2215,9 +2215,9 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
     if ctx.config.pattern_decay_days > 0 {
         let mut total_decayed =
             patterns::decay_stale_patterns(&patterns_dir, ctx.config.pattern_decay_days);
-        // Also decay extension pattern dirs
-        for ext_name in &ctx.config.extensions {
-            if let Some(ext) = discovered_extensions.iter().find(|e| &e.name == ext_name) {
+        // Also decay plugin pattern dirs
+        for ext_name in &ctx.config.plugins {
+            if let Some(ext) = discovered_plugins.iter().find(|e| &e.name == ext_name) {
                 if let Some(ref pdir) = ext.patterns_dir {
                     total_decayed +=
                         patterns::decay_stale_patterns(pdir, ctx.config.pattern_decay_days);
@@ -2234,12 +2234,12 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
 
     let mut cached_patterns = patterns::load_patterns(&patterns_dir);
 
-    // Merge extension patterns into the pool
+    // Merge plugin patterns into the pool
     let ext_patterns =
-        extensions::load_extension_patterns(&discovered_extensions, &ctx.config.extensions);
+        plugins::load_plugin_patterns(&discovered_plugins, &ctx.config.plugins);
     if !ext_patterns.is_empty() {
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-            "Loaded {} extension patterns",
+            "Loaded {} plugin patterns",
             ext_patterns.len()
         ))));
         cached_patterns.extend(ext_patterns);
@@ -2340,7 +2340,7 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                     "",
                     &coach_prompt,
                     Vec::new(),
-                    ctx.config.extensions.clone(),
+                    ctx.config.plugins.clone(),
                 );
                 let coach_inv_id = ctx.manifest.record_invocation(coach_evidence_spec);
                 let coach_start = Instant::now();
@@ -2464,7 +2464,7 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                 },
                 intake_brief.as_deref(),
             );
-            // Scout is investigation-only -- skip extension context to save tokens.
+            // Scout is investigation-only -- skip plugin context to save tokens.
             let scout_spec = build_evidence_spec(
                 StageId::Research,
                 AgentRole::Scout,
@@ -2477,7 +2477,7 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                 "",
                 &prompt,
                 Vec::new(),
-                ctx.config.extensions.clone(),
+                ctx.config.plugins.clone(),
             );
             let scout_inv_id = ctx.manifest.record_invocation(scout_spec);
             let scout_start = Instant::now();
@@ -2597,7 +2597,7 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                 skip_scout,
                 &cached_patterns,
                 &patterns_dir,
-                &extension_context,
+                &plugin_context,
             )
             .await;
             if !dual_arena_mode {
@@ -2898,7 +2898,7 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                 build_history.as_deref(),
                 &discover_skill_text,
             );
-            // Discovery finds new work -- skip extension context to save tokens.
+            // Discovery finds new work -- skip plugin context to save tokens.
             let discovery_start = Instant::now();
             let result = agent::run_agent(
                 &AgentRole::Discovery,
@@ -3187,7 +3187,7 @@ async fn process_task(
     skip_scout: bool,
     cached_patterns: &[patterns::Pattern],
     patterns_dir: &std::path::Path,
-    extension_context: &str,
+    plugin_context: &str,
 ) -> (bool, bool, bool) {
     let cc_version = ctx.cc_version.clone();
     // arena_mode == "dual" forks two full pipelines (A and pipeline_b_config).
@@ -3207,7 +3207,7 @@ async fn process_task(
                 tx,
                 cached_patterns,
                 patterns_dir,
-                extension_context,
+                plugin_context,
                 [selected_configs[0].clone(), selected_configs[1].clone()],
             )
             .await;
@@ -3804,7 +3804,7 @@ async fn process_task(
         task_info,
         ctx,
         tx,
-        extension_context,
+        plugin_context,
         &mut last_rate_limited,
     )
     .await;
@@ -3964,7 +3964,7 @@ async fn process_task(
                     // harness's `patterns_injected` check grades this stage
                     // instead of silently skipping it.
                     injected_skill_titles.clone(),
-                    ctx.config.extensions.clone(),
+                    ctx.config.plugins.clone(),
                 );
                 let query_inv_id = ctx.manifest.record_invocation(query_spec);
                 let query_start = Instant::now();
@@ -4130,7 +4130,7 @@ async fn process_task(
             task_info,
             ctx,
             tx,
-            extension_context,
+            plugin_context,
             &mut last_rate_limited,
         )
         .await;
@@ -4219,7 +4219,7 @@ async fn process_task(
                     &research_prompt_text,
                     // T1.31: surface injected skill IDs so eval grades this stage.
                     injected_skill_titles.clone(),
-                    ctx.config.extensions.clone(),
+                    ctx.config.plugins.clone(),
                 );
                 let research_inv_id = ctx.manifest.record_invocation(research_spec);
                 let research_start = Instant::now();
@@ -4487,7 +4487,7 @@ async fn process_task(
         task_info,
         ctx,
         tx,
-        extension_context,
+        plugin_context,
         &mut last_rate_limited,
     )
     .await;
@@ -4648,7 +4648,7 @@ async fn process_task(
             if let Some(summary) = budget_summary_for_next.take() {
                 prompt = format!("{}\n\n{}", summary, prompt);
             }
-            // Planner writes plans, not code -- skip extension context to save tokens.
+            // Planner writes plans, not code -- skip plugin context to save tokens.
             let override_reason = if budget_model_override.is_some() {
                 Some("budget_recovery".to_string())
             } else {
@@ -4676,7 +4676,7 @@ async fn process_task(
                 "",
                 &prompt,
                 injected_pattern_ids.clone(),
-                ctx.config.extensions.clone(),
+                ctx.config.plugins.clone(),
             );
             let this_planner_inv_id = ctx.manifest.record_invocation(planner_spec);
             planner_inv_id = Some(this_planner_inv_id);
@@ -4920,10 +4920,10 @@ async fn process_task(
         stage_results.push(result);
     }
 
-    // ─── Gate: Extension Context ───────────────────────────────
-    if !ctx.config.extensions.is_empty() {
-        let discovered = extensions::discover_extensions(&ctx.project_dir);
-        if let Err(errors) = extensions::validate_extensions(&discovered, &ctx.config.extensions) {
+    // ─── Gate: Plugin Context ───────────────────────────────
+    if !ctx.config.plugins.is_empty() {
+        let discovered = plugins::discover_plugins(&ctx.project_dir);
+        if let Err(errors) = plugins::validate_plugins(&discovered, &ctx.config.plugins) {
             for err in &errors {
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
                     "GATE BLOCKED: {}",
@@ -4943,10 +4943,10 @@ async fn process_task(
                 emit_tasks_file_mtime(&ctx.plan_path, tx);
             }
             stage_results.push(StageResult::failure(
-                "ExtensionGate",
-                "Validate extension context",
+                "PluginGate",
+                "Validate plugin context",
                 FailureType::GateFail,
-                vec!["Ensure all configured extensions have CLAUDE.md files".to_string()],
+                vec!["Ensure all configured plugins have CLAUDE.md files".to_string()],
             ));
             let _ = commit_wip_for_mode(ctx, task_id, task_desc);
             flush_budget_telemetry(
@@ -5004,7 +5004,7 @@ async fn process_task(
                 reason,
                 crate::utils::truncate_str(&failed_output, 500),
             );
-            // Planner retry -- skip extension context to save tokens.
+            // Planner retry -- skip plugin context to save tokens.
 
             let retry_spec = build_evidence_spec(
                 StageId::Plan,
@@ -5018,7 +5018,7 @@ async fn process_task(
                 "",
                 &retry_prompt,
                 injected_pattern_ids.clone(),
-                ctx.config.extensions.clone(),
+                ctx.config.plugins.clone(),
             );
             let retry_inv_id = ctx.manifest.record_invocation(retry_spec);
             // Mark the original planner invocation as superseded by this retry,
@@ -5214,7 +5214,7 @@ async fn process_task(
         }
     }
 
-    // Checkpoint: planner completed (after extension + builder gates pass)
+    // Checkpoint: planner completed (after plugin + builder gates pass)
     if !checkpoint_skip_planner {
         if let Some(idx) = plan_card_idx {
             write_checkpoint(&ctx.buildloop_dir, task_id, task_desc, idx);
@@ -5625,7 +5625,7 @@ async fn process_task(
         task_info,
         ctx,
         tx,
-        extension_context,
+        plugin_context,
         &mut last_rate_limited,
     )
     .await;
@@ -5684,10 +5684,10 @@ async fn process_task(
         build_ok = true;
         // last_rate_limited stays false for the skipped session.
     } else {
-        emit_extension_injections(
+        emit_plugin_injections(
             tx,
-            &ctx.config.extensions,
-            extension_context,
+            &ctx.config.plugins,
+            plugin_context,
             &AgentRole::Builder,
             task_id,
         );
@@ -5740,7 +5740,7 @@ async fn process_task(
                 tx,
                 file_ops,
                 groups,
-                extension_context,
+                plugin_context,
                 // T1.31: pass the builder-stage skill text (or legacy
                 // patterns) so parallel slots see the same reference data
                 // as the serial builder.
@@ -5860,7 +5860,7 @@ async fn process_task(
             // T1.31: the builder prompt now wraps `pattern_context` (here:
             // build_skill_text) internally inside its own BEGIN REFERENCE
             // DATA block, so the old manual wrap is no longer needed.
-            let prompt = prompts::wrap_with_extensions(&prompt, extension_context);
+            let prompt = prompts::wrap_with_plugins(&prompt, plugin_context);
             let prompt = if let Some(summary) = budget_summary_for_next.take() {
                 format!("{}\n\n{}", summary, prompt)
             } else {
@@ -5912,7 +5912,7 @@ async fn process_task(
                 // T1.31: include injected skill IDs alongside legacy pattern
                 // IDs so the eval harness grades skill injection for BUILD.
                 builder_matched_ids,
-                ctx.config.extensions.clone(),
+                ctx.config.plugins.clone(),
             );
             let builder_inv_id = ctx.manifest.record_invocation(builder_spec);
             let build_result = agent::run_agent(
@@ -6191,7 +6191,7 @@ async fn process_task(
         task_info,
         ctx,
         tx,
-        extension_context,
+        plugin_context,
         &mut last_rate_limited,
     )
     .await;
@@ -6325,7 +6325,7 @@ async fn process_task(
                         task_desc,
                         ctx,
                         &reviewer_pattern_context,
-                        extension_context,
+                        plugin_context,
                         tx,
                         &injected_pattern_ids,
                     )
@@ -6337,7 +6337,7 @@ async fn process_task(
                         task_desc,
                         ctx,
                         &reviewer_pattern_context,
-                        extension_context,
+                        plugin_context,
                         tx,
                         &injected_pattern_ids,
                     )
@@ -6359,7 +6359,7 @@ async fn process_task(
         task_info,
         ctx,
         tx,
-        extension_context,
+        plugin_context,
         &mut last_rate_limited,
     )
     .await;
@@ -6829,9 +6829,9 @@ async fn process_task(
                         e
                     ))));
                 }
-                // Also apply to extension pattern dirs
-                let ext_infos = extensions::discover_extensions(&ctx.project_dir);
-                for ext_name in &ctx.config.extensions {
+                // Also apply to plugin pattern dirs
+                let ext_infos = plugins::discover_plugins(&ctx.project_dir);
+                for ext_name in &ctx.config.plugins {
                     if let Some(ext) = ext_infos.iter().find(|e| &e.name == ext_name) {
                         if let Some(ref pdir) = ext.patterns_dir {
                             let _ = patterns::apply_feedback(pdir, &feedback);
@@ -6997,20 +6997,20 @@ async fn process_task(
                 ))));
             }
         }
-        let ext_infos = extensions::discover_extensions(&ctx.project_dir);
-        for ext_name in &ctx.config.extensions {
+        let ext_infos = plugins::discover_plugins(&ctx.project_dir);
+        for ext_name in &ctx.config.plugins {
             if let Some(ext) = ext_infos.iter().find(|e| &e.name == ext_name) {
                 if let Some(ref pdir) = ext.patterns_dir {
                     match patterns::update_used_counts(pdir, &all_cited_by_role, outcome) {
                         Ok(n) if n > 0 => {
                             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                                "Pattern store updated: {} pattern(s) updated in extension '{}'",
+                                "Pattern store updated: {} pattern(s) updated in plugin '{}'",
                                 n, ext_name
                             ))));
                         }
                         Err(e) => {
                             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                                "Warning: failed to update pattern used_counts for extension '{}': {}",
+                                "Warning: failed to update pattern used_counts for plugin '{}': {}",
                                 ext_name, e
                             ))));
                         }
@@ -7150,7 +7150,7 @@ async fn run_pattern_extraction(
     )));
 
     let prompt = prompts::pattern_extraction_prompt(task_id, task_desc);
-    // Note: pattern extraction doesn't get extension context -- it's a lightweight
+    // Note: pattern extraction doesn't get plugin context -- it's a lightweight
     // JSON extraction task that doesn't benefit from domain-specific instructions.
     // Discovery-stage manifest recording deferred to v2 -- StageId enum
     // covers Q/R/P/B/A only; see docs/PLAN_eval-harness.md.
@@ -8096,7 +8096,7 @@ mod tests {
 
     #[test]
     fn test_planner_checkpoint_not_written_before_gate() {
-        // Bug D41.1(a): write_checkpoint("planner") used to run before the extension
+        // Bug D41.1(a): write_checkpoint("planner") used to run before the plugin
         // gate and builder gate. If either gate failed, the checkpoint remained,
         // causing planner skip on resume. After the fix, checkpoint is written only
         // after both gates pass.

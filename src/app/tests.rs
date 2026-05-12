@@ -2100,13 +2100,13 @@ fn test_dual_custom_pipeline_stage_usage_updates_pipeline_stage_context() {
     );
 }
 
-// ─── Extension & Pattern Telemetry Tests ────────────────────────────
+// ─── Plugin & Pattern Telemetry Tests ────────────────────────────
 
 #[test]
-fn test_extension_reference_detection_finds_keywords() {
+fn test_plugin_reference_detection_finds_keywords() {
     let dir = temp_project_dir("ext-ref-detect");
     let mut state = AppState::new(dir.join(".buildloop"));
-    state.extension_keywords = HashMap::from([(
+    state.plugin_keywords = HashMap::from([(
         "roblox".to_string(),
         vec![
             "cframe".to_string(),
@@ -2119,19 +2119,19 @@ fn test_extension_reference_detection_finds_keywords() {
         .agent_output
         .push("Using CFrame to position the part".to_string());
     handle_agent_done(&mut state, true);
-    assert_eq!(state.extension_reference_count.get("roblox"), Some(&1));
+    assert_eq!(state.plugin_reference_count.get("roblox"), Some(&1));
     assert!(state
         .log_messages
         .iter()
-        .any(|(_, msg)| msg.contains("Extension 'roblox' referenced")));
+        .any(|(_, msg)| msg.contains("Plugin 'roblox' referenced")));
     let _ = std::fs::remove_dir_all(dir);
 }
 
 #[test]
-fn test_extension_reference_detection_no_match() {
+fn test_plugin_reference_detection_no_match() {
     let dir = temp_project_dir("ext-ref-nomatch");
     let mut state = AppState::new(dir.join(".buildloop"));
-    state.extension_keywords = HashMap::from([(
+    state.plugin_keywords = HashMap::from([(
         "roblox".to_string(),
         vec![
             "cframe".to_string(),
@@ -2144,7 +2144,7 @@ fn test_extension_reference_detection_no_match() {
         .agent_output
         .push("Writing unit tests for the parser".to_string());
     handle_agent_done(&mut state, true);
-    assert!(!state.extension_reference_count.contains_key("roblox"));
+    assert!(!state.plugin_reference_count.contains_key("roblox"));
     let _ = std::fs::remove_dir_all(dir);
 }
 
@@ -2191,32 +2191,32 @@ fn test_pattern_apply_detection_no_match() {
 }
 
 #[test]
-fn test_extension_inject_count_incremented_on_event() {
+fn test_plugin_inject_count_incremented_on_event() {
     let dir = temp_project_dir("ext-inject-count");
     let mut state = AppState::new(dir.join(".buildloop"));
     let config = Config::default();
     handle_event(
         &mut state,
-        AppEvent::LoopEvent(LoopEvent::ExtensionInjected {
+        AppEvent::LoopEvent(LoopEvent::PluginInjected {
             name: "roblox".to_string(),
             agent_role: "Builder".to_string(),
             task_id: "T1.1".to_string(),
         }),
         &config,
     );
-    assert_eq!(state.extension_inject_count.get("roblox"), Some(&1));
-    assert_eq!(state.session_extensions_used.len(), 1);
+    assert_eq!(state.plugin_inject_count.get("roblox"), Some(&1));
+    assert_eq!(state.session_plugins_used.len(), 1);
     handle_event(
         &mut state,
-        AppEvent::LoopEvent(LoopEvent::ExtensionInjected {
+        AppEvent::LoopEvent(LoopEvent::PluginInjected {
             name: "roblox".to_string(),
             agent_role: "Reviewer".to_string(),
             task_id: "T1.1".to_string(),
         }),
         &config,
     );
-    assert_eq!(state.extension_inject_count.get("roblox"), Some(&2));
-    assert_eq!(state.session_extensions_used.len(), 2);
+    assert_eq!(state.plugin_inject_count.get("roblox"), Some(&2));
+    assert_eq!(state.session_plugins_used.len(), 2);
     let _ = std::fs::remove_dir_all(dir);
 }
 
@@ -2287,11 +2287,11 @@ fn test_patterns_used_with_skill_ids_increments_inject_counter() {
 }
 
 #[test]
-fn test_build_completion_warns_unused_extensions() {
+fn test_build_completion_warns_unused_plugins() {
     let dir = temp_project_dir("ext-warn-unused");
     let mut state = AppState::new(dir.join(".buildloop"));
-    state.extension_inject_count = HashMap::from([("roblox".to_string(), 4)]);
-    // Leave extension_reference_count empty
+    state.plugin_inject_count = HashMap::from([("roblox".to_string(), 4)]);
+    // Leave plugin_reference_count empty
     let config = Config::default();
     handle_event(
         &mut state,
@@ -2299,7 +2299,7 @@ fn test_build_completion_warns_unused_extensions() {
         &config,
     );
     assert!(state.log_messages.iter().any(|(_, msg)| msg
-        .contains("Warning: Extension 'roblox' was injected 4 times but never referenced")));
+        .contains("Warning: Plugin 'roblox' was injected 4 times but never referenced")));
     let _ = std::fs::remove_dir_all(dir);
 }
 
@@ -2307,8 +2307,8 @@ fn test_build_completion_warns_unused_extensions() {
 fn test_build_completion_no_warning_when_referenced() {
     let dir = temp_project_dir("ext-warn-none");
     let mut state = AppState::new(dir.join(".buildloop"));
-    state.extension_inject_count = HashMap::from([("roblox".to_string(), 4)]);
-    state.extension_reference_count = HashMap::from([("roblox".to_string(), 2)]);
+    state.plugin_inject_count = HashMap::from([("roblox".to_string(), 4)]);
+    state.plugin_reference_count = HashMap::from([("roblox".to_string(), 2)]);
     let config = Config::default();
     handle_event(
         &mut state,
@@ -2318,7 +2318,7 @@ fn test_build_completion_no_warning_when_referenced() {
     assert!(!state
         .log_messages
         .iter()
-        .any(|(_, msg)| msg.contains("Warning: Extension 'roblox'")));
+        .any(|(_, msg)| msg.contains("Warning: Plugin 'roblox'")));
     let _ = std::fs::remove_dir_all(dir);
 }
 
@@ -2326,7 +2326,7 @@ fn test_build_completion_no_warning_when_referenced() {
 fn test_keyword_minimum_length_filter() {
     let dir = temp_project_dir("kw-min-len");
     let mut state = AppState::new(dir.join(".buildloop"));
-    state.extension_keywords = HashMap::from([(
+    state.plugin_keywords = HashMap::from([(
         "recon".to_string(),
         vec!["ssh".to_string(), "idrac".to_string(), "racadm".to_string()],
     )]);
@@ -2335,12 +2335,12 @@ fn test_keyword_minimum_length_filter() {
         .agent_output
         .push("Using ssh to connect and running racadm commands".to_string());
     handle_agent_done(&mut state, true);
-    assert_eq!(state.extension_reference_count.get("recon"), Some(&1));
+    assert_eq!(state.plugin_reference_count.get("recon"), Some(&1));
     // The log should mention racadm (>= 4 chars) but NOT ssh (< 4 chars)
     let ref_log = state
         .log_messages
         .iter()
-        .find(|(_, msg)| msg.contains("Extension 'recon' referenced"));
+        .find(|(_, msg)| msg.contains("Plugin 'recon' referenced"));
     assert!(ref_log.is_some());
     let (_, log_msg) = ref_log.unwrap();
     assert!(log_msg.contains("racadm"));

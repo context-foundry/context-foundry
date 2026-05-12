@@ -20,7 +20,7 @@ const ARTIFACT_MIN_BYTES: u64 = 200;
 pub struct StageCompletedSuccessfully;
 pub struct SystemPromptPresent;
 pub struct ModelMatchesConfig;
-pub struct ExtensionLoaded;
+pub struct PluginLoaded;
 pub struct PatternsInjected;
 pub struct PriorArtifactReceived;
 pub struct PriorArtifactRead;
@@ -198,9 +198,9 @@ impl Check for ModelMatchesConfig {
     }
 }
 
-impl Check for ExtensionLoaded {
+impl Check for PluginLoaded {
     fn name(&self) -> &'static str {
-        "extension_loaded"
+        "plugin_loaded"
     }
     fn category(&self) -> Category {
         Category::Plumbing
@@ -231,19 +231,19 @@ impl Check for ExtensionLoaded {
                 });
                 continue;
             }
-            if inv.selected_extension_names.is_empty() {
+            if inv.selected_plugin_names.is_empty() {
                 out.push(StageCheckResult {
                     stage,
                     invocation_id: inv.invocation_id,
                     status: Status::Skip,
-                    evidence: "no extensions selected".to_string(),
+                    evidence: "no plugins selected".to_string(),
                 });
                 continue;
             }
             let missing: Vec<String> = inv
-                .selected_extension_names
+                .selected_plugin_names
                 .iter()
-                .filter(|n| !inv.prompt_extension_names_found.contains(n))
+                .filter(|n| !inv.prompt_plugin_names_found.contains(n))
                 .cloned()
                 .collect();
             if missing.is_empty() {
@@ -251,7 +251,7 @@ impl Check for ExtensionLoaded {
                     stage,
                     invocation_id: inv.invocation_id,
                     status: Status::Pass,
-                    evidence: format!("found={:?}", inv.prompt_extension_names_found),
+                    evidence: format!("found={:?}", inv.prompt_plugin_names_found),
                 });
             } else {
                 out.push(StageCheckResult {
@@ -666,7 +666,7 @@ mod tests {
             system_prompt: system,
             user_prompt: user,
             matched_pattern_ids: Vec::new(),
-            selected_extension_names: Vec::new(),
+            selected_plugin_names: Vec::new(),
             prior_artifact_paths: Vec::new(),
         }
     }
@@ -778,7 +778,7 @@ mod tests {
             system_prompt: "sys",
             user_prompt: "user",
             matched_pattern_ids: Vec::new(),
-            selected_extension_names: Vec::new(),
+            selected_plugin_names: Vec::new(),
             prior_artifact_paths: Vec::new(),
         };
         let id = h.record_invocation(spec);
@@ -806,7 +806,7 @@ mod tests {
             system_prompt: "sys",
             user_prompt: "user",
             matched_pattern_ids: Vec::new(),
-            selected_extension_names: Vec::new(),
+            selected_plugin_names: Vec::new(),
             prior_artifact_paths: Vec::new(),
         };
         let id = h.record_invocation(spec);
@@ -835,7 +835,7 @@ mod tests {
             system_prompt: "sys",
             user_prompt: "user",
             matched_pattern_ids: Vec::new(),
-            selected_extension_names: Vec::new(),
+            selected_plugin_names: Vec::new(),
             prior_artifact_paths: Vec::new(),
         };
         let id = h.record_invocation(spec);
@@ -847,7 +847,7 @@ mod tests {
     }
 
     #[test]
-    fn extension_loaded_skips_when_none_selected() {
+    fn plugin_loaded_skips_when_none_selected() {
         let tmp = TempDir::new().unwrap();
         let bl = make_buildloop(&tmp);
         let h = ManifestHandle::new(&bl, "T1.1", Utc::now());
@@ -855,39 +855,39 @@ mod tests {
         h.record_exit(id, StageStatus::Ran, Utc::now(), AgentExitInfo::default());
         h.flush().unwrap();
         let r = latest_run(&bl).unwrap();
-        let results = run_check(ExtensionLoaded, &r);
+        let results = run_check(PluginLoaded, &r);
         assert_eq!(results[0].status, Status::Skip);
     }
 
     #[test]
-    fn extension_loaded_passes_with_marker() {
+    fn plugin_loaded_passes_with_marker() {
         let tmp = TempDir::new().unwrap();
         let bl = make_buildloop(&tmp);
         let h = ManifestHandle::new(&bl, "T1.1", Utc::now());
         let user = "before --- BEGIN EXTENSION CONTEXT: recon --- after";
         let mut spec = empty_spec(StageId::Plan, AgentRole::Planner, "sys", user);
-        spec.selected_extension_names = vec!["recon".to_string()];
+        spec.selected_plugin_names = vec!["recon".to_string()];
         let id = h.record_invocation(spec);
         h.record_exit(id, StageStatus::Ran, Utc::now(), AgentExitInfo::default());
         h.flush().unwrap();
         let r = latest_run(&bl).unwrap();
-        let results = run_check(ExtensionLoaded, &r);
+        let results = run_check(PluginLoaded, &r);
         assert_eq!(results[0].status, Status::Pass);
     }
 
     #[test]
-    fn extension_loaded_fails_when_marker_missing() {
+    fn plugin_loaded_fails_when_marker_missing() {
         let tmp = TempDir::new().unwrap();
         let bl = make_buildloop(&tmp);
         let h = ManifestHandle::new(&bl, "T1.1", Utc::now());
         let user = "user prompt without marker";
         let mut spec = empty_spec(StageId::Plan, AgentRole::Planner, "sys", user);
-        spec.selected_extension_names = vec!["recon".to_string()];
+        spec.selected_plugin_names = vec!["recon".to_string()];
         let id = h.record_invocation(spec);
         h.record_exit(id, StageStatus::Ran, Utc::now(), AgentExitInfo::default());
         h.flush().unwrap();
         let r = latest_run(&bl).unwrap();
-        let results = run_check(ExtensionLoaded, &r);
+        let results = run_check(PluginLoaded, &r);
         assert_eq!(results[0].status, Status::Fail);
     }
 

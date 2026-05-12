@@ -35,15 +35,15 @@ mcp__context-foundry__read_global_patterns("common-issues")
 
 ## Plugins
 
-Context Foundry has domain-specific plugins (formerly called "extensions"). **When working on tasks for a specific domain, read that plugin's CLAUDE.md first.** The on-disk directory name `extensions/` is preserved for path stability with existing projects and tooling; only the user-facing label changed to "Plugins".
+Context Foundry has domain-specific plugins (formerly called "extensions"). **When working on tasks for a specific domain, read that plugin's CLAUDE.md first.** The on-disk directory is `plugins/`. The legacy `plugins/` name is auto-migrated on first startup; do not reference it in new code or docs.
 
 ### Roblox Plugin
-**Location:** `extensions/roblox/`
+**Location:** `plugins/roblox/`
 **When to read:** Any Roblox world generation, Lune scripting, or .rbxl/.rbxm work
 
 **IMPORTANT - Read before Roblox work:**
-- `extensions/roblox/CLAUDE.md` - Critical patterns and commands
-- `extensions/roblox/patterns/roblox-common-issues.json` - Learned issues
+- `plugins/roblox/CLAUDE.md` - Critical patterns and commands
+- `plugins/roblox/skills/roblox-common-pitfalls/SKILL.md` - Learned pitfalls (Anthropic Skills format)
 
 **Key learnings:**
 - Use `add_to_world.luau` (not `generate_world.luau`)
@@ -51,15 +51,15 @@ Context Foundry has domain-specific plugins (formerly called "extensions"). **Wh
 - Don't generate worlds from scratch - load original and clone
 
 ### Workday Extend Plugin
-**Location:** `extensions/extend/`
+**Location:** `plugins/extend/`
 **When to read:** Any Workday Extend app development, orchestrations, integrations, security configuration, BIRT reports, or Workday API work
 
 **IMPORTANT - Read before Extend work:**
-- `extensions/extend/CLAUDE.md` - Index of all guides and critical rules
-- `extensions/extend/WORKDAY_EXTEND_DEVELOPER_GUIDE.md` - Comprehensive dev workflow
-- `extensions/extend/WORKDAY_EXTEND_ARCHITECTURE.md` - AMD/PMD/SMD metadata structures
-- `extensions/extend/orchestrations-integrations-guide.md` - Orchestrations deep dive
-- `extensions/extend/security-reporting-birt-notes.md` - Security, reporting, BIRT
+- `plugins/extend/CLAUDE.md` - Index of all guides and critical rules
+- `plugins/extend/WORKDAY_EXTEND_DEVELOPER_GUIDE.md` - Comprehensive dev workflow
+- `plugins/extend/WORKDAY_EXTEND_ARCHITECTURE.md` - AMD/PMD/SMD metadata structures
+- `plugins/extend/orchestrations-integrations-guide.md` - Orchestrations deep dive
+- `plugins/extend/security-reporting-birt-notes.md` - Security, reporting, BIRT
 
 **Key learnings:**
 - Extend apps are metadata-driven (no arbitrary code execution)
@@ -69,13 +69,13 @@ Context Foundry has domain-specific plugins (formerly called "extensions"). **Wh
 - Test before every biannual Workday release
 
 ### Recon Plugin
-**Location:** `extensions/recon/`
+**Location:** `plugins/recon/`
 **When to read:** Any fleet checks, iDRAC queries, racadm commands, server inventory lookups, or batch ops from a management server
 
 **IMPORTANT - Read before ops/recon work:**
-- `extensions/recon/CLAUDE.md` - Domain rules and key files
-- `extensions/recon/config/inventory-schema.json` - CSV column mapping
-- `extensions/recon/templates/` - Proven command templates
+- `plugins/recon/CLAUDE.md` - Domain rules and key files
+- `plugins/recon/config/inventory-schema.json` - CSV column mapping
+- `plugins/recon/templates/` - Proven command templates
 
 **Key learnings:**
 - Always use `grep -w` for hostname lookups (avoid substring matches)
@@ -83,12 +83,12 @@ Context Foundry has domain-specific plugins (formerly called "extensions"). **Wh
 - Always label batch output with the current hostname
 
 ### Workday Agents Plugin
-**Location:** `extensions/workday-agents/`
+**Location:** `plugins/workday-agents/`
 **When to read:** Building any standalone compliance rule engine targeting the Workday Marketplace (ACA auditor, multi-state tax, Davis-Bacon, or similar)
 
 **IMPORTANT - Read before building a new Workday agent:**
-- `extensions/workday-agents/CLAUDE.md` - Architecture pattern, design rules, existing agents
-- `extensions/workday-agents/patterns/workday-agents-common-issues.json` - Learned bugs from Doubt/auditor
+- `plugins/workday-agents/CLAUDE.md` - Architecture pattern, design rules, existing agents
+- `plugins/workday-agents/skills/workday-agents-common-pitfalls/SKILL.md` - Learned pitfalls (Anthropic Skills format)
 
 **Key learnings:**
 - Normalize dict KEYS (not just values) at the Pydantic model level
@@ -101,7 +101,7 @@ Context Foundry has domain-specific plugins (formerly called "extensions"). **Wh
 ### Other Plugins
 | Plugin | Path | Domain |
 |-----------|------|--------|
-| Flowise | `extensions/flowise/` | Flowise AI workflows |
+| Flowise | `plugins/flowise/` | Flowise AI workflows |
 
 ## MCP Tools Available
 

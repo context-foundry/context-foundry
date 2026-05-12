@@ -10,8 +10,8 @@ This is how we keep AI-assisted contributions consistent with the project's arch
 |------|-------|----------------|
 | `architecture.md` | `src/app.rs`, `src/agent.rs`, `src/main.rs` | Build loop pipeline, module responsibilities, event system, agent invocation, review gate |
 | `config.md` | `src/config.rs`, `.foundry.json` | Configuration schema, task format, git commit conventions |
-| `extensions.md` | `extensions/**/*` | Extension directory structure, available extensions, domain rules |
-| `patterns.md` | `src/patterns.rs`, `**/*.json` | Pattern JSON schema, storage locations, matching algorithm, merge behavior |
+| `plugins.md` | `plugins/**/*` | Plugin directory structure, available plugins, domain rules |
+| `patterns.md` | `src/patterns.rs`, `**/*.json` | Legacy pattern JSON (deprecated, kept for back-compat fallback) |
 | `prompts.md` | `src/prompts.rs` | Agent prompt functions, conventions, modification guidelines |
 | `rust.md` | `src/**/*.rs` | Error handling, async patterns, code style, serde conventions, testing |
 

@@ -110,12 +110,12 @@ pub struct RunningPaneRects {
     #[allow(dead_code)]
     pub narrative: Rect,
     pub patterns: Rect,
-    pub extensions_used: Option<Rect>,
+    pub plugins_used: Option<Rect>,
     /// Terminal column of the vertical separator between agent and task-queue panes.
     pub separator_col: u16,
 }
 
-pub fn running_layout(area: Rect, has_extensions: bool, split_pct: u16) -> RunningPaneRects {
+pub fn running_layout(area: Rect, has_plugins: bool, split_pct: u16) -> RunningPaneRects {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -138,14 +138,14 @@ pub fn running_layout(area: Rect, has_extensions: bool, split_pct: u16) -> Runni
         .split(chunks[2]);
 
     let sep = middle_cols[1].x;
-    if has_extensions {
+    if has_plugins {
         let right_panel = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Min(6),
                 Constraint::Length(6),  // narrative
                 Constraint::Length(6),  // patterns
-                Constraint::Length(6),  // extensions used
+                Constraint::Length(6),  // plugins used
             ])
             .split(middle_cols[1]);
         RunningPaneRects {
@@ -153,7 +153,7 @@ pub fn running_layout(area: Rect, has_extensions: bool, split_pct: u16) -> Runni
             task_queue: right_panel[0],
             narrative: right_panel[1],
             patterns: right_panel[2],
-            extensions_used: Some(right_panel[3]),
+            plugins_used: Some(right_panel[3]),
             separator_col: sep,
         }
     } else {
@@ -170,7 +170,7 @@ pub fn running_layout(area: Rect, has_extensions: bool, split_pct: u16) -> Runni
             task_queue: right_panel[0],
             narrative: right_panel[1],
             patterns: right_panel[2],
-            extensions_used: None,
+            plugins_used: None,
             separator_col: sep,
         }
     }
@@ -202,23 +202,23 @@ pub fn render(frame: &mut Frame, state: &AppState, config: &Config) {
         .split(chunks[2]);
     running::render_agent_output(frame, middle_cols[0], state, state.focused_pane);
 
-    // Right panel: task queue + patterns (+ extensions used if any selected)
-    let has_extensions = !state.available_extensions.iter().all(|e| !e.selected)
-        || !state.session_extensions_used.is_empty();
-    let _right_panel = if has_extensions {
+    // Right panel: task queue + patterns (+ plugins used if any selected)
+    let has_plugins = !state.available_plugins.iter().all(|e| !e.selected)
+        || !state.session_plugins_used.is_empty();
+    let _right_panel = if has_plugins {
         let panel = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Min(6),    // Task queue (fills remaining space)
                 Constraint::Length(6), // Narrative (3 content lines + 2 border)
                 Constraint::Length(6), // Patterns (4 content lines + 2 border)
-                Constraint::Length(6), // Extensions Used (4 content lines + 2 border)
+                Constraint::Length(6), // Plugins Used (4 content lines + 2 border)
             ])
             .split(middle_cols[1]);
         running::render_task_queue(frame, panel[0], state, state.focused_pane);
         narrative::render_narrative(frame, panel[1], state, state.focused_pane);
         running::render_skill_citations(frame, panel[2], state, config, state.focused_pane);
-        running::render_extensions_used(frame, panel[3], state, state.focused_pane);
+        running::render_plugins_used(frame, panel[3], state, state.focused_pane);
         panel
     } else {
         let panel = Layout::default()

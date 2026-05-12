@@ -44,8 +44,8 @@ pub struct Pattern {
     /// Tracked automatically after each task to measure pattern usefulness.
     #[serde(default)]
     pub used_count: usize,
-    /// Extension CLAUDE.md path this pattern was promoted to (e.g. "extensions/rust/CLAUDE.md").
-    /// Non-empty means the pattern has graduated to extension prose and should be excluded from injection.
+    /// Plugin CLAUDE.md path this pattern was promoted to (e.g. "plugins/rust/CLAUDE.md").
+    /// Non-empty means the pattern has graduated to plugin prose and should be excluded from injection.
     #[serde(default)]
     pub promoted_to: String,
     /// ISO date when the pattern was promoted (e.g. "2026-04-07").
@@ -160,7 +160,7 @@ where
     }
 }
 
-/// Wrapper object format used by extension pattern files.
+/// Wrapper object format used by plugin pattern files.
 /// Example: {"pattern_type": "common-issues", "domain": "recon", "patterns": [...]}
 /// Preserves extra metadata fields (pattern_type, domain, version, etc.) on round-trip.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -372,7 +372,7 @@ pub fn keyword_scores(
         .iter()
         .enumerate()
         .filter_map(|(i, p)| {
-            // Skip promoted patterns -- they now live in extension CLAUDE.md
+            // Skip promoted patterns -- they now live in plugin CLAUDE.md
             if !p.promoted_to.is_empty() {
                 return None;
             }
@@ -1730,7 +1730,7 @@ mod tests {
             auto_apply: false,
             learned_from: None,
             used_count: 0,
-            promoted_to: "extensions/rust/CLAUDE.md".to_string(),
+            promoted_to: "plugins/rust/CLAUDE.md".to_string(),
             promoted_at: "2026-04-07".to_string(),
             last_used_at: None,
             cited_in_pass: 0,
@@ -1780,7 +1780,7 @@ mod tests {
             auto_apply: false,
             learned_from: None,
             used_count: 0,
-            promoted_to: "extensions/rust/CLAUDE.md".to_string(),
+            promoted_to: "plugins/rust/CLAUDE.md".to_string(),
             promoted_at: "2026-04-07".to_string(),
             last_used_at: None,
             cited_in_pass: 0,

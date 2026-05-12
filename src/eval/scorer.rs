@@ -335,7 +335,7 @@ mod tests {
             system_prompt: "sys",
             user_prompt: "user",
             matched_pattern_ids: Vec::new(),
-            selected_extension_names: Vec::new(),
+            selected_plugin_names: Vec::new(),
             prior_artifact_paths: Vec::new(),
         };
         let id = h.record_invocation(spec);

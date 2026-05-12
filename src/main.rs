@@ -11,7 +11,7 @@ mod dashboard;
 mod doubt_confidence;
 mod embeddings;
 mod eval;
-mod extensions;
+mod plugins;
 mod ghcopilot;
 mod git;
 mod history;
@@ -166,7 +166,7 @@ enum PatternAction {
         #[arg(long, conflicts_with = "yes")]
         dry_run: bool,
     },
-    /// Promote high-citation patterns into extension CLAUDE.md prose
+    /// Promote high-citation patterns into plugin CLAUDE.md prose
     Promote {
         /// Actually write files (default is dry-run)
         #[arg(long)]

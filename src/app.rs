@@ -26,7 +26,7 @@ use self::startup::{
 pub use self::state::FileEntry;
 pub use self::state::{
     settings_sections, Action, AppPhase, AppState, ClickableSurface, CurrentClassification,
-    DualSelection, ExplorerContextMenu, ExtensionDisplayInfo, FieldKind, ModelEntry, ModelPicker,
+    DualSelection, ExplorerContextMenu, PluginDisplayInfo, FieldKind, ModelEntry, ModelPicker,
     OverlayRow, PatternEventKind, PickerItem, PlanStatus, PlanningState, RunningModalKind,
     SectionKind, StartupAction, StartupScenario, StartupState, StreamState,
     SurfaceSummaryOverlay, TuiPane,
@@ -964,7 +964,7 @@ fn spawn_build_loop(
     loop_config.run_mode = state.run_mode.clone();
     loop_config.dual_selection = state.dual_selection.as_str().to_string();
     loop_config.builder_models = state.builder_model_specs.clone();
-    loop_config.extensions = state.selected_extension_names();
+    loop_config.plugins = state.selected_plugin_names();
 
     state.review_gates.clear();
     state.review_session_id = None;
@@ -2435,21 +2435,21 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                 state.is_discovering = false;
                 state.log(format!("Discovery found {} new tasks", new_count));
             }
-            LoopEvent::ExtensionKeywordsLoaded { ref keywords } => {
-                state.extension_keywords = keywords.clone();
+            LoopEvent::PluginKeywordsLoaded { ref keywords } => {
+                state.plugin_keywords = keywords.clone();
             }
-            LoopEvent::ExtensionInjected {
+            LoopEvent::PluginInjected {
                 ref name,
                 ref agent_role,
                 ref task_id,
             } => {
-                state.session_extensions_used.push(state::ExtensionEvent {
+                state.session_plugins_used.push(state::PluginEvent {
                     name: name.clone(),
                     agent_role: agent_role.clone(),
                     task_id: task_id.clone(),
                 });
                 *state
-                    .extension_inject_count
+                    .plugin_inject_count
                     .entry(name.clone())
                     .or_insert(0) += 1;
             }
@@ -2755,14 +2755,14 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                 state.observatory_session_id = Some(sid.clone());
             }
             LoopEvent::Finished => {
-                // Emit warnings for injected-but-never-referenced extensions
-                let warnings: Vec<String> = state.extension_inject_count
+                // Emit warnings for injected-but-never-referenced plugins
+                let warnings: Vec<String> = state.plugin_inject_count
                     .iter()
                     .filter_map(|(ext_name, inject_count)| {
-                        let ref_count = state.extension_reference_count.get(ext_name).copied().unwrap_or(0);
+                        let ref_count = state.plugin_reference_count.get(ext_name).copied().unwrap_or(0);
                         if *inject_count > 0 && ref_count == 0 {
                             Some(format!(
-                                "Warning: Extension '{}' was injected {} times but never referenced -- check if the extension content is relevant to this task.",
+                                "Warning: Plugin '{}' was injected {} times but never referenced -- check if the plugin content is relevant to this task.",
                                 ext_name, inject_count
                             ))
                         } else {
@@ -3493,8 +3493,8 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                         let terminal_size = crossterm::terminal::size().unwrap_or((120, 40));
                         let area =
                             ratatui::layout::Rect::new(0, 0, terminal_size.0, terminal_size.1);
-                        let has_ext = state.available_extensions.iter().any(|e| e.selected)
-                            || !state.session_extensions_used.is_empty();
+                        let has_ext = state.available_plugins.iter().any(|e| e.selected)
+                            || !state.session_plugins_used.is_empty();
                         let panes = tui::running_layout(area, has_ext, state.agent_pane_split);
                         let bottom_chunks = ratatui::layout::Layout::default()
                             .direction(ratatui::layout::Direction::Vertical)
@@ -3515,10 +3515,10 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                         } else if tui::rect_contains(panes.patterns, mouse.column, mouse.row) {
                             state.focused_pane = state::TuiPane::PatternsLearned;
                         } else if panes
-                            .extensions_used
+                            .plugins_used
                             .is_some_and(|r| tui::rect_contains(r, mouse.column, mouse.row))
                         {
-                            state.focused_pane = state::TuiPane::Extensions;
+                            state.focused_pane = state::TuiPane::Plugins;
                         } else if tui::rect_contains(bottom_chunks[3], mouse.column, mouse.row) {
                             state.focused_pane = state::TuiPane::Stats;
                         }
@@ -3598,8 +3598,8 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                             let terminal_size = crossterm::terminal::size().unwrap_or((120, 40));
                             let area =
                                 ratatui::layout::Rect::new(0, 0, terminal_size.0, terminal_size.1);
-                            let has_ext = state.available_extensions.iter().any(|e| e.selected)
-                                || !state.session_extensions_used.is_empty();
+                            let has_ext = state.available_plugins.iter().any(|e| e.selected)
+                                || !state.session_plugins_used.is_empty();
                             let panes = tui::running_layout(area, has_ext, state.agent_pane_split);
                             if tui::rect_contains(panes.agent_output, mouse.column, mouse.row) {
                                 state.focused_pane = state::TuiPane::AgentOutput;
@@ -3616,10 +3616,10 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                                 state.focused_pane = state::TuiPane::PatternsLearned;
                                 state.patterns_scroll = state.patterns_scroll.saturating_sub(lines);
                             } else if panes
-                                .extensions_used
+                                .plugins_used
                                 .is_some_and(|r| tui::rect_contains(r, mouse.column, mouse.row))
                             {
-                                state.focused_pane = state::TuiPane::Extensions;
+                                state.focused_pane = state::TuiPane::Plugins;
                             }
                         }
                     }
@@ -3637,8 +3637,8 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                             let terminal_size = crossterm::terminal::size().unwrap_or((120, 40));
                             let area =
                                 ratatui::layout::Rect::new(0, 0, terminal_size.0, terminal_size.1);
-                            let has_ext = state.available_extensions.iter().any(|e| e.selected)
-                                || !state.session_extensions_used.is_empty();
+                            let has_ext = state.available_plugins.iter().any(|e| e.selected)
+                                || !state.session_plugins_used.is_empty();
                             let panes = tui::running_layout(area, has_ext, state.agent_pane_split);
                             if tui::rect_contains(panes.agent_output, mouse.column, mouse.row) {
                                 state.focused_pane = state::TuiPane::AgentOutput;
@@ -3652,10 +3652,10 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                                 state.focused_pane = state::TuiPane::PatternsLearned;
                                 state.patterns_scroll = state.patterns_scroll.saturating_add(lines);
                             } else if panes
-                                .extensions_used
+                                .plugins_used
                                 .is_some_and(|r| tui::rect_contains(r, mouse.column, mouse.row))
                             {
-                                state.focused_pane = state::TuiPane::Extensions;
+                                state.focused_pane = state::TuiPane::Plugins;
                             }
                         }
                     }
@@ -3663,8 +3663,8 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                         let terminal_size = crossterm::terminal::size().unwrap_or((120, 40));
                         let area =
                             ratatui::layout::Rect::new(0, 0, terminal_size.0, terminal_size.1);
-                        let has_ext = state.available_extensions.iter().any(|e| e.selected)
-                            || !state.session_extensions_used.is_empty();
+                        let has_ext = state.available_plugins.iter().any(|e| e.selected)
+                            || !state.session_plugins_used.is_empty();
                         let panes = tui::running_layout(area, has_ext, state.agent_pane_split);
                         // Bottom stats rect (used for both hit-test and dispatch)
                         let bottom_full = ratatui::layout::Rect::new(
@@ -3711,10 +3711,10 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                         } else if tui::rect_contains(panes.patterns, mouse.column, mouse.row) {
                             Some(ClickableSurface::SkillCitations)
                         } else if panes
-                            .extensions_used
+                            .plugins_used
                             .is_some_and(|r| tui::rect_contains(r, mouse.column, mouse.row))
                         {
-                            None // Extensions pane has no specific surface yet
+                            None // Plugins pane has no specific surface yet
                         } else if tui::rect_contains(stats_rect, mouse.column, mouse.row) {
                             Some(ClickableSurface::Stats)
                         } else {
@@ -3731,10 +3731,10 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                         } else if tui::rect_contains(panes.patterns, mouse.column, mouse.row) {
                             state.focused_pane = state::TuiPane::PatternsLearned;
                         } else if panes
-                            .extensions_used
+                            .plugins_used
                             .is_some_and(|r| tui::rect_contains(r, mouse.column, mouse.row))
                         {
-                            state.focused_pane = state::TuiPane::Extensions;
+                            state.focused_pane = state::TuiPane::Plugins;
                         } else if tui::rect_contains(stats_rect, mouse.column, mouse.row) {
                             state.focused_pane = state::TuiPane::Stats;
                         } else {
@@ -5045,7 +5045,7 @@ fn handle_dual_pipeline_event(state: &mut AppState, idx: usize, event: AppEvent,
 }
 
 pub(super) fn handle_agent_done(state: &mut AppState, success: bool) {
-    // ─── Extension & Pattern Reference Detection ───
+    // ─── Plugin & Pattern Reference Detection ───
     if !state.agent_output.is_empty() {
         let agent_role_str = state
             .current_agent
@@ -5064,9 +5064,9 @@ pub(super) fn handle_agent_done(state: &mut AppState, success: bool) {
             })
             .to_lowercase();
 
-        // Check extension keywords (clone to avoid borrow conflict with state.log)
+        // Check plugin keywords (clone to avoid borrow conflict with state.log)
         let ext_kw_snapshot: Vec<(String, Vec<String>)> = state
-            .extension_keywords
+            .plugin_keywords
             .iter()
             .map(|(k, v)| (k.clone(), v.clone()))
             .collect();
@@ -5079,11 +5079,11 @@ pub(super) fn handle_agent_done(state: &mut AppState, success: bool) {
                 .collect();
             if !matched.is_empty() {
                 *state
-                    .extension_reference_count
+                    .plugin_reference_count
                     .entry(ext_name.clone())
                     .or_insert(0) += 1;
                 state.log(format!(
-                    "Extension '{}' referenced by {} (keywords: {})",
+                    "Plugin '{}' referenced by {} (keywords: {})",
                     ext_name,
                     agent_role_str,
                     matched.join(", ")

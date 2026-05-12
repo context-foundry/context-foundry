@@ -30,11 +30,11 @@ Thumbs.db
 .foundry/
 .foundry.json
 
-# Private plugins (on-disk dir name `extensions/` preserved for path stability)
-extensions/roblox/
-extensions/flowise/
-extensions/extend/
-extensions/__pycache__/
+# Private plugins (machine-local, not part of the public repo)
+plugins/roblox/
+plugins/flowise/
+plugins/extend/
+plugins/__pycache__/
 
 # Legacy Python package
 context_foundry/

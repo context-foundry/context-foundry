@@ -57,7 +57,7 @@ The loser is shown in the UI as `shadowed by <winner>` so you can see
 which file wins.
 
 CF-native skills under `~/.foundry/skills/` and plugin-bundled
-`extensions/<name>/skills/<topic>/SKILL.md` always win over discovered
+`plugins/<name>/skills/<topic>/SKILL.md` always win over discovered
 external skills with the same name.
 
 ## GitHub Copilot custom instructions

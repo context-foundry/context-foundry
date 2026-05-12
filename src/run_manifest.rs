@@ -61,7 +61,7 @@ pub struct PromptEvidenceSpec<'a> {
     pub system_prompt: &'a str,
     pub user_prompt: &'a str,
     pub matched_pattern_ids: Vec<String>,
-    pub selected_extension_names: Vec<String>,
+    pub selected_plugin_names: Vec<String>,
     pub prior_artifact_paths: Vec<PathBuf>,
 }
 
@@ -115,13 +115,13 @@ pub struct StageInvocation {
     #[serde(default)]
     pub matched_pattern_ids: Vec<String>,
     #[serde(default)]
-    pub selected_extension_names: Vec<String>,
+    pub selected_plugin_names: Vec<String>,
     #[serde(default)]
     pub prompt_pattern_ids_found: Vec<String>,
     #[serde(default)]
     pub prompt_artifact_refs_found: Vec<String>,
     #[serde(default)]
-    pub prompt_extension_names_found: Vec<String>,
+    pub prompt_plugin_names_found: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub started_at: Option<DateTime<Utc>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -177,7 +177,7 @@ fn compute_pattern_evidence(prompt: &str, ids: &[String]) -> Vec<String> {
         .collect()
 }
 
-fn compute_extension_evidence(prompt: &str, names: &[String]) -> Vec<String> {
+fn compute_plugin_evidence(prompt: &str, names: &[String]) -> Vec<String> {
     names
         .iter()
         .filter(|name| prompt.contains(&format!("--- BEGIN EXTENSION CONTEXT: {} ---", name)))
@@ -232,8 +232,8 @@ impl ManifestHandle {
         let user_prompt_preview = truncate_preview(spec.user_prompt, 1024);
         let prompt_pattern_ids_found =
             compute_pattern_evidence(spec.user_prompt, &spec.matched_pattern_ids);
-        let prompt_extension_names_found =
-            compute_extension_evidence(spec.user_prompt, &spec.selected_extension_names);
+        let prompt_plugin_names_found =
+            compute_plugin_evidence(spec.user_prompt, &spec.selected_plugin_names);
         let prompt_artifact_refs_found =
             compute_artifact_evidence(spec.user_prompt, &spec.prior_artifact_paths);
 
@@ -266,10 +266,10 @@ impl ManifestHandle {
             system_prompt_preview: Some(system_prompt_preview),
             user_prompt_preview: Some(user_prompt_preview),
             matched_pattern_ids: spec.matched_pattern_ids,
-            selected_extension_names: spec.selected_extension_names,
+            selected_plugin_names: spec.selected_plugin_names,
             prompt_pattern_ids_found,
             prompt_artifact_refs_found,
-            prompt_extension_names_found,
+            prompt_plugin_names_found,
             started_at: Some(Utc::now()),
             exit_status: None,
             exit_observed_at: None,
@@ -424,7 +424,7 @@ mod tests {
             system_prompt: system,
             user_prompt: user,
             matched_pattern_ids: Vec::new(),
-            selected_extension_names: Vec::new(),
+            selected_plugin_names: Vec::new(),
             prior_artifact_paths: Vec::new(),
         }
     }
@@ -448,10 +448,10 @@ mod tests {
     }
 
     #[test]
-    fn extension_evidence_matches_marker() {
+    fn plugin_evidence_matches_marker() {
         let prompt = "before --- BEGIN EXTENSION CONTEXT: recon --- after";
         let names = vec!["recon".to_string(), "missing".to_string()];
-        let found = compute_extension_evidence(prompt, &names);
+        let found = compute_plugin_evidence(prompt, &names);
         assert_eq!(found, vec!["recon".to_string()]);
     }
 
@@ -490,7 +490,7 @@ mod tests {
             system_prompt: "",
             user_prompt: user,
             matched_pattern_ids: vec!["pat-a".to_string(), "pat-b".to_string()],
-            selected_extension_names: vec!["recon".to_string()],
+            selected_plugin_names: vec!["recon".to_string()],
             prior_artifact_paths: vec![PathBuf::from(".buildloop/research-report.md")],
         };
         h.record_invocation(spec);
@@ -498,7 +498,7 @@ mod tests {
         let inv = &m.invocations[0];
         assert_eq!(inv.prompt_pattern_ids_found, vec!["pat-a".to_string()]);
         assert_eq!(
-            inv.prompt_extension_names_found,
+            inv.prompt_plugin_names_found,
             vec!["recon".to_string()]
         );
         assert_eq!(

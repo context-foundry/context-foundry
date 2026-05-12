@@ -52,7 +52,7 @@ impl SkillSource {
 
 /// A single skill or instruction file discovered outside CF's native
 /// `~/.foundry/skills/` directory and outside plugin-bundled
-/// `extensions/<name>/skills/<topic>/SKILL.md`.
+/// `plugins/<name>/skills/<topic>/SKILL.md`.
 #[derive(Debug, Clone)]
 pub struct DiscoveredSkill {
     pub source: SkillSource,

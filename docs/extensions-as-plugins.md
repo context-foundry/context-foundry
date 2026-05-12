@@ -1,6 +1,6 @@
 # Extensions as Anthropic Plugins (T1.14)
 
-Context Foundry's `extensions/<name>/` directories now ship in two compatible layouts at once:
+Context Foundry's `plugins/<name>/` directories now ship in two compatible layouts at once:
 
 - **Legacy layout** (pre-T1.14): a single `CLAUDE.md` plus optional `patterns/`, `docs/`, `templates/`, `examples/`.
 - **Plugin layout** (T1.14+): a `.claude-plugin/plugin.json` manifest plus one or more `skills/<topic>/SKILL.md` files.
@@ -15,8 +15,8 @@ claude /plugin install <local-path-or-repo>
 
 For each in-scope extension (`roblox`, `extend`, `recon`, `workday-agents`, `flowise`, `workday`), T1.14 added:
 
-1. `extensions/<name>/.claude-plugin/plugin.json` -- the Anthropic plugin manifest (`name`, `version`, `description`, `author`, `keywords`).
-2. `extensions/<name>/skills/<topic>/SKILL.md` -- one skill mirroring the existing `CLAUDE.md` body, with standard Anthropic Skills frontmatter (`name`, `description`).
+1. `plugins/<name>/.claude-plugin/plugin.json` -- the Anthropic plugin manifest (`name`, `version`, `description`, `author`, `keywords`).
+2. `plugins/<name>/skills/<topic>/SKILL.md` -- one skill mirroring the existing `CLAUDE.md` body, with standard Anthropic Skills frontmatter (`name`, `description`).
 
 The original `CLAUDE.md` is preserved. The migration is additive.
 
@@ -33,7 +33,7 @@ The `BEGIN/END EXTENSION CONTEXT` delimiter format is unchanged -- Context Found
 
 ## Adding a new skill to an existing plugin extension
 
-1. Create `extensions/<name>/skills/<new-topic>/SKILL.md`.
+1. Create `plugins/<name>/skills/<new-topic>/SKILL.md`.
 2. Use this frontmatter shape:
    ```markdown
    ---
@@ -47,9 +47,9 @@ The `BEGIN/END EXTENSION CONTEXT` delimiter format is unchanged -- Context Found
 
 ## Adding a new plugin extension from scratch
 
-1. Create `extensions/<name>/.claude-plugin/plugin.json` matching the schema below.
-2. Create at least one `extensions/<name>/skills/<topic>/SKILL.md`.
-3. (Optional) Create `extensions/<name>/CLAUDE.md` if you want a legacy reader to still see the rules without the skill loader.
+1. Create `plugins/<name>/.claude-plugin/plugin.json` matching the schema below.
+2. Create at least one `plugins/<name>/skills/<topic>/SKILL.md`.
+3. (Optional) Create `plugins/<name>/CLAUDE.md` if you want a legacy reader to still see the rules without the skill loader.
 
 ### plugin.json minimum schema
 
@@ -59,7 +59,7 @@ The `BEGIN/END EXTENSION CONTEXT` delimiter format is unchanged -- Context Found
   "version": "0.1.0",
   "description": "<one-line description>",
   "author": { "name": "Context Foundry", "url": "https://github.com/snedea/context-foundry" },
-  "homepage": "https://github.com/snedea/context-foundry/tree/main/extensions/<name>",
+  "homepage": "https://github.com/snedea/context-foundry/tree/main/plugins/<name>",
   "repository": "https://github.com/snedea/context-foundry",
   "license": "MIT",
   "keywords": ["..."]

@@ -21,13 +21,13 @@ This spec does not try to recreate the full Context Foundry TUI. It rebuilds the
 This spec is based on the current Context Foundry implementation, not assumptions:
 
 - Foundry programmatically loads selected extension `CLAUDE.md` files via [src/extensions.rs](../src/extensions.rs) and merges extension `patterns/*.json`.
-- Foundry does not bulk-load the full Flowise corpus. Examples, templates, and expertise docs are loaded because [extensions/flowise/CLAUDE.md](../extensions/flowise/CLAUDE.md) tells the agent to read them.
+- Foundry does not bulk-load the full Flowise corpus. Examples, templates, and expertise docs are loaded because [plugins/flowise/CLAUDE.md](../plugins/flowise/CLAUDE.md) tells the agent to read them.
 - Therefore the portable kit must use selective retrieval, not unconditional injection.
 
 Concretely, the current Flowise extension points the agent at:
 
-- [extensions/flowise/FLOWISE.md](../extensions/flowise/FLOWISE.md)
-- [extensions/flowise/docs/flowise-expertise.json](../extensions/flowise/docs/flowise-expertise.json)
+- [plugins/flowise/FLOWISE.md](../plugins/flowise/FLOWISE.md)
+- [plugins/flowise/docs/flowise-expertise.json](../plugins/flowise/docs/flowise-expertise.json)
 - `example-flows/masterclass-2025/*.json`
 - `node-templates/*.json`
 
@@ -62,20 +62,20 @@ The portable kit should be generated from the Flowise extension already in this 
 
 ### 5.1 Source of truth
 
-- [extensions/flowise/FLOWISE.md](../extensions/flowise/FLOWISE.md): core structural rules and invariants
-- [extensions/flowise/docs/flowise-expertise.json](../extensions/flowise/docs/flowise-expertise.json): learned patterns, anti-patterns, model defaults, testing checklists
-- [extensions/flowise/example-flows/](../extensions/flowise/example-flows/): reference flows
-- [extensions/flowise/node-templates/](../extensions/flowise/node-templates/): exact node blueprints
-- [extensions/flowise/patterns/flowise-agentflow-patterns.json](../extensions/flowise/patterns/flowise-agentflow-patterns.json): portable keyword and pattern mapping
-- [extensions/flowise/hackathon-devcon-2026/validate-flows.js](../extensions/flowise/hackathon-devcon-2026/validate-flows.js): structural validator seed
+- [plugins/flowise/FLOWISE.md](../plugins/flowise/FLOWISE.md): core structural rules and invariants
+- [plugins/flowise/docs/flowise-expertise.json](../plugins/flowise/docs/flowise-expertise.json): learned patterns, anti-patterns, model defaults, testing checklists
+- [plugins/flowise/example-flows/](../plugins/flowise/example-flows/): reference flows
+- [plugins/flowise/node-templates/](../plugins/flowise/node-templates/): exact node blueprints
+- [plugins/flowise/patterns/flowise-agentflow-patterns.json](../plugins/flowise/patterns/flowise-agentflow-patterns.json): portable keyword and pattern mapping
+- [plugins/flowise/hackathon-devcon-2026/validate-flows.js](../plugins/flowise/hackathon-devcon-2026/validate-flows.js): structural validator seed
 
 ### 5.2 Corpus tiers
 
 | Tier | Files | Runtime behavior |
 |------|-------|------------------|
-| Always-on | distilled rules derived from [extensions/flowise/FLOWISE.md](../extensions/flowise/FLOWISE.md), plus audit requirements | loaded every session |
-| Retrieved on demand | [extensions/flowise/docs/flowise-expertise.json](../extensions/flowise/docs/flowise-expertise.json), selected AgentFlow v2 examples, selected node templates, selected pattern records | loaded only for the current task |
-| Maintenance only | [extensions/flowise/DEVELOPMENT_WORKFLOW.md](../extensions/flowise/DEVELOPMENT_WORKFLOW.md), [extensions/flowise/docs/flowise-expertise-analyzer-output.json](../extensions/flowise/docs/flowise-expertise-analyzer-output.json) | used to evolve the kit, not injected into normal build sessions |
+| Always-on | distilled rules derived from [plugins/flowise/FLOWISE.md](../plugins/flowise/FLOWISE.md), plus audit requirements | loaded every session |
+| Retrieved on demand | [plugins/flowise/docs/flowise-expertise.json](../plugins/flowise/docs/flowise-expertise.json), selected AgentFlow v2 examples, selected node templates, selected pattern records | loaded only for the current task |
+| Maintenance only | [plugins/flowise/DEVELOPMENT_WORKFLOW.md](../plugins/flowise/DEVELOPMENT_WORKFLOW.md), [plugins/flowise/docs/flowise-expertise-analyzer-output.json](../plugins/flowise/docs/flowise-expertise-analyzer-output.json) | used to evolve the kit, not injected into normal build sessions |
 
 ### 5.3 Runtime retrieval rule
 
@@ -330,14 +330,14 @@ The kit needs a small manifest that maps problem classes to the right corpus sli
 ### 10.3 Manifest maintenance
 
 - Update the manifest when new examples or templates are added.
-- Use [extensions/flowise/docs/flowise-expertise-analyzer-output.json](../extensions/flowise/docs/flowise-expertise-analyzer-output.json) as a maintenance aid only.
+- Use [plugins/flowise/docs/flowise-expertise-analyzer-output.json](../plugins/flowise/docs/flowise-expertise-analyzer-output.json) as a maintenance aid only.
 - Do not inject the analyzer output into build sessions.
 
 ## 11. Script Contracts
 
 ### 11.1 `scripts/validate-flowise.js`
 
-- Ported from [extensions/flowise/hackathon-devcon-2026/validate-flows.js](../extensions/flowise/hackathon-devcon-2026/validate-flows.js)
+- Ported from [plugins/flowise/hackathon-devcon-2026/validate-flows.js](../plugins/flowise/hackathon-devcon-2026/validate-flows.js)
 - validates Flowise JSON structure before audit
 - returns exit `0` on success, non-zero on failure
 - writes machine-readable results to stdout or `artifacts/flowise/<slug>.validate.json`
@@ -463,13 +463,13 @@ The portable kit must be compared against Foundry on a fixed set of prompts.
 
 | ID | Prompt | Reference file |
 |----|--------|----------------|
-| `chaining-review` | Build an AgentFlow v2 that ingests a policy document, extracts obligations, validates them, pauses for human review, and returns a final approval report. | [extensions/flowise/example-flows/afv2-patterns/01-chaining.json](../extensions/flowise/example-flows/afv2-patterns/01-chaining.json) |
-| `parallel-research` | Build an AgentFlow v2 that researches a vendor from web, internal knowledge, and risk analysis in parallel, then synthesizes one recommendation. | [extensions/flowise/example-flows/afv2-patterns/02-parallel.json](../extensions/flowise/example-flows/afv2-patterns/02-parallel.json) |
-| `routing-helpdesk` | Build an AgentFlow v2 that routes incoming requests to billing, technical, or general support specialists and returns one synthesized answer. | [extensions/flowise/example-flows/afv2-patterns/03-routing.json](../extensions/flowise/example-flows/afv2-patterns/03-routing.json) |
-| `iteration-review` | Build an AgentFlow v2 that iterates over a list of requirements, evaluates each item, accumulates findings, and returns a summary. | [extensions/flowise/example-flows/afv2-patterns/04-iteration.json](../extensions/flowise/example-flows/afv2-patterns/04-iteration.json) |
-| `software-dev-team` | Build a software development team flow with planner, developer, tester, and reviewer agents. | [extensions/flowise/example-flows/masterclass-2025/software-dev-team-agents.json](../extensions/flowise/example-flows/masterclass-2025/software-dev-team-agents.json) |
-| `deep-research` | Build a deep research orchestrator with planning, search loops, evidence gathering, and synthesis. | [extensions/flowise/example-flows/masterclass-2025/deep-research-agentflow.json](../extensions/flowise/example-flows/masterclass-2025/deep-research-agentflow.json) |
-| `succession-planning` | Build a Workday-style succession planning orchestrator with approval gates and structured recommendations. | [extensions/flowise/example-flows/succession-planning-orchestrator.json](../extensions/flowise/example-flows/succession-planning-orchestrator.json) |
+| `chaining-review` | Build an AgentFlow v2 that ingests a policy document, extracts obligations, validates them, pauses for human review, and returns a final approval report. | [plugins/flowise/example-flows/afv2-patterns/01-chaining.json](../plugins/flowise/example-flows/afv2-patterns/01-chaining.json) |
+| `parallel-research` | Build an AgentFlow v2 that researches a vendor from web, internal knowledge, and risk analysis in parallel, then synthesizes one recommendation. | [plugins/flowise/example-flows/afv2-patterns/02-parallel.json](../plugins/flowise/example-flows/afv2-patterns/02-parallel.json) |
+| `routing-helpdesk` | Build an AgentFlow v2 that routes incoming requests to billing, technical, or general support specialists and returns one synthesized answer. | [plugins/flowise/example-flows/afv2-patterns/03-routing.json](../plugins/flowise/example-flows/afv2-patterns/03-routing.json) |
+| `iteration-review` | Build an AgentFlow v2 that iterates over a list of requirements, evaluates each item, accumulates findings, and returns a summary. | [plugins/flowise/example-flows/afv2-patterns/04-iteration.json](../plugins/flowise/example-flows/afv2-patterns/04-iteration.json) |
+| `software-dev-team` | Build a software development team flow with planner, developer, tester, and reviewer agents. | [plugins/flowise/example-flows/masterclass-2025/software-dev-team-agents.json](../plugins/flowise/example-flows/masterclass-2025/software-dev-team-agents.json) |
+| `deep-research` | Build a deep research orchestrator with planning, search loops, evidence gathering, and synthesis. | [plugins/flowise/example-flows/masterclass-2025/deep-research-agentflow.json](../plugins/flowise/example-flows/masterclass-2025/deep-research-agentflow.json) |
+| `succession-planning` | Build a Workday-style succession planning orchestrator with approval gates and structured recommendations. | [plugins/flowise/example-flows/succession-planning-orchestrator.json](../plugins/flowise/example-flows/succession-planning-orchestrator.json) |
 
 ### 14.2 Metrics
 
@@ -488,14 +488,14 @@ Foundry remains the benchmark and fallback until the portable kit matches it clo
 
 When the portable kit discovers a new pattern or failure mode:
 
-1. update [extensions/flowise/docs/flowise-expertise.json](../extensions/flowise/docs/flowise-expertise.json)
-2. update [extensions/flowise/FLOWISE.md](../extensions/flowise/FLOWISE.md) if the issue reflects a stable rule
-3. add or refresh an example in [extensions/flowise/example-flows/](../extensions/flowise/example-flows/)
-4. update a node template in [extensions/flowise/node-templates/](../extensions/flowise/node-templates/) if structure changed
+1. update [plugins/flowise/docs/flowise-expertise.json](../plugins/flowise/docs/flowise-expertise.json)
+2. update [plugins/flowise/FLOWISE.md](../plugins/flowise/FLOWISE.md) if the issue reflects a stable rule
+3. add or refresh an example in [plugins/flowise/example-flows/](../plugins/flowise/example-flows/)
+4. update a node template in [plugins/flowise/node-templates/](../plugins/flowise/node-templates/) if structure changed
 5. regenerate `.flowise-kit/corpus/` for the portable target repo
 6. update `.flowise-kit/manifest.json`
 
-This mirrors the intent of [extensions/flowise/DEVELOPMENT_WORKFLOW.md](../extensions/flowise/DEVELOPMENT_WORKFLOW.md) while keeping runtime context lean.
+This mirrors the intent of [plugins/flowise/DEVELOPMENT_WORKFLOW.md](../plugins/flowise/DEVELOPMENT_WORKFLOW.md) while keeping runtime context lean.
 
 ## 16. Acceptance Criteria
 
