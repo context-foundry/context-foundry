@@ -837,6 +837,16 @@
       "model": "gpt-4o-mini",
       "lines": 82,
       "generation": 84
+    },
+    {
+      "file": "heap-overflow-hot-pot.js",
+      "name": "Heap Overflow Hot Pot",
+      "location": "Boiling Lake, Dominica",
+      "biome": "volcanic",
+      "generated": "2026-05-12T23:31:56.654Z",
+      "model": "gpt-4o-mini",
+      "lines": 89,
+      "generation": 85
     }
   ]
 }
