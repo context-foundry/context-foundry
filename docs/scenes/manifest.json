@@ -797,6 +797,16 @@
       "model": "gpt-4o-mini",
       "lines": 94,
       "generation": 80
+    },
+    {
+      "file": "runtime-on-the-serengeti.js",
+      "name": "Runtime on the Serengeti",
+      "location": "Serengeti National Park, Tanzania",
+      "biome": "savanna",
+      "generated": "2026-05-12T15:10:23.868Z",
+      "model": "gpt-4o-mini",
+      "lines": 84,
+      "generation": 81
     }
   ]
 }
