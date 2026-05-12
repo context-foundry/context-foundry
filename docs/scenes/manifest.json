@@ -767,6 +767,16 @@
       "model": "gpt-4o-mini",
       "lines": 80,
       "generation": 77
+    },
+    {
+      "file": "merge-conflict-at-29032-feet.js",
+      "name": "Merge Conflict at 29,032 Feet",
+      "location": "Mount Everest, Nepal-China Border",
+      "biome": "mountain",
+      "generated": "2026-05-12T04:10:04.936Z",
+      "model": "gpt-4o-mini",
+      "lines": 82,
+      "generation": 78
     }
   ]
 }
