@@ -1284,12 +1284,12 @@ fn render_plugins_panel(frame: &mut Frame, area: Rect, state: &AppState) {
             let checkbox = if ext.selected { "[x]" } else { "[ ]" };
             let is_cursor =
                 i == state.plugins_cursor && state.focused_pane == TuiPane::Plugins;
-            let pattern_label = if ext.pattern_count > 0 {
-                format!(" ({}p)", ext.pattern_count)
+            let skill_label = if ext.skill_count > 0 {
+                format!(" ({}s)", ext.skill_count)
             } else {
                 String::new()
             };
-            let name_and_meta = format!("{} {}{}", checkbox, ext.name, pattern_label);
+            let name_and_meta = format!("{} {}{}", checkbox, ext.name, skill_label);
             let desc_width = inner_width.saturating_sub(name_and_meta.len() + 3);
             let desc = truncate_str(&ext.description, desc_width);
 

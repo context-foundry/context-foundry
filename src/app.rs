@@ -27,7 +27,7 @@ pub use self::state::FileEntry;
 pub use self::state::{
     settings_sections, Action, AppPhase, AppState, ClickableSurface, CurrentClassification,
     DualSelection, ExplorerContextMenu, PluginDisplayInfo, FieldKind, ModelEntry, ModelPicker,
-    OverlayRow, PatternEventKind, PickerItem, PlanStatus, PlanningState, RunningModalKind,
+    OverlayRow, PickerItem, PlanStatus, PlanningState, RunningModalKind,
     SectionKind, StartupAction, StartupScenario, StartupState, StreamState,
     SurfaceSummaryOverlay, TuiPane,
 };

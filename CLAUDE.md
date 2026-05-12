@@ -35,7 +35,7 @@ mcp__context-foundry__read_global_patterns("common-issues")
 
 ## Plugins
 
-Context Foundry has domain-specific plugins (formerly called "extensions"). **When working on tasks for a specific domain, read that plugin's CLAUDE.md first.** The on-disk directory is `plugins/`. The legacy `plugins/` name is auto-migrated on first startup; do not reference it in new code or docs.
+Context Foundry has domain-specific plugins (formerly called "extensions"). **When working on tasks for a specific domain, read that plugin's CLAUDE.md first.** The on-disk directory is `plugins/`. The legacy `extensions/` name is auto-migrated on first startup; do not reference it in new code or docs.
 
 ### Roblox Plugin
 **Location:** `plugins/roblox/`

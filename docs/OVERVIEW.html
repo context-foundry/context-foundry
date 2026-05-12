@@ -233,7 +233,7 @@
     <li><a href="#git-integration">Git Integration</a></li>
     <li><a href="#tui-layout">TUI Layout</a></li>
     <li><a href="#configuration">Configuration Reference</a></li>
-    <li><a href="#extensions">Extensions</a></li>
+    <li><a href="#plugins">Plugins</a></li>
     <li><a href="#mcp-tools">MCP Tools</a></li>
     <li><a href="#pattern-store">Pattern Store</a></li>
     <li><a href="#samsara">Samsara / Discovery</a></li>
@@ -252,7 +252,7 @@
 Context Foundry is an autonomous build loop that runs AI coding agents through a
 structured pipeline (Scout, Plan, Implement, Doubt) to complete software engineering
 tasks. Written in Rust (foundry v0.6.1), it provides a ratatui-based TUI dashboard,
-pattern learning, extension system, dual-model execution arena, and full git
+pattern learning, plugin system, dual-model execution arena, and full git
 integration with PR workflows. The system reads tasks from TASKS.md, processes each
 through the SPID pipeline, and commits results -- optionally creating per-task pull
 requests for human review.
@@ -315,10 +315,10 @@ requests for human review.
   <text x="105" y="298" text-anchor="middle" fill="#8b949e" font-family="monospace" font-size="10">~/.foundry/patterns/</text>
   <text x="105" y="310" text-anchor="middle" fill="#8b949e" font-family="monospace" font-size="9">JSON keyword+semantic</text>
 
-  <!-- Extension System -->
+  <!-- Plugin System -->
   <rect x="250" y="260" width="190" height="60" rx="4" fill="#161b22" stroke="#58a6ff" stroke-width="1.5"/>
-  <text x="345" y="282" text-anchor="middle" fill="#f0a500" font-family="monospace" font-size="12" font-weight="bold">Extension System</text>
-  <text x="345" y="298" text-anchor="middle" fill="#8b949e" font-family="monospace" font-size="10">extensions.rs</text>
+  <text x="345" y="282" text-anchor="middle" fill="#f0a500" font-family="monospace" font-size="12" font-weight="bold">Plugin System</text>
+  <text x="345" y="298" text-anchor="middle" fill="#8b949e" font-family="monospace" font-size="10">plugins.rs</text>
   <text x="345" y="310" text-anchor="middle" fill="#8b949e" font-family="monospace" font-size="9">discover + load CLAUDE.md</text>
 
   <!-- MCP Server -->
@@ -366,9 +366,9 @@ requests for human review.
   <line x1="105" y1="258" x2="270" y2="200" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arrow)"/>
   <text x="170" y="222" fill="#8b949e" font-family="monospace" font-size="8">inject at plan</text>
 
-  <!-- Extension System -> Agent -->
+  <!-- Plugin System -> Agent -->
   <line x1="345" y1="258" x2="550" y2="82" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arrow)"/>
-  <text x="430" y="175" fill="#8b949e" font-family="monospace" font-size="8">wrap_with_extensions()</text>
+  <text x="430" y="175" fill="#8b949e" font-family="monospace" font-size="8">wrap_with_plugins()</text>
 
   <!-- MCP -> Pattern Store -->
   <line x1="498" y1="290" x2="192" y2="290" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arrow)"/>
@@ -445,7 +445,7 @@ runs after each successful task).
   <text x="465" y="28" text-anchor="middle" fill="#f0a500" font-family="monospace" font-size="12" font-weight="bold">PLAN</text>
   <text x="465" y="42" text-anchor="middle" fill="#8b949e" font-family="monospace" font-size="9">AgentRole::Planner</text>
   <text x="410" y="56" fill="#e6edf3" font-family="monospace" font-size="8">In: scout-report,</text>
-  <text x="410" y="68" fill="#e6edf3" font-family="monospace" font-size="8">  patterns, extensions</text>
+  <text x="410" y="68" fill="#e6edf3" font-family="monospace" font-size="8">  patterns, plugins</text>
   <text x="410" y="80" fill="#e6edf3" font-family="monospace" font-size="8">Out: current-plan.md</text>
   <text x="410" y="92" fill="#8b949e" font-family="monospace" font-size="8">Skip: simple task +</text>
   <text x="410" y="104" fill="#8b949e" font-family="monospace" font-size="8">skip_planner_for_simple</text>
@@ -873,7 +873,7 @@ zones, with the middle zone split 60/40 horizontally.
 │                                  │  [pattern activity feed]            │
 │                                  ├─────────────────────────────────────┤
 │                                  │ EXTENSIONS USED (6 lines)           │
-│                                  │  [extension injection feed]         │
+│                                  │  [plugin injection feed]         │
 ├──────────────────────────────────┴─────────────────────────────────────┤
 │ STATS PANEL (6 lines)                                                  │
 │  Progress: [████████░░░░] 3/7 │ Git: main (3 dirty)                   │
@@ -920,7 +920,7 @@ zones, with the middle zone split 60/40 horizontally.
   </tr>
   <tr>
     <td>Extensions Used</td>
-    <td><code>render_extensions_used</code></td>
+    <td><code>render_plugins_used</code></td>
     <td><code>LoopEvent::ExtensionInjected</code></td>
   </tr>
   <tr>
@@ -1263,10 +1263,10 @@ zones, with the middle zone split 60/40 horizontally.
       <td>Defer doubt to last task only</td>
     </tr>
     <tr>
-      <td><code>extensions</code></td>
+      <td><code>plugins</code></td>
       <td>Vec&lt;String&gt;</td>
       <td><code>[]</code></td>
-      <td>Selected extension names (e.g., ["roblox", "extend"])</td>
+      <td>Selected plugin names (e.g., ["roblox", "extend"])</td>
     </tr>
     <tr>
       <td><code>create_issue_on_wip</code></td>
@@ -1312,21 +1312,21 @@ zones, with the middle zone split 60/40 horizontally.
 <!-- ================================================================ -->
 <!-- SECTION 8: EXTENSIONS                                            -->
 <!-- ================================================================ -->
-<section id="extensions">
+<section id="plugins">
 <h2>Extensions</h2>
 
 <p>
 Extensions provide domain-specific knowledge to agents. They are discovered from
 <code>~/.foundry/plugins/</code> (global), ancestor directories' <code>plugins/</code>
-folders, and <code>&lt;project&gt;/plugins/</code> (local). Each extension directory
-must contain a <code>CLAUDE.md</code> file. Project-local extensions override global
-ones with the same name. Extension context is built by <code>load_extension_context()</code> and
-prepended to agent prompts via <code>wrap_with_extensions()</code>.
+folders, and <code>&lt;project&gt;/plugins/</code> (local). Each plugin directory
+must contain a <code>CLAUDE.md</code> file. Project-local plugins override global
+ones with the same name. Plugin context is built by <code>load_plugin_context()</code> and
+prepended to agent prompts via <code>wrap_with_plugins()</code>.
 </p>
 
-<h3>8.0 Extension Taxonomy</h3>
+<h3>8.0 Plugin Taxonomy</h3>
 <p>
-An <strong>extension</strong> (or <strong>domain pack</strong>) is a directory containing
+A <strong>plugin</strong> (or <strong>domain pack</strong>) is a directory containing
 any combination of the following component types:
 </p>
 
@@ -1340,7 +1340,7 @@ any combination of the following component types:
   <tr>
     <td><strong>Instructions</strong></td>
     <td><code>CLAUDE.md</code></td>
-    <td>Authored domain rules, critical constraints, session-start checklists. Always injected into agent prompts when the extension is selected.</td>
+    <td>Authored domain rules, critical constraints, session-start checklists. Always injected into agent prompts when the plugin is selected.</td>
     <td>Yes</td>
   </tr>
   <tr>

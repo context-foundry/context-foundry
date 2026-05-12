@@ -100,7 +100,7 @@ pub struct PluginDisplayInfo {
     pub name: String,
     pub selected: bool,
     pub description: String,
-    pub pattern_count: usize,
+    pub skill_count: usize,
 }
 
 /// Display info for an externally-discovered skill surfaced under the
@@ -2142,25 +2142,25 @@ mod tests {
                 name: "rust".to_string(),
                 selected: true,
                 description: String::new(),
-                pattern_count: 0,
+                skill_count: 0,
             },
             PluginDisplayInfo {
                 name: "python".to_string(),
                 selected: false,
                 description: String::new(),
-                pattern_count: 0,
+                skill_count: 0,
             },
             PluginDisplayInfo {
                 name: "roblox".to_string(),
                 selected: true,
                 description: String::new(),
-                pattern_count: 0,
+                skill_count: 0,
             },
             PluginDisplayInfo {
                 name: "extend".to_string(),
                 selected: false,
                 description: String::new(),
-                pattern_count: 0,
+                skill_count: 0,
             },
         ];
         let names = state.selected_plugin_names();
@@ -2174,7 +2174,7 @@ mod tests {
             name: "rust".to_string(),
             selected: false,
             description: String::new(),
-            pattern_count: 0,
+            skill_count: 0,
         }];
         assert!(state.selected_plugin_names().is_empty());
     }
@@ -2193,19 +2193,19 @@ mod tests {
                 name: "alpha".to_string(),
                 selected: true,
                 description: String::new(),
-                pattern_count: 0,
+                skill_count: 0,
             },
             PluginDisplayInfo {
                 name: "beta".to_string(),
                 selected: false,
                 description: String::new(),
-                pattern_count: 0,
+                skill_count: 0,
             },
             PluginDisplayInfo {
                 name: "gamma".to_string(),
                 selected: true,
                 description: String::new(),
-                pattern_count: 0,
+                skill_count: 0,
             },
         ];
         assert_eq!(

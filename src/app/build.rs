@@ -2233,17 +2233,8 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
     }
 
     let mut cached_patterns = patterns::load_patterns(&patterns_dir);
-
-    // Merge plugin patterns into the pool
-    let ext_patterns =
-        plugins::load_plugin_patterns(&discovered_plugins, &ctx.config.plugins);
-    if !ext_patterns.is_empty() {
-        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-            "Loaded {} plugin patterns",
-            ext_patterns.len()
-        ))));
-        cached_patterns.extend(ext_patterns);
-    }
+    // Plugin-bundled skills are injected via load_plugin_context() — they
+    // do not need to feed the global pattern pool here.
 
     // ─── Scout State ──────────────────────────────────────────────
     // Scout runs once at session start, then reuses the report for

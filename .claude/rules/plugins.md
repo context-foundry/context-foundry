@@ -3,9 +3,9 @@ paths:
   - "plugins/**/*"
 ---
 
-# Plugins (on-disk: `extensions/`)
+# Plugins
 
-Plugins are domain-specific knowledge packages under `extensions/`. The directory is still named `extensions/` for path stability (T1.22 was a UI rename only); the user-facing label everywhere else is "Plugins."
+Plugins are domain-specific knowledge packages under `plugins/`. The legacy `extensions/` directory is auto-migrated on first startup (one-shot `fs::rename`); do not reference it in new code or docs.
 
 ## Taxonomy
 

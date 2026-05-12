@@ -10,7 +10,7 @@ Foundry reads a `TASKS.md` task list and works through it using Claude Code agen
 
 - [Building a Second Brain with the Loop](https://youtu.be/VO_c2j0dPH0) — Foundry autonomously works through an implementation plan, building a second-brain app from a task list while the TUI streams each agent's output in real time.
 - [Enhancing the Second Brain with the Loop](https://youtu.be/wL0RLml2Tio) — A follow-up run where foundry picks up where it left off, discovering new work and iterating on the second-brain app with patterns learned from the first pass.
-- [Technical Overview](https://context-foundry.github.io/context-foundry/OVERVIEW.html) — Architecture reference covering every subsystem: pipeline, dual-model arena, git integration, TUI layout, config, extensions, and MCP tools.
+- [Technical Overview](https://context-foundry.github.io/context-foundry/OVERVIEW.html) — Architecture reference covering every subsystem: pipeline, dual-model arena, git integration, TUI layout, config, plugins, and MCP tools.
 - [The Roundup](https://context-foundry.github.io/context-foundry/ROUNDUP.html) — A Texas-themed pitch page explaining Context Foundry for software architects.
 
 ## Task Flow
@@ -583,69 +583,69 @@ Key design decisions in the prompt system:
 - **Evidence-based review**: every finding must cite file, line number, and concrete evidence
 - **Large file handling**: all agents receive guidance to use Grep and `Read` with `offset`/`limit` for files exceeding the 10,000-token tool limit, preventing read failures on large source files
 
-## Extensions
+## Plugins
 
-Extensions are human-authored, read-only domain knowledge packages. They teach foundry's agents how to work with technologies, APIs, or workflows that aren't in Claude's training data. Foundry discovers extensions automatically from three sources (highest priority wins):
+Plugins are human-authored, read-only domain knowledge packages. They teach foundry's agents how to work with technologies, APIs, or workflows that aren't in Claude's training data. Foundry discovers plugins automatically from three sources (highest priority wins):
 
-1. **Project-local** -- `<project_dir>/extensions/`
-2. **Ancestor** -- walks up from the project directory, checking each parent for an `extensions/` subdirectory (closest ancestor wins)
-3. **Global** -- `~/.foundry/extensions/`
+1. **Project-local** -- `<project_dir>/plugins/`
+2. **Ancestor** -- walks up from the project directory, checking each parent for a `plugins/` subdirectory (closest ancestor wins)
+3. **Global** -- `~/.foundry/plugins/`
 
-Ancestor discovery means you can run foundry from a nested subdirectory and it will still find extensions defined higher in the tree. For example, running from `extensions/flowise/hackathon/` will discover sibling extensions like `extensions/extend/`.
+Ancestor discovery means you can run foundry from a nested subdirectory and it will still find plugins defined higher in the tree. For example, running from `plugins/flowise/hackathon/` will discover sibling plugins like `plugins/extend/`.
 
-An extension is a folder containing a `CLAUDE.md` (domain rules) and optionally a patterns JSON (domain-specific patterns). For example, a Roblox extension might teach agents to use CFrame instead of Position for moving parts, or a Workday Extend extension might document that WIDs are tenant-specific.
+A plugin is a folder containing a `CLAUDE.md` (domain rules) and a `skills/` directory of one or more `SKILL.md` files (Anthropic Agent Skills format). For example, a Roblox plugin might teach agents to use CFrame instead of Position for moving parts, or a Workday Extend plugin might document that WIDs are tenant-specific.
 
-### Extensions vs patterns
+### Plugins vs skills
 
-Extensions and patterns both inject knowledge into agent prompts, but they serve different purposes:
+Plugins and skills both inject knowledge into agent prompts, but they serve different purposes:
 
-|  | Extensions | Patterns |
+|  | Plugins | Skills |
 |---|---|---|
-| **What** | Domain knowledge packages (CLAUDE.md + optional patterns) | Individual issue/solution pairs |
-| **Created by** | Humans only -- foundry never writes extensions | Foundry's pattern extractor agent after each task |
-| **Selection** | Manual -- user picks on startup screen | Automatic -- keyword/semantic matching per task |
-| **Injection** | CLAUDE.md prepended verbatim to builder and reviewer prompts | Matched patterns injected into planner/reviewer only |
-| **Scope** | Per-project (user selects which apply) | Global (all patterns match against all tasks) |
-| **Always on** | Yes -- if selected, builder and reviewer get the full content regardless of task | No -- only patterns whose keywords match the task |
+| **What** | Domain knowledge packages (CLAUDE.md + one or more skills) | Individual SKILL.md files in Anthropic Agent Skills format |
+| **Created by** | Humans -- foundry's pattern extractor can also produce skills | Foundry's pattern extractor after each task, or human authors |
+| **Selection** | Manual -- user picks on startup screen | Automatic -- hybrid retriever (BM25 + nomic-embed cosine + telemetry) per task |
+| **Injection** | CLAUDE.md prepended verbatim to builder and reviewer prompts | Top-N matched skills injected into the relevant pipeline stage |
+| **Scope** | Per-project (user selects which apply) | Global (all skills match against all tasks) |
+| **Always on** | Yes -- if selected, builder and reviewer get the full content regardless of task | No -- only skills the retriever ranks high enough |
 
-Extensions can carry their own patterns (shown as `(3p)` in the TUI). These extension patterns are merged into the global pattern pool and go through the same keyword matching as regular patterns. So an extension bundles two things: mandatory domain rules (CLAUDE.md) that are always injected, and optional domain-specific patterns (JSON) that are selectively matched.
+Plugins can carry their own skills under `plugins/<name>/skills/`. These plugin skills are merged into the global skill pool and ranked by the same retriever. So a plugin bundles two things: mandatory domain rules (CLAUDE.md) always injected when selected, and optional domain-specific skills (SKILL.md files) the retriever ranks per task.
 
-### Extension context
+### Plugin context
 
-On the startup screen, foundry shows a checkbox panel listing all discovered extensions with their pattern counts (`(3p)` = 3 patterns in that extension). Select the ones relevant to your build:
+On the startup screen, foundry shows a checkbox panel listing all discovered plugins with their skill counts. Select the ones relevant to your build:
 
 ```
-┌ Extensions ──────────────────────────────────────┐
-│ [ ] extend (1p) Workday Extend orchestrations    │
-│ [x] flowise (3p) Flowise AgentFlow v2 workflows  │
-│ [ ] recon (1p) Fleet ops, iDRAC                  │
-│ [ ] roblox (4p) Roblox world gen, Lune scripting │
+┌ Plugins ─────────────────────────────────────────┐
+│ [ ] extend (1s) Workday Extend orchestrations    │
+│ [x] flowise (2s) Flowise AgentFlow v2 workflows  │
+│ [ ] recon (2s) Fleet ops, iDRAC                  │
+│ [ ] roblox (2s) Roblox world gen, Lune scripting │
 └──────────────────────────────────────────────────┘
 ```
 
-Selected extensions are **programmatically injected** into the builder and reviewer prompts as prepended context. Scout and planner skip extension injection to save tokens -- they investigate and plan without domain-specific rules, while the agents that write and audit code get the full extension context. This is deterministic enforcement, not a suggestion the agent may or may not follow.
+Selected plugins are **programmatically injected** into the builder and reviewer prompts as prepended context. Scout and planner skip plugin injection to save tokens -- they investigate and plan without domain-specific rules, while the agents that write and audit code get the full plugin context. This is deterministic enforcement, not a suggestion the agent may or may not follow.
 
-The status bar shows active extensions at all times: `Extensions: flowise (1 active)` or `Extensions: none`.
+The status bar shows active plugins at all times: `Plugins: flowise (1 active)` or `Plugins: none`.
 
-Selection persists to `.foundry.json`:
+Selection persists to `.foundry.json` under the `plugins` key. Legacy configs using `"extensions": [...]` continue to load via a serde alias and get rewritten to `"plugins"` on next save:
 ```json
 {
-  "extensions": ["flowise"]
+  "plugins": ["flowise"]
 }
 ```
 
-### Creating extensions
+### Creating plugins
 
 ```
-extensions/your-domain/
-├── CLAUDE.md                          # Domain rules (injected into every agent prompt)
-├── patterns/your-domain-common-issues.json  # Learned issues (merged into pattern matching)
-└── docs/                              # Supporting documentation
+plugins/your-domain/
+├── CLAUDE.md                                       # Domain rules (injected into every agent prompt)
+├── skills/your-domain-pitfalls/SKILL.md            # Learned pitfalls (Anthropic Skills format)
+└── docs/                                           # Supporting documentation
 ```
 
-The `CLAUDE.md` should contain the rules and patterns an agent needs to work correctly in your domain. Extension patterns are automatically merged into the global pattern matching pool when the extension is selected -- no manual merge step needed.
+The `CLAUDE.md` should contain the rules an agent needs to work correctly in your domain. Plugin skills are automatically merged into the global skill pool when the plugin is selected -- no manual merge step needed.
 
-A prerequisite gate validates extensions before the builder runs: if an extension is configured but its CLAUDE.md is missing, the build is blocked with a clear error.
+A prerequisite gate validates plugins before the builder runs: if a plugin is configured but its CLAUDE.md is missing, the build is blocked with a clear error.
 
 ## Architecture
 

@@ -77,7 +77,7 @@ struct PluginIndexEntry {
     name: String,
     description: String,
     source: String,
-    pattern_count: usize,
+    skill_count: usize,
 }
 
 // ─── Response Constructors ──────────────────────────────────
@@ -113,7 +113,7 @@ fn handle_initialize(request: &JsonRpcRequest) -> JsonRpcResponse {
         },
         "serverInfo": {
             "name": "context-foundry",
-            "version": "0.6.0"
+            "version": env!("CARGO_PKG_VERSION")
         }
     });
     make_success_response(request.id.clone().unwrap_or(Value::Null), result)
@@ -214,7 +214,7 @@ fn build_plugin_index(project_dir: &Path) -> Result<String> {
         .into_iter()
         .map(|ext| {
             let description = plugins::extract_description(&ext.claude_md_path);
-            let pattern_count = plugins::count_plugin_patterns(&ext.patterns_dir);
+            let skill_count = plugins::count_plugin_skills(&ext.skills_dir);
             let source = match ext.source {
                 plugins::PluginSource::Global => "global".to_string(),
                 plugins::PluginSource::Ancestor => "ancestor".to_string(),
@@ -224,7 +224,7 @@ fn build_plugin_index(project_dir: &Path) -> Result<String> {
                 name: ext.name,
                 description,
                 source,
-                pattern_count,
+                skill_count,
             }
         })
         .collect();

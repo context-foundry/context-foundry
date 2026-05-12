@@ -20,7 +20,7 @@ This spec does not try to recreate the full Context Foundry TUI. It rebuilds the
 
 This spec is based on the current Context Foundry implementation, not assumptions:
 
-- Foundry programmatically loads selected extension `CLAUDE.md` files via [src/extensions.rs](../src/extensions.rs) and merges extension `patterns/*.json`.
+- Foundry programmatically loads selected plugin `CLAUDE.md` files via [src/plugins.rs](../src/plugins.rs) and merges plugin `skills/*/SKILL.md`.
 - Foundry does not bulk-load the full Flowise corpus. Examples, templates, and expertise docs are loaded because [plugins/flowise/CLAUDE.md](../plugins/flowise/CLAUDE.md) tells the agent to read them.
 - Therefore the portable kit must use selective retrieval, not unconditional injection.
 

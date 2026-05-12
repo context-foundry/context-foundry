@@ -4,9 +4,11 @@ paths:
   - "**/*.json"
 ---
 
-# Pattern System
+# Pattern System (LEGACY)
 
-## Pattern JSON Schema
+> **Deprecated as of v3.3.0.** Patterns have been replaced by Anthropic Agent Skills (`SKILL.md` files). See `.claude/rules/plugins.md` for the current system. The loader at `src/patterns.rs:233` reads `~/.foundry/skills/` first and falls back to JSON patterns only when no skills exist. This document describes the fallback format. Do not author new patterns; write skills instead.
+
+## Pattern JSON Schema (legacy)
 ```json
 {
   "pattern_id": "kebab-case-id",
@@ -30,7 +32,7 @@ paths:
 ## Storage Locations
 - **Global**: `~/.foundry/patterns/` — shared across all projects, loaded by default
 - **Project**: `.foundry/patterns/` — project-specific learnings
-- **Extensions**: `extensions/<name>/patterns/` — domain-specific (Roblox, Flowise, etc.)
+- **Plugins** (legacy): `plugins/<name>/patterns/` — domain-specific JSON fallback. New plugin learnings should go to `plugins/<name>/skills/<topic>/SKILL.md` instead.
 
 ## Matching Algorithm
 - Exact word match = +2 points, substring = +1, tech stack = +1 each

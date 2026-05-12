@@ -1095,12 +1095,12 @@ pub(super) fn enter_home_surface(
         .map(|ext| {
             let selected = config.plugins.contains(&ext.name);
             let description = plugins::extract_description(&ext.claude_md_path);
-            let pattern_count = plugins::count_plugin_patterns(&ext.patterns_dir);
+            let skill_count = plugins::count_plugin_skills(&ext.skills_dir);
             crate::app::state::PluginDisplayInfo {
                 name: ext.name.clone(),
                 selected,
                 description,
-                pattern_count,
+                skill_count,
             }
         })
         .collect();
@@ -1402,12 +1402,12 @@ pub(super) fn enter_startup_surface(
         .map(|ext| {
             let selected = config.plugins.contains(&ext.name);
             let description = plugins::extract_description(&ext.claude_md_path);
-            let pattern_count = plugins::count_plugin_patterns(&ext.patterns_dir);
+            let skill_count = plugins::count_plugin_skills(&ext.skills_dir);
             crate::app::state::PluginDisplayInfo {
                 name: ext.name.clone(),
                 selected,
                 description,
-                pattern_count,
+                skill_count,
             }
         })
         .collect();

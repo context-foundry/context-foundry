@@ -1,12 +1,12 @@
 # Plugins
 
-A **plugin** (also called a **domain pack**, formerly **extension**) is a self-contained knowledge package that teaches foundry agents how to work with a specialized technology or domain. Plugins live in `extensions/<name>/` directories and are discovered automatically from three locations (highest priority wins):
+A **plugin** (also called a **domain pack**, formerly **extension**) is a self-contained knowledge package that teaches foundry agents how to work with a specialized technology or domain. Plugins live in `plugins/<name>/` directories and are discovered automatically from three locations (highest priority wins):
 
-1. `<project>/extensions/` (project-local)
-2. Ancestor directories' `extensions/` folders (closest wins)
-3. `~/.foundry/extensions/` (global)
+1. `<project>/plugins/` (project-local)
+2. Ancestor directories' `plugins/` folders (closest wins)
+3. `~/.foundry/plugins/` (global)
 
-The on-disk directory name is preserved as `extensions/` for path stability with existing projects and tooling. The user-facing label is "Plugins" everywhere in the TUI.
+The legacy `extensions/` directory name is auto-migrated on first startup; references in old docs or configs continue to load via a one-shot `fs::rename`.
 
 ## Taxonomy
 

@@ -1,6 +1,5 @@
 use std::path::{Path, PathBuf};
 
-use crate::patterns::{self, Pattern};
 use crate::utils::truncate_str;
 
 #[derive(Debug, Clone)]
@@ -319,9 +318,9 @@ pub fn extract_description(claude_md_path: &Path) -> String {
     "(no description)".to_string()
 }
 
-/// Count JSON pattern files in a plugin's patterns directory.
-pub fn count_plugin_patterns(patterns_dir: &Option<PathBuf>) -> usize {
-    let Some(dir) = patterns_dir else {
+/// Count skills (SKILL.md directories) in a plugin's skills/ directory.
+pub fn count_plugin_skills(skills_dir: &Option<PathBuf>) -> usize {
+    let Some(dir) = skills_dir else {
         return 0;
     };
     let entries = match std::fs::read_dir(dir) {
@@ -330,12 +329,7 @@ pub fn count_plugin_patterns(patterns_dir: &Option<PathBuf>) -> usize {
     };
     entries
         .flatten()
-        .filter(|e| {
-            e.path()
-                .extension()
-                .and_then(|ext| ext.to_str())
-                .is_some_and(|ext| ext == "json")
-        })
+        .filter(|e| e.path().is_dir() && e.path().join("SKILL.md").is_file())
         .count()
 }
 
@@ -464,22 +458,6 @@ pub fn extract_keywords(claude_md_path: &Path) -> Vec<String> {
     result.sort();
     result.truncate(50);
     result
-}
-
-/// Load all pattern JSON files from selected plugins' patterns directories.
-pub fn load_plugin_patterns(plugins: &[PluginInfo], selected: &[String]) -> Vec<Pattern> {
-    let mut all_patterns = Vec::new();
-    for name in selected {
-        let Some(ext) = plugins.iter().find(|e| e.name == *name) else {
-            continue;
-        };
-        let Some(ref pdir) = ext.patterns_dir else {
-            continue;
-        };
-        let mut ext_patterns = patterns::load_patterns(pdir);
-        all_patterns.append(&mut ext_patterns);
-    }
-    all_patterns
 }
 
 #[cfg(test)]

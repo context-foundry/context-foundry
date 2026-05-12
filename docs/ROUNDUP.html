@@ -509,8 +509,8 @@
     <tr><td><code>orchestrator_max_iterations</code></td><td>usize</td><td><code>3</code></td><td>Max proposer/reviewer iterations</td></tr>
     <tr><td><code>orchestrator_accept_policy</code></td><td>String</td><td><code>"no-high-medium"</code></td><td>Acceptance: "no-high", "no-high-medium", or "no-findings"</td></tr>
     <tr><td><code>planning_iterations</code></td><td>u64</td><td><code>0</code></td><td>Max iterations for foundry plan mode (0 = unlimited)</td></tr>
-    <tr><td colspan="4" style="background:var(--surface); color:var(--gold); font-weight:600; font-family:var(--font-heading);">Extensions</td></tr>
-    <tr><td><code>extensions</code></td><td>Vec&lt;String&gt;</td><td><code>[]</code></td><td>Selected extension names (e.g., ["roblox", "extend"])</td></tr>
+    <tr><td colspan="4" style="background:var(--surface); color:var(--gold); font-weight:600; font-family:var(--font-heading);">Plugins</td></tr>
+    <tr><td><code>plugins</code></td><td>Vec&lt;String&gt;</td><td><code>[]</code></td><td>Selected plugin names (e.g., ["roblox", "extend"]). Legacy <code>"extensions"</code> key still accepted via serde alias.</td></tr>
     <tr><td colspan="4" style="background:var(--surface); color:var(--gold); font-weight:600; font-family:var(--font-heading);">Display &amp; Limits</td></tr>
     <tr><td><code>theme</code></td><td>String</td><td><code>"dark"</code></td><td>TUI color theme: "dark", "catppuccin", or "solarized"</td></tr>
     <tr><td><code>truecolor</code></td><td>Option&lt;bool&gt;</td><td><code>null</code></td><td>Override truecolor detection (null = auto-detect)</td></tr>
