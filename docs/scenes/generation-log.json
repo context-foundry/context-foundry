@@ -1479,5 +1479,32 @@
     "retries": 1,
     "api_retries": 0,
     "validation": "pass"
+  },
+  {
+    "ts": "2026-05-12T21:42:14.310Z",
+    "scene": "lava-tube-localhost.js",
+    "seed_id": "lava-tube-localhost",
+    "biome": "underground",
+    "model": "gpt-4o-mini",
+    "input_tokens": 16288,
+    "output_tokens": 1432,
+    "cost_usd": 0.0033,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "fail",
+    "error": "Validation failed after 2 attempts: VALIDATION FAILED (1 error):\n- Too short: 68 lines (min 80)"
+  },
+  {
+    "ts": "2026-05-12T21:42:32.221Z",
+    "scene": "pampas-parallel-processing.js",
+    "seed_id": "pampas-parallel-processing",
+    "biome": "savanna",
+    "model": "gpt-4o-mini",
+    "input_tokens": 7597,
+    "output_tokens": 918,
+    "cost_usd": 0.0017,
+    "retries": 0,
+    "api_retries": 0,
+    "validation": "pass"
   }
 ]
