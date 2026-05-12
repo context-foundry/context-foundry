@@ -817,6 +817,16 @@
       "model": "gpt-4o-mini",
       "lines": 88,
       "generation": 82
+    },
+    {
+      "file": "syntax-highlighting-northern-lights.js",
+      "name": "Syntax Highlighting: Northern Lights",
+      "location": "Abisko, Swedish Lapland, Sweden",
+      "biome": "arctic",
+      "generated": "2026-05-12T20:12:26.592Z",
+      "model": "gpt-4o-mini",
+      "lines": 94,
+      "generation": 83
     }
   ]
 }

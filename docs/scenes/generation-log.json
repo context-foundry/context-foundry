@@ -1452,5 +1452,32 @@
     "retries": 0,
     "api_retries": 0,
     "validation": "pass"
+  },
+  {
+    "ts": "2026-05-12T20:11:43.304Z",
+    "scene": "the-original-cloud-computing.js",
+    "seed_id": "the-original-cloud-computing",
+    "biome": "forest",
+    "model": "gpt-4o-mini",
+    "input_tokens": 16654,
+    "output_tokens": 1474,
+    "cost_usd": 0.0034,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "fail",
+    "error": "Validation failed after 2 attempts: VALIDATION FAILED (1 error):\n- Too short: 77 lines (min 80)"
+  },
+  {
+    "ts": "2026-05-12T20:12:26.593Z",
+    "scene": "syntax-highlighting-northern-lights.js",
+    "seed_id": "syntax-highlighting-northern-lights",
+    "biome": "arctic",
+    "model": "gpt-4o-mini",
+    "input_tokens": 14906,
+    "output_tokens": 1857,
+    "cost_usd": 0.0034,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "pass"
   }
 ]
