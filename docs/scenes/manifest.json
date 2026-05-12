@@ -807,6 +807,16 @@
       "model": "gpt-4o-mini",
       "lines": 84,
       "generation": 81
+    },
+    {
+      "file": "door-to-hell-production-incident.js",
+      "name": "Door to Hell (Production Incident)",
+      "location": "Darvaza Gas Crater, Turkmenistan",
+      "biome": "extreme",
+      "generated": "2026-05-12T18:19:30.452Z",
+      "model": "gpt-4o-mini",
+      "lines": 88,
+      "generation": 82
     }
   ]
 }
