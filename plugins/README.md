@@ -24,7 +24,7 @@ A plugin is a directory containing any combination of these component types:
 ### Directory structure
 
 ```
-extensions/<name>/
+plugins/<name>/
 ├── CLAUDE.md                          # Instructions (required)
 ├── skills/
 │   └── <topic>/
@@ -82,7 +82,7 @@ Required frontmatter fields: `name`, `description`. The `metadata` block is opti
 
 1. Create your plugin folder:
    ```bash
-   mkdir -p extensions/my-tech/skills
+   mkdir -p plugins/my-tech/skills
    ```
 
 2. Write a `CLAUDE.md` with critical rules and references your agents need.
@@ -90,7 +90,7 @@ Required frontmatter fields: `name`, `description`. The `metadata` block is opti
 3. Reference it from your project's `CLAUDE.md`:
    ```markdown
    ## Plugin
-   Read /path/to/context-foundry/extensions/my-tech/CLAUDE.md for domain rules.
+   Read /path/to/context-foundry/plugins/my-tech/CLAUDE.md for domain rules.
    ```
 
 ## External skills

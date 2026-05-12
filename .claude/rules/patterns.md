@@ -41,12 +41,11 @@ paths:
 - Top 10 matched patterns injected into planner/reviewer prompts
 
 ## After Solving Issues
-1. Add to the relevant patterns file (extension or project).
-2. Merge to global: `mcp__context-foundry__merge_project_patterns(path, "common-issues")`
-3. Patterns deduplicate by `pattern_id` on merge.
+1. Write a new `SKILL.md` under the relevant plugin's `skills/<topic>/` directory (Anthropic Skills format — see `plugins.md` for schema). Do NOT add new entries to legacy `patterns/*.json` files.
+2. New global learnings: write a SKILL.md to `~/.foundry/skills/<topic>/SKILL.md`. The pattern extractor agent already writes in this format as of T1.26.
 
-## Extension Pattern Format
-Extensions use a wrapper object:
+## Legacy Plugin Pattern Wrapper Format
+Legacy `plugins/<name>/patterns/*.json` files use this wrapper. Loader-compatible for back-compat read only:
 ```json
 {
   "pattern_type": "common-issues",

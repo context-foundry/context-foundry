@@ -1,4 +1,4 @@
-# Extensions as Anthropic Plugins (T1.14)
+# Extensions as Anthropic Plugins (T1.14, finalized in v3.3.0)
 
 Context Foundry's `plugins/<name>/` directories now ship in two compatible layouts at once:
 
@@ -29,9 +29,9 @@ The original `CLAUDE.md` is preserved. The migration is additive.
 1. If the plugin has a `skills/` directory containing at least one `<topic>/SKILL.md`, concatenate every SKILL.md body (frontmatter stripped) in lexicographic order.
 2. Otherwise, fall back to reading `CLAUDE.md`.
 
-The `BEGIN/END EXTENSION CONTEXT` delimiter format is unchanged -- Context Foundry still owns the per-stage injection policy. Only the source of the body changes.
+The `BEGIN/END PLUGIN CONTEXT` delimiter format is unchanged -- Context Foundry still owns the per-stage injection policy. Only the source of the body changes. (Pre-v3.3.0 builds emit `BEGIN/END EXTENSION CONTEXT` instead; the new delimiter is the only on-the-wire change.)
 
-## Adding a new skill to an existing plugin extension
+## Adding a new skill to an existing plugin
 
 1. Create `plugins/<name>/skills/<new-topic>/SKILL.md`.
 2. Use this frontmatter shape:
@@ -45,7 +45,7 @@ The `BEGIN/END EXTENSION CONTEXT` delimiter format is unchanged -- Context Found
    ```
 3. The next pipeline run picks up the new SKILL.md automatically -- no code changes required.
 
-## Adding a new plugin extension from scratch
+## Adding a new plugin from scratch
 
 1. Create `plugins/<name>/.claude-plugin/plugin.json` matching the schema below.
 2. Create at least one `plugins/<name>/skills/<topic>/SKILL.md`.

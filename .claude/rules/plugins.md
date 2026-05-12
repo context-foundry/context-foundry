@@ -22,7 +22,7 @@ A **plugin** (or **domain pack**) is a directory containing any combination of:
 
 ## Structure Convention
 ```
-extensions/<name>/
+plugins/<name>/
 ├── CLAUDE.md                       # Domain rules (read before any work in this domain)
 ├── skills/
 │   └── <topic>/SKILL.md            # One skill per directory (Anthropic Skills format)

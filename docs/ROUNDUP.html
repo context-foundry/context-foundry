@@ -267,7 +267,7 @@
   <table>
     <tr><th>Aspect</th><th>Detail</th></tr>
     <tr><td>Agent</td><td><code>AgentRole::Planner</code></td></tr>
-    <tr><td>Input</td><td>scout-report.md, matched patterns, extension context</td></tr>
+    <tr><td>Input</td><td>scout-report.md, matched skills, plugin context</td></tr>
     <tr><td>Output</td><td><code>.buildloop/current-plan.md</code></td></tr>
     <tr><td>Skip when</td><td><code>skip_planner_for_simple</code> is true and task complexity is Simple</td></tr>
   </table>
@@ -524,14 +524,14 @@
   <!-- SECTION 7: THE POSSE -->
   <h2>The Posse</h2>
 
-  <p>Specialist deputies, each with their own jurisdiction. Extensions provide domain-specific knowledge to agents. They are discovered from <code>~/.foundry/plugins/</code> (global) and <code>&lt;project&gt;/plugins/</code> (local). Each extension directory contains a <code>CLAUDE.md</code> file whose contents are prepended to agent prompts.</p>
+  <p>Specialist deputies, each with their own jurisdiction. Plugins provide domain-specific knowledge to agents. They are discovered from <code>~/.foundry/plugins/</code> (global) and <code>&lt;project&gt;/plugins/</code> (local). Each plugin directory contains a <code>CLAUDE.md</code> file whose contents are prepended to agent prompts.</p>
 
   <div class="card-grid">
 
     <div class="card">
       <h3>Roblox</h3>
       <span class="archetype">plugins/roblox/</span>
-      <p>World generation using Lune scripting and .rbxl/.rbxm files. Key files: <code>CLAUDE.md</code>, <code>patterns/roblox-common-issues.json</code>. Gotcha: use <code>add_to_world.luau</code>, never <code>generate_world.luau</code> -- terrain has varying elevations that cause floating objects.</p>
+      <p>World generation using Lune scripting and .rbxl/.rbxm files. Key files: <code>CLAUDE.md</code>, <code>skills/roblox-common-pitfalls/SKILL.md</code>. Gotcha: use <code>add_to_world.luau</code>, never <code>generate_world.luau</code> -- terrain has varying elevations that cause floating objects.</p>
     </div>
 
     <div class="card">
@@ -572,7 +572,7 @@
     <li><strong>Pattern learning compounds over time.</strong> Every solved problem is extracted into a reusable pattern. Before planning each new task, matching patterns are injected into the agent's context. The system gets better at your codebase the more you use it.</li>
     <li><strong>The doubt loop catches what self-review misses.</strong> A fresh-context reviewer audits every build. It has no knowledge of what the builder intended -- only what the builder claims and what the code actually does. This separation of concerns catches blind spots that self-review cannot.</li>
     <li><strong>The dual-model arena absorbs uncertainty.</strong> Run two different models against the same task in isolated worktrees. Compare outputs. Pick the winner. No single-vendor dependency.</li>
-    <li><strong>Everything is a config change.</strong> Pipeline mode, execution mode, model selection, pattern injection limits, PR polling intervals, extension selection -- all in one <code>.foundry.json</code> file. No infrastructure changes required to change behavior.</li>
+    <li><strong>Everything is a config change.</strong> Pipeline mode, execution mode, model selection, pattern injection limits, PR polling intervals, plugin selection -- all in one <code>.foundry.json</code> file. No infrastructure changes required to change behavior.</li>
   </ul>
 
   <footer>

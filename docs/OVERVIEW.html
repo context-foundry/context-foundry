@@ -919,9 +919,9 @@ zones, with the middle zone split 60/40 horizontally.
     <td><code>LoopEvent::PatternsUsed</code></td>
   </tr>
   <tr>
-    <td>Extensions Used</td>
+    <td>Plugins Used</td>
     <td><code>render_plugins_used</code></td>
-    <td><code>LoopEvent::ExtensionInjected</code></td>
+    <td><code>LoopEvent::PluginInjected</code></td>
   </tr>
   <tr>
     <td>Stats Panel</td>
@@ -1313,10 +1313,10 @@ zones, with the middle zone split 60/40 horizontally.
 <!-- SECTION 8: EXTENSIONS                                            -->
 <!-- ================================================================ -->
 <section id="plugins">
-<h2>Extensions</h2>
+<h2>Plugins</h2>
 
 <p>
-Extensions provide domain-specific knowledge to agents. They are discovered from
+Plugins provide domain-specific knowledge to agents. They are discovered from
 <code>~/.foundry/plugins/</code> (global), ancestor directories' <code>plugins/</code>
 folders, and <code>&lt;project&gt;/plugins/</code> (local). Each plugin directory
 must contain a <code>CLAUDE.md</code> file. Project-local plugins override global
@@ -1392,7 +1392,7 @@ catalogs, expertise metadata, and governance lists belong in <code>docs/</code>.
 <p><code>plugins/roblox/</code></p>
 <ul>
   <li><strong>Purpose:</strong> Domain knowledge for Roblox world generation using Lune scripting and .rbxl/.rbxm files.</li>
-  <li><strong>Key files:</strong> <code>CLAUDE.md</code>, <code>patterns/roblox-common-issues.json</code></li>
+  <li><strong>Key files:</strong> <code>CLAUDE.md</code>, <code>skills/roblox-common-pitfalls/SKILL.md</code></li>
   <li><strong>Critical patterns:</strong>
     <ul>
       <li>Use <code>add_to_world.luau</code>, NOT <code>generate_world.luau</code> -- terrain has varying elevations</li>
@@ -1407,7 +1407,7 @@ catalogs, expertise metadata, and governance lists belong in <code>docs/</code>.
 <p><code>plugins/extend/</code></p>
 <ul>
   <li><strong>Purpose:</strong> Workday Extend PaaS application development -- building custom apps inside Workday tenants.</li>
-  <li><strong>Key files:</strong> <code>CLAUDE.md</code>, <code>WORKDAY_EXTEND_DEVELOPER_GUIDE.md</code>, <code>WORKDAY_EXTEND_ARCHITECTURE.md</code>, <code>orchestrations-integrations-guide.md</code>, <code>security-reporting-birt-notes.md</code>, <code>LATEST_DEVELOPMENTS.md</code>, <code>patterns/extend-common-issues.json</code></li>
+  <li><strong>Key files:</strong> <code>CLAUDE.md</code>, <code>WORKDAY_EXTEND_DEVELOPER_GUIDE.md</code>, <code>WORKDAY_EXTEND_ARCHITECTURE.md</code>, <code>orchestrations-integrations-guide.md</code>, <code>security-reporting-birt-notes.md</code>, <code>LATEST_DEVELOPMENTS.md</code>, <code>skills/extend-common-pitfalls/SKILL.md</code></li>
   <li><strong>Critical rules:</strong>
     <ul>
       <li>No local file-based development -- Extend apps built entirely in browser App Builder</li>
@@ -1425,7 +1425,7 @@ catalogs, expertise metadata, and governance lists belong in <code>docs/</code>.
 <p><code>plugins/recon/</code></p>
 <ul>
   <li><strong>Purpose:</strong> Fleet reconnaissance from a management server -- inventory lookups, iDRAC queries, racadm commands, batch operations against Dell servers.</li>
-  <li><strong>Key files:</strong> <code>CLAUDE.md</code>, <code>config/inventory-schema.json</code>, <code>templates/idrac-checks.md</code>, <code>templates/batch-loops.md</code>, <code>patterns/recon-common-issues.json</code></li>
+  <li><strong>Key files:</strong> <code>CLAUDE.md</code>, <code>config/inventory-schema.json</code>, <code>templates/idrac-checks.md</code>, <code>templates/batch-loops.md</code>, <code>skills/recon-common-pitfalls/SKILL.md</code></li>
   <li><strong>Critical rules:</strong>
     <ul>
       <li>Always use <code>grep -w</code> (whole-word match) for hostname lookups</li>

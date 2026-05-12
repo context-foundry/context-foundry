@@ -317,7 +317,7 @@ mod tests {
         assert_eq!(result["protocolVersion"], "2024-11-05");
         assert!(result["capabilities"]["resources"].is_object());
         assert_eq!(result["serverInfo"]["name"], "context-foundry");
-        assert_eq!(result["serverInfo"]["version"], "0.6.0");
+        assert_eq!(result["serverInfo"]["version"], env!("CARGO_PKG_VERSION"));
     }
 
     #[test]
