@@ -11,13 +11,73 @@ use crate::skill_discovery::{DiscoveredSkill, SkillSource};
 use crate::skills_telemetry;
 use crate::utils::atomic_write_file;
 
+/// Where a `SkillFile` came from. Drives telemetry/citation labels and the
+/// dedup precedence when two skills share a `name`/`dir_name`.
+///
+/// Order of variants matches precedence (highest first) used by the
+/// merged-pool dedup in `load_skills_from_global_and_project`:
+///   1. `GlobalFoundry`  (`~/.foundry/skills/<topic>/SKILL.md`)
+///   2. `ClaudeProject`  (`<project>/.claude/skills/<topic>/SKILL.md`)
+///   3. `AgentsMd`       (project AGENTS.md, then ancestor AGENTS.md)
+///   4. `CopilotInstructions` (`.github/copilot-instructions.md`)
+///   5. `CursorRules`    (`<project>/.cursorrules`)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SkillProvenance {
+    #[default]
+    GlobalFoundry,
+    ClaudeProject,
+    AgentsMd,
+    CopilotInstructions,
+    CursorRules,
+}
+
+impl SkillProvenance {
+    /// Higher = wins on name collision.
+    pub fn precedence(self) -> u8 {
+        match self {
+            Self::GlobalFoundry => 5,
+            Self::ClaudeProject => 4,
+            Self::AgentsMd => 3,
+            Self::CopilotInstructions => 2,
+            Self::CursorRules => 1,
+        }
+    }
+
+    /// Short label for telemetry attribution and citation logs.
+    #[allow(dead_code)]
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::GlobalFoundry => "global-foundry",
+            Self::ClaudeProject => "claude-project",
+            Self::AgentsMd => "agents-md",
+            Self::CopilotInstructions => "copilot",
+            Self::CursorRules => "cursor",
+        }
+    }
+
+    /// Map a `SkillSource` from cross-provider discovery into a `SkillProvenance`.
+    pub fn from_skill_source(src: SkillSource) -> Self {
+        match src {
+            SkillSource::ClaudeProjectSkill => Self::ClaudeProject,
+            SkillSource::AgentsMd => Self::AgentsMd,
+            SkillSource::CopilotInstructions => Self::CopilotInstructions,
+            SkillSource::CursorRules => Self::CursorRules,
+        }
+    }
+}
+
 /// A single SKILL.md file on disk parsed back into a Pattern shape so the
 /// existing matcher can consume it without further changes.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct SkillFile {
     pub dir_name: String,
     pub frontmatter: SkillFrontmatter,
     pub body: String,
+    /// T2.4: source of this skill. Default `GlobalFoundry` for any code
+    /// path that pre-dates the cross-provider merge (parse_skill_file,
+    /// load_skills, etc.). The cross-provider discovery path sets this
+    /// explicitly via `discovered_to_skill_file`.
+    pub provenance: SkillProvenance,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -100,6 +160,87 @@ pub fn load_skills(dir: &Path) -> Vec<SkillFile> {
 pub fn load_skills_from_global() -> Vec<SkillFile> {
     let dir = resolve_skills_dir("~/.foundry/skills");
     load_skills(&dir)
+}
+
+/// T2.4: return the merged auto-retrieval skill pool combining
+/// `~/.foundry/skills/` and cross-provider discovered SKILL.md / AGENTS.md /
+/// .cursorrules / .github/copilot-instructions.md files in the given project
+/// directory. Dedup rule: on `dir_name` collision the higher
+/// `SkillProvenance::precedence()` wins (global > .claude > AGENTS.md >
+/// copilot > cursor).
+pub fn load_skills_from_global_and_project(project_dir: &Path) -> Vec<SkillFile> {
+    let global = load_skills_from_global();
+    let discovered = crate::skill_discovery::discover_external_skills(project_dir);
+
+    let mut by_name: HashMap<String, SkillFile> = HashMap::with_capacity(global.len() + discovered.len());
+    let key_of = |sf: &SkillFile| -> String {
+        if !sf.dir_name.is_empty() {
+            sf.dir_name.clone()
+        } else {
+            sf.frontmatter.name.clone()
+        }
+    };
+
+    for sf in global {
+        let key = key_of(&sf);
+        by_name.insert(key, sf);
+    }
+
+    for disc in &discovered {
+        let cand = discovered_to_skill_file(disc);
+        let key = key_of(&cand);
+        let new_winner = match by_name.get(&key) {
+            Some(existing) => cand.provenance.precedence() > existing.provenance.precedence(),
+            None => true,
+        };
+        if new_winner {
+            by_name.insert(key, cand);
+        }
+    }
+
+    by_name.into_values().collect()
+}
+
+/// T2.4: render the one-line skill-pool summary that appears above the
+/// Plugins panel on the startup screen. Buckets are listed in the same
+/// precedence order as `SkillProvenance`; zero-count buckets are omitted.
+/// Returns `"Skill pool: 0 total"` when the slice is empty.
+pub fn skill_pool_summary(skills: &[SkillFile]) -> String {
+    if skills.is_empty() {
+        return "Skill pool: 0 total".to_string();
+    }
+    let mut global = 0usize;
+    let mut claude = 0usize;
+    let mut agents = 0usize;
+    let mut copilot = 0usize;
+    let mut cursor = 0usize;
+    for s in skills {
+        match s.provenance {
+            SkillProvenance::GlobalFoundry => global += 1,
+            SkillProvenance::ClaudeProject => claude += 1,
+            SkillProvenance::AgentsMd => agents += 1,
+            SkillProvenance::CopilotInstructions => copilot += 1,
+            SkillProvenance::CursorRules => cursor += 1,
+        }
+    }
+    let total = global + claude + agents + copilot + cursor;
+    let mut buckets: Vec<String> = Vec::new();
+    if global > 0 {
+        buckets.push(format!("{} global", global));
+    }
+    if claude > 0 {
+        buckets.push(format!("{} from .claude/skills/", claude));
+    }
+    if agents > 0 {
+        buckets.push(format!("{} from AGENTS.md", agents));
+    }
+    if copilot > 0 {
+        buckets.push(format!("{} from copilot", copilot));
+    }
+    if cursor > 0 {
+        buckets.push(format!("{} from .cursorrules", cursor));
+    }
+    format!("Skill pool: {} = {} total", buckets.join(", "), total)
 }
 
 /// Drop-in shape for the matcher. Each `SkillFile` becomes one `Pattern`.
@@ -296,10 +437,9 @@ fn load_keyword_overrides() -> HashMap<String, Vec<String>> {
 /// `cf-stage` defaults to `both` so the skill is offered to both planner and
 /// reviewer prompts -- external skills don't carry CF's per-stage targeting.
 ///
-/// T1.27 ships the prompt-injection path via `format_discovered_skills_for_prompt`
-/// so this helper is currently only exercised by tests, but it is the
-/// canonical converter for any future ranker integration.
-#[allow(dead_code)]
+/// T2.4: this is the canonical converter for the auto-retrieval merge path;
+/// `load_skills_from_global_and_project` calls it to materialize an in-memory
+/// `SkillFile` from each foreign discovered skill before the dedup step.
 pub fn discovered_to_skill_file(disc: &DiscoveredSkill) -> SkillFile {
     let (name, description, cf_stage) = match (&disc.frontmatter, disc.source) {
         (Some(fm), SkillSource::ClaudeProjectSkill) => {
@@ -345,6 +485,7 @@ pub fn discovered_to_skill_file(disc: &DiscoveredSkill) -> SkillFile {
         dir_name: disc.derived_name.clone(),
         frontmatter,
         body: disc.body.clone(),
+        provenance: SkillProvenance::from_skill_source(disc.source),
     }
 }
 
@@ -355,6 +496,11 @@ pub fn discovered_to_skill_file(disc: &DiscoveredSkill) -> SkillFile {
 /// Each block is prefixed with the source label and the file path, then the
 /// raw body is included verbatim. Returns an empty string if `discovered` is
 /// empty.
+///
+/// T2.4: no longer called from any production path -- cross-provider skills
+/// now flow through `load_skills_from_global_and_project` and the standard
+/// ranker. Kept for the existing test suite in `src/skills.rs`.
+#[allow(dead_code)]
 pub fn format_discovered_skills_for_prompt(discovered: &[(SkillSource, &DiscoveredSkill)]) -> String {
     if discovered.is_empty() {
         return String::new();
@@ -717,6 +863,7 @@ pub fn parse_skill_file(dir_name: &str, content: &str) -> Result<SkillFile> {
         dir_name: dir_name.to_string(),
         frontmatter,
         body,
+        provenance: SkillProvenance::GlobalFoundry,
     })
 }
 
@@ -1307,6 +1454,7 @@ mod tests {
                 cf_keywords: Vec::new(),
             },
             body: String::new(),
+            provenance: SkillProvenance::GlobalFoundry,
         }
     }
 
@@ -1385,6 +1533,7 @@ mod tests {
                 cf_keywords: vec!["a".to_string(), "b".to_string()],
             },
             body: String::new(),
+            provenance: SkillProvenance::GlobalFoundry,
         };
         let refs: Vec<&SkillFile> = vec![&skill];
         let out = format_skills_for_prompt(&refs, 10);
@@ -1501,6 +1650,7 @@ mod tests {
                 cf_keywords: kws.iter().map(|s| s.to_string()).collect(),
             },
             body: String::new(),
+            provenance: SkillProvenance::GlobalFoundry,
         }
     }
 
@@ -1892,9 +2042,13 @@ mod synthesize_keywords_tests {
 
 #[cfg(test)]
 mod ranks_tests {
-    use super::{skill_to_pattern, SkillFile, SkillFrontmatter};
+    use super::{
+        load_skills_from_global_and_project, skill_pool_summary, skill_to_pattern, SkillFile,
+        SkillFrontmatter, SkillProvenance,
+    };
     use crate::patterns::{keyword_scores, Pattern, PatternSolution};
     use std::collections::HashMap;
+    use std::path::Path;
 
     fn make_pattern(pattern_id: &str, keywords: Vec<&str>) -> Pattern {
         Pattern {
@@ -2406,6 +2560,7 @@ mod ranks_tests {
                     "frontmatter-only-tok-b".to_string(),
                 ],
             },
+            provenance: SkillProvenance::GlobalFoundry,
         };
         let p = skill_to_pattern(sf);
         assert_eq!(
@@ -2422,5 +2577,142 @@ mod ranks_tests {
                 .any(|k| k == "bugfix" || k == "feature" || k == "implementation"),
             "synthesized tokens must not appear when cf-keywords is non-empty and no override matches pattern_id"
         );
+    }
+
+    // T2.4 tests: merged auto-retrieval pool + summary line.
+
+    fn write_global_skill_into(home_skills_dir: &Path, dir: &str, name: &str, desc: &str) {
+        let topic = home_skills_dir.join(dir);
+        std::fs::create_dir_all(&topic).unwrap();
+        let body = format!(
+            "---\nname: {}\ndescription: {}\nmetadata:\n  cf-stage: planner\n---\n\nbody\n",
+            name, desc
+        );
+        std::fs::write(topic.join("SKILL.md"), body).unwrap();
+    }
+
+    fn with_pinned_home<F: FnOnce(&Path)>(f: F) {
+        // Pin HOME to a tempdir so resolve_skills_dir("~/.foundry/skills") and
+        // the ancestor walk are both scoped to a sandbox. Critical to avoid
+        // reading the user's real ~/.foundry/skills/ during tests.
+        let tmp_home = tempfile::tempdir().unwrap();
+        let prev_home = std::env::var("HOME").ok();
+        std::env::set_var("HOME", tmp_home.path());
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| f(tmp_home.path())));
+        match prev_home {
+            Some(h) => std::env::set_var("HOME", h),
+            None => std::env::remove_var("HOME"),
+        }
+        if let Err(e) = result {
+            std::panic::resume_unwind(e);
+        }
+    }
+
+    #[serial_test::serial(home_env)]
+    #[test]
+    fn merged_pool_dedupes_global_winning_over_claude_project() {
+        with_pinned_home(|home| {
+            let home_skills = home.join(".foundry").join("skills");
+            write_global_skill_into(&home_skills, "foo", "foo", "global foo");
+
+            // Project sits INSIDE the pinned HOME so the ancestor walk is bounded.
+            let project = tempfile::tempdir_in(home).unwrap();
+            let topic = project.path().join(".claude").join("skills").join("foo");
+            std::fs::create_dir_all(&topic).unwrap();
+            std::fs::write(
+                topic.join("SKILL.md"),
+                "---\nname: foo\ndescription: project foo\n---\n\nbody\n",
+            )
+            .unwrap();
+
+            let merged = load_skills_from_global_and_project(project.path());
+            let foos: Vec<&SkillFile> =
+                merged.iter().filter(|s| s.dir_name == "foo").collect();
+            assert_eq!(
+                foos.len(),
+                1,
+                "expected exactly one foo entry after dedup, got {:?}",
+                foos
+            );
+            assert_eq!(
+                foos[0].provenance,
+                SkillProvenance::GlobalFoundry,
+                "global must win over .claude/skills/ on name collision"
+            );
+        });
+    }
+
+    #[serial_test::serial(home_env)]
+    #[test]
+    fn merged_pool_includes_distinct_foreign_skills() {
+        with_pinned_home(|home| {
+            let project = tempfile::tempdir_in(home).unwrap();
+            std::fs::write(project.path().join("AGENTS.md"), "# AGENTS rules\n").unwrap();
+            let merged = load_skills_from_global_and_project(project.path());
+            let agents: Vec<&SkillFile> = merged
+                .iter()
+                .filter(|s| s.provenance == SkillProvenance::AgentsMd)
+                .collect();
+            assert!(
+                !agents.is_empty(),
+                "expected merged pool to include an AgentsMd-sourced skill, got {:?}",
+                merged
+            );
+        });
+    }
+
+    #[serial_test::serial(home_env)]
+    #[test]
+    fn merged_pool_does_not_walk_when_project_has_no_foreign_skills() {
+        with_pinned_home(|home| {
+            // Pin HOME to an empty dir so load_skills_from_global() returns
+            // zero entries.
+            let project = tempfile::tempdir_in(home).unwrap();
+            let merged = load_skills_from_global_and_project(project.path());
+            assert!(
+                merged.is_empty(),
+                "merged pool should be empty when neither global nor project carry skills, got {:?}",
+                merged
+            );
+        });
+    }
+
+    #[test]
+    fn skill_pool_summary_renders_zero() {
+        assert_eq!(skill_pool_summary(&[]), "Skill pool: 0 total");
+    }
+
+    #[test]
+    fn skill_pool_summary_renders_mixed() {
+        let mk = |prov: SkillProvenance| SkillFile {
+            dir_name: "x".to_string(),
+            frontmatter: SkillFrontmatter::default(),
+            body: String::new(),
+            provenance: prov,
+        };
+        let pool = vec![
+            mk(SkillProvenance::GlobalFoundry),
+            mk(SkillProvenance::GlobalFoundry),
+            mk(SkillProvenance::ClaudeProject),
+            mk(SkillProvenance::AgentsMd),
+        ];
+        let s = skill_pool_summary(&pool);
+        assert_eq!(
+            s,
+            "Skill pool: 2 global, 1 from .claude/skills/, 1 from AGENTS.md = 4 total"
+        );
+    }
+
+    #[test]
+    fn skill_pool_summary_omits_empty_buckets() {
+        let mk = || SkillFile {
+            dir_name: "x".to_string(),
+            frontmatter: SkillFrontmatter::default(),
+            body: String::new(),
+            provenance: SkillProvenance::GlobalFoundry,
+        };
+        let pool = vec![mk(), mk(), mk()];
+        let s = skill_pool_summary(&pool);
+        assert_eq!(s, "Skill pool: 3 global = 3 total");
     }
 }

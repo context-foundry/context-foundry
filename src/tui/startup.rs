@@ -111,8 +111,6 @@ pub enum StartupMouseTarget {
     FileEntry(usize),
     PreviewLine,
     PluginEntry(usize),
-    /// T1.27: row index into `state.available_external_skills`.
-    ExternalSkillEntry(usize),
     ExpandAllToggle,
     WrapToggle,
     DashboardTab,
@@ -145,21 +143,13 @@ pub(super) fn render_startup(frame: &mut Frame, state: &AppState) {
     render_startup_status_bar(frame, layout.status, state);
 }
 
-/// T1.27: total rows the Plugins panel needs to display plugins plus
-/// (optionally) a divider + external-skill rows. When external skills are
-/// empty, returns just the plugin count so the existing layout is
-/// unchanged.
+/// T2.4: external-skill rows folded into the auto-retrieval pool; the
+/// Plugins panel now renders only plugin checkboxes plus (optionally)
+/// a single summary line above them.
 fn combined_panel_row_count(state: &AppState) -> usize {
     let ext = state.available_plugins.len();
-    let xs = state.available_external_skills.len();
-    if xs == 0 {
-        ext
-    } else if ext == 0 {
-        // 1 header row ("External Skills:") + xs rows
-        xs + 1
-    } else {
-        ext + 1 + xs // ext rows + divider + external skill rows
-    }
+    let summary_row = if state.skill_pool_summary.is_empty() { 0 } else { 1 };
+    ext + summary_row
 }
 
 pub(super) fn startup_hit_test(
@@ -339,12 +329,12 @@ fn plugins_panel_hit_test(
     column: u16,
     row: u16,
 ) -> Option<StartupMouseTarget> {
+    let _ = column;
     if !rect_contains(area, column, row) {
         return None;
     }
     let ext_count = state.available_plugins.len();
-    let xs_count = state.available_external_skills.len();
-    if ext_count == 0 && xs_count == 0 {
+    if ext_count == 0 {
         return None;
     }
     let inner_top = area.y + 1;
@@ -353,23 +343,14 @@ fn plugins_panel_hit_test(
         return None;
     }
     let relative_row = (row - inner_top) as usize;
-    // Layout: [plugins...] [optional divider] [optional "External Skills:" header] [external skills...]
-    if relative_row < ext_count {
-        return Some(StartupMouseTarget::PluginEntry(relative_row));
-    }
-    if xs_count == 0 {
+    // T2.4: summary line (if present) occupies the first row.
+    let summary_offset = if state.skill_pool_summary.is_empty() { 0 } else { 1 };
+    if relative_row < summary_offset {
         return None;
     }
-    // Divider row (only present when both groups are non-empty).
-    let divider_rows = if ext_count > 0 { 1 } else { 0 };
-    let header_row = 1; // "External Skills" header
-    let xs_start = ext_count + divider_rows + header_row;
-    if relative_row < xs_start {
-        return None;
-    }
-    let xs_index = relative_row - xs_start;
-    if xs_index < xs_count {
-        Some(StartupMouseTarget::ExternalSkillEntry(xs_index))
+    let plugin_row = relative_row - summary_offset;
+    if plugin_row < ext_count {
+        Some(StartupMouseTarget::PluginEntry(plugin_row))
     } else {
         None
     }
@@ -1254,7 +1235,7 @@ fn render_plugins_panel(frame: &mut Frame, area: Rect, state: &AppState) {
 
     let inner_width = area.width.saturating_sub(2) as usize;
 
-    if state.available_plugins.is_empty() && state.available_external_skills.is_empty() {
+    if state.available_plugins.is_empty() && state.skill_pool_summary.is_empty() {
         let paragraph = Paragraph::new(vec![
             Line::from(Span::styled(
                 "  No plugins found.",
@@ -1276,7 +1257,16 @@ fn render_plugins_panel(frame: &mut Frame, area: Rect, state: &AppState) {
         return;
     }
 
-    let mut lines: Vec<Line> = state
+    let mut lines: Vec<Line> = Vec::new();
+    if !state.skill_pool_summary.is_empty() {
+        lines.push(Line::from(Span::styled(
+            format!(" {}", state.skill_pool_summary),
+            Style::default()
+                .fg(state.tui_theme.accent)
+                .add_modifier(Modifier::BOLD),
+        )));
+    }
+    let plugin_lines: Vec<Line> = state
         .available_plugins
         .iter()
         .enumerate()
@@ -1316,73 +1306,7 @@ fn render_plugins_panel(frame: &mut Frame, area: Rect, state: &AppState) {
             ])
         })
         .collect();
-
-    // T1.27: render the External Skills group below plugins when present.
-    if !state.available_external_skills.is_empty() {
-        if !state.available_plugins.is_empty() {
-            // Visual divider row.
-            lines.push(Line::from(Span::styled(
-                " ─── External Skills ───",
-                Style::default().fg(state.tui_theme.muted),
-            )));
-        } else {
-            lines.push(Line::from(Span::styled(
-                " External Skills:",
-                Style::default()
-                    .fg(state.tui_theme.accent)
-                    .add_modifier(Modifier::BOLD),
-            )));
-        }
-
-        let ext_count = state.available_plugins.len();
-        for (i, xs) in state.available_external_skills.iter().enumerate() {
-            let checkbox = if xs.selected { "[x]" } else { "[ ]" };
-            let cursor_idx = ext_count + i;
-            let is_cursor = cursor_idx == state.plugins_cursor
-                && state.focused_pane == TuiPane::Plugins;
-
-            let label = format!(
-                "{} {} [{}]",
-                checkbox,
-                xs.derived_name,
-                xs.source.ui_label()
-            );
-            let path_str = xs.path.to_string_lossy();
-            let desc_width = inner_width.saturating_sub(label.len() + 3);
-            let mut desc_text = truncate_str(&path_str, desc_width).to_string();
-            if let Some(winner) = &xs.shadowed_by {
-                let trimmed_winner = std::path::Path::new(winner)
-                    .file_name()
-                    .and_then(|n| n.to_str())
-                    .unwrap_or("(other)");
-                desc_text = format!("shadowed by {}", trimmed_winner);
-            }
-
-            let name_style = if is_cursor {
-                Style::default()
-                    .fg(Color::Black)
-                    .bg(state.tui_theme.accent)
-                    .add_modifier(Modifier::BOLD)
-            } else if xs.shadowed_by.is_some() {
-                Style::default().fg(state.tui_theme.muted)
-            } else if xs.selected {
-                Style::default().fg(Color::Green)
-            } else {
-                Style::default().fg(state.tui_theme.text)
-            };
-
-            let desc_style = if is_cursor {
-                Style::default().fg(Color::Black).bg(state.tui_theme.accent)
-            } else {
-                Style::default().fg(state.tui_theme.muted)
-            };
-
-            lines.push(Line::from(vec![
-                Span::styled(format!(" {} ", label), name_style),
-                Span::styled(desc_text, desc_style),
-            ]));
-        }
-    }
+    lines.extend(plugin_lines);
 
     let paragraph = Paragraph::new(lines).block(
         Block::default()

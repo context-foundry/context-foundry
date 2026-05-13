@@ -19,46 +19,46 @@ authored against the Anthropic Claude Code convention drop in unchanged.
 FlowiseKit-style frontmatter fields (`context`, `allowed-tools`,
 `argument-hint`) are accepted and ignored gracefully.
 
-## How to opt skills in
+## How they reach the planner / builder / reviewer
 
-When you launch CF on a project that has any of these files, an "External
-Skills" section appears in the startup screen below the Plugins panel. Each
-entry shows its provenance label (`AGENTS.md`, `.cursorrules`, `.claude/skills/`,
-`.github/copilot-instructions.md`) and a checkbox. The default state is OFF --
-discovered skills do not affect the planner prompt unless you check the box.
+As of T2.4 (May 2026), cross-provider discovered skills are folded into
+Context Foundry's auto-retrieval skill pool alongside `~/.foundry/skills/`.
+There is no per-skill checkbox to opt them in -- any SKILL.md / AGENTS.md /
+.cursorrules / .github/copilot-instructions.md found at startup is eligible
+for retrieval. The same BM25 + semantic-rerank + telemetry ranker that
+selects from the global pool now sees the union of all sources.
 
-Opt-in state is persisted per project in `.foundry.json` under
-`external_skills_enabled`, keyed by absolute file path.
+The startup screen shows a single one-line summary above the Plugins panel,
+e.g. `Skill pool: 321 global, 14 from .claude/skills/, 3 from AGENTS.md = 338 total`.
 
-## How they appear in the planner prompt
+Provenance is preserved on every `SkillFile` (the `provenance` field) and
+surfaced in telemetry / citation logs as one of `global-foundry`,
+`claude-project`, `agents-md`, `copilot`, or `cursor`. Injection treats
+all provenances identically -- the source label is informational only.
 
-Each opted-in skill is appended to both planner and reviewer prompt context,
-inside an `## External Skills` block. Each entry leads with the file path and
-a `source: <agents-md|cursor|claude-project|copilot>` label so the agent can
-see provenance.
+Note: when a foreign skill's `derived_name` collides with a CF-native skill
+under `~/.foundry/skills/`, the CF-native skill wins the dedup (see
+Precedence below) and is the only one that reaches the ranker.
 
-## Precedence and shadowing
+## Precedence (name-collision rule)
 
-When two discovered skills share the same `derived_name`, CF picks one
-according to this precedence (highest first):
+When two skills share a `dir_name` / `frontmatter.name`, the merged pool
+keeps the highest-precedence entry. Order (highest first):
 
-1. Project `.claude/skills/<topic>/SKILL.md`
-2. Project `AGENTS.md`
-3. Project `.github/copilot-instructions.md`
-4. Ancestor `AGENTS.md` (closest first)
+1. `~/.foundry/skills/<topic>/SKILL.md` (CF-native global)
+2. Project `.claude/skills/<topic>/SKILL.md`
+3. Project `AGENTS.md` (then ancestor `AGENTS.md` walking outward)
+4. `.github/copilot-instructions.md`
 5. `.cursorrules`
 
-Shadowing only fires when two discovered skills share the same `derived_name`;
-in practice the four sources produce distinct names (e.g. `agents-md-<parent>`,
-`copilot-instructions`, `cursorrules`), so this list also doubles as the UI
-display order.
+## Legacy `.foundry.json` field
 
-The loser is shown in the UI as `shadowed by <winner>` so you can see
-which file wins.
-
-CF-native skills under `~/.foundry/skills/` and plugin-bundled
-`plugins/<name>/skills/<topic>/SKILL.md` always win over discovered
-external skills with the same name.
+Older projects may carry a `external_skills_enabled` map keyed by absolute
+path. T2.4 honors this field on read for backward compatibility: those
+skills get a "pinned always-on" bit set in addition to being in the
+auto-pool, but new selections cannot be made through the UI. The field is
+deprecated and will be removed in a future release. A one-line note is
+logged to stderr at startup when the field is non-empty.
 
 ## GitHub Copilot custom instructions
 

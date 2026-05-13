@@ -1195,9 +1195,11 @@ impl Config {
         }
     }
 
-    /// Persist the per-project external-skills opt-in map to .foundry.json.
-    /// T1.27: paths point at AGENTS.md / .cursorrules / .claude/skills SKILL.md
-    /// files outside CF's native skill store. Map values: `true` = opted in.
+    /// T2.4: deprecated -- no longer called from any UI path. Kept for
+    /// back-compat readers and any external integration tests. The legacy
+    /// `external_skills_enabled` map is now honored as a read-only "pinned
+    /// always-on" hint; new selections cannot be made through the UI.
+    #[allow(dead_code)]
     pub fn save_external_skills_enabled(
         project_dir: &Path,
         enabled: &std::collections::HashMap<String, bool>,

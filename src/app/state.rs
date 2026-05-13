@@ -117,22 +117,6 @@ pub struct PluginDisplayInfo {
     pub skill_count: usize,
 }
 
-/// Display info for an externally-discovered skill surfaced under the
-/// "External Skills" section of the startup screen (T1.27). Each entry maps
-/// 1:1 to a `crate::skill_discovery::DiscoveredSkill` and tracks the
-/// per-project opt-in flag persisted to `.foundry.json`.
-#[derive(Debug, Clone)]
-pub struct ExternalSkillDisplayInfo {
-    pub source: crate::skill_discovery::SkillSource,
-    pub path: std::path::PathBuf,
-    pub derived_name: String,
-    pub selected: bool,
-    /// True when another higher-precedence source contributes a skill with
-    /// the same `derived_name`; the UI displays this as "shadowed by ..." so
-    /// the user can see which file wins.
-    pub shadowed_by: Option<String>,
-}
-
 // T1.36: `kind` is set at construction sites (Used/Learned) but only read in
 // tests today; `title` is also read in tests. Kept as plumbing for future
 // UI surfaces (e.g. distinct icons per kind).
@@ -1578,11 +1562,11 @@ pub struct AppState {
     pub hovered_pipeline_label: Option<String>,
     pub available_plugins: Vec<PluginDisplayInfo>,
     pub plugins_cursor: usize,
-    /// Externally-discovered skills surfaced under the "External Skills"
-    /// section of the startup screen (T1.27). Empty until the project's
-    /// startup-state initializer scans for AGENTS.md / .cursorrules /
-    /// `.claude/skills/`.
-    pub available_external_skills: Vec<ExternalSkillDisplayInfo>,
+    /// T2.4: one-line summary of the merged auto-retrieval skill pool
+    /// (e.g. "Skill pool: 321 global + 14 from .claude/skills/ = 335 total").
+    /// Rendered above the Plugins section on the startup screen. Empty
+    /// before the startup-state initializer runs.
+    pub skill_pool_summary: String,
     // ─── Plugin & Pattern Telemetry Counters ───
     pub plugin_inject_count: HashMap<String, usize>,
     pub plugin_reference_count: HashMap<String, usize>,
@@ -1776,7 +1760,7 @@ impl AppState {
             hovered_pipeline_label: None,
             available_plugins: Vec::new(),
             plugins_cursor: 0,
-            available_external_skills: Vec::new(),
+            skill_pool_summary: String::new(),
             plugin_inject_count: HashMap::new(),
             plugin_reference_count: HashMap::new(),
             pattern_inject_count: 0,

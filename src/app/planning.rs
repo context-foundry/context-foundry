@@ -387,7 +387,7 @@ pub(super) async fn run_plan_mode(project_dir: &Path, max_iterations: u64) -> Re
 async fn load_gap_analysis_pattern_context(ctx: &RunContext) -> String {
     let skills_dir = skills::resolve_skills_dir("~/.foundry/skills");
     let all_skills = skills::load_skills(&skills_dir);
-    let mut base = if !all_skills.is_empty() {
+    let base = if !all_skills.is_empty() {
         let planner_skills = skills::select_skills_for_stage(
             &all_skills,
             "planner",
@@ -420,21 +420,6 @@ async fn load_gap_analysis_pattern_context(ctx: &RunContext) -> String {
             )
         }
     };
-
-    // T1.27: append opted-in external skills so gap-analysis planning sees
-    // them too. Read-only and best-effort.
-    let enabled_external = crate::skill_discovery::load_enabled_external_skills(
-        &ctx.project_dir,
-        &ctx.config.external_skills_enabled,
-    );
-    if !enabled_external.is_empty() {
-        let entries: Vec<(crate::skill_discovery::SkillSource, &crate::skill_discovery::DiscoveredSkill)> =
-            enabled_external
-                .iter()
-                .map(|d| (d.source, d))
-                .collect();
-        base.push_str(&skills::format_discovered_skills_for_prompt(&entries));
-    }
 
     base
 }

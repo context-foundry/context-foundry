@@ -18,7 +18,10 @@ pub enum SkillSource {
 
 impl SkillSource {
     /// Short label embedded in the planner prompt as `source: <label>` so the
-    /// agent can see provenance.
+    /// agent can see provenance. T2.4: kept for the
+    /// `format_discovered_skills_for_prompt` test suite; the merged
+    /// auto-retrieval pool uses `SkillProvenance::label` instead.
+    #[allow(dead_code)]
     pub fn prompt_label(self) -> &'static str {
         match self {
             Self::AgentsMd => "agents-md",
@@ -40,6 +43,9 @@ impl SkillSource {
 
     /// Higher number = higher precedence when two discovered skills share a
     /// derived_name. Mirrors the precedence rule documented in T1.27.
+    /// T2.4: dedup precedence now lives on `SkillProvenance` for the merged
+    /// auto-retrieval pool; kept here for the existing tests in this module.
+    #[allow(dead_code)]
     pub fn precedence(self) -> u8 {
         match self {
             Self::ClaudeProjectSkill => 3,
@@ -56,15 +62,17 @@ impl SkillSource {
 #[derive(Debug, Clone)]
 pub struct DiscoveredSkill {
     pub source: SkillSource,
+    /// T2.4: only read by `load_enabled_external_skills` (legacy back-compat)
+    /// and the test suite. Production discovery passes the derived_name and
+    /// body to `discovered_to_skill_file` which does not consult the path.
+    #[allow(dead_code)]
     pub path: PathBuf,
     pub body: String,
     pub derived_name: String,
     /// Parsed SKILL.md frontmatter when the source carries one
     /// (`ClaudeProjectSkill`). AGENTS.md and .cursorrules have no
-    /// frontmatter so this is always `None` for them. Currently consumed
-    /// by `skills::discovered_to_skill_file`, which is wired up for future
-    /// matcher integration but not yet on the prompt-injection path.
-    #[allow(dead_code)]
+    /// frontmatter so this is always `None` for them. Consumed by
+    /// `skills::discovered_to_skill_file` on the auto-retrieval merge path.
     pub frontmatter: Option<SkillFrontmatter>,
 }
 
@@ -257,13 +265,13 @@ pub fn discover_external_skills(project_dir: &Path) -> Vec<DiscoveredSkill> {
     out
 }
 
-/// Discover external skills and filter to only those the user has opted in
-/// via the `external_skills_enabled` map in `.foundry.json`. Returns an empty
-/// vec when no enabled skills are present, so callers can short-circuit
-/// without triggering directory walks beyond the initial discovery.
-///
-/// This is the entrypoint the build/planning pipeline uses to inject external
-/// skills into the planner/reviewer prompt context.
+/// T2.4: legacy opt-in filter. The auto-retrieval pool now ingests
+/// cross-provider skills unconditionally via
+/// `crate::skills::load_skills_from_global_and_project`; callers that still
+/// consult this function are honoring legacy `.foundry.json`
+/// `external_skills_enabled` values as a "pinned always-on" bit on top of
+/// auto-retrieval. Kept for back-compat readers and tests.
+#[allow(dead_code)]
 pub fn load_enabled_external_skills(
     project_dir: &Path,
     enabled: &std::collections::HashMap<String, bool>,

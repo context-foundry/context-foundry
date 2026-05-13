@@ -747,7 +747,7 @@ fn spawn_lookahead_planner(
 
         let skills_dir_lookahead = skills::resolve_skills_dir("~/.foundry/skills");
         let all_skills_lookahead = skills::load_skills(&skills_dir_lookahead);
-        let mut pattern_context = if !all_skills_lookahead.is_empty() {
+        let pattern_context = if !all_skills_lookahead.is_empty() {
             let mut lookahead_seen: std::collections::HashSet<String> =
                 std::collections::HashSet::new();
             let mut lookahead_titles: Vec<String> = Vec::new();
@@ -785,22 +785,6 @@ fn spawn_lookahead_planner(
             patterns::format_patterns_for_prompt(&m, "planner", lookahead_pattern_count)
         };
 
-        // T1.27: append the opted-in external skills (AGENTS.md, etc.) to the
-        // lookahead planner context. Best-effort: if config or discovery
-        // fails for any reason, the lookahead planner just runs without them.
-        let enabled_external_lookahead = crate::skill_discovery::load_enabled_external_skills(
-            &ctx.project_dir,
-            &ctx.config.external_skills_enabled,
-        );
-        if !enabled_external_lookahead.is_empty() {
-            let entries: Vec<(crate::skill_discovery::SkillSource, &crate::skill_discovery::DiscoveredSkill)> =
-                enabled_external_lookahead
-                    .iter()
-                    .map(|d| (d.source, d))
-                    .collect();
-            let block = skills::format_discovered_skills_for_prompt(&entries);
-            pattern_context.push_str(&block);
-        }
 
         let prompt = prompts::planner_lookahead_prompt(
             &ctx.config.pipeline_stage_label("plan"),
@@ -3547,27 +3531,10 @@ async fn process_task(
         ctx.config.min_pattern_injection,
     );
 
-    let skills_dir_main = skills::resolve_skills_dir("~/.foundry/skills");
-    let all_skills_main = skills::load_skills(&skills_dir_main);
-
-    // T1.27: discover external skills (AGENTS.md, .cursorrules,
-    // .claude/skills/) opted in by the user via the per-project allowlist.
-    // Empty unless the user has explicitly enabled at least one in the
-    // startup-screen "External Skills" section.
-    let enabled_external_skills = crate::skill_discovery::load_enabled_external_skills(
-        &ctx.project_dir,
-        &ctx.config.external_skills_enabled,
-    );
-    let external_skills_block = if enabled_external_skills.is_empty() {
-        String::new()
-    } else {
-        let entries: Vec<(crate::skill_discovery::SkillSource, &crate::skill_discovery::DiscoveredSkill)> =
-            enabled_external_skills
-                .iter()
-                .map(|d| (d.source, d))
-                .collect();
-        skills::format_discovered_skills_for_prompt(&entries)
-    };
+    // T2.4: cross-provider discovered SKILL.md files are now folded into the
+    // auto-retrieval pool. Build pipeline runs from the project's root; pass
+    // it so the merged pool includes <project>/.claude/skills/, AGENTS.md, etc.
+    let all_skills_main = skills::load_skills_from_global_and_project(&ctx.project_dir);
 
     // Collect skill IDs injected into any stage prompt so the downstream
     // PatternsUsed emit can report a non-zero inj count even when no legacy
@@ -3581,13 +3548,13 @@ async fn process_task(
 
     let (
         matched,
-        mut pattern_context,
-        mut reviewer_pattern_context,
-        mut query_skill_text,
-        mut research_skill_text,
-        mut build_skill_text,
-        mut discover_skill_text,
-        mut plan_review_skill_text,
+        pattern_context,
+        reviewer_pattern_context,
+        query_skill_text,
+        research_skill_text,
+        build_skill_text,
+        _discover_skill_text,
+        plan_review_skill_text,
     ) = if !all_skills_main.is_empty() {
         // T1.31: in the default (non-strict) mode every stage receives the
         // same union of skills, so the ranker output is identical across
@@ -3864,23 +3831,6 @@ async fn process_task(
             plan_review_text,
         )
     };
-
-    // T1.27: append the external-skills block (if any) to every stage's
-    // context. External skills are stage-agnostic by design; the agent
-    // decides per-task which to apply.
-    if !external_skills_block.is_empty() {
-        pattern_context.push_str(&external_skills_block);
-        reviewer_pattern_context.push_str(&external_skills_block);
-        query_skill_text.push_str(&external_skills_block);
-        research_skill_text.push_str(&external_skills_block);
-        build_skill_text.push_str(&external_skills_block);
-        discover_skill_text.push_str(&external_skills_block);
-        plan_review_skill_text.push_str(&external_skills_block);
-        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-            "Injected {} external skill(s) into all stage prompts",
-            enabled_external_skills.len()
-        ))));
-    }
 
     if !matched.is_empty() {
         let actually_injected = matched.len().min(effective_pattern_count);
