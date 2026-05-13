@@ -992,14 +992,14 @@ pub(super) fn render_task_queue(frame: &mut Frame, area: Rect, state: &AppState,
                         TaskOverride::None => "",
                         TaskOverride::Fast | TaskOverride::Strict => "*",
                     };
-                    format!("[{}{}]", tier_char, override_char)
+                    format!("[{}{}] ", tier_char, override_char)
                 } else {
-                    "[?]".to_string()
+                    "[?] ".to_string()
                 }
             } else if !task.completed {
                 match task.override_flag {
-                    TaskOverride::Fast => "[f]".to_string(),
-                    TaskOverride::Strict => "[s]".to_string(),
+                    TaskOverride::Fast => "[f] ".to_string(),
+                    TaskOverride::Strict => "[s] ".to_string(),
                     TaskOverride::None => {
                         let cls = classify_task_full(&task.description, TaskOverride::None);
                         let tier_char = match cls.tier {
@@ -1007,11 +1007,11 @@ pub(super) fn render_task_queue(frame: &mut Frame, area: Rect, state: &AppState,
                             TaskComplexity::Medium => 'M',
                             TaskComplexity::Complex => 'C',
                         };
-                        format!("[{}]", tier_char)
+                        format!("[{}] ", tier_char)
                     }
                 }
             } else {
-                "   ".to_string()
+                String::new()
             };
             let badge_width = badge_text.chars().count();
             let badge_color = match task.override_flag {
@@ -1022,12 +1022,12 @@ pub(super) fn render_task_queue(frame: &mut Frame, area: Rect, state: &AppState,
 
             let pipeline_width: usize = pipeline_spans.iter().map(|s| s.width()).sum();
             let desc = task.short_desc(
-                inner_width.saturating_sub(task.id.len() + 5 + pipeline_width + badge_width + 1),
+                inner_width.saturating_sub(task.id.len() + 5 + pipeline_width + badge_width),
             );
             let mut spans = vec![
                 Span::styled(format!(" {} ", icon), style),
                 Span::styled(format!("{}: ", task.id), id_style),
-                Span::styled(format!("{} ", badge_text), Style::default().fg(badge_color)),
+                Span::styled(badge_text, Style::default().fg(badge_color)),
                 Span::styled(desc, style),
             ];
             spans.extend(pipeline_spans);
@@ -1844,6 +1844,76 @@ mod tests {
         assert!(
             rendered.contains("writing... (5 chunks)"),
             "rendered: {}",
+            rendered
+        );
+    }
+
+    #[test]
+    fn render_task_queue_completed_row_has_no_badge_gap() {
+        use crate::task::Task;
+        use ratatui::backend::TestBackend;
+        use ratatui::Terminal;
+        use std::path::PathBuf;
+
+        let mut state = AppState::new(PathBuf::from(".buildloop"));
+        state.task_queue = vec![
+            Task {
+                id: "T_DONE".to_string(),
+                description: "DoneDesc".to_string(),
+                line_number: 1,
+                completed: true,
+                pipeline_progress: None,
+                override_flag: TaskOverride::None,
+            },
+            Task {
+                id: "T_PEND".to_string(),
+                description: "PendDesc".to_string(),
+                line_number: 2,
+                completed: false,
+                pipeline_progress: None,
+                override_flag: TaskOverride::Strict,
+            },
+        ];
+        state.current_task = None;
+        state.completed_count = 1;
+        state.total_count = 2;
+
+        let backend = TestBackend::new(120, 8);
+        let mut terminal = Terminal::new(backend).expect("failed to create terminal");
+        terminal
+            .draw(|frame| render_task_queue(frame, frame.area(), &state, TuiPane::TaskQueue))
+            .expect("failed to draw task queue");
+
+        let buffer = terminal.backend().buffer();
+        let area = *buffer.area();
+        let rendered: String = (0..area.height)
+            .map(|y| {
+                (0..area.width)
+                    .map(|x| {
+                        buffer
+                            .cell((x, y))
+                            .map(|c| c.symbol().to_string())
+                            .unwrap_or_default()
+                    })
+                    .collect::<Vec<_>>()
+                    .join("")
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        assert!(
+            rendered.contains("T_DONE: DoneDesc"),
+            "completed row missing tight badge column: {}",
+            rendered
+        );
+        assert!(
+            rendered.contains("T_PEND: [s] PendDesc"),
+            "pending row missing [s] badge with single trailing space: {}",
+            rendered
+        );
+        assert!(
+            !rendered.contains("T_DONE:    "),
+            "completed row still has badge gap: {}",
             rendered
         );
     }
