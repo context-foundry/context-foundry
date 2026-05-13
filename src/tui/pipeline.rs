@@ -22,11 +22,51 @@ pub enum PipelineClick {
 const TILE_W: u16 = TILE_INNER_W + 2;
 const TILE_PITCH: u16 = TILE_W + 2;
 
-/// Hit-test the pipeline map. `area` is the full pipeline area rect
-/// (Constraint::Length(5) for single-row layout). `n_connected` is the
-/// number of enabled connected stages currently rendered. Returns None
-/// if the click is outside all tiles.
+/// Max connected tiles rendered on row 1 of the two-row (full) layout.
+const ROW1_MAX_TILES: usize = 5;
+
+/// Terminal-height breakpoint at which the pipeline pane switches from the
+/// compact (single-row, 6-tall) layout to the full (two-row, 9-tall) layout.
+/// Below this threshold the Min(8) middle pane would be squeezed below its
+/// minimum, so the pipeline collapses to a single row.
+pub const PIPELINE_COMPACT_BREAKPOINT: u16 = 28;
+
+/// Pipeline pane height (rows) for the dashboard Constraint::Length slot.
+/// Returns 6 when the terminal is below the breakpoint (single-row tiles)
+/// and 9 when there is room for the two-row grid.
+pub fn pipeline_height(frame_height: u16) -> u16 {
+    if frame_height < PIPELINE_COMPACT_BREAKPOINT {
+        6
+    } else {
+        9
+    }
+}
+
+/// True when the terminal is below the breakpoint and the pipeline should
+/// render as a single row to preserve the Min(8) middle pane.
+pub fn is_compact_layout(frame_height: u16) -> bool {
+    frame_height < PIPELINE_COMPACT_BREAKPOINT
+}
+
+/// Hit-test the pipeline map. `area` is the full pipeline area rect; the
+/// layout (1D compact vs 2D full) is auto-detected from `area.height`:
+/// heights < 9 use the compact single-row hit-test, heights >= 9 use the
+/// two-row hit-test. `n_connected` is the number of enabled connected
+/// stages currently rendered. Returns None if the click is outside all tiles.
 pub fn pipeline_click(area: Rect, col: u16, row: u16, n_connected: usize) -> Option<PipelineClick> {
+    if area.height < 9 {
+        pipeline_click_compact(area, col, row, n_connected)
+    } else {
+        pipeline_click_full(area, col, row, n_connected)
+    }
+}
+
+fn pipeline_click_compact(
+    area: Rect,
+    col: u16,
+    row: u16,
+    n_connected: usize,
+) -> Option<PipelineClick> {
     let tile_y0 = area.y + 1;
     if row < tile_y0 || row >= tile_y0 + TILE_HEIGHT {
         return None;
@@ -53,6 +93,65 @@ pub fn pipeline_click(area: Rect, col: u16, row: u16, n_connected: usize) -> Opt
         let bx = disc_x0 + (j as u16) * TILE_PITCH;
         if col >= bx && col < bx + TILE_W {
             return Some(target);
+        }
+    }
+
+    None
+}
+
+fn pipeline_click_full(
+    area: Rect,
+    col: u16,
+    row: u16,
+    n_connected: usize,
+) -> Option<PipelineClick> {
+    let row1_y0 = area.y + 1;
+    // Row 2 starts after row 1 (3 lines) + 1 inter-row gap line.
+    let row2_y0 = row1_y0 + TILE_HEIGHT + 1;
+
+    let in_row1 = row >= row1_y0 && row < row1_y0 + TILE_HEIGHT;
+    let in_row2 = row >= row2_y0 && row < row2_y0 + TILE_HEIGHT;
+    if !in_row1 && !in_row2 {
+        return None;
+    }
+
+    let n_row1 = n_connected.min(ROW1_MAX_TILES);
+    let n_row2_connected = n_connected.saturating_sub(ROW1_MAX_TILES);
+    let x0 = area.x + 2;
+
+    if in_row1 {
+        for i in 0..n_row1 {
+            let bx = x0 + (i as u16) * TILE_PITCH;
+            if col >= bx && col < bx + TILE_W {
+                return Some(PipelineClick::ConnectedStage(i));
+            }
+        }
+    }
+
+    if in_row2 {
+        // Connected overflow on row 2 (left side).
+        for j in 0..n_row2_connected {
+            let bx = x0 + (j as u16) * TILE_PITCH;
+            if col >= bx && col < bx + TILE_W {
+                return Some(PipelineClick::ConnectedStage(ROW1_MAX_TILES + j));
+            }
+        }
+        // Disconnected trio renders on row 2 (right side) after a 4-cell gap
+        // when total connected <= 7 -- otherwise it would collide with row-2
+        // overflow tiles.
+        if n_connected <= 7 {
+            let disc_x0 = x0 + (n_row2_connected as u16) * TILE_PITCH + 4;
+            let disc_stages = [
+                PipelineClick::Ship,
+                PipelineClick::Discover,
+                PipelineClick::Patterns,
+            ];
+            for (j, target) in disc_stages.into_iter().enumerate() {
+                let bx = disc_x0 + (j as u16) * TILE_PITCH;
+                if col >= bx && col < bx + TILE_W {
+                    return Some(target);
+                }
+            }
         }
     }
 
@@ -98,6 +197,7 @@ pub(super) fn render_pipeline_map(
     area: Rect,
     state: &AppState,
     config: &Config,
+    compact_layout: bool,
 ) {
     let theme = &state.tui_theme;
     let active_role = if state.dual_build.active {
