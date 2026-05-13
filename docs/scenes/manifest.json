@@ -887,6 +887,16 @@
       "model": "gpt-4o-mini",
       "lines": 90,
       "generation": 89
+    },
+    {
+      "file": "lava-tube-localhost.js",
+      "name": "Lava Tube Localhost",
+      "location": "Kazumura Cave, Big Island, Hawaii, USA",
+      "biome": "underground",
+      "generated": "2026-05-13T21:47:28.662Z",
+      "model": "gpt-4o-mini",
+      "lines": 87,
+      "generation": 90
     }
   ]
 }
