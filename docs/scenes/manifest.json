@@ -867,6 +867,16 @@
       "model": "gpt-4o-mini",
       "lines": 95,
       "generation": 87
+    },
+    {
+      "file": "autumn-deprecation-notice.js",
+      "name": "Autumn Deprecation Notice",
+      "location": "Green Mountain National Forest, Vermont, USA",
+      "biome": "forest",
+      "generated": "2026-05-13T18:19:10.933Z",
+      "model": "gpt-4o-mini",
+      "lines": 80,
+      "generation": 88
     }
   ]
 }
