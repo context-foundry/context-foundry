@@ -188,3 +188,40 @@ means the audit reported failures (the commit was `WIP` not `feat`). The
 smoke gate's check 6 asserts `B` is present and no legacy `I`/`D` appears.
 See [`docs/progress-indicators.md`](progress-indicators.md) for the full
 QRPBA reference and migration notes from the legacy SPID scheme.
+
+## Phase 32.1 audit verdict (2026-05-13)
+
+The Phase 32.1 codex audit (artifact: `.buildloop/codex-audit.log`) flagged five
+HIGH-severity gaps in local-model routing. T1.38 walked each gap against the
+current code, fixed the one real bug, and locked in regression coverage for the
+remaining four. The verdict table below records the result so future agents do
+not re-open the same gaps.
+
+| Gap | Audit severity | Verdict | Evidence |
+|-----|----------------|---------|----------|
+| (a) routing-not-all-stages -- `save_builder_routing` only writes `builder_*` keys; need all 8 stages overridden | HIGH | PASS (no code change; covered by tests) | `Config::for_pipeline` (src/config.rs:1497-1588) overrides all 8 stage `*_provider` fields and, when the parsed provider is OpenCode, propagates the model string to all 8 `*_model` fields. Locked in by `for_pipeline_with_opencode_routes_all_eight_stages_to_opencode_and_propagates_model` (LM Studio spec) and the new `for_pipeline_with_opencode_ollama_spec_routes_all_eight_stages_and_propagates_model` (Ollama spec) in src/config.rs. |
+| (b) ollama-not-routed -- Ollama selection may not save `builder_provider` correctly | HIGH | PASS (no code change; covered by tests) | `apply_builder_selection` (src/app.rs:269-316) routes both lmstudio and ollama through the same `Config::save_local_model` + `Config::save_builder_routing("opencode", "<lmstudio\|ollama>/<name>")` branch. Locked in by the new `save_builder_routing_persists_ollama_spec_identically_to_lmstudio` test in src/config.rs. |
+| (c) hardcoded-claude-fallbacks -- pattern extraction and planner fallback may bypass user selection | HIGH | PASS (no code change) | `src/app/build.rs:7177-7181` gates pattern extraction with `if Config::parse_provider(...) != ModelProvider::Claude { skip }`, so the hardcoded `agent::ModelProvider::Claude` at src/app/build.rs:7312 sits inside `run_pattern_extraction`, which is unreachable when a local model is active. `src/app/planning.rs` uses `Config::parse_provider(&ctx.config.planner_provider)` -- no hardcoded Claude in the build-loop hot path. |
+| (d) opencode-event-parsing -- TUI may have no structured progress for opencode runs | HIGH | PASS (no code change) | `parse_opencode_line` (src/agent.rs) and the dispatcher fully parse OpenCode `--format json` events into `AgentOutputEvent::{Text, ToolUse, ToolResult, Stderr, Result, Usage, Error}`. The TODO referenced in the audit is resolved. |
+| (e) no-error-surface -- missing opencode / unreachable LM Studio / model not loaded may hang or silently fail | HIGH | FAIL (real bug, fixed in T1.38) | `provider_binary_is_available` previously short-circuited to `true` for every provider whose `uses_pty()` was `false`, which incorrectly included OpenCode. The "opencode binary missing" failure was hidden behind a late PTY spawn error. T1.38 rewrote the function to actually `which opencode` and exempt only GhCopilot (see "What changed" below). The other three failure modes (LM Studio unreachable, model not loaded, context overflow) were already surfaced via the `classify_agent_error` typed-error taxonomy. |
+
+### What changed in T1.38
+
+1. **`provider_binary_is_available` now probes `which opencode`** (src/app/commands.rs:185-204). The function only exempts `ModelProvider::GhCopilot`; all other providers, including `OpenCode`, are now checked via the host's `which` (`where` on Windows). Effect: when `opencode` is not on PATH, `ensure_required_providers_available` reports `required provider CLI not found: opencode (builder)` before the run starts, instead of failing late inside the PTY spawn.
+2. **`ModelProvider::uses_pty` was deleted** (src/agent.rs). The helper had a single caller, which was rewritten in change (1) to use `matches!(provider, ModelProvider::GhCopilot)` directly. The helper had no other in-tree callers and no published-API consumers (foundry is a binary, not a library).
+3. **New for_pipeline + save_builder_routing parity tests for Ollama specs** (src/config.rs). Both `for_pipeline_with_opencode_ollama_spec_routes_all_eight_stages_and_propagates_model` and `save_builder_routing_persists_ollama_spec_identically_to_lmstudio` assert that an `ollama/<name>` spec produces the same all-eight-stages routing and the same persisted `.foundry.json` shape as the LM Studio counterpart. A regression that drops the `ollama/` prefix or fails to propagate the model to non-builder stages will now fail in CI.
+4. **Two new unit tests guarding the run-mode binary gate for OpenCode** (src/app/commands.rs). `opencode_missing_is_reported_in_run_mode_when_builder_provider_is_opencode` confirms that the missing-CLI report flows through `missing_provider_commands` when the closure says OpenCode is unavailable. `opencode_present_passes_run_mode_gate_when_builder_provider_is_opencode` confirms the empty-missing case is reachable when the closure marks OpenCode available.
+
+### Failure-mode taxonomy
+
+| Failure mode | Detection | Surfaced as |
+|--------------|-----------|-------------|
+| `opencode` missing on PATH | `provider_binary_is_available(OpenCode)` returns `false`; `ensure_required_providers_available` bails before any agent spawn. | `anyhow::Error("required provider CLI not found: opencode (...)")` -- shown to the operator at startup; non-zero exit for `foundry run --no-tui`. |
+| LM Studio (or Ollama) unreachable | `classify_agent_error` matches `"connection refused"` / `"failed to connect"` / `"Connection refused"` patterns in the agent stderr stream. | `AgentErrorKind::ProviderUnreachable` -- TUI shows a typed toast; circuit breaker (src/app.rs:4921-4946) aborts the run within ~10 s. |
+| Model not loaded | `classify_agent_error` matches `"model not loaded"` / `404 /v1/models` / `model_not_found` patterns. | `AgentErrorKind::ModelNotLoaded` -- typed toast tells the user to load a model. |
+| Context overflow | Regex match on `tokens=<N>` / `ctx_size=<N>` / context-overflow phrases in the agent error stream. | `AgentErrorKind::ContextOverflow` -- toast names the actual `tokens` and `ctx_size` and tells the user to raise n_ctx and press R to retry. |
+
+### Known gaps (deferred -- not part of T1.38)
+
+- **GhCopilot binary-availability gate.** `provider_binary_is_available(GhCopilot)` returns `true` unconditionally. GhCopilot depends on the `gh` CLI for OAuth, so an absent `gh` binary will still fail at runtime with no typed startup error. T1.38 is scoped to local-model routing (LM Studio / Ollama / OpenCode); fixing the `gh` gate is a separate concern. Suggested follow-up: probe `gh` via `Command::new(lookup_cmd).arg("gh")` in the GhCopilot branch (or in a new dedicated dependency check).
+- **Ollama end-to-end smoke parity.** `scripts/smoke-local-model.sh` is LM-Studio-only by design; per the T1.38 task constraints, the script was not modified. Ollama runtime parity is asserted only at the config-routing layer via the unit tests added in T1.38, not end-to-end against a live `ollama serve`. Suggested follow-up: a separate task to extend the smoke script (or add a sibling `scripts/smoke-ollama-model.sh`) so a regression in ollama-prefix handling surfaces in CI.

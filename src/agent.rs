@@ -247,12 +247,6 @@ impl ModelProvider {
         }
     }
 
-    /// Returns `false` for native HTTP providers that have no CLI binary
-    /// (GhCopilot, OpenCode). These are always considered "available".
-    pub fn uses_pty(self) -> bool {
-        !matches!(self, ModelProvider::GhCopilot | ModelProvider::OpenCode)
-    }
-
     /// Resolve the node CLI entry-point for this provider on Windows.
     /// Returns `Some(path)` if found, `None` otherwise.
     ///

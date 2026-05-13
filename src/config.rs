@@ -2550,6 +2550,86 @@ mod tests {
     }
 
     #[test]
+    fn for_pipeline_with_opencode_ollama_spec_routes_all_eight_stages_and_propagates_model() {
+        let mut config = Config::default();
+        config.scout_model = "sonnet".into();
+        config.query_model = "haiku".into();
+        config.research_model = "sonnet".into();
+        config.planner_model = "opus".into();
+        config.builder_model = "opus".into();
+        config.reviewer_model = "sonnet".into();
+        config.fixer_model = "sonnet".into();
+        config.discovery_model = "opus".into();
+
+        let pipeline = config.for_pipeline("opencode:ollama/llama3.2");
+
+        assert_eq!(pipeline.scout_provider, "opencode");
+        assert_eq!(pipeline.query_provider, "opencode");
+        assert_eq!(pipeline.research_provider, "opencode");
+        assert_eq!(pipeline.planner_provider, "opencode");
+        assert_eq!(pipeline.builder_provider, "opencode");
+        assert_eq!(pipeline.reviewer_provider, "opencode");
+        assert_eq!(pipeline.fixer_provider, "opencode");
+        assert_eq!(pipeline.discovery_provider, "opencode");
+
+        assert_eq!(pipeline.scout_model, "ollama/llama3.2");
+        assert_eq!(pipeline.query_model, "ollama/llama3.2");
+        assert_eq!(pipeline.research_model, "ollama/llama3.2");
+        assert_eq!(pipeline.planner_model, "ollama/llama3.2");
+        assert_eq!(pipeline.builder_model, "ollama/llama3.2");
+        assert_eq!(pipeline.reviewer_model, "ollama/llama3.2");
+        assert_eq!(pipeline.fixer_model, "ollama/llama3.2");
+        assert_eq!(pipeline.discovery_model, "ollama/llama3.2");
+
+        let mut local_cfg = Config::default();
+        local_cfg.builder_models = vec!["opencode:ollama/llama3.2".into()];
+        local_cfg.dual_selection = "first".into();
+        let selected = local_cfg.selected_pipeline_configs(&local_cfg.dual_selection);
+        assert_eq!(selected.len(), 1);
+        assert_eq!(selected[0].scout_provider, "opencode");
+        assert_eq!(selected[0].query_provider, "opencode");
+        assert_eq!(selected[0].research_provider, "opencode");
+        assert_eq!(selected[0].planner_provider, "opencode");
+        assert_eq!(selected[0].builder_provider, "opencode");
+        assert_eq!(selected[0].reviewer_provider, "opencode");
+        assert_eq!(selected[0].fixer_provider, "opencode");
+        assert_eq!(selected[0].discovery_provider, "opencode");
+        assert_eq!(selected[0].scout_model, "ollama/llama3.2");
+        assert_eq!(selected[0].builder_model, "ollama/llama3.2");
+        assert_eq!(selected[0].discovery_model, "ollama/llama3.2");
+    }
+
+    #[test]
+    #[serial]
+    fn save_builder_routing_persists_ollama_spec_identically_to_lmstudio() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", home.path());
+
+        Config::save_builder_routing(dir.path(), "opencode", "ollama/llama3.2");
+
+        let content = fs::read_to_string(dir.path().join(".foundry.json")).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&content).unwrap();
+        assert_eq!(value["builder_provider"], "opencode");
+        assert_eq!(value["builder_model"], "ollama/llama3.2");
+        assert_eq!(value["dual_selection"], "first");
+        assert_eq!(value["arena_mode"], "solo");
+        let arr = value["builder_models"]
+            .as_array()
+            .expect("builder_models should be an array");
+        assert_eq!(arr.len(), 1);
+        assert_eq!(arr[0], "opencode:ollama/llama3.2");
+
+        let reloaded = Config::load(dir.path());
+        let pipelines = reloaded.selected_pipeline_configs("first");
+        assert_eq!(pipelines.len(), 1);
+        assert_eq!(pipelines[0].builder_provider, "opencode");
+        assert_eq!(pipelines[0].planner_provider, "opencode");
+        assert_eq!(pipelines[0].discovery_provider, "opencode");
+        assert_eq!(pipelines[0].builder_model, "ollama/llama3.2");
+    }
+
+    #[test]
     fn config_deserializes_auto_push_remote() {
         let config: Config = serde_json::from_str(r#"{"auto_push_remote":"snedea"}"#)
             .expect("config should deserialize");

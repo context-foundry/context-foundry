@@ -183,8 +183,11 @@ pub(crate) fn ensure_required_providers_available(
 }
 
 pub(crate) fn provider_binary_is_available(provider: ModelProvider) -> bool {
-    // Native HTTP providers have no CLI binary — they are always "available".
-    if !provider.uses_pty() {
+    // GhCopilot depends on the `gh` CLI for OAuth, not a foundry-shipped binary;
+    // its availability gate is out of scope for local-model routing (see KNOWN_GAPS
+    // in docs/local-model-setup.md). Exempt it here so a missing `gh` binary does
+    // not block runs that happen to declare GhCopilot for an unused role.
+    if matches!(provider, ModelProvider::GhCopilot) {
         return true;
     }
     let lookup_cmd = if cfg!(target_os = "windows") {
@@ -1822,6 +1825,51 @@ mod tests {
         });
 
         assert_eq!(missing.get("codex"), Some(&vec!["builder", "fixer"]));
+    }
+
+    #[test]
+    fn opencode_missing_is_reported_in_run_mode_when_builder_provider_is_opencode() {
+        let config = Config {
+            builder_provider: "opencode".into(),
+            builder_model: "lmstudio/test".into(),
+            builder_models: vec!["opencode:lmstudio/test".into()],
+            dual_selection: "first".into(),
+            ..Config::default()
+        };
+
+        let missing = missing_provider_commands(&config, ProviderCommandMode::Run, |provider| {
+            provider == ModelProvider::Claude
+        });
+
+        assert!(
+            missing
+                .get("opencode")
+                .map(|roles| roles.contains(&"builder (dual)"))
+                .unwrap_or(false),
+            "opencode CLI must be reported as missing when not on PATH: {:?}",
+            missing
+        );
+    }
+
+    #[test]
+    fn opencode_present_passes_run_mode_gate_when_builder_provider_is_opencode() {
+        let config = Config {
+            builder_provider: "opencode".into(),
+            builder_model: "lmstudio/test".into(),
+            builder_models: vec!["opencode:lmstudio/test".into()],
+            dual_selection: "first".into(),
+            ..Config::default()
+        };
+
+        let missing = missing_provider_commands(&config, ProviderCommandMode::Run, |provider| {
+            matches!(provider, ModelProvider::Claude | ModelProvider::OpenCode)
+        });
+
+        assert!(
+            missing.is_empty(),
+            "no providers should be missing when closure reports Claude and OpenCode both available: {:?}",
+            missing
+        );
     }
 
     #[test]
