@@ -45,7 +45,7 @@ fn default_observatory_jsonl_retention_days() -> usize {
 }
 
 fn default_agent_pane_split() -> u16 {
-    30
+    50
 }
 
 fn default_max_plan_review_cycles() -> usize {
@@ -691,7 +691,7 @@ impl Default for Config {
             show_retrieval_panel: false,
             create_issue_on_wip: false,
             preview_wrap: false,
-            agent_pane_split: 30,
+            agent_pane_split: 50,
             pr_poll_interval_secs: 30,
             theme: "dark".into(),
             truecolor: None,

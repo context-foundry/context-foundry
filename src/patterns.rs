@@ -2474,7 +2474,7 @@ mod tests {
     }
 
     #[test]
-    #[serial_test::serial(home_env)]
+    #[serial_test::serial]
     fn load_patterns_from_global_falls_back_to_json_when_no_skills() {
         let tmp = tempfile::tempdir().expect("tempdir");
         let prev_home = std::env::var("HOME").ok();
@@ -2508,7 +2508,7 @@ mod tests {
     }
 
     #[test]
-    #[serial_test::serial(home_env)]
+    #[serial_test::serial]
     fn load_patterns_from_global_prefers_skills_when_present() {
         let tmp = tempfile::tempdir().expect("tempdir");
         let prev_home = std::env::var("HOME").ok();

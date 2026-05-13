@@ -516,7 +516,7 @@ mod tests {
     }
 
     #[tokio::test]
-    #[serial_test::serial(home_env)]
+    #[serial_test::serial]
     async fn gap_analysis_pattern_context_is_empty_without_pattern_files() {
         let dir = temp_dir("foundry-planning-empty-patterns");
         let prev_home = std::env::var("HOME").ok();
@@ -544,7 +544,7 @@ mod tests {
     }
 
     #[tokio::test]
-    #[serial_test::serial(home_env)]
+    #[serial_test::serial]
     async fn gap_analysis_pattern_context_includes_loaded_patterns() {
         let dir = temp_dir("foundry-planning-patterns");
         let patterns_dir = dir.join("patterns");
