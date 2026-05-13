@@ -87,3 +87,40 @@ intentionally out of scope:
 - Other formats: GEMINI.md, `.clinerules`, `.cursor/rules/*.mdc`,
   `.claude/agents/`, `.claude/rules/`, `.claude/hooks/`,
   `.github/instructions/*.instructions.md` (deferred)
+
+## Keyword overrides for foreign skills
+
+Some external skill sources (notably Anthropic Superpowers SKILL.md files) ship
+without a `metadata.cf-keywords` block. CF synthesizes a fallback from the
+skill's name and description (see `synthesize_keywords` in `src/skills.rs`),
+but the synthesized list is generic. For known foreign skill packs, a curated
+keyword list improves BM25 retrieval quality.
+
+CF reads a sidecar JSON file at `~/.foundry/skill-keywords-overrides.json` at
+startup. The file is a map of `skill_id -> [keyword, keyword, ...]`. Example:
+
+```json
+{
+  "test-driven-development": ["test", "tdd", "test-driven", "implementation", "bugfix"],
+  "systematic-debugging": ["debug", "bug", "reproduce", "isolate", "root-cause"]
+}
+```
+
+When `skill_to_pattern` builds a Pattern for a skill, it merges keyword sources
+in this order, deduplicating while preserving first occurrence:
+
+1. The curated overrides entry for the skill's `pattern_id` (if any).
+2. Then EITHER (a) the synthesized fallback from `synthesize_keywords(pattern_id, description)` if frontmatter `cf-keywords` is empty, OR (b) the authored `cf-keywords` verbatim if non-empty. The synthesized fallback and authored cf-keywords are mutually exclusive -- a skill with explicit `cf-keywords` is NEVER augmented with synthesized tokens. This preserves the pre-T2.1 vocabulary for skills that opt in to explicit metadata.
+
+In practice the override map only carries entries for foreign skill packs that
+lack `cf-keywords` (the 14 Superpowers skills under `~/.foundry/skills/`). For
+those skills the merged vector is `overrides ++ synthesized` (deduped); for any
+skill with authored `cf-keywords` and no override entry, the merged vector is
+identical to the authored list.
+
+The file is loaded once and cached for the process lifetime. If the file is
+missing or malformed, CF silently falls back to the source-2 branch -- no
+error is surfaced and no curated overrides are applied.
+
+The override map's `skill_id` keys match the on-disk directory name under
+`~/.foundry/skills/<dir>/SKILL.md` (the same key CF uses as `pattern_id`).

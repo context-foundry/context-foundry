@@ -1,5 +1,6 @@
 use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 use anyhow::{Context, Result};
 use chrono::{NaiveDate, Utc};
@@ -126,10 +127,36 @@ pub fn skill_to_pattern(s: SkillFile) -> Pattern {
         s.frontmatter.name.clone()
     };
 
-    let keywords = if s.frontmatter.cf_keywords.is_empty() {
-        synthesize_keywords(&pattern_id, &s.frontmatter.description)
-    } else {
-        s.frontmatter.cf_keywords.clone()
+    let keywords = {
+        let mut out: Vec<String> = Vec::new();
+        let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+        // 1. curated overrides keyed by pattern_id (applies to ANY skill with an
+        //    entry in the sidecar JSON; in practice only the 14 Superpowers ids).
+        if let Some(over) = keyword_overrides().get(&pattern_id) {
+            for k in over {
+                if seen.insert(k.clone()) {
+                    out.push(k.clone());
+                }
+            }
+        }
+        // 2. baseline source: synthesized fallback when frontmatter cf-keywords
+        //    is empty, otherwise the authored cf-keywords verbatim. Preserves
+        //    pre-T2.1 behavior for skills with explicit metadata so unrelated
+        //    skills don't have their BM25 vocabulary silently broadened.
+        if s.frontmatter.cf_keywords.is_empty() {
+            for k in synthesize_keywords(&pattern_id, &s.frontmatter.description) {
+                if seen.insert(k.clone()) {
+                    out.push(k);
+                }
+            }
+        } else {
+            for k in &s.frontmatter.cf_keywords {
+                if seen.insert(k.clone()) {
+                    out.push(k.clone());
+                }
+            }
+        }
+        out
     };
 
     Pattern {
@@ -213,6 +240,49 @@ pub fn synthesize_keywords(pattern_id: &str, description: &str) -> Vec<String> {
     flush(&mut buf, &mut out, &mut seen);
 
     out
+}
+
+/// Curated per-skill keyword overrides loaded once from
+/// `~/.foundry/skill-keywords-overrides.json`. Used to give foreign skill
+/// packs (e.g. Anthropic Superpowers) a hand-tuned BM25 vocabulary without
+/// modifying their on-disk SKILL.md files.
+static KEYWORD_OVERRIDES: OnceLock<HashMap<String, Vec<String>>> = OnceLock::new();
+
+fn keyword_overrides() -> &'static HashMap<String, Vec<String>> {
+    KEYWORD_OVERRIDES.get_or_init(load_keyword_overrides)
+}
+
+fn load_keyword_overrides() -> HashMap<String, Vec<String>> {
+    let home = match crate::utils::home_dir() {
+        Some(h) => h,
+        None => return HashMap::new(),
+    };
+    let path = home.join(".foundry").join("skill-keywords-overrides.json");
+    if !path.exists() {
+        return HashMap::new();
+    }
+    let content = match std::fs::read_to_string(&path) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!(
+                "warning: failed to read {}: {} -- skipping",
+                path.display(),
+                e
+            );
+            return HashMap::new();
+        }
+    };
+    match serde_json::from_str::<HashMap<String, Vec<String>>>(&content) {
+        Ok(map) => map,
+        Err(e) => {
+            eprintln!(
+                "warning: failed to parse {}: {} -- skipping",
+                path.display(),
+                e
+            );
+            HashMap::new()
+        }
+    }
 }
 
 /// Synthesize a `SkillFile` from an externally-discovered skill (AGENTS.md,
@@ -1724,5 +1794,537 @@ mod synthesize_keywords_tests {
         let long = "alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november oscar papa quebec romeo sierra tango uniform victor whiskey xray yankee zulu";
         let kw = synthesize_keywords("an-id", long);
         assert!(kw.len() <= 24);
+    }
+}
+
+#[cfg(test)]
+mod ranks_tests {
+    use super::{skill_to_pattern, SkillFile, SkillFrontmatter};
+    use crate::patterns::{keyword_scores, Pattern, PatternSolution};
+    use std::collections::HashMap;
+
+    fn make_pattern(pattern_id: &str, keywords: Vec<&str>) -> Pattern {
+        Pattern {
+            pattern_id: pattern_id.to_string(),
+            title: pattern_id.to_string(),
+            first_seen: String::new(),
+            last_seen: String::new(),
+            frequency: 0,
+            severity: None,
+            keywords: keywords.into_iter().map(|s| s.to_string()).collect(),
+            tech_stack: Vec::new(),
+            issue: None,
+            solution: Some(PatternSolution {
+                planner: String::new(),
+                reviewer: String::new(),
+            }),
+            auto_apply: false,
+            learned_from: None,
+            used_count: 0,
+            promoted_to: String::new(),
+            promoted_at: String::new(),
+            last_used_at: None,
+            cited_in_pass: 0,
+            cited_in_wip: 0,
+            cited_by_stage: HashMap::new(),
+        }
+    }
+
+    fn synthetic_corpus() -> Vec<Pattern> {
+        let mut patterns: Vec<Pattern> = Vec::with_capacity(34);
+        // 14 Superpowers skills with curated keyword arrays (lockstep with the
+        // overrides JSON; kept inline so the test does not depend on on-disk state).
+        patterns.push(make_pattern(
+            "brainstorming",
+            vec![
+                "brainstorm",
+                "brainstorming",
+                "ideation",
+                "design",
+                "alternatives",
+                "options",
+                "tradeoffs",
+                "approach",
+                "architecture",
+                "decision",
+                "explore",
+                "exploratory",
+                "discuss",
+                "proposal",
+                "rfc",
+            ],
+        ));
+        patterns.push(make_pattern(
+            "dispatching-parallel-agents",
+            vec![
+                "parallel",
+                "agents",
+                "dispatch",
+                "concurrent",
+                "fan-out",
+                "subagent",
+                "spawn",
+                "multi-agent",
+                "delegate",
+                "orchestrate",
+                "workers",
+                "tasks",
+                "background",
+            ],
+        ));
+        patterns.push(make_pattern(
+            "executing-plans",
+            vec![
+                "execute",
+                "executing",
+                "plan",
+                "implementation",
+                "implement",
+                "build",
+                "ship",
+                "stepwise",
+                "checklist",
+                "follow",
+                "carry-out",
+                "construction",
+            ],
+        ));
+        patterns.push(make_pattern(
+            "finishing-a-development-branch",
+            vec![
+                "finish",
+                "finishing",
+                "branch",
+                "merge",
+                "pull-request",
+                "pr",
+                "complete",
+                "wrap-up",
+                "integrate",
+                "review",
+                "cleanup",
+                "completion",
+                "ready",
+            ],
+        ));
+        patterns.push(make_pattern(
+            "receiving-code-review",
+            vec![
+                "receive",
+                "receiving",
+                "review",
+                "feedback",
+                "comments",
+                "incorporate",
+                "address",
+                "respond",
+                "fix",
+                "code-review",
+                "reviewer",
+                "patch",
+            ],
+        ));
+        patterns.push(make_pattern(
+            "requesting-code-review",
+            vec![
+                "request",
+                "requesting",
+                "review",
+                "code-review",
+                "pr",
+                "pull-request",
+                "reviewer",
+                "ask",
+                "submit",
+                "feedback",
+                "ready",
+            ],
+        ));
+        patterns.push(make_pattern(
+            "subagent-driven-development",
+            vec![
+                "subagent",
+                "sub-agent",
+                "delegation",
+                "agent-driven",
+                "spawn",
+                "delegate",
+                "task",
+                "isolate",
+                "context",
+                "fresh-context",
+                "compose",
+            ],
+        ));
+        patterns.push(make_pattern(
+            "systematic-debugging",
+            vec![
+                "debug",
+                "debugging",
+                "bug",
+                "crash",
+                "investigate",
+                "investigation",
+                "reproduce",
+                "isolate",
+                "root-cause",
+                "trace",
+                "fault",
+                "diagnose",
+                "failure",
+                "intermittent",
+                "regression",
+            ],
+        ));
+        patterns.push(make_pattern(
+            "test-driven-development",
+            vec![
+                "test",
+                "tests",
+                "testing",
+                "tdd",
+                "test-driven",
+                "test-first",
+                "implementation",
+                "code",
+                "feature",
+                "bugfix",
+                "failing-test",
+                "red-green-refactor",
+                "unit",
+                "spec",
+            ],
+        ));
+        patterns.push(make_pattern(
+            "using-git-worktrees",
+            vec![
+                "worktree",
+                "worktrees",
+                "git",
+                "branch",
+                "checkout",
+                "parallel",
+                "isolated",
+                "workspace",
+                "switch",
+                "concurrent",
+            ],
+        ));
+        patterns.push(make_pattern(
+            "using-superpowers",
+            vec![
+                "superpowers",
+                "skill",
+                "skills",
+                "dispatcher",
+                "master",
+                "start",
+                "begin",
+                "establish",
+                "find",
+                "use",
+            ],
+        ));
+        patterns.push(make_pattern(
+            "verification-before-completion",
+            vec![
+                "verify",
+                "verification",
+                "complete",
+                "completion",
+                "done",
+                "check",
+                "validate",
+                "before",
+                "finish",
+                "confirm",
+                "asserts",
+            ],
+        ));
+        patterns.push(make_pattern(
+            "writing-plans",
+            vec![
+                "write",
+                "writing",
+                "plan",
+                "planning",
+                "draft",
+                "spec",
+                "design",
+                "outline",
+                "document",
+                "structure",
+                "blueprint",
+            ],
+        ));
+        patterns.push(make_pattern(
+            "writing-skills",
+            vec![
+                "write",
+                "writing",
+                "skill",
+                "skills",
+                "author",
+                "create",
+                "edit",
+                "skill-md",
+                "frontmatter",
+                "verify",
+            ],
+        ));
+        // 20 distractor patterns derived from existing CF-native pattern ids.
+        patterns.push(make_pattern(
+            "phantom-path-survives-targeted-cleanup-planner",
+            vec![
+                "phantom", "path", "survives", "targeted", "cleanup", "planner", "flowise", "json",
+                "metadata",
+            ],
+        ));
+        patterns.push(make_pattern(
+            "phantom-path-survives-targeted-cleanup-reviewer",
+            vec![
+                "phantom",
+                "path",
+                "survives",
+                "targeted",
+                "cleanup",
+                "reviewer",
+                "flowise",
+                "json",
+                "metadata",
+            ],
+        ));
+        patterns.push(make_pattern(
+            "rust-struct-literal-field-explosion-planner",
+            vec![
+                "rust", "struct", "literal", "field", "explosion", "planner", "serde", "default",
+                "compile",
+            ],
+        ));
+        patterns.push(make_pattern(
+            "rust-struct-literal-field-explosion-reviewer",
+            vec![
+                "rust", "struct", "literal", "field", "explosion", "reviewer", "serde", "default",
+                "compile",
+            ],
+        ));
+        patterns.push(make_pattern(
+            "broken-venv-symlinks-platform-mismatch-planner",
+            vec![
+                "broken", "venv", "symlink", "platform", "mismatch", "planner", "uv", "cpython",
+                "macos",
+            ],
+        ));
+        patterns.push(make_pattern(
+            "broken-venv-symlinks-platform-mismatch-reviewer",
+            vec![
+                "broken", "venv", "symlink", "platform", "mismatch", "reviewer", "uv", "cpython",
+                "macos",
+            ],
+        ));
+        patterns.push(make_pattern(
+            "python-venv-uv-symlink-broken-planner",
+            vec![
+                "python", "venv", "uv", "symlink", "broken", "planner", "fastapi", "runtime",
+            ],
+        ));
+        patterns.push(make_pattern(
+            "python-venv-uv-symlink-broken-reviewer",
+            vec![
+                "python", "venv", "uv", "symlink", "broken", "reviewer", "fastapi", "runtime",
+            ],
+        ));
+        patterns.push(make_pattern(
+            "broken-venv-symlink-uv-python-planner",
+            vec![
+                "broken", "venv", "symlink", "uv", "python", "planner", "aarch64",
+            ],
+        ));
+        patterns.push(make_pattern(
+            "broken-venv-symlink-uv-python-reviewer",
+            vec![
+                "broken", "venv", "symlink", "uv", "python", "reviewer", "aarch64",
+            ],
+        ));
+        patterns.push(make_pattern(
+            "dict-get-default-fails-on-explicit-null-planner",
+            vec![
+                "dict", "get", "default", "fails", "explicit", "null", "planner", "python",
+                "typeerror",
+            ],
+        ));
+        patterns.push(make_pattern(
+            "dict-get-default-fails-on-explicit-null-reviewer",
+            vec![
+                "dict", "get", "default", "fails", "explicit", "null", "reviewer", "python",
+                "typeerror",
+            ],
+        ));
+        patterns.push(make_pattern(
+            "broken-venv-cross-platform-planner",
+            vec![
+                "broken", "venv", "cross", "platform", "planner", "python", "exit", "127",
+            ],
+        ));
+        patterns.push(make_pattern(
+            "broken-venv-cross-platform-reviewer",
+            vec![
+                "broken", "venv", "cross", "platform", "reviewer", "python", "exit", "127",
+            ],
+        ));
+        patterns.push(make_pattern(
+            "keyword-missing-hyphenated-compound-adjective-planner",
+            vec![
+                "keyword",
+                "missing",
+                "hyphenated",
+                "compound",
+                "adjective",
+                "planner",
+                "substring",
+                "threshold",
+            ],
+        ));
+        patterns.push(make_pattern(
+            "keyword-missing-hyphenated-compound-adjective-reviewer",
+            vec![
+                "keyword",
+                "missing",
+                "hyphenated",
+                "compound",
+                "adjective",
+                "reviewer",
+                "substring",
+                "threshold",
+            ],
+        ));
+        patterns.push(make_pattern(
+            "compute-once-cross-cutting-embedding-reviewer",
+            vec![
+                "compute",
+                "once",
+                "cross",
+                "cutting",
+                "embedding",
+                "reviewer",
+                "ollama",
+                "performance",
+            ],
+        ));
+        patterns.push(make_pattern(
+            "docker-healthcheck-tcp-fallback-planner",
+            vec![
+                "docker",
+                "healthcheck",
+                "tcp",
+                "fallback",
+                "planner",
+                "container",
+                "compose",
+            ],
+        ));
+        patterns.push(make_pattern(
+            "csp-wasm-unsafe-eval-required-planner",
+            vec![
+                "csp", "wasm", "unsafe", "eval", "required", "planner", "argon2", "caddy",
+            ],
+        ));
+        patterns.push(make_pattern(
+            "utc-timestamp-missing-z-suffix-reviewer",
+            vec![
+                "utc",
+                "timestamp",
+                "missing",
+                "suffix",
+                "reviewer",
+                "date",
+                "browser",
+                "frontend",
+            ],
+        ));
+        patterns
+    }
+
+    fn top_5_ids(patterns: &[Pattern], task_desc: &str) -> Vec<String> {
+        let mut scored = keyword_scores(patterns, task_desc, &[]);
+        scored.sort_by(|a, b| b.1.cmp(&a.1));
+        scored
+            .into_iter()
+            .take(5)
+            .map(|(idx, _)| patterns[idx].pattern_id.clone())
+            .collect()
+    }
+
+    #[test]
+    fn ranks_test_driven_development_for_tdd_task() {
+        let patterns = synthetic_corpus();
+        let task = "Implement the new auth feature using TDD: write failing unit tests first then implementation code for the bugfix";
+        let top = top_5_ids(&patterns, task);
+        assert!(
+            top.iter().any(|id| id == "test-driven-development"),
+            "expected test-driven-development in top 5, got {:?}",
+            top
+        );
+    }
+
+    #[test]
+    fn ranks_systematic_debugging_for_bug_task() {
+        let patterns = synthetic_corpus();
+        let task = "Debug intermittent crash in the payment processor: reproduce the bug, isolate the failure, and diagnose the root-cause regression";
+        let top = top_5_ids(&patterns, task);
+        assert!(
+            top.iter().any(|id| id == "systematic-debugging"),
+            "expected systematic-debugging in top 5, got {:?}",
+            top
+        );
+    }
+
+    #[test]
+    fn ranks_brainstorming_for_design_task() {
+        let patterns = synthetic_corpus();
+        let task = "Brainstorm design alternatives and tradeoffs for the new caching layer architecture; explore options before writing the RFC";
+        let top = top_5_ids(&patterns, task);
+        assert!(
+            top.iter().any(|id| id == "brainstorming"),
+            "expected brainstorming in top 5, got {:?}",
+            top
+        );
+    }
+
+    #[test]
+    fn skill_to_pattern_preserves_frontmatter_cf_keywords_without_synthesizing() {
+        let sf = SkillFile {
+            dir_name: "some-non-superpowers-id".to_string(),
+            body: String::new(),
+            frontmatter: SkillFrontmatter {
+                name: "some-non-superpowers-id".to_string(),
+                description: "This description contains many synthesizable tokens including bugfix feature implementation that must NOT appear in the merged keyword vector".to_string(),
+                cf_stage: "planner".to_string(),
+                cf_citations_pass: 0,
+                cf_citations_wip: 0,
+                cf_last_used: None,
+                cf_frequency: 0,
+                cf_severity: None,
+                cf_keywords: vec![
+                    "frontmatter-only-tok-a".to_string(),
+                    "frontmatter-only-tok-b".to_string(),
+                ],
+            },
+        };
+        let p = skill_to_pattern(sf);
+        assert_eq!(
+            p.keywords,
+            vec![
+                "frontmatter-only-tok-a".to_string(),
+                "frontmatter-only-tok-b".to_string(),
+            ],
+            "frontmatter cf-keywords must not be augmented by synthesized tokens when overrides absent"
+        );
+        assert!(
+            !p.keywords
+                .iter()
+                .any(|k| k == "bugfix" || k == "feature" || k == "implementation"),
+            "synthesized tokens must not appear when cf-keywords is non-empty and no override matches pattern_id"
+        );
     }
 }
