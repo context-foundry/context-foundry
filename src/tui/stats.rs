@@ -1389,8 +1389,10 @@ mod tests {
     fn skills_row_shows_semantic_disabled_when_config_flag_is_false() {
         let mut state = AppState::new(PathBuf::from(".buildloop"));
         state.last_pattern_match_mode = Some("semantic".to_string());
-        let mut config = Config::default();
-        config.semantic_match_enabled = false;
+        let config = Config {
+            semantic_match_enabled: false,
+            ..Default::default()
+        };
         let rendered = render_stats_text_tall_with_config(&state, &config);
         assert!(rendered.contains("Skills: keyword-only (semantic disabled)"), "rendered: {}", rendered);
         assert!(!rendered.contains("Skills: hybrid"), "rendered: {}", rendered);
@@ -1441,7 +1443,7 @@ mod tests {
                         .cell((x + i as u16, y))
                         .map(|c| c.symbol().to_string())
                         .unwrap_or_default();
-                    if sym.chars().next() != Some(*expected) {
+                    if !sym.starts_with(*expected) {
                         matched = false;
                         break;
                     }

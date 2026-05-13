@@ -358,9 +358,7 @@ fn required_providers(
             }
             // Arena dual mode clears legacy builder_models at runtime, so skip
             // that validation path entirely when arena_mode == "dual".
-            if config.arena_mode == "dual" {
-                v.push(("builder", Config::parse_provider(&config.builder_provider)));
-            } else if config.builder_models.is_empty() {
+            if config.arena_mode == "dual" || config.builder_models.is_empty() {
                 v.push(("builder", Config::parse_provider(&config.builder_provider)));
             } else {
                 let specs_to_check: Vec<&str> = match config.dual_selection.as_str() {

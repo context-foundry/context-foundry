@@ -2318,7 +2318,7 @@ pub fn context_menu_hit_test(
     // not have access to the live frame area so we assume "fits in 200x80".
     let frame_area = Rect::new(0, 0, 200, 80);
     let rect = context_menu_rect(menu, frame_area);
-    if col >= rect.x + 1
+    if col > rect.x
         && col < rect.x + rect.width.saturating_sub(1)
         && row == rect.y + 1
     {

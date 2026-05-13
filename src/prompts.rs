@@ -325,7 +325,6 @@ Then output your reply text and end with exactly one of: READY_TO_PROCEED or AWA
 }
 
 #[allow(clippy::too_many_arguments)]
-#[allow(clippy::too_many_arguments)]
 pub fn query_prompt(
     stage_label: &str,
     prompt_override: Option<&str>,

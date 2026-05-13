@@ -2651,8 +2651,10 @@ fn ctrl_c_modal_1_arms_stop_and_quits() {
 #[test]
 fn pipeline_click_routes_connected_stages_to_summary_by_default() {
     use crate::tui;
-    let mut cfg = Config::default();
-    cfg.plan_review_enabled = true;
+    let cfg = Config {
+        plan_review_enabled: true,
+        ..Default::default()
+    };
     let dir = PathBuf::from(".");
     let expected_ids = ["query", "research", "plan", "plan-review", "implement", "doubt"];
     for (i, expected) in expected_ids.iter().enumerate() {
@@ -2709,8 +2711,10 @@ fn pipeline_click_routes_ship_and_discover_to_summary() {
 #[test]
 fn pipeline_click_respects_prefer_file_open_over_summary() {
     use crate::tui;
-    let mut cfg = Config::default();
-    cfg.prefer_file_open_over_summary = true;
+    let cfg = Config {
+        prefer_file_open_over_summary: true,
+        ..Default::default()
+    };
     let dir = PathBuf::from(".");
 
     let stage_target =

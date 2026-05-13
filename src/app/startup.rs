@@ -222,7 +222,7 @@ pub(super) fn handle_startup_event(state: &mut AppState, event: AppEvent, config
             if let Some(startup) = state.startup.as_mut() {
                 startup.placeholder_tick = startup.placeholder_tick.wrapping_add(1);
             }
-            if state.tick_count % super::state::TASKS_RELOAD_TICK_STRIDE == 0 {
+            if state.tick_count.is_multiple_of(super::state::TASKS_RELOAD_TICK_STRIDE) {
                 let _ = state.handle_tasks_file_change();
             }
         }

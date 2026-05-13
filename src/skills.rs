@@ -205,7 +205,7 @@ pub fn synthesize_keywords(pattern_id: &str, description: &str) -> Vec<String> {
 
     let mut out: Vec<String> = Vec::with_capacity(24);
     let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
-    let mut push = |token: String, out: &mut Vec<String>, seen: &mut std::collections::HashSet<String>| {
+    let push = |token: String, out: &mut Vec<String>, seen: &mut std::collections::HashSet<String>| {
         if token.len() < 3 || STOPWORDS.contains(&token.as_str()) {
             return;
         }
@@ -954,7 +954,7 @@ fn render_skill(fm: &SkillFrontmatter, body: &str) -> String {
 }
 
 fn escape_scalar(v: &str) -> String {
-    let one_line: String = v.replace('\n', " ").replace('\r', " ");
+    let one_line: String = v.replace(['\n', '\r'], " ");
     let needs_quote = one_line.is_empty()
         || one_line.starts_with(' ')
         || one_line.ends_with(' ')
@@ -1570,7 +1570,7 @@ mod tests {
         let p = sample_pattern("plan body", "review body");
         let dir = tempfile::tempdir().expect("tempdir");
 
-        let first = write_extracted_skills(dir.path(), &[p.clone()]).expect("write1");
+        let first = write_extracted_skills(dir.path(), std::slice::from_ref(&p)).expect("write1");
         assert_eq!(first.created.len(), 2);
 
         // Capture pre-bump frequency from the planner side.
@@ -1687,9 +1687,11 @@ mod tests {
 
     #[test]
     fn discovered_to_skill_file_claude_skill_reuses_existing_frontmatter() {
-        let mut fm = SkillFrontmatter::default();
-        fm.name = "audit-flowise".to_string();
-        fm.description = "Audit a Flowise flow.".to_string();
+        let fm = SkillFrontmatter {
+            name: "audit-flowise".to_string(),
+            description: "Audit a Flowise flow.".to_string(),
+            ..Default::default()
+        };
         let disc = DiscoveredSkill {
             source: SkillSource::ClaudeProjectSkill,
             path: PathBuf::from("/tmp/.claude/skills/audit-flowise/SKILL.md"),
@@ -1921,6 +1923,9 @@ mod ranks_tests {
         }
     }
 
+    // T1.36: 400-line literal rewrite deferred -- behavior-preserving but
+    // high-risk in one pass (34 elements built via `make_pattern(...)` calls).
+    #[allow(clippy::vec_init_then_push)]
     fn synthetic_corpus() -> Vec<Pattern> {
         let mut patterns: Vec<Pattern> = Vec::with_capacity(34);
         // 14 Superpowers skills with curated keyword arrays (lockstep with the

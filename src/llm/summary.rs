@@ -14,7 +14,12 @@ use crate::llm::summary_cache::{
 use crate::prompts::surface_summary_prompt;
 use crate::utils::truncate_str;
 
+// T1.36: `surface_tag` and `surface_label` are populated at every construction
+// site and read in tests (surface_label) / by the summary_cache key (surface_tag
+// through a separate path). Kept as part of the public outcome contract so
+// downstream consumers can pivot on them without having to recompute.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct SummaryOutcome {
     pub surface_tag: String,
     pub stage: String,
@@ -192,9 +197,11 @@ mod tests {
 
     #[tokio::test]
     async fn summarize_stage_returns_fallback_when_provider_missing() {
-        let mut cfg = Config::default();
-        cfg.summary_provider = "nonexistent".into();
-        cfg.summary_model = "x".into();
+        let cfg = Config {
+            summary_provider: "nonexistent".into(),
+            summary_model: "x".into(),
+            ..Default::default()
+        };
 
         let outcome = summarize_surface(
             ClickableSurface::PipelineStage("plan-review".to_string()),

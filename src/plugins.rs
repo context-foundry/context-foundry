@@ -564,7 +564,7 @@ mod tests {
         let project_dir = root.path().join("child");
         std::fs::create_dir_all(&project_dir).unwrap();
         let plugins = discover_plugins(&project_dir);
-        let result = load_plugin_context(&plugins, &vec!["dual".to_string()]);
+        let result = load_plugin_context(&plugins, &["dual".to_string()]);
 
         assert!(
             result.contains("--- BEGIN PLUGIN CONTEXT: dual ---"),
@@ -604,7 +604,7 @@ mod tests {
         let project_dir = root.path().join("child");
         std::fs::create_dir_all(&project_dir).unwrap();
         let plugins = discover_plugins(&project_dir);
-        let result = load_plugin_context(&plugins, &vec!["legacy".to_string()]);
+        let result = load_plugin_context(&plugins, &["legacy".to_string()]);
 
         assert!(
             result.contains("LEGACY-FALLBACK-BODY"),

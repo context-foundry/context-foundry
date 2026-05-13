@@ -25,29 +25,6 @@ const TILE_PITCH: u16 = TILE_W + 2;
 /// Max connected tiles rendered on row 1 of the two-row (full) layout.
 const ROW1_MAX_TILES: usize = 5;
 
-/// Terminal-height breakpoint at which the pipeline pane switches from the
-/// compact (single-row, 6-tall) layout to the full (two-row, 9-tall) layout.
-/// Below this threshold the Min(8) middle pane would be squeezed below its
-/// minimum, so the pipeline collapses to a single row.
-pub const PIPELINE_COMPACT_BREAKPOINT: u16 = 28;
-
-/// Pipeline pane height (rows) for the dashboard Constraint::Length slot.
-/// Returns 6 when the terminal is below the breakpoint (single-row tiles)
-/// and 9 when there is room for the two-row grid.
-pub fn pipeline_height(frame_height: u16) -> u16 {
-    if frame_height < PIPELINE_COMPACT_BREAKPOINT {
-        6
-    } else {
-        9
-    }
-}
-
-/// True when the terminal is below the breakpoint and the pipeline should
-/// render as a single row to preserve the Min(8) middle pane.
-pub fn is_compact_layout(frame_height: u16) -> bool {
-    frame_height < PIPELINE_COMPACT_BREAKPOINT
-}
-
 /// Hit-test the pipeline map. `area` is the full pipeline area rect; the
 /// layout (1D compact vs 2D full) is auto-detected from `area.height`:
 /// heights < 9 use the compact single-row hit-test, heights >= 9 use the
@@ -197,7 +174,7 @@ pub(super) fn render_pipeline_map(
     area: Rect,
     state: &AppState,
     config: &Config,
-    compact_layout: bool,
+    _compact_layout: bool,
 ) {
     let theme = &state.tui_theme;
     let active_role = if state.dual_build.active {

@@ -3,7 +3,6 @@
 /// Classifies tasks by heuristic keyword/length analysis so the build loop
 /// can route simple tasks to cheaper models and reserve expensive models
 /// for complex work.
-
 use std::sync::LazyLock;
 
 use regex::Regex;
@@ -19,18 +18,13 @@ pub enum TaskComplexity {
 }
 
 /// Per-task user override read from `[fast]` / `[strict]` flags in TASKS.md.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum TaskOverride {
+    #[default]
     None,
     Fast,
     Strict,
-}
-
-impl Default for TaskOverride {
-    fn default() -> Self {
-        TaskOverride::None
-    }
 }
 
 impl TaskOverride {

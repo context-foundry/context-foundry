@@ -342,6 +342,10 @@ pub fn recent_citations(
     Ok(out)
 }
 
+// T1.36: exercised only from the test below. Kept on the public surface so
+// future TUI/telemetry consumers can adopt it without re-implementation;
+// allow(dead_code) is the lowest-risk option (deleting would lose the query).
+#[allow(dead_code)]
 pub fn session_citation_count(conn: &Connection, since: SystemTime) -> Result<usize> {
     let dt: DateTime<Utc> = since.into();
     let since_date = dt.format("%Y-%m-%d").to_string();

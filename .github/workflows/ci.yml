@@ -35,4 +35,4 @@ jobs:
         run: cargo test
 
       - name: cargo clippy
-        run: cargo clippy -- -D warnings
+        run: cargo clippy --all-targets -- -D warnings

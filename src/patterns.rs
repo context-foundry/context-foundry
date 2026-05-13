@@ -2217,8 +2217,8 @@ mod tests {
         let result: Vec<Pattern> = serde_json::from_str(&content).unwrap();
         let p1 = result.iter().find(|p| p.pattern_id == "p1").unwrap();
         assert_eq!(p1.cited_by_stage.get("planner").copied(), Some(1));
-        assert!(p1.cited_by_stage.get("reviewer").is_none());
-        assert!(p1.cited_by_stage.get("builder").is_none());
+        assert!(!p1.cited_by_stage.contains_key("reviewer"));
+        assert!(!p1.cited_by_stage.contains_key("builder"));
 
         let _ = std::fs::remove_dir_all(&dir);
     }

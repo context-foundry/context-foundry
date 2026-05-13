@@ -133,7 +133,11 @@ pub struct ExternalSkillDisplayInfo {
     pub shadowed_by: Option<String>,
 }
 
+// T1.36: `kind` is set at construction sites (Used/Learned) but only read in
+// tests today; `title` is also read in tests. Kept as plumbing for future
+// UI surfaces (e.g. distinct icons per kind).
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct PatternEvent {
     pub title: String,
     pub kind: PatternEventKind,
@@ -2052,6 +2056,9 @@ pub(super) enum AppEvent {
     SkillsRetrieved {
         stage: StageId,
         top_picks: Vec<(String, f32)>,
+        // T1.36: emitted by build.rs and consumed via `total_pool: _` at the
+        // two AppEvent consumers; tests assert it round-trips correctly.
+        #[allow(dead_code)]
         total_pool: usize,
     },
 }

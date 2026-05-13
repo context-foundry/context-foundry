@@ -3305,7 +3305,7 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
         }
         AppEvent::Tick => {
             state.tick_count = state.tick_count.wrapping_add(1);
-            if state.tick_count % crate::app::state::TASKS_RELOAD_TICK_STRIDE == 0 {
+            if state.tick_count.is_multiple_of(crate::app::state::TASKS_RELOAD_TICK_STRIDE) {
                 let _ = state.handle_tasks_file_change();
             }
             let needs_refresh = match state.skill_citation_summary_loaded_at {
@@ -5442,6 +5442,10 @@ pub fn run_patterns_promote(apply: bool, days: u32) -> Result<()> {
 enum PipelineClickTarget {
     StageSummary {
         stage_id: String,
+        // T1.36: production discards via `fallback_file: _` at the consumer
+        // site; tests still verify it was populated correctly. Field is
+        // therefore "never read in non-test code" by rustc's reckoning.
+        #[allow(dead_code)]
         fallback_file: Option<std::path::PathBuf>,
     },
     OpenFile(std::path::PathBuf),
@@ -6246,7 +6250,6 @@ fn handle_startup_mouse_at_for_running(
                     }
                 }
             }
-            return;
         }
         MouseEventKind::Down(MouseButton::Left) => {
             // If a context menu is open, the click either fires the AI-summary
