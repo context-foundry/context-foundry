@@ -857,6 +857,16 @@
       "model": "gpt-4o-mini",
       "lines": 100,
       "generation": 86
+    },
+    {
+      "file": "api-gateway-to-paradise.js",
+      "name": "API Gateway to Paradise",
+      "location": "Maldives Overwater Bungalows, North Male Atoll",
+      "biome": "ocean",
+      "generated": "2026-05-13T15:15:47.558Z",
+      "model": "gpt-4o-mini",
+      "lines": 95,
+      "generation": 87
     }
   ]
 }
