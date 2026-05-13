@@ -1533,5 +1533,32 @@
     "retries": 0,
     "api_retries": 0,
     "validation": "pass"
+  },
+  {
+    "ts": "2026-05-13T04:15:26.146Z",
+    "scene": "neon-city-never-sleeps.js",
+    "seed_id": "neon-city-never-sleeps",
+    "biome": "urban",
+    "model": "gpt-4o-mini",
+    "input_tokens": 16286,
+    "output_tokens": 1514,
+    "cost_usd": 0.0034,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "fail",
+    "error": "Validation failed after 2 attempts: VALIDATION FAILED (1 error):\n- Too short: 70 lines (min 80)"
+  },
+  {
+    "ts": "2026-05-13T04:15:48.415Z",
+    "scene": "blue-screen-of-death-valley.js",
+    "seed_id": "blue-screen-of-death-valley",
+    "biome": "desert",
+    "model": "gpt-4o-mini",
+    "input_tokens": 16284,
+    "output_tokens": 1575,
+    "cost_usd": 0.0034,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "pass"
   }
 ]

@@ -847,6 +847,16 @@
       "model": "gpt-4o-mini",
       "lines": 89,
       "generation": 85
+    },
+    {
+      "file": "blue-screen-of-death-valley.js",
+      "name": "Blue Screen of Death Valley",
+      "location": "Racetrack Playa, Death Valley, California, USA",
+      "biome": "desert",
+      "generated": "2026-05-13T04:15:48.415Z",
+      "model": "gpt-4o-mini",
+      "lines": 100,
+      "generation": 86
     }
   ]
 }
