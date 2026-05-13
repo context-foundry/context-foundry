@@ -315,6 +315,14 @@ pub struct Config {
     #[serde(default)]
     pub skills_stage_filter_strict: bool,
 
+    /// T2.2: when true, the running screen renders an additional "Skill
+    /// Retrieval" panel below "Skill Citations (post-task)" that shows the
+    /// retriever's per-stage top picks with scores and a check when the
+    /// skill ended up cited. Default false: legacy single-panel layout is
+    /// preserved unchanged.
+    #[serde(default)]
+    pub show_retrieval_panel: bool,
+
     /// When true, auto-create a GitHub issue when a task commits as WIP
     /// (validation failed). The issue body includes review findings from
     /// .buildloop/review-report.md.
@@ -680,6 +688,7 @@ impl Default for Config {
             plugins: Vec::new(),
             external_skills_enabled: std::collections::HashMap::new(),
             skills_stage_filter_strict: false,
+            show_retrieval_panel: false,
             create_issue_on_wip: false,
             preview_wrap: false,
             agent_pane_split: 30,
@@ -1769,6 +1778,7 @@ impl Config {
             "embedding_timeout_ms" => self.embedding_timeout_ms.to_string(),
             "semantic_match_enabled" => self.semantic_match_enabled.to_string(),
             "skills_stage_filter_strict" => self.skills_stage_filter_strict.to_string(),
+            "show_retrieval_panel" => self.show_retrieval_panel.to_string(),
             "sandbox" => self.sandbox.to_string(),
             "sandbox_image" => self.sandbox_image.clone(),
             "phase_isolation" => self.phase_isolation.to_string(),
@@ -1840,6 +1850,7 @@ impl Config {
             | "budget_recovery_enabled"
             | "semantic_match_enabled"
             | "skills_stage_filter_strict"
+            | "show_retrieval_panel"
             | "sandbox"
             | "phase_isolation"
             | "semgrep_enabled"

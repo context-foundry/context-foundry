@@ -160,6 +160,54 @@ fn cached_agent_system_directives() -> &'static str {
         .as_str()
 }
 
+/// T2.2: rank skills with scores for emission and convert to the
+/// AppEvent::SkillsRetrieved payload. Bounded at 10 entries; `total_pool`
+/// is the post-stage-filter candidate-pool size. Fire-and-forget: receiver
+/// errors are swallowed via `let _ = ...`.
+async fn emit_skills_retrieved(
+    tx: &mpsc::UnboundedSender<AppEvent>,
+    stage: StageId,
+    all_skills: &[skills::SkillFile],
+    stage_label: &str,
+    task_desc: &str,
+    detected_stack: &[String],
+    cfg: &Config,
+) {
+    let stage_skills =
+        skills::select_skills_for_stage(all_skills, stage_label, cfg.skills_stage_filter_strict);
+    let total_pool = stage_skills.len();
+    if total_pool == 0 {
+        return;
+    }
+    let ranked = skills::rank_skills_for_task_with_scores(
+        &stage_skills,
+        task_desc,
+        detected_stack,
+        cfg.semantic_match_enabled,
+        &cfg.embedding_model,
+        cfg.embedding_timeout_ms,
+        &cfg.ollama_url,
+    )
+    .await;
+    let top_picks: Vec<(String, f32)> = ranked
+        .into_iter()
+        .take(10)
+        .map(|(s, score)| {
+            let id = if !s.dir_name.is_empty() {
+                s.dir_name.clone()
+            } else {
+                s.frontmatter.name.clone()
+            };
+            (id, score)
+        })
+        .collect();
+    let _ = tx.send(AppEvent::SkillsRetrieved {
+        stage,
+        top_picks,
+        total_pool,
+    });
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(super) fn build_evidence_spec<'a>(
     stage_id: StageId,
@@ -3538,6 +3586,57 @@ async fn process_task(
                 &mut injected_skill_keywords,
             )
             .await;
+            // T2.2: in non-strict (default) mode the candidate set is identical
+            // across the 5 canonical pipeline stages, so we rank once and emit
+            // five fire-and-forget SkillsRetrieved events sharing the same
+            // top_picks but tagged with each StageId. This avoids leaving four
+            // out of five rows of the Retrieval panel empty under the default
+            // config -- which is the path most users will exercise.
+            if ctx.config.show_retrieval_panel {
+                let stage_skills = skills::select_skills_for_stage(
+                    &all_skills_main,
+                    "planner",
+                    ctx.config.skills_stage_filter_strict,
+                );
+                let total_pool = stage_skills.len();
+                if total_pool > 0 {
+                    let ranked = skills::rank_skills_for_task_with_scores(
+                        &stage_skills,
+                        task_desc,
+                        &detected_stack,
+                        ctx.config.semantic_match_enabled,
+                        &ctx.config.embedding_model,
+                        ctx.config.embedding_timeout_ms,
+                        &ctx.config.ollama_url,
+                    )
+                    .await;
+                    let top_picks: Vec<(String, f32)> = ranked
+                        .into_iter()
+                        .take(10)
+                        .map(|(s, score)| {
+                            let id = if !s.dir_name.is_empty() {
+                                s.dir_name.clone()
+                            } else {
+                                s.frontmatter.name.clone()
+                            };
+                            (id, score)
+                        })
+                        .collect();
+                    for stage in [
+                        StageId::Query,
+                        StageId::Research,
+                        StageId::Plan,
+                        StageId::Build,
+                        StageId::Audit,
+                    ] {
+                        let _ = tx.send(AppEvent::SkillsRetrieved {
+                            stage,
+                            top_picks: top_picks.clone(),
+                            total_pool,
+                        });
+                    }
+                }
+            }
             (
                 Vec::<&patterns::Pattern>::new(),
                 unified.clone(),
@@ -3561,6 +3660,18 @@ async fn process_task(
                 &mut injected_skill_keywords,
             )
             .await;
+            if ctx.config.show_retrieval_panel {
+                emit_skills_retrieved(
+                    tx,
+                    StageId::Plan,
+                    &all_skills_main,
+                    "planner",
+                    task_desc,
+                    &detected_stack,
+                    &ctx.config,
+                )
+                .await;
+            }
             let reviewer_text = rank_and_format_skills_for_stage(
                 &all_skills_main,
                 "reviewer",
@@ -3573,6 +3684,18 @@ async fn process_task(
                 &mut injected_skill_keywords,
             )
             .await;
+            if ctx.config.show_retrieval_panel {
+                emit_skills_retrieved(
+                    tx,
+                    StageId::Audit,
+                    &all_skills_main,
+                    "reviewer",
+                    task_desc,
+                    &detected_stack,
+                    &ctx.config,
+                )
+                .await;
+            }
             let query_text = rank_and_format_skills_for_stage(
                 &all_skills_main,
                 "query",
@@ -3585,6 +3708,18 @@ async fn process_task(
                 &mut injected_skill_keywords,
             )
             .await;
+            if ctx.config.show_retrieval_panel {
+                emit_skills_retrieved(
+                    tx,
+                    StageId::Query,
+                    &all_skills_main,
+                    "query",
+                    task_desc,
+                    &detected_stack,
+                    &ctx.config,
+                )
+                .await;
+            }
             let research_text = rank_and_format_skills_for_stage(
                 &all_skills_main,
                 "research",
@@ -3597,6 +3732,18 @@ async fn process_task(
                 &mut injected_skill_keywords,
             )
             .await;
+            if ctx.config.show_retrieval_panel {
+                emit_skills_retrieved(
+                    tx,
+                    StageId::Research,
+                    &all_skills_main,
+                    "research",
+                    task_desc,
+                    &detected_stack,
+                    &ctx.config,
+                )
+                .await;
+            }
             let build_text = rank_and_format_skills_for_stage(
                 &all_skills_main,
                 "builder",
@@ -3609,6 +3756,18 @@ async fn process_task(
                 &mut injected_skill_keywords,
             )
             .await;
+            if ctx.config.show_retrieval_panel {
+                emit_skills_retrieved(
+                    tx,
+                    StageId::Build,
+                    &all_skills_main,
+                    "builder",
+                    task_desc,
+                    &detected_stack,
+                    &ctx.config,
+                )
+                .await;
+            }
             let discover_text = rank_and_format_skills_for_stage(
                 &all_skills_main,
                 "discover",
@@ -3621,6 +3780,9 @@ async fn process_task(
                 &mut injected_skill_keywords,
             )
             .await;
+            // T2.2: discover stage is intentionally not emitted -- StageId
+            // has no Discover variant. The Skill Retrieval panel only shows
+            // the 5 canonical pipeline stages (Query/Research/Plan/Build/Audit).
             // P+ uses planner-shaped guidance because the proposer is what
             // actually plans; the reviewer agent inside P+ is downstream of it.
             let plan_review_text = planner_text.clone();

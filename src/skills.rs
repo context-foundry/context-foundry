@@ -473,6 +473,97 @@ pub async fn rank_skills_for_task<'a>(
     ranked
 }
 
+/// T2.2: same ranking algorithm as `rank_skills_for_task` but returns each
+/// ranked skill paired with its post-telemetry-boost score (as f32) so the
+/// TUI can surface per-stage retrieval transparency. The eight existing call
+/// sites use the score-less variant unchanged.
+#[allow(clippy::too_many_arguments)]
+pub async fn rank_skills_for_task_with_scores<'a>(
+    skills: &[&'a SkillFile],
+    task_desc: &str,
+    detected_stack: &[String],
+    semantic_match_enabled: bool,
+    embedding_model: &str,
+    embedding_timeout_ms: u64,
+    ollama_url: &str,
+) -> Vec<(&'a SkillFile, f32)> {
+    if skills.is_empty() {
+        return Vec::new();
+    }
+
+    let owned_patterns: Vec<Pattern> = skills
+        .iter()
+        .map(|s| skill_to_pattern((*s).clone()))
+        .collect();
+
+    let kw_scores = crate::patterns::keyword_scores(&owned_patterns, task_desc, detected_stack);
+
+    let semantic_scored: Vec<(&Pattern, usize)> = if semantic_match_enabled {
+        let (scored, _result) = embeddings::match_patterns_semantic(
+            &owned_patterns,
+            task_desc,
+            embedding_model,
+            embedding_timeout_ms,
+            &kw_scores,
+            ollama_url,
+        )
+        .await;
+        scored
+    } else {
+        let mut s: Vec<(&Pattern, usize)> = kw_scores
+            .iter()
+            .filter(|(_, sc)| *sc > 0)
+            .map(|(idx, sc)| (&owned_patterns[*idx], *sc))
+            .collect();
+        s.sort_by_key(|a| std::cmp::Reverse(a.1));
+        s
+    };
+
+    let telemetry = skills_telemetry::load_popularity_scores_or_default();
+    let today = Utc::now().date_naive();
+
+    let mut boosted: Vec<(String, usize)> = Vec::with_capacity(semantic_scored.len());
+    for (p, score) in &semantic_scored {
+        let mut multiplier: f64 = 1.0;
+        if let Some(rec) = telemetry.get(&p.pattern_id) {
+            if rec.citations_pass > 0 {
+                multiplier *= 1.10;
+            }
+            if let Some(date_str) = rec.last_used.as_deref() {
+                if let Ok(last) = NaiveDate::parse_from_str(date_str, "%Y-%m-%d") {
+                    let days_ago = (today - last).num_days().max(0) as f64;
+                    let decay = (-days_ago / 90.0_f64).exp().max(0.1_f64);
+                    multiplier *= decay;
+                }
+            }
+        }
+        let final_score = ((*score as f64) * multiplier).round() as usize;
+        if final_score > 0 {
+            boosted.push((p.pattern_id.clone(), final_score));
+        }
+    }
+
+    boosted.sort_by_key(|a| std::cmp::Reverse(a.1));
+
+    let mut id_to_skill: HashMap<String, &'a SkillFile> = HashMap::with_capacity(skills.len());
+    for s in skills {
+        let id = if !s.dir_name.is_empty() {
+            s.dir_name.clone()
+        } else {
+            s.frontmatter.name.clone()
+        };
+        id_to_skill.insert(id, *s);
+    }
+
+    let mut ranked_with_scores: Vec<(&'a SkillFile, f32)> = Vec::with_capacity(boosted.len());
+    for (id, score) in &boosted {
+        if let Some(skill) = id_to_skill.get(id.as_str()) {
+            ranked_with_scores.push((*skill, *score as f32));
+        }
+    }
+    ranked_with_scores
+}
+
 pub fn match_skills_for_stage<'a>(skills: &'a [SkillFile], stage: &str) -> Vec<&'a SkillFile> {
     let stage_lc = stage.trim().to_lowercase();
     skills

@@ -10,6 +10,7 @@ use super::{pane_border_style, pane_border_type};
 use crate::agent::AgentRole;
 use crate::app::{AppPhase, AppState, CurrentClassification, PluginDisplayInfo, StreamState, TuiPane};
 use crate::complexity::{classify_task_full, TaskComplexity, TaskOverride};
+use crate::eval::stage_id::StageId;
 use crate::utils::truncate_str;
 
 fn complexity_estimate_label(cls: &CurrentClassification) -> String {
@@ -1088,11 +1089,11 @@ pub(super) fn render_skill_citations(
 
     let title = match summary_opt {
         Some(s) if s.db_available => format!(
-            " Skill Citations ({} session / {} unique) ",
+            " Skill Citations (post-task) ({} session / {} unique) ",
             s.session_citations, s.session_skills_cited
         ),
-        Some(_) => " Skill Citations (telemetry unavailable) ".to_string(),
-        None => " Skill Citations (loading...) ".to_string(),
+        Some(_) => " Skill Citations (post-task) (telemetry unavailable) ".to_string(),
+        None => " Skill Citations (post-task) (loading...) ".to_string(),
     };
 
     let title_line = if focused == TuiPane::PatternsLearned {
@@ -1121,6 +1122,11 @@ pub(super) fn render_skill_citations(
 
     let inner_width = area.width.saturating_sub(4) as usize;
     let mut lines: Vec<Line> = Vec::new();
+
+    lines.push(Line::from(Span::styled(
+        " Updated after AUDIT writes citations.",
+        Style::default().fg(theme.muted),
+    )));
 
     match summary_opt {
         None => {
@@ -1191,6 +1197,105 @@ pub(super) fn render_skill_citations(
 
     let paragraph = Paragraph::new(lines).block(block);
     frame.render_widget(paragraph, area);
+}
+
+/// T2.2: per-stage retrieval transparency panel. Renders a section per
+/// pipeline stage showing the retriever's top-5 picks with scores and a
+/// check mark for skills that ended up being cited. Responsive: at
+/// `area.height < 30` collapses to a one-line summary; at >= 30 expands
+/// to a table.
+pub(super) fn render_skill_retrieval(
+    frame: &mut Frame,
+    area: Rect,
+    state: &AppState,
+    focused: TuiPane,
+) {
+    let theme = &state.tui_theme;
+    let title = " Skill Retrieval (per-stage top picks) ".to_string();
+    let title_line = if focused == TuiPane::SkillRetrieval {
+        Line::from(vec![
+            Span::styled(
+                title,
+                Style::default().fg(theme.info).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(" (click for AI summary) ", Style::default().fg(theme.muted)),
+        ])
+    } else {
+        Line::from(Span::styled(
+            title,
+            Style::default().fg(theme.info).add_modifier(Modifier::BOLD),
+        ))
+    };
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(pane_border_style(
+            focused,
+            TuiPane::SkillRetrieval,
+            &state.tui_theme,
+        ))
+        .border_type(pane_border_type(focused, TuiPane::SkillRetrieval))
+        .title(title_line);
+
+    let inner_width = area.width.saturating_sub(4) as usize;
+    let mut lines: Vec<Line> = Vec::new();
+
+    if state.last_retrieval.is_empty() {
+        lines.push(Line::from(Span::styled(
+            " Retrieval data will appear when a task injects skills.",
+            Style::default().fg(theme.muted),
+        )));
+    } else if area.height < 30 {
+        let stages = state.last_retrieval.len();
+        let total: usize = state.last_retrieval.values().map(|v| v.len()).sum();
+        lines.push(Line::from(Span::styled(
+            format!(" {} stages retrieved, {} top picks", stages, total),
+            Style::default().fg(theme.text),
+        )));
+    } else {
+        for stage in [
+            StageId::Query,
+            StageId::Research,
+            StageId::Plan,
+            StageId::Build,
+            StageId::Audit,
+        ] {
+            if let Some(entries) = state.last_retrieval.get(&stage) {
+                let header = format!(" {}:", stage_user_label(stage));
+                lines.push(Line::from(Span::styled(
+                    truncate_str(&header, inner_width).to_string(),
+                    Style::default().fg(theme.info).add_modifier(Modifier::BOLD),
+                )));
+                for entry in entries.iter().take(5) {
+                    let check = if entry.was_cited { "\u{2713}" } else { " " };
+                    let row = format!("  {} {}  {:.2}", check, entry.skill_id, entry.score);
+                    let truncated = truncate_str(&row, inner_width).to_string();
+                    let style = if entry.was_cited {
+                        Style::default().fg(theme.success)
+                    } else {
+                        Style::default().fg(theme.text)
+                    };
+                    lines.push(Line::from(Span::styled(truncated, style)));
+                }
+            }
+        }
+    }
+
+    let paragraph = Paragraph::new(lines).block(block);
+    frame.render_widget(paragraph, area);
+}
+
+/// T2.2: user-facing label for a StageId. Mirrors `stage_user_label` in
+/// `src/app.rs`. We do NOT use `StageId::slug()` because the internal slugs
+/// ("implement", "doubt") differ from the user-facing QRPBA labels
+/// ("BUILD", "AUDIT") documented in `docs/progress-indicators.md`.
+fn stage_user_label(stage: StageId) -> &'static str {
+    match stage {
+        StageId::Query => "QUERY",
+        StageId::Research => "RESEARCH",
+        StageId::Plan => "PLAN",
+        StageId::Build => "BUILD",
+        StageId::Audit => "AUDIT",
+    }
 }
 
 pub(super) fn render_plugins_used(
@@ -1480,6 +1585,7 @@ fn cursor_hint_for_state(state: &AppState) -> &'static str {
         TuiPane::AgentOutput
         | TuiPane::TaskQueue
         | TuiPane::PatternsLearned
+        | TuiPane::SkillRetrieval
         | TuiPane::Narrative
         | TuiPane::Stats
         | TuiPane::Plugins => "click for AI summary",

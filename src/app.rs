@@ -36,6 +36,7 @@ use crate::agent::{AgentErrorKind, AgentOutputEvent, AgentRole};
 use crate::complexity::TaskOverride;
 use crate::config::Config;
 use crate::eval;
+use crate::eval::stage_id::StageId;
 use crate::llm::summary::summarize_surface;
 use crate::llm::summary_cache::StageState;
 use crate::eval::report as eval_report;
@@ -1338,6 +1339,18 @@ fn handle_planning_event(state: &mut AppState, event: AppEvent, config: &Config)
         AppEvent::UpdateAvailable(version) => {
             state.update_available = Some(version);
         }
+        AppEvent::SkillsRetrieved { stage, top_picks, total_pool: _ } => {
+            let entries: Vec<state::LastRetrievalEntry> = top_picks
+                .into_iter()
+                .take(10)
+                .map(|(skill_id, score)| state::LastRetrievalEntry {
+                    was_cited: state.session_skill_citations_set.contains(&skill_id),
+                    skill_id,
+                    score,
+                })
+                .collect();
+            state.last_retrieval.insert(stage, entries);
+        }
         AppEvent::OllamaStatus(connected) => {
             state.last_pattern_match_mode = Some(
                 if connected {
@@ -2498,6 +2511,13 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                 for name in skill_names {
                     state.session_skill_citations_set.insert(name.clone());
                 }
+                for entries in state.last_retrieval.values_mut() {
+                    for entry in entries.iter_mut() {
+                        if state.session_skill_citations_set.contains(&entry.skill_id) {
+                            entry.was_cited = true;
+                        }
+                    }
+                }
                 refresh_skill_citation_summary(state);
             }
             LoopEvent::BudgetOverrun {
@@ -3522,7 +3542,7 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                             ratatui::layout::Rect::new(0, 0, terminal_size.0, terminal_size.1);
                         let has_ext = state.available_plugins.iter().any(|e| e.selected)
                             || !state.session_plugins_used.is_empty();
-                        let panes = tui::running_layout(area, has_ext, state.agent_pane_split);
+                        let panes = tui::running_layout(area, has_ext, state.agent_pane_split, config.show_retrieval_panel);
                         let bottom_chunks = ratatui::layout::Layout::default()
                             .direction(ratatui::layout::Direction::Vertical)
                             .constraints([
@@ -3541,6 +3561,11 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                             state.focused_pane = state::TuiPane::Narrative;
                         } else if tui::rect_contains(panes.patterns, mouse.column, mouse.row) {
                             state.focused_pane = state::TuiPane::PatternsLearned;
+                        } else if panes
+                            .skill_retrieval
+                            .is_some_and(|r| tui::rect_contains(r, mouse.column, mouse.row))
+                        {
+                            state.focused_pane = state::TuiPane::SkillRetrieval;
                         } else if panes
                             .plugins_used
                             .is_some_and(|r| tui::rect_contains(r, mouse.column, mouse.row))
@@ -3627,7 +3652,7 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                                 ratatui::layout::Rect::new(0, 0, terminal_size.0, terminal_size.1);
                             let has_ext = state.available_plugins.iter().any(|e| e.selected)
                                 || !state.session_plugins_used.is_empty();
-                            let panes = tui::running_layout(area, has_ext, state.agent_pane_split);
+                            let panes = tui::running_layout(area, has_ext, state.agent_pane_split, config.show_retrieval_panel);
                             if tui::rect_contains(panes.agent_output, mouse.column, mouse.row) {
                                 state.focused_pane = state::TuiPane::AgentOutput;
                                 let max = state.agent_output.len().saturating_sub(1);
@@ -3642,6 +3667,11 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                             } else if tui::rect_contains(panes.patterns, mouse.column, mouse.row) {
                                 state.focused_pane = state::TuiPane::PatternsLearned;
                                 state.patterns_scroll = state.patterns_scroll.saturating_sub(lines);
+                            } else if panes
+                                .skill_retrieval
+                                .is_some_and(|r| tui::rect_contains(r, mouse.column, mouse.row))
+                            {
+                                state.focused_pane = state::TuiPane::SkillRetrieval;
                             } else if panes
                                 .plugins_used
                                 .is_some_and(|r| tui::rect_contains(r, mouse.column, mouse.row))
@@ -3666,7 +3696,7 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                                 ratatui::layout::Rect::new(0, 0, terminal_size.0, terminal_size.1);
                             let has_ext = state.available_plugins.iter().any(|e| e.selected)
                                 || !state.session_plugins_used.is_empty();
-                            let panes = tui::running_layout(area, has_ext, state.agent_pane_split);
+                            let panes = tui::running_layout(area, has_ext, state.agent_pane_split, config.show_retrieval_panel);
                             if tui::rect_contains(panes.agent_output, mouse.column, mouse.row) {
                                 state.focused_pane = state::TuiPane::AgentOutput;
                                 state.scroll_offset = state.scroll_offset.saturating_sub(lines);
@@ -3678,6 +3708,11 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                             } else if tui::rect_contains(panes.patterns, mouse.column, mouse.row) {
                                 state.focused_pane = state::TuiPane::PatternsLearned;
                                 state.patterns_scroll = state.patterns_scroll.saturating_add(lines);
+                            } else if panes
+                                .skill_retrieval
+                                .is_some_and(|r| tui::rect_contains(r, mouse.column, mouse.row))
+                            {
+                                state.focused_pane = state::TuiPane::SkillRetrieval;
                             } else if panes
                                 .plugins_used
                                 .is_some_and(|r| tui::rect_contains(r, mouse.column, mouse.row))
@@ -3692,7 +3727,7 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                             ratatui::layout::Rect::new(0, 0, terminal_size.0, terminal_size.1);
                         let has_ext = state.available_plugins.iter().any(|e| e.selected)
                             || !state.session_plugins_used.is_empty();
-                        let panes = tui::running_layout(area, has_ext, state.agent_pane_split);
+                        let panes = tui::running_layout(area, has_ext, state.agent_pane_split, config.show_retrieval_panel);
                         // Bottom stats rect (used for both hit-test and dispatch)
                         let bottom_full = ratatui::layout::Rect::new(
                             0,
@@ -3738,6 +3773,11 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                         } else if tui::rect_contains(panes.patterns, mouse.column, mouse.row) {
                             Some(ClickableSurface::SkillCitations)
                         } else if panes
+                            .skill_retrieval
+                            .is_some_and(|r| tui::rect_contains(r, mouse.column, mouse.row))
+                        {
+                            Some(ClickableSurface::SkillRetrieval)
+                        } else if panes
                             .plugins_used
                             .is_some_and(|r| tui::rect_contains(r, mouse.column, mouse.row))
                         {
@@ -3757,6 +3797,11 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                             state.focused_pane = state::TuiPane::Narrative;
                         } else if tui::rect_contains(panes.patterns, mouse.column, mouse.row) {
                             state.focused_pane = state::TuiPane::PatternsLearned;
+                        } else if panes
+                            .skill_retrieval
+                            .is_some_and(|r| tui::rect_contains(r, mouse.column, mouse.row))
+                        {
+                            state.focused_pane = state::TuiPane::SkillRetrieval;
                         } else if panes
                             .plugins_used
                             .is_some_and(|r| tui::rect_contains(r, mouse.column, mouse.row))
@@ -3932,6 +3977,18 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                     overlay.last_error = outcome.error;
                 }
             }
+        }
+        AppEvent::SkillsRetrieved { stage, top_picks, total_pool: _ } => {
+            let entries: Vec<state::LastRetrievalEntry> = top_picks
+                .into_iter()
+                .take(10)
+                .map(|(skill_id, score)| state::LastRetrievalEntry {
+                    was_cited: state.session_skill_citations_set.contains(&skill_id),
+                    skill_id,
+                    score,
+                })
+                .collect();
+            state.last_retrieval.insert(stage, entries);
         }
         AppEvent::NarrativeRefresh(brief) => {
             state.last_commit_brief = brief;
@@ -5829,6 +5886,34 @@ fn surface_summary_inputs(
             let truncated = crate::utils::truncate_str(&s, 4096).to_string();
             (vec![], Some(truncated))
         }
+        ClickableSurface::SkillRetrieval => {
+            let mut s = String::new();
+            if state.last_retrieval.is_empty() {
+                s.push_str("no retrieval data loaded\n");
+            } else {
+                for stage in &[
+                    StageId::Query,
+                    StageId::Research,
+                    StageId::Plan,
+                    StageId::Build,
+                    StageId::Audit,
+                ] {
+                    if let Some(entries) = state.last_retrieval.get(stage) {
+                        s.push_str(&format!("{}:\n", stage_user_label(*stage).to_lowercase()));
+                        for entry in entries.iter().take(5) {
+                            s.push_str(&format!(
+                                "- {} (score {:.2}{})\n",
+                                entry.skill_id,
+                                entry.score,
+                                if entry.was_cited { ", cited" } else { "" }
+                            ));
+                        }
+                    }
+                }
+            }
+            let truncated = crate::utils::truncate_str(&s, 4096).to_string();
+            (vec![], Some(truncated))
+        }
         ClickableSurface::Stats => {
             let mut s = String::new();
             s.push_str(&format!(
@@ -5915,6 +6000,21 @@ fn pipeline_click_artifact(
     }
 }
 
+/// T2.2: user-facing label for a StageId. We deliberately do NOT use
+/// `StageId::slug()` here because the internal slugs ("implement", "doubt")
+/// differ from the user-facing QRPBA labels ("BUILD", "AUDIT") documented in
+/// `docs/progress-indicators.md`. Used by both the Skill Retrieval table
+/// header and the SkillRetrieval surface-summary artifact.
+fn stage_user_label(stage: StageId) -> &'static str {
+    match stage {
+        StageId::Query => "QUERY",
+        StageId::Research => "RESEARCH",
+        StageId::Plan => "PLAN",
+        StageId::Build => "BUILD",
+        StageId::Audit => "AUDIT",
+    }
+}
+
 fn surface_has_fallback_file(overlay: Option<&SurfaceSummaryOverlay>) -> bool {
     let Some(o) = overlay else { return false };
     match &o.surface {
@@ -5923,6 +6023,7 @@ fn surface_has_fallback_file(overlay: Option<&SurfaceSummaryOverlay>) -> bool {
         ClickableSurface::ExplorerFile(_) => true,
         ClickableSurface::Narrative
         | ClickableSurface::SkillCitations
+        | ClickableSurface::SkillRetrieval
         | ClickableSurface::Stats
         | ClickableSurface::AgentOutput => false,
     }

@@ -712,6 +712,7 @@ pub(super) async fn run_headless(project_dir: &Path, output_format: Option<Strin
             | AppEvent::LocalModels { .. }
             | AppEvent::WelcomeMessage(_)
             | AppEvent::SurfaceSummaryReady { .. }
+            | AppEvent::SkillsRetrieved { .. }
             | AppEvent::NarrativeRefresh(_)
             | AppEvent::Tick => {}
         }

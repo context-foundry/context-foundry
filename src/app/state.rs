@@ -10,6 +10,7 @@ use std::path::PathBuf;
 use crate::agent::{AgentErrorKind, AgentOutputEvent, AgentRole};
 use crate::complexity::{TaskComplexity, TaskOverride};
 use crate::eval::report::EvalReportSnapshot;
+use crate::eval::stage_id::StageId;
 use crate::git;
 use crate::orchestrator::OrchestratorOutcome;
 use crate::patterns::Pattern;
@@ -50,9 +51,19 @@ pub enum TuiPane {
     AgentOutput,
     TaskQueue,
     PatternsLearned,
+    SkillRetrieval,
     Plugins,
     Narrative,
     Stats,
+}
+
+/// T2.2: a single entry inside `AppState::last_retrieval[stage]` representing
+/// one ranked skill the retriever returned for that stage's prompt context.
+#[derive(Debug, Clone)]
+pub struct LastRetrievalEntry {
+    pub skill_id: String,
+    pub score: f32,
+    pub was_cited: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -61,6 +72,7 @@ pub enum ClickableSurface {
     TaskQueue,
     Narrative,
     SkillCitations,
+    SkillRetrieval,
     Stats,
     AgentOutput,
     ExplorerFile(std::path::PathBuf),
@@ -73,6 +85,7 @@ impl ClickableSurface {
             ClickableSurface::TaskQueue => "task_queue",
             ClickableSurface::Narrative => "narrative",
             ClickableSurface::SkillCitations => "skill_citations",
+            ClickableSurface::SkillRetrieval => "skill_retrieval",
             ClickableSurface::Stats => "stats",
             ClickableSurface::AgentOutput => "agent_output",
             ClickableSurface::ExplorerFile(_) => "explorer_file",
@@ -84,6 +97,7 @@ impl ClickableSurface {
             ClickableSurface::TaskQueue => "Task Queue".to_string(),
             ClickableSurface::Narrative => "Narrative".to_string(),
             ClickableSurface::SkillCitations => "Skill Citations".to_string(),
+            ClickableSurface::SkillRetrieval => "Skill Retrieval".to_string(),
             ClickableSurface::Stats => "Stats".to_string(),
             ClickableSurface::AgentOutput => "Agent Output".to_string(),
             ClickableSurface::ExplorerFile(p) => p
@@ -1515,6 +1529,13 @@ pub struct AppState {
     pub(super) skill_citation_summary_loaded_at: Option<std::time::Instant>,
     pub session_skill_citations_set: std::collections::HashSet<String>,
     pub session_skill_citation_count: usize,
+    /// T2.2: per-stage retrieval transparency snapshot. Keyed by StageId,
+    /// stores the top-N ranked skill IDs with their post-telemetry scores
+    /// and a `was_cited` flag flipped true when AUDIT records a citation
+    /// for that skill id. Bounded at 10 entries per stage. Populated only
+    /// when `show_retrieval_panel = true` in config; otherwise the build
+    /// loop never emits SkillsRetrieved and this map stays empty.
+    pub last_retrieval: HashMap<StageId, Vec<LastRetrievalEntry>>,
     pub session_plugins_used: Vec<PluginEvent>, // plugin injections this session
     pub session_feat_commits: usize,
     pub session_wip_commits: usize,
@@ -1725,6 +1746,7 @@ impl AppState {
             skill_citation_summary_loaded_at: None,
             session_skill_citations_set: std::collections::HashSet::new(),
             session_skill_citation_count: 0,
+            last_retrieval: HashMap::new(),
             session_plugins_used: Vec::new(),
             session_patterns_learned: 0,
             session_review_high: 0,
@@ -2023,6 +2045,14 @@ pub(super) enum AppEvent {
     SurfaceSummaryReady {
         surface: ClickableSurface,
         outcome: crate::llm::summary::SummaryOutcome,
+    },
+    /// T2.2: retriever published its per-stage top picks after a rank pass.
+    /// Fire-and-forget: when `show_retrieval_panel = false` in config, the
+    /// build loop does not emit, so the receiver simply never sees this.
+    SkillsRetrieved {
+        stage: StageId,
+        top_picks: Vec<(String, f32)>,
+        total_pool: usize,
     },
 }
 

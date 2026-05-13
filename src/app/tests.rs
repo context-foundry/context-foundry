@@ -2742,6 +2742,7 @@ fn handle_surface_click_opens_surface_summary_overlay_for_each_variant() {
         ClickableSurface::TaskQueue,
         ClickableSurface::Narrative,
         ClickableSurface::SkillCitations,
+        ClickableSurface::SkillRetrieval,
         ClickableSurface::Stats,
         ClickableSurface::AgentOutput,
         ClickableSurface::PipelineStage("plan".to_string()),
@@ -2758,4 +2759,76 @@ fn handle_surface_click_opens_surface_summary_overlay_for_each_variant() {
         let ov = state.surface_summary_overlay.as_ref().unwrap();
         assert_eq!(ov.surface.tag(), surface.tag());
     }
+}
+
+/// T2.2: a SkillsRetrieved event for a stage populates `last_retrieval`
+/// with up to 10 entries; subsequent SkillCitationsRecorded flips
+/// `was_cited` for entries whose skill_id matches a citation.
+#[test]
+fn app_event_skills_retrieved_updates_last_retrieval_and_flips_was_cited() {
+    use crate::eval::stage_id::StageId;
+    let dir = temp_project_dir("skills_retrieved");
+    let cfg = Config::default();
+    let mut state = AppState::new(dir.join(".buildloop"));
+
+    let top_picks: Vec<(String, f32)> = vec![
+        ("skill-a".to_string(), 4.5),
+        ("skill-b".to_string(), 3.2),
+        ("skill-c".to_string(), 1.1),
+    ];
+    handle_event(
+        &mut state,
+        AppEvent::SkillsRetrieved {
+            stage: StageId::Plan,
+            top_picks: top_picks.clone(),
+            total_pool: 20,
+        },
+        &cfg,
+    );
+    let plan_entries = state
+        .last_retrieval
+        .get(&StageId::Plan)
+        .expect("plan entries present after SkillsRetrieved");
+    assert_eq!(plan_entries.len(), 3);
+    assert_eq!(plan_entries[0].skill_id, "skill-a");
+    assert!((plan_entries[0].score - 4.5).abs() < 1e-4);
+    assert!(!plan_entries[0].was_cited);
+
+    // Bounded at 10 entries even if 12 picks come in.
+    let many: Vec<(String, f32)> = (0..12)
+        .map(|i| (format!("s{}", i), i as f32))
+        .collect();
+    handle_event(
+        &mut state,
+        AppEvent::SkillsRetrieved {
+            stage: StageId::Build,
+            top_picks: many,
+            total_pool: 50,
+        },
+        &cfg,
+    );
+    let build_entries = state
+        .last_retrieval
+        .get(&StageId::Build)
+        .expect("build entries present");
+    assert_eq!(build_entries.len(), 10);
+
+    // SkillCitationsRecorded flips was_cited on matching entries.
+    handle_event(
+        &mut state,
+        AppEvent::LoopEvent(LoopEvent::SkillCitationsRecorded {
+            skill_names: vec!["skill-b".to_string()],
+        }),
+        &cfg,
+    );
+    let plan_entries = state
+        .last_retrieval
+        .get(&StageId::Plan)
+        .expect("plan entries still present after citations");
+    let cited: Vec<&str> = plan_entries
+        .iter()
+        .filter(|e| e.was_cited)
+        .map(|e| e.skill_id.as_str())
+        .collect();
+    assert_eq!(cited, vec!["skill-b"]);
 }

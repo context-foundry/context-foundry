@@ -250,6 +250,52 @@ the "best-effort, never blocks" invariant.
 - Cost-adjusted score.
 - Per-stage live scoring (currently report runs at task finalization).
 
+## Skill Retrieval Transparency (T2.2)
+
+The TUI's right-pane "Skill Citations" panel renders post-task citation
+telemetry from `~/.foundry/skills-telemetry.db`. The header now reads
+`Skill Citations (post-task)` with a muted helper line
+`Updated after AUDIT writes citations.` so it is honest about what the
+panel shows.
+
+### `AppEvent::SkillsRetrieved`
+
+A separate event emitted by the build loop after every stage's
+`rank_skills_for_task` call carries the retriever's per-stage top picks:
+
+```rust
+AppEvent::SkillsRetrieved {
+    stage: StageId,
+    top_picks: Vec<(String, f32)>, // (skill_id, post-telemetry score), bounded at 10
+    total_pool: usize,             // candidate-pool size after stage filtering
+}
+```
+
+The event is fire-and-forget: when `show_retrieval_panel = false` in
+`.foundry.json` (default), the build loop does not emit and the TUI does
+not render the new panel. Memory footprint stays constant because each
+stage's stored entries are capped at 10.
+
+### `show_retrieval_panel` config flag
+
+When set to `true` in `.foundry.json` or `~/.foundry/config.json`:
+
+- In non-strict mode (default): the build loop ranks once and emits five
+  `SkillsRetrieved` events (Query, Research, Plan, Build, Audit) sharing
+  the same `top_picks` -- because in non-strict mode every stage receives
+  the same unified candidate set.
+- In strict mode: the build loop emits one event per stage as each
+  per-stage ranking pass runs. Discovery is skipped (StageId has no
+  Discover variant).
+- A new "Skill Retrieval (per-stage top picks)" panel renders below
+  "Skill Citations (post-task)". The renderer is responsive:
+  - At `area.height >= 30` rows: per-stage table with top-5 skills and
+    scores. A green check appears next to skills whose IDs later appear
+    in `state.session_skill_citations_set` (cited this session).
+  - At `area.height < 30`: a one-line summary "N stages retrieved, M top picks".
+- The panel preserves the existing "click for AI summary" affordance via
+  a new `ClickableSurface::SkillRetrieval` variant.
+
 ## Related docs
 
 - [Settings Overlay](settings-overlay.md) -- the `?` modal that exposes

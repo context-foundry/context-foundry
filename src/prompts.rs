@@ -2462,6 +2462,9 @@ pub fn surface_summary_prompt(
         ClickableSurface::SkillCitations => {
             skill_citations_summary_prompt(state, artifacts, log_tail)
         }
+        ClickableSurface::SkillRetrieval => {
+            skill_retrieval_summary_prompt(state, artifacts, log_tail)
+        }
         ClickableSurface::Stats => stats_summary_prompt(state, artifacts, log_tail),
         ClickableSurface::AgentOutput => agent_output_summary_prompt(state, artifacts, log_tail),
         ClickableSurface::ExplorerFile(path) => explorer_file_summary_prompt(
@@ -2548,6 +2551,33 @@ pub fn skill_citations_summary_prompt(
          the top three cited skills by name, call out any cited this session, and state \
          whether the skills telemetry database is reachable. If no citations have happened \
          yet, say so plainly. Cap output at 500 tokens. Plain text only, no markdown headers.",
+    );
+    out
+}
+
+pub fn skill_retrieval_summary_prompt(
+    state: &StageState,
+    artifacts: &[(String, String)],
+    log_tail: &str,
+) -> String {
+    let mut out = String::with_capacity(2048);
+    out.push_str(&format!(
+        "Pane: SKILL RETRIEVAL\nCurrent state: {}\n\n",
+        state.as_str()
+    ));
+    for (label, body) in artifacts {
+        out.push_str(&format!("=== {} ===\n{}\n", label, body));
+    }
+    if !log_tail.is_empty() {
+        out.push_str(&format!("=== recent log ===\n{}\n", log_tail));
+    }
+    out.push_str(
+        "\nWrite a 4-8-sentence friendly-but-technical summary of the Skill Retrieval pane. \
+         For each stage (Query, Research, Plan, Build, Audit) name the top 3 retrieved skill \
+         IDs with their scores, call out which of those ended up cited (was_cited=true), and \
+         state whether the retrieval data is empty for any stage. If no retrieval data is \
+         loaded yet, say so plainly. Cap output at 500 tokens. Plain text only, no markdown \
+         headers.",
     );
     out
 }
@@ -4282,6 +4312,7 @@ mod prompt_override_tests {
             (ClickableSurface::TaskQueue, "Task Queue"),
             (ClickableSurface::Narrative, "Narrative pane"),
             (ClickableSurface::SkillCitations, "Skill Citations pane"),
+            (ClickableSurface::SkillRetrieval, "Skill Retrieval pane"),
             (ClickableSurface::Stats, "Stats pane"),
             (ClickableSurface::AgentOutput, "agent output buffer"),
             (
