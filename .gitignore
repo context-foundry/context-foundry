@@ -87,6 +87,14 @@ foundry-overview.html
 visualizer.html
 nul
 
+# User drafts -- stray personal Markdown files that should not be tracked.
+# `*.draft.md` is the recommended naming convention for personal scratch
+# drafts kept inside this repo; `viva-cowork-post.md` was a specific stray
+# file that got auto-committed by the foundry pipeline before this rule
+# existed. Keep this list conservative -- do NOT add a blanket *.md ignore.
+*.draft.md
+viva-cowork-post.md
+
 # Symlinks installed by users into the cross-provider surface (e.g. Superpowers)
 .claude/skills/brainstorming
 .claude/skills/dispatching-parallel-agents

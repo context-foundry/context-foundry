@@ -391,6 +391,23 @@ pub(super) fn render_dashboard_stats(
         Span::styled(sandbox_label, Style::default().fg(sandbox_color)),
     ]));
 
+    // ─── Row: Skills (derived from semantic_match_enabled + Ollama health) ───
+    let (skills_status, skills_color): (&str, Color) = if !config.semantic_match_enabled {
+        ("Skills: keyword-only (semantic disabled)", theme.muted)
+    } else if state.last_pattern_match_mode.as_deref() == Some("semantic") {
+        ("Skills: hybrid (BM25 + nomic-embed)", theme.success)
+    } else {
+        // Covers None (initial state before first health-check tick),
+        // Some("cooldown") (failed health check entered cooldown), and
+        // Some("keyword-only") (explicit fallback). All three mean the
+        // semantic backend is unreachable right now.
+        ("Skills: keyword-only (Ollama down)", theme.warning)
+    };
+    lines.push(Line::from(vec![
+        Span::styled("  ", Style::default()),
+        Span::styled(skills_status, Style::default().fg(skills_color)),
+    ]));
+
     // ─── Row: Timing (full width, three labeled timers) ───
     // The stage timer was previously crammed onto the same row as the
     // Ollama/Tmux indicator on the left half; on narrower terminals the
@@ -1044,6 +1061,30 @@ mod tests {
             .join("\n")
     }
 
+    fn render_stats_text_tall_with_config(state: &AppState, config: &Config) -> String {
+        let backend = TestBackend::new(180, 16);
+        let mut terminal = Terminal::new(backend).expect("failed to create terminal");
+        terminal
+            .draw(|frame| render_dashboard_stats(frame, frame.area(), state, config, TuiPane::AgentOutput))
+            .expect("failed to draw stats");
+        let buffer = terminal.backend().buffer();
+        let area = *buffer.area();
+        (0..area.height)
+            .map(|y| {
+                (0..area.width)
+                    .map(|x| {
+                        buffer
+                            .cell((x, y))
+                            .map(|cell| cell.symbol().to_string())
+                            .unwrap_or_else(|| " ".to_string())
+                    })
+                    .collect::<Vec<_>>()
+                    .join("")
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
     #[test]
     fn timing_row_shows_three_labeled_timers_when_agent_active() {
         use chrono::Utc;
@@ -1323,6 +1364,37 @@ mod tests {
         assert!(rendered.contains("(no eval yet)"), "rendered: {}", rendered);
         assert!(!rendered.contains("(last)"), "rendered: {}", rendered);
         assert!(!rendered.contains("Q\u{2713}"), "rendered: {}", rendered);
+    }
+
+    #[test]
+    fn skills_row_shows_hybrid_when_semantic_enabled_and_ollama_connected() {
+        let mut state = AppState::new(PathBuf::from(".buildloop"));
+        state.last_pattern_match_mode = Some("semantic".to_string());
+        let rendered = render_stats_text_tall(&state);
+        assert!(rendered.contains("Skills: hybrid (BM25 + nomic-embed)"), "rendered: {}", rendered);
+        assert!(!rendered.contains("Skills: keyword-only"), "rendered: {}", rendered);
+    }
+
+    #[test]
+    fn skills_row_shows_ollama_down_when_semantic_enabled_and_health_check_failed() {
+        let mut state = AppState::new(PathBuf::from(".buildloop"));
+        state.last_pattern_match_mode = Some("keyword-only".to_string());
+        let rendered = render_stats_text_tall(&state);
+        assert!(rendered.contains("Skills: keyword-only (Ollama down)"), "rendered: {}", rendered);
+        assert!(!rendered.contains("Skills: hybrid"), "rendered: {}", rendered);
+        assert!(!rendered.contains("Skills: keyword-only (semantic disabled)"), "rendered: {}", rendered);
+    }
+
+    #[test]
+    fn skills_row_shows_semantic_disabled_when_config_flag_is_false() {
+        let mut state = AppState::new(PathBuf::from(".buildloop"));
+        state.last_pattern_match_mode = Some("semantic".to_string());
+        let mut config = Config::default();
+        config.semantic_match_enabled = false;
+        let rendered = render_stats_text_tall_with_config(&state, &config);
+        assert!(rendered.contains("Skills: keyword-only (semantic disabled)"), "rendered: {}", rendered);
+        assert!(!rendered.contains("Skills: hybrid"), "rendered: {}", rendered);
+        assert!(!rendered.contains("Skills: keyword-only (Ollama down)"), "rendered: {}", rendered);
     }
 
     #[test]
