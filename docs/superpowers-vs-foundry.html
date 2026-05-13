@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Superpowers vs Context Foundry — A Real Comparison</title>
+  <meta name="description" content="An in-depth, honest side-by-side of Jesse Vincent's Superpowers Claude Code plugin and Context Foundry. Same Anthropic Skills format, different layers of the stack. Architecture, skill systems, methodology coverage, token economics, and honest gap analysis in both directions.">
+  <meta property="og:title" content="Superpowers vs Context Foundry — A Real Comparison">
+  <meta property="og:description" content="Same Anthropic Skills format, different layers of the stack. An honest side-by-side.">
+  <meta property="og:image" content="assets/og-card-1200x630.png">
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://contextfoundry.dev/superpowers-vs-foundry.html">
+  <link rel="icon" type="image/png" href="assets/favicon-square-512.png">
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --surface-2: #1c2129;
+      --border: #30363d;
+      --text: #e6edf3;
+      --text-muted: #8b949e;
+      --accent: #f0a500;
+      --accent-subtle: rgba(240, 165, 0, 0.15);
+      --sp-accent: #6e57c0;
+      --sp-subtle: rgba(110, 87, 192, 0.18);
+      --good: #3fb950;
+      --bad: #f85149;
+      --partial: #d29922;
+      --radius: 4px;
+      --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+    }
+    * { box-sizing: border-box; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 0.9rem;
+      line-height: 1.7;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 3rem 1.5rem;
+    }
+    h1 {
+      color: var(--accent);
+      font-size: 1.5rem;
+      border-bottom: 2px solid var(--accent);
+      padding-bottom: 0.5rem;
+      margin-bottom: 0.25rem;
+    }
+    h2 {
+      color: var(--accent);
+      font-size: 1.15rem;
+      border-left: 3px solid var(--accent);
+      padding-left: 0.75rem;
+      margin-top: 2.5rem;
+      margin-bottom: 0.75rem;
+    }
+    h3 {
+      color: var(--text);
+      font-size: 1rem;
+      margin-top: 1.75rem;
+      margin-bottom: 0.5rem;
+    }
+    p { margin: 0.75rem 0; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    pre {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem 1.25rem;
+      overflow-x: auto;
+      font-size: 0.8rem;
+      line-height: 1.5;
+    }
+    code {
+      background: var(--surface);
+      padding: 0.15rem 0.4rem;
+      border-radius: var(--radius);
+      font-size: 0.85rem;
+    }
+    pre code { background: none; padding: 0; }
+    blockquote {
+      border-left: 3px solid var(--accent);
+      margin: 1.25rem 0;
+      padding: 0.5rem 1rem;
+      background: var(--accent-subtle);
+      border-radius: 0 var(--radius) var(--radius) 0;
+    }
+    blockquote p { margin: 0.25rem 0; font-size: 0.9rem; }
+    blockquote cite { color: var(--text-muted); font-style: normal; font-size: 0.8rem; }
+    .hook {
+      font-size: 1.05rem;
+      color: var(--text);
+      margin-bottom: 0.25rem;
+    }
+    .subtitle {
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      margin-top: 0;
+    }
+    .muted { color: var(--text-muted); }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1rem 0;
+      font-size: 0.82rem;
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 0.55rem 0.7rem;
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      background: var(--surface);
+      color: var(--accent);
+    }
+    th.sp { color: var(--sp-accent); }
+    th.cf { color: var(--accent); }
+    th.dim { color: var(--text-muted); font-weight: normal; width: 22%; }
+
+    .verdict-row td:first-child {
+      color: var(--text-muted);
+      font-weight: 600;
+      background: var(--surface);
+    }
+
+    .check { color: var(--good); font-weight: bold; }
+    .cross { color: var(--bad); font-weight: bold; }
+    .partial { color: var(--partial); font-weight: bold; }
+
+    /* Layer diagram */
+    .layer-diagram {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem;
+      margin: 1.25rem 0;
+      font-size: 0.78rem;
+      line-height: 1.45;
+      white-space: pre;
+      overflow-x: auto;
+      color: var(--text);
+    }
+
+    /* Side-by-side hero */
+    .vs-hero {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin: 1.5rem 0;
+    }
+    .vs-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem 1.1rem;
+    }
+    .vs-card.sp { border-top: 3px solid var(--sp-accent); }
+    .vs-card.cf { border-top: 3px solid var(--accent); }
+    .vs-card h3 {
+      margin: 0 0 0.25rem 0;
+      font-size: 0.95rem;
+    }
+    .vs-card.sp h3 { color: var(--sp-accent); }
+    .vs-card.cf h3 { color: var(--accent); }
+    .vs-card .role {
+      color: var(--text-muted);
+      font-size: 0.75rem;
+      margin-bottom: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .vs-card .one-liner {
+      font-size: 0.85rem;
+      line-height: 1.55;
+      margin: 0.5rem 0 0 0;
+    }
+    .vs-card .stats {
+      margin-top: 0.6rem;
+      padding-top: 0.6rem;
+      border-top: 1px dashed var(--border);
+      color: var(--text-muted);
+      font-size: 0.75rem;
+    }
+
+    .pill {
+      display: inline-block;
+      padding: 0.1rem 0.5rem;
+      border-radius: 999px;
+      font-size: 0.7rem;
+      font-weight: bold;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+    }
+    .pill-sp { background: var(--sp-subtle); color: var(--sp-accent); }
+    .pill-cf { background: var(--accent-subtle); color: var(--accent); }
+    .pill-shared { background: rgba(63, 185, 80, 0.15); color: var(--good); }
+    .pill-neither { background: rgba(248, 81, 73, 0.15); color: var(--bad); }
+
+    /* Decision-matrix */
+    .decision-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin: 1.25rem 0;
+    }
+    .decision-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 0.9rem 1rem;
+    }
+    .decision-card.sp { border-left: 3px solid var(--sp-accent); }
+    .decision-card.cf { border-left: 3px solid var(--accent); }
+    .decision-card h4 {
+      margin: 0 0 0.4rem 0;
+      font-size: 0.85rem;
+    }
+    .decision-card.sp h4 { color: var(--sp-accent); }
+    .decision-card.cf h4 { color: var(--accent); }
+    .decision-card ul {
+      margin: 0.3rem 0 0 1rem;
+      padding: 0;
+      font-size: 0.8rem;
+      line-height: 1.55;
+    }
+    .decision-card li { margin: 0.25rem 0; }
+
+    .callout {
+      background: var(--accent-subtle);
+      border: 1px solid var(--accent);
+      border-radius: var(--radius);
+      padding: 0.75rem 1rem;
+      margin: 1.25rem 0;
+    }
+    .callout.sp {
+      background: var(--sp-subtle);
+      border-color: var(--sp-accent);
+    }
+    .callout p { margin: 0.25rem 0; font-size: 0.85rem; }
+    .callout .label {
+      font-size: 0.7rem;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      font-weight: bold;
+      color: var(--text-muted);
+      margin-bottom: 0.3rem;
+    }
+
+    footer {
+      margin-top: 3rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--border);
+      color: var(--text-muted);
+      font-size: 0.78rem;
+    }
+
+    @media (max-width: 720px) {
+      .vs-hero, .decision-grid { grid-template-columns: 1fr; }
+      table { font-size: 0.75rem; }
+    }
+    @media print {
+      body { background: white; color: black; max-width: none; padding: 0.5in; }
+      pre { border: 1px solid #ccc; background: #f7f7f7; }
+      h1, h2 { color: #333; }
+      footer { color: #666; }
+      .vs-card, .decision-card, .callout, .layer-diagram { background: #fafafa; color: black; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <p class="muted"><a href="index.html">contextfoundry.dev</a> &middot; May 2026</p>
+  <h1>Superpowers vs Context Foundry</h1>
+  <p class="hook">Same Anthropic Skills format, different layer of the stack.</p>
+  <p class="subtitle">An honest, in-depth side-by-side of Jesse Vincent's Superpowers Claude Code plugin and Context Foundry. Architecture, skill systems, methodology coverage, token economics, and honest gap analysis in both directions.</p>
+</header>
+
+<section id="tldr">
+  <h2>TL;DR</h2>
+  <p>Superpowers is a Claude Code plugin that bolts a software-engineering methodology onto a turn-based conversational session. Context Foundry is a standalone Rust binary that runs an autonomous build loop against your codebase across many tasks without supervision. They are not competitors. They live at different layers of the same stack and could be run together.</p>
+
+  <div class="vs-hero">
+    <div class="vs-card sp">
+      <div class="role">Plugin · v5.1.0 · 645K installs</div>
+      <h3>Superpowers</h3>
+      <p class="one-liner">A methodology layer that lives inside an interactive Claude Code session. 14 composable skills + 1 master dispatcher that fires automatically and routes the agent through TDD, brainstorming, plan-writing, subagent dispatch, code review, and worktree-based parallelism.</p>
+      <div class="stats">MIT &middot; Anthropic Skills format &middot; turn-based collaboration</div>
+    </div>
+    <div class="vs-card cf">
+      <div class="role">Binary · v3.3.0 · self-hosted</div>
+      <h3>Context Foundry</h3>
+      <p class="one-liner">A 9-stage autonomous build loop (Q&rarr;R&rarr;P&rarr;P+&rarr;B&rarr;A&rarr;SHIP&rarr;DISCOVER&rarr;SKILLS) that reads a <code>TASKS.md</code> queue and ships <code>feat()</code> commits unattended. Hybrid skill retriever (BM25 + local Ollama nomic-embed + telemetry) ranks 271 skills per stage. TUI dashboard, multi-provider routing.</p>
+      <div class="stats">MIT &middot; Anthropic Skills format &middot; autonomous pipeline</div>
+    </div>
+  </div>
+</section>
+
+<section id="layer">
+  <h2>Layer diagram &mdash; where each sits</h2>
+  <p>The diagram below is the single most important point of this comparison. Superpowers steers what one agent does on one turn. Context Foundry orchestrates many agents across many tasks, each running in its own fresh context. They overlap only at the skill-format layer.</p>
+  <div class="layer-diagram">
+   ┌──────────────────────────────────────────────────────────────────────────┐
+   │  Layer 5 &mdash; Multi-task autonomy                                          │
+   │  Reads TASKS.md, runs stages, commits per task, learns across runs.      │
+   │                                                                          │
+   │     <span style="color:#f0a500">[ Context Foundry ]</span>   ← pipeline + retriever + telemetry + TUI       │
+   │                                                                          │
+   └──────────────────────────────────────────────────────────────────────────┘
+   ┌──────────────────────────────────────────────────────────────────────────┐
+   │  Layer 4 &mdash; Per-stage agent invocation                                   │
+   │  Spawns Claude / Codex / Copilot in PTY, fresh-context per stage.        │
+   │                                                                          │
+   │     <span style="color:#f0a500">[ Context Foundry — Builder, Auditor, etc. ]</span>                          │
+   │                                                                          │
+   └──────────────────────────────────────────────────────────────────────────┘
+   ┌──────────────────────────────────────────────────────────────────────────┐
+   │  Layer 3 &mdash; In-session methodology                                       │
+   │  Inside one Claude session: brainstorm, plan, TDD, review, debug.        │
+   │                                                                          │
+   │     <span style="color:#6e57c0">[ Superpowers ]</span>   ← dispatcher + composable skills                   │
+   │                                                                          │
+   └──────────────────────────────────────────────────────────────────────────┘
+   ┌──────────────────────────────────────────────────────────────────────────┐
+   │  Layer 2 &mdash; Skill / knowledge format                                     │
+   │                                                                          │
+   │     <span style="color:#3fb950">[ Anthropic Agent Skills (SKILL.md) ]</span>   ← both build on this         │
+   │                                                                          │
+   └──────────────────────────────────────────────────────────────────────────┘
+   ┌──────────────────────────────────────────────────────────────────────────┐
+   │  Layer 1 &mdash; Foundation model + CLI                                       │
+   │     [ Claude Code / Codex / Copilot / Gemini / Cursor / OpenCode ]       │
+   └──────────────────────────────────────────────────────────────────────────┘
+  </div>
+  <p>This is why a fair comparison cannot pick a winner: they run at different layers. The interesting question is not "which is better," it is "where does each contribute most?"</p>
+</section>
+
+<section id="matrix">
+  <h2>Side-by-side feature matrix</h2>
+  <p>The verdict column says what each tool actually does, not what it could in theory do. <span class="check">&check;</span> means the capability is shipped and load-bearing. <span class="partial">&deg;</span> means partial or different mechanism. <span class="cross">&minus;</span> means not present.</p>
+  <table>
+    <tr>
+      <th class="dim">Capability</th>
+      <th class="sp">Superpowers</th>
+      <th class="cf">Context Foundry</th>
+    </tr>
+    <tr>
+      <td><strong>Form factor</strong></td>
+      <td>Claude Code plugin (markdown skills)</td>
+      <td>Standalone Rust binary + TUI</td>
+    </tr>
+    <tr>
+      <td><strong>Execution model</strong></td>
+      <td>Turn-based, human in the loop</td>
+      <td>Autonomous, queue-driven, unattended</td>
+    </tr>
+    <tr>
+      <td><strong>Time horizon</strong></td>
+      <td>One session, minutes to hours</td>
+      <td>Multiple tasks, hours to days</td>
+    </tr>
+    <tr>
+      <td><strong>Skill format</strong></td>
+      <td>Anthropic Skills SKILL.md <span class="check">&check;</span></td>
+      <td>Anthropic Skills SKILL.md <span class="check">&check;</span></td>
+    </tr>
+    <tr>
+      <td><strong>Skill catalog size</strong></td>
+      <td>14 curated skills (methodology-focused)</td>
+      <td>271 shipped + user-extensible (pitfall-focused)</td>
+    </tr>
+    <tr>
+      <td><strong>Skill activation</strong></td>
+      <td>Master "using-superpowers" dispatcher reads request, picks skills via <code>when_to_use</code> metadata</td>
+      <td>Hybrid retriever per stage: BM25 + nomic-embed cosine + telemetry success-rate boost</td>
+    </tr>
+    <tr>
+      <td><strong>Master / dispatcher skill</strong></td>
+      <td><code>using-superpowers</code> &mdash; runs every conversation, under 2K tokens, routes to skills <span class="check">&check;</span></td>
+      <td>No equivalent &mdash; routing is per-stage by the retriever <span class="cross">&minus;</span></td>
+    </tr>
+    <tr>
+      <td><strong>TDD enforcement</strong></td>
+      <td><code>test-driven-development</code> skill enforces red/green/refactor; tests must fail before impl <span class="check">&check;</span></td>
+      <td>No dedicated TDD skill in shipped catalog <span class="cross">&minus;</span></td>
+    </tr>
+    <tr>
+      <td><strong>Systematic debugging</strong></td>
+      <td><code>systematic-debugging</code>: 4-phase root-cause methodology; architectural review trigger after 3 failed fixes <span class="check">&check;</span></td>
+      <td>No dedicated debugging methodology skill <span class="cross">&minus;</span></td>
+    </tr>
+    <tr>
+      <td><strong>Brainstorming / requirements</strong></td>
+      <td><code>brainstorming</code>: Socratic refinement, design sections for validation <span class="check">&check;</span></td>
+      <td>QUERY stage: clarifying questions before research <span class="partial">&deg;</span> (different mechanism)</td>
+    </tr>
+    <tr>
+      <td><strong>Plan writing</strong></td>
+      <td><code>writing-plans</code> skill &mdash; structured implementation plan <span class="check">&check;</span></td>
+      <td>PLAN stage produces <code>current-plan.md</code> with file:line operations <span class="check">&check;</span></td>
+    </tr>
+    <tr>
+      <td><strong>Plan review</strong></td>
+      <td>Code review post-implementation only <span class="partial">&deg;</span></td>
+      <td>P+ (plan-review) iterates the plan before BUILD; depth scales by complexity tier (1/2/3) <span class="check">&check;</span></td>
+    </tr>
+    <tr>
+      <td><strong>Plan execution</strong></td>
+      <td><code>executing-plans</code> with batched checkpoints <span class="check">&check;</span></td>
+      <td>BUILD stage; verification commands per plan <span class="check">&check;</span></td>
+    </tr>
+    <tr>
+      <td><strong>Code review</strong></td>
+      <td><code>requesting-code-review</code> + <code>receiving-code-review</code> + code-reviewer agent <span class="check">&check;</span></td>
+      <td>AUDIT stage: fresh-context agent reads build-claims, greps diff, verifies CHECK lines <span class="check">&check;</span></td>
+    </tr>
+    <tr>
+      <td><strong>Fresh-context per stage</strong></td>
+      <td>Subagent dispatch isolates implementation tokens <span class="check">&check;</span></td>
+      <td>Every stage spawns a clean Claude/Codex process <span class="check">&check;</span></td>
+    </tr>
+    <tr>
+      <td><strong>Subagent dispatch</strong></td>
+      <td><code>subagent-driven-development</code> + <code>dispatching-parallel-agents</code> <span class="check">&check;</span></td>
+      <td>Dual-model arena + per-stage agents; not user-invoked parallel <span class="partial">&deg;</span></td>
+    </tr>
+    <tr>
+      <td><strong>Git worktrees</strong></td>
+      <td><code>using-git-worktrees</code> &mdash; parallel tasks without clobbering <span class="check">&check;</span></td>
+      <td>Worktrees for dual-model arena and parallel agents <span class="check">&check;</span></td>
+    </tr>
+    <tr>
+      <td><strong>Auto-commit per task</strong></td>
+      <td><code>finishing-a-development-branch</code> skill assists, user-driven <span class="partial">&deg;</span></td>
+      <td>SHIP stage commits <code>feat()</code> or <code>WIP()</code> based on audit verdict <span class="check">&check;</span></td>
+    </tr>
+    <tr>
+      <td><strong>Task queue / multi-task</strong></td>
+      <td>No queue &mdash; one task per conversation <span class="cross">&minus;</span></td>
+      <td>TASKS.md queue with QRPBA progress indicators <span class="check">&check;</span></td>
+    </tr>
+    <tr>
+      <td><strong>Discovery / next-task</strong></td>
+      <td>Not present <span class="cross">&minus;</span></td>
+      <td>DISCOVER stage scans codebase, appends new tasks <span class="check">&check;</span></td>
+    </tr>
+    <tr>
+      <td><strong>Skill authoring</strong></td>
+      <td><code>writing-skills</code>: TDD applied to skill docs <span class="check">&check;</span></td>
+      <td>Pattern extractor writes SKILL.md after each task <span class="check">&check;</span></td>
+    </tr>
+    <tr>
+      <td><strong>Cross-tool reach</strong></td>
+      <td>Ships <code>.claude-plugin/</code>, <code>.codex-plugin/</code>, <code>.cursor-plugin/</code>, <code>.opencode/</code> &mdash; 7+ tools <span class="check">&check;</span></td>
+      <td>Cross-provider runtime (Claude/Codex/Copilot/local); reads external skill formats (AGENTS.md, .cursorrules, .github/copilot-instructions.md) <span class="check">&check;</span></td>
+    </tr>
+    <tr>
+      <td><strong>Vector embedding</strong></td>
+      <td>Not used &mdash; activation is via <code>when_to_use</code> semantic matching by the host model <span class="cross">&minus;</span></td>
+      <td>Local Ollama nomic-embed-text (137M params, 768-dim, ~50ms/call, on-device) <span class="check">&check;</span></td>
+    </tr>
+    <tr>
+      <td><strong>Telemetry / learn loop</strong></td>
+      <td>Behavioral pressure-tests to keep skills firing under load <span class="partial">&deg;</span></td>
+      <td>Citation scanner + SQLite sidecar: skills cited in passing builds gain rank; failures decay <span class="check">&check;</span></td>
+    </tr>
+    <tr>
+      <td><strong>Token economics</strong></td>
+      <td>"VERY token light" &mdash; master skill &lt;2K tokens; subagents absorb implementation cost <span class="check">&check;</span></td>
+      <td>Heavier per task (~$28 per [Complex] task on the May 2026 overnight run) but unattended <span class="partial">&deg;</span></td>
+    </tr>
+    <tr>
+      <td><strong>Live dashboard / TUI</strong></td>
+      <td>None; lives in the terminal Claude Code is running in <span class="cross">&minus;</span></td>
+      <td>Ratatui TUI with clickable AI summaries on every pane <span class="check">&check;</span></td>
+    </tr>
+    <tr>
+      <td><strong>Per-stage model routing</strong></td>
+      <td>One model per session <span class="cross">&minus;</span></td>
+      <td><code>stage_overrides</code> in <code>.foundry.json</code> &mdash; e.g. Claude on PLAN, Codex on BUILD <span class="check">&check;</span></td>
+    </tr>
+    <tr>
+      <td><strong>License</strong></td>
+      <td>MIT</td>
+      <td>MIT</td>
+    </tr>
+    <tr>
+      <td><strong>Install</strong></td>
+      <td><code>/plugin install superpowers@claude-plugins-official</code></td>
+      <td><code>cargo install foundry</code> / <code>npm i -g context-foundry</code> / brew / winget</td>
+    </tr>
+    <tr>
+      <td><strong>Adoption (May 2026)</strong></td>
+      <td>645,146 installs</td>
+      <td>v3.3.0 just shipped; significantly smaller install base</td>
+    </tr>
+  </table>
+</section>
+
+<section id="methodology">
+  <h2>Methodology coverage</h2>
+  <p>Superpowers' value prop is methodology: it teaches Claude how to <em>do</em> software development &mdash; brainstorming, TDD, debugging, code review &mdash; on every turn. Context Foundry's value prop is orchestration: it spends those tokens on running stages in the right order. They are unequally distributed across the same surface.</p>
+  <table>
+    <tr>
+      <th class="dim">Methodology</th>
+      <th class="sp">Superpowers</th>
+      <th class="cf">Context Foundry</th>
+      <th class="dim">Honest verdict</th>
+    </tr>
+    <tr>
+      <td>Brainstorming / clarify requirements</td>
+      <td>Socratic, multi-turn, design-doc style</td>
+      <td>QUERY stage writes clarifying questions to disk</td>
+      <td>Both cover this. Superpowers is more conversational; CF is more artifact-driven.</td>
+    </tr>
+    <tr>
+      <td>Plan writing</td>
+      <td><code>writing-plans</code> skill</td>
+      <td>PLAN + P+ stages with verification matrix</td>
+      <td>CF is more rigorous here &mdash; P+ rejects plans that don't grep against actual files.</td>
+    </tr>
+    <tr>
+      <td>TDD (red/green/refactor)</td>
+      <td><code>test-driven-development</code> &mdash; tests must fail before code</td>
+      <td>Not enforced as a discrete skill in the catalog</td>
+      <td><strong>Real gap in CF.</strong> A test-first skill would slot naturally into the BUILD stage.</td>
+    </tr>
+    <tr>
+      <td>Systematic debugging</td>
+      <td>4-phase: investigate root cause, pattern analysis, hypothesis test, implement; architectural review after 3 failed attempts</td>
+      <td>The AUDIT stage flags WIP() commits; no proactive debugging methodology</td>
+      <td><strong>Real gap in CF.</strong> Superpowers' debugging discipline is one of its sharpest contributions.</td>
+    </tr>
+    <tr>
+      <td>Code review</td>
+      <td><code>requesting-code-review</code> + <code>receiving-code-review</code> + code-reviewer agent</td>
+      <td>AUDIT stage with fresh-context agent verifying CHECK lines against the diff</td>
+      <td>Different rhythms. Superpowers' review is conversational; CF's is binary pass/fail driving <code>feat()</code> vs <code>WIP()</code>.</td>
+    </tr>
+    <tr>
+      <td>Worktree-based parallelism</td>
+      <td><code>using-git-worktrees</code> &mdash; user-invoked branching for parallel tasks</td>
+      <td>Dual-model arena uses worktrees for A/B model comparison</td>
+      <td>Both lean on worktrees. Different use cases &mdash; parallel tasks (SP) vs parallel models on one task (CF).</td>
+    </tr>
+    <tr>
+      <td>Skill authoring</td>
+      <td><code>writing-skills</code> &mdash; behavioral pressure-tests for skill docs</td>
+      <td>Pattern extractor agent writes SKILL.md from task artifacts</td>
+      <td>Different angles. Superpowers teaches authoring discipline; CF auto-extracts from completed work.</td>
+    </tr>
+    <tr>
+      <td>Multi-task queue + autonomy</td>
+      <td>Not in scope &mdash; one task per session</td>
+      <td>Full TASKS.md pipeline running unattended overnight</td>
+      <td><strong>Real gap in Superpowers</strong> &mdash; but it is by design. Superpowers is a methodology, not an orchestrator.</td>
+    </tr>
+    <tr>
+      <td>Per-task verdict + auto-commit</td>
+      <td>User commits at end of session</td>
+      <td>SHIP stage emits <code>feat()</code> or <code>WIP()</code> per task based on AUDIT</td>
+      <td><strong>Real gap in Superpowers</strong> by the same logic &mdash; no autonomous git surface.</td>
+    </tr>
+    <tr>
+      <td>Cross-run learning</td>
+      <td>No mechanism &mdash; skills are static</td>
+      <td>Citation telemetry; skills cited in passing builds gain rank for next task</td>
+      <td><strong>Real gap in Superpowers.</strong> A static skill library doesn't get better the more you use it.</td>
+    </tr>
+  </table>
+</section>
+
+<section id="skills-deep-dive">
+  <h2>Skill system &mdash; the deep dive</h2>
+  <p>Both projects build on Anthropic's Agent Skills specification (<code>SKILL.md</code> with YAML frontmatter, progressive disclosure, name + description as the activation key). The interesting differences are in <em>how</em> the skills are ranked and surfaced.</p>
+
+  <h3>Superpowers: dispatcher + when_to_use semantics</h3>
+  <p>One master skill, <code>using-superpowers</code>, loads on every conversation. It is under 2K tokens. It reads the user's request and decides which of the 14 skills to invoke. Activation is via the host model's own pattern-matching against each skill's <code>when_to_use</code> metadata. There is no retriever and no vector store &mdash; the orchestration logic lives in the dispatcher's prose. From Simon Willison's writeup:</p>
+  <blockquote>
+    <p>"VERY token light&hellip; one doc of fewer than 2k tokens. It uses subagents to manage token-heavy stuff, including all the actual implementation. As it needs bits of the process, it runs a shell script to search for them."</p>
+    <cite>&mdash; Simon Willison on Superpowers</cite>
+  </blockquote>
+  <p>The catalog is small and curated: 14 skills, each manually authored, covering methodology rather than domain knowledge.</p>
+
+  <h3>Context Foundry: hybrid retriever + per-stage filter</h3>
+  <p>271 skills shipped by default. Per stage per task, a three-signal retriever ranks every candidate:</p>
+  <ul>
+    <li><strong>BM25</strong> &mdash; sparse keyword match against the task description.</li>
+    <li><strong>Cosine similarity</strong> &mdash; dense match via <a href="https://ollama.com/library/nomic-embed-text">nomic-embed-text</a> running on a local Ollama process. 137M parameters, 768-dim vectors, ~50ms per call, cached to disk. Embedding stays on the machine.</li>
+    <li><strong>Telemetry boost</strong> &mdash; success-rate weighting from the citation scanner: skills cited in <code>feat()</code> commits rank higher than those cited in <code>WIP()</code> commits.</li>
+  </ul>
+  <p>The top N (default 10, tunable) get injected into that stage's prompt. The retriever runs for every stage (QUERY, RESEARCH, PLAN, P+, BUILD, AUDIT, SHIP, DISCOVER, SKILLS), filtered softly by the <code>cf-stage</code> hint in each skill's metadata.</p>
+
+  <h3>Where they meet</h3>
+  <p>Both treat the skill body as the unit of progressive disclosure. Both keep the catalog separate from the activation logic. Both use Anthropic's spec so the on-disk content is portable between tools. Critically: <strong>a Superpowers skill could be dropped into <code>~/.foundry/skills/</code> and the Context Foundry retriever would pick it up</strong> for any stage where its description matched. The portability is real, not theoretical.</p>
+</section>
+
+<section id="economics">
+  <h2>Token economics</h2>
+  <p>Both projects make different bets about how to spend tokens.</p>
+
+  <div class="vs-hero">
+    <div class="vs-card sp">
+      <h3>Superpowers</h3>
+      <p class="one-liner"><strong>Bet:</strong> minimize the methodology overhead per turn so the user-facing budget is mostly implementation.</p>
+      <p class="one-liner"><strong>Mechanism:</strong> master skill is &lt;2K tokens; subagents take the implementation cost; skills load on demand via runtime search.</p>
+      <p class="one-liner"><strong>Implication:</strong> works inside any Claude Code session without changing your billing pattern materially.</p>
+    </div>
+    <div class="vs-card cf">
+      <h3>Context Foundry</h3>
+      <p class="one-liner"><strong>Bet:</strong> spend whatever a queue takes overnight, because the alternative is paying a human to babysit the run.</p>
+      <p class="one-liner"><strong>Mechanism:</strong> 9 stages per task, each a fresh-context agent invocation; ~$28 average per [Complex] task on the May 2026 overnight run.</p>
+      <p class="one-liner"><strong>Implication:</strong> per-task cost is visibly higher, but the time the user spends is approximately zero between invocation and the morning's commits.</p>
+    </div>
+  </div>
+
+  <p>This is not a fair fight on raw tokens, and it shouldn't be. Superpowers is optimizing for the unit "how much extra do I pay to get methodology added to a session I was going to have anyway?" Context Foundry is optimizing for "how much do I pay to skip the session entirely?"</p>
+</section>
+
+<section id="cross-tool">
+  <h2>Cross-tool reach</h2>
+  <p>Both ship beyond a single vendor, but in different ways.</p>
+  <table>
+    <tr>
+      <th class="dim">Aspect</th>
+      <th class="sp">Superpowers</th>
+      <th class="cf">Context Foundry</th>
+    </tr>
+    <tr>
+      <td>Where the skills live</td>
+      <td>Ships per-tool wrapper dirs: <code>.claude-plugin/</code>, <code>.codex-plugin/</code>, <code>.cursor-plugin/</code>, <code>.opencode/</code>, <code>.codex-app/</code>, plus Factory Droid, Gemini CLI, GitHub Copilot CLI integrations</td>
+      <td>Skills live in <code>~/.foundry/skills/</code> and <code>plugins/&lt;name&gt;/skills/</code>. The tools are invoked <em>by</em> Foundry, not the other way around</td>
+    </tr>
+    <tr>
+      <td>Reads external skill formats</td>
+      <td>Authors its own format and pushes it cross-tool</td>
+      <td>Discovers <code>AGENTS.md</code> (Linux Foundation standard), <code>.cursorrules</code>, <code>.claude/skills/&lt;topic&gt;/SKILL.md</code>, <code>.github/copilot-instructions.md</code> &mdash; with per-source opt-in on the startup screen</td>
+    </tr>
+    <tr>
+      <td>Direction of integration</td>
+      <td>"My skills should work in your tool"</td>
+      <td>"My pipeline can call your tool, and read your skills"</td>
+    </tr>
+    <tr>
+      <td>Per-stage model routing</td>
+      <td>One model per session</td>
+      <td>Different model per pipeline stage via <code>stage_overrides</code> &mdash; e.g. Claude Opus on PLAN, Codex on BUILD, local model on DISCOVER</td>
+    </tr>
+  </table>
+</section>
+
+<section id="combined">
+  <h2>What happens if you run both?</h2>
+  <p>This is the most interesting scenario and the one that argues hardest against treating them as competitors.</p>
+
+  <div class="callout sp">
+    <div class="label">Hypothesis</div>
+    <p>Context Foundry's BUILD and AUDIT stages spawn Claude Code processes. If the user has installed Superpowers, those spawned processes inherit Superpowers' master skill and all 14 of its methodology skills. Foundry's pipeline gets TDD discipline, four-phase debugging, and the code-reviewer agent for free.</p>
+  </div>
+
+  <p>Two specific gaps in Context Foundry's catalog &mdash; explicit TDD enforcement and a systematic debugging methodology &mdash; are exactly where Superpowers is strongest. A user running Foundry on a TDD-shaped codebase, with Superpowers installed in their global Claude Code config, would get something closer to the union of both projects' strengths than either alone:</p>
+  <ul>
+    <li>Foundry handles the queue, the artifact discipline, the multi-stage fresh-context rhythm, and the citation feedback loop.</li>
+    <li>Superpowers handles, inside each BUILD invocation, the red/green/refactor TDD cycle and the root-cause-first debugging pass.</li>
+    <li>Foundry's hybrid retriever can <em>also</em> rank Superpowers' skills if they're symlinked into <code>~/.foundry/skills/</code> &mdash; same SKILL.md format.</li>
+  </ul>
+  <p>This is the practical answer to "which should I install?" Both, if your workflow has room for them. Treat the layer diagram at the top as the seating chart: they sit in different chairs.</p>
+</section>
+
+<section id="honest-gaps-cf">
+  <h2>Honest gaps in Context Foundry (that Superpowers fills)</h2>
+  <div class="callout">
+    <div class="label">Where Superpowers is sharper</div>
+    <p>1. <strong>No dedicated TDD skill in the shipped 271.</strong> The catalog has many "test failure" pitfalls but no "tests must fail before implementation" enforcement skill. Adding one would slot naturally into BUILD via the <code>cf-stage: build</code> hint.</p>
+    <p>2. <strong>No four-phase debugging methodology.</strong> AUDIT catches failures post-hoc; Superpowers' <code>systematic-debugging</code> drives the agent to investigate root cause before patching. CF would benefit from a sibling AUDIT-time skill that scans for symptom-treating fixes.</p>
+    <p>3. <strong>No subagent dispatch from within a stage.</strong> Foundry's stages are themselves the subagents; there's no idiom for a stage to fan out further. Superpowers' <code>dispatching-parallel-agents</code> covers a use case (e.g. "review four files in parallel") that Foundry doesn't have a primitive for.</p>
+    <p>4. <strong>No conversational brainstorming.</strong> QUERY writes questions to disk; it does not maintain a Socratic dialogue with the user. For ill-specified tasks, Superpowers' multi-turn brainstorming may produce a better starting plan.</p>
+    <p>5. <strong>No skill-author discipline.</strong> The pattern extractor writes SKILL.md mechanically; Superpowers' <code>writing-skills</code> applies TDD principles to the skill itself, including behavioral pressure-tests.</p>
+  </div>
+</section>
+
+<section id="honest-gaps-sp">
+  <h2>Honest gaps in Superpowers (that Context Foundry fills)</h2>
+  <div class="callout sp">
+    <div class="label">Where Context Foundry is sharper</div>
+    <p>1. <strong>No autonomy.</strong> Superpowers is bound to the rhythm of a human turn. It cannot run overnight against a queue. This is by design &mdash; it is a methodology layer, not an orchestrator &mdash; but it means "ship 10 tasks while I sleep" is not in scope.</p>
+    <p>2. <strong>No queue, no DISCOVER stage, no auto-commit verdict.</strong> Each session ends when the user closes it. There is no equivalent to TASKS.md, no <code>QRPBA</code> progress indicators, and no programmatic <code>feat()</code> vs <code>WIP()</code> decision based on a fresh-context audit.</p>
+    <p>3. <strong>No retriever.</strong> Skill activation relies on the host model's own pattern-matching against <code>when_to_use</code>. This is elegant at 14 skills and probably saturates at a few dozen; it would not scale to a 271-skill catalog. Foundry's BM25 + dense + telemetry combination is the answer to "what happens when the catalog grows to hundreds of skills?"</p>
+    <p>4. <strong>No telemetry feedback loop.</strong> Skills don't learn from outcomes. A skill that fires every conversation but never contributes to a passing build will keep firing forever. Foundry's citation scanner is the closed-loop version of the same idea.</p>
+    <p>5. <strong>No per-stage model routing.</strong> Superpowers runs against whatever model the host CLI uses. Foundry's <code>stage_overrides</code> mean a project can put Claude Opus on PLAN, Codex on BUILD, and a local model on DISCOVER &mdash; routing by what each model is best at.</p>
+    <p>6. <strong>No live dashboard.</strong> Output is whatever the host terminal shows. Foundry's TUI surfaces pipeline state, AI summaries on every pane, hover tooltips, click-through to artifacts &mdash; the user can watch an autonomous run without reading the raw log.</p>
+  </div>
+</section>
+
+<section id="decision">
+  <h2>When to use which</h2>
+  <div class="decision-grid">
+    <div class="decision-card sp">
+      <h4>Reach for Superpowers when&hellip;</h4>
+      <ul>
+        <li>You're at the keyboard, in a Claude Code session, working on one task at a time.</li>
+        <li>You want methodology discipline (TDD, root-cause debugging, plan-first) without changing how you launch Claude.</li>
+        <li>The bottleneck is the quality of one session, not throughput across many sessions.</li>
+        <li>You want a small, curated, hand-authored skill set, not a hundreds-deep catalog.</li>
+        <li>You're using a tool that isn't Claude Code (Cursor, Codex, Copilot, OpenCode) but you still want the methodology.</li>
+        <li>You're new to disciplined AI-collaboration and want a learning path baked into the workflow.</li>
+      </ul>
+    </div>
+    <div class="decision-card cf">
+      <h4>Reach for Context Foundry when&hellip;</h4>
+      <ul>
+        <li>You want to leave a queue running unattended &mdash; overnight, while you're in meetings, while you sleep.</li>
+        <li>The work decomposes into 5+ tasks that can each be specified at the <code>TASKS.md</code> level.</li>
+        <li>You need a fresh-context audit gate before commits hit your tree.</li>
+        <li>You want learning to compound across runs &mdash; skills cited in passing builds gaining rank for next time.</li>
+        <li>You want per-stage model routing (cheap models for cheap stages, frontier models for hard stages).</li>
+        <li>You want a TUI you can glance at to see where the pipeline is.</li>
+        <li>You're running models locally and want the embedding step to stay on the laptop.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="closing">
+  <h2>Closing</h2>
+  <p>The dominant framing on AI coding tools right now is competitive: which plugin is best, which agent wins, which framework will beat which. That framing is wrong for these two projects. Superpowers and Context Foundry sit at different layers of the same stack, both build on Anthropic's Skills format, both treat fresh-context discipline as load-bearing, and both ship under MIT.</p>
+  <p>The interesting comparison is not <em>which one</em> but <em>which combination</em>. The honest answer is that Context Foundry is stronger at orchestration and weaker at methodology; Superpowers is the inverse. If your workflow has room for both, run both. If it doesn't, the layer diagram at the top of this page tells you where each one fits.</p>
+  <p>Two projects, same skill format, complementary scope. The Anthropic Skills format being shared between them is not a coincidence &mdash; it's what makes the seating chart legible. That portability is itself the most important thing in this comparison.</p>
+</section>
+
+<section id="sources">
+  <h2>Sources</h2>
+  <ul style="font-size: 0.78rem; line-height: 1.65;">
+    <li><a href="https://claude.com/plugins/superpowers">Superpowers plugin listing &mdash; Anthropic</a></li>
+    <li><a href="https://github.com/obra/superpowers">obra/superpowers on GitHub</a> (skills, README, plugin.json)</li>
+    <li><a href="https://blog.fsck.com/2025/10/09/superpowers/">Jesse Vincent &mdash; "Superpowers: How I'm using coding agents in October 2025"</a></li>
+    <li><a href="https://simonwillison.net/2025/Oct/10/superpowers/">Simon Willison &mdash; "Superpowers" notes</a></li>
+    <li><a href="https://agentskills.io/specification">Anthropic Agent Skills specification</a></li>
+    <li><a href="may-2026.html">An Evolving Harness &mdash; Context Foundry v3.2.0 retrospective</a> (the May article)</li>
+    <li><a href="skills-and-plugins.html">Skills and Plugins &mdash; Context Foundry's skill catalog</a></li>
+    <li>Context Foundry source: <a href="https://github.com/context-foundry/context-foundry">github.com/context-foundry/context-foundry</a> (v3.3.0)</li>
+  </ul>
+</section>
+
+<footer>
+  Context Foundry &middot; May 2026 &middot;
+  This comparison was researched against the live Superpowers v5.1.0 plugin documentation and source. Facts about Superpowers are quoted or paraphrased from those sources; the gap analysis in both directions is the author's own assessment, not Jesse Vincent's. Errors are the author's. &middot;
+  <a href="https://github.com/context-foundry/context-foundry">GitHub</a> &middot;
+  <a href="index.html">Back to index</a>
+</footer>
+
+</body>
+</html>
