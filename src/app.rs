@@ -518,6 +518,33 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
         });
     }
 
+    // Eager pre-warm of the global skill embedding cache. Without this, a
+    // skill freshly dropped into ~/.foundry/skills/ that lacks cf-keywords
+    // scores 0 on the keyword path AND has no cached embedding, so it cannot
+    // be picked even on its first relevant task. Runs in the background after
+    // a short delay so TUI rendering is not blocked.
+    if config.semantic_match_enabled {
+        let model = config.embedding_model.clone();
+        let timeout_ms = config.embedding_timeout_ms;
+        let ollama_url = config.ollama_url.clone();
+        tokio::spawn(async move {
+            // Wait a moment so initial TUI paint settles before we hit Ollama.
+            tokio::time::sleep(Duration::from_secs(2)).await;
+            let patterns = crate::patterns::load_patterns_from_global();
+            if patterns.is_empty() {
+                return;
+            }
+            let result = crate::embeddings::prewarm_pattern_cache(
+                &patterns, &model, timeout_ms, &ollama_url,
+            )
+            .await;
+            eprintln!(
+                "info: skill embedding pre-warm {} ({} already cached, {} newly embedded, {}ms)",
+                result.mode, result.already_cached, result.newly_embedded, result.elapsed_ms
+            );
+        });
+    }
+
     // Spawn keyboard reader (keep handle so we can abort it for external editors)
     let mut terminal_reader_handle = spawn_terminal_event_reader(event_tx.clone());
 

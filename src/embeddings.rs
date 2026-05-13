@@ -261,6 +261,121 @@ fn save_cache(cache: &EmbeddingCache, current_patterns: &[Pattern]) {
     save_cache_to(&cache_path(), cache, current_patterns);
 }
 
+// ─── Eager Pre-Warm ──────────────────────────────────────────
+
+/// Result of a pre-warm pass over the skill catalog.
+pub struct PrewarmResult {
+    pub mode: &'static str, // "warmed", "already-warm", "skipped-unavailable", "ollama-failed"
+    pub already_cached: usize,
+    pub newly_embedded: usize,
+    pub elapsed_ms: u128,
+}
+
+/// Eagerly embed every pattern in the catalog so the cache is populated before
+/// any retrieval call. This closes the gap where a freshly-installed skill
+/// without `cf-keywords` is invisible to the retriever until its first
+/// stage-time embedding pass — which itself depended on Ollama being available
+/// at exactly the right moment.
+///
+/// Designed to be called once at app launch, in a background `tokio::spawn`,
+/// so the TUI renders immediately and the embedding work happens in parallel.
+/// Returns quickly when Ollama is unavailable; the keyword-synthesis fallback
+/// on `skill_to_pattern` keeps the retriever functional in that case.
+pub async fn prewarm_pattern_cache(
+    patterns: &[Pattern],
+    model: &str,
+    timeout_ms: u64,
+    ollama_url: &str,
+) -> PrewarmResult {
+    let started = std::time::Instant::now();
+
+    if patterns.is_empty() {
+        return PrewarmResult {
+            mode: "warmed",
+            already_cached: 0,
+            newly_embedded: 0,
+            elapsed_ms: started.elapsed().as_millis(),
+        };
+    }
+
+    if !is_available() {
+        return PrewarmResult {
+            mode: "skipped-unavailable",
+            already_cached: 0,
+            newly_embedded: 0,
+            elapsed_ms: started.elapsed().as_millis(),
+        };
+    }
+
+    let mut cache = load_cache();
+    if cache.schema_version != CACHE_SCHEMA_VERSION {
+        cache = EmbeddingCache {
+            schema_version: CACHE_SCHEMA_VERSION,
+            entries: HashMap::new(),
+        };
+    }
+
+    let mut to_embed: Vec<(usize, String, String)> = Vec::new(); // (idx, text, cache_key)
+    let mut already_cached = 0usize;
+
+    for (i, pattern) in patterns.iter().enumerate() {
+        let text = pattern_embedding_text(pattern);
+        let hash = content_hash(&text);
+        let cache_key = format!("{}:{}", model, hash);
+        if let Some(entry) = cache.entries.get(&cache_key) {
+            if entry.model == model && entry.content_hash == hash {
+                already_cached += 1;
+                continue;
+            }
+        }
+        to_embed.push((i, text, cache_key));
+    }
+
+    if to_embed.is_empty() {
+        return PrewarmResult {
+            mode: "already-warm",
+            already_cached,
+            newly_embedded: 0,
+            elapsed_ms: started.elapsed().as_millis(),
+        };
+    }
+
+    let texts: Vec<String> = to_embed.iter().map(|(_, t, _)| t.clone()).collect();
+    match embed_batch(&texts, model, timeout_ms, ollama_url).await {
+        Ok(embeddings) => {
+            let count = embeddings.len().min(to_embed.len());
+            for ((_, text, cache_key), embedding) in to_embed.iter().take(count).zip(embeddings.iter()) {
+                let normalized = normalize(embedding);
+                let hash = content_hash(text);
+                cache.entries.insert(
+                    cache_key.clone(),
+                    CacheEntry {
+                        model: model.to_string(),
+                        content_hash: hash,
+                        embedding: normalized,
+                    },
+                );
+            }
+            save_cache(&cache, patterns);
+            PrewarmResult {
+                mode: "warmed",
+                already_cached,
+                newly_embedded: count,
+                elapsed_ms: started.elapsed().as_millis(),
+            }
+        }
+        Err(_) => {
+            mark_failed();
+            PrewarmResult {
+                mode: "ollama-failed",
+                already_cached,
+                newly_embedded: 0,
+                elapsed_ms: started.elapsed().as_millis(),
+            }
+        }
+    }
+}
+
 // ─── Semantic Matcher ────────────────────────────────────────
 
 pub struct SemanticMatchResult {

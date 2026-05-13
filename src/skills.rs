@@ -126,6 +126,12 @@ pub fn skill_to_pattern(s: SkillFile) -> Pattern {
         s.frontmatter.name.clone()
     };
 
+    let keywords = if s.frontmatter.cf_keywords.is_empty() {
+        synthesize_keywords(&pattern_id, &s.frontmatter.description)
+    } else {
+        s.frontmatter.cf_keywords.clone()
+    };
+
     Pattern {
         pattern_id,
         title: s.frontmatter.description.clone(),
@@ -133,7 +139,7 @@ pub fn skill_to_pattern(s: SkillFile) -> Pattern {
         last_seen: String::new(),
         frequency: s.frontmatter.cf_frequency,
         severity: s.frontmatter.cf_severity.clone(),
-        keywords: s.frontmatter.cf_keywords.clone(),
+        keywords,
         tech_stack: Vec::new(),
         issue: extract_issue_from_body(&s.body),
         solution: Some(PatternSolution { planner, reviewer }),
@@ -147,6 +153,66 @@ pub fn skill_to_pattern(s: SkillFile) -> Pattern {
         cited_in_wip: s.frontmatter.cf_citations_wip,
         cited_by_stage: std::collections::HashMap::new(),
     }
+}
+
+/// Generate fallback keywords when a SKILL.md omits the `metadata.cf-keywords`
+/// block. Without explicit keywords, the BM25 path scores 0; combined with a
+/// cold embedding cache or an unavailable Ollama, the skill becomes invisible
+/// to the retriever. Synthesizing from the pattern_id (kebab-case) and the
+/// description gives the keyword path a baseline signal.
+///
+/// Source order: `pattern_id` tokens (kebab-split) + description content words
+/// (filtered against stopwords). Lowercased. Deduplicated. Capped at 24 tokens
+/// to keep the BM25 vocabulary bounded.
+pub fn synthesize_keywords(pattern_id: &str, description: &str) -> Vec<String> {
+    const STOPWORDS: &[&str] = &[
+        "the", "a", "an", "and", "or", "but", "if", "is", "are", "was", "were",
+        "be", "been", "being", "use", "uses", "used", "using", "when", "where",
+        "what", "which", "who", "whom", "this", "that", "these", "those", "of",
+        "on", "in", "at", "to", "for", "with", "without", "any", "all", "you",
+        "must", "should", "before", "after", "from", "by", "into", "as", "it",
+        "its", "your", "yours", "we", "our", "us", "i", "they", "their", "them",
+        "do", "does", "did", "have", "has", "had", "can", "could", "will",
+        "would", "may", "might", "etc",
+    ];
+
+    let mut out: Vec<String> = Vec::with_capacity(24);
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut push = |token: String, out: &mut Vec<String>, seen: &mut std::collections::HashSet<String>| {
+        if token.len() < 3 || STOPWORDS.contains(&token.as_str()) {
+            return;
+        }
+        if seen.insert(token.clone()) {
+            out.push(token);
+        }
+    };
+
+    // 1. pattern_id tokens (kebab-split)
+    for tok in pattern_id.split('-') {
+        push(tok.to_lowercase(), &mut out, &mut seen);
+    }
+
+    // 2. description content words: lowercase alphanum + apostrophe runs, drop short/stopwords
+    let mut buf = String::new();
+    let flush = |buf: &mut String, out: &mut Vec<String>, seen: &mut std::collections::HashSet<String>| {
+        if !buf.is_empty() {
+            let token = std::mem::take(buf);
+            push(token, out, seen);
+        }
+    };
+    for ch in description.chars() {
+        if ch.is_ascii_alphanumeric() || ch == '\'' {
+            buf.extend(ch.to_lowercase());
+        } else {
+            flush(&mut buf, &mut out, &mut seen);
+        }
+        if out.len() >= 24 {
+            break;
+        }
+    }
+    flush(&mut buf, &mut out, &mut seen);
+
+    out
 }
 
 /// Synthesize a `SkillFile` from an externally-discovered skill (AGENTS.md,
@@ -1617,5 +1683,46 @@ mod tests {
             "expected citation instruction footer, got: {}",
             out
         );
+    }
+}
+
+#[cfg(test)]
+mod synthesize_keywords_tests {
+    use super::synthesize_keywords;
+
+    #[test]
+    fn synthesizes_from_kebab_name_and_description() {
+        let kw = synthesize_keywords(
+            "test-driven-development",
+            "Use when implementing any feature or bugfix, before writing implementation code",
+        );
+        // name tokens
+        assert!(kw.contains(&"test".to_string()));
+        assert!(kw.contains(&"driven".to_string()));
+        assert!(kw.contains(&"development".to_string()));
+        // description content words (stopwords filtered)
+        assert!(kw.contains(&"implementing".to_string()));
+        assert!(kw.contains(&"feature".to_string()));
+        assert!(kw.contains(&"bugfix".to_string()));
+        // stopwords excluded
+        assert!(!kw.contains(&"use".to_string()));
+        assert!(!kw.contains(&"any".to_string()));
+        assert!(!kw.contains(&"the".to_string()));
+        assert!(!kw.contains(&"or".to_string()));
+        // dedupe
+        let dups: std::collections::HashSet<_> = kw.iter().collect();
+        assert_eq!(dups.len(), kw.len());
+    }
+
+    #[test]
+    fn handles_empty_inputs() {
+        assert_eq!(synthesize_keywords("", "").len(), 0);
+    }
+
+    #[test]
+    fn caps_at_24_tokens() {
+        let long = "alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november oscar papa quebec romeo sierra tango uniform victor whiskey xray yankee zulu";
+        let kw = synthesize_keywords("an-id", long);
+        assert!(kw.len() <= 24);
     }
 }

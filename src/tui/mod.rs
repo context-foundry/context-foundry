@@ -189,7 +189,7 @@ pub fn render(frame: &mut Frame, state: &AppState, config: &Config) {
         .split(frame.area());
 
     running::render_header(frame, chunks[0], state);
-    pipeline::render_pipeline_map(frame, chunks[1], state, config);
+    pipeline::render_pipeline_map(frame, chunks[1], state, config, false);
 
     // Middle: split horizontally per user-adjustable split percentage
     let left_pct = state.agent_pane_split.clamp(20, 80);
@@ -347,7 +347,7 @@ pub fn render_running_explorer(frame: &mut Frame, state: &AppState, config: &Con
         .split(frame.area());
 
     running::render_header(frame, chunks[0], state);
-    pipeline::render_pipeline_map(frame, chunks[1], state, config);
+    pipeline::render_pipeline_map(frame, chunks[1], state, config, false);
 
     // Middle: explorer + preview (same as startup layout)
     let middle_cols = Layout::default()

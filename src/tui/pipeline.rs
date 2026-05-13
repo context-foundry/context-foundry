@@ -444,7 +444,7 @@ mod tests {
         let backend = TestBackend::new(220, 12);
         let mut terminal = Terminal::new(backend).expect("failed to create terminal");
         terminal
-            .draw(|frame| render_pipeline_map(frame, frame.area(), state, config))
+            .draw(|frame| render_pipeline_map(frame, frame.area(), state, config, false))
             .expect("failed to draw pipeline");
 
         let buffer = terminal.backend().buffer();
@@ -543,7 +543,7 @@ mod tests {
         let backend = TestBackend::new(220, 12);
         let mut terminal = Terminal::new(backend).expect("failed to create terminal");
         terminal
-            .draw(|frame| render_pipeline_map(frame, frame.area(), &state, &config))
+            .draw(|frame| render_pipeline_map(frame, frame.area(), &state, &config, false))
             .expect("failed to draw pipeline");
 
         let buffer = terminal.backend().buffer();
