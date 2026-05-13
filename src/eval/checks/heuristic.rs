@@ -118,7 +118,7 @@ fn missing_decomposition_requirements(section: &str) -> Vec<&'static str> {
     missing
 }
 
-fn extract_file_paths_from_research(text: &str) -> Vec<String> {
+pub(crate) fn extract_file_paths_from_research(text: &str) -> Vec<String> {
     let mut set = std::collections::BTreeSet::new();
     // Backtick-quoted file references: `app/main.py`, `Cargo.toml`.
     // Extension must be alphabetical (1-8 chars) -- this rejects numeric
@@ -150,6 +150,18 @@ fn extract_file_paths_from_research(text: &str) -> Vec<String> {
         }
     }
     set.into_iter().collect()
+}
+
+/// Return the set of file paths cited in `research-report.md` that do NOT
+/// appear as substrings of `current-plan.md`. The output ordering matches
+/// `extract_file_paths_from_research` (alphabetical via BTreeSet).
+pub(crate) fn compute_missing_research_paths(research: &str, plan: &str) -> Vec<String> {
+    let files = extract_file_paths_from_research(research);
+    files
+        .iter()
+        .filter(|f| !plan.contains(f.as_str()))
+        .cloned()
+        .collect()
 }
 
 /// Reject path-shaped strings that are actually URL components, e.g.
@@ -603,11 +615,7 @@ impl Check for PlanCoversResearchFiles {
                 });
                 continue;
             }
-            let missing: Vec<String> = files
-                .iter()
-                .filter(|f| !plan.contains(f.as_str()))
-                .cloned()
-                .collect();
+            let missing = compute_missing_research_paths(&research, &plan);
             let total = files.len();
             let matched = total - missing.len();
             // Plans for incremental tasks legitimately don't enumerate every

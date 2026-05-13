@@ -811,6 +811,11 @@ fn spawn_lookahead_planner(
             &ctx.spec_file_prompt_path(),
             &ctx.tasks_file_prompt_path(),
             &plan_file,
+            // T1.42: lookahead planner runs for a FUTURE task; the sidecar
+            // semantically targets the CURRENT task's next attempt and is
+            // already consumed/deleted at task start in process_task. Always
+            // pass None here. Tracked as a KNOWN_GAP for a future iteration.
+            None,
         );
         // Lookahead planner writes plans, not code -- skip plugin context.
 
@@ -3268,6 +3273,22 @@ async fn process_task(
     // path via finalize_run().
     ctx.manifest.reset_to(task_id, chrono::Utc::now());
 
+    // T1.42: read-once-and-discard the plan-review-feedback sidecar at the
+    // task boundary. The sidecar is written when a PRIOR task's P+ cap fires;
+    // the current task's primary planner gets one shot at consuming it. Any
+    // task that does not run the primary planner (skip_planner, la_plan_used)
+    // simply drops the feedback -- the sidecar file MUST NOT leak across more
+    // than one task boundary even if the planner is skipped.
+    let previous_attempt_feedback_for_task: Option<String> =
+        read_previous_attempt_feedback_block(&ctx.buildloop_dir);
+    let _ = std::fs::remove_file(ctx.buildloop_dir.join("plan-review-feedback.json"));
+    if previous_attempt_feedback_for_task.is_some() {
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+            "Planner: previous-attempt feedback sidecar consumed for {} (will inject if primary planner runs)",
+            task_id
+        ))));
+    }
+
     let mut stage_results: Vec<StageResult> = Vec::new();
     let mut budget_telemetry = budget::BudgetTelemetry {
         task_id: task_id.to_string(),
@@ -4786,7 +4807,14 @@ async fn process_task(
                 &pattern_context,
                 &ctx.spec_file_prompt_path(),
                 &ctx.tasks_file_prompt_path(),
+                previous_attempt_feedback_for_task.as_deref(),
             );
+            if previous_attempt_feedback_for_task.is_some() {
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                    "Planner: injecting previous-attempt feedback block for {} (from plan-review-feedback.json sidecar)",
+                    task_id
+                ))));
+            }
             // Inject build history into planner for cross-session recall
             let history_dir = crate::history::resolve_history_dir(&ctx.config.history_dir);
             let history_records = crate::history::search_history(
@@ -5135,6 +5163,7 @@ async fn process_task(
                 &pattern_context,
                 &ctx.spec_file_prompt_path(),
                 &ctx.tasks_file_prompt_path(),
+                previous_attempt_feedback_for_task.as_deref(),
             );
             // Re-inject build history into retry prompt
             let retry_history_dir = crate::history::resolve_history_dir(&ctx.config.history_dir);
@@ -5549,6 +5578,48 @@ async fn process_task(
                                 String::new()
                             }
                         };
+                        // T1.42: persist a structured sidecar so the NEXT task's
+                        // primary planner can prepend a feedback block surfacing
+                        // the missing-path set, top unresolved findings, and any
+                        // explicit constraints P+ added. Best-effort -- a write
+                        // failure logs and continues; the planner degrades to
+                        // today's behaviour without a sidecar.
+                        let research_text = std::fs::read_to_string(
+                            ctx.buildloop_dir.join("research-report.md"),
+                        )
+                        .unwrap_or_default();
+                        let plan_text_for_sidecar =
+                            std::fs::read_to_string(&ctx.current_plan).unwrap_or_default();
+                        let missing_research_paths =
+                            crate::eval::checks::heuristic::compute_missing_research_paths(
+                                &research_text,
+                                &plan_text_for_sidecar,
+                            );
+                        let new_constraints = extract_new_constraints_from_findings(
+                            &outcome.unresolved_findings,
+                        );
+                        let sidecar = PlanReviewFeedbackSidecar {
+                            task_id: task_id.to_string(),
+                            generated_at: chrono::Utc::now().to_rfc3339(),
+                            cycles_used,
+                            cycles_cap,
+                            missing_research_paths,
+                            unresolved_findings: outcome.unresolved_findings.clone(),
+                            new_constraints,
+                        };
+                        if let Err(e) =
+                            write_plan_review_feedback_sidecar(&ctx.buildloop_dir, &sidecar)
+                        {
+                            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                                "P+ cap hit: failed to write plan-review-feedback.json sidecar: {}",
+                                e
+                            ))));
+                        } else {
+                            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
+                                "P+ cap hit: wrote plan-review-feedback.json sidecar for next planner attempt"
+                                    .to_string(),
+                            )));
+                        }
                         observatory::log_event(
                             &ctx.session_id,
                             &ctx.project_dir,
@@ -7565,6 +7636,108 @@ fn prune_history(
             ))));
         }
     }
+}
+
+/// Structured sidecar persisted to `.buildloop/plan-review-feedback.json` when
+/// the P+ cap fires. Read by the NEXT task's primary planner so attempt N+1
+/// surfaces the same blind spots that tripped attempt N. Written via
+/// `atomic_write_file` (tmp + rename). Reader returns `None` on missing or
+/// malformed JSON so the planner degrades gracefully to today's behaviour.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub(crate) struct PlanReviewFeedbackSidecar {
+    pub task_id: String,
+    pub generated_at: String,
+    pub cycles_used: usize,
+    pub cycles_cap: usize,
+    pub missing_research_paths: Vec<String>,
+    pub unresolved_findings: Vec<crate::orchestrator::Finding>,
+    pub new_constraints: Vec<String>,
+}
+
+/// Serialize `sidecar` and atomically write
+/// `<buildloop_dir>/plan-review-feedback.json`.
+pub(crate) fn write_plan_review_feedback_sidecar(
+    buildloop_dir: &std::path::Path,
+    sidecar: &PlanReviewFeedbackSidecar,
+) -> std::io::Result<()> {
+    let path = buildloop_dir.join("plan-review-feedback.json");
+    let json = serde_json::to_vec_pretty(sidecar).map_err(std::io::Error::other)?;
+    crate::utils::atomic_write_file(&path, &json)
+}
+
+/// Read `plan-review-feedback.json` and format a labelled markdown block at
+/// most ~500 tokens (top 5 paths, top 3 findings, top 5 constraints). Returns
+/// `None` when the sidecar is missing, malformed, or contains nothing
+/// actionable. Never panics -- pipeline must keep running.
+pub(crate) fn read_previous_attempt_feedback_block(
+    buildloop_dir: &std::path::Path,
+) -> Option<String> {
+    let path = buildloop_dir.join("plan-review-feedback.json");
+    let text = std::fs::read_to_string(&path).ok()?;
+    let sidecar: PlanReviewFeedbackSidecar = serde_json::from_str(&text).ok()?;
+
+    let top_paths: Vec<&String> = sidecar.missing_research_paths.iter().take(5).collect();
+    let top_findings: Vec<&crate::orchestrator::Finding> =
+        sidecar.unresolved_findings.iter().take(3).collect();
+    let constraints: Vec<&String> = sidecar.new_constraints.iter().take(5).collect();
+
+    if top_paths.is_empty() && top_findings.is_empty() && constraints.is_empty() {
+        return None;
+    }
+
+    let mut body = format!(
+        "Prior P+ attempt for {} did not converge after {} of {} cycle(s). \
+Address the following before drafting this plan:\n",
+        sidecar.task_id, sidecar.cycles_used, sidecar.cycles_cap
+    );
+
+    if !top_paths.is_empty() {
+        body.push_str("\n## Files missing from previous plan (cite or rule out each):\n");
+        for p in &top_paths {
+            body.push_str(&format!("- {}\n", p));
+        }
+    }
+
+    if !top_findings.is_empty() {
+        body.push_str("\n## Unresolved P+ findings to address:\n");
+        for f in &top_findings {
+            body.push_str(&format!("- {} [{}]", f.description, f.severity));
+            if !f.location.is_empty() {
+                body.push_str(&format!(" at {}", f.location));
+            }
+            body.push('\n');
+            if !f.suggestion.is_empty() {
+                body.push_str(&format!("  Suggestion: {}\n", f.suggestion));
+            }
+        }
+    }
+
+    if !constraints.is_empty() {
+        body.push_str("\n## Additional constraints from P+:\n");
+        for c in &constraints {
+            body.push_str(&format!("- {}\n", c));
+        }
+    }
+
+    Some(body)
+}
+
+/// Scan findings for natural-language constraint signals (split-task asks or
+/// findings whose description starts with "Constraint:"). Conservative on
+/// purpose -- the sidecar must not become a kitchen sink.
+pub(crate) fn extract_new_constraints_from_findings(
+    findings: &[crate::orchestrator::Finding],
+) -> Vec<String> {
+    let mut out = Vec::new();
+    for f in findings {
+        let desc_lc = f.description.to_ascii_lowercase();
+        if desc_lc.starts_with("constraint:")
+            || (desc_lc.contains("split") && desc_lc.contains("task"))
+        {
+            out.push(f.description.clone());
+        }
+    }
+    out
 }
 
 fn append_unresolved_plan_review_feedback(
@@ -10310,5 +10483,167 @@ mod plan_review_cap_tests {
         let _ = append_unresolved_plan_review_feedback(&plan_path, "T1.99", 1, 2, &[]).unwrap();
         let contents = std::fs::read_to_string(&plan_path).unwrap();
         assert!(contents.starts_with(original), "original plan content must be preserved verbatim before the appended block");
+    }
+}
+
+#[cfg(test)]
+mod plan_review_feedback_sidecar_tests {
+    use super::{
+        extract_new_constraints_from_findings, read_previous_attempt_feedback_block,
+        write_plan_review_feedback_sidecar, PlanReviewFeedbackSidecar,
+    };
+    use crate::orchestrator::Finding;
+    use tempfile::tempdir;
+
+    fn finding(severity: &str, description: &str, location: &str, suggestion: &str) -> Finding {
+        Finding {
+            severity: severity.into(),
+            description: description.into(),
+            location: location.into(),
+            suggestion: suggestion.into(),
+        }
+    }
+
+    #[test]
+    fn test_write_and_read_plan_review_feedback_sidecar_round_trips_data() {
+        let dir = tempdir().unwrap();
+        let sidecar = PlanReviewFeedbackSidecar {
+            task_id: "T9.99".into(),
+            generated_at: "2026-05-13T00:00:00+00:00".into(),
+            cycles_used: 3,
+            cycles_cap: 3,
+            missing_research_paths: vec![
+                "src/alpha.rs".into(),
+                "src/beta.rs".into(),
+                "src/gamma.rs".into(),
+                "src/delta.rs".into(),
+                "src/epsilon.rs".into(),
+            ],
+            unresolved_findings: vec![
+                finding("high", "missing error handling", "src/foo.rs:10", "wrap with ?"),
+                finding("medium", "off-by-one", "src/bar.rs:42", ""),
+                finding("low", "naming nit", "", ""),
+            ],
+            new_constraints: vec!["Constraint: must use channel mpsc".into()],
+        };
+        write_plan_review_feedback_sidecar(dir.path(), &sidecar).unwrap();
+        assert!(dir.path().join("plan-review-feedback.json").exists());
+
+        let body = read_previous_attempt_feedback_block(dir.path()).expect("must read body");
+        assert!(body.contains("Prior P+ attempt for T9.99"));
+        assert!(body.contains("3 of 3 cycle"));
+        for p in ["src/alpha.rs", "src/beta.rs", "src/gamma.rs", "src/delta.rs", "src/epsilon.rs"]
+        {
+            assert!(body.contains(p), "body missing {}", p);
+        }
+        assert!(body.contains("missing error handling"));
+        assert!(body.contains("off-by-one"));
+        assert!(body.contains("naming nit"));
+        assert!(body.contains("Constraint: must use channel mpsc"));
+    }
+
+    #[test]
+    fn test_read_previous_attempt_feedback_block_returns_none_when_missing() {
+        let dir = tempdir().unwrap();
+        assert!(read_previous_attempt_feedback_block(dir.path()).is_none());
+    }
+
+    #[test]
+    fn test_read_previous_attempt_feedback_block_returns_none_on_malformed_json() {
+        let dir = tempdir().unwrap();
+        std::fs::write(dir.path().join("plan-review-feedback.json"), "not json").unwrap();
+        assert!(read_previous_attempt_feedback_block(dir.path()).is_none());
+    }
+
+    #[test]
+    fn test_read_previous_attempt_feedback_block_returns_none_when_all_fields_empty() {
+        let dir = tempdir().unwrap();
+        let sidecar = PlanReviewFeedbackSidecar {
+            task_id: "T9.99".into(),
+            generated_at: "2026-05-13T00:00:00+00:00".into(),
+            cycles_used: 0,
+            cycles_cap: 0,
+            missing_research_paths: vec![],
+            unresolved_findings: vec![],
+            new_constraints: vec![],
+        };
+        write_plan_review_feedback_sidecar(dir.path(), &sidecar).unwrap();
+        assert!(read_previous_attempt_feedback_block(dir.path()).is_none());
+    }
+
+    #[test]
+    fn test_read_previous_attempt_feedback_block_truncates_to_top_5_paths_top_3_findings() {
+        let dir = tempdir().unwrap();
+        let paths: Vec<String> = (0..10).map(|i| format!("src/p{}.rs", i)).collect();
+        let findings: Vec<Finding> = (0..6)
+            .map(|i| finding("medium", &format!("finding {}", i), "", ""))
+            .collect();
+        let sidecar = PlanReviewFeedbackSidecar {
+            task_id: "T9.99".into(),
+            generated_at: "2026-05-13T00:00:00+00:00".into(),
+            cycles_used: 3,
+            cycles_cap: 3,
+            missing_research_paths: paths.clone(),
+            unresolved_findings: findings.clone(),
+            new_constraints: vec![],
+        };
+        write_plan_review_feedback_sidecar(dir.path(), &sidecar).unwrap();
+        let body = read_previous_attempt_feedback_block(dir.path()).unwrap();
+        // First 5 paths must be present; 6th-10th must NOT be present.
+        for p in paths.iter().take(5) {
+            assert!(body.contains(p), "expected {} in body", p);
+        }
+        for p in paths.iter().skip(5) {
+            assert!(!body.contains(p), "did not expect {} in body", p);
+        }
+        // First 3 findings present, 4th-6th omitted.
+        for f in findings.iter().take(3) {
+            assert!(body.contains(&f.description), "expected {} in body", f.description);
+        }
+        for f in findings.iter().skip(3) {
+            assert!(
+                !body.contains(&f.description),
+                "did not expect {} in body",
+                f.description
+            );
+        }
+    }
+
+    #[test]
+    fn test_extract_new_constraints_from_findings_matches_split_signals() {
+        let findings = vec![
+            finding("high", "Constraint: must use channel mpsc", "", ""),
+            finding("medium", "Split this into 3 sub-tasks", "", ""),
+            finding("low", "Bug: off-by-one", "", ""),
+        ];
+        let out = extract_new_constraints_from_findings(&findings);
+        assert_eq!(out.len(), 2);
+        assert_eq!(out[0], "Constraint: must use channel mpsc");
+        assert_eq!(out[1], "Split this into 3 sub-tasks");
+    }
+
+    #[test]
+    fn test_atomic_write_does_not_leave_tmp_file() {
+        let dir = tempdir().unwrap();
+        let sidecar = PlanReviewFeedbackSidecar {
+            task_id: "T9.99".into(),
+            generated_at: "2026-05-13T00:00:00+00:00".into(),
+            cycles_used: 1,
+            cycles_cap: 3,
+            missing_research_paths: vec!["src/x.rs".into()],
+            unresolved_findings: vec![],
+            new_constraints: vec![],
+        };
+        write_plan_review_feedback_sidecar(dir.path(), &sidecar).unwrap();
+        let entries: Vec<_> = std::fs::read_dir(dir.path())
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
+        assert!(entries.contains(&"plan-review-feedback.json".to_string()));
+        assert!(
+            !entries.iter().any(|n| n.ends_with(".tmp")),
+            "atomic_write_file must clean up the temp file"
+        );
     }
 }

@@ -493,6 +493,7 @@ pub fn planner_prompt(
     pattern_context: &str,
     spec_file: &str,
     tasks_file: &str,
+    previous_attempt_feedback: Option<&str>,
 ) -> String {
     if let Some(s) = prompt_override.filter(|s| !s.trim().is_empty()) {
         return s.to_string();
@@ -509,6 +510,15 @@ pub fn planner_prompt(
         )
     };
 
+    let previous_attempt_block = previous_attempt_feedback
+        .filter(|s| !s.trim().is_empty())
+        .map(|body| {
+            format!(
+                "\n--- BEGIN PREVIOUS ATTEMPT FEEDBACK ---\n{body}\n--- END PREVIOUS ATTEMPT FEEDBACK ---\n"
+            )
+        })
+        .unwrap_or_default();
+
     let skill_citation = SKILL_CITATION_INSTRUCTION_PLAN;
 
     format!(
@@ -518,7 +528,7 @@ YOUR TASK: Create a detailed implementation plan for:
 
 Task ID: {task_id}
 Task Description: {task_desc}
-
+{previous_attempt_block}
 CRITICAL CONTEXT: Your plan will be read and executed by an AI BUILDER agent, not a human.
 Write for machine consumption: be explicit, structured, and deterministic.
 Eliminate all ambiguity -- the builder should never need to make judgment calls.
@@ -717,6 +727,7 @@ pub fn planner_lookahead_prompt(
     spec_file: &str,
     tasks_file: &str,
     plan_filename: &str,
+    previous_attempt_feedback: Option<&str>,
 ) -> String {
     if let Some(s) = prompt_override.filter(|s| !s.trim().is_empty()) {
         return s.to_string();
@@ -733,6 +744,15 @@ pub fn planner_lookahead_prompt(
         )
     };
 
+    let previous_attempt_block = previous_attempt_feedback
+        .filter(|s| !s.trim().is_empty())
+        .map(|body| {
+            format!(
+                "\n--- BEGIN PREVIOUS ATTEMPT FEEDBACK ---\n{body}\n--- END PREVIOUS ATTEMPT FEEDBACK ---\n"
+            )
+        })
+        .unwrap_or_default();
+
     let skill_citation = SKILL_CITATION_INSTRUCTION_PLAN;
 
     format!(
@@ -742,7 +762,7 @@ YOUR TASK: Create a detailed implementation plan for:
 
 Task ID: {task_id}
 Task Description: {task_desc}
-
+{previous_attempt_block}
 CRITICAL CONTEXT: Your plan will be read and executed by an AI BUILDER agent, not a human.
 Write for machine consumption: be explicit, structured, and deterministic.
 Eliminate all ambiguity -- the builder should never need to make judgment calls.
@@ -2808,6 +2828,7 @@ pub fn gap_analysis_prompt(
     user_intent: Option<&str>,
     spec_file: &str,
     tasks_file: &str,
+    previous_attempt_feedback: Option<&str>,
 ) -> String {
     let patterns_block = if pattern_context.is_empty() {
         String::new()
@@ -2836,8 +2857,17 @@ TRANSIENT USER INTENT:
         })
         .unwrap_or_default();
 
+    let previous_attempt_block = previous_attempt_feedback
+        .filter(|s| !s.trim().is_empty())
+        .map(|body| {
+            format!(
+                "\n--- BEGIN PREVIOUS ATTEMPT FEEDBACK ---\n{body}\n--- END PREVIOUS ATTEMPT FEEDBACK ---\n"
+            )
+        })
+        .unwrap_or_default();
+
     format!(
-        r#"You are the PLANNING agent running in dedicated gap-analysis mode (iteration {iteration}).
+        r#"You are the PLANNING agent running in dedicated gap-analysis mode (iteration {iteration}).{previous_attempt_block}
 
 YOUR TASK: Study the entire project — specifications, architecture, and existing code — then
 generate or update {tasks_file} with a prioritized list of implementation tasks.
@@ -2906,6 +2936,7 @@ mod tests {
             patterns,
             "SPEC.md",
             "TASKS.md",
+            None,
         );
         assert!(
             planner.contains("--- BEGIN REFERENCE DATA (non-authoritative"),
@@ -2939,7 +2970,9 @@ mod tests {
 
     #[test]
     fn test_empty_pattern_context_has_no_reference_block() {
-        let planner = planner_prompt("PLAN", None, "T1", "test task", "", "SPEC.md", "TASKS.md");
+        let planner = planner_prompt(
+            "PLAN", None, "T1", "test task", "", "SPEC.md", "TASKS.md", None,
+        );
         assert!(
             !planner.contains("BEGIN REFERENCE DATA"),
             "empty pattern context should not produce a reference block"
@@ -2975,6 +3008,7 @@ mod tests {
             "ignored",
             "SPEC.md",
             "TASKS.md",
+            None,
         );
         assert!(
             out.contains("**Skills referenced:**"),
@@ -3000,11 +3034,102 @@ mod tests {
             "SPEC.md",
             "TASKS.md",
             "current-plan.md",
+            None,
         );
         assert!(out.contains("**Skills referenced:**"));
         let footer_pos = out.find("**Skills referenced:**").unwrap();
         let ref_pos = out.find("BEGIN REFERENCE DATA").unwrap_or(out.len());
         assert!(footer_pos < ref_pos);
+    }
+
+    #[test]
+    fn planner_prompt_with_previous_attempt_feedback_orders_blocks_correctly() {
+        // T1.42: when a previous P+ attempt left a sidecar, the feedback block
+        // must render ABOVE both BEGIN REFERENCE DATA and the skill-citation
+        // footer so the agent reads it as part of the active instructions.
+        let out = planner_prompt(
+            "PLAN",
+            None,
+            "T1",
+            "test task",
+            "ignored",
+            "SPEC.md",
+            "TASKS.md",
+            Some("Top missing path: src/foo.rs"),
+        );
+        assert!(out.contains("--- BEGIN PREVIOUS ATTEMPT FEEDBACK ---"));
+        assert!(out.contains("--- END PREVIOUS ATTEMPT FEEDBACK ---"));
+        assert!(out.contains("src/foo.rs"));
+        let begin_pos = out.find("--- BEGIN PREVIOUS ATTEMPT FEEDBACK ---").unwrap();
+        let critical_pos = out.find("CRITICAL CONTEXT:").unwrap();
+        let footer_pos = out.find("**Skills referenced:**").unwrap();
+        let ref_pos = out.find("BEGIN REFERENCE DATA").unwrap_or(out.len());
+        assert!(
+            begin_pos < critical_pos,
+            "feedback block must appear before CRITICAL CONTEXT"
+        );
+        assert!(
+            begin_pos < footer_pos,
+            "feedback block must appear before Skills referenced footer"
+        );
+        assert!(
+            begin_pos < ref_pos,
+            "feedback block must appear before BEGIN REFERENCE DATA"
+        );
+
+        let out_none = planner_prompt(
+            "PLAN",
+            None,
+            "T1",
+            "test task",
+            "ignored",
+            "SPEC.md",
+            "TASKS.md",
+            None,
+        );
+        assert!(
+            !out_none.contains("PREVIOUS ATTEMPT FEEDBACK"),
+            "feedback block must be absent when previous_attempt_feedback is None"
+        );
+
+        let out_empty = planner_prompt(
+            "PLAN",
+            None,
+            "T1",
+            "test task",
+            "ignored",
+            "SPEC.md",
+            "TASKS.md",
+            Some("   "),
+        );
+        assert!(
+            !out_empty.contains("PREVIOUS ATTEMPT FEEDBACK"),
+            "feedback block must be absent when whitespace-only"
+        );
+    }
+
+    #[test]
+    fn planner_lookahead_prompt_with_previous_attempt_feedback_orders_blocks_correctly() {
+        let out = planner_lookahead_prompt(
+            "PLAN",
+            None,
+            "T1",
+            "test task",
+            "ignored",
+            "SPEC.md",
+            "TASKS.md",
+            "current-plan.md",
+            Some("Top missing path: src/bar.rs"),
+        );
+        assert!(out.contains("--- BEGIN PREVIOUS ATTEMPT FEEDBACK ---"));
+        assert!(out.contains("src/bar.rs"));
+        let begin_pos = out.find("--- BEGIN PREVIOUS ATTEMPT FEEDBACK ---").unwrap();
+        let critical_pos = out.find("CRITICAL CONTEXT:").unwrap();
+        let footer_pos = out.find("**Skills referenced:**").unwrap();
+        let ref_pos = out.find("BEGIN REFERENCE DATA").unwrap_or(out.len());
+        assert!(begin_pos < critical_pos);
+        assert!(begin_pos < footer_pos);
+        assert!(begin_pos < ref_pos);
     }
 
     #[test]
@@ -3220,7 +3345,9 @@ mod tests {
 
     #[test]
     fn planner_prompt_includes_vertical_slicing_rule() {
-        let planner = planner_prompt("PLAN", None, "T1", "test task", "", "SPEC.md", "TASKS.md");
+        let planner = planner_prompt(
+            "PLAN", None, "T1", "test task", "", "SPEC.md", "TASKS.md", None,
+        );
         assert!(
             planner.contains("Vertical slicing"),
             "planner prompt must include the vertical slicing rule heading phrase"
@@ -3349,14 +3476,15 @@ mod tests {
 
     #[test]
     fn gap_analysis_prompt_includes_optional_user_intent() {
-        let prompt = gap_analysis_prompt(1, "", Some("fix auth bugs"), "SPEC.md", "TASKS.md");
+        let prompt =
+            gap_analysis_prompt(1, "", Some("fix auth bugs"), "SPEC.md", "TASKS.md", None);
         assert!(prompt.contains("The user currently wants: fix auth bugs"));
         assert!(prompt.contains("Do NOT rewrite SPEC.md"));
     }
 
     #[test]
     fn gap_analysis_prompt_omits_user_intent_block_when_absent() {
-        let prompt = gap_analysis_prompt(1, "", None, "SPEC.md", "TASKS.md");
+        let prompt = gap_analysis_prompt(1, "", None, "SPEC.md", "TASKS.md", None);
         assert!(!prompt.contains("TRANSIENT USER INTENT"));
     }
 
@@ -3370,6 +3498,7 @@ mod tests {
             "",
             "ARCHITECTURE.md",
             "IMPL_PLAN.md",
+            None,
         );
         assert!(planner.contains("ARCHITECTURE.md"));
         assert!(planner.contains("IMPL_PLAN.md"));

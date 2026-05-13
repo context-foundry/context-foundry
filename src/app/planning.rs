@@ -30,9 +30,17 @@ pub(super) async fn spawn_inline_planning_task(
         }
     });
 
-    let outcome =
-        run_gap_analysis_iteration(&ctx, 1, &pattern_context, user_intent.as_deref(), agent_tx)
-            .await;
+    let previous_attempt_feedback =
+        crate::app::build::read_previous_attempt_feedback_block(&ctx.buildloop_dir);
+    let outcome = run_gap_analysis_iteration(
+        &ctx,
+        1,
+        &pattern_context,
+        user_intent.as_deref(),
+        previous_attempt_feedback.as_deref(),
+        agent_tx,
+    )
+    .await;
 
     // Wait for the forwarding task to drain all agent events (including Usage)
     // before signaling completion. Without this, PlanningFinished can arrive
@@ -324,8 +332,17 @@ pub(super) async fn run_plan_mode(project_dir: &Path, max_iterations: u64) -> Re
             }
         });
 
-        let outcome =
-            run_gap_analysis_iteration(&ctx, i as usize, &pattern_context, None, agent_tx).await;
+        let previous_attempt_feedback =
+            crate::app::build::read_previous_attempt_feedback_block(&ctx.buildloop_dir);
+        let outcome = run_gap_analysis_iteration(
+            &ctx,
+            i as usize,
+            &pattern_context,
+            None,
+            previous_attempt_feedback.as_deref(),
+            agent_tx,
+        )
+        .await;
 
         let status = if outcome.success {
             "completed"
@@ -427,6 +444,7 @@ async fn run_gap_analysis_iteration(
     iteration: usize,
     pattern_context: &str,
     user_intent: Option<&str>,
+    previous_attempt_feedback: Option<&str>,
     agent_tx: mpsc::UnboundedSender<AgentOutputEvent>,
 ) -> PlanningOutcome {
     if !ctx.plan_path.exists() {
@@ -453,6 +471,7 @@ async fn run_gap_analysis_iteration(
         user_intent,
         &ctx.spec_file_prompt_path(),
         &ctx.tasks_file_prompt_path(),
+        previous_attempt_feedback,
     );
     let result = agent::run_agent(
         &AgentRole::Planner,
