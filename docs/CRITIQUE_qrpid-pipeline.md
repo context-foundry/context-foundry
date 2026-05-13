@@ -3,6 +3,10 @@
 **Reviewer:** Architecture audit (fresh-context)
 **Date:** 2026-03-28
 **Spec under review:** `docs/SPEC_qrpid-pipeline.md`
+
+> **Note (2026-05-12):** This critique pre-dates the v3.3.0 rename. References to
+> `extensions/`, `wrap_with_extensions()`, and "extension context" refer to what is
+> now `plugins/`, `wrap_with_plugins()`, and "plugin context."
 **Cross-reference:** `docs/PLAN_cross-model-orchestrator.md`
 
 ---

@@ -3,6 +3,12 @@ Date: 2026-05-07
 Version: v8 (revised after seventh audit; scope cut applied)
 Status: planning
 
+> **Note (2026-05-12):** This plan was written before the v3.3.0 rename. Symbol
+> references below say `src/extensions.rs`, `wrap_with_extensions()`, and
+> `BEGIN/END EXTENSION CONTEXT`; the live equivalents are `src/plugins.rs`,
+> `wrap_with_plugins()`, and `BEGIN/END PLUGIN CONTEXT`. Line numbers cited are
+> pre-rename and have shifted.
+
 ## Revision history
 
 - **v1** -- assumed prompts could be reconstructed from JSONL.

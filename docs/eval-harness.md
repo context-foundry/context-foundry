@@ -62,11 +62,12 @@ The orchestrator computes three "found" lists over the FULL assembled prompt
   with the literal square brackets, per the formatter at
   `src/patterns.rs:366`. Bare-substring matching would produce false positives
   on English-word IDs like `simple` or `gates`.
-- `prompt_extension_names_found` -- substring match against
-  `--- BEGIN EXTENSION CONTEXT: <name> ---`, the wrapper marker injected by
-  `src/extensions.rs:192`. Names, not paths -- two extensions in different
+- `prompt_plugin_names_found` -- substring match against
+  `--- BEGIN PLUGIN CONTEXT: <name> ---`, the wrapper marker injected by
+  `src/plugins.rs`. Names, not paths -- two plugins in different
   roots (Global vs ProjectLocal) collide on name; precedence resolves to the
-  highest-priority source.
+  highest-priority source. (Pre-v3.3.0 builds use `EXTENSION CONTEXT` and
+  `src/extensions.rs`.)
 - `prompt_artifact_refs_found` -- substring match against the basename of each
   prior artifact path (e.g. `current-plan.md`).
 
