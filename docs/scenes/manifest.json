@@ -877,6 +877,16 @@
       "model": "gpt-4o-mini",
       "lines": 80,
       "generation": 88
+    },
+    {
+      "file": "floating-point-lagoon.js",
+      "name": "Floating Point Lagoon",
+      "location": "Jokulsarlon Glacier Lagoon, Iceland",
+      "biome": "ocean",
+      "generated": "2026-05-13T20:12:57.714Z",
+      "model": "gpt-4o-mini",
+      "lines": 90,
+      "generation": 89
     }
   ]
 }
