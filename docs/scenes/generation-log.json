@@ -1612,5 +1612,32 @@
     "retries": 1,
     "api_retries": 0,
     "validation": "pass"
+  },
+  {
+    "ts": "2026-05-14T04:15:06.226Z",
+    "scene": "deploy-to-production-dock.js",
+    "seed_id": "deploy-to-production-dock",
+    "biome": "urban",
+    "model": "gpt-4o-mini",
+    "input_tokens": 16274,
+    "output_tokens": 1691,
+    "cost_usd": 0.0035,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "fail",
+    "error": "Validation failed after 2 attempts: VALIDATION FAILED (1 error):\n- Too short: 79 lines (min 80)"
+  },
+  {
+    "ts": "2026-05-14T04:15:41.035Z",
+    "scene": "stack-trace-spires.js",
+    "seed_id": "stack-trace-spires",
+    "biome": "mountain",
+    "model": "gpt-4o-mini",
+    "input_tokens": 15246,
+    "output_tokens": 1811,
+    "cost_usd": 0.0034,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "pass"
   }
 ]
