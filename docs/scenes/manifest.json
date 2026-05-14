@@ -917,6 +917,16 @@
       "model": "gpt-4o-mini",
       "lines": 80,
       "generation": 92
+    },
+    {
+      "file": "the-original-cloud-computing.js",
+      "name": "The Original Cloud Computing",
+      "location": "Monteverde Cloud Forest, Costa Rica",
+      "biome": "forest",
+      "generated": "2026-05-14T10:36:37.002Z",
+      "model": "gpt-4o-mini",
+      "lines": 80,
+      "generation": 93
     }
   ]
 }
