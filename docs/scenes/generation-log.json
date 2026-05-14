@@ -1720,5 +1720,46 @@
     "retries": 0,
     "api_retries": 0,
     "validation": "pass"
+  },
+  {
+    "ts": "2026-05-14T20:04:03.726Z",
+    "scene": "bioluminescent-debug-log.js",
+    "seed_id": "bioluminescent-debug-log",
+    "biome": "extreme",
+    "model": "gpt-4o-mini",
+    "input_tokens": 16296,
+    "output_tokens": 1539,
+    "cost_usd": 0.0034,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "fail",
+    "error": "Validation failed after 2 attempts: VALIDATION FAILED (1 error):\n- Too short: 79 lines (min 80)"
+  },
+  {
+    "ts": "2026-05-14T20:04:30.532Z",
+    "scene": "ring-buffer-saturn.js",
+    "seed_id": "ring-buffer-saturn",
+    "biome": "space",
+    "model": "gpt-4o-mini",
+    "input_tokens": 16654,
+    "output_tokens": 1476,
+    "cost_usd": 0.0034,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "fail",
+    "error": "Validation failed after 2 attempts: VALIDATION FAILED (1 error):\n- Too short: 72 lines (min 80)"
+  },
+  {
+    "ts": "2026-05-14T20:04:43.003Z",
+    "scene": "404-sunlight-not-found.js",
+    "seed_id": "404-sunlight-not-found",
+    "biome": "arctic",
+    "model": "gpt-4o-mini",
+    "input_tokens": 7423,
+    "output_tokens": 740,
+    "cost_usd": 0.0016,
+    "retries": 0,
+    "api_retries": 0,
+    "validation": "pass"
   }
 ]

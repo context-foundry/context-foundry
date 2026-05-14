@@ -937,6 +937,16 @@
       "model": "gpt-4o-mini",
       "lines": 97,
       "generation": 94
+    },
+    {
+      "file": "404-sunlight-not-found.js",
+      "name": "404: Sunlight Not Found",
+      "location": "Eisriesenwelt Ice Cave, Werfen, Austria",
+      "biome": "arctic",
+      "generated": "2026-05-14T20:04:43.002Z",
+      "model": "gpt-4o-mini",
+      "lines": 84,
+      "generation": 95
     }
   ]
 }
