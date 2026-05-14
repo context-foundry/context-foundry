@@ -1761,5 +1761,32 @@
     "retries": 0,
     "api_retries": 0,
     "validation": "pass"
+  },
+  {
+    "ts": "2026-05-14T23:13:52.364Z",
+    "scene": "read-only-petrified-forest.js",
+    "seed_id": "read-only-petrified-forest",
+    "biome": "desert",
+    "model": "gpt-4o-mini",
+    "input_tokens": 16660,
+    "output_tokens": 1545,
+    "cost_usd": 0.0034,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "fail",
+    "error": "Validation failed after 2 attempts: VALIDATION FAILED (1 error):\n- Too short: 72 lines (min 80)"
+  },
+  {
+    "ts": "2026-05-14T23:14:16.318Z",
+    "scene": "ring-buffer-saturn.js",
+    "seed_id": "ring-buffer-saturn",
+    "biome": "space",
+    "model": "gpt-4o-mini",
+    "input_tokens": 16654,
+    "output_tokens": 1699,
+    "cost_usd": 0.0035,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "pass"
   }
 ]
