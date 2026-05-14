@@ -1639,5 +1639,32 @@
     "retries": 1,
     "api_retries": 0,
     "validation": "pass"
+  },
+  {
+    "ts": "2026-05-14T07:24:28.416Z",
+    "scene": "lunar-landing-page.js",
+    "seed_id": "lunar-landing-page",
+    "biome": "space",
+    "model": "gpt-4o-mini",
+    "input_tokens": 16316,
+    "output_tokens": 1388,
+    "cost_usd": 0.0033,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "fail",
+    "error": "Validation failed after 2 attempts: VALIDATION FAILED (1 error):\n- Too short: 64 lines (min 80)"
+  },
+  {
+    "ts": "2026-05-14T07:25:03.950Z",
+    "scene": "cold-storage-solutions.js",
+    "seed_id": "cold-storage-solutions",
+    "biome": "arctic",
+    "model": "gpt-4o-mini",
+    "input_tokens": 16286,
+    "output_tokens": 1496,
+    "cost_usd": 0.0033,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "pass"
   }
 ]
