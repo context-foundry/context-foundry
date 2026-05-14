@@ -927,6 +927,16 @@
       "model": "gpt-4o-mini",
       "lines": 80,
       "generation": 93
+    },
+    {
+      "file": "neon-city-never-sleeps.js",
+      "name": "Neon City Never Sleeps()",
+      "location": "Shibuya Crossing, Tokyo, Japan",
+      "biome": "urban",
+      "generated": "2026-05-14T18:12:33.616Z",
+      "model": "gpt-4o-mini",
+      "lines": 97,
+      "generation": 94
     }
   ]
 }
