@@ -50,7 +50,7 @@ window.CF.register("Floating Point Lagoon", "Jokulsarlon Glacier Lagoon, Iceland
 
     // Draw Icebergs
     for(var iceberg of icebergs){
-      iceberg.y += iceberg.drift; // Drift 
+      iceberg.y += iceberg.drift; // Drift
       if (iceberg.y > H) iceberg.y = -50; // Looping effect
       rect(iceberg.x, iceberg.y, iceberg.width, iceberg.height, rgba('#caf0f8', 0.9));
       rect(iceberg.x + 5, iceberg.y + 5, iceberg.width - 10, iceberg.height - 10, rgba('#e9ecef', 0.6));

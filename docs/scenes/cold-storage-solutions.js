@@ -7,9 +7,9 @@ window.CF.register("Cold Storage Solutions", "Svalbard Global Seed Vault, Svalba
   var snowflakes=[];
   for(var i=0;i<100;i++){
     snowflakes.push({
-      x:Math.random()*W, 
+      x:Math.random()*W,
       y:Math.random()*H,
-      vy:Math.random()*0.5+0.5, 
+      vy:Math.random()*0.5+0.5,
       vx:(Math.random()-0.5)*0.2,
       size:Math.random()*2+1
     });

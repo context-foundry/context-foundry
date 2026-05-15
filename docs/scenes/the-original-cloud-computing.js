@@ -12,7 +12,7 @@ window.CF.register("The Original Cloud Computing", "Monteverde Cloud Forest, Cos
   var fogCount = 10;
   var orchidCount = 5;
   var birdCount = 3;
-  
+
   var mossSeed = srand(1);
   var fogSeed = srand(2);
   var orchidSeed = srand(3);

@@ -8,21 +8,21 @@ window.CF.register("API Gateway to Paradise", "Maldives Overwater Bungalows, Nor
   var villa = [];
   var particles = [];
   var r = srand(1001);
-  
+
   // Create coral
   for(var i = 0; i < 20; i++){
     coral.push({
-      x: r() * W, 
-      y: H - 60 + r() * 10, 
+      x: r() * W,
+      y: H - 60 + r() * 10,
       size: 2 + r() * 3
     });
   }
-  
+
   // Create overwater villas
   for(var i = 0; i < 5; i++){
     villa.push({
-      baseX: 90 + i * 70, 
-      baseY: H - 100, 
+      baseX: 90 + i * 70,
+      baseY: H - 100,
       sway: r() * Math.PI * 2
     });
   }
@@ -30,8 +30,8 @@ window.CF.register("API Gateway to Paradise", "Maldives Overwater Bungalows, Nor
   // Create particles (bubbles)
   for(var i = 0; i < 50; i++){
     particles.push({
-      x: r() * W, 
-      y: H - 50 + r() * 50, 
+      x: r() * W,
+      y: H - 50 + r() * 50,
       vy: -0.5 - r() * 0.2,
       life: 100 + Math.floor(r() * 100)
     });
@@ -43,7 +43,7 @@ window.CF.register("API Gateway to Paradise", "Maldives Overwater Bungalows, Nor
       var p = y / (H / 2);
       rect(0, y, W, 1, lerp('#FFB74D', '#FFAB40', p));
     }
-    
+
     // === SUNSET HORIZON ===
     var sunY = 130 + Math.sin(t * 0.4) * 5;
     var sunBrightness = Math.max(0, Math.sin((t - 2) * Math.PI / 3));

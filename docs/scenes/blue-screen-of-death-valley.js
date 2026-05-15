@@ -60,7 +60,7 @@ window.CF.register("Blue Screen of Death Valley", "Racetrack Playa, Death Valley
         }
       }
     }
-    
+
     // Draw sailing stones and their trails
     for(var s of stones){
       s.x += s.direction * s.speed;

@@ -33,7 +33,7 @@ window.CF.register("Ring Buffer Saturn", "Saturn's Rings, Outer Solar System", f
     var saturnX = W / 2;
     var saturnY = H / 2;
     circle(saturnX, saturnY, saturnSize, rgba('#caf0f8', 0.3));
-    
+
     // Draw Saturn's atmosphere
     for (var i=0; i<10; i++) {
       circle(saturnX, saturnY, saturnSize + i, rgba('#e9c46a', 0.1 - i * 0.01));
