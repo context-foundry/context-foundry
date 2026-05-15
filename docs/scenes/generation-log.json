@@ -1936,5 +1936,46 @@
     "retries": 0,
     "api_retries": 0,
     "validation": "pass"
+  },
+  {
+    "ts": "2026-05-15T23:14:24.985Z",
+    "scene": "edge-case-cliffside.js",
+    "seed_id": "edge-case-cliffside",
+    "biome": "mountain",
+    "model": "gpt-4o-mini",
+    "input_tokens": 15256,
+    "output_tokens": 1952,
+    "cost_usd": 0.0035,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "fail",
+    "error": "Validation failed after 2 attempts: VALIDATION FAILED (1 error):\n- Too short: 77 lines (min 80)"
+  },
+  {
+    "ts": "2026-05-15T23:14:55.836Z",
+    "scene": "open-ocean-open-source.js",
+    "seed_id": "open-ocean-open-source",
+    "biome": "ocean",
+    "model": "gpt-4o-mini",
+    "input_tokens": 16288,
+    "output_tokens": 1470,
+    "cost_usd": 0.0033,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "fail",
+    "error": "Validation failed after 2 attempts: VALIDATION FAILED (1 error):\n- Too short: 66 lines (min 80)"
+  },
+  {
+    "ts": "2026-05-15T23:15:29.040Z",
+    "scene": "version-control-tree-rings.js",
+    "seed_id": "version-control-tree-rings",
+    "biome": "forest",
+    "model": "gpt-4o-mini",
+    "input_tokens": 14876,
+    "output_tokens": 1659,
+    "cost_usd": 0.0032,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "pass"
   }
 ]
