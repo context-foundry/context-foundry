@@ -948,8 +948,7 @@ async fn run_multipass_review(
             pattern_ids.to_vec(),
             Vec::new(),
         );
-        let per_file_inv_id: StageInvocationId =
-            ctx.manifest.record_invocation(per_file_spec);
+        let per_file_inv_id: StageInvocationId = ctx.manifest.record_invocation(per_file_spec);
 
         let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
         let fwd_tx = tx.clone();

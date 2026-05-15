@@ -262,10 +262,7 @@ fn patterns_body_lines(
             " Skill Citations (telemetry unavailable) ".to_string(),
             s.db_path.display().to_string(),
         ),
-        None => (
-            " Skill Citations (loading...) ".to_string(),
-            String::new(),
-        ),
+        None => (" Skill Citations (loading...) ".to_string(), String::new()),
     };
 
     match summary_opt {
@@ -330,10 +327,7 @@ fn patterns_body_lines(
                         format!("{:>5} ", rec.citations_wip),
                         Style::default().fg(Color::Yellow),
                     ),
-                    Span::styled(
-                        format!("{:>10} ", stage),
-                        Style::default().fg(theme.info),
-                    ),
+                    Span::styled(format!("{:>10} ", stage), Style::default().fg(theme.info)),
                     Span::styled(
                         format!("{:>10}", last_used_str),
                         Style::default().fg(theme.muted),
@@ -371,7 +365,8 @@ fn derive_stage_label(
             _ => {}
         }
     }
-    best.map(|(s, _)| s.to_string()).unwrap_or_else(|| "-".to_string())
+    best.map(|(s, _)| s.to_string())
+        .unwrap_or_else(|| "-".to_string())
 }
 
 // ─── Stats Overlay ──────────────────────────────────────────
@@ -1066,13 +1061,11 @@ pub(super) fn render_settings_overlay(frame: &mut Frame, state: &AppState) {
                                 ]),
                                 OverlayRow::ActionButton(action) => {
                                     let label = match action {
-                                        Action::RerunEvalOnLastRun => {
-                                            "[ Re-run eval on last run ]"
-                                        }
+                                        Action::RerunEvalOnLastRun => "[ Re-run eval on last run ]",
                                         Action::ViewInjectedPatterns => {
                                             "[ View injected this session ]"
                                         }
-                                        Action::ViewAllPatterns => "[ View all global ]",
+                                        Action::ViewAllPatterns => "[ View all skills ]",
                                     };
                                     let cursor_str = if row_focused { "> " } else { "  " };
                                     Line::from(vec![
@@ -1088,9 +1081,7 @@ pub(super) fn render_settings_overlay(frame: &mut Frame, state: &AppState) {
                                         ),
                                         Span::styled(
                                             label,
-                                            row_style
-                                                .fg(theme.accent)
-                                                .add_modifier(Modifier::BOLD),
+                                            row_style.fg(theme.accent).add_modifier(Modifier::BOLD),
                                         ),
                                     ])
                                 }
@@ -1134,13 +1125,11 @@ pub(super) fn render_settings_overlay(frame: &mut Frame, state: &AppState) {
                                 ]),
                                 OverlayRow::ActionButton(action) => {
                                     let label = match action {
-                                        Action::RerunEvalOnLastRun => {
-                                            "[ Re-run eval on last run ]"
-                                        }
+                                        Action::RerunEvalOnLastRun => "[ Re-run eval on last run ]",
                                         Action::ViewInjectedPatterns => {
                                             "[ View injected this session ]"
                                         }
-                                        Action::ViewAllPatterns => "[ View all global ]",
+                                        Action::ViewAllPatterns => "[ View all skills ]",
                                     };
                                     let cursor_str = if row_focused { "> " } else { "  " };
                                     Line::from(vec![
@@ -1156,9 +1145,7 @@ pub(super) fn render_settings_overlay(frame: &mut Frame, state: &AppState) {
                                         ),
                                         Span::styled(
                                             label,
-                                            row_style
-                                                .fg(theme.accent)
-                                                .add_modifier(Modifier::BOLD),
+                                            row_style.fg(theme.accent).add_modifier(Modifier::BOLD),
                                         ),
                                     ])
                                 }
@@ -1179,134 +1166,147 @@ pub(super) fn render_settings_overlay(frame: &mut Frame, state: &AppState) {
                     }
                 }
                 SectionKind::Standard => {
-            for field in &section.fields {
-                if row_idx >= scroll_offset && (row_idx - scroll_offset) < content_height {
-                    let field_focused = row_idx == focus;
+                    for field in &section.fields {
+                        if row_idx >= scroll_offset && (row_idx - scroll_offset) < content_height {
+                            let field_focused = row_idx == focus;
 
-                    // Get the current value
-                    let value = match field.id {
-                        "arena" => {
-                            if state.arena_mode == "dual" { "Dual".to_string() } else { "Solo".to_string() }
-                        }
-                        "builder" => {
-                            let specs = &state.builder_model_specs;
-                            let mut list: Vec<String> =
-                                specs.iter().map(|s| Config::readable_spec(s)).collect();
-                            if specs.len() >= 2 {
-                                let combined = list
-                                    .iter()
-                                    .take(specs.len())
-                                    .cloned()
-                                    .collect::<Vec<_>>()
-                                    .join("/");
-                                list.push(combined);
-                            }
-                            for m in &state.local_models {
-                                if !list.contains(m) {
-                                    list.push(m.clone());
+                            // Get the current value
+                            let value = match field.id {
+                                "arena" => {
+                                    if state.arena_mode == "dual" {
+                                        "Dual".to_string()
+                                    } else {
+                                        "Solo".to_string()
+                                    }
                                 }
-                            }
-                            list.get(state.builder_cursor)
-                                .cloned()
-                                .unwrap_or_else(|| "(default)".into())
-                        }
-                        "theme" => crate::tui::theme::current_name(&state.tui_theme).to_string(),
-                        _ if editing.is_some_and(|inline| inline.field_id == field.id) => {
-                            editing.unwrap().buffer.clone()
-                        }
-                        _ => config.field_value(field.id),
-                    };
+                                "builder" => {
+                                    let specs = &state.builder_model_specs;
+                                    let mut list: Vec<String> =
+                                        specs.iter().map(|s| Config::readable_spec(s)).collect();
+                                    if specs.len() >= 2 {
+                                        let combined = list
+                                            .iter()
+                                            .take(specs.len())
+                                            .cloned()
+                                            .collect::<Vec<_>>()
+                                            .join("/");
+                                        list.push(combined);
+                                    }
+                                    for m in &state.local_models {
+                                        if !list.contains(m) {
+                                            list.push(m.clone());
+                                        }
+                                    }
+                                    list.get(state.builder_cursor)
+                                        .cloned()
+                                        .unwrap_or_else(|| "(default)".into())
+                                }
+                                "theme" => {
+                                    crate::tui::theme::current_name(&state.tui_theme).to_string()
+                                }
+                                _ if editing.is_some_and(|inline| inline.field_id == field.id) => {
+                                    editing.unwrap().buffer.clone()
+                                }
+                                _ => config.field_value(field.id),
+                            };
 
-                    // `backpressure_only` is stored with inverted semantics
-                    // relative to its UI label "Doubt in the Loop?": when the
-                    // user sees ON they expect Doubt to run, but the stored
-                    // value `true` means *skip* Doubt. Flip just the display
-                    // (and the value text below) so OK/checked = "Doubt runs".
-                    let display_inverted = field.id == "backpressure_only";
-                    let displayed_truthy = if display_inverted {
-                        value == "false"
-                    } else {
-                        value == "true"
-                    };
-                    let icon_str = match field.kind {
-                        FieldKind::Bool => {
-                            if displayed_truthy {
-                                "\u{2611}"
+                            // `backpressure_only` is stored with inverted semantics
+                            // relative to its UI label "Doubt in the Loop?": when the
+                            // user sees ON they expect Doubt to run, but the stored
+                            // value `true` means *skip* Doubt. Flip just the display
+                            // (and the value text below) so OK/checked = "Doubt runs".
+                            let display_inverted = field.id == "backpressure_only";
+                            let displayed_truthy = if display_inverted {
+                                value == "false"
                             } else {
-                                "\u{2610}"
-                            }
-                        }
-                        _ => " ",
-                    };
+                                value == "true"
+                            };
+                            let icon_str = match field.kind {
+                                FieldKind::Bool => {
+                                    if displayed_truthy {
+                                        "\u{2611}"
+                                    } else {
+                                        "\u{2610}"
+                                    }
+                                }
+                                _ => " ",
+                            };
 
-                    let row_style = if field_focused {
-                        Style::default().bg(highlight_bg)
-                    } else {
-                        Style::default()
-                    };
-
-                    let label_width = 28usize;
-                    let value_width = 24usize;
-                    let raw_display = if editing.is_some_and(|inline| inline.field_id == field.id) {
-                        format!("{value}_")
-                    } else if display_inverted && field.kind == FieldKind::Bool {
-                        // Display inverted bools as ON/OFF (clearer than "true"/"false"
-                        // when the displayed semantics oppose the stored value).
-                        if displayed_truthy { "ON".to_string() } else { "OFF".to_string() }
-                    } else {
-                        value.clone()
-                    };
-                    let display_val = if raw_display.len() > value_width {
-                        format!("{}...", &raw_display[..value_width - 3])
-                    } else {
-                        raw_display
-                    };
-
-                    let cursor_str = if field_focused { "> " } else { "  " };
-                    let line = Line::from(vec![
-                        Span::styled(
-                            cursor_str,
-                            if field_focused {
+                            let row_style = if field_focused {
+                                Style::default().bg(highlight_bg)
+                            } else {
                                 Style::default()
-                                    .fg(theme.accent)
-                                    .add_modifier(Modifier::BOLD)
+                            };
+
+                            let label_width = 28usize;
+                            let value_width = 24usize;
+                            let raw_display =
+                                if editing.is_some_and(|inline| inline.field_id == field.id) {
+                                    format!("{value}_")
+                                } else if display_inverted && field.kind == FieldKind::Bool {
+                                    // Display inverted bools as ON/OFF (clearer than "true"/"false"
+                                    // when the displayed semantics oppose the stored value).
+                                    if displayed_truthy {
+                                        "ON".to_string()
+                                    } else {
+                                        "OFF".to_string()
+                                    }
+                                } else {
+                                    value.clone()
+                                };
+                            let display_val = if raw_display.len() > value_width {
+                                format!("{}...", &raw_display[..value_width - 3])
                             } else {
-                                Style::default().fg(theme.muted)
-                            },
-                        ),
-                        Span::styled(format!("{} ", icon_str), Style::default().fg(theme.muted)),
-                        Span::styled(
-                            format!("{:<width$}", field.label, width = label_width),
-                            row_style,
-                        ),
-                        Span::styled(
-                            format!("{:<width$}", display_val, width = value_width),
-                            row_style.fg(Color::White),
-                        ),
-                        Span::styled(
-                            truncate_str(
-                                field.hint,
-                                inner
-                                    .width
-                                    .saturating_sub(label_width as u16 + value_width as u16 + 6)
-                                    as usize,
-                            ),
-                            Style::default().fg(theme.muted),
-                        ),
-                    ]);
-                    frame.render_widget(
-                        Paragraph::new(line),
-                        Rect {
-                            x: inner.x,
-                            y: render_y,
-                            width: inner.width,
-                            height: 1,
-                        },
-                    );
-                    render_y += 1;
-                }
-                row_idx += 1;
-            }
+                                raw_display
+                            };
+
+                            let cursor_str = if field_focused { "> " } else { "  " };
+                            let line = Line::from(vec![
+                                Span::styled(
+                                    cursor_str,
+                                    if field_focused {
+                                        Style::default()
+                                            .fg(theme.accent)
+                                            .add_modifier(Modifier::BOLD)
+                                    } else {
+                                        Style::default().fg(theme.muted)
+                                    },
+                                ),
+                                Span::styled(
+                                    format!("{} ", icon_str),
+                                    Style::default().fg(theme.muted),
+                                ),
+                                Span::styled(
+                                    format!("{:<width$}", field.label, width = label_width),
+                                    row_style,
+                                ),
+                                Span::styled(
+                                    format!("{:<width$}", display_val, width = value_width),
+                                    row_style.fg(Color::White),
+                                ),
+                                Span::styled(
+                                    truncate_str(
+                                        field.hint,
+                                        inner.width.saturating_sub(
+                                            label_width as u16 + value_width as u16 + 6,
+                                        ) as usize,
+                                    ),
+                                    Style::default().fg(theme.muted),
+                                ),
+                            ]);
+                            frame.render_widget(
+                                Paragraph::new(line),
+                                Rect {
+                                    x: inner.x,
+                                    y: render_y,
+                                    width: inner.width,
+                                    height: 1,
+                                },
+                            );
+                            render_y += 1;
+                        }
+                        row_idx += 1;
+                    }
                 }
             }
         }
@@ -1317,7 +1317,11 @@ pub(super) fn render_settings_overlay(frame: &mut Frame, state: &AppState) {
         if let Some(ref picker) = ov_state.picker {
             let selected_route = if picker.pipeline_b {
                 let (p, m) = config.active_routing_for_stage_b(&picker.stage);
-                if p.is_empty() && m.is_empty() { None } else { Some((p, m)) }
+                if p.is_empty() && m.is_empty() {
+                    None
+                } else {
+                    Some((p, m))
+                }
             } else {
                 let stage_overridden = config
                     .stage_overrides
@@ -1359,17 +1363,19 @@ fn render_model_picker(
 
     frame.render_widget(Clear, popup);
     let catalog = crate::model_catalog::load_catalog();
-    let (stale_label, stale_warn) = crate::model_catalog::staleness_label(
-        chrono::Utc::now(),
-        catalog.source_fetched_at,
-    );
+    let (stale_label, stale_warn) =
+        crate::model_catalog::staleness_label(chrono::Utc::now(), catalog.source_fetched_at);
     let base = if picker.pipeline_b {
         format!(" Model for {} (B) ", picker.stage)
     } else {
         format!(" Model for {} ", picker.stage)
     };
     let title = format!("{} {} ", base.trim_end(), stale_label);
-    let title_color = if stale_warn { Color::Yellow } else { theme.accent };
+    let title_color = if stale_warn {
+        Color::Yellow
+    } else {
+        theme.accent
+    };
     // "Refresh now" button deferred -- env var FOUNDRY_MODEL_REFRESH=force triggers a manual refresh.
     frame.render_widget(
         Block::default()
@@ -1810,12 +1816,11 @@ pub fn render_surface_summary_overlay(
 
     let body: Vec<Line<'static>> = if overlay.in_flight && overlay.summary.is_none() {
         const SPINNER_FRAMES: &[char] = &[
-            '\u{280B}', '\u{2819}', '\u{2839}', '\u{2838}', '\u{283C}',
-            '\u{2834}', '\u{2826}', '\u{2827}', '\u{2807}', '\u{280F}',
+            '\u{280B}', '\u{2819}', '\u{2839}', '\u{2838}', '\u{283C}', '\u{2834}', '\u{2826}',
+            '\u{2827}', '\u{2807}', '\u{280F}',
         ];
         let elapsed = overlay.started_at.elapsed();
-        let frame_idx =
-            ((elapsed.as_millis() / 100) as usize) % SPINNER_FRAMES.len();
+        let frame_idx = ((elapsed.as_millis() / 100) as usize) % SPINNER_FRAMES.len();
         let spinner = SPINNER_FRAMES[frame_idx];
         let secs = elapsed.as_secs();
         vec![Line::from(vec![
@@ -1826,10 +1831,7 @@ pub fn render_surface_summary_overlay(
                     .add_modifier(Modifier::BOLD),
             ),
             Span::styled("summarizing...", Style::default().fg(theme.muted)),
-            Span::styled(
-                format!("  ({}s)", secs),
-                Style::default().fg(theme.muted),
-            ),
+            Span::styled(format!("  ({}s)", secs), Style::default().fg(theme.muted)),
         ])]
     } else if let Some(text) = &overlay.summary {
         text.lines()
@@ -1844,7 +1846,11 @@ pub fn render_surface_summary_overlay(
     } else {
         overlay.last_model.as_str()
     };
-    let cache_label = if overlay.last_cache_hit { "cached" } else { "fresh" };
+    let cache_label = if overlay.last_cache_hit {
+        "cached"
+    } else {
+        "fresh"
+    };
     let provider_label = if overlay.last_provider.is_empty() {
         "(default)"
     } else {
@@ -2318,14 +2324,434 @@ pub fn context_menu_hit_test(
     // not have access to the live frame area so we assume "fits in 200x80".
     let frame_area = Rect::new(0, 0, 200, 80);
     let rect = context_menu_rect(menu, frame_area);
-    if col > rect.x
-        && col < rect.x + rect.width.saturating_sub(1)
-        && row == rect.y + 1
-    {
+    if col > rect.x && col < rect.x + rect.width.saturating_sub(1) && row == rect.y + 1 {
         Some(ContextMenuHit::AiSummary)
     } else {
         None
     }
+}
+
+// ─── Skills Browser Overlay ──────────────────────────────────────
+/// Compute the modal rect for the Skills overlay. Used by both the renderer
+/// and the mouse hit-test so they stay aligned.
+pub fn skills_overlay_modal_rect(area: Rect) -> Rect {
+    let modal_w = area.width.saturating_sub(4).min(120).max(60);
+    let modal_h = area.height.saturating_sub(4).min(40).max(12);
+    let x = area.x + (area.width.saturating_sub(modal_w)) / 2;
+    let y = area.y + (area.height.saturating_sub(modal_h)) / 2;
+    Rect::new(x, y, modal_w, modal_h)
+}
+
+/// Returns true if (column, row) lands on the modal's `[ X ]` close button.
+pub fn skills_overlay_close_hit(area: Rect, column: u16, row: u16) -> bool {
+    let modal_area = skills_overlay_modal_rect(area);
+    let btn = close_btn_rect(modal_area);
+    column >= btn.x && column < btn.x.saturating_add(btn.width) && row == btn.y
+}
+
+/// Returns the absolute skill index for a (column, row) landing inside the
+/// list region of the Skills modal, accounting for the current scroll offset.
+/// Returns None if the click is outside the list (border / footer / outside).
+pub fn skills_overlay_row_hit(
+    area: Rect,
+    scroll: usize,
+    total_rows: usize,
+    column: u16,
+    row: u16,
+) -> Option<usize> {
+    let modal_area = skills_overlay_modal_rect(area);
+    let inner_x = modal_area.x + 1;
+    // Inner content starts after the top border AND the tab strip row.
+    let list_top = modal_area.y + 2;
+    let inner_w = modal_area.width.saturating_sub(2);
+    let inner_h = modal_area.height.saturating_sub(2);
+    if column < inner_x || column >= inner_x + inner_w {
+        return None;
+    }
+    // The list region spans rows [list_top, footer_y), where footer_y is the
+    // second-to-last inner row (footer occupies the last inner row).
+    let footer_y = modal_area.y + 1 + inner_h.saturating_sub(1);
+    if row < list_top || row >= footer_y {
+        return None;
+    }
+    let relative = (row - list_top) as usize;
+    let idx = scroll + relative;
+    if idx < total_rows {
+        Some(idx)
+    } else {
+        None
+    }
+}
+
+/// Hit-test the tab strip. Caller passes the current `skill_count` and
+/// `prompt_count` so this stays in sync with the actual rendered label widths
+/// (which include the counts). The tab strip lives on the first interior row
+/// of the modal, after a single leading space.
+pub fn skills_overlay_tab_hit(
+    area: Rect,
+    skill_count: usize,
+    prompt_count: usize,
+    column: u16,
+    row: u16,
+) -> Option<crate::app::ViewerTab> {
+    use crate::app::ViewerTab;
+    let modal_area = skills_overlay_modal_rect(area);
+    let tab_row = modal_area.y + 1;
+    if row != tab_row {
+        return None;
+    }
+    let skills_label = format!(" Skills ({}) ", skill_count);
+    let prompts_label = format!(" Prompts ({}) ", prompt_count);
+    // Renderer emits, inside the inner area (which starts at modal.x + 1):
+    //   Span::raw(" ") + skills_label + Span::raw(" ") + prompts_label + hint
+    // So the first label starts at modal.x + 1 + 1 = modal.x + 2.
+    let skills_start = modal_area.x + 2;
+    let skills_end = skills_start + skills_label.chars().count() as u16;
+    // Then one separator space, then the Prompts label.
+    let prompts_start = skills_end + 1;
+    let prompts_end = prompts_start + prompts_label.chars().count() as u16;
+    if column >= skills_start && column < skills_end {
+        Some(ViewerTab::Skills)
+    } else if column >= prompts_start && column < prompts_end {
+        Some(ViewerTab::Prompts)
+    } else {
+        None
+    }
+}
+
+pub fn render_skills_overlay(frame: &mut Frame, state: &AppState) {
+    use crate::app::ViewerTab;
+    if state.skills_overlay.is_none() && state.prompts_overlay.is_none() {
+        return;
+    }
+    let area = frame.area();
+    let modal_area = skills_overlay_modal_rect(area);
+
+    let backdrop = Block::default().style(Style::default().bg(state.tui_theme.surface));
+    frame.render_widget(Clear, modal_area);
+    frame.render_widget(backdrop, modal_area);
+
+    let title = match state.active_viewer_tab {
+        ViewerTab::Skills => " Viewer  \u{2014} Skills ".to_string(),
+        ViewerTab::Prompts => " Viewer  \u{2014} Prompts ".to_string(),
+    };
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Double)
+        .border_style(Style::default().fg(state.tui_theme.accent))
+        .title(Span::styled(
+            title,
+            Style::default()
+                .fg(state.tui_theme.accent)
+                .add_modifier(Modifier::BOLD),
+        ));
+    let inner = block.inner(modal_area);
+    frame.render_widget(block, modal_area);
+
+    // Close button [ X ] at top-right of the modal border.
+    let btn = close_btn_rect(modal_area);
+    let btn_style = Style::default()
+        .fg(Color::Yellow)
+        .add_modifier(Modifier::BOLD);
+    for (i, ch) in "[ X ]".chars().enumerate() {
+        let col = btn.x + i as u16;
+        let buf = frame.buffer_mut();
+        if col < buf.area().width && btn.y < buf.area().height {
+            buf[(col, btn.y)].set_char(ch).set_style(btn_style);
+        }
+    }
+
+    // Layout: tab strip (1 row), content (flex), footer (1 row).
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(1),
+            Constraint::Min(3),
+            Constraint::Length(1),
+        ])
+        .split(inner);
+    let tab_area = chunks[0];
+    let content_area = chunks[1];
+    let footer_area = chunks[2];
+
+    render_viewer_tab_strip(frame, tab_area, state);
+
+    match state.active_viewer_tab {
+        ViewerTab::Skills => render_viewer_skills_content(frame, content_area, footer_area, state),
+        ViewerTab::Prompts => {
+            render_viewer_prompts_content(frame, content_area, footer_area, state)
+        }
+    }
+}
+
+fn render_viewer_tab_strip(frame: &mut Frame, area: Rect, state: &AppState) {
+    use crate::app::ViewerTab;
+    let skill_count = state
+        .skills_overlay
+        .as_ref()
+        .map(|s| s.rows.len())
+        .unwrap_or(0);
+    let prompt_count = state
+        .prompts_overlay
+        .as_ref()
+        .map(|p| p.rows.len())
+        .unwrap_or(0);
+    let active_style = Style::default()
+        .fg(Color::Black)
+        .bg(state.tui_theme.accent)
+        .add_modifier(Modifier::BOLD);
+    let inactive_style = Style::default().fg(state.tui_theme.muted);
+
+    let skills_label = format!(" Skills ({}) ", skill_count);
+    let prompts_label = format!(" Prompts ({}) ", prompt_count);
+    let hint = "   Tab: switch  \u{2191}\u{2193}/PgUp/PgDn  Esc close";
+
+    let spans = vec![
+        Span::raw(" "),
+        Span::styled(
+            skills_label,
+            if state.active_viewer_tab == ViewerTab::Skills {
+                active_style
+            } else {
+                inactive_style
+            },
+        ),
+        Span::raw(" "),
+        Span::styled(
+            prompts_label,
+            if state.active_viewer_tab == ViewerTab::Prompts {
+                active_style
+            } else {
+                inactive_style
+            },
+        ),
+        Span::styled(hint.to_string(), Style::default().fg(state.tui_theme.muted)),
+    ];
+    frame.render_widget(Paragraph::new(Line::from(spans)), area);
+}
+
+fn render_viewer_skills_content(
+    frame: &mut Frame,
+    list_area: Rect,
+    footer_area: Rect,
+    state: &AppState,
+) {
+    let Some(overlay) = state.skills_overlay.as_ref() else {
+        return;
+    };
+    let total = overlay.rows.len();
+    let visible_rows = list_area.height as usize;
+    let scroll_start = overlay.scroll.min(total);
+    let scroll_end = (scroll_start + visible_rows).min(total);
+
+    let inner_width = list_area.width as usize;
+    let name_col = 28usize;
+    let source_col = 8usize;
+    let fixed = 1 + name_col + 1 + source_col + 1;
+    let path_col = inner_width.saturating_sub(fixed);
+
+    let lines: Vec<Line> = overlay
+        .rows
+        .iter()
+        .enumerate()
+        .skip(scroll_start)
+        .take(scroll_end.saturating_sub(scroll_start))
+        .map(|(i, row)| {
+            let is_cursor = i == overlay.cursor;
+            let indicator = if is_cursor { "▸" } else { " " };
+            let name = truncate_str(&row.name, name_col);
+            let source = truncate_str(row.source_label, source_col);
+            let path = truncate_str(&row.path_hint, path_col);
+            let text = format!(
+                "{} {:<name_w$} {:<src_w$} {}",
+                indicator,
+                name,
+                source,
+                path,
+                name_w = name_col,
+                src_w = source_col,
+            );
+            let style = if is_cursor {
+                Style::default()
+                    .fg(Color::Black)
+                    .bg(state.tui_theme.accent)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(state.tui_theme.text)
+            };
+            Line::from(Span::styled(text, style))
+        })
+        .collect();
+
+    frame.render_widget(Paragraph::new(lines), list_area);
+
+    let focused_desc = overlay
+        .rows
+        .get(overlay.cursor)
+        .map(|r| r.description.as_str())
+        .unwrap_or("");
+    let desc_truncated = truncate_str(focused_desc, inner_width.saturating_sub(40));
+    let position = if total == 0 {
+        String::new()
+    } else {
+        format!(
+            " {}/{} ",
+            overlay.cursor.saturating_add(1).min(total),
+            total
+        )
+    };
+    let footer_text = format!(
+        " {}{}   |   Enter edit ($EDITOR)  Esc close",
+        position, desc_truncated
+    );
+    frame.render_widget(
+        Paragraph::new(Line::from(Span::styled(
+            footer_text,
+            Style::default().fg(state.tui_theme.muted),
+        ))),
+        footer_area,
+    );
+}
+
+fn render_viewer_prompts_content(
+    frame: &mut Frame,
+    content_area: Rect,
+    footer_area: Rect,
+    state: &AppState,
+) {
+    let Some(overlay) = state.prompts_overlay.as_ref() else {
+        return;
+    };
+    if let Some(dd) = overlay.drill_down.as_ref() {
+        render_prompts_drill_down(frame, content_area, footer_area, state, dd);
+    } else {
+        render_prompts_list(frame, content_area, footer_area, state, overlay);
+    }
+}
+
+fn render_prompts_list(
+    frame: &mut Frame,
+    list_area: Rect,
+    footer_area: Rect,
+    state: &AppState,
+    overlay: &crate::app::PromptsOverlayState,
+) {
+    let total = overlay.rows.len();
+    let visible_rows = list_area.height as usize;
+    let scroll_start = overlay.scroll.min(total);
+    let scroll_end = (scroll_start + visible_rows).min(total);
+
+    let inner_width = list_area.width as usize;
+    let name_col = 36usize;
+    let fixed = 1 + name_col + 1;
+    let summary_col = inner_width.saturating_sub(fixed);
+
+    let lines: Vec<Line> = overlay
+        .rows
+        .iter()
+        .enumerate()
+        .skip(scroll_start)
+        .take(scroll_end.saturating_sub(scroll_start))
+        .map(|(i, row)| {
+            let is_cursor = i == overlay.cursor;
+            let indicator = if is_cursor { "▸" } else { " " };
+            let name = truncate_str(&row.name, name_col);
+            let summary = truncate_str(&row.doc_summary, summary_col);
+            let text = format!(
+                "{} {:<name_w$} {}",
+                indicator,
+                name,
+                summary,
+                name_w = name_col,
+            );
+            let style = if is_cursor {
+                Style::default()
+                    .fg(Color::Black)
+                    .bg(state.tui_theme.accent)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(state.tui_theme.text)
+            };
+            Line::from(Span::styled(text, style))
+        })
+        .collect();
+
+    frame.render_widget(Paragraph::new(lines), list_area);
+
+    let position = if total == 0 {
+        String::new()
+    } else {
+        format!(
+            " {}/{} ",
+            overlay.cursor.saturating_add(1).min(total),
+            total
+        )
+    };
+    let footer_text = format!(" {}   |   Enter view source  Esc close", position);
+    frame.render_widget(
+        Paragraph::new(Line::from(Span::styled(
+            footer_text,
+            Style::default().fg(state.tui_theme.muted),
+        ))),
+        footer_area,
+    );
+}
+
+fn render_prompts_drill_down(
+    frame: &mut Frame,
+    content_area: Rect,
+    footer_area: Rect,
+    state: &AppState,
+    dd: &crate::app::PromptsDrillDown,
+) {
+    let header_text = format!(" {}  (read-only)", dd.name);
+    let header_area = Rect::new(content_area.x, content_area.y, content_area.width, 1);
+    let body_area = Rect::new(
+        content_area.x,
+        content_area.y + 1,
+        content_area.width,
+        content_area.height.saturating_sub(1),
+    );
+
+    frame.render_widget(
+        Paragraph::new(Line::from(Span::styled(
+            header_text,
+            Style::default()
+                .fg(state.tui_theme.accent)
+                .add_modifier(Modifier::BOLD),
+        ))),
+        header_area,
+    );
+
+    let visible_rows = body_area.height as usize;
+    let total_lines = dd.source.lines().count();
+    let scroll = dd.scroll.min(total_lines.saturating_sub(1).max(0));
+    let body_lines: Vec<Line> = dd
+        .source
+        .lines()
+        .skip(scroll)
+        .take(visible_rows)
+        .map(|l| {
+            Line::from(Span::styled(
+                l.to_string(),
+                Style::default().fg(state.tui_theme.text),
+            ))
+        })
+        .collect();
+    frame.render_widget(Paragraph::new(body_lines), body_area);
+
+    let footer_text = format!(
+        " line {}/{}   |   \u{2191}\u{2193}/PgUp/PgDn scroll  Esc back to list",
+        scroll + 1,
+        total_lines.max(1)
+    );
+    frame.render_widget(
+        Paragraph::new(Line::from(Span::styled(
+            footer_text,
+            Style::default().fg(state.tui_theme.muted),
+        ))),
+        footer_area,
+    );
 }
 
 #[cfg(test)]

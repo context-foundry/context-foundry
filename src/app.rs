@@ -26,21 +26,21 @@ use self::startup::{
 pub use self::state::FileEntry;
 pub use self::state::{
     settings_sections, Action, AppPhase, AppState, ClickableSurface, CurrentClassification,
-    DualSelection, ExplorerContextMenu, PluginDisplayInfo, FieldKind, ModelEntry, ModelPicker,
-    OverlayRow, PickerItem, PlanStatus, PlanningState, RunningModalKind,
-    SectionKind, StartupAction, StartupScenario, StartupState, StreamState,
-    SurfaceSummaryOverlay, TuiPane,
+    DualSelection, ExplorerContextMenu, FieldKind, ModelEntry, ModelPicker, OverlayRow, PickerItem,
+    PlanStatus, PlanningState, PluginDisplayInfo, PromptsDrillDown, PromptsOverlayRow,
+    PromptsOverlayState, RunningModalKind, SectionKind, SkillsOverlayRow, StartupAction,
+    StartupScenario, StartupState, StreamState, SurfaceSummaryOverlay, TuiPane, ViewerTab,
 };
 use self::state::{AppEvent, AppendTasksRequest, LoopEvent, PendingTransition, PlanningOutcome};
 use crate::agent::{AgentErrorKind, AgentOutputEvent, AgentRole};
 use crate::complexity::TaskOverride;
 use crate::config::Config;
 use crate::eval;
+use crate::eval::report as eval_report;
 use crate::eval::stage_id::StageId;
+use crate::git;
 use crate::llm::summary::summarize_surface;
 use crate::llm::summary_cache::StageState;
-use crate::eval::report as eval_report;
-use crate::git;
 use crate::orchestrator::{self, OrchestratorConfig, OrchestratorOutcome};
 use crate::task;
 use crate::tmux;
@@ -624,12 +624,11 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
         tokio::spawn(async move {
             loop {
                 let dir = project_dir_buf.clone();
-                let brief = tokio::task::spawn_blocking(move || {
-                    crate::git::last_commit_brief(&dir)
-                })
-                .await
-                .ok()
-                .flatten();
+                let brief =
+                    tokio::task::spawn_blocking(move || crate::git::last_commit_brief(&dir))
+                        .await
+                        .ok()
+                        .flatten();
                 if narrative_tx
                     .send(AppEvent::NarrativeRefresh(brief))
                     .is_err()
@@ -680,6 +679,9 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
                 if state.show_settings_overlay {
                     tui::render_settings_overlay(frame, &state);
                 }
+                if state.show_skills_overlay {
+                    tui::render_skills_overlay(frame, &state);
+                }
                 if state.surface_summary_overlay.is_some() {
                     tui::render_surface_summary_overlay(frame, &state);
                 }
@@ -716,6 +718,10 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
         if let Some(editor_path) =
             apply_pending_transition(project_dir, &config, &event_tx, &mut state, &shutdown)
         {
+            // Snapshot the phase BEFORE suspending so we can resume into the
+            // right surface. From Running/Planning (e.g. Viewer-launched
+            // edits), we should NOT bounce the user back to Startup.
+            let resume_phase = state.phase;
             // Abort the terminal event reader so it stops competing for input
             terminal_reader_handle.abort();
             tui::restore_terminal(&mut terminal)?;
@@ -733,7 +739,22 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
                 }
                 Err(e) => Some(format!("Editor failed: {}", e)),
             };
-            enter_home_surface(project_dir, &mut state, message);
+            match resume_phase {
+                AppPhase::Startup => {
+                    // Pre-existing flow: reload home surface (refreshes plan
+                    // counts, plugin discovery, skill pool, etc.) and surface
+                    // the post-editor status message there.
+                    enter_home_surface(project_dir, &mut state, message);
+                }
+                AppPhase::Running | AppPhase::Planning => {
+                    // Stay in the current phase; just log the message and
+                    // let the existing TUI re-render. The Viewer overlay,
+                    // if it was open, is still in state and reappears.
+                    if let Some(msg) = message {
+                        state.log(msg);
+                    }
+                }
+            }
         }
 
         if state.should_quit {
@@ -825,6 +846,20 @@ fn dispatch_event(state: &mut AppState, event: AppEvent, config: &Config) {
     if let AppEvent::NarrativeRefresh(brief) = &event {
         state.last_commit_brief = brief.clone();
         return;
+    }
+    // Global Viewer overlay shortcuts and key/mouse capture work in every
+    // phase. Must come BEFORE phase dispatch so Ctrl+S/Ctrl+P are not
+    // shadowed by running-mode handlers (e.g. plain `p` toggling patterns,
+    // or the old sandbox-disabled message).
+    if let AppEvent::Key(key) = &event {
+        if startup::handle_global_viewer_key(state, *key) {
+            return;
+        }
+    }
+    if let AppEvent::Mouse(mouse) = &event {
+        if startup::handle_global_viewer_mouse(state, *mouse) {
+            return;
+        }
     }
     match state.phase {
         AppPhase::Startup => handle_startup_event(state, event, config),
@@ -1246,32 +1281,28 @@ fn handle_planning_event(state: &mut AppState, event: AppEvent, config: &Config)
             // Hover anywhere updates the pipeline-tile tooltip label so the
             // status bar can surface the long name (Q -> QUERY, SH -> SHIP, etc.).
             if matches!(mouse.kind, MouseEventKind::Moved) {
-                state.hovered_pipeline_label = tui::pipeline_click(
-                    pipeline_area,
-                    mouse.column,
-                    mouse.row,
-                    n_connected,
-                )
-                .map(|click| match click {
-                    tui::PipelineClick::ConnectedStage(i) => {
-                        let mut labels: Vec<String> = Vec::new();
-                        if config.run_mode == "coach" {
-                            labels.push("COACH".to_string());
-                        }
-                        for stage_cfg in
-                            config.pipeline_stages.iter().filter(|s| s.enabled)
-                        {
-                            labels.push(stage_cfg.label.clone());
-                            if stage_cfg.id == "plan" && config.plan_review_enabled {
-                                labels.push("P+".to_string());
+                state.hovered_pipeline_label =
+                    tui::pipeline_click(pipeline_area, mouse.column, mouse.row, n_connected).map(
+                        |click| match click {
+                            tui::PipelineClick::ConnectedStage(i) => {
+                                let mut labels: Vec<String> = Vec::new();
+                                if config.run_mode == "coach" {
+                                    labels.push("COACH".to_string());
+                                }
+                                for stage_cfg in config.pipeline_stages.iter().filter(|s| s.enabled)
+                                {
+                                    labels.push(stage_cfg.label.clone());
+                                    if stage_cfg.id == "plan" && config.plan_review_enabled {
+                                        labels.push("P+".to_string());
+                                    }
+                                }
+                                labels.get(i).cloned().unwrap_or_else(|| "?".to_string())
                             }
-                        }
-                        labels.get(i).cloned().unwrap_or_else(|| "?".to_string())
-                    }
-                    tui::PipelineClick::Ship => "SHIP".to_string(),
-                    tui::PipelineClick::Discover => "DISCOVER".to_string(),
-                    tui::PipelineClick::Patterns => "SKILLS".to_string(),
-                });
+                            tui::PipelineClick::Ship => "SHIP".to_string(),
+                            tui::PipelineClick::Discover => "DISCOVER".to_string(),
+                            tui::PipelineClick::Patterns => "SKILLS".to_string(),
+                        },
+                    );
             }
 
             if matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
@@ -1343,7 +1374,11 @@ fn handle_planning_event(state: &mut AppState, event: AppEvent, config: &Config)
         AppEvent::UpdateAvailable(version) => {
             state.update_available = Some(version);
         }
-        AppEvent::SkillsRetrieved { stage, top_picks, total_pool: _ } => {
+        AppEvent::SkillsRetrieved {
+            stage,
+            top_picks,
+            total_pool: _,
+        } => {
             let entries: Vec<state::LastRetrievalEntry> = top_picks
                 .into_iter()
                 .take(10)
@@ -1463,11 +1498,7 @@ pub(crate) fn handle_overlay_esc(state: &mut AppState) -> bool {
     false
 }
 
-fn handle_running_modal_key(
-    state: &mut AppState,
-    key: event::KeyEvent,
-    kind: RunningModalKind,
-) {
+fn handle_running_modal_key(state: &mut AppState, key: event::KeyEvent, kind: RunningModalKind) {
     match kind {
         RunningModalKind::StopRun => match key.code {
             KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter => {
@@ -1581,13 +1612,9 @@ fn refresh_eval_report_cache(state: &mut AppState) {
     // cycle until the next refresh). The reverse order would let an
     // old snapshot pair with a fresh mtime -- exactly the false-fresh
     // bug T1.29 is fixing.
-    let mtime = std::fs::metadata(
-        state
-            .buildloop_dir
-            .join(eval_report::EVAL_REPORT_FILENAME),
-    )
-    .ok()
-    .and_then(|m| m.modified().ok());
+    let mtime = std::fs::metadata(state.buildloop_dir.join(eval_report::EVAL_REPORT_FILENAME))
+        .ok()
+        .and_then(|m| m.modified().ok());
     let snap = eval_report::read_report(&state.buildloop_dir);
     state.eval_report_cache = snap.clone();
     state.eval_report_mtime = mtime;
@@ -2190,13 +2217,7 @@ fn handle_planning_key(state: &mut AppState, key: event::KeyEvent, config: &Conf
                 .parent()
                 .unwrap_or(std::path::Path::new("."))
                 .to_path_buf();
-            trigger_surface_summary(
-                state,
-                &project_dir,
-                config,
-                overlay.surface.clone(),
-                true,
-            );
+            trigger_surface_summary(state, &project_dir, config, overlay.surface.clone(), true);
         }
         KeyCode::Char('f')
             if !state.show_settings_overlay && state.surface_summary_overlay.is_some() =>
@@ -2213,9 +2234,7 @@ fn handle_planning_key(state: &mut AppState, key: event::KeyEvent, config: &Conf
         }
         // Scroll the AI summary body. Keys claim the event only when the
         // overlay is open so they don't steal Up/Down from the running screen.
-        KeyCode::Up
-            if !state.show_settings_overlay && state.surface_summary_overlay.is_some() =>
-        {
+        KeyCode::Up if !state.show_settings_overlay && state.surface_summary_overlay.is_some() => {
             if let Some(o) = state.surface_summary_overlay.as_mut() {
                 o.scroll_offset = o.scroll_offset.saturating_sub(1);
             }
@@ -2265,10 +2284,8 @@ fn handle_planning_key(state: &mut AppState, key: event::KeyEvent, config: &Conf
                 refresh_skill_citation_summary(state);
             }
         }
-        // Sandbox toggle removed -- config-only override for implementers.
-        KeyCode::Char('s') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-            state.log("Sandbox toggle disabled -- override via .foundry.json only".to_string());
-        }
+        // Ctrl+S formerly logged a sandbox-disabled message. Reclaimed by the
+        // global Viewer dispatcher above so this match arm is now unreachable.
         KeyCode::Char('t') if key.modifiers.contains(KeyModifiers::CONTROL) => {
             let (new_theme, name) = crate::tui::theme::cycle_next(&state.tui_theme);
             state.tui_theme = new_theme;
@@ -2491,10 +2508,7 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                     agent_role: agent_role.clone(),
                     task_id: task_id.clone(),
                 });
-                *state
-                    .plugin_inject_count
-                    .entry(name.clone())
-                    .or_insert(0) += 1;
+                *state.plugin_inject_count.entry(name.clone()).or_insert(0) += 1;
             }
             LoopEvent::PatternsUsed {
                 ref titles,
@@ -3111,8 +3125,7 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                             if !state.show_settings_overlay
                                 && state.surface_summary_overlay.is_some() =>
                         {
-                            let Some(overlay) =
-                                state.surface_summary_overlay.as_ref().cloned()
+                            let Some(overlay) = state.surface_summary_overlay.as_ref().cloned()
                             else {
                                 return;
                             };
@@ -3133,8 +3146,7 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                             if !state.show_settings_overlay
                                 && state.surface_summary_overlay.is_some() =>
                         {
-                            let Some(overlay) =
-                                state.surface_summary_overlay.as_ref().cloned()
+                            let Some(overlay) = state.surface_summary_overlay.as_ref().cloned()
                             else {
                                 return;
                             };
@@ -3308,7 +3320,10 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
         }
         AppEvent::Tick => {
             state.tick_count = state.tick_count.wrapping_add(1);
-            if state.tick_count.is_multiple_of(crate::app::state::TASKS_RELOAD_TICK_STRIDE) {
+            if state
+                .tick_count
+                .is_multiple_of(crate::app::state::TASKS_RELOAD_TICK_STRIDE)
+            {
                 let _ = state.handle_tasks_file_change();
             }
             let needs_refresh = match state.skill_citation_summary_loaded_at {
@@ -3395,22 +3410,15 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                         return;
                     }
                     MouseEventKind::Down(MouseButton::Left) => {
-                        let has_file = surface_has_fallback_file(
-                            state.surface_summary_overlay.as_ref(),
-                        );
-                        match tui::summary_modal_hit_test(
-                            area,
-                            mouse.column,
-                            mouse.row,
-                            has_file,
-                        ) {
+                        let has_file =
+                            surface_has_fallback_file(state.surface_summary_overlay.as_ref());
+                        match tui::summary_modal_hit_test(area, mouse.column, mouse.row, has_file) {
                             Some(tui::SummaryModalAction::Dismiss) => {
                                 state.surface_summary_overlay = None;
                                 return;
                             }
                             Some(tui::SummaryModalAction::Refresh) => {
-                                let Some(overlay) =
-                                    state.surface_summary_overlay.as_ref().cloned()
+                                let Some(overlay) = state.surface_summary_overlay.as_ref().cloned()
                                 else {
                                     return;
                                 };
@@ -3429,8 +3437,7 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                                 return;
                             }
                             Some(tui::SummaryModalAction::OpenFile) => {
-                                let Some(overlay) =
-                                    state.surface_summary_overlay.as_ref().cloned()
+                                let Some(overlay) = state.surface_summary_overlay.as_ref().cloned()
                                 else {
                                     return;
                                 };
@@ -3545,7 +3552,12 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                             ratatui::layout::Rect::new(0, 0, terminal_size.0, terminal_size.1);
                         let has_ext = state.available_plugins.iter().any(|e| e.selected)
                             || !state.session_plugins_used.is_empty();
-                        let panes = tui::running_layout(area, has_ext, state.agent_pane_split, config.show_retrieval_panel);
+                        let panes = tui::running_layout(
+                            area,
+                            has_ext,
+                            state.agent_pane_split,
+                            config.show_retrieval_panel,
+                        );
                         let bottom_chunks = ratatui::layout::Layout::default()
                             .direction(ratatui::layout::Direction::Vertical)
                             .constraints([
@@ -3585,23 +3597,19 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                         // Pipeline tile hover -- look up the full label so the
                         // status bar can render a tooltip explaining the
                         // single-letter abbreviation (Q/R/P/P+/B/A/SH/DI/SK).
-                        let pipe_layout_chunks =
-                            ratatui::layout::Layout::default()
-                                .direction(ratatui::layout::Direction::Vertical)
-                                .constraints([
-                                    ratatui::layout::Constraint::Length(5),
-                                    ratatui::layout::Constraint::Length(5),
-                                    ratatui::layout::Constraint::Min(8),
-                                    ratatui::layout::Constraint::Length(8),
-                                    ratatui::layout::Constraint::Length(1),
-                                ])
-                                .split(area);
+                        let pipe_layout_chunks = ratatui::layout::Layout::default()
+                            .direction(ratatui::layout::Direction::Vertical)
+                            .constraints([
+                                ratatui::layout::Constraint::Length(5),
+                                ratatui::layout::Constraint::Length(5),
+                                ratatui::layout::Constraint::Min(8),
+                                ratatui::layout::Constraint::Length(8),
+                                ratatui::layout::Constraint::Length(1),
+                            ])
+                            .split(area);
                         let pipeline_area = pipe_layout_chunks[1];
-                        let mut n_connected = config
-                            .pipeline_stages
-                            .iter()
-                            .filter(|s| s.enabled)
-                            .count();
+                        let mut n_connected =
+                            config.pipeline_stages.iter().filter(|s| s.enabled).count();
                         if config.run_mode == "coach" {
                             n_connected += 1;
                         }
@@ -3620,15 +3628,10 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                                 if config.run_mode == "coach" {
                                     labels.push("COACH".to_string());
                                 }
-                                for stage_cfg in config
-                                    .pipeline_stages
-                                    .iter()
-                                    .filter(|s| s.enabled)
+                                for stage_cfg in config.pipeline_stages.iter().filter(|s| s.enabled)
                                 {
                                     labels.push(stage_cfg.label.clone());
-                                    if stage_cfg.id == "plan"
-                                        && config.plan_review_enabled
-                                    {
+                                    if stage_cfg.id == "plan" && config.plan_review_enabled {
                                         labels.push("P+".to_string());
                                     }
                                 }
@@ -3655,7 +3658,12 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                                 ratatui::layout::Rect::new(0, 0, terminal_size.0, terminal_size.1);
                             let has_ext = state.available_plugins.iter().any(|e| e.selected)
                                 || !state.session_plugins_used.is_empty();
-                            let panes = tui::running_layout(area, has_ext, state.agent_pane_split, config.show_retrieval_panel);
+                            let panes = tui::running_layout(
+                                area,
+                                has_ext,
+                                state.agent_pane_split,
+                                config.show_retrieval_panel,
+                            );
                             if tui::rect_contains(panes.agent_output, mouse.column, mouse.row) {
                                 state.focused_pane = state::TuiPane::AgentOutput;
                                 let max = state.agent_output.len().saturating_sub(1);
@@ -3699,7 +3707,12 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                                 ratatui::layout::Rect::new(0, 0, terminal_size.0, terminal_size.1);
                             let has_ext = state.available_plugins.iter().any(|e| e.selected)
                                 || !state.session_plugins_used.is_empty();
-                            let panes = tui::running_layout(area, has_ext, state.agent_pane_split, config.show_retrieval_panel);
+                            let panes = tui::running_layout(
+                                area,
+                                has_ext,
+                                state.agent_pane_split,
+                                config.show_retrieval_panel,
+                            );
                             if tui::rect_contains(panes.agent_output, mouse.column, mouse.row) {
                                 state.focused_pane = state::TuiPane::AgentOutput;
                                 state.scroll_offset = state.scroll_offset.saturating_sub(lines);
@@ -3730,14 +3743,15 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                             ratatui::layout::Rect::new(0, 0, terminal_size.0, terminal_size.1);
                         let has_ext = state.available_plugins.iter().any(|e| e.selected)
                             || !state.session_plugins_used.is_empty();
-                        let panes = tui::running_layout(area, has_ext, state.agent_pane_split, config.show_retrieval_panel);
-                        // Bottom stats rect (used for both hit-test and dispatch)
-                        let bottom_full = ratatui::layout::Rect::new(
-                            0,
-                            0,
-                            terminal_size.0,
-                            terminal_size.1,
+                        let panes = tui::running_layout(
+                            area,
+                            has_ext,
+                            state.agent_pane_split,
+                            config.show_retrieval_panel,
                         );
+                        // Bottom stats rect (used for both hit-test and dispatch)
+                        let bottom_full =
+                            ratatui::layout::Rect::new(0, 0, terminal_size.0, terminal_size.1);
                         let bottom_chunks = ratatui::layout::Layout::default()
                             .direction(ratatui::layout::Direction::Vertical)
                             .constraints([
@@ -3981,7 +3995,11 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                 }
             }
         }
-        AppEvent::SkillsRetrieved { stage, top_picks, total_pool: _ } => {
+        AppEvent::SkillsRetrieved {
+            stage,
+            top_picks,
+            total_pool: _,
+        } => {
             let entries: Vec<state::LastRetrievalEntry> = top_picks
                 .into_iter()
                 .take(10)
@@ -4546,7 +4564,11 @@ fn cycle_enum_field(state: &mut AppState, field_id: &str, direction: i32) {
     let project_dir = overlay_project_dir(state).to_path_buf();
     match field_id {
         "arena" => {
-            let new_mode = if state.arena_mode == "dual" { "solo" } else { "dual" };
+            let new_mode = if state.arena_mode == "dual" {
+                "solo"
+            } else {
+                "dual"
+            };
             state.arena_mode = new_mode.to_string();
             Config::save_arena_mode(&project_dir, new_mode);
             if new_mode == "solo" {
@@ -4717,11 +4739,11 @@ fn refresh_skill_citation_summary(state: &mut AppState) {
     let db_path = crate::skills_telemetry::db_path();
     match crate::skills_telemetry::open_db(&db_path) {
         Ok(conn) => {
-            let top_skills = crate::skills_telemetry::top_cited_skills(&conn, 50)
-                .unwrap_or_default();
+            let top_skills =
+                crate::skills_telemetry::top_cited_skills(&conn, 50).unwrap_or_default();
             let week_ago = chrono::Utc::now() - chrono::Duration::days(7);
-            let week_recent = crate::skills_telemetry::recent_citations(&conn, week_ago)
-                .unwrap_or_default();
+            let week_recent =
+                crate::skills_telemetry::recent_citations(&conn, week_ago).unwrap_or_default();
             let last_cited: Option<(String, String)> = top_skills
                 .iter()
                 .max_by(|a, b| a.last_used.cmp(&b.last_used))
@@ -4730,8 +4752,8 @@ fn refresh_skill_citation_summary(state: &mut AppState) {
                         .as_ref()
                         .map(|d| (r.skill_name.clone(), d.clone()))
                 });
-            let all_skills = crate::skills_telemetry::top_cited_skills(&conn, 10_000)
-                .unwrap_or_default();
+            let all_skills =
+                crate::skills_telemetry::top_cited_skills(&conn, 10_000).unwrap_or_default();
             let top3: Vec<crate::skills_telemetry::TelemetryRecord> =
                 week_recent.into_iter().take(3).collect();
             state.skill_citation_summary = Some(crate::app::state::SkillCitationSummary {
@@ -4830,8 +4852,7 @@ fn handle_agent_output(state: &mut AppState, output: AgentOutputEvent) {
             } else {
                 state.agent_output.push(chunk.clone());
             }
-            state.status_summary =
-                format!("writing... ({} chunks)", state.stream_text_delta_count);
+            state.status_summary = format!("writing... ({} chunks)", state.stream_text_delta_count);
         }
         AgentOutputEvent::Text(ref text) => {
             if text.starts_with("[rate limited]") {
@@ -5585,10 +5606,7 @@ fn stage_summary_inputs(
         "doubt" => (vec![buildloop.join("review-report.md")], None),
         "coach" => (vec![buildloop.join("intake-brief.md")], None),
         "scout" => (vec![buildloop.join("scout-report.md")], None),
-        "discover" => (
-            vec![ContractPaths::resolve(project_dir).tasks_path],
-            None,
-        ),
+        "discover" => (vec![ContractPaths::resolve(project_dir).tasks_path], None),
         "ship" => (Vec::new(), Some(collect_ship_log_blocking(project_dir))),
         // No single artifact -- the extractor writes per-skill SKILL.md files
         // into ~/.foundry/skills/. The summarizer reads the stage log instead.
@@ -5853,10 +5871,7 @@ fn surface_summary_inputs(
 ) -> (Vec<std::path::PathBuf>, Option<String>) {
     match surface {
         ClickableSurface::PipelineStage(stage_id) => stage_summary_inputs(stage_id, project_dir),
-        ClickableSurface::TaskQueue => (
-            vec![ContractPaths::resolve(project_dir).tasks_path],
-            None,
-        ),
+        ClickableSurface::TaskQueue => (vec![ContractPaths::resolve(project_dir).tasks_path], None),
         ClickableSurface::Narrative => {
             let mut s = String::new();
             if let Some(brief) = state.last_commit_brief.as_ref() {
@@ -5947,21 +5962,18 @@ fn surface_summary_inputs(
         }
         ClickableSurface::Stats => {
             let mut s = String::new();
-            s.push_str(&format!(
-                "Session cost: ${:.4}\n",
-                state.session_cost_usd
-            ));
+            s.push_str(&format!("Session cost: ${:.4}\n", state.session_cost_usd));
             s.push_str(&format!("Input tokens: {}\n", state.session_input_tokens));
-            s.push_str(&format!(
-                "Output tokens: {}\n",
-                state.session_output_tokens
-            ));
+            s.push_str(&format!("Output tokens: {}\n", state.session_output_tokens));
             s.push_str(&format!(
                 "Completed: {} / {} tasks\n",
                 state.completed_count, state.total_count
             ));
             if let Some(report) = state.eval_report_cache.as_ref() {
-                s.push_str(&format!("Eval cache present: {} stages\n", report.stages.len()));
+                s.push_str(&format!(
+                    "Eval cache present: {} stages\n",
+                    report.stages.len()
+                ));
             } else {
                 s.push_str("Eval report: not yet written\n");
             }
@@ -5969,13 +5981,8 @@ fn surface_summary_inputs(
             (vec![], Some(truncated))
         }
         ClickableSurface::AgentOutput => {
-            let mut chrono: Vec<String> = state
-                .agent_output
-                .iter()
-                .rev()
-                .take(80)
-                .cloned()
-                .collect();
+            let mut chrono: Vec<String> =
+                state.agent_output.iter().rev().take(80).cloned().collect();
             chrono.reverse();
             let joined = chrono.join("\n");
             let truncated = crate::utils::truncate_str(&joined, 4096).to_string();
@@ -6092,8 +6099,10 @@ fn surface_open_file(
         }
         None => {
             if let Some(o) = state.surface_summary_overlay.as_mut() {
-                o.last_error =
-                    Some(format!("No fallback file defined for {}", overlay.stage_label));
+                o.last_error = Some(format!(
+                    "No fallback file defined for {}",
+                    overlay.stage_label
+                ));
             }
         }
     }

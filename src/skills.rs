@@ -172,7 +172,8 @@ pub fn load_skills_from_global_and_project(project_dir: &Path) -> Vec<SkillFile>
     let global = load_skills_from_global();
     let discovered = crate::skill_discovery::discover_external_skills(project_dir);
 
-    let mut by_name: HashMap<String, SkillFile> = HashMap::with_capacity(global.len() + discovered.len());
+    let mut by_name: HashMap<String, SkillFile> =
+        HashMap::with_capacity(global.len() + discovered.len());
     let key_of = |sf: &SkillFile| -> String {
         if !sf.dir_name.is_empty() {
             sf.dir_name.clone()
@@ -241,6 +242,72 @@ pub fn skill_pool_summary(skills: &[SkillFile]) -> String {
         buckets.push(format!("{} from .cursorrules", cursor));
     }
     format!("Skill pool: {} = {} total", buckets.join(", "), total)
+}
+
+/// Build display rows for the Skills Browser overlay. Sorted by source
+/// precedence (global -> .claude -> agents -> copilot -> cursor) then name.
+pub fn build_skills_overlay_rows(
+    skills: &[SkillFile],
+    project_dir: &Path,
+) -> Vec<crate::app::SkillsOverlayRow> {
+    let home = std::env::var_os("HOME").map(PathBuf::from);
+    let project_str = project_dir.display().to_string();
+
+    let mut rows: Vec<crate::app::SkillsOverlayRow> = skills
+        .iter()
+        .map(|s| {
+            let (source_label, path_hint) = match s.provenance {
+                SkillProvenance::GlobalFoundry => {
+                    let raw = format!("~/.foundry/skills/{}/SKILL.md", s.dir_name);
+                    let p = if let Some(ref h) = home {
+                        raw.replacen("~", &h.display().to_string(), 1)
+                    } else {
+                        raw
+                    };
+                    ("global", p)
+                }
+                SkillProvenance::ClaudeProject => (
+                    ".claude",
+                    format!("{}/.claude/skills/{}/SKILL.md", project_str, s.dir_name),
+                ),
+                SkillProvenance::AgentsMd => ("agents", format!("{}/AGENTS.md", project_str)),
+                SkillProvenance::CopilotInstructions => (
+                    "copilot",
+                    format!("{}/.github/copilot-instructions.md", project_str),
+                ),
+                SkillProvenance::CursorRules => ("cursor", format!("{}/.cursorrules", project_str)),
+            };
+            let name = if s.frontmatter.name.is_empty() {
+                s.dir_name.clone()
+            } else {
+                s.frontmatter.name.clone()
+            };
+            crate::app::SkillsOverlayRow {
+                name,
+                description: s.frontmatter.description.clone(),
+                source_label,
+                path_hint,
+            }
+        })
+        .collect();
+
+    rows.sort_by(|a, b| {
+        source_rank(a.source_label)
+            .cmp(&source_rank(b.source_label))
+            .then(a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+    });
+    rows
+}
+
+fn source_rank(label: &str) -> u8 {
+    match label {
+        "global" => 0,
+        ".claude" => 1,
+        "agents" => 2,
+        "copilot" => 3,
+        "cursor" => 4,
+        _ => 9,
+    }
 }
 
 /// Drop-in shape for the matcher. Each `SkillFile` becomes one `Pattern`.
@@ -334,26 +401,25 @@ pub fn skill_to_pattern(s: SkillFile) -> Pattern {
 /// to keep the BM25 vocabulary bounded.
 pub fn synthesize_keywords(pattern_id: &str, description: &str) -> Vec<String> {
     const STOPWORDS: &[&str] = &[
-        "the", "a", "an", "and", "or", "but", "if", "is", "are", "was", "were",
-        "be", "been", "being", "use", "uses", "used", "using", "when", "where",
-        "what", "which", "who", "whom", "this", "that", "these", "those", "of",
-        "on", "in", "at", "to", "for", "with", "without", "any", "all", "you",
-        "must", "should", "before", "after", "from", "by", "into", "as", "it",
-        "its", "your", "yours", "we", "our", "us", "i", "they", "their", "them",
-        "do", "does", "did", "have", "has", "had", "can", "could", "will",
-        "would", "may", "might", "etc",
+        "the", "a", "an", "and", "or", "but", "if", "is", "are", "was", "were", "be", "been",
+        "being", "use", "uses", "used", "using", "when", "where", "what", "which", "who", "whom",
+        "this", "that", "these", "those", "of", "on", "in", "at", "to", "for", "with", "without",
+        "any", "all", "you", "must", "should", "before", "after", "from", "by", "into", "as", "it",
+        "its", "your", "yours", "we", "our", "us", "i", "they", "their", "them", "do", "does",
+        "did", "have", "has", "had", "can", "could", "will", "would", "may", "might", "etc",
     ];
 
     let mut out: Vec<String> = Vec::with_capacity(24);
     let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
-    let push = |token: String, out: &mut Vec<String>, seen: &mut std::collections::HashSet<String>| {
-        if token.len() < 3 || STOPWORDS.contains(&token.as_str()) {
-            return;
-        }
-        if seen.insert(token.clone()) {
-            out.push(token);
-        }
-    };
+    let push =
+        |token: String, out: &mut Vec<String>, seen: &mut std::collections::HashSet<String>| {
+            if token.len() < 3 || STOPWORDS.contains(&token.as_str()) {
+                return;
+            }
+            if seen.insert(token.clone()) {
+                out.push(token);
+            }
+        };
 
     // 1. pattern_id tokens (kebab-split)
     for tok in pattern_id.split('-') {
@@ -362,12 +428,13 @@ pub fn synthesize_keywords(pattern_id: &str, description: &str) -> Vec<String> {
 
     // 2. description content words: lowercase alphanum + apostrophe runs, drop short/stopwords
     let mut buf = String::new();
-    let flush = |buf: &mut String, out: &mut Vec<String>, seen: &mut std::collections::HashSet<String>| {
-        if !buf.is_empty() {
-            let token = std::mem::take(buf);
-            push(token, out, seen);
-        }
-    };
+    let flush =
+        |buf: &mut String, out: &mut Vec<String>, seen: &mut std::collections::HashSet<String>| {
+            if !buf.is_empty() {
+                let token = std::mem::take(buf);
+                push(token, out, seen);
+            }
+        };
     for ch in description.chars() {
         if ch.is_ascii_alphanumeric() || ch == '\'' {
             buf.extend(ch.to_lowercase());
@@ -501,7 +568,9 @@ pub fn discovered_to_skill_file(disc: &DiscoveredSkill) -> SkillFile {
 /// now flow through `load_skills_from_global_and_project` and the standard
 /// ranker. Kept for the existing test suite in `src/skills.rs`.
 #[allow(dead_code)]
-pub fn format_discovered_skills_for_prompt(discovered: &[(SkillSource, &DiscoveredSkill)]) -> String {
+pub fn format_discovered_skills_for_prompt(
+    discovered: &[(SkillSource, &DiscoveredSkill)],
+) -> String {
     if discovered.is_empty() {
         return String::new();
     }
@@ -777,10 +846,7 @@ pub fn format_skills_for_prompt(skills: &[&SkillFile], max_skills: usize) -> Str
             s.frontmatter.cf_stage
         ));
         if !s.frontmatter.description.is_empty() {
-            out.push_str(&format!(
-                "**Description:** {}\n",
-                s.frontmatter.description
-            ));
+            out.push_str(&format!("**Description:** {}\n", s.frontmatter.description));
         }
         if !s.frontmatter.cf_keywords.is_empty() {
             out.push_str(&format!(
@@ -947,19 +1013,22 @@ fn parse_frontmatter(yaml_block: &str) -> Result<SkillFrontmatter> {
                         }
                     }
                     "cf-citations-pass" => {
-                        fm.cf_citations_pass = value_part.trim().parse::<usize>().with_context(
-                            || format!("integer field {} not parseable: {}", key, value_part),
-                        )?;
+                        fm.cf_citations_pass =
+                            value_part.trim().parse::<usize>().with_context(|| {
+                                format!("integer field {} not parseable: {}", key, value_part)
+                            })?;
                     }
                     "cf-citations-wip" => {
-                        fm.cf_citations_wip = value_part.trim().parse::<usize>().with_context(
-                            || format!("integer field {} not parseable: {}", key, value_part),
-                        )?;
+                        fm.cf_citations_wip =
+                            value_part.trim().parse::<usize>().with_context(|| {
+                                format!("integer field {} not parseable: {}", key, value_part)
+                            })?;
                     }
                     "cf-frequency" => {
-                        fm.cf_frequency = value_part.trim().parse::<usize>().with_context(
-                            || format!("integer field {} not parseable: {}", key, value_part),
-                        )?;
+                        fm.cf_frequency =
+                            value_part.trim().parse::<usize>().with_context(|| {
+                                format!("integer field {} not parseable: {}", key, value_part)
+                            })?;
                     }
                     _ => {}
                 }
@@ -1126,8 +1195,7 @@ fn escape_scalar(v: &str) -> String {
 /// Write a single skill to `<skills_dir>/<dir_name>/SKILL.md`.
 pub fn write_skill(skills_dir: &Path, dir_name: &str, contents: &str) -> Result<()> {
     let dir = skills_dir.join(dir_name);
-    std::fs::create_dir_all(&dir)
-        .with_context(|| format!("failed to create {}", dir.display()))?;
+    std::fs::create_dir_all(&dir).with_context(|| format!("failed to create {}", dir.display()))?;
     let target = dir.join("SKILL.md");
     atomic_write_file(&target, contents.as_bytes())
         .with_context(|| format!("failed to write {}", target.display()))?;
@@ -1474,10 +1542,7 @@ mod tests {
         ];
         let result = match_skills_for_stage(&skills, "planner");
         assert_eq!(result.len(), 2);
-        let names: Vec<&str> = result
-            .iter()
-            .map(|s| s.frontmatter.name.as_str())
-            .collect();
+        let names: Vec<&str> = result.iter().map(|s| s.frontmatter.name.as_str()).collect();
         assert!(names.contains(&"a"));
         assert!(names.contains(&"c"));
     }
@@ -1595,10 +1660,8 @@ mod tests {
         let s1 = make_skill("plan-file-token-overflow-planner", "planner");
         let s2 = make_skill("stats-structs-need-clone-for-tui-state-planner", "planner");
         let s3 = make_skill("unused-skill-planner", "planner");
-        let pats: Vec<crate::patterns::Pattern> = vec![s1, s2, s3]
-            .into_iter()
-            .map(skill_to_pattern)
-            .collect();
+        let pats: Vec<crate::patterns::Pattern> =
+            vec![s1, s2, s3].into_iter().map(skill_to_pattern).collect();
 
         let synthetic_plan = "\
 # Plan: T1.30
@@ -1695,10 +1758,7 @@ mod tests {
         .await;
 
         assert!(!out.is_empty(), "expected at least one matching skill");
-        let names: Vec<&str> = out
-            .iter()
-            .map(|s| s.frontmatter.name.as_str())
-            .collect();
+        let names: Vec<&str> = out.iter().map(|s| s.frontmatter.name.as_str()).collect();
         assert!(
             names.contains(&"alpha") || names.contains(&"gamma"),
             "expected alpha or gamma to surface; got {:?}",
@@ -1938,8 +1998,7 @@ mod tests {
             derived_name: "agents-md".to_string(),
             frontmatter: None,
         };
-        let entries: Vec<(SkillSource, &DiscoveredSkill)> =
-            vec![(SkillSource::AgentsMd, &disc)];
+        let entries: Vec<(SkillSource, &DiscoveredSkill)> = vec![(SkillSource::AgentsMd, &disc)];
         let out = format_discovered_skills_for_prompt(&entries);
         assert!(out.contains("## External Skills"));
         assert!(
@@ -2380,28 +2439,35 @@ mod ranks_tests {
         patterns.push(make_pattern(
             "phantom-path-survives-targeted-cleanup-reviewer",
             vec![
-                "phantom",
-                "path",
-                "survives",
-                "targeted",
-                "cleanup",
-                "reviewer",
-                "flowise",
-                "json",
-                "metadata",
+                "phantom", "path", "survives", "targeted", "cleanup", "reviewer", "flowise",
+                "json", "metadata",
             ],
         ));
         patterns.push(make_pattern(
             "rust-struct-literal-field-explosion-planner",
             vec![
-                "rust", "struct", "literal", "field", "explosion", "planner", "serde", "default",
+                "rust",
+                "struct",
+                "literal",
+                "field",
+                "explosion",
+                "planner",
+                "serde",
+                "default",
                 "compile",
             ],
         ));
         patterns.push(make_pattern(
             "rust-struct-literal-field-explosion-reviewer",
             vec![
-                "rust", "struct", "literal", "field", "explosion", "reviewer", "serde", "default",
+                "rust",
+                "struct",
+                "literal",
+                "field",
+                "explosion",
+                "reviewer",
+                "serde",
+                "default",
                 "compile",
             ],
         ));
@@ -2446,14 +2512,28 @@ mod ranks_tests {
         patterns.push(make_pattern(
             "dict-get-default-fails-on-explicit-null-planner",
             vec![
-                "dict", "get", "default", "fails", "explicit", "null", "planner", "python",
+                "dict",
+                "get",
+                "default",
+                "fails",
+                "explicit",
+                "null",
+                "planner",
+                "python",
                 "typeerror",
             ],
         ));
         patterns.push(make_pattern(
             "dict-get-default-fails-on-explicit-null-reviewer",
             vec![
-                "dict", "get", "default", "fails", "explicit", "null", "reviewer", "python",
+                "dict",
+                "get",
+                "default",
+                "fails",
+                "explicit",
+                "null",
+                "reviewer",
+                "python",
                 "typeerror",
             ],
         ));
@@ -2673,8 +2753,7 @@ mod ranks_tests {
             .unwrap();
 
             let merged = load_skills_from_global_and_project(project.path());
-            let foos: Vec<&SkillFile> =
-                merged.iter().filter(|s| s.dir_name == "foo").collect();
+            let foos: Vec<&SkillFile> = merged.iter().filter(|s| s.dir_name == "foo").collect();
             assert_eq!(
                 foos.len(),
                 1,

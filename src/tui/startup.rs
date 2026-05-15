@@ -10,7 +10,7 @@ use ratatui::{
 };
 
 use super::{pane_border_style, pane_border_type};
-use crate::app::{AppState, PluginDisplayInfo, FileEntry, StartupState, TuiPane};
+use crate::app::{AppState, FileEntry, PluginDisplayInfo, StartupState, TuiPane};
 use crate::utils::truncate_str;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -143,13 +143,10 @@ pub(super) fn render_startup(frame: &mut Frame, state: &AppState) {
     render_startup_status_bar(frame, layout.status, state);
 }
 
-/// T2.4: external-skill rows folded into the auto-retrieval pool; the
-/// Plugins panel now renders only plugin checkboxes plus (optionally)
-/// a single summary line above them.
+/// Plugins panel renders only plugin checkboxes. The skill-pool inventory
+/// moved to the Ctrl+S overlay; the per-skill summary line was removed.
 fn combined_panel_row_count(state: &AppState) -> usize {
-    let ext = state.available_plugins.len();
-    let summary_row = if state.skill_pool_summary.is_empty() { 0 } else { 1 };
-    ext + summary_row
+    state.available_plugins.len()
 }
 
 pub(super) fn startup_hit_test(
@@ -206,8 +203,9 @@ pub(super) fn startup_layout(area: Rect, plugin_count: usize) -> StartupLayout {
     let vertical = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(8), // summary
-            Constraint::Min(8),    // body
+            Constraint::Length(8),                // summary
+            Constraint::Min(5),                   // body (explorer + preview columns)
+            Constraint::Length(ext_panel_height), // plugins panel (full width)
             Constraint::Length(5), // input prompt (borders + 3 content lines for wrapping)
             Constraint::Length(1), // status bar
         ])
@@ -218,22 +216,13 @@ pub(super) fn startup_layout(area: Rect, plugin_count: usize) -> StartupLayout {
         .constraints([Constraint::Percentage(36), Constraint::Percentage(64)])
         .split(vertical[1]);
 
-    // Split left column: file explorer (top) + plugins panel (bottom)
-    let left_split = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Min(5),                   // file explorer (flexible)
-            Constraint::Length(ext_panel_height), // plugins panel (fixed)
-        ])
-        .split(columns[0]);
-
     StartupLayout {
         summary: vertical[0],
-        status: vertical[3],
-        explorer: left_split[0],
-        plugins: left_split[1],
+        status: vertical[4],
+        explorer: columns[0],
+        plugins: vertical[2],
         preview: columns[1],
-        input: vertical[2],
+        input: vertical[3],
     }
 }
 
@@ -343,12 +332,7 @@ fn plugins_panel_hit_test(
         return None;
     }
     let relative_row = (row - inner_top) as usize;
-    // T2.4: summary line (if present) occupies the first row.
-    let summary_offset = if state.skill_pool_summary.is_empty() { 0 } else { 1 };
-    if relative_row < summary_offset {
-        return None;
-    }
-    let plugin_row = relative_row - summary_offset;
+    let plugin_row = relative_row + state.plugins_scroll;
     if plugin_row < ext_count {
         Some(StartupMouseTarget::PluginEntry(plugin_row))
     } else {
@@ -1211,6 +1195,16 @@ pub(super) fn render_startup_status_bar(frame: &mut Frame, area: Rect, state: &A
         format!("  {} ", ext_status),
         Style::default().fg(state.tui_theme.accent),
     ));
+    // Viewer hint: Ctrl+S opens on Skills tab, Ctrl+P on Prompts.
+    if state.skill_pool_total > 0 {
+        spans.push(Span::styled(
+            format!(
+                " | {} skills [Ctrl+S]  prompts [Ctrl+P]",
+                state.skill_pool_total
+            ),
+            Style::default().fg(state.tui_theme.muted),
+        ));
+    }
     if let Some(ref version) = state.update_available {
         spans.push(Span::styled(
             format!(" | v{} available", version),
@@ -1226,8 +1220,25 @@ pub(super) fn render_startup_status_bar(frame: &mut Frame, area: Rect, state: &A
 fn render_plugins_panel(frame: &mut Frame, area: Rect, state: &AppState) {
     let border_style = pane_border_style(state.focused_pane, TuiPane::Plugins, &state.tui_theme);
     let border_type = pane_border_type(state.focused_pane, TuiPane::Plugins);
+
+    let visible_plugin_rows = (area.height.saturating_sub(2)) as usize;
+    let total_plugins = state.available_plugins.len();
+    let scroll_start = state.plugins_scroll.min(total_plugins);
+    let scroll_end = (scroll_start + visible_plugin_rows).min(total_plugins);
+    let has_scroll = total_plugins > visible_plugin_rows && visible_plugin_rows > 0;
+
+    let title_text = if has_scroll {
+        format!(
+            " Plugins ({}-{} of {}) ",
+            scroll_start + 1,
+            scroll_end,
+            total_plugins
+        )
+    } else {
+        " Plugins ".to_string()
+    };
     let title_span = Span::styled(
-        " Plugins ",
+        title_text,
         Style::default()
             .fg(state.tui_theme.accent)
             .add_modifier(Modifier::BOLD),
@@ -1235,7 +1246,7 @@ fn render_plugins_panel(frame: &mut Frame, area: Rect, state: &AppState) {
 
     let inner_width = area.width.saturating_sub(2) as usize;
 
-    if state.available_plugins.is_empty() && state.skill_pool_summary.is_empty() {
+    if state.available_plugins.is_empty() {
         let paragraph = Paragraph::new(vec![
             Line::from(Span::styled(
                 "  No plugins found.",
@@ -1258,22 +1269,15 @@ fn render_plugins_panel(frame: &mut Frame, area: Rect, state: &AppState) {
     }
 
     let mut lines: Vec<Line> = Vec::new();
-    if !state.skill_pool_summary.is_empty() {
-        lines.push(Line::from(Span::styled(
-            format!(" {}", state.skill_pool_summary),
-            Style::default()
-                .fg(state.tui_theme.accent)
-                .add_modifier(Modifier::BOLD),
-        )));
-    }
     let plugin_lines: Vec<Line> = state
         .available_plugins
         .iter()
         .enumerate()
+        .skip(scroll_start)
+        .take(scroll_end.saturating_sub(scroll_start))
         .map(|(i, ext)| {
             let checkbox = if ext.selected { "[x]" } else { "[ ]" };
-            let is_cursor =
-                i == state.plugins_cursor && state.focused_pane == TuiPane::Plugins;
+            let is_cursor = i == state.plugins_cursor && state.focused_pane == TuiPane::Plugins;
             let skill_label = if ext.skill_count > 0 {
                 format!(" ({}s)", ext.skill_count)
             } else {

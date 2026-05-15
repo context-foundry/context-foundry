@@ -221,7 +221,10 @@ pub(super) fn handle_startup_event(state: &mut AppState, event: AppEvent, config
             if let Some(startup) = state.startup.as_mut() {
                 startup.placeholder_tick = startup.placeholder_tick.wrapping_add(1);
             }
-            if state.tick_count.is_multiple_of(super::state::TASKS_RELOAD_TICK_STRIDE) {
+            if state
+                .tick_count
+                .is_multiple_of(super::state::TASKS_RELOAD_TICK_STRIDE)
+            {
                 let _ = state.handle_tasks_file_change();
             }
         }
@@ -294,6 +297,10 @@ pub(super) fn handle_startup_key(state: &mut AppState, key: event::KeyEvent, con
         return;
     }
 
+    // NOTE: the Viewer overlay (Skills + Prompts) is intercepted earlier in
+    // `src/app.rs` via `handle_global_viewer_key`, so by the time we reach
+    // this handler `state.show_skills_overlay` is guaranteed false.
+
     // Plugin panel navigation (when focused on plugins pane)
     let total_panel_rows = state.available_plugins.len();
     if state.focused_pane == crate::app::state::TuiPane::Plugins && total_panel_rows > 0 {
@@ -302,12 +309,14 @@ pub(super) fn handle_startup_key(state: &mut AppState, key: event::KeyEvent, con
                 if state.plugins_cursor > 0 {
                     state.plugins_cursor -= 1;
                 }
+                clamp_plugins_scroll(state);
                 return;
             }
             KeyCode::Down => {
                 if state.plugins_cursor + 1 < total_panel_rows {
                     state.plugins_cursor += 1;
                 }
+                clamp_plugins_scroll(state);
                 return;
             }
             KeyCode::Char(' ') => {
@@ -410,6 +419,7 @@ pub(super) fn handle_startup_key(state: &mut AppState, key: event::KeyEvent, con
             } else {
                 state.focused_pane = crate::app::state::TuiPane::Plugins;
                 state.plugins_cursor = 0;
+                state.plugins_scroll = 0;
             }
         }
         KeyCode::Tab | KeyCode::BackTab => {
@@ -448,14 +458,8 @@ pub(super) fn handle_startup_key(state: &mut AppState, key: event::KeyEvent, con
                 }
             }
         }
-        // Sandbox toggle removed -- sandbox is always on, only configurable
-        // via .foundry.json (reserved for implementers).
-        KeyCode::Char('s') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-            if let Some(ref mut s) = state.startup {
-                s.status_message =
-                    Some("Sandbox toggle disabled -- override via .foundry.json only".into());
-            }
-        }
+        // Ctrl+S and Ctrl+P are handled globally in `src/app.rs` via
+        // `handle_global_viewer_key`. No phase-local handler needed.
         KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => {
             if state.builder_model_specs.len() >= 2 {
                 use crate::app::state::DualSelection;
@@ -879,6 +883,9 @@ pub(super) fn handle_startup_mouse_at(
         }
         return;
     }
+    // Viewer overlay mouse events are intercepted in `src/app.rs` via
+    // `handle_global_viewer_mouse` before phase dispatch, so we don't repeat
+    // that handling here.
     if state.show_no_tasks_warning && matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left))
     {
         state.show_no_tasks_warning = false;
@@ -921,6 +928,7 @@ pub(super) fn handle_startup_mouse_at(
                     tui::StartupMouseTarget::PluginEntry(index) => {
                         state.focused_pane = crate::app::state::TuiPane::Plugins;
                         state.plugins_cursor = index;
+                        clamp_plugins_scroll(state);
                         // Toggle the clicked plugin
                         if let Some(ext) = state.available_plugins.get_mut(index) {
                             ext.selected = !ext.selected;
@@ -1082,7 +1090,9 @@ pub(super) fn enter_home_surface(
 
     let project_dir_path = project_dir.to_path_buf();
     let merged = crate::skills::load_skills_from_global_and_project(&project_dir_path);
+    state.skill_pool_total = merged.len();
     state.skill_pool_summary = crate::skills::skill_pool_summary(&merged);
+    state.plugins_scroll = 0;
 
     // T2.4: honor the legacy .foundry.json `external_skills_enabled` field as
     // a deprecated read-only "pinned always-on" bit. New writes go through
@@ -1325,7 +1335,9 @@ pub(super) fn enter_startup_surface(
 
     let project_dir_path = project_dir.to_path_buf();
     let merged = crate::skills::load_skills_from_global_and_project(&project_dir_path);
+    state.skill_pool_total = merged.len();
     state.skill_pool_summary = crate::skills::skill_pool_summary(&merged);
+    state.plugins_scroll = 0;
 }
 
 pub(super) fn enter_startup_surface_for_scenario(
@@ -1666,6 +1678,481 @@ fn refresh_git_state(state: &mut AppState, project_dir: &Path) {
         if let Some(ref mut startup) = state.startup {
             startup.git_context = Some(ctx);
         }
+    }
+}
+
+// ─── Plugins Panel Scroll ────────────────────────────────────────
+// Visible plugin rows = panel_height - 2 (borders).
+// Must stay in sync with `startup_layout` in `src/tui/startup.rs`.
+pub(super) fn plugins_visible_rows(state: &AppState) -> usize {
+    let plugin_count = state.available_plugins.len();
+    let panel_height = if plugin_count == 0 {
+        4u16
+    } else {
+        (plugin_count as u16 + 2).min(12)
+    };
+    (panel_height as usize).saturating_sub(2)
+}
+
+// Phase-agnostic Viewer entry points called from `src/app.rs` BEFORE phase
+// dispatch so Ctrl+S, Ctrl+P, Tab, Esc, list scrolling, etc. behave the same
+// in Startup, Planning, and Running phases.
+pub(crate) fn handle_global_viewer_key(state: &mut AppState, key: event::KeyEvent) -> bool {
+    if key.modifiers.contains(KeyModifiers::CONTROL) {
+        match key.code {
+            KeyCode::Char('s') => {
+                if state.show_skills_overlay {
+                    state.active_viewer_tab = crate::app::ViewerTab::Skills;
+                } else {
+                    toggle_skills_overlay(state);
+                }
+                return true;
+            }
+            KeyCode::Char('p') => {
+                if state.show_skills_overlay {
+                    state.active_viewer_tab = crate::app::ViewerTab::Prompts;
+                } else {
+                    toggle_prompts_overlay(state);
+                }
+                return true;
+            }
+            _ => {}
+        }
+    }
+    if state.show_skills_overlay {
+        let visible_rows = skills_overlay_visible_rows(current_terminal_size());
+        let _ = handle_skills_overlay_key(state, key, visible_rows);
+        return true;
+    }
+    false
+}
+
+pub(crate) fn handle_global_viewer_mouse(state: &mut AppState, mouse: MouseEvent) -> bool {
+    if !state.show_skills_overlay {
+        return false;
+    }
+    let terminal_size = current_terminal_size();
+    let visible_rows = skills_overlay_visible_rows(terminal_size);
+    let area = ratatui::layout::Rect::new(0, 0, terminal_size.0, terminal_size.1);
+    match mouse.kind {
+        MouseEventKind::Down(MouseButton::Left) => {
+            if tui::skills_overlay_close_hit(area, mouse.column, mouse.row) {
+                state.show_skills_overlay = false;
+                return true;
+            }
+            let skill_count = state
+                .skills_overlay
+                .as_ref()
+                .map(|s| s.rows.len())
+                .unwrap_or(0);
+            let prompt_count = state
+                .prompts_overlay
+                .as_ref()
+                .map(|p| p.rows.len())
+                .unwrap_or(0);
+            if let Some(tab) = tui::skills_overlay_tab_hit(
+                area,
+                skill_count,
+                prompt_count,
+                mouse.column,
+                mouse.row,
+            ) {
+                state.active_viewer_tab = tab;
+                return true;
+            }
+            match state.active_viewer_tab {
+                crate::app::ViewerTab::Skills => {
+                    if let Some(overlay) = state.skills_overlay.as_ref() {
+                        let total = overlay.rows.len();
+                        let scroll = overlay.scroll;
+                        if let Some(idx) = tui::skills_overlay_row_hit(
+                            area,
+                            scroll,
+                            total,
+                            mouse.column,
+                            mouse.row,
+                        ) {
+                            let path = std::path::PathBuf::from(&overlay.rows[idx].path_hint);
+                            if let Some(o) = state.skills_overlay.as_mut() {
+                                o.cursor = idx;
+                                clamp_skills_scroll(o, visible_rows);
+                            }
+                            state.pending_transition =
+                                Some(PendingTransition::OpenExternalEditor { file_path: path });
+                        }
+                    }
+                }
+                crate::app::ViewerTab::Prompts => {
+                    if let Some(overlay) = state.prompts_overlay.as_ref() {
+                        let total = overlay.rows.len();
+                        let scroll = overlay.scroll;
+                        if let Some(idx) = tui::skills_overlay_row_hit(
+                            area,
+                            scroll,
+                            total,
+                            mouse.column,
+                            mouse.row,
+                        ) {
+                            let row = overlay.rows[idx].clone();
+                            if let Some(o) = state.prompts_overlay.as_mut() {
+                                o.cursor = idx;
+                                clamp_prompts_list_scroll(o, visible_rows);
+                                o.drill_down = Some(crate::app::PromptsDrillDown {
+                                    name: row.name,
+                                    source: row.source,
+                                    scroll: 0,
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        MouseEventKind::ScrollUp => match state.active_viewer_tab {
+            crate::app::ViewerTab::Skills => {
+                if let Some(overlay) = state.skills_overlay.as_mut() {
+                    overlay.cursor = overlay.cursor.saturating_sub(3);
+                    clamp_skills_scroll(overlay, visible_rows);
+                }
+            }
+            crate::app::ViewerTab::Prompts => {
+                if let Some(overlay) = state.prompts_overlay.as_mut() {
+                    if let Some(dd) = overlay.drill_down.as_mut() {
+                        dd.scroll = dd.scroll.saturating_sub(3);
+                    } else {
+                        overlay.cursor = overlay.cursor.saturating_sub(3);
+                        clamp_prompts_list_scroll(overlay, visible_rows);
+                    }
+                }
+            }
+        },
+        MouseEventKind::ScrollDown => match state.active_viewer_tab {
+            crate::app::ViewerTab::Skills => {
+                if let Some(overlay) = state.skills_overlay.as_mut() {
+                    let max = overlay.rows.len().saturating_sub(1);
+                    overlay.cursor = (overlay.cursor + 3).min(max);
+                    clamp_skills_scroll(overlay, visible_rows);
+                }
+            }
+            crate::app::ViewerTab::Prompts => {
+                if let Some(overlay) = state.prompts_overlay.as_mut() {
+                    if let Some(dd) = overlay.drill_down.as_mut() {
+                        let total_lines = dd.source.lines().count();
+                        let max_scroll = total_lines.saturating_sub(visible_rows.max(1));
+                        dd.scroll = (dd.scroll + 3).min(max_scroll);
+                    } else {
+                        let max = overlay.rows.len().saturating_sub(1);
+                        overlay.cursor = (overlay.cursor + 3).min(max);
+                        clamp_prompts_list_scroll(overlay, visible_rows);
+                    }
+                }
+            }
+        },
+        _ => {}
+    }
+    true
+}
+
+// ─── Unified Viewer Overlay (Skills + Prompts) ──────────────────
+/// Toggle the unified Viewer overlay. Defaults the active tab to Skills.
+/// Called by Ctrl+S. Loads both tabs' content on open so tab-switching is
+/// instant.
+pub(super) fn toggle_skills_overlay(state: &mut AppState) {
+    toggle_viewer_overlay(state, crate::app::ViewerTab::Skills);
+}
+
+pub(super) fn toggle_prompts_overlay(state: &mut AppState) {
+    toggle_viewer_overlay(state, crate::app::ViewerTab::Prompts);
+}
+
+fn toggle_viewer_overlay(state: &mut AppState, open_tab: crate::app::ViewerTab) {
+    if state.show_skills_overlay {
+        state.show_skills_overlay = false;
+        return;
+    }
+    let project_dir = state
+        .buildloop_dir
+        .parent()
+        .unwrap_or(std::path::Path::new("."))
+        .to_path_buf();
+    let skills = crate::skills::load_skills_from_global_and_project(&project_dir);
+    let skill_rows = crate::skills::build_skills_overlay_rows(&skills, &project_dir);
+    state.skills_overlay = Some(crate::app::state::SkillsOverlayState {
+        rows: skill_rows,
+        cursor: 0,
+        scroll: 0,
+    });
+
+    let prompt_rows: Vec<crate::app::PromptsOverlayRow> = crate::prompt_browser::list_prompts()
+        .into_iter()
+        .map(|p| crate::app::PromptsOverlayRow {
+            name: p.name,
+            doc_summary: p.doc_summary,
+            source: p.source,
+        })
+        .collect();
+    state.prompts_overlay = Some(crate::app::PromptsOverlayState {
+        rows: prompt_rows,
+        cursor: 0,
+        scroll: 0,
+        drill_down: None,
+    });
+
+    state.active_viewer_tab = open_tab;
+    state.show_skills_overlay = true;
+}
+
+/// Handle key events while the unified Viewer overlay is open. Dispatches
+/// to the active tab. Returns true if consumed.
+pub(super) fn handle_skills_overlay_key(
+    state: &mut AppState,
+    key: event::KeyEvent,
+    visible_rows: usize,
+) -> bool {
+    if !state.show_skills_overlay {
+        return false;
+    }
+    // Global keys handled regardless of active tab:
+    match key.code {
+        KeyCode::Tab => {
+            state.active_viewer_tab = match state.active_viewer_tab {
+                crate::app::ViewerTab::Skills => crate::app::ViewerTab::Prompts,
+                crate::app::ViewerTab::Prompts => crate::app::ViewerTab::Skills,
+            };
+            return true;
+        }
+        KeyCode::BackTab => {
+            state.active_viewer_tab = match state.active_viewer_tab {
+                crate::app::ViewerTab::Skills => crate::app::ViewerTab::Prompts,
+                crate::app::ViewerTab::Prompts => crate::app::ViewerTab::Skills,
+            };
+            return true;
+        }
+        _ => {}
+    }
+    match state.active_viewer_tab {
+        crate::app::ViewerTab::Skills => handle_skills_tab_key(state, key, visible_rows),
+        crate::app::ViewerTab::Prompts => handle_prompts_tab_key(state, key, visible_rows),
+    }
+}
+
+fn handle_skills_tab_key(state: &mut AppState, key: event::KeyEvent, visible_rows: usize) -> bool {
+    let Some(overlay) = state.skills_overlay.as_mut() else {
+        return false;
+    };
+    let total = overlay.rows.len();
+    match key.code {
+        KeyCode::Esc => {
+            state.show_skills_overlay = false;
+            true
+        }
+        KeyCode::Enter => {
+            if let Some(row) = overlay.rows.get(overlay.cursor) {
+                let path = std::path::PathBuf::from(&row.path_hint);
+                state.pending_transition =
+                    Some(PendingTransition::OpenExternalEditor { file_path: path });
+            }
+            true
+        }
+        KeyCode::Up => {
+            if overlay.cursor > 0 {
+                overlay.cursor -= 1;
+            }
+            clamp_skills_scroll(overlay, visible_rows);
+            true
+        }
+        KeyCode::Down => {
+            if overlay.cursor + 1 < total {
+                overlay.cursor += 1;
+            }
+            clamp_skills_scroll(overlay, visible_rows);
+            true
+        }
+        KeyCode::PageUp => {
+            let step = visible_rows.max(1);
+            overlay.cursor = overlay.cursor.saturating_sub(step);
+            clamp_skills_scroll(overlay, visible_rows);
+            true
+        }
+        KeyCode::PageDown => {
+            let step = visible_rows.max(1);
+            overlay.cursor = (overlay.cursor + step).min(total.saturating_sub(1));
+            clamp_skills_scroll(overlay, visible_rows);
+            true
+        }
+        KeyCode::Home => {
+            overlay.cursor = 0;
+            clamp_skills_scroll(overlay, visible_rows);
+            true
+        }
+        KeyCode::End => {
+            overlay.cursor = total.saturating_sub(1);
+            clamp_skills_scroll(overlay, visible_rows);
+            true
+        }
+        _ => true,
+    }
+}
+
+fn handle_prompts_tab_key(state: &mut AppState, key: event::KeyEvent, visible_rows: usize) -> bool {
+    let Some(overlay) = state.prompts_overlay.as_mut() else {
+        return false;
+    };
+
+    // If we're in the drill-down source view, keys scroll the source.
+    if let Some(dd) = overlay.drill_down.as_mut() {
+        let total_lines = dd.source.lines().count();
+        let max_scroll = total_lines.saturating_sub(visible_rows.max(1));
+        match key.code {
+            KeyCode::Esc => {
+                overlay.drill_down = None;
+                return true;
+            }
+            KeyCode::Up => {
+                dd.scroll = dd.scroll.saturating_sub(1);
+                return true;
+            }
+            KeyCode::Down => {
+                dd.scroll = (dd.scroll + 1).min(max_scroll);
+                return true;
+            }
+            KeyCode::PageUp => {
+                let step = visible_rows.max(1);
+                dd.scroll = dd.scroll.saturating_sub(step);
+                return true;
+            }
+            KeyCode::PageDown => {
+                let step = visible_rows.max(1);
+                dd.scroll = (dd.scroll + step).min(max_scroll);
+                return true;
+            }
+            KeyCode::Home => {
+                dd.scroll = 0;
+                return true;
+            }
+            KeyCode::End => {
+                dd.scroll = max_scroll;
+                return true;
+            }
+            _ => return true,
+        }
+    }
+
+    // List view.
+    let total = overlay.rows.len();
+    match key.code {
+        KeyCode::Esc => {
+            state.show_skills_overlay = false;
+            true
+        }
+        KeyCode::Enter => {
+            if let Some(row) = overlay.rows.get(overlay.cursor) {
+                overlay.drill_down = Some(crate::app::PromptsDrillDown {
+                    name: row.name.clone(),
+                    source: row.source.clone(),
+                    scroll: 0,
+                });
+            }
+            true
+        }
+        KeyCode::Up => {
+            if overlay.cursor > 0 {
+                overlay.cursor -= 1;
+            }
+            clamp_prompts_list_scroll(overlay, visible_rows);
+            true
+        }
+        KeyCode::Down => {
+            if overlay.cursor + 1 < total {
+                overlay.cursor += 1;
+            }
+            clamp_prompts_list_scroll(overlay, visible_rows);
+            true
+        }
+        KeyCode::PageUp => {
+            let step = visible_rows.max(1);
+            overlay.cursor = overlay.cursor.saturating_sub(step);
+            clamp_prompts_list_scroll(overlay, visible_rows);
+            true
+        }
+        KeyCode::PageDown => {
+            let step = visible_rows.max(1);
+            overlay.cursor = (overlay.cursor + step).min(total.saturating_sub(1));
+            clamp_prompts_list_scroll(overlay, visible_rows);
+            true
+        }
+        KeyCode::Home => {
+            overlay.cursor = 0;
+            clamp_prompts_list_scroll(overlay, visible_rows);
+            true
+        }
+        KeyCode::End => {
+            overlay.cursor = total.saturating_sub(1);
+            clamp_prompts_list_scroll(overlay, visible_rows);
+            true
+        }
+        _ => true,
+    }
+}
+
+fn clamp_prompts_list_scroll(overlay: &mut crate::app::PromptsOverlayState, visible_rows: usize) {
+    if visible_rows == 0 {
+        overlay.scroll = 0;
+        return;
+    }
+    if overlay.cursor < overlay.scroll {
+        overlay.scroll = overlay.cursor;
+    } else if overlay.cursor >= overlay.scroll + visible_rows {
+        overlay.scroll = overlay.cursor + 1 - visible_rows;
+    }
+    let max_scroll = overlay.rows.len().saturating_sub(visible_rows);
+    if overlay.scroll > max_scroll {
+        overlay.scroll = max_scroll;
+    }
+}
+
+/// Compute the number of visible content rows inside the Viewer modal,
+/// mirroring `render_skills_overlay` in `src/tui/overlays.rs`. Keep these
+/// formulas in sync.
+pub(super) fn skills_overlay_visible_rows(terminal_size: (u16, u16)) -> usize {
+    let term_h = terminal_size.1;
+    let modal_h = term_h.saturating_sub(4).min(40).max(12);
+    // modal interior = modal_h - 2 borders.
+    // Layout reserves 1 row for the tab strip and 1 row for the footer.
+    (modal_h as usize).saturating_sub(4)
+}
+
+fn clamp_skills_scroll(overlay: &mut crate::app::state::SkillsOverlayState, visible_rows: usize) {
+    if visible_rows == 0 {
+        overlay.scroll = 0;
+        return;
+    }
+    if overlay.cursor < overlay.scroll {
+        overlay.scroll = overlay.cursor;
+    } else if overlay.cursor >= overlay.scroll + visible_rows {
+        overlay.scroll = overlay.cursor + 1 - visible_rows;
+    }
+    let max_scroll = overlay.rows.len().saturating_sub(visible_rows);
+    if overlay.scroll > max_scroll {
+        overlay.scroll = max_scroll;
+    }
+}
+
+pub(super) fn clamp_plugins_scroll(state: &mut AppState) {
+    let visible = plugins_visible_rows(state);
+    if visible == 0 {
+        state.plugins_scroll = 0;
+        return;
+    }
+    if state.plugins_cursor < state.plugins_scroll {
+        state.plugins_scroll = state.plugins_cursor;
+    } else if state.plugins_cursor >= state.plugins_scroll + visible {
+        state.plugins_scroll = state.plugins_cursor + 1 - visible;
+    }
+    let total = state.available_plugins.len();
+    let max_scroll = total.saturating_sub(visible);
+    if state.plugins_scroll > max_scroll {
+        state.plugins_scroll = max_scroll;
     }
 }
 

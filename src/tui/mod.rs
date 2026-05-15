@@ -33,10 +33,11 @@ pub use modal_spec::{
 };
 pub use overlays::{
     close_btn_rect, confirm_banner_hit_test, context_menu_hit_test, git_init_offer_hit_test,
-    model_picker_hit_test, quit_confirm_hit_test, render_git_init_offer,
-    render_no_tasks_warning, render_quit_confirm, render_running_modal, settings_modal_rect,
-    settings_overlay_row_hit_test, summary_modal_hit_test, ConfirmBannerAction, ContextMenuHit,
-    GitInitOfferAction, ModelPickerMouseTarget, QuitConfirmAction, SummaryModalAction,
+    model_picker_hit_test, quit_confirm_hit_test, render_git_init_offer, render_no_tasks_warning,
+    render_quit_confirm, render_running_modal, settings_modal_rect, settings_overlay_row_hit_test,
+    skills_overlay_close_hit, skills_overlay_row_hit, skills_overlay_tab_hit,
+    summary_modal_hit_test, ConfirmBannerAction, ContextMenuHit, GitInitOfferAction,
+    ModelPickerMouseTarget, QuitConfirmAction, SummaryModalAction,
 };
 pub fn render_surface_summary_overlay(frame: &mut Frame, state: &AppState) {
     if let Some(overlay) = state.surface_summary_overlay.as_ref() {
@@ -149,9 +150,9 @@ pub fn running_layout(
     // T2.2: build the constraints vector dynamically so we can conditionally
     // splice in the Skill Retrieval slot between Patterns and Plugins.
     let mut constraints: Vec<Constraint> = vec![
-        Constraint::Min(6),     // task queue
-        Constraint::Length(6),  // narrative
-        Constraint::Length(6),  // skill citations (post-task)
+        Constraint::Min(6),    // task queue
+        Constraint::Length(6), // narrative
+        Constraint::Length(6), // skill citations (post-task)
     ];
     if show_retrieval_panel {
         constraints.push(Constraint::Length(8)); // skill retrieval
@@ -222,9 +223,9 @@ pub fn render(frame: &mut Frame, state: &AppState, config: &Config) {
     let has_plugins = !state.available_plugins.iter().all(|e| !e.selected)
         || !state.session_plugins_used.is_empty();
     let mut constraints: Vec<Constraint> = vec![
-        Constraint::Min(6),     // Task queue
-        Constraint::Length(6),  // Narrative
-        Constraint::Length(6),  // Skill Citations (post-task)
+        Constraint::Min(6),    // Task queue
+        Constraint::Length(6), // Narrative
+        Constraint::Length(6), // Skill Citations (post-task)
     ];
     if config.show_retrieval_panel {
         constraints.push(Constraint::Length(8)); // Skill Retrieval (per-stage top picks)
@@ -346,6 +347,10 @@ pub fn render_stats_overlay(frame: &mut Frame, state: &AppState) {
 
 pub fn render_settings_overlay(frame: &mut Frame, state: &AppState) {
     overlays::render_settings_overlay(frame, state);
+}
+
+pub fn render_skills_overlay(frame: &mut Frame, state: &AppState) {
+    overlays::render_skills_overlay(frame, state);
 }
 
 pub fn render_running_explorer(frame: &mut Frame, state: &AppState, config: &Config) {

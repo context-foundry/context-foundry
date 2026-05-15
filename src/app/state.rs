@@ -460,9 +460,9 @@ pub enum PatternsFilter {
 
 #[derive(Debug, Clone)]
 pub struct PatternsSectionSnapshot {
-    /// All patterns parsed from `~/.foundry/patterns/`.
+    /// Pattern-shaped references backing the Skills settings detail.
     pub all: Vec<Pattern>,
-    /// Pattern ids that were injected this session (subset of all by id).
+    /// Reference ids that were injected this session (subset of all by id).
     pub injected_ids: std::collections::BTreeSet<String>,
     /// Currently selected filter: "session" or "all".
     pub filter: PatternsFilter,
@@ -498,18 +498,81 @@ pub fn settings_sections(dual_mode: bool) -> Vec<SectionDef> {
     // has_b_row=false for stages where B routing is not meaningful at runtime:
     //   - Discovery: runs in outer loop, not per-pipeline
     //   - PR Review: not part of the build loop
-    //   - Patterns: hardcodes Claude provider, B provider ignored
+    //   - Skill extraction: hardcodes Claude provider, B provider ignored
     //   - Fixer: AgentRole::Fixer has no runtime invocations
     let stage_defs: &[(&str, &str, &str, &str, &str, bool)] = &[
-        ("stage_query", "stage_query_b", "  Query", "  Query (A)", "  Query (B)", true),
-        ("stage_research", "stage_research_b", "  Research", "  Research (A)", "  Research (B)", true),
-        ("stage_plan", "stage_plan_b", "  Plan", "  Plan (A)", "  Plan (B)", true),
-        ("stage_build", "stage_build_b", "  Build", "  Build (A)", "  Build (B)", true),
-        ("stage_audit", "stage_audit_b", "  Audit", "  Audit (A)", "  Audit (B)", true),
-        ("stage_discovery", "stage_discovery_b", "  Discovery", "  Discovery (A)", "  Discovery (B)", false),
-        ("stage_pr_review", "stage_pr_review_b", "  PR Review", "  PR Review (A)", "  PR Review (B)", false),
-        ("stage_patterns", "stage_patterns_b", "  Patterns", "  Patterns (A)", "  Patterns (B)", false),
-        ("stage_fixer", "stage_fixer_b", "  Fixer", "  Fixer (A)", "  Fixer (B)", false),
+        (
+            "stage_query",
+            "stage_query_b",
+            "  Query",
+            "  Query (A)",
+            "  Query (B)",
+            true,
+        ),
+        (
+            "stage_research",
+            "stage_research_b",
+            "  Research",
+            "  Research (A)",
+            "  Research (B)",
+            true,
+        ),
+        (
+            "stage_plan",
+            "stage_plan_b",
+            "  Plan",
+            "  Plan (A)",
+            "  Plan (B)",
+            true,
+        ),
+        (
+            "stage_build",
+            "stage_build_b",
+            "  Build",
+            "  Build (A)",
+            "  Build (B)",
+            true,
+        ),
+        (
+            "stage_audit",
+            "stage_audit_b",
+            "  Audit",
+            "  Audit (A)",
+            "  Audit (B)",
+            true,
+        ),
+        (
+            "stage_discovery",
+            "stage_discovery_b",
+            "  Discovery",
+            "  Discovery (A)",
+            "  Discovery (B)",
+            false,
+        ),
+        (
+            "stage_pr_review",
+            "stage_pr_review_b",
+            "  PR Review",
+            "  PR Review (A)",
+            "  PR Review (B)",
+            false,
+        ),
+        (
+            "stage_patterns",
+            "stage_patterns_b",
+            "  Skill Extraction",
+            "  Skill Extraction (A)",
+            "  Skill Extraction (B)",
+            false,
+        ),
+        (
+            "stage_fixer",
+            "stage_fixer_b",
+            "  Fixer",
+            "  Fixer (A)",
+            "  Fixer (B)",
+            false,
+        ),
     ];
     let mut routing_fields = vec![FieldDef {
         id: "arena",
@@ -552,7 +615,7 @@ pub fn settings_sections(dual_mode: bool) -> Vec<SectionDef> {
         },
         SectionDef {
             id: "patterns_detail",
-            name: "Patterns",
+            name: "Skills",
             default_expanded: false,
             fields: vec![],
             kind: SectionKind::Patterns,
@@ -824,14 +887,14 @@ pub fn settings_sections(dual_mode: bool) -> Vec<SectionDef> {
                 },
                 FieldDef {
                     id: "max_pattern_injection",
-                    label: "Max Patterns",
-                    hint: "Max patterns injected per task",
+                    label: "Max Skills",
+                    hint: "Max skills injected per task",
                     kind: FieldKind::Number,
                 },
                 FieldDef {
                     id: "min_pattern_injection",
-                    label: "Min Patterns",
-                    hint: "Min patterns injected per task",
+                    label: "Min Skills",
+                    hint: "Min skills injected per task",
                     kind: FieldKind::Number,
                 },
                 FieldDef {
@@ -934,8 +997,8 @@ pub fn settings_sections(dual_mode: bool) -> Vec<SectionDef> {
             fields: vec![
                 FieldDef {
                     id: "patterns_dir",
-                    label: "Patterns Dir",
-                    hint: "Pattern storage directory",
+                    label: "Legacy Patterns Dir",
+                    hint: "Retired JSON pattern storage directory",
                     kind: FieldKind::Editor,
                 },
                 FieldDef {
@@ -1071,7 +1134,10 @@ impl SettingsOverlayState {
         } else {
             report.aggregate_badge.as_str()
         };
-        rows.push(OverlayRow::ReportLine(format!("Aggregate: {}", aggregate_text)));
+        rows.push(OverlayRow::ReportLine(format!(
+            "Aggregate: {}",
+            aggregate_text
+        )));
         if let Some(cp) = report.completion_path.as_deref() {
             rows.push(OverlayRow::ReportLine(format!("Completion: {}", cp)));
         }
@@ -1110,10 +1176,7 @@ impl SettingsOverlayState {
                     )));
                     for c in inv.checks.iter().filter(|c| c.status == "fail") {
                         let ev = if c.evidence.chars().count() > 80 {
-                            format!(
-                                "{}...",
-                                c.evidence.chars().take(77).collect::<String>()
-                            )
+                            format!("{}...", c.evidence.chars().take(77).collect::<String>())
                         } else {
                             c.evidence.clone()
                         };
@@ -1141,7 +1204,7 @@ impl SettingsOverlayState {
         let cache = match self.patterns_section_cache.as_ref() {
             Some(c) => c,
             None => {
-                rows.push(OverlayRow::ReportLine("No patterns loaded.".to_string()));
+                rows.push(OverlayRow::ReportLine("No skills loaded.".to_string()));
                 rows.push(OverlayRow::ActionButton(Action::ViewAllPatterns));
                 return rows;
             }
@@ -1161,7 +1224,7 @@ impl SettingsOverlayState {
             PatternsFilter::All => "all",
         };
         rows.push(OverlayRow::ReportLine(format!(
-            "Patterns ({}): id | title | sev | freq | used | last | success%",
+            "Skills ({}): id | title | sev | freq | used | last | success%",
             filter_label
         )));
 
@@ -1375,6 +1438,57 @@ pub struct DualBuildState {
     pub last_event_was_delta: [bool; 2],
 }
 
+/// Lightweight row for the skill-browser overlay. Built once when the overlay
+/// opens; the full `SkillFile` bodies are not retained.
+#[derive(Debug, Clone)]
+pub struct SkillsOverlayRow {
+    pub name: String,
+    pub description: String,
+    pub source_label: &'static str,
+    pub path_hint: String,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct SkillsOverlayState {
+    pub rows: Vec<SkillsOverlayRow>,
+    pub cursor: usize,
+    pub scroll: usize,
+}
+
+/// Which tab of the unified Viewer overlay is active. Skills is the default
+/// when opening via Ctrl+S; Prompts when opening via Ctrl+P. Tab key cycles
+/// between them while the overlay is open.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ViewerTab {
+    #[default]
+    Skills,
+    Prompts,
+}
+
+#[derive(Debug, Clone)]
+pub struct PromptsOverlayRow {
+    pub name: String,
+    pub doc_summary: String,
+    pub source: String,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct PromptsDrillDown {
+    pub name: String,
+    pub source: String,
+    pub scroll: usize,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct PromptsOverlayState {
+    pub rows: Vec<PromptsOverlayRow>,
+    pub cursor: usize,
+    pub scroll: usize,
+    /// When Some, the modal shows the source of the selected prompt instead
+    /// of the list. Esc returns to the list.
+    pub drill_down: Option<PromptsDrillDown>,
+}
+
 #[derive(Debug, Clone)]
 pub struct SurfaceSummaryOverlay {
     pub surface: ClickableSurface,
@@ -1480,8 +1594,8 @@ pub struct AppState {
     pub run_mode: String,    // "auto", "sprint", "review", or "coach"
     pub dual_selection: DualSelection, // Ctrl+D cycle: Off, First, Second, Both
     pub builder_model_specs: Vec<String>, // raw config values (e.g., ["claude:opus", "codex:"])
-    pub arena_mode: String,              // "solo" or "dual"
-    pub build_stage_label: String,       // formatted label from build stage routing
+    pub arena_mode: String,  // "solo" or "dual"
+    pub build_stage_label: String, // formatted label from build stage routing
     pub awaiting_review: bool,
     pub(super) review_gates: HashMap<String, Arc<SyncFlag>>,
     pub(super) review_session_id: Option<String>,
@@ -1492,15 +1606,19 @@ pub struct AppState {
     pub show_findings: bool,
     pub show_stats_overlay: bool,
     pub show_settings_overlay: bool,
+    pub show_skills_overlay: bool,
+    pub skills_overlay: Option<SkillsOverlayState>,
+    pub prompts_overlay: Option<PromptsOverlayState>,
+    pub active_viewer_tab: ViewerTab,
     pub settings_overlay_cursor: usize, // legacy -- kept for compatibility, driven by settings_overlay.focus
     pub settings_overlay: Option<SettingsOverlayState>,
     pub local_models: Vec<String>, // discovered models (LM Studio + Ollama merged)
     pub lmstudio_models: Vec<String>, // discovered LM Studio model IDs (raw /v1/models ids)
     pub lmstudio_id_to_opencode_path: HashMap<String, String>, // suffix-after-last-slash -> canonical opencode path (e.g. "qwen3-coder-30b" -> "lmstudio/qwen/qwen3-coder-30b")
     pub ollama_models: Vec<String>, // discovered Ollama model names (raw /api/tags names)
-    pub claude_cli_available: bool,  // `claude --version` succeeded
-    pub codex_cli_available: bool,   // `codex --version` succeeded
-    pub copilot_available: bool,     // `gh auth token` succeeded
+    pub claude_cli_available: bool, // `claude --version` succeeded
+    pub codex_cli_available: bool,  // `codex --version` succeeded
+    pub copilot_available: bool,    // `gh auth token` succeeded
     pub local_model_cursor: usize,  // index into local_models for current selection
     pub selected_local_model: String, // persisted selection, from config or cycling
     pub builder_cursor: usize,      // index into unified builder list (specs + local)
@@ -1562,11 +1680,16 @@ pub struct AppState {
     pub hovered_pipeline_label: Option<String>,
     pub available_plugins: Vec<PluginDisplayInfo>,
     pub plugins_cursor: usize,
+    pub plugins_scroll: usize,
     /// T2.4: one-line summary of the merged auto-retrieval skill pool
     /// (e.g. "Skill pool: 321 global + 14 from .claude/skills/ = 335 total").
-    /// Rendered above the Plugins section on the startup screen. Empty
-    /// before the startup-state initializer runs.
+    /// Now rendered only in the Ctrl+S Skill Browser overlay header; the
+    /// startup status bar shows just the count from `skill_pool_total`.
+    /// Empty before the startup-state initializer runs.
     pub skill_pool_summary: String,
+    /// Total count of skills in the merged pool, surfaced in the startup
+    /// status bar as "N skills [Ctrl+S]".
+    pub skill_pool_total: usize,
     // ─── Plugin & Pattern Telemetry Counters ───
     pub plugin_inject_count: HashMap<String, usize>,
     pub plugin_reference_count: HashMap<String, usize>,
@@ -1638,13 +1761,11 @@ impl AppState {
         // populates the cache when opened (see open_settings_overlay in
         // app.rs), but the status meter renders directly from this field
         // and won't see anything until something forces a refresh.
-        let initial_eval_mtime = std::fs::metadata(
-            buildloop_dir.join(crate::eval::report::EVAL_REPORT_FILENAME),
-        )
-        .ok()
-        .and_then(|m| m.modified().ok());
-        let initial_eval_cache =
-            crate::eval::report::read_report(&buildloop_dir);
+        let initial_eval_mtime =
+            std::fs::metadata(buildloop_dir.join(crate::eval::report::EVAL_REPORT_FILENAME))
+                .ok()
+                .and_then(|m| m.modified().ok());
+        let initial_eval_cache = crate::eval::report::read_report(&buildloop_dir);
         Self {
             buildloop_dir,
             eval_report_cache: initial_eval_cache,
@@ -1701,6 +1822,10 @@ impl AppState {
             show_findings: false,
             show_stats_overlay: false,
             show_settings_overlay: false,
+            show_skills_overlay: false,
+            skills_overlay: None,
+            prompts_overlay: None,
+            active_viewer_tab: ViewerTab::Skills,
             settings_overlay_cursor: 0,
             settings_overlay: None,
             local_models: Vec::new(),
@@ -1760,7 +1885,9 @@ impl AppState {
             hovered_pipeline_label: None,
             available_plugins: Vec::new(),
             plugins_cursor: 0,
+            plugins_scroll: 0,
             skill_pool_summary: String::new(),
+            skill_pool_total: 0,
             plugin_inject_count: HashMap::new(),
             plugin_reference_count: HashMap::new(),
             pattern_inject_count: 0,
@@ -2423,7 +2550,11 @@ mod tests {
             "missing stage_build_b"
         );
         // 9 A rows + 5 B rows (Discovery, PR Review, Patterns, Fixer excluded from B)
-        assert_eq!(stage_fields.len(), 14, "expected 14 stage picker rows (9 A + 5 B)");
+        assert_eq!(
+            stage_fields.len(),
+            14,
+            "expected 14 stage picker rows (9 A + 5 B)"
+        );
     }
 
     #[test]
@@ -2433,7 +2564,10 @@ mod tests {
         let labels: Vec<&str> = routing.fields.iter().map(|f| f.label).collect();
         assert!(labels.contains(&"  Plan (A)"), "missing Plan (A) label");
         assert!(labels.contains(&"  Plan (B)"), "missing Plan (B) label");
-        assert!(!labels.contains(&"  Plan"), "solo label should not appear in dual mode");
+        assert!(
+            !labels.contains(&"  Plan"),
+            "solo label should not appear in dual mode"
+        );
     }
 
     #[test]
@@ -2494,8 +2628,14 @@ mod tests {
             .filter(|f| !f.id.ends_with("_b") && f.kind == FieldKind::StagePicker)
             .map(|f| f.id)
             .collect();
-        assert!(a_ids.contains(&"stage_patterns"), "patterns A should still appear");
-        assert!(a_ids.contains(&"stage_pr_review"), "PR review A should still appear");
+        assert!(
+            a_ids.contains(&"stage_patterns"),
+            "patterns A should still appear"
+        );
+        assert!(
+            a_ids.contains(&"stage_pr_review"),
+            "PR review A should still appear"
+        );
     }
 
     #[test]
