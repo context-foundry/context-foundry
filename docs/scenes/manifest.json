@@ -967,6 +967,16 @@
       "model": "gpt-4o-mini",
       "lines": 101,
       "generation": 97
+    },
+    {
+      "file": "read-only-petrified-forest.js",
+      "name": "Read-Only Petrified Forest",
+      "location": "Petrified Forest National Park, Arizona, USA",
+      "biome": "desert",
+      "generated": "2026-05-15T09:26:28.649Z",
+      "model": "gpt-4o-mini",
+      "lines": 88,
+      "generation": 98
     }
   ]
 }
