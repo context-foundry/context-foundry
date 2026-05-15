@@ -1895,5 +1895,46 @@
     "retries": 0,
     "api_retries": 0,
     "validation": "pass"
+  },
+  {
+    "ts": "2026-05-15T21:30:02.777Z",
+    "scene": "divide-and-conquer-canyon.js",
+    "seed_id": "divide-and-conquer-canyon",
+    "biome": "mountain",
+    "model": "gpt-4o-mini",
+    "input_tokens": 16646,
+    "output_tokens": 1454,
+    "cost_usd": 0.0034,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "fail",
+    "error": "Validation failed after 2 attempts: VALIDATION FAILED (1 error):\n- Too short: 71 lines (min 80)"
+  },
+  {
+    "ts": "2026-05-15T21:30:31.040Z",
+    "scene": "hello-world-from-orbit.js",
+    "seed_id": "hello-world-from-orbit",
+    "biome": "space",
+    "model": "gpt-4o-mini",
+    "input_tokens": 14872,
+    "output_tokens": 1517,
+    "cost_usd": 0.0031,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "fail",
+    "error": "Validation failed after 2 attempts: VALIDATION FAILED (1 error):\n- Too short: 73 lines (min 80)"
+  },
+  {
+    "ts": "2026-05-15T21:30:47.800Z",
+    "scene": "recursive-ridgeline.js",
+    "seed_id": "recursive-ridgeline",
+    "biome": "mountain",
+    "model": "gpt-4o-mini",
+    "input_tokens": 8128,
+    "output_tokens": 927,
+    "cost_usd": 0.0018,
+    "retries": 0,
+    "api_retries": 0,
+    "validation": "pass"
   }
 ]

@@ -1007,6 +1007,16 @@
       "model": "gpt-4o-mini",
       "lines": 83,
       "generation": 101
+    },
+    {
+      "file": "recursive-ridgeline.js",
+      "name": "Recursive Ridgeline",
+      "location": "Torres del Paine, Patagonia, Chile",
+      "biome": "mountain",
+      "generated": "2026-05-15T21:30:47.799Z",
+      "model": "gpt-4o-mini",
+      "lines": 93,
+      "generation": 102
     }
   ]
 }
