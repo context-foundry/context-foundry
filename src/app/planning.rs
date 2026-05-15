@@ -20,7 +20,7 @@ pub(super) async fn spawn_inline_planning_task(
     user_intent: Option<String>,
 ) {
     ctx.ensure_runtime_dirs();
-    let pattern_context = load_gap_analysis_pattern_context(&ctx).await;
+    let reference_context = load_gap_analysis_reference_context(&ctx).await;
 
     let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
     let forward_tx = event_tx.clone();
@@ -35,7 +35,7 @@ pub(super) async fn spawn_inline_planning_task(
     let outcome = run_gap_analysis_iteration(
         &ctx,
         1,
-        &pattern_context,
+        &reference_context,
         user_intent.as_deref(),
         previous_attempt_feedback.as_deref(),
         agent_tx,
@@ -176,10 +176,7 @@ pub(super) async fn run_append_tasks(
 /// if Coach fails or times out, the caller proceeds without an intake
 /// brief and the planner runs against SPEC.md alone (the same behavior
 /// as auto/sprint/review modes).
-async fn run_coach_preflight(
-    ctx: &RunContext,
-    event_tx: &mpsc::UnboundedSender<AppEvent>,
-) {
+async fn run_coach_preflight(ctx: &RunContext, event_tx: &mpsc::UnboundedSender<AppEvent>) {
     let _ = event_tx.send(AppEvent::LoopEvent(LoopEvent::Log(
         "Coach mode: running pre-flight intake before task creation".to_string(),
     )));
@@ -187,12 +184,8 @@ async fn run_coach_preflight(
     let intake_thread_path = ctx.buildloop_dir.join("intake-thread.md");
     let coach_thread = std::fs::read_to_string(&intake_thread_path).unwrap_or_default();
     let coach_spec_content = std::fs::read_to_string(&ctx.spec_path).ok();
-    let coach_prompt = prompts::coach_intake_prompt(
-        "",
-        coach_spec_content.as_deref(),
-        &coach_thread,
-        1,
-    );
+    let coach_prompt =
+        prompts::coach_intake_prompt("", coach_spec_content.as_deref(), &coach_thread, 1);
 
     let (coach_tx, mut coach_rx) = mpsc::unbounded_channel();
     let coach_fwd_tx = event_tx.clone();
@@ -263,7 +256,7 @@ pub(super) async fn run_plan_mode(project_dir: &Path, max_iterations: u64) -> Re
         eprintln!("Max iterations: {}", iterations);
     }
 
-    let pattern_context = load_gap_analysis_pattern_context(&ctx).await;
+    let reference_context = load_gap_analysis_reference_context(&ctx).await;
 
     for i in 1..=iterations {
         eprintln!(
@@ -337,7 +330,7 @@ pub(super) async fn run_plan_mode(project_dir: &Path, max_iterations: u64) -> Re
         let outcome = run_gap_analysis_iteration(
             &ctx,
             i as usize,
-            &pattern_context,
+            &reference_context,
             None,
             previous_attempt_feedback.as_deref(),
             agent_tx,
@@ -384,9 +377,8 @@ pub(super) async fn run_plan_mode(project_dir: &Path, max_iterations: u64) -> Re
     Ok(())
 }
 
-async fn load_gap_analysis_pattern_context(ctx: &RunContext) -> String {
-    let skills_dir = skills::resolve_skills_dir("~/.foundry/skills");
-    let all_skills = skills::load_skills(&skills_dir);
+async fn load_gap_analysis_reference_context(ctx: &RunContext) -> String {
+    let all_skills = skills::load_skills_from_global_and_project(&ctx.project_dir);
     let base = if !all_skills.is_empty() {
         let planner_skills = skills::select_skills_for_stage(
             &all_skills,
@@ -406,19 +398,17 @@ async fn load_gap_analysis_pattern_context(ctx: &RunContext) -> String {
         )
         .await;
         skills::format_skills_for_prompt(&ranked, ctx.config.max_pattern_injection)
-    } else {
+    } else if ctx.config.pattern_dual_emit {
         let patterns_dir = patterns::resolve_patterns_dir(&ctx.config.patterns_dir);
         let all_patterns = patterns::load_patterns(&patterns_dir);
         if all_patterns.is_empty() {
             String::new()
         } else {
             let refs: Vec<&patterns::Pattern> = all_patterns.iter().collect();
-            patterns::format_patterns_for_prompt(
-                &refs,
-                "planner",
-                ctx.config.max_pattern_injection,
-            )
+            patterns::format_patterns_for_prompt(&refs, "planner", ctx.config.max_pattern_injection)
         }
+    } else {
+        String::new()
     };
 
     base
@@ -427,7 +417,7 @@ async fn load_gap_analysis_pattern_context(ctx: &RunContext) -> String {
 async fn run_gap_analysis_iteration(
     ctx: &RunContext,
     iteration: usize,
-    pattern_context: &str,
+    reference_context: &str,
     user_intent: Option<&str>,
     previous_attempt_feedback: Option<&str>,
     agent_tx: mpsc::UnboundedSender<AgentOutputEvent>,
@@ -452,7 +442,7 @@ async fn run_gap_analysis_iteration(
 
     let prompt = prompts::gap_analysis_prompt(
         iteration,
-        pattern_context,
+        reference_context,
         user_intent,
         &ctx.spec_file_prompt_path(),
         &ctx.tasks_file_prompt_path(),
@@ -521,7 +511,7 @@ mod tests {
 
     #[tokio::test]
     #[serial_test::serial]
-    async fn gap_analysis_pattern_context_is_empty_without_pattern_files() {
+    async fn gap_analysis_reference_context_is_empty_without_skills_or_legacy_files() {
         let dir = temp_dir("foundry-planning-empty-patterns");
         let prev_home = std::env::var("HOME").ok();
         std::env::set_var("HOME", &dir);
@@ -537,7 +527,7 @@ mod tests {
             std::sync::Arc::new(std::sync::Mutex::new(())),
         );
 
-        assert_eq!(load_gap_analysis_pattern_context(&ctx).await, "");
+        assert_eq!(load_gap_analysis_reference_context(&ctx).await, "");
 
         if let Some(prev) = prev_home {
             std::env::set_var("HOME", prev);
@@ -549,8 +539,8 @@ mod tests {
 
     #[tokio::test]
     #[serial_test::serial]
-    async fn gap_analysis_pattern_context_includes_loaded_patterns() {
-        let dir = temp_dir("foundry-planning-patterns");
+    async fn gap_analysis_reference_context_ignores_legacy_patterns_by_default() {
+        let dir = temp_dir("foundry-planning-patterns-default-off");
         let patterns_dir = dir.join("patterns");
         std::fs::create_dir_all(&patterns_dir).expect("failed to create patterns dir");
         std::fs::write(
@@ -580,7 +570,53 @@ mod tests {
             std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             std::sync::Arc::new(std::sync::Mutex::new(())),
         );
-        let context = load_gap_analysis_pattern_context(&ctx).await;
+        let context = load_gap_analysis_reference_context(&ctx).await;
+
+        assert_eq!(context, "");
+
+        if let Some(prev) = prev_home {
+            std::env::set_var("HOME", prev);
+        } else {
+            std::env::remove_var("HOME");
+        }
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn gap_analysis_reference_context_includes_legacy_patterns_when_dual_emit_enabled() {
+        let dir = temp_dir("foundry-planning-patterns");
+        let patterns_dir = dir.join("patterns");
+        std::fs::create_dir_all(&patterns_dir).expect("failed to create patterns dir");
+        std::fs::write(
+            patterns_dir.join("sample.json"),
+            r#"[
+  {
+    "pattern_id": "auth-1",
+    "title": "Auth callback mismatch",
+    "frequency": 2,
+    "keywords": ["auth"],
+    "solution": { "planner": "Verify callback URLs." }
+  }
+]"#,
+        )
+        .expect("failed to write pattern");
+
+        let prev_home = std::env::var("HOME").ok();
+        std::env::set_var("HOME", &dir);
+
+        let config = crate::config::Config {
+            patterns_dir: patterns_dir.display().to_string(),
+            pattern_dual_emit: true,
+            ..crate::config::Config::default()
+        };
+        let ctx = RunContext::new(
+            &dir,
+            config,
+            std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            std::sync::Arc::new(std::sync::Mutex::new(())),
+        );
+        let context = load_gap_analysis_reference_context(&ctx).await;
 
         assert!(context.contains("Auth callback mismatch"));
         assert!(context.contains("Verify callback URLs."));

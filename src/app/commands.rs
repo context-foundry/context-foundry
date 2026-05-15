@@ -1247,7 +1247,10 @@ fn migrate_to_skills_in_dir(
         let p: Pattern = match serde_json::from_value::<Pattern>(v) {
             Ok(p) => p,
             Err(e) => {
-                warnings.push(format!("failed to deserialize pattern {}: {}", id_for_warn, e));
+                warnings.push(format!(
+                    "failed to deserialize pattern {}: {}",
+                    id_for_warn, e
+                ));
                 continue;
             }
         };
@@ -1264,10 +1267,7 @@ fn migrate_to_skills_in_dir(
     let planned_files = planned.len();
     let skipped_count = skipped.len();
 
-    println!(
-        "common-issues.json: {} pattern(s) loaded",
-        total_patterns
-    );
+    println!("common-issues.json: {} pattern(s) loaded", total_patterns);
     println!(
         "Planned: {} skill file(s); skipped {} pattern(s) with no solution",
         planned_files, skipped_count
@@ -1332,6 +1332,14 @@ fn migrate_to_skills_in_dir(
 }
 
 pub(super) fn run_patterns_promote(apply: bool, days: u32) -> Result<()> {
+    let config = Config::load(&PathBuf::from("."));
+    if !config.pattern_dual_emit {
+        println!(
+            "Legacy pattern promotion is disabled (pattern_dual_emit=false); skills are the active reuse path."
+        );
+        return Ok(());
+    }
+
     let obs_dir = crate::stats::observatory_dir()?;
 
     let (events, _skipped) = crate::stats::load_events(&obs_dir, days, None)?;
@@ -1383,7 +1391,6 @@ pub(super) fn run_patterns_promote(apply: bool, days: u32) -> Result<()> {
     }
 
     // Load all patterns with source file tracking
-    let config = Config::load(&PathBuf::from("."));
     let patterns_dir = patterns::resolve_patterns_dir(&config.patterns_dir);
     let patterns_with_sources = patterns::load_patterns_with_sources(&patterns_dir);
 
@@ -2177,7 +2184,11 @@ mod tests {
         let content = std::fs::read_to_string(path).expect("read file");
         let arr: Vec<serde_json::Value> = serde_json::from_str(&content).expect("parse array");
         arr.iter()
-            .filter_map(|v| v.get("pattern_id").and_then(|x| x.as_str()).map(String::from))
+            .filter_map(|v| {
+                v.get("pattern_id")
+                    .and_then(|x| x.as_str())
+                    .map(String::from)
+            })
             .collect()
     }
 
@@ -2360,8 +2371,7 @@ mod tests {
     fn write_migration_source(patterns_dir: &Path, body: &serde_json::Value) {
         std::fs::create_dir_all(patterns_dir).expect("create patterns dir");
         let source = patterns_dir.join("common-issues.json");
-        std::fs::write(&source, serde_json::to_string_pretty(body).unwrap())
-            .expect("write source");
+        std::fs::write(&source, serde_json::to_string_pretty(body).unwrap()).expect("write source");
     }
 
     #[test]

@@ -188,10 +188,8 @@ fn extract_file_paths_from_files_changed(text: &str) -> Vec<String> {
     //   - `src/foo.rs` -- new file
     //   - src/bar.rs (modified)
     //   * frontend/App.tsx
-    let loose_re = regex::Regex::new(
-        r"^[-*+]\s+`?([A-Za-z0-9_./\-]*(?:[/.][A-Za-z0-9_./\-]+)+)`?",
-    )
-    .ok();
+    let loose_re =
+        regex::Regex::new(r"^[-*+]\s+`?([A-Za-z0-9_./\-]*(?:[/.][A-Za-z0-9_./\-]+)+)`?").ok();
     let mut in_section = false;
     for line in text.lines() {
         let trimmed = line.trim_end();
@@ -250,9 +248,7 @@ fn count_file_operations(plan: &str) -> usize {
         Ok(re) => re,
         Err(_) => return 0,
     };
-    let heading_re = match regex::Regex::new(
-        r"^#{2,4}\s+\d+\.\s+\[?(?:CREATE|MODIFY)\]?\s+\S+",
-    ) {
+    let heading_re = match regex::Regex::new(r"^#{2,4}\s+\d+\.\s+\[?(?:CREATE|MODIFY)\]?\s+\S+") {
         Ok(re) => re,
         Err(_) => return 0,
     };
@@ -294,17 +290,17 @@ fn classify_bash_command(cmd: &str) -> Option<&'static str> {
         }
     }
 
-    if let Ok(pipe_to_shell_re) = regex::Regex::new(
-        r"(?i)\b(?:curl|wget|fetch)\b[^|]*\|\s*(?:sh|bash|zsh|fish|ksh)\b",
-    ) {
+    if let Ok(pipe_to_shell_re) =
+        regex::Regex::new(r"(?i)\b(?:curl|wget|fetch)\b[^|]*\|\s*(?:sh|bash|zsh|fish|ksh)\b")
+    {
         if pipe_to_shell_re.is_match(trimmed) {
             return Some("network fetch piped directly into a shell interpreter");
         }
     }
 
-    if let Ok(force_push_re) = regex::Regex::new(
-        r"(?i)\bgit\s+push\b[^\n]*(?:--force\b|--force-with-lease\b|\s-f\b)",
-    ) {
+    if let Ok(force_push_re) =
+        regex::Regex::new(r"(?i)\bgit\s+push\b[^\n]*(?:--force\b|--force-with-lease\b|\s-f\b)")
+    {
         if force_push_re.is_match(trimmed) && is_unqualified_force_push(trimmed) {
             return Some("git push --force without explicit remote and branch arguments");
         }
@@ -316,26 +312,8 @@ fn classify_bash_command(cmd: &str) -> Option<&'static str> {
 fn is_dangerous_rm_target(cmd: &str) -> bool {
     let lower = cmd.to_ascii_lowercase();
     const TARGETS: &[&str] = &[
-        " /",
-        " /*",
-        " /usr",
-        " /etc",
-        " /var",
-        " /lib",
-        " /bin",
-        " /sbin",
-        " /opt",
-        " /home",
-        " /root",
-        " /boot",
-        " /sys",
-        " /proc",
-        " /dev",
-        " $home",
-        " ~",
-        " ~/",
-        " ..",
-        " /*.",
+        " /", " /*", " /usr", " /etc", " /var", " /lib", " /bin", " /sbin", " /opt", " /home",
+        " /root", " /boot", " /sys", " /proc", " /dev", " $home", " ~", " ~/", " ..", " /*.",
     ];
     for target in TARGETS {
         if lower.contains(target) {
@@ -1154,7 +1132,9 @@ impl Check for BuildClaimsHasGapsSection {
                     continue;
                 }
             };
-            let found = claims.lines().any(|l| l.trim_end() == "## Gaps and Assumptions");
+            let found = claims
+                .lines()
+                .any(|l| l.trim_end() == "## Gaps and Assumptions");
             if found {
                 out.push(StageCheckResult {
                     stage,
@@ -1353,10 +1333,7 @@ impl Check for AuditFindingsLocalized {
                 if let Some(arr) = json.get(*sev).and_then(|v| v.as_array()) {
                     for (i, entry) in arr.iter().enumerate() {
                         total_entries += 1;
-                        let has_file = entry
-                            .get("file")
-                            .and_then(|v| v.as_str())
-                            .is_some();
+                        let has_file = entry.get("file").and_then(|v| v.as_str()).is_some();
                         let has_line = entry.get("line").and_then(|v| v.as_u64()).is_some();
                         if !(has_file && has_line) {
                             violations.push((sev.to_string(), i));
@@ -1566,19 +1543,38 @@ impl Check for PatternCitationsPersisted {
             }
 
             let cfg_path = root.join(".foundry.json");
-            let configured_dir = if cfg_path.exists() {
+            let cfg_json = if cfg_path.exists() {
                 std::fs::read_to_string(&cfg_path)
                     .ok()
                     .and_then(|s| serde_json::from_str::<Value>(&s).ok())
-                    .and_then(|v| {
-                        v.get("patterns_dir")
-                            .and_then(|v| v.as_str())
-                            .map(|s| s.to_string())
-                    })
-                    .unwrap_or_else(|| "~/.foundry/patterns".to_string())
             } else {
-                "~/.foundry/patterns".to_string()
+                None
             };
+            let legacy_enabled = cfg_json
+                .as_ref()
+                .and_then(|v| v.get("pattern_dual_emit"))
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            if !legacy_enabled {
+                out.push(StageCheckResult {
+                    stage,
+                    invocation_id: inv.invocation_id,
+                    status: Status::Skip,
+                    evidence:
+                        "legacy pattern citation persistence is disabled (pattern_dual_emit=false)"
+                            .to_string(),
+                });
+                continue;
+            }
+
+            let configured_dir = cfg_json
+                .as_ref()
+                .and_then(|v| {
+                    v.get("patterns_dir")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string())
+                })
+                .unwrap_or_else(|| "~/.foundry/patterns".to_string());
             let patterns_dir = patterns::resolve_patterns_dir(&configured_dir);
 
             let loaded = patterns::load_patterns(&patterns_dir);
@@ -1758,9 +1754,7 @@ fn read_src_files(root: &Path) -> Vec<(PathBuf, String)> {
             };
             if meta.is_dir() {
                 stack.push(path);
-            } else if meta.is_file()
-                && path.extension().and_then(|s| s.to_str()) == Some("rs")
-            {
+            } else if meta.is_file() && path.extension().and_then(|s| s.to_str()) == Some("rs") {
                 if let Ok(content) = std::fs::read_to_string(&path) {
                     out.push((path, content));
                 }
@@ -1813,10 +1807,7 @@ fn classify_test_only_regions(content: &str) -> Vec<bool> {
 // definition can be located at all (be conservative -- let the existing
 // check logic decide).
 fn function_defined_only_in_tests(root: &Path, name: &str) -> bool {
-    let def_pat = format!(
-        r"\bfn\s+{}\b",
-        regex::escape(name)
-    );
+    let def_pat = format!(r"\bfn\s+{}\b", regex::escape(name));
     let def_re = match regex::Regex::new(&def_pat) {
         Ok(r) => r,
         Err(_) => return false,
@@ -1883,10 +1874,7 @@ fn classify_line_regions(content: &str) -> Vec<bool> {
     out
 }
 
-fn scan_token_in_production_lines(
-    root: &Path,
-    token_re: &regex::Regex,
-) -> Vec<(PathBuf, usize)> {
+fn scan_token_in_production_lines(root: &Path, token_re: &regex::Regex) -> Vec<(PathBuf, usize)> {
     let files = read_src_files(root);
     let mut hits = Vec::new();
     for (path, content) in files {
@@ -2351,8 +2339,9 @@ impl Check for BuildClaimsHasWireUpEvidence {
                             stage,
                             invocation_id: inv.invocation_id,
                             status: Status::Fail,
-                            evidence: "Wire-Up Evidence section present but trivially short or empty"
-                                .to_string(),
+                            evidence:
+                                "Wire-Up Evidence section present but trivially short or empty"
+                                    .to_string(),
                         });
                     }
                 }
@@ -2428,9 +2417,7 @@ mod tests {
     use super::*;
     use crate::agent::AgentRole;
     use crate::eval::run::latest_run;
-    use crate::run_manifest::{
-        AgentExitInfo, ManifestHandle, PromptEvidenceSpec, StageStatus,
-    };
+    use crate::run_manifest::{AgentExitInfo, ManifestHandle, PromptEvidenceSpec, StageStatus};
     use chrono::Utc;
     use std::fs;
     use tempfile::TempDir;
@@ -2778,7 +2765,11 @@ mod tests {
     fn build_claims_has_gaps_section_fails_when_missing() {
         let tmp = TempDir::new().unwrap();
         let bl = make_buildloop(&tmp);
-        fs::write(bl.join("build-claims.md"), "## Files Changed\n- [CREATE] x -- y\n").unwrap();
+        fs::write(
+            bl.join("build-claims.md"),
+            "## Files Changed\n- [CREATE] x -- y\n",
+        )
+        .unwrap();
         let h = write_build_invocation(&bl);
         h.flush().unwrap();
         let r = latest_run(&bl).unwrap();
@@ -3076,7 +3067,12 @@ mod tests {
 ";
         fs::write(&log_path, log_content).unwrap();
         let h = ManifestHandle::new(&bl, "T1.2", Utc::now());
-        let id = h.record_invocation(empty_spec(StageId::Build, AgentRole::Builder, "sys", "user"));
+        let id = h.record_invocation(empty_spec(
+            StageId::Build,
+            AgentRole::Builder,
+            "sys",
+            "user",
+        ));
         h.record_exit(
             id,
             StageStatus::Ran,
@@ -3110,7 +3106,12 @@ mod tests {
 ";
         fs::write(&log_path, log_content).unwrap();
         let h = ManifestHandle::new(&bl, "T1.2", Utc::now());
-        let id = h.record_invocation(empty_spec(StageId::Build, AgentRole::Builder, "sys", "user"));
+        let id = h.record_invocation(empty_spec(
+            StageId::Build,
+            AgentRole::Builder,
+            "sys",
+            "user",
+        ));
         h.record_exit(
             id,
             StageStatus::Ran,
@@ -3142,7 +3143,12 @@ mod tests {
 ";
         fs::write(&log_path, log_content).unwrap();
         let h = ManifestHandle::new(&bl, "T1.2", Utc::now());
-        let id = h.record_invocation(empty_spec(StageId::Build, AgentRole::Builder, "sys", "user"));
+        let id = h.record_invocation(empty_spec(
+            StageId::Build,
+            AgentRole::Builder,
+            "sys",
+            "user",
+        ));
         h.record_exit(
             id,
             StageStatus::Ran,
@@ -3237,6 +3243,39 @@ mod tests {
     }
 
     #[test]
+    fn pattern_citations_persisted_skips_legacy_store_when_dual_emit_disabled() {
+        let tmp = TempDir::new().unwrap();
+        let bl = make_buildloop(&tmp);
+
+        fs::write(
+            tmp.path().join(".foundry.json"),
+            serde_json::to_string_pretty(&serde_json::json!({
+                "pattern_dual_emit": false,
+                "patterns_dir": tmp.path().join("project-patterns").to_string_lossy().to_string(),
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        fs::write(
+            bl.join("build-claims.md"),
+            "## Files Changed\n- src/foo.rs\n## Notes\n- Avoided [pat-x] issue\n",
+        )
+        .unwrap();
+
+        let h = ManifestHandle::new(&bl, "T1.1", Utc::now());
+        let id = h.record_invocation(audit_spec_with_matched_patterns(vec!["pat-x".to_string()]));
+        h.record_exit(id, StageStatus::Ran, Utc::now(), AgentExitInfo::default());
+        h.flush().unwrap();
+
+        let r = latest_run(&bl).unwrap();
+        let results = run_check(PatternCitationsPersisted, &r);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].status, Status::Skip);
+        assert!(results[0].evidence.contains("pattern_dual_emit=false"));
+    }
+
+    #[test]
     fn pattern_citations_persisted_passes_when_counters_non_zero() {
         let tmp = TempDir::new().unwrap();
         let bl = make_buildloop(&tmp);
@@ -3247,6 +3286,7 @@ mod tests {
         fs::write(patterns_dir.join("common-issues.json"), json).unwrap();
 
         let cfg = serde_json::json!({
+            "pattern_dual_emit": true,
             "patterns_dir": patterns_dir.to_string_lossy().to_string(),
         });
         fs::write(
@@ -3284,6 +3324,7 @@ mod tests {
         fs::write(patterns_dir.join("common-issues.json"), json).unwrap();
 
         let cfg = serde_json::json!({
+            "pattern_dual_emit": true,
             "patterns_dir": patterns_dir.to_string_lossy().to_string(),
         });
         fs::write(
@@ -3678,11 +3719,7 @@ mod tests {
         git_commit_all(tmp.path(), "add alpha");
         let bl = tmp.path().join(".buildloop");
         std::fs::create_dir_all(&bl).unwrap();
-        std::fs::write(
-            bl.join("build-claims.md"),
-            "## Files Changed\n- src/x.rs\n",
-        )
-        .unwrap();
+        std::fs::write(bl.join("build-claims.md"), "## Files Changed\n- src/x.rs\n").unwrap();
         let h = ManifestHandle::new(&bl, "T1.6", Utc::now());
         let id = h.record_invocation(empty_spec(
             StageId::Build,
@@ -3728,6 +3765,8 @@ mod tests {
         let results = run_check(BuildClaimsHasWireUpEvidence, &r);
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].status, Status::Pass);
-        assert!(results[0].evidence.contains("Wire-Up Evidence has 1 bullet"));
+        assert!(results[0]
+            .evidence
+            .contains("Wire-Up Evidence has 1 bullet"));
     }
 }

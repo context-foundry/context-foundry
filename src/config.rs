@@ -278,9 +278,9 @@ pub struct Config {
     /// The pre-computed plan is reused when the loop advances to that task.
     pub planner_lookahead: bool,
 
-    /// Model for pattern extraction (lightweight JSON output, doesn't need Opus).
+    /// Model for skill extraction (lightweight JSON output, doesn't need Opus).
     pub pattern_extraction_model: String,
-    /// Provider for pattern extraction. Defaults to "claude".
+    /// Provider for skill extraction. Defaults to "claude".
     pub pattern_extraction_provider: String,
 
     /// Run mode: "auto" (default) runs forever with discovery.
@@ -603,14 +603,10 @@ pub struct Config {
     pub b_pattern_extraction_provider: String,
     #[serde(default)]
     pub b_pattern_extraction_model: String,
-    /// When true (default), pattern extraction emits BOTH the legacy
-    /// ~/.foundry/patterns/common-issues.json merge AND the new
-    /// ~/.foundry/skills/<pattern_id>/SKILL.md write. When false, only
-    /// the SKILL.md write runs (legacy JSON store is read-only). Phase 1
-    /// of the T1.26/T1.28/T1.29 strangler-fig rollout: dual-emit while
-    /// the new path bakes; flip to false in T1.28; remove the legacy
-    /// path in T1.29.
-    #[serde(default = "default_true")]
+    /// Back-compat escape hatch. When true, skill extraction also mirrors
+    /// learned entries into the retired legacy JSON store. Defaults to false:
+    /// skills are the write path.
+    #[serde(default)]
     pub pattern_dual_emit: bool,
 }
 
@@ -759,7 +755,7 @@ impl Default for Config {
             b_pr_review_model: String::new(),
             b_pattern_extraction_provider: String::new(),
             b_pattern_extraction_model: String::new(),
-            pattern_dual_emit: true,
+            pattern_dual_emit: false,
         }
     }
 }
@@ -1627,7 +1623,7 @@ impl Config {
             ("Fixer", &self.fixer_provider, &self.fixer_model),
             ("Discovery", &self.discovery_provider, &self.discovery_model),
             (
-                "Patterns",
+                "Skill Extraction",
                 &self.pattern_extraction_provider,
                 &self.pattern_extraction_model,
             ),
@@ -1674,10 +1670,7 @@ impl Config {
                 self.pattern_extraction_model.clone(),
             ),
             "fixer" => (self.fixer_provider.clone(), self.fixer_model.clone()),
-            "summary" => (
-                self.summary_provider.clone(),
-                self.summary_model.clone(),
-            ),
+            "summary" => (self.summary_provider.clone(), self.summary_model.clone()),
             _ => (self.builder_provider.clone(), self.builder_model.clone()),
         }
     }
@@ -1793,9 +1786,7 @@ impl Config {
             "max_pattern_injection" => self.max_pattern_injection.to_string(),
             "min_pattern_injection" => self.min_pattern_injection.to_string(),
             "history_search_results" => self.history_search_results.to_string(),
-            "observatory_jsonl_retention_days" => {
-                self.observatory_jsonl_retention_days.to_string()
-            }
+            "observatory_jsonl_retention_days" => self.observatory_jsonl_retention_days.to_string(),
             "auto_push_remote" => self.auto_push_remote.clone().unwrap_or_default(),
             "create_issue_on_wip" => self.create_issue_on_wip.to_string(),
             "pr_review_concurrency" => self.pr_review_concurrency.to_string(),
@@ -2014,9 +2005,10 @@ impl Config {
             "audit" | "doubt" => ("b_reviewer_provider", "b_reviewer_model"),
             "discovery" | "discover" => ("b_discovery_provider", "b_discovery_model"),
             "pr_review" => ("b_pr_review_provider", "b_pr_review_model"),
-            "pattern_extraction" | "patterns" => {
-                ("b_pattern_extraction_provider", "b_pattern_extraction_model")
-            }
+            "pattern_extraction" | "patterns" => (
+                "b_pattern_extraction_provider",
+                "b_pattern_extraction_model",
+            ),
             "fixer" => ("b_fixer_provider", "b_fixer_model"),
             _ => ("b_builder_provider", "b_builder_model"),
         }
@@ -2110,9 +2102,7 @@ impl Config {
     /// is logged.
     pub fn save_agent_pane_split_global(pct: u16) {
         let Some(config_path) = Self::global_config_path() else {
-            eprintln!(
-                "warning: cannot save agent_pane_split -- HOME or USERPROFILE not set"
-            );
+            eprintln!("warning: cannot save agent_pane_split -- HOME or USERPROFILE not set");
             return;
         };
         if let Some(parent) = config_path.parent() {
@@ -2435,14 +2425,26 @@ mod tests {
 
         let content = std::fs::read_to_string(dir.path().join(".foundry.json")).unwrap();
         let value: serde_json::Value = serde_json::from_str(&content).unwrap();
-        assert_eq!(value["arena_mode"], "solo", "local-model selection must drop to solo");
-        assert_eq!(value["prev_arena_mode"], "dual", "prior arena_mode must be snapshotted");
+        assert_eq!(
+            value["arena_mode"], "solo",
+            "local-model selection must drop to solo"
+        );
+        assert_eq!(
+            value["prev_arena_mode"], "dual",
+            "prior arena_mode must be snapshotted"
+        );
 
         Config::clear_builder_routing(dir.path());
         let content = std::fs::read_to_string(dir.path().join(".foundry.json")).unwrap();
         let value: serde_json::Value = serde_json::from_str(&content).unwrap();
-        assert_eq!(value["arena_mode"], "dual", "arena_mode must be restored on clear");
-        assert!(value.get("prev_arena_mode").is_none(), "snapshot must be removed");
+        assert_eq!(
+            value["arena_mode"], "dual",
+            "arena_mode must be restored on clear"
+        );
+        assert!(
+            value.get("prev_arena_mode").is_none(),
+            "snapshot must be removed"
+        );
     }
 
     #[test]
@@ -2658,9 +2660,18 @@ mod tests {
     #[test]
     fn display_provider_model_formats_empty_and_named_models() {
         assert_eq!(Config::display_provider_model("claude", ""), "Claude");
-        assert_eq!(Config::display_provider_model("claude", "opus"), "Claude Opus");
-        assert_eq!(Config::display_provider_model("claude", "sonnet"), "Claude Sonnet");
-        assert_eq!(Config::display_provider_model("claude", "haiku"), "Claude Haiku");
+        assert_eq!(
+            Config::display_provider_model("claude", "opus"),
+            "Claude Opus"
+        );
+        assert_eq!(
+            Config::display_provider_model("claude", "sonnet"),
+            "Claude Sonnet"
+        );
+        assert_eq!(
+            Config::display_provider_model("claude", "haiku"),
+            "Claude Haiku"
+        );
         assert_eq!(
             Config::display_provider_model("claude", "claude-opus-4-7"),
             "Claude Opus"
@@ -2744,7 +2755,11 @@ mod tests {
 
         let selected = config.selected_pipeline_configs("both");
 
-        assert_eq!(selected.len(), 1, "solo mode should not fork into dual pipelines");
+        assert_eq!(
+            selected.len(),
+            1,
+            "solo mode should not fork into dual pipelines"
+        );
     }
 
     /// Regression: a real on-disk config without `arena_mode` deserializes the
@@ -2757,7 +2772,10 @@ mod tests {
             r#"{"builder_models":["claude:opus","codex:"],"dual_selection":"both"}"#,
         )
         .unwrap();
-        assert_eq!(config.arena_mode, "", "serde default for arena_mode is empty string");
+        assert_eq!(
+            config.arena_mode, "",
+            "serde default for arena_mode is empty string"
+        );
 
         let selected = config.selected_pipeline_configs("both");
         assert_eq!(
@@ -3744,7 +3762,10 @@ mod tests {
         let providers: Vec<&str> = entries.iter().map(|e| e.provider.as_str()).collect();
         assert!(!providers.contains(&"claude"), "claude should be absent");
         assert!(!providers.contains(&"codex"), "codex should be absent");
-        assert!(!providers.contains(&"ghcopilot"), "copilot should be absent");
+        assert!(
+            !providers.contains(&"ghcopilot"),
+            "copilot should be absent"
+        );
         assert!(providers.contains(&""), "reset sentinel always present");
     }
 
@@ -3759,8 +3780,7 @@ mod tests {
 
     #[test]
     fn list_available_models_includes_ollama() {
-        let entries =
-            Config::list_available_models(false, false, false, &[], &["llama3.2".into()]);
+        let entries = Config::list_available_models(false, false, false, &[], &["llama3.2".into()]);
         let ol = entries.iter().find(|e| e.label == "llama3.2");
         assert!(ol.is_some(), "Ollama model not in entries");
         assert_eq!(ol.unwrap().model, "ollama/llama3.2");
@@ -3801,7 +3821,10 @@ mod tests {
         let b = config.pipeline_b_config();
         assert_eq!(b.scout_provider, "claude", "B should inherit scout from A");
         assert_eq!(b.scout_model, "opus-4-7");
-        assert_eq!(b.builder_provider, "codex", "B should inherit builder from A");
+        assert_eq!(
+            b.builder_provider, "codex",
+            "B should inherit builder from A"
+        );
         assert_eq!(b.builder_model, "gpt-5.4");
     }
 
@@ -3845,12 +3868,30 @@ mod tests {
         config.dual_selection = "both".into();
         let configs = config.selected_pipeline_configs("both");
         assert_eq!(configs.len(), 2);
-        assert_eq!(configs[0].arena_mode, "solo", "Pipeline A must be solo to prevent recursion");
-        assert_eq!(configs[1].arena_mode, "solo", "Pipeline B must be solo to prevent recursion");
-        assert!(configs[0].builder_models.is_empty(), "Pipeline A must clear legacy dual fields");
-        assert!(configs[1].builder_models.is_empty(), "Pipeline B must clear legacy dual fields");
-        assert!(configs[0].dual_selection.is_empty(), "Pipeline A must clear dual_selection");
-        assert!(configs[1].dual_selection.is_empty(), "Pipeline B must clear dual_selection");
+        assert_eq!(
+            configs[0].arena_mode, "solo",
+            "Pipeline A must be solo to prevent recursion"
+        );
+        assert_eq!(
+            configs[1].arena_mode, "solo",
+            "Pipeline B must be solo to prevent recursion"
+        );
+        assert!(
+            configs[0].builder_models.is_empty(),
+            "Pipeline A must clear legacy dual fields"
+        );
+        assert!(
+            configs[1].builder_models.is_empty(),
+            "Pipeline B must clear legacy dual fields"
+        );
+        assert!(
+            configs[0].dual_selection.is_empty(),
+            "Pipeline A must clear dual_selection"
+        );
+        assert!(
+            configs[1].dual_selection.is_empty(),
+            "Pipeline B must clear dual_selection"
+        );
     }
 
     #[test]
@@ -3863,8 +3904,16 @@ mod tests {
         // Both A and B configs should themselves return 1 config (not trigger another dual split)
         let a_sub = configs[0].selected_pipeline_configs("");
         let b_sub = configs[1].selected_pipeline_configs("");
-        assert_eq!(a_sub.len(), 1, "Pipeline A config must not trigger dual again");
-        assert_eq!(b_sub.len(), 1, "Pipeline B config must not trigger dual again");
+        assert_eq!(
+            a_sub.len(),
+            1,
+            "Pipeline A config must not trigger dual again"
+        );
+        assert_eq!(
+            b_sub.len(),
+            1,
+            "Pipeline B config must not trigger dual again"
+        );
     }
 
     #[test]
@@ -3895,7 +3944,10 @@ mod tests {
         config.b_query_provider = "codex".into();
         let b = config.pipeline_b_config();
         assert_eq!(b.query_provider, "codex");
-        assert!(b.query_model.is_empty(), "empty B model means use provider default");
+        assert!(
+            b.query_model.is_empty(),
+            "empty B model means use provider default"
+        );
     }
 
     #[test]

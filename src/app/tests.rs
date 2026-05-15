@@ -41,6 +41,63 @@ fn write_file(path: &Path, content: &str) {
     std::fs::write(path, content).expect("failed to write test file");
 }
 
+struct HomeGuard {
+    previous: Option<String>,
+}
+
+impl HomeGuard {
+    fn set(home: &Path) -> Self {
+        let previous = std::env::var("HOME").ok();
+        std::env::set_var("HOME", home);
+        Self { previous }
+    }
+}
+
+impl Drop for HomeGuard {
+    fn drop(&mut self) {
+        match self.previous.as_ref() {
+            Some(home) => std::env::set_var("HOME", home),
+            None => std::env::remove_var("HOME"),
+        }
+    }
+}
+
+fn write_legacy_pattern(home: &Path, pattern_id: &str) {
+    let json = format!(
+        r#"[{{
+  "pattern_id": "{}",
+  "title": "Legacy Pattern",
+  "frequency": 1,
+  "keywords": [],
+  "tech_stack": [],
+  "issue": "legacy",
+  "solution": {{"planner": "legacy", "reviewer": ""}}
+}}]"#,
+        pattern_id
+    );
+    write_file(
+        &home
+            .join(".foundry")
+            .join("patterns")
+            .join("common-issues.json"),
+        &json,
+    );
+}
+
+fn write_project_skill(project_dir: &Path, skill_id: &str) {
+    let skill_md = format!(
+        "---\nname: {skill_id}\ndescription: Project skill\nmetadata:\n  cf-stage: planner\n  cf-citations-pass: 0\n  cf-citations-wip: 0\n  cf-frequency: 1\n  cf-keywords:\n    - project\n---\n\n## Issue\n\nUse the project skill.\n\n## Solution\n\nApply it.\n"
+    );
+    write_file(
+        &project_dir
+            .join(".claude")
+            .join("skills")
+            .join(skill_id)
+            .join("SKILL.md"),
+        &skill_md,
+    );
+}
+
 fn overlay_focus_index(overlay: &SettingsOverlayState, field_id: &str) -> usize {
     for idx in 0..overlay.visible_row_count() {
         if matches!(overlay.row_at_index(idx), Some(RowId::Field(id)) if id == field_id) {
@@ -1768,7 +1825,7 @@ fn test_background_log_does_not_overwrite_agent_state() {
     handle_event(
         &mut state,
         AppEvent::LoopEvent(LoopEvent::BackgroundLog(
-            "Background pattern extraction started".to_string(),
+            "Background skill extraction started".to_string(),
         )),
         &Config::default(),
     );
@@ -1781,18 +1838,18 @@ fn test_background_log_does_not_overwrite_agent_state() {
         vec![AgentRole::Planner, AgentRole::Builder]
     );
     let (_ts, msg) = state.log_messages.last().unwrap();
-    assert!(msg.contains("Background pattern extraction started"));
+    assert!(msg.contains("Background skill extraction started"));
 }
 
 #[test]
-fn test_background_log_tracks_pattern_count() {
+fn test_background_log_tracks_skill_count() {
     let mut state = AppState::new(PathBuf::from("/tmp/test"));
     assert_eq!(state.session_patterns_learned, 0);
 
     handle_event(
         &mut state,
         AppEvent::LoopEvent(LoopEvent::BackgroundLog(
-            "Merged patterns: 3 new added to /path".to_string(),
+            "Skills written: 3 new, 1 bumped, 0 skipped (dir: /path)".to_string(),
         )),
         &Config::default(),
     );
@@ -2656,7 +2713,14 @@ fn pipeline_click_routes_connected_stages_to_summary_by_default() {
         ..Default::default()
     };
     let dir = PathBuf::from(".");
-    let expected_ids = ["query", "research", "plan", "plan-review", "implement", "doubt"];
+    let expected_ids = [
+        "query",
+        "research",
+        "plan",
+        "plan-review",
+        "implement",
+        "doubt",
+    ];
     for (i, expected) in expected_ids.iter().enumerate() {
         let target =
             super::pipeline_click_target(tui::PipelineClick::ConnectedStage(i), &dir, &cfg);
@@ -2665,7 +2729,12 @@ fn pipeline_click_routes_connected_stages_to_summary_by_default() {
                 stage_id,
                 fallback_file,
             } => {
-                assert_eq!(stage_id.as_str(), *expected, "wrong stage id at index {}", i);
+                assert_eq!(
+                    stage_id.as_str(),
+                    *expected,
+                    "wrong stage id at index {}",
+                    i
+                );
                 assert!(
                     fallback_file.is_some(),
                     "fallback_file should be Some for stage {}",
@@ -2702,9 +2771,15 @@ fn pipeline_click_routes_ship_and_discover_to_summary() {
             fallback_file,
         } => {
             assert_eq!(stage_id, "discover");
-            assert!(fallback_file.is_some(), "discover should fall back to TASKS.md");
+            assert!(
+                fallback_file.is_some(),
+                "discover should fall back to TASKS.md"
+            );
         }
-        other => panic!("expected discover to route to StageSummary, got {:?}", other),
+        other => panic!(
+            "expected discover to route to StageSummary, got {:?}",
+            other
+        ),
     }
 }
 
@@ -2765,6 +2840,98 @@ fn handle_surface_click_opens_surface_summary_overlay_for_each_variant() {
     }
 }
 
+#[test]
+#[serial_test::serial(home_env)]
+fn ui_reference_loader_uses_project_skills_when_legacy_dual_emit_disabled() {
+    let home = temp_project_dir("foundry-ui-skill-home");
+    let project = home.join("project");
+    std::fs::create_dir_all(&project).expect("failed to create project dir");
+    let _home = HomeGuard::set(&home);
+
+    write_legacy_pattern(&home, "legacy-json");
+    write_project_skill(&project, "project-skill");
+
+    let config = Config::default();
+    assert!(!config.pattern_dual_emit);
+    let loaded = super::load_reference_patterns_for_ui(&project, &config);
+
+    let ids: Vec<&str> = loaded.iter().map(|p| p.pattern_id.as_str()).collect();
+    assert_eq!(ids, vec!["project-skill"]);
+}
+
+#[test]
+#[serial_test::serial(home_env)]
+fn ui_reference_loader_allows_legacy_patterns_only_when_dual_emit_enabled() {
+    let home = temp_project_dir("foundry-ui-legacy-home");
+    let project = home.join("project");
+    std::fs::create_dir_all(&project).expect("failed to create project dir");
+    let _home = HomeGuard::set(&home);
+
+    write_legacy_pattern(&home, "legacy-json");
+
+    let config = Config {
+        pattern_dual_emit: true,
+        ..Default::default()
+    };
+    let loaded = super::load_reference_patterns_for_ui(&project, &config);
+
+    let ids: Vec<&str> = loaded.iter().map(|p| p.pattern_id.as_str()).collect();
+    assert_eq!(ids, vec!["legacy-json"]);
+}
+
+#[test]
+#[serial_test::serial(home_env)]
+fn refresh_patterns_cache_uses_skill_rows_when_legacy_dual_emit_disabled() {
+    let home = temp_project_dir("foundry-refresh-skill-home");
+    let project = home.join("project");
+    std::fs::create_dir_all(project.join(".buildloop")).expect("failed to create .buildloop");
+    let _home = HomeGuard::set(&home);
+
+    write_legacy_pattern(&home, "legacy-json");
+    write_project_skill(&project, "project-skill");
+
+    let mut state = AppState::new(project.join(".buildloop"));
+    let config = Config::default();
+    super::refresh_patterns_cache(&mut state, &config);
+
+    let cache = state
+        .patterns_cache
+        .expect("patterns cache should be populated");
+    let ids: Vec<&str> = cache.iter().map(|p| p.pattern_id.as_str()).collect();
+    assert_eq!(ids, vec!["project-skill"]);
+    assert!(
+        state.patterns_dir_cache.is_none(),
+        "legacy patterns directory should not be cached when dual emit is disabled"
+    );
+}
+
+#[test]
+#[serial_test::serial(home_env)]
+fn settings_overlay_skills_detail_uses_skills_when_legacy_dual_emit_disabled() {
+    let home = temp_project_dir("foundry-settings-skill-home");
+    let project = home.join("project");
+    std::fs::create_dir_all(project.join(".buildloop")).expect("failed to create .buildloop");
+    let _home = HomeGuard::set(&home);
+
+    write_file(
+        &project.join(".foundry.json"),
+        r#"{"pattern_dual_emit":false}"#,
+    );
+    write_legacy_pattern(&home, "legacy-json");
+    write_project_skill(&project, "project-skill");
+
+    let mut state = AppState::new(project.join(".buildloop"));
+    assert!(super::toggle_settings_overlay(&mut state));
+
+    let cache = state
+        .settings_overlay
+        .as_ref()
+        .and_then(|overlay| overlay.patterns_section_cache.as_ref())
+        .expect("settings skills cache should be populated");
+    let ids: Vec<&str> = cache.all.iter().map(|p| p.pattern_id.as_str()).collect();
+    assert_eq!(ids, vec!["project-skill"]);
+}
+
 /// T2.2: a SkillsRetrieved event for a stage populates `last_retrieval`
 /// with up to 10 entries; subsequent SkillCitationsRecorded flips
 /// `was_cited` for entries whose skill_id matches a citation.
@@ -2799,9 +2966,7 @@ fn app_event_skills_retrieved_updates_last_retrieval_and_flips_was_cited() {
     assert!(!plan_entries[0].was_cited);
 
     // Bounded at 10 entries even if 12 picks come in.
-    let many: Vec<(String, f32)> = (0..12)
-        .map(|i| (format!("s{}", i), i as f32))
-        .collect();
+    let many: Vec<(String, f32)> = (0..12).map(|i| (format!("s{}", i), i as f32)).collect();
     handle_event(
         &mut state,
         AppEvent::SkillsRetrieved {

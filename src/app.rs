@@ -528,15 +528,19 @@ pub async fn run_tui(project_dir: &Path) -> Result<()> {
         let model = config.embedding_model.clone();
         let timeout_ms = config.embedding_timeout_ms;
         let ollama_url = config.ollama_url.clone();
+        let project_dir = project_dir.to_path_buf();
         tokio::spawn(async move {
             // Wait a moment so initial TUI paint settles before we hit Ollama.
             tokio::time::sleep(Duration::from_secs(2)).await;
-            let patterns = crate::patterns::load_patterns_from_global();
+            let patterns = load_skill_patterns_for_project(&project_dir);
             if patterns.is_empty() {
                 return;
             }
             let result = crate::embeddings::prewarm_pattern_cache(
-                &patterns, &model, timeout_ms, &ollama_url,
+                &patterns,
+                &model,
+                timeout_ms,
+                &ollama_url,
             )
             .await;
             eprintln!(
@@ -1537,13 +1541,12 @@ fn toggle_settings_overlay(state: &mut AppState) -> bool {
             ov.expanded_sections.insert("pipeline_health".to_string());
             ov.eval_pipeline_health_first_view = false;
         }
-        // Populate Patterns Detail snapshot. AppState does not currently track
-        // per-session injected pattern ids, so injected_ids is empty -- the
-        // "Injected this session" filter renders header + buttons only until
-        // the user toggles to All. Future work may thread the live set in.
-        let global_patterns = crate::patterns::load_patterns_from_global();
+        // Populate the Skills detail snapshot. The UI still uses the legacy
+        // pattern-shaped row model, but when dual-emitting is off the rows are
+        // sourced only from skills.
+        let config = load_settings_config(state);
         ov.patterns_section_cache = Some(state::PatternsSectionSnapshot {
-            all: global_patterns,
+            all: load_reference_patterns_for_ui(project_dir, &config),
             injected_ids: std::collections::BTreeSet::new(),
             filter: state::PatternsFilter::InjectedThisSession,
         });
@@ -2532,10 +2535,10 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                 ));
             }
             LoopEvent::Log(ref msg) => {
-                // Track patterns learned from "Merged patterns: N new added" messages
-                if msg.starts_with("Merged patterns:") {
+                // Track skills learned from background extraction summaries.
+                if msg.starts_with("Skills written:") {
                     if let Some(count_str) = msg
-                        .strip_prefix("Merged patterns: ")
+                        .strip_prefix("Skills written: ")
                         .and_then(|s| s.split_whitespace().next())
                     {
                         if let Ok(n) = count_str.parse::<usize>() {
@@ -2595,10 +2598,10 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                 state.log("Stats: failed to load events".to_string());
             }
             LoopEvent::BackgroundLog(ref msg) => {
-                // Track patterns learned from "Merged patterns: N new added" messages
-                if msg.starts_with("Merged patterns:") {
+                // Track skills learned from background extraction summaries.
+                if msg.starts_with("Skills written:") {
                     if let Some(count_str) = msg
-                        .strip_prefix("Merged patterns: ")
+                        .strip_prefix("Skills written: ")
                         .and_then(|s| s.split_whitespace().next())
                     {
                         if let Ok(n) = count_str.parse::<usize>() {
@@ -2606,7 +2609,7 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                         }
                     }
                 }
-                if let Some(title) = msg.strip_prefix("Pattern learned: ") {
+                if let Some(title) = msg.strip_prefix("Skill learned: ") {
                     state.session_patterns.push(state::PatternEvent {
                         title: title.to_string(),
                         kind: state::PatternEventKind::Learned,
@@ -4680,10 +4683,34 @@ fn compute_and_show_stats_overlay(state: &mut AppState) {
 }
 
 fn refresh_patterns_cache(state: &mut AppState, config: &Config) {
-    use crate::patterns;
-    let dir = patterns::resolve_patterns_dir(&config.patterns_dir);
-    state.patterns_cache = Some(patterns::load_patterns(&dir));
-    state.patterns_dir_cache = Some(dir);
+    if config.pattern_dual_emit {
+        use crate::patterns;
+        let dir = patterns::resolve_patterns_dir(&config.patterns_dir);
+        state.patterns_cache = Some(patterns::load_patterns(&dir));
+        state.patterns_dir_cache = Some(dir);
+    } else {
+        let project_dir = overlay_project_dir(state).to_path_buf();
+        state.patterns_cache = Some(load_skill_patterns_for_project(&project_dir));
+        state.patterns_dir_cache = None;
+    }
+}
+
+fn load_reference_patterns_for_ui(
+    project_dir: &Path,
+    config: &Config,
+) -> Vec<crate::patterns::Pattern> {
+    if config.pattern_dual_emit {
+        crate::patterns::load_patterns_from_global()
+    } else {
+        load_skill_patterns_for_project(project_dir)
+    }
+}
+
+fn load_skill_patterns_for_project(project_dir: &Path) -> Vec<crate::patterns::Pattern> {
+    crate::skills::load_skills_from_global_and_project(project_dir)
+        .into_iter()
+        .map(crate::skills::skill_to_pattern)
+        .collect()
 }
 
 fn refresh_skill_citation_summary(state: &mut AppState) {

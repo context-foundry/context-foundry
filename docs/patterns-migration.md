@@ -180,19 +180,24 @@ T1.13 migration:
 
 ### Dual emit
 
-`config.pattern_dual_emit` (default `true` in this phase) controls
-whether the legacy `~/.foundry/patterns/common-issues.json` merge runs
-alongside the new SKILL.md write. With it on, both stores grow on
-every extraction. Set `pattern_dual_emit: false` in
-`~/.foundry/config.json` or `.foundry.json` to skip the legacy write
-entirely.
+`config.pattern_dual_emit` controls whether the legacy
+`~/.foundry/patterns/common-issues.json` merge runs alongside the
+SKILL.md write. It now defaults to `false`: Skills
+(`~/.foundry/skills/<id>/SKILL.md`) are the default reuse path, and the
+legacy JSON store is no longer read or written unless explicitly opted
+in.
+
+If you rely on the legacy JSON store, set `"pattern_dual_emit": true`
+in `~/.foundry/config.json` or `.foundry.json`. Existing configs that
+already set the field keep their value; only omitted/default values
+change behavior.
 
 ### Rollout
 
-- Phase 1 (T1.26 -- this phase): default `pattern_dual_emit = true`,
+- Phase 1 (T1.26): default `pattern_dual_emit = true`,
   both paths run.
-- Phase 2 (T1.28): flip default to `false` after roughly 10 tasks
-  with no observed regressions; legacy JSON store stops growing.
+- Phase 2 (T1.28): default flipped to `false`; legacy JSON store stops
+  growing unless explicitly opted in.
 - Phase 3 (T1.29): delete `merge_patterns` and the `common-issues.json`
   reader; archive the file as `_legacy_archive_<date>.json`; remove
   the `pattern_dual_emit` field.

@@ -5,8 +5,8 @@ use std::io::{self, BufRead, Write};
 use std::path::Path;
 
 use crate::config::Config;
-use crate::plugins;
 use crate::patterns;
+use crate::plugins;
 
 // ─── JSON-RPC 2.0 Types ────────────────────────────────────
 
@@ -183,6 +183,10 @@ fn handle_resources_read(
 // ─── Resource Builders ──────────────────────────────────────
 
 fn build_pattern_catalog(config: &Config) -> Result<String> {
+    if !config.pattern_dual_emit {
+        return Ok("[]".to_string());
+    }
+
     let patterns_dir = patterns::resolve_patterns_dir(&config.patterns_dir);
     let all_patterns = patterns::load_patterns(&patterns_dir);
 
@@ -351,6 +355,7 @@ mod tests {
 
         let config = Config {
             patterns_dir: dir.path().to_string_lossy().to_string(),
+            pattern_dual_emit: true,
             ..Config::default()
         };
 
@@ -380,6 +385,7 @@ mod tests {
 
         let config = Config {
             patterns_dir: dir.path().to_string_lossy().to_string(),
+            pattern_dual_emit: true,
             ..Config::default()
         };
 
@@ -388,6 +394,26 @@ mod tests {
         assert_eq!(entries[0]["pattern_id"], "high");
         assert_eq!(entries[1]["pattern_id"], "mid");
         assert_eq!(entries[2]["pattern_id"], "low");
+    }
+
+    #[test]
+    fn test_build_pattern_catalog_empty_when_legacy_disabled() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("test.json"),
+            r#"[{"pattern_id": "legacy", "title": "Legacy", "frequency": 1}]"#,
+        )
+        .unwrap();
+
+        let config = Config {
+            patterns_dir: dir.path().to_string_lossy().to_string(),
+            pattern_dual_emit: false,
+            ..Config::default()
+        };
+
+        let catalog = build_pattern_catalog(&config).unwrap();
+        let entries: Vec<Value> = serde_json::from_str(&catalog).unwrap();
+        assert!(entries.is_empty());
     }
 
     #[test]

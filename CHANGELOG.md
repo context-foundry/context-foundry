@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- `pattern_dual_emit` now defaults to `false`. Skills (`~/.foundry/skills/<id>/SKILL.md`) are the default reuse path; the legacy `~/.foundry/patterns/common-issues.json` store is no longer read or written by default.
+
+### Migration
+- If you rely on the legacy pattern JSON store, set `"pattern_dual_emit": true` explicitly in `.foundry.json` or `~/.foundry/config.json`. Existing configs that already set the field keep their value; only omitted/default values change behavior.
+
 ## [3.3.0] - 2026-05-12
 
 ### Changed (BREAKING with auto-migration)
