@@ -847,6 +847,116 @@
       "model": "gpt-4o-mini",
       "lines": 89,
       "generation": 85
+    },
+    {
+      "file": "blue-screen-of-death-valley.js",
+      "name": "Blue Screen of Death Valley",
+      "location": "Racetrack Playa, Death Valley, California, USA",
+      "biome": "desert",
+      "generated": "2026-05-13T04:15:48.415Z",
+      "model": "gpt-4o-mini",
+      "lines": 100,
+      "generation": 86
+    },
+    {
+      "file": "api-gateway-to-paradise.js",
+      "name": "API Gateway to Paradise",
+      "location": "Maldives Overwater Bungalows, North Male Atoll",
+      "biome": "ocean",
+      "generated": "2026-05-13T15:15:47.558Z",
+      "model": "gpt-4o-mini",
+      "lines": 95,
+      "generation": 87
+    },
+    {
+      "file": "autumn-deprecation-notice.js",
+      "name": "Autumn Deprecation Notice",
+      "location": "Green Mountain National Forest, Vermont, USA",
+      "biome": "forest",
+      "generated": "2026-05-13T18:19:10.933Z",
+      "model": "gpt-4o-mini",
+      "lines": 80,
+      "generation": 88
+    },
+    {
+      "file": "floating-point-lagoon.js",
+      "name": "Floating Point Lagoon",
+      "location": "Jokulsarlon Glacier Lagoon, Iceland",
+      "biome": "ocean",
+      "generated": "2026-05-13T20:12:57.714Z",
+      "model": "gpt-4o-mini",
+      "lines": 90,
+      "generation": 89
+    },
+    {
+      "file": "lava-tube-localhost.js",
+      "name": "Lava Tube Localhost",
+      "location": "Kazumura Cave, Big Island, Hawaii, USA",
+      "biome": "underground",
+      "generated": "2026-05-13T21:47:28.662Z",
+      "model": "gpt-4o-mini",
+      "lines": 87,
+      "generation": 90
+    },
+    {
+      "file": "stack-trace-spires.js",
+      "name": "Stack Trace Spires",
+      "location": "Zhangjiajie National Forest, Hunan, China",
+      "biome": "mountain",
+      "generated": "2026-05-14T04:15:41.034Z",
+      "model": "gpt-4o-mini",
+      "lines": 81,
+      "generation": 91
+    },
+    {
+      "file": "cold-storage-solutions.js",
+      "name": "Cold Storage Solutions",
+      "location": "Svalbard Global Seed Vault, Svalbard, Norway",
+      "biome": "arctic",
+      "generated": "2026-05-14T07:25:03.950Z",
+      "model": "gpt-4o-mini",
+      "lines": 80,
+      "generation": 92
+    },
+    {
+      "file": "the-original-cloud-computing.js",
+      "name": "The Original Cloud Computing",
+      "location": "Monteverde Cloud Forest, Costa Rica",
+      "biome": "forest",
+      "generated": "2026-05-14T10:36:37.002Z",
+      "model": "gpt-4o-mini",
+      "lines": 80,
+      "generation": 93
+    },
+    {
+      "file": "neon-city-never-sleeps.js",
+      "name": "Neon City Never Sleeps()",
+      "location": "Shibuya Crossing, Tokyo, Japan",
+      "biome": "urban",
+      "generated": "2026-05-14T18:12:33.616Z",
+      "model": "gpt-4o-mini",
+      "lines": 97,
+      "generation": 94
+    },
+    {
+      "file": "404-sunlight-not-found.js",
+      "name": "404: Sunlight Not Found",
+      "location": "Eisriesenwelt Ice Cave, Werfen, Austria",
+      "biome": "arctic",
+      "generated": "2026-05-14T20:04:43.002Z",
+      "model": "gpt-4o-mini",
+      "lines": 84,
+      "generation": 95
+    },
+    {
+      "file": "ring-buffer-saturn.js",
+      "name": "Ring Buffer Saturn",
+      "location": "Saturn's Rings, Outer Solar System",
+      "biome": "space",
+      "generated": "2026-05-14T23:14:16.317Z",
+      "model": "gpt-4o-mini",
+      "lines": 81,
+      "generation": 96
     }
   ]
 }
