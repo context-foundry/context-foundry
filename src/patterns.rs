@@ -18,6 +18,7 @@ pub struct PatternSolution {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Pattern {
+    #[serde(alias = "skill_id")]
     pub pattern_id: String,
     pub title: String,
     #[serde(default)]

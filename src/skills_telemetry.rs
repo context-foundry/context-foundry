@@ -18,6 +18,17 @@ pub struct TelemetryRecord {
     pub cited_by_stage: HashMap<String, u64>,
 }
 
+/// Feedback signal from a builder agent about an injected skill's quality.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SkillFeedback {
+    /// Skill was helpful and correct.
+    Confirmed(String),
+    /// Skill is outdated for the current codebase.
+    Stale(String),
+    /// Skill is actively wrong or misleading.
+    Wrong(String),
+}
+
 pub fn db_path() -> PathBuf {
     let base = if cfg!(target_os = "windows") {
         std::env::var("LOCALAPPDATA")
@@ -49,12 +60,8 @@ pub fn open_db(path: &Path) -> Result<Connection> {
             )
         })?;
     }
-    let conn = Connection::open(path).with_context(|| {
-        format!(
-            "failed to open skills telemetry DB at {}",
-            path.display()
-        )
-    })?;
+    let conn = Connection::open(path)
+        .with_context(|| format!("failed to open skills telemetry DB at {}", path.display()))?;
     conn.pragma_update(None, "journal_mode", "WAL")
         .context("failed to set journal_mode")?;
     conn.pragma_update(None, "synchronous", "NORMAL")
@@ -74,13 +81,54 @@ fn init_schema(conn: &Connection) -> Result<()> {
             cited_by_planner  INTEGER NOT NULL DEFAULT 0,
             cited_by_reviewer INTEGER NOT NULL DEFAULT 0,
             cited_by_builder  INTEGER NOT NULL DEFAULT 0,
-            cited_by_scout    INTEGER NOT NULL DEFAULT 0
+            cited_by_scout    INTEGER NOT NULL DEFAULT 0,
+            feedback_confirmed INTEGER NOT NULL DEFAULT 0,
+            feedback_stale     INTEGER NOT NULL DEFAULT 0,
+            feedback_wrong     INTEGER NOT NULL DEFAULT 0,
+            last_feedback      TEXT
         );
         CREATE INDEX IF NOT EXISTS idx_skill_telemetry_last_used
             ON skill_telemetry(last_used);
         "#,
     )
     .context("failed to initialize skills telemetry schema")?;
+    ensure_column(
+        conn,
+        "feedback_confirmed",
+        "ALTER TABLE skill_telemetry ADD COLUMN feedback_confirmed INTEGER NOT NULL DEFAULT 0",
+    )?;
+    ensure_column(
+        conn,
+        "feedback_stale",
+        "ALTER TABLE skill_telemetry ADD COLUMN feedback_stale INTEGER NOT NULL DEFAULT 0",
+    )?;
+    ensure_column(
+        conn,
+        "feedback_wrong",
+        "ALTER TABLE skill_telemetry ADD COLUMN feedback_wrong INTEGER NOT NULL DEFAULT 0",
+    )?;
+    ensure_column(
+        conn,
+        "last_feedback",
+        "ALTER TABLE skill_telemetry ADD COLUMN last_feedback TEXT",
+    )?;
+    Ok(())
+}
+
+fn ensure_column(conn: &Connection, column: &str, ddl: &str) -> Result<()> {
+    let mut stmt = conn
+        .prepare("PRAGMA table_info(skill_telemetry)")
+        .context("failed to inspect skill_telemetry schema")?;
+    let rows = stmt
+        .query_map([], |row| row.get::<_, String>(1))
+        .context("failed to query skill_telemetry schema")?;
+    for row in rows {
+        if row.context("failed to read skill_telemetry column")? == column {
+            return Ok(());
+        }
+    }
+    conn.execute(ddl, [])
+        .with_context(|| format!("failed to add skill_telemetry.{column}"))?;
     Ok(())
 }
 
@@ -114,9 +162,7 @@ pub fn record_citations_batch(
         CommitOutcome::Wip => 1,
     };
 
-    let tx = conn
-        .transaction()
-        .context("failed to begin telemetry tx")?;
+    let tx = conn.transaction().context("failed to begin telemetry tx")?;
 
     let mut updated = 0usize;
     for skill_name in &names {
@@ -157,6 +203,80 @@ pub fn record_citations_batch(
     }
 
     tx.commit().context("failed to commit telemetry tx")?;
+    Ok(updated)
+}
+
+/// Parse SKILL_FEEDBACK markers from builder output.
+/// Format: `SKILL_FEEDBACK: skill-id | confirmed|stale|wrong | optional reason`
+pub fn parse_skill_feedback(text: &str) -> Vec<(String, SkillFeedback)> {
+    let mut results = Vec::new();
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if !trimmed.starts_with("SKILL_FEEDBACK:") {
+            continue;
+        }
+        let rest = trimmed.trim_start_matches("SKILL_FEEDBACK:").trim();
+        let parts: Vec<&str> = rest.splitn(3, '|').map(|s| s.trim()).collect();
+        if parts.len() < 2 || parts[0].is_empty() {
+            continue;
+        }
+        let skill_name = parts[0].to_string();
+        let reason = parts.get(2).unwrap_or(&"").to_string();
+        let feedback = match parts[1].to_lowercase().as_str() {
+            "confirmed" => SkillFeedback::Confirmed(reason),
+            "stale" => SkillFeedback::Stale(reason),
+            "wrong" => SkillFeedback::Wrong(reason),
+            _ => continue,
+        };
+        results.push((skill_name, feedback));
+    }
+    results
+}
+
+pub fn record_feedback_batch(
+    conn: &mut Connection,
+    feedback: &[(String, SkillFeedback)],
+) -> Result<usize> {
+    if feedback.is_empty() {
+        return Ok(0);
+    }
+    let today = Utc::now().format("%Y-%m-%d").to_string();
+
+    let mut tally: HashMap<String, (i64, i64, i64)> = HashMap::new();
+    for (skill_name, signal) in feedback {
+        let entry = tally.entry(skill_name.clone()).or_insert((0, 0, 0));
+        match signal {
+            SkillFeedback::Confirmed(_) => entry.0 += 1,
+            SkillFeedback::Stale(_) => entry.1 += 1,
+            SkillFeedback::Wrong(_) => entry.2 += 1,
+        }
+    }
+
+    let tx = conn
+        .transaction()
+        .context("failed to begin skill feedback tx")?;
+    let mut updated = 0usize;
+    let mut names: Vec<String> = tally.keys().cloned().collect();
+    names.sort();
+    for skill_name in names {
+        let (confirmed, stale, wrong) = tally.get(&skill_name).copied().unwrap_or_default();
+        tx.execute(
+            r#"
+            INSERT INTO skill_telemetry (
+                skill_name, feedback_confirmed, feedback_stale, feedback_wrong, last_feedback
+            ) VALUES (?1, ?2, ?3, ?4, ?5)
+            ON CONFLICT(skill_name) DO UPDATE SET
+                feedback_confirmed = feedback_confirmed + excluded.feedback_confirmed,
+                feedback_stale     = feedback_stale     + excluded.feedback_stale,
+                feedback_wrong     = feedback_wrong     + excluded.feedback_wrong,
+                last_feedback      = excluded.last_feedback
+            "#,
+            params![&skill_name, confirmed, stale, wrong, today],
+        )
+        .with_context(|| format!("failed to upsert skill feedback for {}", skill_name))?;
+        updated += 1;
+    }
+    tx.commit().context("failed to commit skill feedback tx")?;
     Ok(updated)
 }
 
@@ -209,23 +329,39 @@ pub fn load_record(conn: &Connection, skill_name: &str) -> Result<Option<Telemet
 #[derive(Debug, Clone, Default)]
 pub struct PopularityRecord {
     pub citations_pass: u64,
+    pub citations_wip: u64,
     pub last_used: Option<String>,
+    pub feedback_confirmed: u64,
+    pub feedback_stale: u64,
+    pub feedback_wrong: u64,
 }
 
 pub fn load_popularity_scores(conn: &Connection) -> Result<HashMap<String, PopularityRecord>> {
     let mut stmt = conn
-        .prepare("SELECT skill_name, citations_pass, last_used FROM skill_telemetry")
+        .prepare(
+            r#"SELECT skill_name, citations_pass, citations_wip, last_used,
+                      feedback_confirmed, feedback_stale, feedback_wrong
+               FROM skill_telemetry"#,
+        )
         .context("failed to prepare load_popularity_scores")?;
     let rows = stmt
         .query_map([], |row| {
             let name: String = row.get(0)?;
             let pass: i64 = row.get(1)?;
-            let last_used: Option<String> = row.get(2)?;
+            let wip: i64 = row.get(2)?;
+            let last_used: Option<String> = row.get(3)?;
+            let confirmed: i64 = row.get(4)?;
+            let stale: i64 = row.get(5)?;
+            let wrong: i64 = row.get(6)?;
             Ok((
                 name,
                 PopularityRecord {
                     citations_pass: pass as u64,
+                    citations_wip: wip as u64,
                     last_used,
+                    feedback_confirmed: confirmed as u64,
+                    feedback_stale: stale as u64,
+                    feedback_wrong: wrong as u64,
                 },
             ))
         })
@@ -288,10 +424,7 @@ pub fn top_cited_skills(conn: &Connection, limit: usize) -> Result<Vec<Telemetry
     Ok(out)
 }
 
-pub fn recent_citations(
-    conn: &Connection,
-    since: DateTime<Utc>,
-) -> Result<Vec<TelemetryRecord>> {
+pub fn recent_citations(conn: &Connection, since: DateTime<Utc>) -> Result<Vec<TelemetryRecord>> {
     let since_date = since.format("%Y-%m-%d").to_string();
     let mut stmt = conn
         .prepare(
@@ -485,6 +618,43 @@ mod tests {
         assert_eq!(rec.citations_pass, 1);
         assert_eq!(rec.cited_by_stage.get("planner"), Some(&1));
         assert_eq!(rec.cited_by_stage.get("reviewer"), Some(&1));
+    }
+
+    #[test]
+    fn parse_skill_feedback_accepts_supported_signals() {
+        let text = "noise\nSKILL_FEEDBACK: rust-async | confirmed | helped\nSKILL_FEEDBACK: old-api | stale | docs moved\nSKILL_FEEDBACK: bad-advice | wrong | broke build\n";
+        let feedback = parse_skill_feedback(text);
+        assert_eq!(feedback.len(), 3);
+        assert_eq!(feedback[0].0, "rust-async");
+        assert!(matches!(feedback[0].1, SkillFeedback::Confirmed(_)));
+        assert!(matches!(feedback[1].1, SkillFeedback::Stale(_)));
+        assert!(matches!(feedback[2].1, SkillFeedback::Wrong(_)));
+    }
+
+    #[test]
+    fn record_feedback_batch_updates_popularity_penalty_fields() {
+        let (_tmp, path) = temp_db_path();
+        let mut conn = open_db(&path).unwrap();
+        record_feedback_batch(
+            &mut conn,
+            &[
+                (
+                    "alpha".to_string(),
+                    SkillFeedback::Confirmed("useful".to_string()),
+                ),
+                ("alpha".to_string(), SkillFeedback::Wrong("bad".to_string())),
+                ("beta".to_string(), SkillFeedback::Stale("old".to_string())),
+            ],
+        )
+        .unwrap();
+
+        let scores = load_popularity_scores(&conn).unwrap();
+        let alpha = scores.get("alpha").unwrap();
+        assert_eq!(alpha.feedback_confirmed, 1);
+        assert_eq!(alpha.feedback_wrong, 1);
+        assert_eq!(alpha.feedback_stale, 0);
+        let beta = scores.get("beta").unwrap();
+        assert_eq!(beta.feedback_stale, 1);
     }
 
     #[test]

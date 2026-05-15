@@ -576,23 +576,10 @@ pub async fn rank_skills_for_task<'a>(
 
     let telemetry = skills_telemetry::load_popularity_scores_or_default();
     let today = Utc::now().date_naive();
-
     let mut boosted: Vec<(String, usize)> = Vec::with_capacity(semantic_scored.len());
     for (p, score) in &semantic_scored {
-        let mut multiplier: f64 = 1.0;
-        if let Some(rec) = telemetry.get(&p.pattern_id) {
-            if rec.citations_pass > 0 {
-                multiplier *= 1.10;
-            }
-            if let Some(date_str) = rec.last_used.as_deref() {
-                if let Ok(last) = NaiveDate::parse_from_str(date_str, "%Y-%m-%d") {
-                    let days_ago = (today - last).num_days().max(0) as f64;
-                    let decay = (-days_ago / 90.0_f64).exp().max(0.1_f64);
-                    multiplier *= decay;
-                }
-            }
-        }
-        let final_score = ((*score as f64) * multiplier).round() as usize;
+        let final_score =
+            apply_skill_telemetry_multiplier(*score, telemetry.get(&p.pattern_id), today);
         if final_score > 0 {
             boosted.push((p.pattern_id.clone(), final_score));
         }
@@ -617,6 +604,39 @@ pub async fn rank_skills_for_task<'a>(
         }
     }
     ranked
+}
+
+fn apply_skill_telemetry_multiplier(
+    score: usize,
+    rec: Option<&skills_telemetry::PopularityRecord>,
+    today: NaiveDate,
+) -> usize {
+    let mut multiplier: f64 = 1.0;
+    if let Some(rec) = rec {
+        if rec.citations_pass > 0 {
+            multiplier *= 1.10;
+        }
+        if rec.citations_wip > rec.citations_pass {
+            multiplier *= 0.85;
+        }
+        if rec.feedback_confirmed > 0 {
+            multiplier *= 1.05_f64.powi(rec.feedback_confirmed.min(3) as i32);
+        }
+        if rec.feedback_stale > 0 {
+            multiplier *= 0.65_f64.powi(rec.feedback_stale.min(3) as i32);
+        }
+        if rec.feedback_wrong > 0 {
+            multiplier *= 0.35_f64.powi(rec.feedback_wrong.min(3) as i32);
+        }
+        if let Some(date_str) = rec.last_used.as_deref() {
+            if let Ok(last) = NaiveDate::parse_from_str(date_str, "%Y-%m-%d") {
+                let days_ago = (today - last).num_days().max(0) as f64;
+                let decay = (-days_ago / 90.0_f64).exp().max(0.1_f64);
+                multiplier *= decay;
+            }
+        }
+    }
+    ((score as f64) * multiplier).round() as usize
 }
 
 /// T2.2: same ranking algorithm as `rank_skills_for_task` but returns each
@@ -667,23 +687,10 @@ pub async fn rank_skills_for_task_with_scores<'a>(
 
     let telemetry = skills_telemetry::load_popularity_scores_or_default();
     let today = Utc::now().date_naive();
-
     let mut boosted: Vec<(String, usize)> = Vec::with_capacity(semantic_scored.len());
     for (p, score) in &semantic_scored {
-        let mut multiplier: f64 = 1.0;
-        if let Some(rec) = telemetry.get(&p.pattern_id) {
-            if rec.citations_pass > 0 {
-                multiplier *= 1.10;
-            }
-            if let Some(date_str) = rec.last_used.as_deref() {
-                if let Ok(last) = NaiveDate::parse_from_str(date_str, "%Y-%m-%d") {
-                    let days_ago = (today - last).num_days().max(0) as f64;
-                    let decay = (-days_ago / 90.0_f64).exp().max(0.1_f64);
-                    multiplier *= decay;
-                }
-            }
-        }
-        let final_score = ((*score as f64) * multiplier).round() as usize;
+        let final_score =
+            apply_skill_telemetry_multiplier(*score, telemetry.get(&p.pattern_id), today);
         if final_score > 0 {
             boosted.push((p.pattern_id.clone(), final_score));
         }
@@ -1700,6 +1707,46 @@ mod tests {
         assert!(
             !names.contains(&"beta"),
             "beta has no overlapping keywords; should be excluded"
+        );
+    }
+
+    #[test]
+    fn skill_telemetry_multiplier_applies_feedback_penalties() {
+        let today = Utc::now().date_naive();
+        let confirmed = crate::skills_telemetry::PopularityRecord {
+            feedback_confirmed: 2,
+            ..Default::default()
+        };
+        let stale = crate::skills_telemetry::PopularityRecord {
+            feedback_stale: 1,
+            ..Default::default()
+        };
+        let wrong = crate::skills_telemetry::PopularityRecord {
+            feedback_wrong: 1,
+            ..Default::default()
+        };
+        let wip_heavy = crate::skills_telemetry::PopularityRecord {
+            citations_pass: 1,
+            citations_wip: 2,
+            ..Default::default()
+        };
+
+        assert_eq!(apply_skill_telemetry_multiplier(100, None, today), 100);
+        assert_eq!(
+            apply_skill_telemetry_multiplier(100, Some(&confirmed), today),
+            110
+        );
+        assert_eq!(
+            apply_skill_telemetry_multiplier(100, Some(&stale), today),
+            65
+        );
+        assert_eq!(
+            apply_skill_telemetry_multiplier(100, Some(&wrong), today),
+            35
+        );
+        assert_eq!(
+            apply_skill_telemetry_multiplier(100, Some(&wip_heavy), today),
+            94
         );
     }
 

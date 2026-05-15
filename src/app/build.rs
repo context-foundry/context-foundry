@@ -28,26 +28,21 @@ use crate::budget;
 use crate::doubt_confidence;
 use crate::eval;
 use crate::eval::stage_id::{self as eval_stage_id, StageId};
-use crate::plugins;
 use crate::observatory::{self, AgentUsage, ObservatoryEvent};
 use crate::orchestrator::{self, OrchestratorConfig};
-use crate::skills;
-use crate::skills_telemetry;
+use crate::plugins;
 use crate::run_manifest::{
     AgentExitInfo, ArtifactSource, CompletionPath, PromptEvidenceSpec, StageStatus,
 };
+use crate::skills;
+use crate::skills_telemetry;
 use crate::utils::atomic_write_file;
 
 /// Stat TASKS.md inside the held `tasks_file_lock` and notify the TUI of the
 /// new mtime via `LoopEvent::TasksFileMtime`. Used after every TASKS.md
 /// mutation so the live-reload watcher does not trigger on our own writes.
-fn emit_tasks_file_mtime(
-    plan_path: &std::path::Path,
-    tx: &mpsc::UnboundedSender<AppEvent>,
-) {
-    let mtime = std::fs::metadata(plan_path)
-        .and_then(|m| m.modified())
-        .ok();
+fn emit_tasks_file_mtime(plan_path: &std::path::Path, tx: &mpsc::UnboundedSender<AppEvent>) {
+    let mtime = std::fs::metadata(plan_path).and_then(|m| m.modified()).ok();
     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::TasksFileMtime(mtime)));
 }
 
@@ -293,7 +288,9 @@ fn write_checkpoint(
         if let Err(e) = atomic_write_file(&path, json.as_bytes()) {
             eprintln!(
                 "Warning: failed to write checkpoint to {}: {} -- crash recovery may not resume from card_idx {}",
-                path.display(), e, card_idx
+                path.display(),
+                e,
+                card_idx
             );
         }
     }
@@ -732,10 +729,7 @@ fn spawn_lookahead_planner(
             task_id
         ))));
 
-        // Match patterns for the look-ahead task.
-        let patterns_dir = patterns::resolve_patterns_dir(&ctx.config.patterns_dir);
-        let all_patterns = patterns::load_patterns(&patterns_dir);
-
+        // Rank skills for the look-ahead task.
         let detected_stack = patterns::detect_project_tech_stack(&ctx.project_dir);
 
         let lookahead_complexity = complexity::classify_task(&task_desc);
@@ -745,9 +739,8 @@ fn spawn_lookahead_planner(
             ctx.config.min_pattern_injection,
         );
 
-        let skills_dir_lookahead = skills::resolve_skills_dir("~/.foundry/skills");
-        let all_skills_lookahead = skills::load_skills(&skills_dir_lookahead);
-        let pattern_context = if !all_skills_lookahead.is_empty() {
+        let all_skills_lookahead = skills::load_skills_from_global_and_project(&ctx.project_dir);
+        let reference_context = if !all_skills_lookahead.is_empty() {
             let mut lookahead_seen: std::collections::HashSet<String> =
                 std::collections::HashSet::new();
             let mut lookahead_titles: Vec<String> = Vec::new();
@@ -765,7 +758,9 @@ fn spawn_lookahead_planner(
                 &mut lookahead_keywords,
             )
             .await
-        } else {
+        } else if ctx.config.pattern_dual_emit {
+            let patterns_dir = patterns::resolve_patterns_dir(&ctx.config.patterns_dir);
+            let all_patterns = patterns::load_patterns(&patterns_dir);
             let m = if ctx.config.semantic_match_enabled {
                 let keyword_scores =
                     patterns::keyword_scores(&all_patterns, &task_desc, &detected_stack);
@@ -783,15 +778,16 @@ fn spawn_lookahead_planner(
                 patterns::match_patterns(&all_patterns, &task_desc, &detected_stack)
             };
             patterns::format_patterns_for_prompt(&m, "planner", lookahead_pattern_count)
+        } else {
+            String::new()
         };
-
 
         let prompt = prompts::planner_lookahead_prompt(
             &ctx.config.pipeline_stage_label("plan"),
             None,
             &task_id,
             &task_desc,
-            &pattern_context,
+            &reference_context,
             &ctx.spec_file_prompt_path(),
             &ctx.tasks_file_prompt_path(),
             &plan_file,
@@ -1203,7 +1199,7 @@ async fn run_parallel_builder(
     ops: &[FileOp],
     groups: &[Vec<usize>],
     plugin_context: &str,
-    pattern_context: &str,
+    reference_context: &str,
 ) -> (bool, bool, AgentUsage) {
     let cc_version = ctx.cc_version.clone();
     let task_id = &task_info.id;
@@ -1382,9 +1378,9 @@ async fn run_parallel_builder(
             &joined_blocks,
             &ctx.spec_file_prompt_path(),
             &ctx.tasks_file_prompt_path(),
-            pattern_context,
+            reference_context,
         );
-        // T1.31: parallel_builder_prompt now wraps `pattern_context` in its
+        // T1.31: parallel_builder_prompt now wraps reference context in its
         // own BEGIN REFERENCE DATA block; the old manual wrap is removed.
         let prompt = prompts::wrap_with_plugins(&prompt, plugin_context);
 
@@ -1487,11 +1483,8 @@ async fn run_parallel_builder(
                 Some(&slot_config),
             )
             .await;
-            let (slot_status, slot_exit) = manifest_exit_info(
-                &result,
-                &slot_orig_provider,
-                &slot_eff_model,
-            );
+            let (slot_status, slot_exit) =
+                manifest_exit_info(&result, &slot_orig_provider, &slot_eff_model);
             slot_manifest.record_exit(slot_inv_id, slot_status, chrono::Utc::now(), slot_exit);
 
             let slot_usage = fwd_handle.await.unwrap_or_default();
@@ -1728,7 +1721,8 @@ async fn run_parallel_builder(
         ) {
             eprintln!(
                 "Warning: failed to write combined build claims to {}: {} -- reviewer will run without claims context",
-                claims_path.display(), e
+                claims_path.display(),
+                e
             );
         }
     }
@@ -2206,8 +2200,7 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
 
     // ─── Plugin Context Loading ──────────────────────────────
     let discovered_plugins = plugins::discover_plugins(&ctx.project_dir);
-    let plugin_context =
-        plugins::load_plugin_context(&discovered_plugins, &ctx.config.plugins);
+    let plugin_context = plugins::load_plugin_context(&discovered_plugins, &ctx.config.plugins);
     if !ctx.config.plugins.is_empty() {
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
             "Plugins active: {}",
@@ -2245,11 +2238,12 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
     // ─── Planner Look-Ahead State ────────────────────────────────
     let mut lookahead: Option<LookaheadHandle> = None;
 
-    // ─── Pattern Cache ─────────────────────────────────────────────
+    // ─── Legacy Pattern Cache ──────────────────────────────────────
     let patterns_dir = patterns::resolve_patterns_dir(&ctx.config.patterns_dir);
 
-    // Decay stale patterns before loading (lazy cleanup on startup)
-    if ctx.config.pattern_decay_days > 0 {
+    // Decay stale patterns before loading (lazy cleanup on startup). This is
+    // legacy-store maintenance only; the default reuse path is skills.
+    if ctx.config.pattern_dual_emit && ctx.config.pattern_decay_days > 0 {
         let mut total_decayed =
             patterns::decay_stale_patterns(&patterns_dir, ctx.config.pattern_decay_days);
         // Also decay plugin pattern dirs
@@ -2269,7 +2263,11 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
         }
     }
 
-    let mut cached_patterns = patterns::load_patterns(&patterns_dir);
+    let mut cached_patterns = if ctx.config.pattern_dual_emit {
+        patterns::load_patterns(&patterns_dir)
+    } else {
+        Vec::new()
+    };
     // Plugin-bundled skills are injected via load_plugin_context() — they
     // do not need to feed the global pattern pool here.
 
@@ -2474,11 +2472,9 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
             let history_context = crate::history::format_history_for_prompt(&history_records);
 
             // Read intake-brief.md if Coach mode produced one before Scout fired
-            let intake_brief = std::fs::read_to_string(
-                ctx.buildloop_dir.join("intake-brief.md"),
-            )
-            .ok()
-            .filter(|s| !s.trim().is_empty());
+            let intake_brief = std::fs::read_to_string(ctx.buildloop_dir.join("intake-brief.md"))
+                .ok()
+                .filter(|s| !s.trim().is_empty());
 
             let prompt = prompts::bootstrap_scout_prompt(
                 user_intent.as_deref(),
@@ -2718,10 +2714,13 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                 }
             }
 
-            // Reload patterns cache if extraction may have added new ones
-            let refreshed = patterns::load_patterns(&patterns_dir);
-            if refreshed.len() != cached_patterns.len() {
-                cached_patterns = refreshed;
+            // Reload legacy pattern cache only when the compatibility store is
+            // explicitly enabled.
+            if ctx.config.pattern_dual_emit {
+                let refreshed = patterns::load_patterns(&patterns_dir);
+                if refreshed.len() != cached_patterns.len() {
+                    cached_patterns = refreshed;
+                }
             }
 
             // Spawn look-ahead planner for the next task now that the scout
@@ -2893,12 +2892,14 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
             // in the outer build loop, not the per-task scope. Seed the ranker
             // with recent session activity (build history) instead of just the
             // round number so embedding-based ranking has meaningful signal.
-            let discover_skills_dir = skills::resolve_skills_dir("~/.foundry/skills");
-            let discover_all_skills = skills::load_skills(&discover_skills_dir);
+            let discover_all_skills = skills::load_skills_from_global_and_project(&ctx.project_dir);
             let discover_stack = patterns::detect_project_tech_stack(&ctx.project_dir);
             let discover_seed = if let Some(history) = build_history.as_deref() {
                 let trimmed: String = history.chars().take(2000).collect();
-                format!("Discovery round {} -- recent work:\n{}", discovery_round, trimmed)
+                format!(
+                    "Discovery round {} -- recent work:\n{}",
+                    discovery_round, trimmed
+                )
             } else {
                 format!("Discovery round {}", discovery_round)
             };
@@ -3282,7 +3283,8 @@ async fn process_task(
     // Mutable state for budget recovery: summary directive for next phase, model override for next phase
     let mut budget_summary_for_next: Option<String> = None;
     let mut budget_model_override: Option<(String, String)> = None; // (provider, model)
-    let patterns_extracted = ctx.buildloop_dir.join("patterns-extracted.json");
+    let skills_extracted = ctx.buildloop_dir.join("skills-extracted.json");
+    let legacy_patterns_extracted = ctx.buildloop_dir.join("patterns-extracted.json");
 
     // Clean up stale dual-build worktrees from previous sessions
     let arena_dir = ctx.buildloop_dir.join("arena");
@@ -3358,10 +3360,8 @@ async fn process_task(
     let task_classification: TaskClassification =
         complexity::classify_task_full(task_desc, override_flag);
     let task_complexity = task_classification.tier;
-    let p_plus_budget = complexity::p_plus_cycles_budget(
-        task_complexity,
-        ctx.config.max_plan_review_cycles,
-    );
+    let p_plus_budget =
+        complexity::p_plus_cycles_budget(task_complexity, ctx.config.max_plan_review_cycles);
     observatory::log_event(
         &ctx.session_id,
         &ctx.project_dir,
@@ -3410,17 +3410,13 @@ async fn process_task(
     // parseable (corrupt artifacts, manual file placement, etc).
     // Task IDs match `[A-Za-z]?\d+\.\d+` per src/task.rs:10 -- bounded shape,
     // contains no path separators, safe to use as a directory name.
-    let archive_label = extract_prior_task_id(&ctx.buildloop_dir)
-        .unwrap_or_else(|| "_orphaned".to_string());
+    let archive_label =
+        extract_prior_task_id(&ctx.buildloop_dir).unwrap_or_else(|| "_orphaned".to_string());
     let history_archive_dir = ctx
         .buildloop_dir
         .join("history")
         .join(&archive_label)
-        .join(
-            chrono::Utc::now()
-                .format("%Y%m%dT%H%M%SZ")
-                .to_string(),
-        );
+        .join(chrono::Utc::now().format("%Y%m%dT%H%M%SZ").to_string());
     let mut archive_failures: Vec<String> = Vec::new();
     // Stale artifact cleanup: failures here mean the next phase may read stale data.
     // Log warnings so the root cause is visible.
@@ -3488,20 +3484,19 @@ async fn process_task(
             stale_cleanup_failures.push("review-report.md".to_string());
         }
     }
-    if let Err(e) = archive_artifact(&patterns_extracted, &history_archive_dir) {
-        eprintln!(
-            "archive: failed to archive patterns-extracted.json: {}",
-            e
-        );
-        archive_failures.push("patterns-extracted.json".to_string());
-    }
-    if let Err(e) = std::fs::remove_file(&patterns_extracted) {
-        if e.kind() != std::io::ErrorKind::NotFound {
-            eprintln!(
-                "Warning: failed to remove stale patterns-extracted.json: {}",
-                e
-            );
-            stale_cleanup_failures.push("patterns-extracted.json".to_string());
+    for (artifact, name) in [
+        (&skills_extracted, "skills-extracted.json"),
+        (&legacy_patterns_extracted, "patterns-extracted.json"),
+    ] {
+        if let Err(e) = archive_artifact(artifact, &history_archive_dir) {
+            eprintln!("archive: failed to archive {}: {}", name, e);
+            archive_failures.push(name.to_string());
+        }
+        if let Err(e) = std::fs::remove_file(artifact) {
+            if e.kind() != std::io::ErrorKind::NotFound {
+                eprintln!("Warning: failed to remove stale {}: {}", name, e);
+                stale_cleanup_failures.push(name.to_string());
+            }
         }
     }
     if !stale_cleanup_failures.is_empty() {
@@ -3548,8 +3543,8 @@ async fn process_task(
 
     let (
         matched,
-        pattern_context,
-        reviewer_pattern_context,
+        planner_reference_context,
+        reviewer_reference_context,
         query_skill_text,
         research_skill_text,
         build_skill_text,
@@ -3785,7 +3780,9 @@ async fn process_task(
                 plan_review_text,
             )
         }
-    } else {
+    } else if ctx.config.pattern_dual_emit {
+        // Legacy compatibility only. The default reuse path is skill-only; this
+        // branch exists for operators who explicitly keep the old store alive.
         let m = if ctx.config.semantic_match_enabled {
             let keyword_scores =
                 patterns::keyword_scores(cached_patterns, task_desc, &detected_stack);
@@ -3812,9 +3809,8 @@ async fn process_task(
             patterns::format_patterns_for_prompt(&m, "planner", effective_pattern_count);
         let reviewer_text =
             patterns::format_patterns_for_prompt(&m, "reviewer", effective_pattern_count);
-        // T1.31: propagate the legacy-patterns context to every per-stage
-        // string so users with patterns-but-no-skills don't lose visibility
-        // when the per-stage skill plumbing is empty.
+        // Legacy compatibility branch: when explicitly enabled, propagate the
+        // old store into each stage using the same per-stage context shape.
         let query_text = planner_text.clone();
         let research_text = planner_text.clone();
         let build_text = planner_text.clone();
@@ -3830,12 +3826,23 @@ async fn process_task(
             discover_text,
             plan_review_text,
         )
+    } else {
+        (
+            Vec::<&patterns::Pattern>::new(),
+            String::new(),
+            String::new(),
+            String::new(),
+            String::new(),
+            String::new(),
+            String::new(),
+            String::new(),
+        )
     };
 
     if !matched.is_empty() {
         let actually_injected = matched.len().min(effective_pattern_count);
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-            "Matched {} patterns, injecting {} for task",
+            "Matched {} legacy pattern(s), injecting {} for task",
             matched.len(),
             actually_injected
         ))));
@@ -4111,8 +4118,12 @@ async fn process_task(
                     &ctx.config.query_provider,
                     &ctx.config.query_model,
                 );
-                ctx.manifest
-                    .record_exit(query_inv_id, query_status, chrono::Utc::now(), query_exit);
+                ctx.manifest.record_exit(
+                    query_inv_id,
+                    query_status,
+                    chrono::Utc::now(),
+                    query_exit,
+                );
 
                 let agent_usage = fwd_handle.await.unwrap_or_default();
                 last_rate_limited = was_rate_limited(&query_result);
@@ -4196,7 +4207,10 @@ async fn process_task(
                     // Remove partial questions.md so crash recovery won't trust stale content
                     if let Err(e) = std::fs::remove_file(&questions_file) {
                         if e.kind() != std::io::ErrorKind::NotFound {
-                            eprintln!("Warning: failed to remove partial questions.md after query failure: {}", e);
+                            eprintln!(
+                                "Warning: failed to remove partial questions.md after query failure: {}",
+                                e
+                            );
                         }
                     }
                 }
@@ -4754,7 +4768,7 @@ async fn process_task(
                     .and_then(|s| s.prompt_override.as_deref()),
                 task_id,
                 task_desc,
-                &pattern_context,
+                &planner_reference_context,
                 &ctx.spec_file_prompt_path(),
                 &ctx.tasks_file_prompt_path(),
                 previous_attempt_feedback_for_task.as_deref(),
@@ -5110,7 +5124,7 @@ async fn process_task(
                     .and_then(|s| s.prompt_override.as_deref()),
                 task_id,
                 task_desc,
-                &pattern_context,
+                &planner_reference_context,
                 &ctx.spec_file_prompt_path(),
                 &ctx.tasks_file_prompt_path(),
                 previous_attempt_feedback_for_task.as_deref(),
@@ -5208,12 +5222,8 @@ async fn process_task(
                 &ctx.config.planner_provider,
                 &ctx.config.planner_model,
             );
-            ctx.manifest.record_exit(
-                retry_inv_id,
-                retry_status,
-                chrono::Utc::now(),
-                retry_exit,
-            );
+            ctx.manifest
+                .record_exit(retry_inv_id, retry_status, chrono::Utc::now(), retry_exit);
 
             let retry_usage = fwd_handle2.await.unwrap_or_default();
             last_rate_limited = was_rate_limited(&retry_result);
@@ -5534,10 +5544,9 @@ async fn process_task(
                         // explicit constraints P+ added. Best-effort -- a write
                         // failure logs and continues; the planner degrades to
                         // today's behaviour without a sidecar.
-                        let research_text = std::fs::read_to_string(
-                            ctx.buildloop_dir.join("research-report.md"),
-                        )
-                        .unwrap_or_default();
+                        let research_text =
+                            std::fs::read_to_string(ctx.buildloop_dir.join("research-report.md"))
+                                .unwrap_or_default();
                         let plan_text_for_sidecar =
                             std::fs::read_to_string(&ctx.current_plan).unwrap_or_default();
                         let missing_research_paths =
@@ -5545,9 +5554,8 @@ async fn process_task(
                                 &research_text,
                                 &plan_text_for_sidecar,
                             );
-                        let new_constraints = extract_new_constraints_from_findings(
-                            &outcome.unresolved_findings,
-                        );
+                        let new_constraints =
+                            extract_new_constraints_from_findings(&outcome.unresolved_findings);
                         let sidecar = PlanReviewFeedbackSidecar {
                             task_id: task_id.to_string(),
                             generated_at: chrono::Utc::now().to_rfc3339(),
@@ -5578,7 +5586,11 @@ async fn process_task(
                                 cycles_used,
                                 cycles_cap,
                                 finding_count,
-                                feedback_summary: crate::utils::truncate_str(&feedback_summary, 2000).to_string(),
+                                feedback_summary: crate::utils::truncate_str(
+                                    &feedback_summary,
+                                    2000,
+                                )
+                                .to_string(),
                             },
                         );
                         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
@@ -6031,7 +6043,7 @@ async fn process_task(
                     &build_skill_text,
                 )
             };
-            // T1.31: the builder prompt now wraps `pattern_context` (here:
+            // T1.31: the builder prompt now wraps reference context (here:
             // build_skill_text) internally inside its own BEGIN REFERENCE
             // DATA block, so the old manual wrap is no longer needed.
             let prompt = prompts::wrap_with_plugins(&prompt, plugin_context);
@@ -6498,7 +6510,7 @@ async fn process_task(
                         task_id,
                         task_desc,
                         ctx,
-                        &reviewer_pattern_context,
+                        &reviewer_reference_context,
                         plugin_context,
                         tx,
                         &injected_pattern_ids,
@@ -6510,7 +6522,7 @@ async fn process_task(
                         task_id,
                         task_desc,
                         ctx,
-                        &reviewer_pattern_context,
+                        &reviewer_reference_context,
                         plugin_context,
                         tx,
                         &injected_pattern_ids,
@@ -6975,8 +6987,8 @@ async fn process_task(
         );
     }
 
-    // Skip pattern extraction for trivial tasks (< 3 files changed or
-    // reviewer found no issues). These tasks rarely produce interesting patterns.
+    // Skip skill extraction for trivial tasks (< 3 files changed or
+    // reviewer found no issues). These tasks rarely produce reusable skills.
     // Use HEAD~1..HEAD because this runs AFTER the commit, so unstaged diff is empty.
     let changed_file_count = std::process::Command::new("git")
         .args(["diff", "--name-only", "HEAD~1", "HEAD"])
@@ -6985,31 +6997,43 @@ async fn process_task(
         .map(|o| String::from_utf8_lossy(&o.stdout).lines().count())
         .unwrap_or(0);
 
-    // ─── Pattern Feedback (self-repair) ────────────────────────────
-    // Parse PATTERN_FEEDBACK markers from builder output (build-claims.md).
-    // Apply feedback to patterns on disk before citation scanning.
-    if !injected_pattern_ids.is_empty() {
+    // ─── Skill Feedback (self-repair) ──────────────────────────────
+    // Parse SKILL_FEEDBACK markers from builder output (build-claims.md) and
+    // persist them to skills-telemetry.db so future retrieval can suppress
+    // stale/wrong skills and prefer confirmed ones.
+    {
         let claims_path = ctx.buildloop_dir.join("build-claims.md");
         if let Ok(claims_content) = std::fs::read_to_string(&claims_path) {
-            let feedback = patterns::parse_pattern_feedback(&claims_content);
+            let mut feedback = skills_telemetry::parse_skill_feedback(&claims_content);
+            if injected_skill_titles.is_empty() {
+                feedback.clear();
+            } else {
+                let allowed: std::collections::HashSet<String> =
+                    injected_skill_titles.iter().cloned().collect();
+                feedback.retain(|(skill_id, _)| allowed.contains(skill_id));
+            }
             if !feedback.is_empty() {
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                    "Pattern feedback: {} signals from builder",
+                    "Skill feedback: {} signal(s) from builder",
                     feedback.len()
                 ))));
-                if let Err(e) = patterns::apply_feedback(patterns_dir, &feedback) {
-                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                        "Warning: failed to apply pattern feedback: {}",
-                        e
-                    ))));
-                }
-                // Also apply to plugin pattern dirs
-                let ext_infos = plugins::discover_plugins(&ctx.project_dir);
-                for ext_name in &ctx.config.plugins {
-                    if let Some(ext) = ext_infos.iter().find(|e| &e.name == ext_name) {
-                        if let Some(ref pdir) = ext.patterns_dir {
-                            let _ = patterns::apply_feedback(pdir, &feedback);
+                let telemetry_path = skills_telemetry::db_path();
+                match skills_telemetry::open_db(&telemetry_path) {
+                    Ok(mut conn) => {
+                        if let Err(e) =
+                            skills_telemetry::record_feedback_batch(&mut conn, &feedback)
+                        {
+                            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                                "Warning: failed to record skill feedback: {}",
+                                e
+                            ))));
                         }
+                    }
+                    Err(e) => {
+                        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                            "Warning: failed to open skill telemetry DB for feedback: {}",
+                            e
+                        ))));
                     }
                 }
             }
@@ -7063,8 +7087,7 @@ async fn process_task(
     // Skill citation scan: independent of injected_pattern_ids because skill
     // discovery does not pre-select skills -- the agent decides which to use.
     {
-        let skills_dir_cite = skills::resolve_skills_dir("~/.foundry/skills");
-        let all_skills_for_cite = skills::load_skills(&skills_dir_cite);
+        let all_skills_for_cite = skills::load_skills_from_global_and_project(&ctx.project_dir);
         if !all_skills_for_cite.is_empty() {
             let skill_patterns: Vec<patterns::Pattern> = all_skills_for_cite
                 .into_iter()
@@ -7097,7 +7120,10 @@ async fn process_task(
     }
 
     let all_cited: Vec<String> = {
-        let mut v: Vec<String> = all_cited_by_role.iter().map(|(pid, _)| pid.clone()).collect();
+        let mut v: Vec<String> = all_cited_by_role
+            .iter()
+            .map(|(pid, _)| pid.clone())
+            .collect();
         v.sort();
         v.dedup();
         v
@@ -7110,7 +7136,7 @@ async fn process_task(
             patterns::CommitOutcome::Wip
         };
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-            "Pattern citations: {} patterns referenced by agents (outcome: {:?})",
+            "Skill citations: {} skill(s) referenced by agents (outcome: {:?})",
             all_cited.len(),
             outcome
         ))));
@@ -7136,11 +7162,9 @@ async fn process_task(
                         names
                     };
                     if !unique_names.is_empty() {
-                        let _ = tx.send(AppEvent::LoopEvent(
-                            LoopEvent::SkillCitationsRecorded {
-                                skill_names: unique_names,
-                            },
-                        ));
+                        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::SkillCitationsRecorded {
+                            skill_names: unique_names,
+                        }));
                     }
                 }
                 Err(e) => {
@@ -7157,38 +7181,41 @@ async fn process_task(
                 ))));
             }
         }
-        match patterns::update_used_counts(patterns_dir, &all_cited_by_role, outcome) {
-            Ok(n) => {
-                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                    "Pattern store updated: {} pattern(s) updated in global store",
-                    n
-                ))));
+        if ctx.config.pattern_dual_emit && !injected_pattern_ids.is_empty() {
+            match patterns::update_used_counts(patterns_dir, &all_cited_by_role, outcome) {
+                Ok(n) if n > 0 => {
+                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                        "Legacy pattern store updated: {} item(s) in global store",
+                        n
+                    ))));
+                }
+                Err(e) => {
+                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                        "Warning: failed to update legacy pattern used_counts: {}",
+                        e
+                    ))));
+                }
+                _ => {}
             }
-            Err(e) => {
-                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                    "Warning: failed to update pattern used_counts: {}",
-                    e
-                ))));
-            }
-        }
-        let ext_infos = plugins::discover_plugins(&ctx.project_dir);
-        for ext_name in &ctx.config.plugins {
-            if let Some(ext) = ext_infos.iter().find(|e| &e.name == ext_name) {
-                if let Some(ref pdir) = ext.patterns_dir {
-                    match patterns::update_used_counts(pdir, &all_cited_by_role, outcome) {
-                        Ok(n) if n > 0 => {
-                            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                                "Pattern store updated: {} pattern(s) updated in plugin '{}'",
-                                n, ext_name
-                            ))));
+            let ext_infos = plugins::discover_plugins(&ctx.project_dir);
+            for ext_name in &ctx.config.plugins {
+                if let Some(ext) = ext_infos.iter().find(|e| &e.name == ext_name) {
+                    if let Some(ref pdir) = ext.patterns_dir {
+                        match patterns::update_used_counts(pdir, &all_cited_by_role, outcome) {
+                            Ok(n) if n > 0 => {
+                                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                                    "Legacy pattern store updated: {} item(s) in plugin '{}'",
+                                    n, ext_name
+                                ))));
+                            }
+                            Err(e) => {
+                                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                                    "Warning: failed to update legacy pattern used_counts for plugin '{}': {}",
+                                    ext_name, e
+                                ))));
+                            }
+                            _ => {}
                         }
-                        Err(e) => {
-                            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
-                                "Warning: failed to update pattern used_counts for plugin '{}': {}",
-                                ext_name, e
-                            ))));
-                        }
-                        _ => {}
                     }
                 }
             }
@@ -7198,31 +7225,31 @@ async fn process_task(
     if validated && changed_file_count >= 3 {
         if Config::parse_provider(&eff_task_builder_provider) != agent::ModelProvider::Claude {
             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
-                "patterns: skipped (local model active)".to_string(),
+                "skills: extraction skipped (local model active)".to_string(),
             )));
         } else {
-            // Fire-and-forget: pattern extraction runs in the background so the
+            // Fire-and-forget: skill extraction runs in the background so the
             // loop can start the next task immediately.  It writes to a separate
-            // patterns directory, not to the source tree, so there is no conflict.
+            // skills directory, not to the source tree, so there is no conflict.
             let bg_task_id = task_id.to_string();
             let bg_task_desc = task_desc.to_string();
             let bg_ctx = ctx.clone();
             let bg_patterns_dir = patterns_dir.to_path_buf();
-            let bg_patterns_extracted = patterns_extracted.clone();
+            let bg_skills_extracted = skills_extracted.clone();
             let bg_tx = tx.clone();
             tokio::spawn(async move {
                 tokio::time::sleep(Duration::from_secs(bg_ctx.config.pause_between_agents_secs))
                     .await;
-                run_pattern_extraction(
+                run_skill_extraction(
                     &bg_task_id,
                     &bg_task_desc,
                     &bg_ctx,
                     &bg_patterns_dir,
-                    &bg_patterns_extracted,
+                    &bg_skills_extracted,
                     &bg_tx,
                 )
                 .await;
-                let _ = std::fs::remove_file(&bg_patterns_extracted);
+                let _ = std::fs::remove_file(&bg_skills_extracted);
             });
         }
     }
@@ -7304,28 +7331,28 @@ async fn process_task(
     (validated, last_rate_limited, human_denied_approval)
 }
 
-async fn run_pattern_extraction(
+async fn run_skill_extraction(
     task_id: &str,
     task_desc: &str,
     ctx: &RunContext,
     patterns_dir: &std::path::Path,
-    patterns_extracted: &std::path::Path,
+    skills_extracted: &std::path::Path,
     tx: &mpsc::UnboundedSender<AppEvent>,
 ) {
     let (agent_tx, _agent_rx) = mpsc::unbounded_channel();
 
     let model = &ctx.config.pattern_extraction_model;
     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BackgroundLog(format!(
-        "Background pattern extraction started (Claude {})",
+        "Background skill extraction started (Claude {})",
         model,
     ))));
     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BackgroundLog(
-        "Extracting patterns from build artifacts...".to_string(),
+        "Extracting reusable skills from build artifacts...".to_string(),
     )));
 
-    let prompt = prompts::pattern_extraction_prompt(task_id, task_desc);
-    // Note: pattern extraction doesn't get plugin context -- it's a lightweight
-    // JSON extraction task that doesn't benefit from domain-specific instructions.
+    let prompt = prompts::skill_extraction_prompt(task_id, task_desc);
+    // Note: skill extraction doesn't get plugin context -- it's a lightweight
+    // JSON extraction task that should learn only from the just-finished task.
     // Discovery-stage manifest recording deferred to v2 -- StageId enum
     // covers Q/R/P/B/A only; see docs/PLAN_eval-harness.md.
     let result = agent::run_agent(
@@ -7345,19 +7372,19 @@ async fn run_pattern_extraction(
 
     let success = result.as_ref().map(|r| r.success).unwrap_or(false);
     let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BackgroundLog(format!(
-        "Background pattern extraction {}",
+        "Background skill extraction {}",
         if success { "completed" } else { "failed" },
     ))));
 
-    if patterns_extracted.exists() {
-        match patterns::extract_patterns_from_file(patterns_extracted) {
-            Ok(new_patterns) if !new_patterns.is_empty() => {
+    if skills_extracted.exists() {
+        match patterns::extract_patterns_from_file(skills_extracted) {
+            Ok(new_skills) if !new_skills.is_empty() => {
                 // Capture titles before any consuming call.
-                let titles: Vec<String> = new_patterns.iter().map(|p| p.title.clone()).collect();
+                let titles: Vec<String> = new_skills.iter().map(|p| p.title.clone()).collect();
 
                 // 1) ALWAYS write SKILL.md (the layer the matcher reads).
                 let skills_dir = crate::skills::resolve_skills_dir("~/.foundry/skills");
-                match crate::skills::write_extracted_skills(&skills_dir, &new_patterns) {
+                match crate::skills::write_extracted_skills(&skills_dir, &new_skills) {
                     Ok(report) => {
                         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BackgroundLog(format!(
                             "Skills written: {} new, {} bumped, {} skipped (dir: {})",
@@ -7385,26 +7412,25 @@ async fn run_pattern_extraction(
                     }
                 }
 
-                // 2) Optionally also write the legacy JSON store (Phase 1 of strangler-fig).
+                // 2) Optional legacy JSON mirror for back-compat only.
                 if ctx.config.pattern_dual_emit {
-                    match patterns::merge_patterns(patterns_dir, new_patterns) {
+                    match patterns::merge_patterns(patterns_dir, new_skills) {
                         Ok(added) => {
-                            let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BackgroundLog(
-                                format!(
-                                    "Merged patterns: {} new added to {}",
+                            let _ =
+                                tx.send(AppEvent::LoopEvent(LoopEvent::BackgroundLog(format!(
+                                    "Legacy pattern mirror: {} new added to {}",
                                     added,
                                     patterns_dir.display()
-                                ),
-                            )));
+                                ))));
                             for title in &titles {
                                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BackgroundLog(
-                                    format!("Pattern learned: {}", title),
+                                    format!("Legacy pattern mirrored: {}", title),
                                 )));
                             }
                         }
                         Err(e) => {
                             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BackgroundLog(
-                                format!("Failed to merge patterns: {}", e),
+                                format!("Failed to update legacy pattern mirror: {}", e),
                             )));
                         }
                     }
@@ -7416,12 +7442,12 @@ async fn run_pattern_extraction(
             }
             Ok(_) => {
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BackgroundLog(
-                    "No patterns extracted for this task".to_string(),
+                    "No reusable skills extracted for this task".to_string(),
                 )));
             }
             Err(e) => {
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::BackgroundLog(format!(
-                    "Failed to parse extracted patterns: {}",
+                    "Failed to parse extracted skills: {}",
                     e
                 ))));
             }
@@ -7545,11 +7571,7 @@ fn extract_prior_task_id(buildloop_dir: &Path) -> Option<String> {
     None
 }
 
-fn prune_history(
-    history_root: &Path,
-    max_tasks: usize,
-    tx: &mpsc::UnboundedSender<AppEvent>,
-) {
+fn prune_history(history_root: &Path, max_tasks: usize, tx: &mpsc::UnboundedSender<AppEvent>) {
     if max_tasks == 0 {
         return;
     }
@@ -7739,8 +7761,8 @@ in the build-claims.md gaps section so AUDIT can adjudicate.\n\
 #[cfg(test)]
 mod tests {
     use super::should_restart_docker;
-    use super::{backup_state_files, restore_state_files};
     use super::{archive_artifact, extract_prior_task_id, prune_history};
+    use super::{backup_state_files, restore_state_files};
     use super::{clear_checkpoint, flush_budget_telemetry, read_checkpoint, write_checkpoint};
     use crate::app::context::RunContext;
     use crate::app::state::{AppEvent, LoopEvent};
@@ -7997,22 +8019,12 @@ mod tests {
             "# Build Claims -- T1.1\n\nbody\n",
         )
         .unwrap();
-        assert_eq!(
-            extract_prior_task_id(&buildloop),
-            Some("T1.1".to_string())
-        );
+        assert_eq!(extract_prior_task_id(&buildloop), Some("T1.1".to_string()));
 
         // Case B: build-claims.md gone, fallback to current-plan.md
         std::fs::remove_file(buildloop.join("build-claims.md")).unwrap();
-        std::fs::write(
-            buildloop.join("current-plan.md"),
-            "# Plan: H1.3\n\nbody\n",
-        )
-        .unwrap();
-        assert_eq!(
-            extract_prior_task_id(&buildloop),
-            Some("H1.3".to_string())
-        );
+        std::fs::write(buildloop.join("current-plan.md"), "# Plan: H1.3\n\nbody\n").unwrap();
+        assert_eq!(extract_prior_task_id(&buildloop), Some("H1.3".to_string()));
 
         // Case C: fallback to research-report.md
         std::fs::remove_file(buildloop.join("current-plan.md")).unwrap();
@@ -8021,21 +8033,14 @@ mod tests {
             "# Research Report\n\nTask ID: D2.4\n\nbody\n",
         )
         .unwrap();
-        assert_eq!(
-            extract_prior_task_id(&buildloop),
-            Some("D2.4".to_string())
-        );
+        assert_eq!(extract_prior_task_id(&buildloop), Some("D2.4".to_string()));
 
         // Case D: no artifacts -> None
         std::fs::remove_file(buildloop.join("research-report.md")).unwrap();
         assert_eq!(extract_prior_task_id(&buildloop), None);
 
         // Case E: corrupt header -> None
-        std::fs::write(
-            buildloop.join("build-claims.md"),
-            "# Random nonsense\n",
-        )
-        .unwrap();
+        std::fs::write(buildloop.join("build-claims.md"), "# Random nonsense\n").unwrap();
         assert_eq!(extract_prior_task_id(&buildloop), None);
 
         let _ = std::fs::remove_dir_all(&dir);
@@ -10392,14 +10397,19 @@ mod plan_review_cap_tests {
     fn append_unresolved_plan_review_feedback_writes_marker_block() {
         let dir = tempdir().unwrap();
         let plan_path = dir.path().join("current-plan.md");
-        std::fs::write(&plan_path, "# Plan: T1.99\n\n## Verification\n- build: cargo build\n").unwrap();
+        std::fs::write(
+            &plan_path,
+            "# Plan: T1.99\n\n## Verification\n- build: cargo build\n",
+        )
+        .unwrap();
         let findings = vec![Finding {
             severity: "high".into(),
             description: "Plan omits error handling for X".into(),
             location: "src/foo.rs:42".into(),
             suggestion: "Wrap with ?".into(),
         }];
-        let block = append_unresolved_plan_review_feedback(&plan_path, "T1.99", 2, 2, &findings).unwrap();
+        let block =
+            append_unresolved_plan_review_feedback(&plan_path, "T1.99", 2, 2, &findings).unwrap();
         let contents = std::fs::read_to_string(&plan_path).unwrap();
         assert!(contents.contains("--- BEGIN PLAN-REVIEW FEEDBACK (UNRESOLVED) ---"));
         assert!(contents.contains("--- END PLAN-REVIEW FEEDBACK (UNRESOLVED) ---"));
@@ -10432,7 +10442,10 @@ mod plan_review_cap_tests {
         std::fs::write(&plan_path, original).unwrap();
         let _ = append_unresolved_plan_review_feedback(&plan_path, "T1.99", 1, 2, &[]).unwrap();
         let contents = std::fs::read_to_string(&plan_path).unwrap();
-        assert!(contents.starts_with(original), "original plan content must be preserved verbatim before the appended block");
+        assert!(
+            contents.starts_with(original),
+            "original plan content must be preserved verbatim before the appended block"
+        );
     }
 }
 
@@ -10470,7 +10483,12 @@ mod plan_review_feedback_sidecar_tests {
                 "src/epsilon.rs".into(),
             ],
             unresolved_findings: vec![
-                finding("high", "missing error handling", "src/foo.rs:10", "wrap with ?"),
+                finding(
+                    "high",
+                    "missing error handling",
+                    "src/foo.rs:10",
+                    "wrap with ?",
+                ),
                 finding("medium", "off-by-one", "src/bar.rs:42", ""),
                 finding("low", "naming nit", "", ""),
             ],
@@ -10482,8 +10500,13 @@ mod plan_review_feedback_sidecar_tests {
         let body = read_previous_attempt_feedback_block(dir.path()).expect("must read body");
         assert!(body.contains("Prior P+ attempt for T9.99"));
         assert!(body.contains("3 of 3 cycle"));
-        for p in ["src/alpha.rs", "src/beta.rs", "src/gamma.rs", "src/delta.rs", "src/epsilon.rs"]
-        {
+        for p in [
+            "src/alpha.rs",
+            "src/beta.rs",
+            "src/gamma.rs",
+            "src/delta.rs",
+            "src/epsilon.rs",
+        ] {
             assert!(body.contains(p), "body missing {}", p);
         }
         assert!(body.contains("missing error handling"));
@@ -10548,7 +10571,11 @@ mod plan_review_feedback_sidecar_tests {
         }
         // First 3 findings present, 4th-6th omitted.
         for f in findings.iter().take(3) {
-            assert!(body.contains(&f.description), "expected {} in body", f.description);
+            assert!(
+                body.contains(&f.description),
+                "expected {} in body",
+                f.description
+            );
         }
         for f in findings.iter().skip(3) {
             assert!(
