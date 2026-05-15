@@ -71,17 +71,6 @@ pub struct Pattern {
     pub cited_by_stage: HashMap<String, usize>,
 }
 
-/// Feedback signal from a builder agent about a pattern's quality.
-#[derive(Debug, Clone, PartialEq)]
-pub enum PatternFeedback {
-    /// Pattern was helpful and correct
-    Confirmed(String),
-    /// Pattern is outdated or wrong
-    Stale(String),
-    /// Pattern is actively harmful/misleading
-    Wrong(String),
-}
-
 /// Outcome of the task that cited a pattern. Threaded into update_used_counts to
 /// distinguish pass-cited patterns from wip-cited patterns.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -927,120 +916,6 @@ pub fn decay_stale_patterns(dir: &Path, decay_days: i64) -> usize {
     total_decayed
 }
 
-/// Parse PATTERN_FEEDBACK markers from builder output.
-/// Format: `PATTERN_FEEDBACK: pattern-id | confirmed|stale|wrong | optional reason`
-pub fn parse_pattern_feedback(text: &str) -> Vec<(String, PatternFeedback)> {
-    let mut results = Vec::new();
-    for line in text.lines() {
-        let trimmed = line.trim();
-        if !trimmed.starts_with("PATTERN_FEEDBACK:") {
-            continue;
-        }
-        let rest = trimmed.trim_start_matches("PATTERN_FEEDBACK:").trim();
-        let parts: Vec<&str> = rest.splitn(3, '|').map(|s| s.trim()).collect();
-        if parts.len() < 2 {
-            continue;
-        }
-        let pattern_id = parts[0].to_string();
-        let reason = parts.get(2).unwrap_or(&"").to_string();
-        let feedback = match parts[1].to_lowercase().as_str() {
-            "confirmed" => PatternFeedback::Confirmed(reason),
-            "stale" => PatternFeedback::Stale(reason),
-            "wrong" => PatternFeedback::Wrong(reason),
-            _ => continue,
-        };
-        results.push((pattern_id, feedback));
-    }
-    results
-}
-
-/// Apply feedback to patterns on disk. Confirmed patterns get used_count bumped
-/// and last_used_at stamped. Stale/wrong patterns get auto_apply disabled.
-/// Returns count of patterns modified.
-pub fn apply_feedback(dir: &Path, feedback: &[(String, PatternFeedback)]) -> Result<usize> {
-    if feedback.is_empty() {
-        return Ok(0);
-    }
-
-    let today = Utc::now().format("%Y-%m-%d").to_string();
-
-    let entries = match std::fs::read_dir(dir) {
-        Ok(e) => e,
-        Err(_) => return Ok(0),
-    };
-
-    let mut total = 0usize;
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.extension().and_then(|e| e.to_str()) != Some("json") {
-            continue;
-        }
-        let content = match std::fs::read_to_string(&path) {
-            Ok(c) => c,
-            Err(_) => continue,
-        };
-
-        let apply_to_pattern = |p: &mut Pattern, today: &str| -> bool {
-            let Some((_, fb)) = feedback.iter().find(|(id, _)| *id == p.pattern_id) else {
-                return false;
-            };
-            match fb {
-                PatternFeedback::Confirmed(_) => {
-                    p.used_count += 1;
-                    p.last_used_at = Some(today.to_string());
-                }
-                PatternFeedback::Stale(_) | PatternFeedback::Wrong(_) => {
-                    p.auto_apply = false;
-                }
-            }
-            true
-        };
-
-        // Try wrapper
-        if let Ok(mut wrapper) = serde_json::from_str::<PatternWrapper>(&content) {
-            let mut changed = 0usize;
-            for p in &mut wrapper.patterns {
-                if apply_to_pattern(p, &today) {
-                    changed += 1;
-                }
-            }
-            if changed > 0 {
-                let json = serde_json::to_string_pretty(&wrapper)?;
-                atomic_write_file(&path, json.as_bytes())?;
-                total += changed;
-            }
-            continue;
-        }
-
-        // Plain array
-        if let Ok(mut patterns) = serde_json::from_str::<Vec<Pattern>>(&content) {
-            let mut changed = 0usize;
-            for p in &mut patterns {
-                if apply_to_pattern(p, &today) {
-                    changed += 1;
-                }
-            }
-            if changed > 0 {
-                let json = serde_json::to_string_pretty(&patterns)?;
-                atomic_write_file(&path, json.as_bytes())?;
-                total += changed;
-            }
-            continue;
-        }
-
-        // Single
-        if let Ok(mut pattern) = serde_json::from_str::<Pattern>(&content) {
-            if apply_to_pattern(&mut pattern, &today) {
-                let json = serde_json::to_string_pretty(&pattern)?;
-                atomic_write_file(&path, json.as_bytes())?;
-                total += 1;
-            }
-        }
-    }
-
-    Ok(total)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1057,6 +932,17 @@ mod tests {
         let json = r#"{"planner": "plan advice", "validator": "old validator advice"}"#;
         let sol: PatternSolution = serde_json::from_str(json).unwrap();
         assert_eq!(sol.reviewer, "old validator advice");
+    }
+
+    #[test]
+    fn test_pattern_accepts_skill_id_alias_for_skill_extraction() {
+        let json = r#"{
+            "skill_id": "skill-native-id",
+            "title": "Skill native extraction",
+            "solution": {"planner": "plan", "reviewer": "review"}
+        }"#;
+        let p: Pattern = serde_json::from_str(json).unwrap();
+        assert_eq!(p.pattern_id, "skill-native-id");
     }
 
     #[test]
@@ -1865,25 +1751,6 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_pattern_feedback() {
-        let text = "some output\nPATTERN_FEEDBACK: sql-inject-001 | confirmed | worked great\nmore output\nPATTERN_FEEDBACK: stale-pattern | stale | no longer relevant\nPATTERN_FEEDBACK: bad-pattern | wrong | caused errors\n";
-        let fb = parse_pattern_feedback(text);
-        assert_eq!(fb.len(), 3);
-        assert_eq!(fb[0].0, "sql-inject-001");
-        assert!(matches!(fb[0].1, PatternFeedback::Confirmed(_)));
-        assert_eq!(fb[1].0, "stale-pattern");
-        assert!(matches!(fb[1].1, PatternFeedback::Stale(_)));
-        assert_eq!(fb[2].0, "bad-pattern");
-        assert!(matches!(fb[2].1, PatternFeedback::Wrong(_)));
-    }
-
-    #[test]
-    fn test_parse_pattern_feedback_empty() {
-        let fb = parse_pattern_feedback("no feedback here");
-        assert!(fb.is_empty());
-    }
-
-    #[test]
     fn test_decay_stale_patterns() {
         let dir = std::env::temp_dir().join("foundry_test_decay");
         let _ = std::fs::remove_dir_all(&dir);
@@ -1956,42 +1823,6 @@ mod tests {
         assert!(lf.auto_apply, "low-freq pattern should keep auto_apply");
         let mf = result.iter().find(|p| p.pattern_id == "mid-freq").unwrap();
         assert!(mf.auto_apply, "mid-freq pattern should keep auto_apply");
-
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn test_apply_feedback_keeps_used_count_for_stale_patterns() {
-        let dir = std::env::temp_dir().join("foundry_test_apply_feedback");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-
-        let mut stale = make_test_pattern("stale", "Stale Pattern", 6, 4);
-        stale.auto_apply = true;
-        let json = serde_json::to_string_pretty(&vec![stale]).unwrap();
-        std::fs::write(dir.join("test.json"), json).unwrap();
-
-        let changed = apply_feedback(
-            &dir,
-            &[(
-                "stale".to_string(),
-                PatternFeedback::Stale("no longer applies".to_string()),
-            )],
-        )
-        .unwrap();
-        assert_eq!(changed, 1);
-
-        let content = std::fs::read_to_string(dir.join("test.json")).unwrap();
-        let result: Vec<Pattern> = serde_json::from_str(&content).unwrap();
-        let stale = result.iter().find(|p| p.pattern_id == "stale").unwrap();
-        assert!(
-            !stale.auto_apply,
-            "stale feedback should disable auto_apply"
-        );
-        assert_eq!(
-            stale.used_count, 4,
-            "stale feedback should not rewrite historical citation counts"
-        );
 
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -2207,7 +2038,12 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
 
-        let patterns = vec![make_test_pattern("p1", "Stage Recording Pattern Title", 3, 0)];
+        let patterns = vec![make_test_pattern(
+            "p1",
+            "Stage Recording Pattern Title",
+            3,
+            0,
+        )];
         let json = serde_json::to_string_pretty(&patterns).unwrap();
         std::fs::write(dir.join("common-issues.json"), &json).unwrap();
 
@@ -2230,7 +2066,12 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
 
-        let patterns = vec![make_test_pattern("p1", "Aggregated Stages Pattern Title", 3, 0)];
+        let patterns = vec![make_test_pattern(
+            "p1",
+            "Aggregated Stages Pattern Title",
+            3,
+            0,
+        )];
         let json = serde_json::to_string_pretty(&patterns).unwrap();
         std::fs::write(dir.join("common-issues.json"), &json).unwrap();
 
@@ -2375,7 +2216,8 @@ mod tests {
 
     #[test]
     fn test_keyword_scores_for_stage_boosts_matching_stage() {
-        let mut planner_pat = make_test_pattern("planner-pat", "Planner Helper Pattern Title", 1, 0);
+        let mut planner_pat =
+            make_test_pattern("planner-pat", "Planner Helper Pattern Title", 1, 0);
         planner_pat.keywords = vec!["plannerkw".to_string()];
         planner_pat.cited_by_stage.insert("planner".to_string(), 5);
         let mut reviewer_pat =
@@ -2386,7 +2228,8 @@ mod tests {
             .insert("reviewer".to_string(), 5);
         let patterns = vec![planner_pat, reviewer_pat];
 
-        let scores = keyword_scores_for_stage(&patterns, "plannerkw reviewerkw project", &[], "planner");
+        let scores =
+            keyword_scores_for_stage(&patterns, "plannerkw reviewerkw project", &[], "planner");
         let p_score = scores
             .iter()
             .find(|(i, _)| *i == 0)
@@ -2456,7 +2299,11 @@ mod tests {
             .find(|(i, _)| *i == 0)
             .map(|(_, s)| *s)
             .unwrap_or(0);
-        assert!(raw_score >= 5, "raw score should be large (got {})", raw_score);
+        assert!(
+            raw_score >= 5,
+            "raw score should be large (got {})",
+            raw_score
+        );
 
         let scores = keyword_scores_for_stage(&[p], "rust project", &[], "builder");
         let s = scores
@@ -2532,7 +2379,11 @@ mod tests {
         )
         .expect("write json");
 
-        let skills_dir = tmp.path().join(".foundry").join("skills").join("test-skill");
+        let skills_dir = tmp
+            .path()
+            .join(".foundry")
+            .join("skills")
+            .join("test-skill");
         std::fs::create_dir_all(&skills_dir).expect("create skills dir");
         let skill_md = "---\nname: test-skill\ndescription: My Skill\nmetadata:\n  cf-stage: planner\n  cf-citations-pass: 0\n  cf-citations-wip: 0\n  cf-frequency: 1\n  cf-keywords:\n    - foo\n---\n\n## Issue\n\nx\n\n## Solution\n\ndo x\n";
         std::fs::write(skills_dir.join("SKILL.md"), skill_md).expect("write skill md");
