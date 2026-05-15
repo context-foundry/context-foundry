@@ -977,6 +977,16 @@
       "model": "gpt-4o-mini",
       "lines": 88,
       "generation": 98
+    },
+    {
+      "file": "recursive-stalactite-descent.js",
+      "name": "Recursive Stalactite Descent",
+      "location": "Lechuguilla Cave, Carlsbad, New Mexico, USA",
+      "biome": "underground",
+      "generated": "2026-05-15T14:38:14.874Z",
+      "model": "gpt-4o-mini",
+      "lines": 83,
+      "generation": 99
     }
   ]
 }

@@ -1828,5 +1828,18 @@
     "retries": 1,
     "api_retries": 0,
     "validation": "pass"
+  },
+  {
+    "ts": "2026-05-15T14:38:14.875Z",
+    "scene": "recursive-stalactite-descent.js",
+    "seed_id": "recursive-stalactite-descent",
+    "biome": "underground",
+    "model": "gpt-4o-mini",
+    "input_tokens": 8309,
+    "output_tokens": 923,
+    "cost_usd": 0.0018,
+    "retries": 0,
+    "api_retries": 0,
+    "validation": "pass"
   }
 ]
