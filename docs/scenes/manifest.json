@@ -997,6 +997,16 @@
       "model": "gpt-4o-mini",
       "lines": 90,
       "generation": 100
+    },
+    {
+      "file": "magma-chamber-singleton.js",
+      "name": "Magma Chamber Singleton",
+      "location": "Mount Yasur, Tanna, Vanuatu",
+      "biome": "volcanic",
+      "generated": "2026-05-15T19:58:30.894Z",
+      "model": "gpt-4o-mini",
+      "lines": 83,
+      "generation": 101
     }
   ]
 }

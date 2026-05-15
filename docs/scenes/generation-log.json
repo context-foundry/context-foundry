@@ -1854,5 +1854,46 @@
     "retries": 1,
     "api_retries": 0,
     "validation": "pass"
+  },
+  {
+    "ts": "2026-05-15T19:56:50.971Z",
+    "scene": "divide-and-conquer-canyon.js",
+    "seed_id": "divide-and-conquer-canyon",
+    "biome": "mountain",
+    "model": "gpt-4o-mini",
+    "input_tokens": 16646,
+    "output_tokens": 1440,
+    "cost_usd": 0.0034,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "fail",
+    "error": "Validation failed after 2 attempts: VALIDATION FAILED (1 error):\n- Too short: 66 lines (min 80)"
+  },
+  {
+    "ts": "2026-05-15T19:57:51.652Z",
+    "scene": "bioluminescent-debug-log.js",
+    "seed_id": "bioluminescent-debug-log",
+    "biome": "extreme",
+    "model": "gpt-4o-mini",
+    "input_tokens": 16296,
+    "output_tokens": 1345,
+    "cost_usd": 0.0033,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "fail",
+    "error": "Validation failed after 2 attempts: VALIDATION FAILED (1 error):\n- Too short: 66 lines (min 80)"
+  },
+  {
+    "ts": "2026-05-15T19:58:30.895Z",
+    "scene": "magma-chamber-singleton.js",
+    "seed_id": "magma-chamber-singleton",
+    "biome": "volcanic",
+    "model": "gpt-4o-mini",
+    "input_tokens": 7412,
+    "output_tokens": 888,
+    "cost_usd": 0.0016,
+    "retries": 0,
+    "api_retries": 0,
+    "validation": "pass"
   }
 ]
