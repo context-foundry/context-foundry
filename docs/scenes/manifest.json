@@ -987,6 +987,16 @@
       "model": "gpt-4o-mini",
       "lines": 83,
       "generation": 99
+    },
+    {
+      "file": "garbage-collected-reef.js",
+      "name": "Garbage Collected Reef",
+      "location": "Raja Ampat, West Papua, Indonesia",
+      "biome": "ocean",
+      "generated": "2026-05-15T17:54:58.127Z",
+      "model": "gpt-4o-mini",
+      "lines": 90,
+      "generation": 100
     }
   ]
 }
