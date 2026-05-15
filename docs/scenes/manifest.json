@@ -957,6 +957,16 @@
       "model": "gpt-4o-mini",
       "lines": 81,
       "generation": 96
+    },
+    {
+      "file": "daemon-process-eruption.js",
+      "name": "Daemon Process Eruption",
+      "location": "Mount Etna, Sicily, Italy",
+      "biome": "volcanic",
+      "generated": "2026-05-15T04:30:43.035Z",
+      "model": "gpt-4o-mini",
+      "lines": 101,
+      "generation": 97
     }
   ]
 }
