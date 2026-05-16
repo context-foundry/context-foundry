@@ -23,7 +23,7 @@ use super::build;
 use super::context::RunContext;
 use super::contract::ContractPaths;
 use super::stream::StreamEmitter;
-use super::{AppEvent, LoopEvent};
+use super::{service_mode, AppEvent, LoopEvent};
 
 /// Schema version of the JSON report emitted by 'foundry run --no-tui --output-format json'.
 /// Increment when fields are renamed, removed, or when a new top-level field is added.
@@ -541,14 +541,19 @@ pub(super) async fn run_headless(project_dir: &Path, output_format: Option<Strin
         build::build_loop(run_context, loop_tx).await;
     });
 
-    let update_tx = tx;
-    tokio::spawn(async move {
-        tokio::time::sleep(Duration::from_secs(2)).await;
-        let result = tokio::task::spawn_blocking(update::check_for_update).await;
-        if let Ok(Ok(Some(version))) = result {
-            let _ = update_tx.send(AppEvent::UpdateAvailable(version));
-        }
-    });
+    // Service mode runs unattended for the build service: skip the
+    // GitHub update check so its background HTTP call cannot perturb
+    // an unattended json-stream run. auto/sprint/review/coach keep it.
+    if service_mode::spawns_update_check(&config_snapshot_data.0) {
+        let update_tx = tx;
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_secs(2)).await;
+            let result = tokio::task::spawn_blocking(update::check_for_update).await;
+            if let Ok(Ok(Some(version))) = result {
+                let _ = update_tx.send(AppEvent::UpdateAvailable(version));
+            }
+        });
+    }
 
     let mut update_version: Option<String> = None;
     // D1.3: typed-error capture for the JSON report's `typed_error` field.

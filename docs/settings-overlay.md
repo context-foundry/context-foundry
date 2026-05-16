@@ -84,7 +84,7 @@ Controls how the build loop processes tasks.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| Run Mode | Enum | `auto` | `auto` / `sprint` / `review` |
+| Run Mode | Enum | `auto` | `auto` / `sprint` / `review` / `coach` / `service` |
 | Pipeline Mode | Enum | `full` | `full` / `fast` / `backpressure` |
 | Plan Review | Bool | `false` | Review plan before building |
 | Review Mode | Enum | `diff-only` | `diff-only` / `full-file` |

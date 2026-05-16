@@ -1,0 +1,35 @@
+{"event_schema_version":1,"event":"counts","tasks_total":2,"tasks_completed":0,"tasks_wip":0}
+{"event_schema_version":1,"event":"task_started","task_id":"T1.1","description":"Add the SQLite schema and migrations"}
+{"event_schema_version":1,"event":"stage_started","stage":"query","role":"QUERY","model":"claude-opus","label":null,"task_id":"T1.1"}
+{"event_schema_version":1,"event":"stage_finished","stage":"query","role":"QUERY","ok":true,"task_id":"T1.1"}
+{"event_schema_version":1,"event":"cost","delta_usd":0.05,"cumulative_usd":0.05,"input_tokens":1200,"output_tokens":300}
+{"event_schema_version":1,"event":"stage_started","stage":"research","role":"RESEARCH","model":"claude-opus","label":null,"task_id":"T1.1"}
+{"event_schema_version":1,"event":"stage_finished","stage":"research","role":"RESEARCH","ok":true,"task_id":"T1.1"}
+{"event_schema_version":1,"event":"cost","delta_usd":0.10,"cumulative_usd":0.15,"input_tokens":2400,"output_tokens":600}
+{"event_schema_version":1,"event":"stage_started","stage":"plan","role":"PLAN","model":"claude-opus","label":null,"task_id":"T1.1"}
+{"event_schema_version":1,"event":"stage_finished","stage":"plan","role":"PLAN","ok":true,"task_id":"T1.1"}
+{"event_schema_version":1,"event":"cost","delta_usd":0.20,"cumulative_usd":0.35,"input_tokens":3600,"output_tokens":900}
+{"event_schema_version":1,"event":"stage_started","stage":"implement","role":"BUILD","model":"claude-opus","label":null,"task_id":"T1.1"}
+{"event_schema_version":1,"event":"stage_finished","stage":"implement","role":"BUILD","ok":true,"task_id":"T1.1"}
+{"event_schema_version":1,"event":"cost","delta_usd":0.30,"cumulative_usd":0.65,"input_tokens":5000,"output_tokens":1500}
+{"event_schema_version":1,"event":"stage_started","stage":"doubt","role":"AUDIT","model":"claude-opus","label":null,"task_id":"T1.1"}
+{"event_schema_version":1,"event":"stage_finished","stage":"doubt","role":"AUDIT","ok":false,"task_id":"T1.1"}
+{"event_schema_version":1,"event":"cost","delta_usd":0.10,"cumulative_usd":0.75,"input_tokens":2000,"output_tokens":500}
+{"event_schema_version":1,"event":"task_completed","task_id":"T1.1","ok":false}
+{"event_schema_version":1,"event":"counts","tasks_total":2,"tasks_completed":0,"tasks_wip":1}
+{"event_schema_version":1,"event":"task_started","task_id":"T1.2","description":"Add the REST list endpoint"}
+{"event_schema_version":1,"event":"stage_started","stage":"query","role":"QUERY","model":"claude-opus","label":null,"task_id":"T1.2"}
+{"event_schema_version":1,"event":"stage_finished","stage":"query","role":"QUERY","ok":true,"task_id":"T1.2"}
+{"event_schema_version":1,"event":"cost","delta_usd":0.05,"cumulative_usd":0.80,"input_tokens":1100,"output_tokens":250}
+{"event_schema_version":1,"event":"stage_started","stage":"plan","role":"PLAN","model":"claude-opus","label":null,"task_id":"T1.2"}
+{"event_schema_version":1,"event":"stage_finished","stage":"plan","role":"PLAN","ok":true,"task_id":"T1.2"}
+{"event_schema_version":1,"event":"cost","delta_usd":0.15,"cumulative_usd":0.95,"input_tokens":3000,"output_tokens":800}
+{"event_schema_version":1,"event":"stage_started","stage":"implement","role":"BUILD","model":"claude-opus","label":null,"task_id":"T1.2"}
+{"event_schema_version":1,"event":"stage_finished","stage":"implement","role":"BUILD","ok":true,"task_id":"T1.2"}
+{"event_schema_version":1,"event":"cost","delta_usd":0.20,"cumulative_usd":1.15,"input_tokens":4200,"output_tokens":1200}
+{"event_schema_version":1,"event":"stage_started","stage":"doubt","role":"AUDIT","model":"claude-opus","label":null,"task_id":"T1.2"}
+{"event_schema_version":1,"event":"stage_finished","stage":"doubt","role":"AUDIT","ok":true,"task_id":"T1.2"}
+{"event_schema_version":1,"event":"cost","delta_usd":0.15,"cumulative_usd":1.30,"input_tokens":2500,"output_tokens":700}
+{"event_schema_version":1,"event":"task_completed","task_id":"T1.2","ok":true}
+{"event_schema_version":1,"event":"counts","tasks_total":2,"tasks_completed":1,"tasks_wip":1}
+{"schema_version":3,"tasks":[{"id":"T1.1","description":"Add the SQLite schema and migrations","status":"wip","commit_sha":"a1b2c3d","findings":{"high":1,"medium":0,"low":1},"duration_secs":140.0},{"id":"T1.2","description":"Add the REST list endpoint","status":"pass","commit_sha":"e4f5a6b","findings":{"high":0,"medium":0,"low":0},"duration_secs":90.0}],"session":{"total_duration_secs":230.0,"patterns_injected":0,"patterns_learned":0,"feat_commits":1,"wip_commits":1},"config":{"run_mode":"service","builder_provider":"claude","builder_model":"claude-opus","reviewer_provider":"claude","reviewer_model":"claude-opus"},"cost_usd":1.3}

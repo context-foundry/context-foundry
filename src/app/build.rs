@@ -23,7 +23,7 @@ use anyhow::Context as _;
 use regex::Regex;
 
 use super::context::{FailureType, RunContext, StageResult};
-use super::{review, AppEvent, LoopEvent};
+use super::{review, service_mode, AppEvent, LoopEvent};
 use crate::budget;
 use crate::doubt_confidence;
 use crate::eval;
@@ -2295,7 +2295,7 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
     // This replaces the separate gap analysis planner.
     {
         let tasks = task::parse_tasks(&ctx.plan_path).unwrap_or_default();
-        if task::count_pending(&tasks) == 0 {
+        if task::count_pending(&tasks) == 0 && service_mode::runs_bootstrap_scout(&ctx.config.run_mode) {
             let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
                 "No pending tasks -- running bootstrap scout to create task queue".to_string(),
             )));
@@ -2697,7 +2697,9 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
             // this guard the outer loop re-picks the same pending task and
             // re-runs the whole pipeline, which burns money fast when an
             // agent stage is hanging or deterministically failing.
-            if consecutive_wip_count >= MAX_CONSECUTIVE_WIP {
+            if consecutive_wip_count >= MAX_CONSECUTIVE_WIP
+                && service_mode::enforces_consecutive_wip_stop(&ctx.config.run_mode)
+            {
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
                     "Pausing: task {} produced {} consecutive WIP commits -- stopping loop. Inspect the failures, then re-run when ready.",
                     task_info.id, consecutive_wip_count
@@ -2807,6 +2809,22 @@ pub(super) async fn build_loop(ctx: RunContext, tx: mpsc::UnboundedSender<AppEve
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(
                     "Review mode: task queue complete -- stopping".to_string(),
                 )));
+                emit_session_ended!();
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Finished));
+                return;
+            }
+
+            // ─── Service Mode: Stop when queue empties, no Discovery ─────
+            // The unattended build-service mode (Phase 35). Like sprint it
+            // stops when the queue empties; it never starts a Discovery
+            // round, so a service build runs exactly the supplied task queue
+            // and terminates deterministically.
+            if service_mode::is_service(&ctx.config.run_mode) {
+                let done_count = task::count_completed(&tasks);
+                let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                    "Service run complete -- all {} tasks done",
+                    done_count
+                ))));
                 emit_session_ended!();
                 let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Finished));
                 return;
@@ -6674,7 +6692,7 @@ async fn process_task(
             .lock()
             .unwrap_or_else(|e| e.into_inner());
         let _ = task::update_task_progress(&ctx.plan_path, task_id, &progress);
-        if validated {
+        if validated || service_mode::wip_is_terminal(&ctx.config.run_mode) {
             let _ = task::mark_done(&ctx.plan_path, task_info.line_number);
         }
         emit_tasks_file_mtime(&ctx.plan_path, tx);

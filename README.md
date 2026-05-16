@@ -2,7 +2,7 @@
 
 Autonomous build loop that plans, builds, reviews, and learns.
 
-Foundry reads a `TASKS.md` task list and works through it using Claude Code agents in a TUI, committing each completed task. Three [run modes](#run-modes) control what happens next: run forever with discovery (Auto), stop when done (Sprint), or pause for human review after each task (Review).
+Foundry reads a `TASKS.md` task list and works through it using Claude Code agents in a TUI, committing each completed task. Several [run modes](#run-modes) control what happens next: run forever with discovery (Auto), stop when done (Sprint), pause for human review after each task (Review), or run unattended for the build service (Service).
 
 **When to use the pipeline:** the harness is a multiplier for verifiable engineering work — tasks with `file:line` references the planner can ground against, constraints the auditor can check, and behavior that BUILD or AUDIT can exercise against the code. For prose work (README updates, brainstorming, architecture decision records, documentation rewrites), the pipeline pays plan-review and audit costs for zero marginal benefit because there's nothing for it to verify. Write those directly. Full guidance: [`docs/task-composition.md`](docs/task-composition.md).
 
@@ -89,13 +89,15 @@ Context Foundry's architecture aligns with the principles in Anthropic's [Claude
 
 ### Run modes
 
-Foundry has three run modes that control how the pipeline advances between tasks. Toggle with `Ctrl+M` on the startup screen or set `run_mode` in `.foundry.json`.
+Foundry has several run modes that control how the pipeline advances between tasks. Toggle with `Ctrl+M` on the startup screen or set `run_mode` in `.foundry.json`.
 
 | Mode | Behavior | Discovery | PRs |
 |------|----------|-----------|-----|
 | **Auto** (default) | Runs all tasks, then discovers new work and keeps going indefinitely | Yes | No |
 | **Sprint** | Runs all tasks, then stops | No | No |
 | **Review** | Runs one task at a time, creates a PR per task, pauses for approval | No | Yes (per task) |
+| **Coach** | Runs an intake pre-flight that clarifies SPEC.md before Scout, then proceeds like Auto | Yes | No |
+| **Service** | Unattended build-service mode: runs all tasks then stops; a WIP/audit-failed task is terminal (no retry) | No | No |
 
 **Auto** is the fully autonomous mode. The loop never stops on its own -- when the task queue empties, a discovery agent scans the codebase for new work and appends it to `TASKS.md`. This is the mode shown in the demo videos.
 
@@ -116,6 +118,8 @@ If a reviewer requests changes, the TUI surfaces that status. Review mode requir
 ```
 
 The `create_issue_on_wip` flag works in any mode -- when a task fails verification and gets a `WIP()` commit, foundry auto-creates a GitHub issue with the review findings.
+
+**Service** is the unattended mode used by the Context Foundry build service (`foundry serve`). Like Sprint it runs every pending task then stops with no discovery, but it also treats a WIP / audit-failed task as terminal: the task is recorded with its `!` failure indicator and `WIP()` commit, and the loop advances to the next task with no retry and no consecutive-WIP stop. Headless runs (`--no-tui`) in this mode also skip the background GitHub update check. Service is meant for automated, bounded build jobs, not interactive use.
 
 ### Dual-model arena
 

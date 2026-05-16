@@ -285,6 +285,9 @@ pub struct Config {
 
     /// Run mode: "auto" (default) runs forever with discovery.
     /// "sprint" runs all tasks then stops. "review" runs one task at a time with PR per task.
+    /// "coach" adds an intake pre-flight. "service" is the unattended
+    /// build-service mode: it stops on an empty queue with no discovery
+    /// and treats a WIP task as terminal (mark done, advance, no retry).
     #[serde(alias = "mode")]
     pub run_mode: String,
 
@@ -1936,7 +1939,7 @@ impl Config {
     /// Get the list of valid enum values for cycling.
     pub fn enum_values(field_id: &str) -> &'static [&'static str] {
         match field_id {
-            "run_mode" => &["auto", "sprint", "review", "coach"],
+            "run_mode" => &["auto", "sprint", "review", "coach", "service"],
             "pipeline_mode" => &["full", "fast", "backpressure"],
             "review_mode" => &["diff-only", "full-file"],
             "doubt_engine" => &["claude", "codex"],
@@ -2272,6 +2275,12 @@ mod tests {
         assert!(values.contains(&"sprint"));
         assert!(values.contains(&"review"));
         assert!(values.contains(&"coach"));
+    }
+
+    #[test]
+    fn run_mode_enum_values_include_service() {
+        let values = Config::enum_values("run_mode");
+        assert!(values.contains(&"service"));
     }
 
     #[test]

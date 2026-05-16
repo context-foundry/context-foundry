@@ -14,6 +14,7 @@ mod context;
 mod contract;
 mod planning;
 mod review;
+mod service_mode;
 mod startup;
 mod state;
 mod stream;

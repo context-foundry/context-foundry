@@ -628,7 +628,7 @@ pub fn settings_sections(dual_mode: bool) -> Vec<SectionDef> {
                 FieldDef {
                     id: "run_mode",
                     label: "Run Mode",
-                    hint: "auto / sprint / review / coach",
+                    hint: "auto / sprint / review / coach / service",
                     kind: FieldKind::Enum,
                 },
                 FieldDef {
@@ -1591,7 +1591,7 @@ pub struct AppState {
     pub update_available: Option<String>,
     pub inject_input: Option<String>,
     pub show_run_view: bool, // Tab toggle: startup shows run view (pipeline+queue+config)
-    pub run_mode: String,    // "auto", "sprint", "review", or "coach"
+    pub run_mode: String,    // "auto", "sprint", "review", "coach", or "service"
     pub dual_selection: DualSelection, // Ctrl+D cycle: Off, First, Second, Both
     pub builder_model_specs: Vec<String>, // raw config values (e.g., ["claude:opus", "codex:"])
     pub arena_mode: String,  // "solo" or "dual"
