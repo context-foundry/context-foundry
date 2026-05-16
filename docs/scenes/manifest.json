@@ -1057,6 +1057,16 @@
       "model": "gpt-4o-mini",
       "lines": 83,
       "generation": 106
+    },
+    {
+      "file": "rebase-the-reef.js",
+      "name": "Rebase the Reef",
+      "location": "Great Barrier Reef, Australia",
+      "biome": "ocean",
+      "generated": "2026-05-16T17:18:38.450Z",
+      "model": "gpt-4o-mini",
+      "lines": 87,
+      "generation": 107
     }
   ]
 }
