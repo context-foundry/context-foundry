@@ -2043,5 +2043,46 @@
     "retries": 0,
     "api_retries": 0,
     "validation": "pass"
+  },
+  {
+    "ts": "2026-05-16T19:35:51.859Z",
+    "scene": "fork-the-fjord.js",
+    "seed_id": "fork-the-fjord",
+    "biome": "ocean",
+    "model": "gpt-4o-mini",
+    "input_tokens": 15238,
+    "output_tokens": 1550,
+    "cost_usd": 0.0032,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "fail",
+    "error": "Validation failed after 2 attempts: VALIDATION FAILED (1 error):\n- Too short: 64 lines (min 80)"
+  },
+  {
+    "ts": "2026-05-16T19:36:18.736Z",
+    "scene": "lunar-landing-page.js",
+    "seed_id": "lunar-landing-page",
+    "biome": "space",
+    "model": "gpt-4o-mini",
+    "input_tokens": 16316,
+    "output_tokens": 1416,
+    "cost_usd": 0.0033,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "fail",
+    "error": "Validation failed after 2 attempts: VALIDATION FAILED (2 errors):\n- Too short: 49 lines (min 80)\n- Insufficient animation: found 1 animation patterns (need 2+). Use osc(t,period,phase), Math.sin(t*speed), or Math.cos(t*speed) for time-based animation"
+  },
+  {
+    "ts": "2026-05-16T19:36:47.917Z",
+    "scene": "deploy-to-production-dock.js",
+    "seed_id": "deploy-to-production-dock",
+    "biome": "urban",
+    "model": "gpt-4o-mini",
+    "input_tokens": 16274,
+    "output_tokens": 1640,
+    "cost_usd": 0.0034,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "pass"
   }
 ]

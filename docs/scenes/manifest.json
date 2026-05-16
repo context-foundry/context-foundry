@@ -1067,6 +1067,16 @@
       "model": "gpt-4o-mini",
       "lines": 87,
       "generation": 107
+    },
+    {
+      "file": "deploy-to-production-dock.js",
+      "name": "Deploy to Production Dock",
+      "location": "Container Port, Rotterdam, Netherlands",
+      "biome": "urban",
+      "generated": "2026-05-16T19:36:47.916Z",
+      "model": "gpt-4o-mini",
+      "lines": 80,
+      "generation": 108
     }
   ]
 }
