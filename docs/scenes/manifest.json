@@ -1087,6 +1087,16 @@
       "model": "gpt-4o-mini",
       "lines": 93,
       "generation": 109
+    },
+    {
+      "file": "terraform-the-terraces.js",
+      "name": "Terraform the Terraces",
+      "location": "Pamukkale Travertine Terraces, Denizli, Turkey",
+      "biome": "volcanic",
+      "generated": "2026-05-16T23:11:36.466Z",
+      "model": "gpt-4o-mini",
+      "lines": 90,
+      "generation": 110
     }
   ]
 }

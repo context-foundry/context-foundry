@@ -2111,5 +2111,46 @@
     "retries": 1,
     "api_retries": 0,
     "validation": "pass"
+  },
+  {
+    "ts": "2026-05-16T23:10:40.151Z",
+    "scene": "404-sand-not-found.js",
+    "seed_id": "404-sand-not-found",
+    "biome": "desert",
+    "model": "gpt-4o-mini",
+    "input_tokens": 16292,
+    "output_tokens": 1358,
+    "cost_usd": 0.0033,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "fail",
+    "error": "Validation failed after 2 attempts: VALIDATION FAILED (1 error):\n- Too short: 59 lines (min 80)"
+  },
+  {
+    "ts": "2026-05-16T23:11:05.710Z",
+    "scene": "deadlock-in-the-dead-vlei.js",
+    "seed_id": "deadlock-in-the-dead-vlei",
+    "biome": "forest",
+    "model": "gpt-4o-mini",
+    "input_tokens": 14882,
+    "output_tokens": 1469,
+    "cost_usd": 0.0031,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "fail",
+    "error": "Validation failed after 2 attempts: VALIDATION FAILED (2 errors):\n- Too short: 61 lines (min 80)\n- Insufficient animation: found 1 animation patterns (need 2+). Use osc(t,period,phase), Math.sin(t*speed), or Math.cos(t*speed) for time-based animation"
+  },
+  {
+    "ts": "2026-05-16T23:11:36.467Z",
+    "scene": "terraform-the-terraces.js",
+    "seed_id": "terraform-the-terraces",
+    "biome": "volcanic",
+    "model": "gpt-4o-mini",
+    "input_tokens": 14868,
+    "output_tokens": 1804,
+    "cost_usd": 0.0033,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "pass"
   }
 ]
