@@ -2084,5 +2084,32 @@
     "retries": 1,
     "api_retries": 0,
     "validation": "pass"
+  },
+  {
+    "ts": "2026-05-16T21:06:26.311Z",
+    "scene": "dependency-tree-baobab.js",
+    "seed_id": "dependency-tree-baobab",
+    "biome": "savanna",
+    "model": "gpt-4o-mini",
+    "input_tokens": 16340,
+    "output_tokens": 1364,
+    "cost_usd": 0.0033,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "fail",
+    "error": "Validation failed after 2 attempts: VALIDATION FAILED (1 error):\n- Too short: 56 lines (min 80)"
+  },
+  {
+    "ts": "2026-05-16T21:07:02.124Z",
+    "scene": "fork-the-fjord.js",
+    "seed_id": "fork-the-fjord",
+    "biome": "ocean",
+    "model": "gpt-4o-mini",
+    "input_tokens": 15238,
+    "output_tokens": 1824,
+    "cost_usd": 0.0034,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "pass"
   }
 ]

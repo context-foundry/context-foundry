@@ -1077,6 +1077,16 @@
       "model": "gpt-4o-mini",
       "lines": 80,
       "generation": 108
+    },
+    {
+      "file": "fork-the-fjord.js",
+      "name": "Fork the Fjord",
+      "location": "Geirangerfjord, Norway",
+      "biome": "ocean",
+      "generated": "2026-05-16T21:07:02.123Z",
+      "model": "gpt-4o-mini",
+      "lines": 93,
+      "generation": 109
     }
   ]
 }
