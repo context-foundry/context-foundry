@@ -22,12 +22,14 @@ use crate::utils::atomic_write_file;
 use super::build;
 use super::context::RunContext;
 use super::contract::ContractPaths;
+use super::stream::StreamEmitter;
 use super::{AppEvent, LoopEvent};
 
 /// Schema version of the JSON report emitted by 'foundry run --no-tui --output-format json'.
 /// Increment when fields are renamed, removed, or when a new top-level field is added.
 /// v2 (D1.3): added `typed_error` top-level field of type Option<TypedErrorReport>.
-pub(crate) const HEADLESS_REPORT_SCHEMA_VERSION: u32 = 2;
+/// v3 (T35.1): added `cost_usd` top-level field (cumulative USD across all agent Usage deltas).
+pub(crate) const HEADLESS_REPORT_SCHEMA_VERSION: u32 = 3;
 
 #[derive(Serialize)]
 struct TaskResult {
@@ -150,8 +152,35 @@ struct SessionReport {
     tasks: Vec<TaskResult>,
     session: SessionStats,
     config: ConfigSnapshot,
+    cost_usd: f64,
     #[serde(skip_serializing_if = "Option::is_none")]
     typed_error: Option<TypedErrorReport>,
+}
+
+/// Headless output mode selected by `--output-format`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum OutputMode {
+    /// Human-readable streaming log (default / unrecognized value).
+    Human,
+    /// Single pretty-printed terminal SessionReport.
+    Json,
+    /// Line-delimited JSON event stream; terminal SessionReport is the last line.
+    JsonStream,
+}
+
+impl OutputMode {
+    fn from_flag(flag: Option<&str>) -> OutputMode {
+        match flag {
+            Some("json") => OutputMode::Json,
+            Some("json-stream") => OutputMode::JsonStream,
+            _ => OutputMode::Human,
+        }
+    }
+
+    /// True when stdout must stay machine-readable (Text/Result go to stderr).
+    fn is_json(&self) -> bool {
+        matches!(self, OutputMode::Json | OutputMode::JsonStream)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -524,7 +553,13 @@ pub(super) async fn run_headless(project_dir: &Path, output_format: Option<Strin
     let mut update_version: Option<String> = None;
     // D1.3: typed-error capture for the JSON report's `typed_error` field.
     let mut typed_error_record: Option<TypedErrorReport> = None;
-    let json_output = output_format.as_deref() == Some("json");
+    let mode = OutputMode::from_flag(output_format.as_deref());
+    let mut emitter: Option<StreamEmitter<std::io::Stdout>> = match mode {
+        OutputMode::JsonStream => Some(StreamEmitter::new(std::io::stdout())),
+        _ => None,
+    };
+    let mut cumulative_cost_usd: f64 = 0.0;
+    let mut tasks_total: usize = 0;
     let session_start = std::time::Instant::now();
     let mut task_results: Vec<TaskResult> = Vec::new();
     let mut task_descriptions: std::collections::HashMap<String, String> =
@@ -537,7 +572,7 @@ pub(super) async fn run_headless(project_dir: &Path, output_format: Option<Strin
     while let Some(evt) = rx.recv().await {
         match evt {
             AppEvent::AgentOutput(AgentOutputEvent::Text(text)) => {
-                if json_output {
+                if mode.is_json() {
                     eprintln!("{}", text);
                 } else {
                     println!("{}", text);
@@ -545,7 +580,7 @@ pub(super) async fn run_headless(project_dir: &Path, output_format: Option<Strin
             }
             AppEvent::AgentOutput(AgentOutputEvent::TextDelta(text)) => {
                 use std::io::Write;
-                if json_output {
+                if mode.is_json() {
                     eprint!("{}", text);
                     let _ = std::io::stderr().flush();
                 } else {
@@ -569,7 +604,7 @@ pub(super) async fn run_headless(project_dir: &Path, output_format: Option<Strin
                 eprintln!("[stderr] {}", line);
             }
             AppEvent::AgentOutput(AgentOutputEvent::Result(text)) => {
-                if json_output {
+                if mode.is_json() {
                     eprintln!("{}", text);
                 } else {
                     println!("{}", text);
@@ -586,15 +621,30 @@ pub(super) async fn run_headless(project_dir: &Path, output_format: Option<Strin
                     abort_signal.store(true, Ordering::Release);
                 }
             }
-            AppEvent::AgentOutput(AgentOutputEvent::Usage { cost_usd, .. }) => {
+            AppEvent::AgentOutput(AgentOutputEvent::Usage {
+                cost_usd,
+                input_tokens,
+                output_tokens,
+                ..
+            }) => {
+                cumulative_cost_usd += cost_usd;
                 eprintln!("[cost] ${:.2}", cost_usd);
+                if let Some(em) = emitter.as_mut() {
+                    em.emit_cost(cost_usd, cumulative_cost_usd, input_tokens, output_tokens);
+                }
             }
             AppEvent::LoopEvent(loop_event) => match loop_event {
                 LoopEvent::TaskStarted(task) => {
+                    if let Some(em) = emitter.as_mut() {
+                        em.emit_task_started(&task.id, &task.description);
+                    }
                     eprintln!("\n=== TASK: {} — {} ===", task.id, task.short_desc(80));
                     task_descriptions.insert(task.id.clone(), task.description.clone());
                 }
                 LoopEvent::AgentStarted(role, model) => {
+                    if let Some(em) = emitter.as_mut() {
+                        em.emit_stage_started(&role, None, &model);
+                    }
                     eprintln!("--- {} ({}) ---", role, model);
                 }
                 LoopEvent::AgentStageStarted {
@@ -602,6 +652,9 @@ pub(super) async fn run_headless(project_dir: &Path, output_format: Option<Strin
                     stage_id,
                     model,
                 } => {
+                    if let Some(em) = emitter.as_mut() {
+                        em.emit_stage_started(&role, Some(&stage_id), &model);
+                    }
                     eprintln!("--- {} [{}] ({}) ---", role, stage_id, model);
                 }
                 LoopEvent::TaskCompleted(id, ok) => {
@@ -611,6 +664,10 @@ pub(super) async fn run_headless(project_dir: &Path, output_format: Option<Strin
                         feat_commits += 1;
                     } else {
                         wip_commits += 1;
+                    }
+                    if let Some(em) = emitter.as_mut() {
+                        em.emit_task_completed(&id, ok);
+                        em.emit_counts(tasks_total, feat_commits, wip_commits);
                     }
                 }
                 LoopEvent::DiscoveryStarted(round) => {
@@ -652,8 +709,7 @@ pub(super) async fn run_headless(project_dir: &Path, output_format: Option<Strin
                 LoopEvent::SessionIdAssigned(sid) => {
                     observatory_session_id = Some(sid);
                 }
-                LoopEvent::CountsUpdated(_, _)
-                | LoopEvent::NextTaskUpdated(_)
+                LoopEvent::NextTaskUpdated(_)
                 | LoopEvent::QueueUpdated(_)
                 | LoopEvent::TasksFileMtime(_)
                 | LoopEvent::TaskReviewResult { .. }
@@ -671,6 +727,12 @@ pub(super) async fn run_headless(project_dir: &Path, output_format: Option<Strin
                 | LoopEvent::BudgetOverrun { .. }
                 | LoopEvent::StatsReady(_)
                 | LoopEvent::StatsLoadFailed => {}
+                LoopEvent::CountsUpdated(_completed, total) => {
+                    tasks_total = total;
+                    if let Some(em) = emitter.as_mut() {
+                        em.emit_counts(total, feat_commits, wip_commits);
+                    }
+                }
                 LoopEvent::PrApproved { pr_num, .. } => {
                     eprintln!("[log] PR #{} approved -- resuming pipeline", pr_num);
                 }
@@ -698,11 +760,15 @@ pub(super) async fn run_headless(project_dir: &Path, output_format: Option<Strin
                     gate.clear();
                 }
             },
+            AppEvent::AgentDone(ok) => {
+                if let Some(em) = emitter.as_mut() {
+                    em.emit_stage_finished(ok);
+                }
+            }
             AppEvent::UpdateAvailable(version) => {
                 update_version = Some(version);
             }
-            AppEvent::AgentDone(_)
-            | AppEvent::DualPipelineEvent(_, _)
+            AppEvent::DualPipelineEvent(_, _)
             | AppEvent::PlanningFinished(_)
             | AppEvent::OrchestratorFinished(_)
             | AppEvent::Key(_)
@@ -723,7 +789,7 @@ pub(super) async fn run_headless(project_dir: &Path, output_format: Option<Strin
     // moves typed_error_record via .take().
     let aborted_by_typed_error = typed_error_record.is_some();
 
-    if json_output {
+    if mode.is_json() {
         let report = SessionReport {
             schema_version: HEADLESS_REPORT_SCHEMA_VERSION,
             tasks: task_results,
@@ -741,16 +807,21 @@ pub(super) async fn run_headless(project_dir: &Path, output_format: Option<Strin
                 reviewer_provider: config_snapshot_data.3.clone(),
                 reviewer_model: config_snapshot_data.4.clone(),
             },
+            cost_usd: cumulative_cost_usd,
             typed_error: typed_error_record.take(),
+        };
+        let serialized = if mode == OutputMode::JsonStream {
+            serde_json::to_string(&report)
+        } else {
+            serde_json::to_string_pretty(&report)
         };
         println!(
             "{}",
-            serde_json::to_string_pretty(&report)
-                .unwrap_or_else(|e| format!("{{\"error\": \"{}\"}}", e))
+            serialized.unwrap_or_else(|e| format!("{{\"error\": \"{}\"}}", e))
         );
     }
 
-    if !json_output {
+    if !mode.is_json() {
         if let Some(ref sid) = observatory_session_id {
             let project_dir_canonical =
                 dunce::canonicalize(project_dir).unwrap_or_else(|_| project_dir.to_path_buf());
@@ -1762,7 +1833,8 @@ mod tests {
 
     use super::{
         format_status_output, format_tasks_output, migrate_to_skills_in_dir,
-        missing_provider_commands, prune_stale_in_dir, ProviderCommandMode,
+        missing_provider_commands, prune_stale_in_dir, ConfigSnapshot, OutputMode,
+        ProviderCommandMode, SessionReport, SessionStats, HEADLESS_REPORT_SCHEMA_VERSION,
     };
     use crate::agent::ModelProvider;
     use crate::config::Config;
@@ -1776,6 +1848,53 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("{}-{}", name, unique));
         std::fs::create_dir_all(&dir).expect("failed to create temp dir");
         dir
+    }
+
+    #[test]
+    fn session_report_serializes_with_cost_and_schema_v3() {
+        let report = SessionReport {
+            schema_version: HEADLESS_REPORT_SCHEMA_VERSION,
+            tasks: vec![],
+            session: SessionStats {
+                total_duration_secs: 1.0,
+                patterns_injected: 0,
+                patterns_learned: 0,
+                feat_commits: 0,
+                wip_commits: 0,
+            },
+            config: ConfigSnapshot {
+                run_mode: "sprint".to_string(),
+                builder_provider: "claude".to_string(),
+                builder_model: "opus".to_string(),
+                reviewer_provider: "claude".to_string(),
+                reviewer_model: "opus".to_string(),
+            },
+            cost_usd: 1.25,
+            typed_error: None,
+        };
+        let s = serde_json::to_string(&report).expect("serialize");
+        assert!(!s.contains('\n'), "json-stream report must be a single line");
+        let v: serde_json::Value = serde_json::from_str(&s).expect("parse");
+        assert_eq!(v["schema_version"], 3);
+        assert_eq!(v["cost_usd"], 1.25);
+        assert!(
+            v.get("typed_error").is_none(),
+            "typed_error must be omitted when None"
+        );
+    }
+
+    #[test]
+    fn output_mode_from_flag_maps_variants() {
+        assert_eq!(OutputMode::from_flag(Some("json")), OutputMode::Json);
+        assert_eq!(
+            OutputMode::from_flag(Some("json-stream")),
+            OutputMode::JsonStream
+        );
+        assert_eq!(OutputMode::from_flag(None), OutputMode::Human);
+        assert_eq!(OutputMode::from_flag(Some("xml")), OutputMode::Human);
+        assert!(OutputMode::Json.is_json());
+        assert!(OutputMode::JsonStream.is_json());
+        assert!(!OutputMode::Human.is_json());
     }
 
     fn write_plan(dir: &Path, contents: &str) -> Vec<task::Task> {

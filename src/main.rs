@@ -62,7 +62,7 @@ enum Commands {
         /// Run without TUI (streaming log mode)
         #[arg(long)]
         no_tui: bool,
-        /// Output format for headless mode (e.g., "json")
+        /// Output format for headless mode: "json" (single report) or "json-stream" (JSONL event stream)
         #[arg(long, value_name = "FORMAT")]
         output_format: Option<String>,
     },

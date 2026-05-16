@@ -29,7 +29,7 @@ of the test suite.
 ## Headless JSON envelope (`out.json`)
 
 `foundry run --no-tui --output-format json` writes a single JSON object to
-stdout. The envelope is versioned via `schema_version` (currently `2`). The
+stdout. The envelope is versioned via `schema_version` (currently `3`). The
 smoke gate asserts this version and fails loudly when it changes so callers
 know to update their parsers. The schema is defined in
 `src/app/commands.rs` (`HEADLESS_REPORT_SCHEMA_VERSION`, `SessionReport`,
@@ -37,7 +37,7 @@ know to update their parsers. The schema is defined in
 
 ```json
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "tasks": [
     {
       "id": "T1.1",
@@ -61,13 +61,15 @@ know to update their parsers. The schema is defined in
     "builder_model": "lmstudio/qwen3.6-35b-a3b",
     "reviewer_provider": "claude",
     "reviewer_model": "opus"
-  }
+  },
+  "cost_usd": 0.0
 }
 ```
 
 | Field | Type | Notes |
 |-------|------|-------|
-| `schema_version` | integer | Bump when any field below is renamed or removed. Smoke gate asserts this is `2`. |
+| `schema_version` | integer | Bump when any field below is renamed or removed. Smoke gate asserts this is `3`. |
+| `cost_usd` | number | Cumulative USD cost across all agent `Usage` deltas. Added in schema v3. |
 | `tasks[].status` | string | `"DONE"` (clean pass / `feat` commit) or `"WIP"` (verify failed / `WIP` commit). |
 | `tasks[].commit_sha` | string \| null | `null` when no commit was produced. |
 | `tasks[].findings` | object | Counts of HIGH/MEDIUM/LOW review findings. |
@@ -75,6 +77,10 @@ know to update their parsers. The schema is defined in
 | `session.wip_commits` | integer | Number of tasks that produced a `WIP(...)` commit. |
 | `config.builder_provider` | string | `"claude"`, `"codex"`, or `"opencode"`. The smoke gate requires `"opencode"`. |
 | `config.builder_model` | string | When `builder_provider == "opencode"` and the routing target is LM Studio, this MUST start with `"lmstudio/"`. |
+
+For the line-delimited event stream produced by `--output-format json-stream`
+(one JSON event per line, terminal `SessionReport` as the final line), see
+[`docs/json-stream-schema.md`](json-stream-schema.md).
 
 ## Interpreting smoke-gate failures
 

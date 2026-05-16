@@ -16,6 +16,7 @@ mod planning;
 mod review;
 mod startup;
 mod state;
+mod stream;
 
 use self::context::RunContext;
 use self::contract::ContractPaths;
