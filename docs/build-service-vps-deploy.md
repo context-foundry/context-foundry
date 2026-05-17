@@ -179,8 +179,8 @@ SVC printenv FOUNDRY_SERVICE_OAUTH_TOKEN        # non-empty: the real token
 ```
 
 The token lives only in the `foundry-service` container's environment. The
-proxy never echoes it in an API response (`src/service/proxy.rs` redacts it)
-and never writes it into a build.
+proxy never echoes it in an API response (the real credential is never
+placed in a response body) and never writes it into a build.
 
 **(c) Build containers receive only the fake per-build token.** During a build
 (section 4), in another shell:
