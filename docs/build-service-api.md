@@ -190,6 +190,7 @@ Typed JSON errors carry:
 | `unauthorized` | `401` | Missing or invalid bearer token |
 | `not_found` | `404` | Unknown job or missing artifact |
 | `idempotency_conflict` | `409` | `idempotency_key` reused with a different normalized request |
+| `app_name_conflict` | `409` | `app_name` is already held by an in-flight or live (`ready`) build -- the preview hostname would collide; pick a different slug and resubmit |
 | `queue_full` | `429` | Queued job count is at `FOUNDRY_SERVICE_QUEUE_CAP` |
 | `build_timeout` | `500` | Build exceeded the wall-clock timeout |
 | `build_crashed` | `500` | The builder produced no terminal report |

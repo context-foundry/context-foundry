@@ -76,6 +76,23 @@ pub async fn find_by_idempotency(
     Ok(row.as_ref().map(row_to_job))
 }
 
+/// Returns `true` when an in-flight or live-preview job already holds
+/// `app_name` -- i.e. a job in `queued`, `building`, `deploying`, or `ready`.
+/// The preview hostname is `<app_name>.<domain>`, so two such jobs would
+/// collide on the same host; the submit path rejects the second (SPEC O5).
+pub async fn app_name_in_use(pool: &PgPool, app_name: &str) -> Result<bool> {
+    let count: i64 = sqlx::query_scalar::<_, i64>(
+        "SELECT count(*) FROM jobs \
+         WHERE app_name = $1 \
+         AND status IN ('queued', 'building', 'deploying', 'ready')",
+    )
+    .bind(app_name)
+    .fetch_one(pool)
+    .await
+    .context("check app_name in use")?;
+    Ok(count > 0)
+}
+
 /// Fixed advisory-lock key serializing every queue-cap capacity decision.
 const QUEUE_CAP_LOCK_KEY: i64 = 7_345_201;
 

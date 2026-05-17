@@ -110,6 +110,7 @@ impl JobStatus {
 pub enum ErrorCode {
     ValidationError,
     IdempotencyConflict,
+    AppNameConflict,
     QueueFull,
     BuildTimeout,
     BuildCrashed,
@@ -122,9 +123,10 @@ pub enum ErrorCode {
 impl ErrorCode {
     /// Every typed error code, in taxonomy order. Lets golden tests iterate
     /// the full error taxonomy exhaustively.
-    pub const ALL: [ErrorCode; 9] = [
+    pub const ALL: [ErrorCode; 10] = [
         ErrorCode::ValidationError,
         ErrorCode::IdempotencyConflict,
+        ErrorCode::AppNameConflict,
         ErrorCode::QueueFull,
         ErrorCode::BuildTimeout,
         ErrorCode::BuildCrashed,
@@ -138,6 +140,7 @@ impl ErrorCode {
         match self {
             ErrorCode::ValidationError => "validation_error",
             ErrorCode::IdempotencyConflict => "idempotency_conflict",
+            ErrorCode::AppNameConflict => "app_name_conflict",
             ErrorCode::QueueFull => "queue_full",
             ErrorCode::BuildTimeout => "build_timeout",
             ErrorCode::BuildCrashed => "build_crashed",
@@ -152,6 +155,7 @@ impl ErrorCode {
         match self {
             ErrorCode::ValidationError => 400,
             ErrorCode::IdempotencyConflict => 409,
+            ErrorCode::AppNameConflict => 409,
             ErrorCode::QueueFull => 429,
             _ => 500,
         }
@@ -422,9 +426,10 @@ mod tests {
     #[test]
     fn error_code_all_has_golden_strings_and_statuses() {
         use std::collections::HashSet;
-        let golden: [(ErrorCode, &str, u16); 9] = [
+        let golden: [(ErrorCode, &str, u16); 10] = [
             (ErrorCode::ValidationError, "validation_error", 400),
             (ErrorCode::IdempotencyConflict, "idempotency_conflict", 409),
+            (ErrorCode::AppNameConflict, "app_name_conflict", 409),
             (ErrorCode::QueueFull, "queue_full", 429),
             (ErrorCode::BuildTimeout, "build_timeout", 500),
             (ErrorCode::BuildCrashed, "build_crashed", 500),
@@ -437,9 +442,9 @@ mod tests {
             assert_eq!(code.as_str(), want_str);
             assert_eq!(code.http_status(), want_status);
         }
-        assert_eq!(ErrorCode::ALL.len(), 9);
+        assert_eq!(ErrorCode::ALL.len(), 10);
         let distinct: HashSet<&str> = ErrorCode::ALL.iter().map(|c| c.as_str()).collect();
-        assert_eq!(distinct.len(), 9, "every error code string is distinct");
+        assert_eq!(distinct.len(), 10, "every error code string is distinct");
     }
 
     #[test]

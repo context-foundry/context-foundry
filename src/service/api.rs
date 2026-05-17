@@ -211,6 +211,21 @@ async fn submit_job(State(state): State<Arc<AppState>>, body: Bytes) -> Response
         Err(_) => return err(ErrorCode::InternalError, "idempotency lookup failed"),
     }
 
+    // Reject a submit whose app_name is already held by an in-flight or live
+    // preview -- the preview hostname is `<app_name>.<domain>`, so two would
+    // collide on the same host (SPEC O5 / D6). An idempotent replay is handled
+    // above, so this only fires for a genuinely new submit.
+    match db::app_name_in_use(&state.pool, &req.app_name).await {
+        Ok(true) => {
+            return err(
+                ErrorCode::AppNameConflict,
+                "app_name is already in use by an in-flight or live build",
+            )
+        }
+        Ok(false) => {}
+        Err(_) => return err(ErrorCode::InternalError, "app_name conflict check failed"),
+    }
+
     let now = Utc::now();
     let job = Job {
         id: format!("fj_{}", Ulid::new()),
