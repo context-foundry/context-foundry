@@ -126,6 +126,8 @@ enum Commands {
         #[arg(long)]
         trend: bool,
     },
+    /// Run the Context Foundry build service (HTTP control plane)
+    Serve,
     /// Initialize foundry in the current project (detect stack, create config)
     Init,
     /// Start the observatory web dashboard
@@ -267,6 +269,9 @@ async fn main() -> Result<()> {
         } => {
             let stats_project = project.unwrap_or_else(|| project_dir.clone());
             stats::run_stats(days, &stats_project, &output, trend)?;
+        }
+        Commands::Serve => {
+            foundry::service::run_serve().await?;
         }
         Commands::Init => {
             init::run_init(&project_dir)?;
