@@ -66,6 +66,30 @@ pub enum ArtifactKind {
     Diagnostics,
 }
 
+/// Apply the `?stage=` / `?tail=N` filters to a JSONL log body.
+///
+/// Shared by every [`StorageBackend`] so the local and cloud backends serve
+/// byte-identical filtered logs.
+pub fn filter_log_lines(content: &str, stage: Option<&str>, tail: Option<usize>) -> String {
+    let mut lines: Vec<&str> = content.lines().collect();
+    if let Some(stage) = stage {
+        lines.retain(|line| {
+            serde_json::from_str::<serde_json::Value>(line)
+                .ok()
+                .as_ref()
+                .and_then(|v| v.get("stage"))
+                .and_then(|s| s.as_str())
+                == Some(stage)
+        });
+    }
+    if let Some(tail) = tail {
+        if lines.len() > tail {
+            lines = lines.split_off(lines.len() - tail);
+        }
+    }
+    lines.join("\n")
+}
+
 /// Backing store for a job's inputs, logs, artifacts, and diagnostics.
 #[async_trait]
 pub trait StorageBackend: Send + Sync {

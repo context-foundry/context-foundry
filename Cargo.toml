@@ -15,6 +15,10 @@ path = "src/lib.rs"
 name = "foundry"
 path = "src/main.rs"
 
+[features]
+default = []
+azure = ["dep:hmac", "dep:sha2", "dep:base64"]
+
 [dependencies]
 tokio = { version = "1", features = ["full"] }
 ratatui = "0.30"
@@ -41,6 +45,9 @@ subtle = "2"
 async-trait = "0.1"
 tar = "0.4"
 flate2 = "1"
+hmac = { version = "0.12", optional = true }
+sha2 = { version = "0.10", optional = true }
+base64 = { version = "0.22", optional = true }
 
 [dev-dependencies]
 tempfile = "3"

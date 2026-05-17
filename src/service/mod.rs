@@ -7,6 +7,12 @@
 //! [`storage_local::LocalFilesystem`]; real Docker builds land in M2 (T35.4).
 
 pub mod api;
+#[cfg(feature = "azure")]
+pub mod azure;
+#[cfg(feature = "azure")]
+pub mod azure_aca;
+#[cfg(feature = "azure")]
+pub mod azure_blob;
 pub mod backend;
 pub mod caddy;
 pub mod config;
@@ -53,8 +59,25 @@ pub async fn run_serve() -> Result<()> {
     let pool = db::connect(&config).await?;
     db::run_migrations(&pool).await?;
 
-    let storage: Arc<dyn backend::StorageBackend> =
-        Arc::new(storage_local::LocalFilesystem::new(config.storage_root.clone()));
+    // The Azure backends share one `AzureConfig`, resolved once from the
+    // environment. Local/VPS deployments never enter this branch and never
+    // compile the `azure` modules (gated by the Cargo `azure` feature).
+    #[cfg(feature = "azure")]
+    let azure_cfg = if config.build_backend == "azure_container_apps" {
+        Some(azure::AzureConfig::from_env().context("resolve Azure backend config")?)
+    } else {
+        None
+    };
+
+    let storage: Arc<dyn backend::StorageBackend> = match config.build_backend.as_str() {
+        #[cfg(feature = "azure")]
+        "azure_container_apps" => Arc::new(azure_blob::AzureBlob::new(
+            azure_cfg
+                .clone()
+                .expect("azure_cfg is Some when build_backend is azure_container_apps"),
+        )),
+        _ => Arc::new(storage_local::LocalFilesystem::new(config.storage_root.clone())),
+    };
     let build: Arc<dyn backend::BuildBackend> = match config.build_backend.as_str() {
         "local_docker" => {
             let preview = localdocker::PreviewConfig {
@@ -83,6 +106,16 @@ pub async fn run_serve() -> Result<()> {
                 }),
             )
         }
+        #[cfg(feature = "azure")]
+        "azure_container_apps" => Arc::new(azure_aca::AzureContainerApps::new(
+            azure_cfg.expect("azure_cfg is Some when build_backend is azure_container_apps"),
+            config.builder_image.clone(),
+            config.builder_proxy_url.clone(),
+        )),
+        #[cfg(not(feature = "azure"))]
+        "azure_container_apps" => anyhow::bail!(
+            "FOUNDRY_SERVICE_BUILD_BACKEND=azure_container_apps requires building foundry with --features azure"
+        ),
         _ => Arc::new(mock_backend::MockBuildBackend::new()),
     };
     let proxy = Arc::new(proxy::ProxyRegistry::new(config.clone()));

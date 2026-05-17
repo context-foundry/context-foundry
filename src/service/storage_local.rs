@@ -9,7 +9,9 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 
-use crate::service::backend::{ArtifactKind, ArtifactResponse, StorageBackend, StorageGrant};
+use crate::service::backend::{
+    filter_log_lines, ArtifactKind, ArtifactResponse, StorageBackend, StorageGrant,
+};
 
 /// Filesystem-backed [`StorageBackend`].
 pub struct LocalFilesystem {
@@ -82,23 +84,7 @@ impl StorageBackend for LocalFilesystem {
                 return Err(anyhow::Error::new(e).context("read job logs"));
             }
         };
-        let mut lines: Vec<&str> = content.lines().collect();
-        if let Some(stage) = stage {
-            lines.retain(|line| {
-                serde_json::from_str::<serde_json::Value>(line)
-                    .ok()
-                    .as_ref()
-                    .and_then(|v| v.get("stage"))
-                    .and_then(|s| s.as_str())
-                    == Some(stage)
-            });
-        }
-        if let Some(tail) = tail {
-            if lines.len() > tail {
-                lines = lines.split_off(lines.len() - tail);
-            }
-        }
-        Ok(lines.join("\n"))
+        Ok(filter_log_lines(&content, stage, tail))
     }
 
     async fn put_artifact(&self, job_id: &str, bytes: &[u8]) -> Result<String> {
