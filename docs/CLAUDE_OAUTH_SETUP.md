@@ -23,6 +23,76 @@ call on the box silently switches to metered API billing. Do not let the new
 backend do that. Its API / Azure provider must be a separate, opt-in code path
 whose credentials never reach the `claude` CLI's environment.
 
+## Scope and correction: `foundry serve` authenticates differently
+
+This document was written from the host-level / Knowmler model. It is correct
+for the **host shell**, **Knowmler's container**, and **interactive (old)
+Context Foundry**, which all use the ambient `~/.claude` OAuth login.
+
+It is NOT the model for **`foundry serve`**, the new Context Foundry build
+service (the `local_docker` backend). Verified against its source
+(`src/service/localdocker.rs`), `foundry serve` is a third pattern:
+
+- A build container gets exactly one bind mount, its per-job work directory.
+  It does **not** mount `~/.claude` and never reads the host subscription.
+- Each build container is given `ANTHROPIC_BASE_URL` (an auth proxy) and
+  `ANTHROPIC_API_KEY` set to a **fake, per-build, scoped token**. The real
+  credential never enters a build container; a test enforces that.
+- The real upstream credential lives only in the proxy daemon, configured from
+  the service's own `FOUNDRY_SERVICE_*` environment.
+
+Consequences for this document:
+
+- **The danger-list below is host-scope.** "Never set `ANTHROPIC_API_KEY` /
+  `ANTHROPIC_BASE_URL` where a `claude` process inherits it" holds for the host
+  shell, shared/global `.env` files, `~/.claude/`, rc files, and Knowmler's
+  container. It does **not** apply inside `foundry serve`'s build containers,
+  which set those two variables by design: per-container, ephemeral, a fake
+  token, never global. `ANTHROPIC_*` on a `foundry-builder` container is
+  correct, not a violation.
+- **The guard script verifies host-level OAuth only.** A green guard confirms
+  the host and Knowmler still ride the subscription. It does **not** confirm
+  `foundry serve` is on OAuth; that is governed by
+  `FOUNDRY_SERVICE_UPSTREAM_AUTH` / `FOUNDRY_SERVICE_OAUTH_TOKEN`, which the
+  guard does not check.
+- **Azure does not apply to this deploy.** The backend being installed is
+  `local_docker`; there is no Azure provider and no Azure key on this VPS. The
+  general API-provider rules below remain useful guidance, but Azure
+  specifically is a non-issue here.
+
+### Putting `foundry serve` on the subscription
+
+`foundry serve` will not pick up `~/.claude` on its own. In the **service's own
+`.env`** (nowhere else):
+
+```
+FOUNDRY_SERVICE_UPSTREAM_AUTH=oauth
+FOUNDRY_SERVICE_OAUTH_TOKEN=<accessToken>
+FOUNDRY_SERVICE_OAUTH_REFRESH_TOKEN=<refreshToken>   # optional
+```
+
+The tokens are the `claudeAiOauth.accessToken` / `refreshToken` already in
+`~/.claude/.credentials.json`, or run `claude setup-token`.
+
+The real risks (note that "an upgrade steals Knowmler's login" is **not** one:
+a binary upgrade never touches `~/.claude`, and `foundry serve` is
+credential-isolated from it):
+
+1. **Forgetting `FOUNDRY_SERVICE_UPSTREAM_AUTH=oauth`.** The service then
+   defaults to `api_key` mode, real builds fail with no credential, and that is
+   the moment someone reaches for an API key. That is the actual path onto
+   metered billing.
+2. **Shared subscription.** `foundry serve`, Knowmler, and interactive Context
+   Foundry all draw on one Claude subscription. A busy build service can eat
+   Knowmler's rate budget; the proxy surfaces that as HTTP 429.
+
+The real "OAuth survived" test is a smoke build: deploy with
+`upstream_auth=oauth` and run one build through to ready. The guard script is
+necessary for the host but not sufficient for the service. The exact
+compose / `.env` / deploy steps for `foundry serve` OAuth mode belong in the
+Context Foundry service deploy doc (built for this under T35.7d); this
+host-level document does not duplicate them.
+
 ## How authentication works today
 
 ### The credential store

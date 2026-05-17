@@ -1,8 +1,15 @@
 #!/usr/bin/env bash
 # Verify the Claude subscription/OAuth setup is intact and not overridden.
 #
+# SCOPE: this checks the HOST-LEVEL subscription -- the host shell and
+# Knowmler's container, which use the ambient ~/.claude OAuth login. It does
+# NOT verify `foundry serve`, the new build service: that authenticates
+# through its own proxy (FOUNDRY_SERVICE_UPSTREAM_AUTH / _OAUTH_TOKEN) and its
+# build containers set ANTHROPIC_* on purpose. A green result here does not
+# mean foundry serve is on OAuth -- smoke-test a build for that.
+#
 # Run this before AND after any Context Foundry upgrade or backend deploy.
-# Exits non-zero if the subscription setup looks compromised.
+# Exits non-zero if the host-level subscription setup looks compromised.
 # See docs/CLAUDE_OAUTH_SETUP.md for the why.
 set -u
 fail=0
