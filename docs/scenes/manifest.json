@@ -1067,6 +1067,56 @@
       "model": "gpt-4o-mini",
       "lines": 87,
       "generation": 107
+    },
+    {
+      "file": "deploy-to-production-dock.js",
+      "name": "Deploy to Production Dock",
+      "location": "Container Port, Rotterdam, Netherlands",
+      "biome": "urban",
+      "generated": "2026-05-16T19:36:47.916Z",
+      "model": "gpt-4o-mini",
+      "lines": 80,
+      "generation": 108
+    },
+    {
+      "file": "fork-the-fjord.js",
+      "name": "Fork the Fjord",
+      "location": "Geirangerfjord, Norway",
+      "biome": "ocean",
+      "generated": "2026-05-16T21:07:02.123Z",
+      "model": "gpt-4o-mini",
+      "lines": 93,
+      "generation": 109
+    },
+    {
+      "file": "terraform-the-terraces.js",
+      "name": "Terraform the Terraces",
+      "location": "Pamukkale Travertine Terraces, Denizli, Turkey",
+      "biome": "volcanic",
+      "generated": "2026-05-16T23:11:36.466Z",
+      "model": "gpt-4o-mini",
+      "lines": 90,
+      "generation": 110
+    },
+    {
+      "file": "dead-code-elimination-forest.js",
+      "name": "Dead Code Elimination Forest",
+      "location": "Hoia Baciu Forest, Cluj-Napoca, Romania",
+      "biome": "forest",
+      "generated": "2026-05-17T08:34:19.612Z",
+      "model": "gpt-4o-mini",
+      "lines": 95,
+      "generation": 111
+    },
+    {
+      "file": "edge-case-cliffside.js",
+      "name": "Edge Case Cliffside",
+      "location": "Cliffs of Moher, County Clare, Ireland",
+      "biome": "mountain",
+      "generated": "2026-05-17T11:34:12.317Z",
+      "model": "gpt-4o-mini",
+      "lines": 85,
+      "generation": 112
     }
   ]
 }
