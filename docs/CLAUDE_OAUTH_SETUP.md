@@ -67,12 +67,18 @@ Consequences for this document:
 
 ```
 FOUNDRY_SERVICE_UPSTREAM_AUTH=oauth
-FOUNDRY_SERVICE_OAUTH_TOKEN=<accessToken>
-FOUNDRY_SERVICE_OAUTH_REFRESH_TOKEN=<refreshToken>   # optional
+FOUNDRY_SERVICE_OAUTH_TOKEN=<token from `claude setup-token`>
 ```
 
-The tokens are the `claudeAiOauth.accessToken` / `refreshToken` already in
-`~/.claude/.credentials.json`, or run `claude setup-token`.
+Get the token with **`claude setup-token`**. That mints a separate, headless
+OAuth token for the build service. **Do not** copy `accessToken` /
+`refreshToken` out of `~/.claude/.credentials.json`: that login is shared with
+Knowmler and the interactive CLI, and if the proxy refreshes the shared refresh
+token, the rotation can invalidate it and log them out. `claude setup-token` is
+an interactive flow; if it cannot be run non-interactively, have the VPS owner
+run it and hand over the token. The exact `.env` path and field names are in
+the `foundry serve` deploy guide (`docs/build-service-vps-deploy.md`); follow
+that doc for the specifics.
 
 The real risks (note that "an upgrade steals Knowmler's login" is **not** one:
 a binary upgrade never touches `~/.claude`, and `foundry serve` is
@@ -204,10 +210,13 @@ Azure-hosted model). That is allowed to exist, but it must be quarantined:
    the Azure path and the `claude` CLI path as fully separate clients that
    share no environment.
 
-4. **Do not re-authenticate Claude.** The backend, its installer, and its
-   upgrade scripts must never run `claude login`, `claude setup-token`,
-   `claude logout`, or otherwise write to `~/.claude/.credentials.json`. The
-   existing OAuth login is managed out of band by the VPS owner.
+4. **Do not disturb the host login.** The backend, its installer, and its
+   upgrade scripts must never run `claude login` or `claude logout`, and must
+   never overwrite `~/.claude/.credentials.json`. The existing OAuth login is
+   managed out of band by the VPS owner. (`claude setup-token` is the
+   exception and is the *correct* tool for the build service: it mints a
+   separate headless token and does not touch the host login. See "Putting
+   `foundry serve` on the subscription" above.)
 
 5. **Do not overwrite `~/.claude/settings.json` or `~/.claude.json`.** If the
    backend needs CLI settings, it should use a project-level `.claude/`
