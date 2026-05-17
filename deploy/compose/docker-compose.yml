@@ -75,16 +75,22 @@ services:
 
   caddy:
     image: caddy:2-alpine
-    ports:
-      - "80:80"
-      - "443:443"
-    # The service reconfigures Caddy at runtime through its admin API on port
-    # 2019 to add and remove preview routes; the static Caddyfile only
-    # declares the admin endpoint and the API route.
+    container_name: foundry-caddy
+    # No host ports. This Caddy is the previews' internal router, not a public
+    # edge: a front Caddy (the host's real :80/:443 edge) reaches it by
+    # container name over `compose_default` and forwards `*.<preview-domain>`
+    # traffic to it. The build service manages it entirely through its admin
+    # API (port 2019) -- POSTing/DELETEing per-preview routes; the static
+    # Caddyfile only bootstraps the server + admin endpoint.
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
       - caddy-config:/config
+    networks:
+      # `default` -- the build service reaches the admin API (caddy:2019);
+      # `foundry-preview` -- reach preview containers to reverse-proxy them.
+      - default
+      - foundry-preview
     restart: unless-stopped
 
 volumes:
