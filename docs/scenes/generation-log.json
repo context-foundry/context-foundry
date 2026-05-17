@@ -2152,5 +2152,32 @@
     "retries": 1,
     "api_retries": 0,
     "validation": "pass"
+  },
+  {
+    "ts": "2026-05-17T08:34:02.530Z",
+    "scene": "lunar-landing-page.js",
+    "seed_id": "lunar-landing-page",
+    "biome": "space",
+    "model": "gpt-4o-mini",
+    "input_tokens": 16316,
+    "output_tokens": 1289,
+    "cost_usd": 0.0032,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "fail",
+    "error": "Validation failed after 2 attempts: VALIDATION FAILED (1 error):\n- Too short: 53 lines (min 80)"
+  },
+  {
+    "ts": "2026-05-17T08:34:19.613Z",
+    "scene": "dead-code-elimination-forest.js",
+    "seed_id": "dead-code-elimination-forest",
+    "biome": "forest",
+    "model": "gpt-4o-mini",
+    "input_tokens": 8126,
+    "output_tokens": 970,
+    "cost_usd": 0.0018,
+    "retries": 0,
+    "api_retries": 0,
+    "validation": "pass"
   }
 ]

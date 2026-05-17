@@ -1097,6 +1097,16 @@
       "model": "gpt-4o-mini",
       "lines": 90,
       "generation": 110
+    },
+    {
+      "file": "dead-code-elimination-forest.js",
+      "name": "Dead Code Elimination Forest",
+      "location": "Hoia Baciu Forest, Cluj-Napoca, Romania",
+      "biome": "forest",
+      "generated": "2026-05-17T08:34:19.612Z",
+      "model": "gpt-4o-mini",
+      "lines": 95,
+      "generation": 111
     }
   ]
 }
