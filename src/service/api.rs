@@ -139,6 +139,22 @@ async fn job_view(state: &Arc<AppState>, job: &Job) -> JobView {
 
 // ─── Bearer auth middleware ─────────────────────────────────────────────────
 
+/// Constant-time check that `presented` equals one of the configured bearer
+/// keys. An empty `api_keys` slice rejects every request (fail-closed default).
+fn key_accepted(api_keys: &[String], presented: &[u8]) -> bool {
+    if api_keys.is_empty() {
+        return false;
+    }
+    // Fold every comparison instead of `.any()`: do not short-circuit on the
+    // first match, so the comparison cost does not reveal which key matched.
+    let mut matched = false;
+    for k in api_keys {
+        let hit = k.as_bytes().ct_eq(presented).unwrap_u8() == 1;
+        matched |= hit;
+    }
+    matched
+}
+
 async fn auth_mw(State(state): State<Arc<AppState>>, req: Request, next: Next) -> Response {
     let presented = req
         .headers()
@@ -148,11 +164,7 @@ async fn auth_mw(State(state): State<Arc<AppState>>, req: Request, next: Next) -
         .unwrap_or("")
         .as_bytes()
         .to_vec();
-    let accepted = !state.config.api_keys.is_empty()
-        && state.config.api_keys.iter().any(|k| {
-            k.len() == presented.len()
-                && k.as_bytes().ct_eq(presented.as_slice()).unwrap_u8() == 1
-        });
+    let accepted = key_accepted(&state.config.api_keys, &presented);
     if accepted {
         next.run(req).await
     } else {
@@ -463,4 +475,46 @@ pub fn router(state: Arc<AppState>) -> Router {
         .merge(protected)
         .route("/v1/healthz", get(healthz))
         .with_state(state)
+}
+
+// ─── Tests ──────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::key_accepted;
+
+    #[test]
+    fn key_accepted_matches_configured_key() {
+        assert!(key_accepted(&["secret".to_string()], b"secret"));
+    }
+
+    #[test]
+    fn key_accepted_rejects_wrong_key_same_length() {
+        assert!(!key_accepted(&["secret".to_string()], b"secres"));
+    }
+
+    #[test]
+    fn key_accepted_rejects_wrong_length_token() {
+        assert!(!key_accepted(&["secret".to_string()], b"sec"));
+        assert!(!key_accepted(&["secret".to_string()], b"secretsecret"));
+    }
+
+    #[test]
+    fn key_accepted_rejects_empty_presented_token() {
+        assert!(!key_accepted(&["secret".to_string()], b""));
+    }
+
+    #[test]
+    fn key_accepted_empty_config_rejects_every_token() {
+        assert!(!key_accepted(&[], b"secret"));
+        assert!(!key_accepted(&[], b""));
+    }
+
+    #[test]
+    fn key_accepted_accepts_either_key_during_rotation() {
+        let keys = vec!["old-key".to_string(), "new-key".to_string()];
+        assert!(key_accepted(&keys, b"old-key"));
+        assert!(key_accepted(&keys, b"new-key"));
+        assert!(!key_accepted(&keys, b"retired-key"));
+    }
 }

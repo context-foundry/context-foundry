@@ -90,6 +90,24 @@ normalized request returns `409 idempotency_conflict`. Because the TTL is
 clamped before hashing, two requests whose raw `preview_ttl_hours` differ but
 clamp to the same value are treated as identical.
 
+### Bearer authentication and key rotation
+
+Every `/v1` route except `/v1/healthz` requires an
+`Authorization: Bearer <key>` header -- this includes the artifact,
+diagnostics, and log download routes. The presented token is compared against
+each entry in `FOUNDRY_SERVICE_API_KEYS` in constant time
+(`subtle::ConstantTimeEq`), so a wrong key cannot be recovered by timing. A
+missing or non-matching token returns `401 unauthorized`.
+
+If `FOUNDRY_SERVICE_API_KEYS` is unset or empty, every protected route
+returns `401` and only `/v1/healthz` is reachable -- a deliberate fail-closed
+default, not a way to disable auth.
+
+To rotate the key without downtime: set `FOUNDRY_SERVICE_API_KEYS` to both the
+old and new key (comma-separated) and restart; move every caller to the new
+key; then drop the old key from the list and restart again. `/v1/healthz`
+stays reachable without a key throughout.
+
 ## Auth proxy
 
 The proxy (`/v1/messages` on `FOUNDRY_SERVICE_PROXY_BIND`) holds the real
