@@ -199,14 +199,6 @@ async fn submit_job(State(state): State<Arc<AppState>>, body: Bytes) -> Response
         Err(_) => return err(ErrorCode::InternalError, "idempotency lookup failed"),
     }
 
-    match db::count_queued(&state.pool).await {
-        Ok(n) if n as usize >= state.config.queue_cap => {
-            return err(ErrorCode::QueueFull, "the build queue is full")
-        }
-        Ok(_) => {}
-        Err(_) => return err(ErrorCode::InternalError, "queue depth check failed"),
-    }
-
     let now = Utc::now();
     let job = Job {
         id: format!("fj_{}", Ulid::new()),
@@ -235,9 +227,12 @@ async fn submit_job(State(state): State<Arc<AppState>>, body: Bytes) -> Response
         updated_at: now,
     };
 
-    match db::insert_job(&state.pool, &job).await {
-        Ok(true) => {}
-        Ok(false) => {
+    match db::insert_job_capped(&state.pool, &job, state.config.queue_cap).await {
+        Ok(db::InsertOutcome::Inserted) => {}
+        Ok(db::InsertOutcome::QueueFull) => {
+            return err(ErrorCode::QueueFull, "the build queue is full")
+        }
+        Ok(db::InsertOutcome::Duplicate) => {
             // Lost an idempotency race with a concurrent submit.
             return match db::find_by_idempotency(&state.pool, &req.owner, &req.idempotency_key)
                 .await

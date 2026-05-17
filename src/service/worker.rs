@@ -31,10 +31,33 @@ pub fn run_worker_pool(
 
 async fn worker_loop(state: Arc<AppState>, worker_id: String, shutdown: Arc<AtomicBool>) {
     while !shutdown.load(Ordering::Relaxed) {
+        // Acquire a global build slot BEFORE claiming a job, so in-flight
+        // builds are capped by `max_concurrent_builds` regardless of how many
+        // worker loops are running. The permit is held across `drive_job`, so
+        // a slot is not freed until the build reaches a terminal state.
+        let permit = match state.build_slots.clone().acquire_owned().await {
+            Ok(p) => p,
+            Err(_) => break,
+        };
+        // A worker unblocked from the gate during drain must not claim a new
+        // job.
+        if shutdown.load(Ordering::Relaxed) {
+            drop(permit);
+            break;
+        }
         match db::claim_next(&state.pool, &worker_id).await {
-            Ok(Some(job)) => drive_job(&state, job).await,
-            Ok(None) => tokio::time::sleep(Duration::from_millis(500)).await,
-            Err(_) => tokio::time::sleep(Duration::from_secs(1)).await,
+            Ok(Some(job)) => {
+                drive_job(&state, job).await;
+                drop(permit);
+            }
+            Ok(None) => {
+                drop(permit);
+                tokio::time::sleep(Duration::from_millis(500)).await;
+            }
+            Err(_) => {
+                drop(permit);
+                tokio::time::sleep(Duration::from_secs(1)).await;
+            }
         }
     }
 }

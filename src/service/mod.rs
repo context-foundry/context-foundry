@@ -15,6 +15,7 @@ pub mod localdocker;
 pub mod mock_backend;
 pub mod models;
 pub mod proxy;
+pub mod ratelimit;
 pub mod reaper;
 pub mod storage_local;
 pub mod worker;
@@ -25,6 +26,7 @@ use std::time::Duration;
 
 use anyhow::{Context, Result};
 use sqlx::PgPool;
+use tokio::sync::Semaphore;
 
 /// Shared application state handed to every axum handler and worker.
 pub struct AppState {
@@ -33,6 +35,9 @@ pub struct AppState {
     pub storage: Arc<dyn backend::StorageBackend>,
     pub build: Arc<dyn backend::BuildBackend>,
     pub proxy: Arc<proxy::ProxyRegistry>,
+    /// Global build-concurrency gate: workers acquire a permit before claiming
+    /// a job, so in-flight builds are capped independently of `worker_count`.
+    pub build_slots: Arc<Semaphore>,
 }
 
 /// Entry point for the `foundry serve` subcommand.
@@ -67,12 +72,20 @@ pub async fn run_serve() -> Result<()> {
                     config.builder_proxy_url.clone(),
                     config.docker_bin.clone(),
                 )
-                .with_preview_config(preview),
+                .with_preview_config(preview)
+                .with_build_limits(localdocker::BuildLimits {
+                    memory: config.build_memory.clone(),
+                    cpus: config.build_cpus.clone(),
+                    pids_limit: config.build_pids_limit,
+                }),
             )
         }
         _ => Arc::new(mock_backend::MockBuildBackend::new()),
     };
     let proxy = Arc::new(proxy::ProxyRegistry::new(config.clone()));
+    // `.max(1)` guards against a misconfigured `0`, which would otherwise
+    // deadlock every worker on the build-slots gate.
+    let build_slots = Arc::new(Semaphore::new(config.max_concurrent_builds.max(1)));
 
     let state = Arc::new(AppState {
         pool,
@@ -80,6 +93,7 @@ pub async fn run_serve() -> Result<()> {
         storage,
         build,
         proxy,
+        build_slots,
     });
 
     // Reconcile jobs left mid-build by a dead process, then kill any

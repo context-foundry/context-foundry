@@ -60,6 +60,15 @@ pub struct ServiceConfig {
     /// How long SIGTERM drain waits for in-flight workers before exiting;
     /// stragglers are caught by next-start reconciliation.
     pub drain_deadline_secs: u64,
+    /// Global cap on concurrently in-flight builds, independent of `worker_count`;
+    /// keeps build count below the Anthropic account's rate-limit headroom.
+    pub max_concurrent_builds: usize,
+    /// `--memory` cap for a build container.
+    pub build_memory: String,
+    /// `--cpus` cap for a build container.
+    pub build_cpus: String,
+    /// `--pids-limit` cap for a build container.
+    pub build_pids_limit: u32,
 }
 
 fn env_or(key: &str, default: &str) -> String {
@@ -141,6 +150,13 @@ impl ServiceConfig {
         let drain_deadline_secs: u64 = env_or("FOUNDRY_SERVICE_DRAIN_DEADLINE_SECS", "30")
             .parse()
             .context("parse FOUNDRY_SERVICE_DRAIN_DEADLINE_SECS")?;
+        let max_concurrent_builds: usize =
+            env_or("FOUNDRY_SERVICE_MAX_CONCURRENT_BUILDS", "3")
+                .parse()
+                .context("parse FOUNDRY_SERVICE_MAX_CONCURRENT_BUILDS")?;
+        let build_pids_limit: u32 = env_or("FOUNDRY_SERVICE_BUILD_PIDS_LIMIT", "512")
+            .parse()
+            .context("parse FOUNDRY_SERVICE_BUILD_PIDS_LIMIT")?;
 
         Ok(ServiceConfig {
             database_url: env_or(
@@ -184,6 +200,10 @@ impl ServiceConfig {
             preview_pids_limit,
             build_timeout_secs,
             drain_deadline_secs,
+            max_concurrent_builds,
+            build_memory: env_or("FOUNDRY_SERVICE_BUILD_MEMORY", "4g"),
+            build_cpus: env_or("FOUNDRY_SERVICE_BUILD_CPUS", "2"),
+            build_pids_limit,
         })
     }
 }

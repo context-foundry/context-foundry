@@ -342,6 +342,24 @@ impl Default for PreviewConfig {
     }
 }
 
+/// CPU/memory/pids caps for a build container.
+#[derive(Clone, Debug)]
+pub struct BuildLimits {
+    pub memory: String,
+    pub cpus: String,
+    pub pids_limit: u32,
+}
+
+impl Default for BuildLimits {
+    fn default() -> Self {
+        BuildLimits {
+            memory: "4g".to_string(),
+            cpus: "2".to_string(),
+            pids_limit: 512,
+        }
+    }
+}
+
 /// Poll a preview upstream's `/healthz` then `/` until one returns HTTP 200, or
 /// the timeout elapses. A connection error (the app still booting) is swallowed
 /// and retried; only the deadline produces an error.
@@ -383,6 +401,8 @@ pub struct LocalDocker {
     recorded_stream: Option<String>,
     /// Tunables for running and routing preview containers.
     preview: PreviewConfig,
+    /// CPU/memory/pids caps applied to the build container.
+    build_limits: BuildLimits,
 }
 
 impl LocalDocker {
@@ -400,6 +420,7 @@ impl LocalDocker {
             docker_bin,
             recorded_stream: None,
             preview: PreviewConfig::default(),
+            build_limits: BuildLimits::default(),
         }
     }
 
@@ -407,6 +428,13 @@ impl LocalDocker {
     /// `with_recorded_stream` keep their existing signatures.
     pub fn with_preview_config(mut self, preview: PreviewConfig) -> LocalDocker {
         self.preview = preview;
+        self
+    }
+
+    /// Override the build-container CPU/memory/pids caps. A builder method,
+    /// mirroring [`LocalDocker::with_preview_config`].
+    pub fn with_build_limits(mut self, build_limits: BuildLimits) -> LocalDocker {
+        self.build_limits = build_limits;
         self
     }
 
@@ -420,6 +448,7 @@ impl LocalDocker {
             docker_bin: "docker".to_string(),
             recorded_stream: Some(stream),
             preview: PreviewConfig::default(),
+            build_limits: BuildLimits::default(),
         }
     }
 
@@ -455,11 +484,11 @@ impl LocalDocker {
             "--add-host".to_string(),
             "host.docker.internal:host-gateway".to_string(),
             "--memory".to_string(),
-            "4g".to_string(),
+            self.build_limits.memory.clone(),
             "--cpus".to_string(),
-            "2".to_string(),
+            self.build_limits.cpus.clone(),
             "--pids-limit".to_string(),
-            "512".to_string(),
+            self.build_limits.pids_limit.to_string(),
             "-v".to_string(),
             format!("{}:/work", work_dir.display()),
             "-w".to_string(),
@@ -922,6 +951,9 @@ mod tests {
         assert!(argv.contains(&"ANTHROPIC_API_KEY=fb_tok".to_string()));
         assert!(argv.contains(&"/srv/storage/jobs/fj_1/work:/work".to_string()));
         assert!(argv.contains(&"--pids-limit".to_string()));
+        assert!(argv.contains(&"4g".to_string()), "default build memory cap");
+        assert!(argv.contains(&"2".to_string()), "default build cpus cap");
+        assert!(argv.contains(&"512".to_string()), "default build pids cap");
         assert!(argv.contains(&"foundry-build-fj_1".to_string()));
         assert_eq!(argv.last().unwrap(), "foundry-builder:latest");
         // The real Anthropic key must never appear in the container argv.
@@ -1035,8 +1067,11 @@ mod tests {
             "--restart",
             "on-failure:3",
             "--memory",
+            "512m",
             "--cpus",
+            "1",
             "--pids-limit",
+            "256",
             "-e",
             "PORT=8080",
             "127.0.0.1::8080",
@@ -1048,6 +1083,29 @@ mod tests {
         }
         assert!(!argv.iter().any(|a| a.contains("ANTHROPIC")));
         assert!(!argv.iter().any(|a| a.contains("sk-ant")));
+    }
+
+    #[test]
+    fn docker_run_argv_honors_custom_build_limits() {
+        let backend = LocalDocker::new(
+            "foundry-builder:latest".to_string(),
+            PathBuf::from("/srv"),
+            "http://proxy".to_string(),
+            "docker".to_string(),
+        )
+        .with_build_limits(BuildLimits {
+            memory: "8g".to_string(),
+            cpus: "4".to_string(),
+            pids_limit: 1024,
+        });
+        let argv = backend.docker_run_argv("fj_1", Path::new("/srv/jobs/fj_1/work"), "fb_tok");
+        assert!(argv.contains(&"8g".to_string()), "custom build memory cap");
+        assert!(argv.contains(&"4".to_string()), "custom build cpus cap");
+        assert!(argv.contains(&"1024".to_string()), "custom build pids cap");
+        assert!(
+            !argv.contains(&"4g".to_string()),
+            "default memory cap is overridden"
+        );
     }
 
     #[test]

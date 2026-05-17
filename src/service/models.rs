@@ -276,6 +276,10 @@ mod tests {
             preview_pids_limit: 256,
             build_timeout_secs: 3600,
             drain_deadline_secs: 30,
+            max_concurrent_builds: 3,
+            build_memory: "4g".to_string(),
+            build_cpus: "2".to_string(),
+            build_pids_limit: 512,
         }
     }
 

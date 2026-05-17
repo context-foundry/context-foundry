@@ -30,7 +30,11 @@ migrations on startup (`migrations/0001_init.sql`).
 | `ANTHROPIC_API_KEY` | (empty) | Real Anthropic key held by the proxy; never crosses to a build |
 | `FOUNDRY_SERVICE_ANTHROPIC_BASE_URL` | `https://api.anthropic.com` | Upstream the proxy forwards to |
 | `FOUNDRY_SERVICE_WORKERS` | `3` | Worker-pool size |
-| `FOUNDRY_SERVICE_QUEUE_CAP` | `50` | Max queued jobs before `429 queue_full` |
+| `FOUNDRY_SERVICE_QUEUE_CAP` | `50` | Max queued jobs before `429 queue_full` (enforced atomically) |
+| `FOUNDRY_SERVICE_MAX_CONCURRENT_BUILDS` | `3` | Global cap on in-flight builds, independent of `FOUNDRY_SERVICE_WORKERS` |
+| `FOUNDRY_SERVICE_BUILD_MEMORY` | `4g` | `--memory` cap for a build container |
+| `FOUNDRY_SERVICE_BUILD_CPUS` | `2` | `--cpus` cap for a build container |
+| `FOUNDRY_SERVICE_BUILD_PIDS_LIMIT` | `512` | `--pids-limit` cap for a build container |
 | `FOUNDRY_SERVICE_MIN_TTL_HOURS` | `1` | Lower clamp for preview TTL |
 | `FOUNDRY_SERVICE_DEFAULT_TTL_HOURS` | `24` | TTL used when a request omits one |
 | `FOUNDRY_SERVICE_MAX_TTL_HOURS` | `72` | Upper clamp for preview TTL |
@@ -71,6 +75,7 @@ Typed JSON errors carry `{ "schema_version": 1, "error": <code>, "message": <tex
 | `validation_error` | `400` | Malformed body, bad `app_name`, oversize input, already-terminal job |
 | `idempotency_conflict` | `409` | `idempotency_key` reused with a different normalized request |
 | `queue_full` | `429` | Queued job count is at `FOUNDRY_SERVICE_QUEUE_CAP` |
+| `rate_limited` | `429` | Proxy paused dispatch after an upstream Anthropic `429` (carries `Retry-After`) |
 | `not_found` | `404` | Unknown job or missing artifact |
 | `unauthorized` | `401` | Missing/invalid bearer token |
 | `internal_error` | `500` | Unexpected server fault |
@@ -92,6 +97,15 @@ The proxy (`/v1/messages` on `FOUNDRY_SERVICE_PROXY_BIND`) holds the real
 revocable token. The proxy enforces coarse abuse limits — a Claude-only model
 allowlist, a max concurrent in-flight request cap (atomic), a max request body
 size, and a max output-token ceiling — then forwards to Anthropic.
+
+### Rate-limit-aware dispatch
+
+When Anthropic returns a `429` the proxy reads its `Retry-After` header (or
+falls back to 60s) and pauses dispatch: subsequent `/v1/messages` calls are
+short-circuited with `429 rate_limited` until the window clears, instead of
+piling load onto an account already over its headroom. The gate is purely
+reactive — it arms only after a `429` is observed, never proactively. When the
+window clears, in-flight builds retry in lockstep and may re-arm the gate.
 
 ## See also
 

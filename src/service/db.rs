@@ -76,6 +76,20 @@ pub async fn find_by_idempotency(
     Ok(row.as_ref().map(row_to_job))
 }
 
+/// Fixed advisory-lock key serializing every queue-cap capacity decision.
+const QUEUE_CAP_LOCK_KEY: i64 = 7_345_201;
+
+/// Outcome of a capped job insert.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InsertOutcome {
+    /// The job row was inserted.
+    Inserted,
+    /// The queue is at `queue_cap`; nothing was inserted.
+    QueueFull,
+    /// The unique `(owner, idempotency_key)` index rejected the row.
+    Duplicate,
+}
+
 /// Count jobs currently in the `queued` state.
 pub async fn count_queued(pool: &PgPool) -> Result<i64> {
     sqlx::query_scalar::<_, i64>("SELECT count(*) FROM jobs WHERE status = 'queued'")
@@ -117,6 +131,72 @@ pub async fn insert_job(pool: &PgPool, job: &Job) -> Result<bool> {
                 Ok(false)
             } else {
                 Err(anyhow::Error::new(e).context("insert job"))
+            }
+        }
+    }
+}
+
+/// Atomically enforce the queue cap and insert the job in one transaction.
+///
+/// A fixed transaction-scoped advisory lock serializes every concurrent
+/// submit, so the `count(*)` then `INSERT` is atomic — closing the
+/// count-then-insert TOCTOU that a separate `count_queued` + `insert_job`
+/// pair has. The `xact` lock auto-releases on commit or rollback.
+pub async fn insert_job_capped(
+    pool: &PgPool,
+    job: &Job,
+    queue_cap: usize,
+) -> Result<InsertOutcome> {
+    let mut tx = pool.begin().await.context("begin queue-cap transaction")?;
+    sqlx::query("SELECT pg_advisory_xact_lock($1)")
+        .bind(QUEUE_CAP_LOCK_KEY)
+        .execute(&mut *tx)
+        .await
+        .context("acquire queue-cap advisory lock")?;
+    let queued: i64 = sqlx::query_scalar::<_, i64>(
+        "SELECT count(*) FROM jobs WHERE status = 'queued'",
+    )
+    .fetch_one(&mut *tx)
+    .await
+    .context("count queued jobs under lock")?;
+    if queued as usize >= queue_cap {
+        let _ = tx.rollback().await;
+        return Ok(InsertOutcome::QueueFull);
+    }
+    let result = sqlx::query(
+        "INSERT INTO jobs \
+         (id, app_name, owner, status, percent, spec_md, tasks_md, cost_usd, ttl_hours, idempotency_key, request_hash) \
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
+    )
+    .bind(job.id.as_str())
+    .bind(job.app_name.as_str())
+    .bind(job.owner.as_str())
+    .bind(job.status.as_str())
+    .bind(job.percent)
+    .bind(job.spec_md.as_str())
+    .bind(job.tasks_md.as_str())
+    .bind(job.cost_usd)
+    .bind(job.ttl_hours)
+    .bind(job.idempotency_key.as_str())
+    .bind(job.request_hash.as_str())
+    .execute(&mut *tx)
+    .await;
+
+    match result {
+        Ok(_) => {
+            tx.commit().await.context("commit capped job insert")?;
+            Ok(InsertOutcome::Inserted)
+        }
+        Err(e) => {
+            let _ = tx.rollback().await;
+            let is_unique = e
+                .as_database_error()
+                .and_then(|d| d.code())
+                .is_some_and(|c| c == "23505");
+            if is_unique {
+                Ok(InsertOutcome::Duplicate)
+            } else {
+                Err(anyhow::Error::new(e).context("insert job (capped)"))
             }
         }
     }

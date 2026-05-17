@@ -10,6 +10,7 @@
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, RwLock};
+use std::time::Duration;
 
 use axum::{
     body::Body,
@@ -23,6 +24,7 @@ use serde_json::json;
 use ulid::Ulid;
 
 use crate::service::config::ServiceConfig;
+use crate::service::ratelimit::RateLimitState;
 use crate::service::AppState;
 
 /// A per-build proxy token with an atomic in-flight-request counter.
@@ -88,6 +90,8 @@ pub struct ProxyRegistry {
     cfg: ServiceConfig,
     http: reqwest::Client,
     tokens: RwLock<HashMap<String, Arc<ProxyToken>>>,
+    /// Rate-limit-aware dispatch gate driven by upstream Anthropic responses.
+    ratelimit: RateLimitState,
 }
 
 impl ProxyRegistry {
@@ -96,6 +100,7 @@ impl ProxyRegistry {
             cfg,
             http: reqwest::Client::new(),
             tokens: RwLock::new(HashMap::new()),
+            ratelimit: RateLimitState::new(),
         }
     }
 
@@ -175,12 +180,37 @@ impl ProxyRegistry {
         }
         Ok(tok)
     }
+
+    /// The remaining rate-limit pause, or `None` when dispatch is clear.
+    pub fn dispatch_delay(&self) -> Option<Duration> {
+        self.ratelimit.dispatch_delay()
+    }
+
+    /// Feed an upstream Anthropic response into the rate-limit gate. A `429`
+    /// arms the gate; any other status leaves dispatch clear.
+    pub fn note_upstream_response(&self, status: u16, headers: &HeaderMap) {
+        self.ratelimit.record_response(status, headers);
+    }
 }
 
 fn denial_response(denial: &ProxyDenial) -> Response {
     (
         denial.http_status(),
         Json(json!({ "error": denial.as_str(), "message": "proxy request denied" })),
+    )
+        .into_response()
+}
+
+/// A typed `429` response carrying a `Retry-After` header, returned when the
+/// rate-limit gate is armed. It never carries the real `ANTHROPIC_API_KEY`.
+fn rate_limited_response(delay: Duration) -> Response {
+    (
+        StatusCode::TOO_MANY_REQUESTS,
+        [(header::RETRY_AFTER, delay.as_secs().max(1).to_string())],
+        Json(json!({
+            "error": "rate_limited",
+            "message": "upstream rate limit reached; dispatch paused"
+        })),
     )
         .into_response()
 }
@@ -226,6 +256,13 @@ async fn messages_handler(
         Err(d) => return denial_response(&d),
     };
 
+    // Rate-limit-aware dispatch: when Anthropic recently returned 429,
+    // refuse new upstream calls until its retry-after window clears
+    // rather than piling load onto an account over its headroom.
+    if let Some(delay) = state.proxy.dispatch_delay() {
+        return rate_limited_response(delay);
+    }
+
     if !tok.try_acquire(cfg.proxy_max_concurrent) {
         return denial_response(&ProxyDenial::TooManyConcurrent);
     }
@@ -244,8 +281,13 @@ async fn messages_handler(
 
     match upstream {
         Ok(resp) => {
-            let status = StatusCode::from_u16(resp.status().as_u16())
-                .unwrap_or(StatusCode::BAD_GATEWAY);
+            let status_u16 = resp.status().as_u16();
+            let resp_headers = resp.headers().clone();
+            // Feed the upstream status/headers to the rate-limit gate so a 429
+            // pauses dispatch for subsequent builds.
+            state.proxy.note_upstream_response(status_u16, &resp_headers);
+            let status =
+                StatusCode::from_u16(status_u16).unwrap_or(StatusCode::BAD_GATEWAY);
             let bytes = resp.bytes().await.unwrap_or_default();
             (
                 status,
