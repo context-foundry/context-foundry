@@ -1107,6 +1107,16 @@
       "model": "gpt-4o-mini",
       "lines": 95,
       "generation": 111
+    },
+    {
+      "file": "edge-case-cliffside.js",
+      "name": "Edge Case Cliffside",
+      "location": "Cliffs of Moher, County Clare, Ireland",
+      "biome": "mountain",
+      "generated": "2026-05-17T11:34:12.317Z",
+      "model": "gpt-4o-mini",
+      "lines": 85,
+      "generation": 112
     }
   ]
 }
