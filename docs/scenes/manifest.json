@@ -1137,6 +1137,16 @@
       "model": "gpt-4o-mini",
       "lines": 83,
       "generation": 114
+    },
+    {
+      "file": "websocket-whirlpool.js",
+      "name": "WebSocket Whirlpool",
+      "location": "Corryvreckan Whirlpool, Scottish Inner Hebrides",
+      "biome": "ocean",
+      "generated": "2026-05-17T23:13:31.860Z",
+      "model": "gpt-4o-mini",
+      "lines": 81,
+      "generation": 115
     }
   ]
 }
