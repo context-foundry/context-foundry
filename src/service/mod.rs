@@ -18,6 +18,7 @@ pub mod proxy;
 pub mod ratelimit;
 pub mod reaper;
 pub mod storage_local;
+pub mod telemetry;
 pub mod worker;
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -38,6 +39,8 @@ pub struct AppState {
     /// Global build-concurrency gate: workers acquire a permit before claiming
     /// a job, so in-flight builds are capped independently of `worker_count`.
     pub build_slots: Arc<Semaphore>,
+    /// Structured service telemetry (backend failures, limiter denials, status transitions).
+    pub telemetry: Arc<telemetry::Telemetry>,
 }
 
 /// Entry point for the `foundry serve` subcommand.
@@ -86,6 +89,7 @@ pub async fn run_serve() -> Result<()> {
     // `.max(1)` guards against a misconfigured `0`, which would otherwise
     // deadlock every worker on the build-slots gate.
     let build_slots = Arc::new(Semaphore::new(config.max_concurrent_builds.max(1)));
+    let telemetry = Arc::new(telemetry::Telemetry::new());
 
     let state = Arc::new(AppState {
         pool,
@@ -94,6 +98,7 @@ pub async fn run_serve() -> Result<()> {
         build,
         proxy,
         build_slots,
+        telemetry,
     });
 
     // Reconcile jobs left mid-build by a dead process, then kill any

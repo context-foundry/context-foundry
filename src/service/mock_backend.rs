@@ -17,6 +17,7 @@ use crate::service::models::Job;
 pub struct MockBuildBackend {
     stream: String,
     fail_image: bool,
+    fail_start: bool,
     start_delay_ms: u64,
 }
 
@@ -26,6 +27,7 @@ impl MockBuildBackend {
         Self {
             stream: include_str!("../../tests/fixtures/service-run-sample.jsonl").to_string(),
             fail_image: false,
+            fail_start: false,
             start_delay_ms: 0,
         }
     }
@@ -36,6 +38,7 @@ impl MockBuildBackend {
         Self {
             stream,
             fail_image: false,
+            fail_start: false,
             start_delay_ms: 0,
         }
     }
@@ -47,6 +50,7 @@ impl MockBuildBackend {
         Self {
             stream: include_str!("../../tests/fixtures/service-run-sample.jsonl").to_string(),
             fail_image: true,
+            fail_start: false,
             start_delay_ms: 0,
         }
     }
@@ -57,7 +61,19 @@ impl MockBuildBackend {
         Self {
             stream: include_str!("../../tests/fixtures/service-run-sample.jsonl").to_string(),
             fail_image: false,
+            fail_start: false,
             start_delay_ms: delay_ms,
+        }
+    }
+
+    /// Construct a backend whose `start_build` errors — exercises the
+    /// `backend_unavailable` failure path.
+    pub fn with_failing_start() -> Self {
+        Self {
+            stream: include_str!("../../tests/fixtures/service-run-sample.jsonl").to_string(),
+            fail_image: false,
+            fail_start: true,
+            start_delay_ms: 0,
         }
     }
 
@@ -84,6 +100,9 @@ impl BuildBackend for MockBuildBackend {
         _grant: &StorageGrant,
         _proxy_token: &str,
     ) -> Result<BuildHandle> {
+        if self.fail_start {
+            anyhow::bail!("mock start_build failed");
+        }
         if self.start_delay_ms > 0 {
             tokio::time::sleep(std::time::Duration::from_millis(self.start_delay_ms)).await;
         }

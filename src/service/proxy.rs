@@ -201,6 +201,18 @@ fn denial_response(denial: &ProxyDenial) -> Response {
         .into_response()
 }
 
+/// Record a limiter denial in telemetry, then return the typed denial
+/// response. Telemetry recording is additive — the HTTP status/body are
+/// unchanged from [`denial_response`].
+fn denied(state: &Arc<AppState>, job_id: Option<&str>, denial: ProxyDenial) -> Response {
+    state.telemetry.record_limiter_denial(
+        job_id,
+        denial.as_str(),
+        "auth proxy abuse damper rejected request",
+    );
+    denial_response(&denial)
+}
+
 /// A typed `429` response carrying a `Retry-After` header, returned when the
 /// rate-limit gate is armed. It never carries the real `ANTHROPIC_API_KEY`.
 fn rate_limited_response(delay: Duration) -> Response {
@@ -233,7 +245,7 @@ async fn messages_handler(
 
     let body_bytes = match axum::body::to_bytes(body, cfg.proxy_max_body_bytes + 1).await {
         Ok(b) => b,
-        Err(_) => return denial_response(&ProxyDenial::BodyTooLarge),
+        Err(_) => return denied(&state, None, ProxyDenial::BodyTooLarge),
     };
 
     let parsed: serde_json::Value =
@@ -253,18 +265,21 @@ async fn messages_handler(
         .evaluate(&token, &model, max_tokens, body_bytes.len())
     {
         Ok(t) => t,
-        Err(d) => return denial_response(&d),
+        Err(d) => return denied(&state, None, d),
     };
 
     // Rate-limit-aware dispatch: when Anthropic recently returned 429,
     // refuse new upstream calls until its retry-after window clears
     // rather than piling load onto an account over its headroom.
     if let Some(delay) = state.proxy.dispatch_delay() {
+        state
+            .telemetry
+            .record_rate_limit_pause(Some(&tok.job_id), delay.as_secs());
         return rate_limited_response(delay);
     }
 
     if !tok.try_acquire(cfg.proxy_max_concurrent) {
-        return denial_response(&ProxyDenial::TooManyConcurrent);
+        return denied(&state, Some(&tok.job_id), ProxyDenial::TooManyConcurrent);
     }
 
     let upstream = state

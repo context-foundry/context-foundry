@@ -59,6 +59,49 @@ impl JobStatus {
             JobStatus::Ready | JobStatus::Failed | JobStatus::Canceled | JobStatus::Expired
         )
     }
+
+    /// A monotonic lifecycle rank: a job's rank never decreases over its
+    /// lifetime, so any permitted transition strictly increases it.
+    ///
+    /// `ready`, `failed`, and `canceled` share rank 3 — all three are
+    /// pipeline-terminal outcomes. `expired` is rank 4 because only a `ready`
+    /// preview can later expire, so `expired` always follows `ready`.
+    pub fn rank(&self) -> u8 {
+        match self {
+            JobStatus::Queued => 0,
+            JobStatus::Building => 1,
+            JobStatus::Deploying => 2,
+            JobStatus::Ready => 3,
+            JobStatus::Failed => 3,
+            JobStatus::Canceled => 3,
+            JobStatus::Expired => 4,
+        }
+    }
+
+    /// Whether `self -> next` is a permitted, monotonic job status transition.
+    ///
+    /// The permitted edges are exactly:
+    /// `queued->building`, `queued->failed`, `queued->canceled`,
+    /// `building->deploying`, `building->failed`, `building->canceled`,
+    /// `deploying->ready`, `deploying->failed`, `deploying->canceled`, and
+    /// `ready->expired`. Every edge strictly increases [`JobStatus::rank`];
+    /// `failed`, `canceled`, and `expired` have no outgoing transition.
+    pub fn can_transition_to(&self, next: JobStatus) -> bool {
+        use JobStatus::*;
+        matches!(
+            (self, next),
+            (Queued, Building)
+                | (Queued, Failed)
+                | (Queued, Canceled)
+                | (Building, Deploying)
+                | (Building, Failed)
+                | (Building, Canceled)
+                | (Deploying, Ready)
+                | (Deploying, Failed)
+                | (Deploying, Canceled)
+                | (Ready, Expired)
+        )
+    }
 }
 
 /// Typed API error codes. `http_status` maps each to its response status.
@@ -77,6 +120,20 @@ pub enum ErrorCode {
 }
 
 impl ErrorCode {
+    /// Every typed error code, in taxonomy order. Lets golden tests iterate
+    /// the full error taxonomy exhaustively.
+    pub const ALL: [ErrorCode; 9] = [
+        ErrorCode::ValidationError,
+        ErrorCode::IdempotencyConflict,
+        ErrorCode::QueueFull,
+        ErrorCode::BuildTimeout,
+        ErrorCode::BuildCrashed,
+        ErrorCode::PreviewDeployFailed,
+        ErrorCode::BackendUnavailable,
+        ErrorCode::Canceled,
+        ErrorCode::InternalError,
+    ];
+
     pub fn as_str(&self) -> &'static str {
         match self {
             ErrorCode::ValidationError => "validation_error",
@@ -335,5 +392,119 @@ mod tests {
             normalized_request_hash("app", "spec", "tasks", t1),
             normalized_request_hash("app", "spec", "tasks", t2),
         );
+    }
+
+    /// The 7 job statuses, used to cross-iterate every transition pair.
+    const ALL_STATUSES: [JobStatus; 7] = [
+        JobStatus::Queued,
+        JobStatus::Building,
+        JobStatus::Deploying,
+        JobStatus::Ready,
+        JobStatus::Failed,
+        JobStatus::Canceled,
+        JobStatus::Expired,
+    ];
+
+    /// The exact set of 10 permitted job status transitions.
+    const GOLDEN_EDGES: [(JobStatus, JobStatus); 10] = [
+        (JobStatus::Queued, JobStatus::Building),
+        (JobStatus::Queued, JobStatus::Failed),
+        (JobStatus::Queued, JobStatus::Canceled),
+        (JobStatus::Building, JobStatus::Deploying),
+        (JobStatus::Building, JobStatus::Failed),
+        (JobStatus::Building, JobStatus::Canceled),
+        (JobStatus::Deploying, JobStatus::Ready),
+        (JobStatus::Deploying, JobStatus::Failed),
+        (JobStatus::Deploying, JobStatus::Canceled),
+        (JobStatus::Ready, JobStatus::Expired),
+    ];
+
+    #[test]
+    fn error_code_all_has_golden_strings_and_statuses() {
+        use std::collections::HashSet;
+        let golden: [(ErrorCode, &str, u16); 9] = [
+            (ErrorCode::ValidationError, "validation_error", 400),
+            (ErrorCode::IdempotencyConflict, "idempotency_conflict", 409),
+            (ErrorCode::QueueFull, "queue_full", 429),
+            (ErrorCode::BuildTimeout, "build_timeout", 500),
+            (ErrorCode::BuildCrashed, "build_crashed", 500),
+            (ErrorCode::PreviewDeployFailed, "preview_deploy_failed", 500),
+            (ErrorCode::BackendUnavailable, "backend_unavailable", 500),
+            (ErrorCode::Canceled, "canceled", 500),
+            (ErrorCode::InternalError, "internal_error", 500),
+        ];
+        for (code, want_str, want_status) in golden {
+            assert_eq!(code.as_str(), want_str);
+            assert_eq!(code.http_status(), want_status);
+        }
+        assert_eq!(ErrorCode::ALL.len(), 9);
+        let distinct: HashSet<&str> = ErrorCode::ALL.iter().map(|c| c.as_str()).collect();
+        assert_eq!(distinct.len(), 9, "every error code string is distinct");
+    }
+
+    #[test]
+    fn status_transition_edges_are_exact() {
+        for &from in &ALL_STATUSES {
+            for &to in &ALL_STATUSES {
+                let golden = GOLDEN_EDGES.contains(&(from, to));
+                assert_eq!(
+                    from.can_transition_to(to),
+                    golden,
+                    "{:?} -> {:?} should be {}",
+                    from,
+                    to,
+                    golden
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn status_transitions_are_strictly_rank_monotonic() {
+        for &from in &ALL_STATUSES {
+            for &to in &ALL_STATUSES {
+                if from.can_transition_to(to) {
+                    assert!(
+                        to.rank() > from.rank(),
+                        "{:?} -> {:?} must strictly increase rank",
+                        from,
+                        to
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn terminal_statuses_have_no_outgoing_transitions() {
+        for &from in &[JobStatus::Failed, JobStatus::Canceled, JobStatus::Expired] {
+            for &to in &ALL_STATUSES {
+                assert!(
+                    !from.can_transition_to(to),
+                    "{:?} is terminal and must not transition to {:?}",
+                    from,
+                    to
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn ready_only_transitions_to_expired() {
+        assert!(JobStatus::Ready.can_transition_to(JobStatus::Expired));
+        for &to in &[
+            JobStatus::Queued,
+            JobStatus::Building,
+            JobStatus::Deploying,
+            JobStatus::Ready,
+            JobStatus::Failed,
+            JobStatus::Canceled,
+        ] {
+            assert!(
+                !JobStatus::Ready.can_transition_to(to),
+                "ready must not transition to {:?}",
+                to
+            );
+        }
     }
 }

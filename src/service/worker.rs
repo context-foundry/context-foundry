@@ -69,6 +69,11 @@ pub async fn drive_job(state: &Arc<AppState>, mut job: Job) {
     // Append the preview-contract task so the build emits a previewable app.
     // The DB row keeps the original tasks_md; only the staged copy is augmented.
     job.tasks_md = models::append_preview_contract(&job.tasks_md);
+    // The worker received the job already claimed/`building`; record the
+    // queued -> building transition the claim performed.
+    state
+        .telemetry
+        .record_status_transition(&job.id, JobStatus::Queued, JobStatus::Building);
 
     // 1. Persist the submitted inputs.
     if let Err(e) = state
@@ -251,6 +256,9 @@ pub async fn drive_job(state: &Arc<AppState>, mut job: Job) {
         .await;
 
     // 10. Move to deploying.
+    state
+        .telemetry
+        .record_status_transition(&job.id, JobStatus::Building, JobStatus::Deploying);
     let _ = db::update_job_progress(
         &state.pool,
         &job.id,
@@ -322,6 +330,9 @@ pub async fn drive_job(state: &Arc<AppState>, mut job: Job) {
     .await;
 
     // 14. Finish ready (sets percent = GREATEST(percent, 100) in the same write).
+    state
+        .telemetry
+        .record_status_transition(&job.id, JobStatus::Deploying, JobStatus::Ready);
     let expires = Utc::now() + ChronoDuration::hours(job.ttl_hours as i64);
     let _ = db::finish_job(
         &state.pool,
@@ -348,6 +359,9 @@ async fn cleanup(state: &Arc<AppState>, token: &str, grant: &StorageGrant, job_i
 }
 
 async fn fail(state: &Arc<AppState>, id: &str, code: &str, msg: &str, artifact_url: Option<&str>) {
+    // Every typed `failed` outcome routes through `fail`, so this one call
+    // covers all backend-failure telemetry.
+    state.telemetry.record_backend_failure(id, code, msg);
     // `percent = 0` -> GREATEST leaves the existing percent unchanged. An
     // `artifact_url` is carried through on a preview failure so the source
     // tarball stays downloadable.
