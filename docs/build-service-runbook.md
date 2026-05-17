@@ -94,26 +94,14 @@ value is a hard startup error.
 
 ### Upstream auth (auth proxy credential)
 
-These configure the credential the auth proxy presents to Anthropic. They are
-read by `resolve_upstream_auth()`.
-
-| Variable | Type | Default | Required | Purpose |
-|----------|------|---------|----------|---------|
-| `FOUNDRY_SERVICE_UPSTREAM_AUTH` | `api_key` \| `oauth` | `api_key` | optional | Upstream credential mode (any other value is a hard error) |
-| `FOUNDRY_SERVICE_OAUTH_TOKEN` | string | (empty) | required in `oauth` mode | OAuth access token |
-| `FOUNDRY_SERVICE_OAUTH_REFRESH_TOKEN` | string | (empty) | optional | OAuth refresh token |
-| `FOUNDRY_SERVICE_OAUTH_CLIENT_ID` | string | (empty) | optional | OAuth client id |
-| `FOUNDRY_SERVICE_OAUTH_REFRESH_URL` | string | `https://console.anthropic.com/v1/oauth/token` | optional | OAuth token refresh endpoint |
-| `FOUNDRY_SERVICE_OAUTH_EXPIRES_AT` | u64 (unix secs) | unset → none | optional | OAuth token expiry (hard error if non-numeric) |
+The auth proxy authenticates to Anthropic with the credential selected by
+`FOUNDRY_SERVICE_UPSTREAM_AUTH` (resolved by `resolve_upstream_auth()`). The
+default mode is `api_key`, which uses the `ANTHROPIC_API_KEY` from the core
+config table above.
 
 **Conditional fail-fast validation.** `validate_upstream_credentials()` runs
 when `build_backend != "mock"` **OR** `FOUNDRY_SERVICE_UPSTREAM_AUTH` is
-explicitly set to a non-empty value. When it runs:
-
-- `api_key` mode requires a non-empty `ANTHROPIC_API_KEY` and **rejects** a
-  simultaneously-set `FOUNDRY_SERVICE_OAUTH_TOKEN` (ambiguous credential).
-- `oauth` mode requires a non-empty `FOUNDRY_SERVICE_OAUTH_TOKEN`.
-
+explicitly set. In `api_key` mode it requires a non-empty `ANTHROPIC_API_KEY`.
 With the default `mock` backend and no explicit `FOUNDRY_SERVICE_UPSTREAM_AUTH`,
 a missing `ANTHROPIC_API_KEY` is tolerated -- this is why the smoke test runs
 without any Anthropic credential.

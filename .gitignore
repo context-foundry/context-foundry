@@ -110,3 +110,6 @@ viva-cowork-post.md
 .claude/skills/verification-before-completion
 .claude/skills/writing-plans
 .claude/skills/writing-skills
+
+# Local-only internal docs -- not part of the public repo
+docs/private/
