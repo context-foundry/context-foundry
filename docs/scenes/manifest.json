@@ -1117,6 +1117,16 @@
       "model": "gpt-4o-mini",
       "lines": 85,
       "generation": 112
+    },
+    {
+      "file": "dependency-tree-baobab.js",
+      "name": "Dependency Tree: Baobab",
+      "location": "Avenue of the Baobabs, Morondava, Madagascar",
+      "biome": "savanna",
+      "generated": "2026-05-17T17:18:40.105Z",
+      "model": "gpt-4o-mini",
+      "lines": 81,
+      "generation": 113
     }
   ]
 }
