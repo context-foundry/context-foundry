@@ -1,0 +1,77 @@
+# Context Foundry build service -- homelab Docker Compose stack.
+#
+# Postgres job store + `foundry serve` control plane + Caddy reverse proxy.
+#
+# First run:
+#   cp deploy/compose/example.env deploy/compose/.env   # then edit
+#   docker compose -f deploy/compose/docker-compose.yml up -d
+#
+# The default .env runs the `mock` build backend: no Anthropic key, no real
+# builds, zero LLM cost. For real builds set FOUNDRY_SERVICE_BUILD_BACKEND to
+# `local_docker` and supply a real ANTHROPIC_API_KEY in .env.
+#
+# See deploy/README.md for the full procedure and validation commands.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - foundry-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  foundry-service:
+    # Build context is the repo root so the Dockerfile can COPY the Cargo
+    # workspace. FOUNDRY_SERVICE_DATABASE_URL in .env must point at the
+    # `postgres` service hostname, and FOUNDRY_SERVICE_CADDY_ADMIN_URL at
+    # http://caddy:2019.
+    build:
+      context: ../..
+      dockerfile: deploy/compose/Dockerfile
+    # `.env` is created from example.env; required:false keeps
+    # `docker compose config` working before it exists.
+    env_file:
+      - path: .env
+        required: false
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8787:8787"
+      - "8788:8788"
+    # The docker socket is required by the local_docker backend, which
+    # launches builder and preview containers on the host daemon.
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    # So builder containers' default FOUNDRY_SERVICE_BUILDER_PROXY_URL of
+    # http://host.docker.internal:8788 resolves on Linux Docker.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    # The service reconfigures Caddy at runtime through its admin API on port
+    # 2019 to add and remove preview routes; the static Caddyfile only
+    # declares the admin endpoint and the API route.
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    restart: unless-stopped
+
+volumes:
+  foundry-pgdata:
+  caddy-data:
+  caddy-config:

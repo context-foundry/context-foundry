@@ -1,0 +1,18 @@
+# Context Foundry build service -- Caddy config for the Compose stack.
+#
+# This static file declares only the admin endpoint and the API route.
+# Preview routes are added and removed dynamically at runtime by the service
+# through the Caddy admin API (FOUNDRY_SERVICE_CADDY_ADMIN_URL /
+# FOUNDRY_SERVICE_CADDY_SERVER) -- they are NOT listed here.
+
+{
+	# The admin API MUST bind 0.0.0.0: Caddy's default localhost:2019 is
+	# unreachable from the foundry-service container. The service posts
+	# preview-route config to http://caddy:2019.
+	admin 0.0.0.0:2019
+}
+
+# Placeholder hostname -- replace `foundry.local` with the homelab domain.
+foundry.local {
+	reverse_proxy foundry-service:8787
+}

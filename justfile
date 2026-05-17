@@ -44,3 +44,7 @@ fmt:
 # Format check (CI)
 fmt-check:
     cargo fmt -- --check
+
+# Build-service smoke test (boots `foundry serve` with the mock backend)
+smoke-service:
+    bash scripts/smoke-build-service.sh

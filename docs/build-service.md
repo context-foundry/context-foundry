@@ -1,14 +1,13 @@
-# Context Foundry Build Service (M1 skeleton)
+# Context Foundry Build Service
 
 `foundry serve` runs a long-running HTTP control plane: a `/v1` REST API, a
 Postgres-backed job store, a worker pool that drives builds, a TTL reaper that
 expires previews, and an Anthropic auth proxy.
 
-This is the **M1 skeleton** (T35.3). It wires a `MockBuildBackend` (which
-replays a recorded build event stream) and a `LocalFilesystem` storage
-backend, so the whole submit -> claim -> build -> ready path is exercisable
-without Docker. Real Docker builds and cloud object storage land in **M2
-(T35.4)**.
+The service supports three build backends -- `mock` (replays a recorded event
+stream, zero LLM cost), `local_docker` (real Docker builds), and
+`azure_container_apps` -- and two storage backends -- `LocalFilesystem` and
+`AzureBlob` -- selected by `FOUNDRY_SERVICE_BUILD_BACKEND`.
 
 ## Running
 
@@ -127,4 +126,18 @@ window clears, in-flight builds retry in lockstep and may re-arm the gate.
 
 ## See also
 
-- Design spec: [`docs/superpowers/specs/2026-05-16-foundry-build-service-design.md`](superpowers/specs/2026-05-16-foundry-build-service-design.md)
+The env-var table above is a quick subset; the runbook's table is the
+authoritative full reference.
+
+- [`build-service-runbook.md`](build-service-runbook.md) -- operator runbook:
+  full env reference, key rotation, cost guidance, failure-mode playbooks,
+  retention policy
+- [`build-service-api.md`](build-service-api.md) -- Knowmler-facing `/v1` API
+  contract
+- [`../deploy/README.md`](../deploy/README.md) -- deployment manifests
+  (Docker Compose + Azure)
+- [`build-service-localdocker.md`](build-service-localdocker.md) -- the
+  LocalDocker backend (M2)
+- [`build-service-preview.md`](build-service-preview.md) -- preview hosting (M3)
+- Design spec:
+  [`superpowers/specs/2026-05-16-foundry-build-service-design.md`](superpowers/specs/2026-05-16-foundry-build-service-design.md)
