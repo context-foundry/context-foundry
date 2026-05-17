@@ -36,6 +36,7 @@ fn row_to_job(row: &PgRow) -> Job {
     Job {
         id: row.get("id"),
         app_name: row.get("app_name"),
+        org_slug: row.get("org_slug"),
         owner: row.get("owner"),
         status,
         percent: row.get("percent"),
@@ -76,17 +77,26 @@ pub async fn find_by_idempotency(
     Ok(row.as_ref().map(row_to_job))
 }
 
-/// Returns `true` when an in-flight or live-preview job already holds
-/// `app_name` -- i.e. a job in `queued`, `building`, `deploying`, or `ready`.
-/// The preview hostname is `<app_name>.<domain>`, so two such jobs would
-/// collide on the same host; the submit path rejects the second (SPEC O5).
-pub async fn app_name_in_use(pool: &PgPool, app_name: &str) -> Result<bool> {
+/// Returns `true` when an in-flight or live-preview job in the SAME org
+/// already holds `app_name` -- i.e. a job in `queued`, `building`,
+/// `deploying`, or `ready`. The preview hostname is
+/// `<app_name>.<org_slug>.<domain>`, so a collision is per-org: two orgs may
+/// reuse a name freely. `org_slug` is matched with `IS NOT DISTINCT FROM`, so
+/// a `NULL` (org-less) job collides only with other `NULL` jobs. The submit
+/// path rejects a second colliding job (SPEC O5).
+pub async fn app_name_in_use(
+    pool: &PgPool,
+    app_name: &str,
+    org_slug: Option<&str>,
+) -> Result<bool> {
     let count: i64 = sqlx::query_scalar::<_, i64>(
         "SELECT count(*) FROM jobs \
          WHERE app_name = $1 \
+         AND org_slug IS NOT DISTINCT FROM $2 \
          AND status IN ('queued', 'building', 'deploying', 'ready')",
     )
     .bind(app_name)
+    .bind(org_slug)
     .fetch_one(pool)
     .await
     .context("check app_name in use")?;
@@ -120,8 +130,8 @@ pub async fn count_queued(pool: &PgPool) -> Result<i64> {
 pub async fn insert_job(pool: &PgPool, job: &Job) -> Result<bool> {
     let result = sqlx::query(
         "INSERT INTO jobs \
-         (id, app_name, owner, status, percent, spec_md, tasks_md, cost_usd, ttl_hours, idempotency_key, request_hash) \
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
+         (id, app_name, owner, status, percent, spec_md, tasks_md, cost_usd, ttl_hours, idempotency_key, request_hash, org_slug) \
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
     )
     .bind(job.id.as_str())
     .bind(job.app_name.as_str())
@@ -134,6 +144,7 @@ pub async fn insert_job(pool: &PgPool, job: &Job) -> Result<bool> {
     .bind(job.ttl_hours)
     .bind(job.idempotency_key.as_str())
     .bind(job.request_hash.as_str())
+    .bind(job.org_slug.as_deref())
     .execute(pool)
     .await;
 
@@ -182,8 +193,8 @@ pub async fn insert_job_capped(
     }
     let result = sqlx::query(
         "INSERT INTO jobs \
-         (id, app_name, owner, status, percent, spec_md, tasks_md, cost_usd, ttl_hours, idempotency_key, request_hash) \
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
+         (id, app_name, owner, status, percent, spec_md, tasks_md, cost_usd, ttl_hours, idempotency_key, request_hash, org_slug) \
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
     )
     .bind(job.id.as_str())
     .bind(job.app_name.as_str())
@@ -196,6 +207,7 @@ pub async fn insert_job_capped(
     .bind(job.ttl_hours)
     .bind(job.idempotency_key.as_str())
     .bind(job.request_hash.as_str())
+    .bind(job.org_slug.as_deref())
     .execute(&mut *tx)
     .await;
 

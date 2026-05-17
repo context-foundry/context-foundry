@@ -729,7 +729,11 @@ impl BuildBackend for LocalDocker {
     }
 
     async fn deploy_preview(&self, job: &Job, image: &ImageRef) -> Result<PreviewInfo> {
-        let url = caddy::preview_url(&job.app_name, &self.preview.base_domain);
+        let url = caddy::preview_url(
+            &job.app_name,
+            job.org_slug.as_deref(),
+            &self.preview.base_domain,
+        );
 
         // Test seam: a recorded build never produced a real image to run.
         if self.recorded_stream.is_some() {
@@ -776,7 +780,11 @@ impl BuildBackend for LocalDocker {
 
         // Register the Caddy route — best-effort: a missing/misconfigured
         // Caddy logs a warning but must NOT fail the job.
-        let hostname = caddy::preview_hostname(&job.app_name, &self.preview.base_domain);
+        let hostname = caddy::preview_hostname(
+            &job.app_name,
+            job.org_slug.as_deref(),
+            &self.preview.base_domain,
+        );
         if let Err(e) = caddy::add_route(
             &self.preview.caddy_admin_url,
             &self.preview.caddy_server_name,

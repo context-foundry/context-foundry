@@ -167,6 +167,8 @@ impl ErrorCode {
 pub struct Job {
     pub id: String,
     pub app_name: String,
+    /// Organization slug; namespaces the preview hostname when set.
+    pub org_slug: Option<String>,
     pub owner: String,
     pub status: JobStatus,
     pub percent: i32,
@@ -200,6 +202,10 @@ pub struct SubmitRequest {
     pub owner: String,
     pub preview_ttl_hours: Option<i32>,
     pub idempotency_key: String,
+    /// Optional organization slug. When present, the preview is namespaced
+    /// per org: `<app_name>.<org_slug>.<root_domain>`. A missing or null
+    /// field deserializes to `None` (backward compatible).
+    pub org_slug: Option<String>,
 }
 
 // ─── Validation + idempotency ───────────────────────────────────────────────
@@ -229,16 +235,21 @@ pub fn clamp_ttl(cfg: &ServiceConfig, requested: Option<i32>) -> i32 {
 ///
 /// The TTL component is the SERVER-CLAMPED value, so two requests whose raw
 /// `preview_ttl_hours` differ but clamp identically produce the same hash.
+/// `org_slug` is included so an `idempotency_key` reused with a different org
+/// (a different preview hostname) is treated as a changed request; a `None`
+/// slug hashes as the empty string, and `validate_submit` never admits an
+/// empty slug as present, so `None` and `Some("")` cannot collide in practice.
 /// Fields are separated by a `0x1e` record-separator byte so concatenation
 /// ambiguity cannot collide distinct inputs.
 pub fn normalized_request_hash(
     app_name: &str,
+    org_slug: Option<&str>,
     spec_md: &str,
     tasks_md: &str,
     clamped_ttl: i32,
 ) -> String {
     let mut hasher = blake3::Hasher::new();
-    for field in [app_name, spec_md, tasks_md] {
+    for field in [app_name, org_slug.unwrap_or(""), spec_md, tasks_md] {
         hasher.update(field.as_bytes());
         hasher.update(&[0x1e]);
     }
@@ -294,6 +305,16 @@ pub fn validate_submit(cfg: &ServiceConfig, req: &SubmitRequest) -> Result<(), S
     if req.idempotency_key.is_empty() {
         return Err("idempotency_key must not be empty".to_string());
     }
+    // An org slug becomes a DNS label in the preview hostname
+    // (`<app_name>.<org_slug>.<root>`), so it has the same shape rule as
+    // `app_name`. Absent is fine -- the preview is then un-namespaced.
+    if let Some(slug) = &req.org_slug {
+        if !valid_app_name(slug) {
+            return Err(
+                "org_slug must be a non-empty [a-z0-9-] slug not bordered by '-'".to_string(),
+            );
+        }
+    }
     Ok(())
 }
 
@@ -344,6 +365,37 @@ mod tests {
         }
     }
 
+    fn submit_req() -> SubmitRequest {
+        SubmitRequest {
+            app_name: "recipe-finder".to_string(),
+            spec_md: "spec".to_string(),
+            tasks_md: "tasks".to_string(),
+            owner: "user@example.com".to_string(),
+            preview_ttl_hours: None,
+            idempotency_key: "idem-1".to_string(),
+            org_slug: None,
+        }
+    }
+
+    #[test]
+    fn validate_submit_checks_org_slug() {
+        let c = cfg();
+        // Absent org_slug is valid.
+        assert!(validate_submit(&c, &submit_req()).is_ok());
+        // A well-formed slug is valid.
+        let mut ok = submit_req();
+        ok.org_slug = Some("acme".to_string());
+        assert!(validate_submit(&c, &ok).is_ok());
+        // A malformed slug is rejected.
+        let mut bad = submit_req();
+        bad.org_slug = Some("Acme Inc".to_string());
+        assert!(validate_submit(&c, &bad).is_err());
+        // An empty slug is rejected: Some("") must not pass as a present value.
+        let mut empty = submit_req();
+        empty.org_slug = Some(String::new());
+        assert!(validate_submit(&c, &empty).is_err());
+    }
+
     #[test]
     fn valid_app_name_accepts_and_rejects() {
         assert!(valid_app_name("recipe-finder"));
@@ -366,11 +418,17 @@ mod tests {
 
     #[test]
     fn request_hash_is_stable_and_sensitive() {
-        let a = normalized_request_hash("app", "spec", "tasks", 24);
-        let b = normalized_request_hash("app", "spec", "tasks", 24);
+        let a = normalized_request_hash("app", None, "spec", "tasks", 24);
+        let b = normalized_request_hash("app", None, "spec", "tasks", 24);
         assert_eq!(a, b);
-        assert_ne!(a, normalized_request_hash("app", "spec-2", "tasks", 24));
-        assert_ne!(a, normalized_request_hash("app", "spec", "tasks", 48));
+        assert_ne!(a, normalized_request_hash("app", None, "spec-2", "tasks", 24));
+        assert_ne!(a, normalized_request_hash("app", None, "spec", "tasks", 48));
+        // The org slug is part of the request identity.
+        assert_ne!(a, normalized_request_hash("app", Some("acme"), "spec", "tasks", 24));
+        assert_ne!(
+            normalized_request_hash("app", Some("acme"), "spec", "tasks", 24),
+            normalized_request_hash("app", Some("beta"), "spec", "tasks", 24),
+        );
     }
 
     #[test]
@@ -393,8 +451,8 @@ mod tests {
         let t2 = clamp_ttl(&c, Some(500));
         assert_eq!(t1, t2);
         assert_eq!(
-            normalized_request_hash("app", "spec", "tasks", t1),
-            normalized_request_hash("app", "spec", "tasks", t2),
+            normalized_request_hash("app", None, "spec", "tasks", t1),
+            normalized_request_hash("app", None, "spec", "tasks", t2),
         );
     }
 
