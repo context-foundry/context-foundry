@@ -2233,5 +2233,32 @@
     "retries": 0,
     "api_retries": 0,
     "validation": "pass"
+  },
+  {
+    "ts": "2026-05-17T21:09:47.158Z",
+    "scene": "hello-world-from-orbit.js",
+    "seed_id": "hello-world-from-orbit",
+    "biome": "space",
+    "model": "gpt-4o-mini",
+    "input_tokens": 14872,
+    "output_tokens": 1402,
+    "cost_usd": 0.0031,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "fail",
+    "error": "Validation failed after 2 attempts: VALIDATION FAILED (1 error):\n- Too short: 62 lines (min 80)"
+  },
+  {
+    "ts": "2026-05-17T21:10:06.800Z",
+    "scene": "drop-tables-waterfall.js",
+    "seed_id": "drop-tables-waterfall",
+    "biome": "ocean",
+    "model": "gpt-4o-mini",
+    "input_tokens": 8121,
+    "output_tokens": 977,
+    "cost_usd": 0.0018,
+    "retries": 0,
+    "api_retries": 0,
+    "validation": "pass"
   }
 ]

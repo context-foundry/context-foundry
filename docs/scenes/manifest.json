@@ -1127,6 +1127,16 @@
       "model": "gpt-4o-mini",
       "lines": 81,
       "generation": 113
+    },
+    {
+      "file": "drop-tables-waterfall.js",
+      "name": "DROP TABLE Waterfall",
+      "location": "Iguazu Falls, Argentina-Brazil Border",
+      "biome": "ocean",
+      "generated": "2026-05-17T21:10:06.799Z",
+      "model": "gpt-4o-mini",
+      "lines": 83,
+      "generation": 114
     }
   ]
 }
