@@ -187,6 +187,42 @@ fn oauth_headers(access_token: &str) -> Vec<(&'static str, String)> {
     ]
 }
 
+/// Append the comma-separated `anthropic-beta` tokens in `raw` to `into`,
+/// trimmed and de-duplicated.
+fn push_beta_tokens(raw: &str, into: &mut Vec<String>) {
+    for tok in raw.split(',').map(str::trim).filter(|s| !s.is_empty()) {
+        if !into.iter().any(|p| p == tok) {
+            into.push(tok.to_string());
+        }
+    }
+}
+
+/// Merge the client's inbound `anthropic-beta` opt-ins with the beta tokens the
+/// upstream auth headers carry, into one de-duplicated header value. Returns
+/// `None` when neither side requests a beta.
+///
+/// The proxy rebuilds the upstream request from scratch, so without this merge
+/// the client's `anthropic-beta` is dropped — and a beta body field it depends
+/// on (e.g. `context_management`) is then rejected upstream with a 400
+/// "Extra inputs are not permitted".
+fn merge_anthropic_beta(
+    inbound: &HeaderMap,
+    auth_headers: &[(&'static str, String)],
+) -> Option<String> {
+    let mut parts: Vec<String> = Vec::new();
+    for v in inbound.get_all("anthropic-beta").iter() {
+        if let Ok(s) = v.to_str() {
+            push_beta_tokens(s, &mut parts);
+        }
+    }
+    for (name, value) in auth_headers {
+        if name.eq_ignore_ascii_case("anthropic-beta") {
+            push_beta_tokens(value, &mut parts);
+        }
+    }
+    (!parts.is_empty()).then(|| parts.join(","))
+}
+
 /// Decide whether an OAuth token must be refreshed: `true` when it is expired
 /// or within `skew` of expiry. A token with no expiry never needs refresh.
 fn needs_refresh(expires_at: Option<SystemTime>, now: SystemTime, skew: Duration) -> bool {
@@ -526,6 +562,10 @@ async fn messages_handler(
         return denied(&state, Some(&tok.job_id), ProxyDenial::TooManyConcurrent);
     }
 
+    // The client's `anthropic-beta` opt-ins must survive the request rebuild,
+    // merged with whatever the upstream credential requires — see
+    // `merge_anthropic_beta`.
+    let merged_beta = merge_anthropic_beta(&headers, &auth_headers);
     let mut request = state
         .proxy
         .http
@@ -533,7 +573,12 @@ async fn messages_handler(
         .header("anthropic-version", "2023-06-01")
         .header(header::CONTENT_TYPE, "application/json");
     for (name, value) in &auth_headers {
-        request = request.header(*name, value.as_str());
+        if !name.eq_ignore_ascii_case("anthropic-beta") {
+            request = request.header(*name, value.as_str());
+        }
+    }
+    if let Some(beta) = &merged_beta {
+        request = request.header("anthropic-beta", beta.as_str());
     }
     let upstream = request.body(body_bytes.to_vec()).send().await;
     tok.release();
@@ -602,6 +647,29 @@ mod tests {
                 ("anthropic-beta", "oauth-2025-04-20".to_string()),
             ]
         );
+    }
+
+    #[test]
+    fn merge_anthropic_beta_combines_client_and_oauth_deduped() {
+        let mut inbound = HeaderMap::new();
+        inbound.insert(
+            "anthropic-beta",
+            "context-management-2025-06-27, oauth-2025-04-20"
+                .parse()
+                .unwrap(),
+        );
+        let merged = merge_anthropic_beta(&inbound, &oauth_headers("tok")).unwrap();
+        assert!(merged.contains("context-management-2025-06-27"));
+        assert_eq!(
+            merged.matches("oauth-2025-04-20").count(),
+            1,
+            "the OAuth beta the client also sent must not be duplicated"
+        );
+    }
+
+    #[test]
+    fn merge_anthropic_beta_none_when_neither_side_sets_it() {
+        assert!(merge_anthropic_beta(&HeaderMap::new(), &api_key_headers("k")).is_none());
     }
 
     #[test]

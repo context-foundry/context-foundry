@@ -201,8 +201,15 @@ pub fn container_name(job_id: &str) -> String {
 }
 
 /// The deterministic image tag for a job's preview app image.
+///
+/// Docker image repository names must be lowercase. Job IDs are `fj_` + a
+/// ULID, and ULIDs are uppercase — so the component is lowercased here.
+/// Container names (above) have no such rule and keep their original case.
 pub fn preview_image_ref(job_id: &str) -> String {
-    format!("foundry-preview-{}:latest", sanitize_component(job_id))
+    format!(
+        "foundry-preview-{}:latest",
+        sanitize_component(job_id).to_ascii_lowercase()
+    )
 }
 
 /// The deterministic container name for a job's preview container.
@@ -469,8 +476,14 @@ impl LocalDocker {
 
     /// Render the `docker run` argument vector (everything after the docker
     /// binary). Injects `ANTHROPIC_BASE_URL` → the auth proxy, the per-build
-    /// scoped token as `ANTHROPIC_API_KEY`, the per-job bind mount, and coarse
-    /// CPU/memory/pids resource caps.
+    /// scoped token as `ANTHROPIC_AUTH_TOKEN`, the per-job bind mount, and
+    /// coarse CPU/memory/pids resource caps.
+    ///
+    /// The token is injected as `ANTHROPIC_AUTH_TOKEN` (not `ANTHROPIC_API_KEY`)
+    /// so the `claude` CLI sends it in the `Authorization: Bearer` header — the
+    /// header the auth proxy reads (`messages_handler` in `proxy.rs`). An
+    /// `ANTHROPIC_API_KEY` would instead go out as `x-api-key` and the proxy
+    /// would reject the request as unauthorized.
     pub fn docker_run_argv(&self, job_id: &str, work_dir: &Path, proxy_token: &str) -> Vec<String> {
         vec![
             "run".to_string(),
@@ -480,7 +493,7 @@ impl LocalDocker {
             "-e".to_string(),
             format!("ANTHROPIC_BASE_URL={}", self.proxy_url),
             "-e".to_string(),
-            format!("ANTHROPIC_API_KEY={proxy_token}"),
+            format!("ANTHROPIC_AUTH_TOKEN={proxy_token}"),
             "--add-host".to_string(),
             "host.docker.internal:host-gateway".to_string(),
             "--memory".to_string(),
@@ -562,38 +575,12 @@ impl LocalDocker {
             self.preview.pids_limit.to_string(),
             "-e".to_string(),
             format!("PORT={}", self.preview.container_port),
-            "-p".to_string(),
-            format!("127.0.0.1::{}", self.preview.container_port),
+            // No `-p` host-port publish: the preview is reached by container
+            // name on the shared `foundry-preview` network. Publishing a port
+            // does not work here anyway — the network is `--internal`, and the
+            // service runs in its own container with its own loopback.
             image_ref.to_string(),
         ]
-    }
-
-    /// The `docker port` argv that reports the host port a preview is on.
-    pub fn port_argv(&self, job_id: &str) -> Vec<String> {
-        vec![
-            "port".to_string(),
-            preview_container_name(job_id),
-            format!("{}/tcp", self.preview.container_port),
-        ]
-    }
-
-    /// Read the ephemeral host port Docker assigned to a preview container.
-    async fn read_preview_port(&self, job_id: &str) -> Result<u16> {
-        let out = tokio::process::Command::new(&self.docker_bin)
-            .args(self.port_argv(job_id))
-            .stdin(Stdio::null())
-            .output()
-            .await
-            .with_context(|| format!("docker port for preview {job_id}"))?;
-        if !out.status.success() {
-            anyhow::bail!("docker port failed for preview {job_id}");
-        }
-        let text = String::from_utf8_lossy(&out.stdout);
-        text.lines()
-            .filter_map(|l| l.rsplit(':').next())
-            .filter_map(|p| p.trim().parse::<u16>().ok())
-            .next()
-            .with_context(|| format!("parse host port from `{}`", text.trim()))
     }
 
     /// Run one `docker build`, teeing stdout/stderr to `logs/image-build.log`.
@@ -742,7 +729,7 @@ impl BuildBackend for LocalDocker {
     }
 
     async fn deploy_preview(&self, job: &Job, image: &ImageRef) -> Result<PreviewInfo> {
-        let url = caddy::preview_url(&job.id, &self.preview.base_domain);
+        let url = caddy::preview_url(&job.app_name, &self.preview.base_domain);
 
         // Test seam: a recorded build never produced a real image to run.
         if self.recorded_stream.is_some() {
@@ -771,8 +758,14 @@ impl BuildBackend for LocalDocker {
             anyhow::bail!("preview container for job {} failed to start", job.id);
         }
 
-        let host_port = self.read_preview_port(&job.id).await?;
-        let upstream = format!("127.0.0.1:{host_port}");
+        // The preview is reached by container name on the shared
+        // `foundry-preview` network — the service and the reverse proxy both
+        // join it. No host port is published (see `preview_run_argv`).
+        let upstream = format!(
+            "{}:{}",
+            preview_container_name(&job.id),
+            self.preview.container_port
+        );
 
         // Health-check; on failure tear the container down so a failed deploy
         // leaves nothing running.
@@ -783,7 +776,7 @@ impl BuildBackend for LocalDocker {
 
         // Register the Caddy route — best-effort: a missing/misconfigured
         // Caddy logs a warning but must NOT fail the job.
-        let hostname = caddy::preview_hostname(&job.id, &self.preview.base_domain);
+        let hostname = caddy::preview_hostname(&job.app_name, &self.preview.base_domain);
         if let Err(e) = caddy::add_route(
             &self.preview.caddy_admin_url,
             &self.preview.caddy_server_name,
@@ -948,7 +941,7 @@ mod tests {
         assert_eq!(argv[0], "run");
         assert!(argv.contains(&"--rm".to_string()));
         assert!(argv.contains(&"ANTHROPIC_BASE_URL=http://host.docker.internal:8788".to_string()));
-        assert!(argv.contains(&"ANTHROPIC_API_KEY=fb_tok".to_string()));
+        assert!(argv.contains(&"ANTHROPIC_AUTH_TOKEN=fb_tok".to_string()));
         assert!(argv.contains(&"/srv/storage/jobs/fj_1/work:/work".to_string()));
         assert!(argv.contains(&"--pids-limit".to_string()));
         assert!(argv.contains(&"4g".to_string()), "default build memory cap");
@@ -1014,10 +1007,13 @@ mod tests {
 
     #[test]
     fn preview_image_ref_and_name_are_safe() {
+        // The image ref must be lowercased: job IDs are uppercase ULIDs but
+        // Docker rejects an image repository name that is not lowercase.
         assert_eq!(
             preview_image_ref("fj_01HMX"),
-            "foundry-preview-fj_01HMX:latest"
+            "foundry-preview-fj_01hmx:latest"
         );
+        // Container names have no lowercase rule and keep their case.
         assert_eq!(
             preview_container_name("a/b c"),
             "foundry-preview-a-b-c"
@@ -1074,7 +1070,6 @@ mod tests {
             "256",
             "-e",
             "PORT=8080",
-            "127.0.0.1::8080",
         ] {
             assert!(
                 argv.contains(&expected.to_string()),
@@ -1083,6 +1078,8 @@ mod tests {
         }
         assert!(!argv.iter().any(|a| a.contains("ANTHROPIC")));
         assert!(!argv.iter().any(|a| a.contains("sk-ant")));
+        // No host-port publish — the preview is reached by container name.
+        assert!(!argv.iter().any(|a| a == "-p"));
     }
 
     #[test]

@@ -23,8 +23,10 @@ command -v claude  >/dev/null 2>&1 || { echo "fatal: claude CLI not on PATH" >&2
 command -v foundry >/dev/null 2>&1 || { echo "fatal: foundry not on PATH"   >&2; exit 1; }
 
 # ── Auth must arrive as the per-build proxy token, never the real key ────────
+# The token is delivered as ANTHROPIC_AUTH_TOKEN so the `claude` CLI sends it
+# as `Authorization: Bearer` — the header the auth proxy validates.
 : "${ANTHROPIC_BASE_URL:?fatal: ANTHROPIC_BASE_URL (auth proxy) not set}"
-: "${ANTHROPIC_API_KEY:?fatal: ANTHROPIC_API_KEY (scoped proxy token) not set}"
+: "${ANTHROPIC_AUTH_TOKEN:?fatal: ANTHROPIC_AUTH_TOKEN (scoped proxy token) not set}"
 
 # ── Pinned service git identity ──────────────────────────────────────────────
 git config --global user.name  "Context Foundry Service"

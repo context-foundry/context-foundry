@@ -29,14 +29,20 @@ pub fn route_id(job_id: &str) -> String {
     format!("foundry-preview-{}", host_label(job_id))
 }
 
-/// The hostname a preview is served under (`build-<job>.<base_domain>`).
-pub fn preview_hostname(job_id: &str, base_domain: &str) -> String {
-    format!("build-{}.{}", host_label(job_id), base_domain)
+/// The hostname a preview is served under (`<app_name>.<base_domain>`).
+///
+/// `app_name` is the `/v1` request field — already validated as a lowercase
+/// `[a-z0-9-]` slug, i.e. a DNS-safe label — so it is used directly. Knowmler
+/// generates a playful, app-derived slug, so a preview lands at e.g.
+/// `wishful-stickers.knowmler.com`. The Caddy route `@id` keys off the job id
+/// (`route_id`), which stays unique even if two apps share a name.
+pub fn preview_hostname(app_name: &str, base_domain: &str) -> String {
+    format!("{}.{}", app_name, base_domain)
 }
 
 /// The full `http://` preview URL stored on the job.
-pub fn preview_url(job_id: &str, base_domain: &str) -> String {
-    format!("http://{}", preview_hostname(job_id, base_domain))
+pub fn preview_url(app_name: &str, base_domain: &str) -> String {
+    format!("http://{}", preview_hostname(app_name, base_domain))
 }
 
 /// The Caddy route object reverse-proxying `hostname` to `upstream`
@@ -108,14 +114,16 @@ mod tests {
 
     #[test]
     fn route_id_and_hostname_are_derived() {
+        // route_id is keyed by the job id (unique); the hostname uses the
+        // app_name slug — the playful, app-derived label Knowmler generates.
         assert_eq!(route_id("fj_1"), "foundry-preview-fj-1");
         assert_eq!(
-            preview_hostname("fj_1", "foundry.local"),
-            "build-fj-1.foundry.local"
+            preview_hostname("wishful-stickers", "knowmler.com"),
+            "wishful-stickers.knowmler.com"
         );
         assert_eq!(
-            preview_url("fj_1", "foundry.local"),
-            "http://build-fj-1.foundry.local"
+            preview_url("wishful-stickers", "knowmler.com"),
+            "http://wishful-stickers.knowmler.com"
         );
     }
 
