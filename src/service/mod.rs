@@ -21,6 +21,7 @@ pub mod worker;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 
 use anyhow::{Context, Result};
 use sqlx::PgPool;
@@ -81,12 +82,18 @@ pub async fn run_serve() -> Result<()> {
         proxy,
     });
 
-    db::reconcile_startup(&state.pool)
+    // Reconcile jobs left mid-build by a dead process, then kill any
+    // containers they orphaned. The reconciled jobs are already terminal
+    // (`failed`), so the LLM build is never silently re-run.
+    let reconciled = db::reconcile_startup(&state.pool)
         .await
         .context("reconcile jobs on startup")?;
+    for id in &reconciled {
+        let _ = state.build.teardown(id).await;
+    }
 
     let shutdown = Arc::new(AtomicBool::new(false));
-    let _workers = worker::run_worker_pool(state.clone(), shutdown.clone());
+    let workers = worker::run_worker_pool(state.clone(), shutdown.clone());
     tokio::spawn(reaper::run_reaper(state.clone(), shutdown.clone()));
     tokio::spawn(proxy::serve_proxy(state.clone()));
 
@@ -99,9 +106,51 @@ pub async fn run_serve() -> Result<()> {
     );
 
     axum::serve(listener, api::router(state.clone()))
+        .with_graceful_shutdown(shutdown_signal())
         .await
         .context("serve /v1 API")?;
 
+    // SIGTERM/SIGINT received: stop new claims, drain in-flight workers to a
+    // deadline. Stragglers past the deadline are caught by next-start
+    // reconciliation, so no LLM build is ever silently re-run.
+    eprintln!(
+        "foundry service: shutdown signal received; stopping new claims, draining workers"
+    );
     shutdown.store(true, Ordering::Relaxed);
+    let deadline = Duration::from_secs(state.config.drain_deadline_secs);
+    if tokio::time::timeout(deadline, async {
+        for h in workers {
+            let _ = h.await;
+        }
+    })
+    .await
+    .is_err()
+    {
+        eprintln!(
+            "foundry service: drain deadline exceeded; stragglers reconciled on next start"
+        );
+    }
     Ok(())
+}
+
+/// Resolve when the process receives SIGTERM or SIGINT (Ctrl-C).
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        let _ = tokio::signal::ctrl_c().await;
+    };
+    #[cfg(unix)]
+    let terminate = async {
+        match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+            Ok(mut sig) => {
+                sig.recv().await;
+            }
+            Err(_) => std::future::pending::<()>().await,
+        }
+    };
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+    tokio::select! {
+        _ = ctrl_c => {}
+        _ = terminate => {}
+    }
 }

@@ -13,6 +13,7 @@
 //! weight; the `docker run` itself is gated behind an optional recorded-stream
 //! test seam so the whole drive can be exercised without Docker.
 
+use std::collections::HashSet;
 use std::path::{Component, Path, PathBuf};
 use std::process::Stdio;
 use std::time::{Duration, Instant};
@@ -207,6 +208,16 @@ pub fn preview_image_ref(job_id: &str) -> String {
 /// The deterministic container name for a job's preview container.
 pub fn preview_container_name(job_id: &str) -> String {
     format!("foundry-preview-{}", sanitize_component(job_id))
+}
+
+/// Recover the (sanitized) job label from a foundry container name.
+/// Returns `Some(label)` for `foundry-build-*` / `foundry-preview-*`
+/// container names, else `None`.
+pub fn foundry_container_job_label(name: &str) -> Option<String> {
+    name.strip_prefix("foundry-build-")
+        .or_else(|| name.strip_prefix("foundry-preview-"))
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
 }
 
 // ─── Preview image build ────────────────────────────────────────────────────
@@ -789,6 +800,48 @@ impl BuildBackend for LocalDocker {
         let _ = caddy::remove_route(&self.preview.caddy_admin_url, job_id).await;
         Ok(())
     }
+
+    async fn sweep_orphans(&self, active_ids: &[String]) -> Result<Vec<String>> {
+        if self.recorded_stream.is_some() {
+            // No real Docker daemon in the test seam — nothing to sweep.
+            return Ok(Vec::new());
+        }
+        let out = tokio::process::Command::new(&self.docker_bin)
+            .args(["ps", "-a", "--format", "{{.Names}}"])
+            .stdin(Stdio::null())
+            .output()
+            .await
+            .context("docker ps for orphan sweep")?;
+        if !out.status.success() {
+            return Ok(Vec::new());
+        }
+        let active: HashSet<String> =
+            active_ids.iter().map(|id| sanitize_component(id)).collect();
+        let names = String::from_utf8_lossy(&out.stdout);
+        let mut swept: Vec<String> = Vec::new();
+        for name in names.lines().map(str::trim).filter(|n| !n.is_empty()) {
+            let Some(label) = foundry_container_job_label(name) else {
+                continue;
+            };
+            if active.contains(&label) {
+                continue;
+            }
+            // Best-effort: kill the orphaned container and drop its Caddy route.
+            let _ = tokio::process::Command::new(&self.docker_bin)
+                .args(["rm", "-f", name])
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .await;
+            let _ = caddy::remove_route(&self.preview.caddy_admin_url, &label).await;
+            if !swept.contains(&label) {
+                swept.push(label);
+            }
+        }
+        swept.sort();
+        Ok(swept)
+    }
 }
 
 #[cfg(test)]
@@ -937,6 +990,20 @@ mod tests {
             preview_container_name("a/b c"),
             "foundry-preview-a-b-c"
         );
+    }
+
+    #[test]
+    fn foundry_container_job_label_strips_prefixes() {
+        assert_eq!(
+            foundry_container_job_label("foundry-build-fj_1"),
+            Some("fj_1".to_string())
+        );
+        assert_eq!(
+            foundry_container_job_label("foundry-preview-fj_1"),
+            Some("fj_1".to_string())
+        );
+        assert_eq!(foundry_container_job_label("postgres"), None);
+        assert_eq!(foundry_container_job_label("foundry-build-"), None);
     }
 
     #[test]

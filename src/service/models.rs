@@ -274,6 +274,8 @@ mod tests {
             preview_memory: "512m".to_string(),
             preview_cpus: "1".to_string(),
             preview_pids_limit: 256,
+            build_timeout_secs: 3600,
+            drain_deadline_secs: 30,
         }
     }
 

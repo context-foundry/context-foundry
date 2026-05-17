@@ -318,21 +318,37 @@ pub async fn insert_event(
     Ok(())
 }
 
-/// On daemon startup, fail any job left mid-build by a previous process.
-/// `queued` rows are untouched — M1 has no live containers to kill (M4/T35.6
-/// adds container reconciliation).
-pub async fn reconcile_startup(pool: &PgPool) -> Result<()> {
-    sqlx::query(
+/// On daemon startup, fail any job left mid-build by a previous process and
+/// return their ids so the caller can kill their orphaned containers.
+///
+/// `queued` rows are untouched, so they stay claimable; `artifact_url` is never
+/// touched, so a partial artifact URL is preserved. The job is marked terminal
+/// (`failed`), so it is never silently re-claimed and the LLM build never reruns.
+pub async fn reconcile_startup(pool: &PgPool) -> Result<Vec<String>> {
+    let rows = sqlx::query(
         "UPDATE jobs \
          SET status = 'failed', error_code = 'internal_error', \
              error_message = 'daemon restarted mid-build', \
              finished_at = now(), updated_at = now() \
-         WHERE status IN ('building', 'deploying')",
+         WHERE status IN ('building', 'deploying') \
+         RETURNING id",
     )
-    .execute(pool)
+    .fetch_all(pool)
     .await
     .context("reconcile jobs on startup")?;
-    Ok(())
+    Ok(rows.iter().map(|r| r.get::<String, _>("id")).collect())
+}
+
+/// Ids of jobs whose containers / proxy tokens / storage grants are still
+/// legitimate (non-terminal, plus `ready` previews still serving traffic).
+pub async fn active_job_ids(pool: &PgPool) -> Result<Vec<String>> {
+    let rows = sqlx::query(
+        "SELECT id FROM jobs WHERE status IN ('queued', 'building', 'deploying', 'ready')",
+    )
+    .fetch_all(pool)
+    .await
+    .context("list active job ids")?;
+    Ok(rows.iter().map(|r| r.get::<String, _>("id")).collect())
 }
 
 /// Mark every `ready` job whose preview TTL has elapsed as `expired`.

@@ -82,16 +82,36 @@ pub async fn drive_job(state: &Arc<AppState>, mut job: Job) {
         }
     };
 
-    // 3. Start the build.
-    let handle = match state.build.start_build(&job, &grant, &token).await {
-        Ok(h) => h,
-        Err(e) => {
+    // 3. Start the build under a wall-clock timeout. Exceeding it kills the
+    //    build (via `cleanup` -> `teardown`, which `docker rm -f`s the
+    //    container) and fails the job with `build_timeout`, not
+    //    `backend_unavailable`.
+    let build_timeout = Duration::from_secs(state.config.build_timeout_secs);
+    let started = state.build.start_build(&job, &grant, &token);
+    let handle = match tokio::time::timeout(build_timeout, started).await {
+        Ok(Ok(h)) => h,
+        Ok(Err(e)) => {
             cleanup(state, &token, &grant, &job.id).await;
             fail(
                 state,
                 &job.id,
                 "backend_unavailable",
                 &format!("start build failed: {e}"),
+                None,
+            )
+            .await;
+            return;
+        }
+        Err(_elapsed) => {
+            cleanup(state, &token, &grant, &job.id).await;
+            fail(
+                state,
+                &job.id,
+                "build_timeout",
+                &format!(
+                    "build exceeded the {}s wall-clock timeout",
+                    state.config.build_timeout_secs
+                ),
                 None,
             )
             .await;

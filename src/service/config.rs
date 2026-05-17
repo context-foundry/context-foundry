@@ -54,6 +54,12 @@ pub struct ServiceConfig {
     pub preview_cpus: String,
     /// `--pids-limit` cap for a preview container.
     pub preview_pids_limit: u32,
+    /// Wall-clock timeout for a build's LLM phase; exceeding it kills the
+    /// build container and fails the job with `build_timeout`. `0` = fire immediately (tests).
+    pub build_timeout_secs: u64,
+    /// How long SIGTERM drain waits for in-flight workers before exiting;
+    /// stragglers are caught by next-start reconciliation.
+    pub drain_deadline_secs: u64,
 }
 
 fn env_or(key: &str, default: &str) -> String {
@@ -129,6 +135,12 @@ impl ServiceConfig {
         let preview_pids_limit: u32 = env_or("FOUNDRY_SERVICE_PREVIEW_PIDS_LIMIT", "256")
             .parse()
             .context("parse FOUNDRY_SERVICE_PREVIEW_PIDS_LIMIT")?;
+        let build_timeout_secs: u64 = env_or("FOUNDRY_SERVICE_BUILD_TIMEOUT_SECS", "3600")
+            .parse()
+            .context("parse FOUNDRY_SERVICE_BUILD_TIMEOUT_SECS")?;
+        let drain_deadline_secs: u64 = env_or("FOUNDRY_SERVICE_DRAIN_DEADLINE_SECS", "30")
+            .parse()
+            .context("parse FOUNDRY_SERVICE_DRAIN_DEADLINE_SECS")?;
 
         Ok(ServiceConfig {
             database_url: env_or(
@@ -170,6 +182,8 @@ impl ServiceConfig {
             preview_memory: env_or("FOUNDRY_SERVICE_PREVIEW_MEMORY", "512m"),
             preview_cpus: env_or("FOUNDRY_SERVICE_PREVIEW_CPUS", "1"),
             preview_pids_limit,
+            build_timeout_secs,
+            drain_deadline_secs,
         })
     }
 }

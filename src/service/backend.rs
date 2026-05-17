@@ -90,6 +90,12 @@ pub trait StorageBackend: Send + Sync {
     async fn put_diagnostics(&self, job_id: &str, bytes: &[u8]) -> Result<()>;
     /// Fetch an artifact for serving over the API.
     async fn fetch(&self, job_id: &str, kind: ArtifactKind) -> Result<ArtifactResponse>;
+    /// Revoke any storage grant issued for `job_id`. Default: local-mount
+    /// grants are plain directories with nothing to revoke.
+    async fn revoke_job(&self, job_id: &str) -> Result<()> {
+        let _ = job_id;
+        Ok(())
+    }
 }
 
 /// Drives a job through the build/deploy lifecycle.
@@ -116,4 +122,10 @@ pub trait BuildBackend: Send + Sync {
     async fn collect_diagnostics(&self, handle: &BuildHandle) -> Result<Vec<u8>>;
     /// Tear down any resources associated with a job.
     async fn teardown(&self, job_id: &str) -> Result<()>;
+    /// Tear down build/preview containers whose job id is not in `active_ids`.
+    /// Returns the swept job labels. Default: nothing to sweep.
+    async fn sweep_orphans(&self, active_ids: &[String]) -> Result<Vec<String>> {
+        let _ = active_ids;
+        Ok(Vec::new())
+    }
 }

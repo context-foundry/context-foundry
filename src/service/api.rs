@@ -374,12 +374,16 @@ async fn cancel_job(State(state): State<Arc<AppState>>, Path(id): Path<String>) 
     if job.status.is_terminal() {
         return err(ErrorCode::ValidationError, "job is already in a terminal state");
     }
-    let _ = state.build.teardown(&id).await;
-    // db::cancel_job only updates jobs still in a cancellable state, so a
-    // worker that completed the job to `ready` in the meantime is not
-    // overwritten — we then report its true current state.
+    // Flip the DB row to `canceled` FIRST: `db::cancel_job` only touches a job
+    // still in a cancellable state, and `finish_job`/`update_job_progress` are
+    // guarded by `status <> 'canceled'`, so once the row is `canceled` a
+    // racing worker's writes no-op. Teardown + credential revocation run only
+    // after the row is `canceled` — reversing this order reopens the race.
     match db::cancel_job(&state.pool, &id).await {
         Ok(Some(canceled)) => {
+            let _ = state.build.teardown(&id).await;
+            state.proxy.revoke_job(&id);
+            let _ = state.storage.revoke_job(&id).await;
             (StatusCode::OK, Json(job_view(&state, &canceled).await)).into_response()
         }
         Ok(None) => match db::get_job(&state.pool, &id).await {

@@ -17,6 +17,7 @@ use crate::service::models::Job;
 pub struct MockBuildBackend {
     stream: String,
     fail_image: bool,
+    start_delay_ms: u64,
 }
 
 impl MockBuildBackend {
@@ -25,6 +26,7 @@ impl MockBuildBackend {
         Self {
             stream: include_str!("../../tests/fixtures/service-run-sample.jsonl").to_string(),
             fail_image: false,
+            start_delay_ms: 0,
         }
     }
 
@@ -34,6 +36,7 @@ impl MockBuildBackend {
         Self {
             stream,
             fail_image: false,
+            start_delay_ms: 0,
         }
     }
 
@@ -44,6 +47,17 @@ impl MockBuildBackend {
         Self {
             stream: include_str!("../../tests/fixtures/service-run-sample.jsonl").to_string(),
             fail_image: true,
+            start_delay_ms: 0,
+        }
+    }
+
+    /// Construct a backend whose `start_build` sleeps `delay_ms` before
+    /// returning — used to exercise the wall-clock build timeout.
+    pub fn with_slow_start(delay_ms: u64) -> Self {
+        Self {
+            stream: include_str!("../../tests/fixtures/service-run-sample.jsonl").to_string(),
+            fail_image: false,
+            start_delay_ms: delay_ms,
         }
     }
 
@@ -70,6 +84,9 @@ impl BuildBackend for MockBuildBackend {
         _grant: &StorageGrant,
         _proxy_token: &str,
     ) -> Result<BuildHandle> {
+        if self.start_delay_ms > 0 {
+            tokio::time::sleep(std::time::Duration::from_millis(self.start_delay_ms)).await;
+        }
         Ok(BuildHandle {
             job_id: job.id.clone(),
         })

@@ -121,6 +121,24 @@ impl ProxyRegistry {
             .remove(token);
     }
 
+    /// Revoke every token issued for one job; returns how many were removed.
+    /// Used by cancel and the orphan sweep.
+    pub fn revoke_job(&self, job_id: &str) -> usize {
+        let mut map = self.tokens.write().expect("proxy token map poisoned");
+        let before = map.len();
+        map.retain(|_, tok| tok.job_id != job_id);
+        before - map.len()
+    }
+
+    /// Drop every token whose job is not in `active_ids` (orphan token sweep);
+    /// returns how many were removed.
+    pub fn sweep(&self, active_ids: &[&str]) -> usize {
+        let mut map = self.tokens.write().expect("proxy token map poisoned");
+        let before = map.len();
+        map.retain(|_, tok| active_ids.contains(&tok.job_id.as_str()));
+        before - map.len()
+    }
+
     /// Look up a live token.
     pub fn validate(&self, token: &str) -> Option<Arc<ProxyToken>> {
         self.tokens
