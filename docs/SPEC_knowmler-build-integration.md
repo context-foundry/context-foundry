@@ -95,6 +95,19 @@ Claude subscription (OAuth), and the `/v1` contract is shipped and tested. The
 - `knowmler.com` is already a homelab-Caddy domain with Cloudflare DNS+TLS, so
   a `*.knowmler.com` wildcard cert is obtainable via the existing Cloudflare
   DNS challenge.
+- The `preview_url` returned by `/v1` is `https://` — previews are served
+  through a TLS-terminating Caddy; an `http://` URL would mixed-content-fail
+  when consumed from Knowmler's HTTPS pages. (Fixed in `caddy.rs::preview_url`.)
+
+### D6 — Preview hostname uniqueness is Knowmler's responsibility
+
+`app_name` becomes the preview hostname (`<app_name>.knowmler.com`). The `/v1`
+API validates `app_name` for slug *shape* only; there is no uniqueness
+constraint. Two live previews with the same `app_name` collide on the same
+host. **Knowmler must guarantee `app_name` is unique among currently-live
+(`ready`) previews** — regenerate/suffix the playful slug on collision. Open:
+whether the build service should *also* hard-reject a submit whose `app_name`
+matches a live preview (a defence-in-depth guard) — see O5.
 
 ## Responsibility split (two repos)
 
@@ -131,7 +144,9 @@ round-0 discussion: S ≤ 2h, M ~ 2h, L ~ 4h. Needs a `/v1` request field
      [`PLAN_build-service-401-fix.md`](PLAN_build-service-401-fix.md) follow-on
      notes). Fix: route to the preview by container name on a shared network
      instead of a published host port. Also: `caddy.rs preview_hostname` →
-     `<app_name>.knowmler.com` (D5).
+     `<app_name>.knowmler.com` (D5). **DONE — defects #7 (preview network) and
+     #8 (success-path teardown) fixed; PR context-foundry#269. Verified
+     reachable on the VPS-internal network only, not yet externally.**
   2. *DNS:* a wildcard `*.knowmler.com` (or `*.preview.knowmler.com`) record
      pointing at the VPS, on Cloudflare.
   3. *Reverse proxy:* a `*.knowmler.com` wildcard block in the **homelab
@@ -144,8 +159,18 @@ round-0 discussion: S ≤ 2h, M ~ 2h, L ~ 4h. Needs a `/v1` request field
 - **O3 — Hosting platform.** S3 today; Azure possible on other deployments.
   Keep the built-app preview platform-agnostic (the container model is; static
   mockup hosting is the part that varies).
+- **O4 — Embedding the preview in Knowmler (iframe vs link).** If the built
+  app is shown inside an iframe (as the idea-stage S3 mockup is), the
+  `knowmler.com` CSP `frame-src` must add `https://*.knowmler.com`
+  (`caddy2/Caddyfile`) — a production change to bundle with the Caddy work. If
+  the rollout is link-only, no CSP change is needed. **Decide before the
+  production-Caddy change.**
+- **O5 — Service-side slug-collision guard (optional).** D6 makes unique
+  `app_name`s Knowmler's responsibility. Optionally the build service could
+  *also* reject a `/v1` submit whose `app_name` matches a currently-`ready`
+  preview — defence in depth. Decide whether to implement.
 
-## Task decomposition (to refine after O1–O3)
+## Task decomposition (to refine after O1–O5)
 
 High-level, to be split into file-referenced, single-concern tasks per repo:
 

@@ -40,9 +40,13 @@ pub fn preview_hostname(app_name: &str, base_domain: &str) -> String {
     format!("{}.{}", app_name, base_domain)
 }
 
-/// The full `http://` preview URL stored on the job.
+/// The full `https://` preview URL stored on the job.
+///
+/// `https`, not `http`: previews are always served through a TLS-terminating
+/// reverse proxy (Caddy). Knowmler links/embeds this URL from an HTTPS page,
+/// so an `http://` value would be a mixed-content failure.
 pub fn preview_url(app_name: &str, base_domain: &str) -> String {
-    format!("http://{}", preview_hostname(app_name, base_domain))
+    format!("https://{}", preview_hostname(app_name, base_domain))
 }
 
 /// The Caddy route object reverse-proxying `hostname` to `upstream`
@@ -123,7 +127,7 @@ mod tests {
         );
         assert_eq!(
             preview_url("wishful-stickers", "knowmler.com"),
-            "http://wishful-stickers.knowmler.com"
+            "https://wishful-stickers.knowmler.com"
         );
     }
 
