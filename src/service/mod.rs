@@ -8,6 +8,7 @@
 
 pub mod api;
 pub mod backend;
+pub mod caddy;
 pub mod config;
 pub mod db;
 pub mod localdocker;
@@ -46,12 +47,28 @@ pub async fn run_serve() -> Result<()> {
     let storage: Arc<dyn backend::StorageBackend> =
         Arc::new(storage_local::LocalFilesystem::new(config.storage_root.clone()));
     let build: Arc<dyn backend::BuildBackend> = match config.build_backend.as_str() {
-        "local_docker" => Arc::new(localdocker::LocalDocker::new(
-            config.builder_image.clone(),
-            config.storage_root.clone(),
-            config.builder_proxy_url.clone(),
-            config.docker_bin.clone(),
-        )),
+        "local_docker" => {
+            let preview = localdocker::PreviewConfig {
+                network: config.preview_network.clone(),
+                base_domain: config.preview_base_domain.clone(),
+                caddy_admin_url: config.caddy_admin_url.clone(),
+                caddy_server_name: config.caddy_server_name.clone(),
+                container_port: 8080,
+                health_timeout_secs: config.preview_health_timeout_secs,
+                memory: config.preview_memory.clone(),
+                cpus: config.preview_cpus.clone(),
+                pids_limit: config.preview_pids_limit,
+            };
+            Arc::new(
+                localdocker::LocalDocker::new(
+                    config.builder_image.clone(),
+                    config.storage_root.clone(),
+                    config.builder_proxy_url.clone(),
+                    config.docker_bin.clone(),
+                )
+                .with_preview_config(preview),
+            )
+        }
         _ => Arc::new(mock_backend::MockBuildBackend::new()),
     };
     let proxy = Arc::new(proxy::ProxyRegistry::new(config.clone()));

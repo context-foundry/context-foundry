@@ -15,6 +15,7 @@
 
 use std::path::{Component, Path, PathBuf};
 use std::process::Stdio;
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
 use async_trait::async_trait;
@@ -24,6 +25,7 @@ use serde_json::json;
 use walkdir::WalkDir;
 
 use crate::service::backend::{BuildBackend, BuildHandle, ImageRef, PreviewInfo, StorageGrant};
+use crate::service::caddy;
 use crate::service::models::Job;
 
 // ─── Build Container Contract ───────────────────────────────────────────────
@@ -197,6 +199,163 @@ pub fn container_name(job_id: &str) -> String {
     format!("foundry-build-{}", sanitize_component(job_id))
 }
 
+/// The deterministic image tag for a job's preview app image.
+pub fn preview_image_ref(job_id: &str) -> String {
+    format!("foundry-preview-{}:latest", sanitize_component(job_id))
+}
+
+/// The deterministic container name for a job's preview container.
+pub fn preview_container_name(job_id: &str) -> String {
+    format!("foundry-preview-{}", sanitize_component(job_id))
+}
+
+// ─── Preview image build ────────────────────────────────────────────────────
+
+/// The detected build stack, used to synthesize a fallback `Dockerfile` when a
+/// build emitted none.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Stack {
+    Node,
+    Python,
+    Static,
+}
+
+/// Classify a build tree by its marker files: `package.json` → Node,
+/// `requirements.txt`/`pyproject.toml` → Python, otherwise a static server.
+pub fn detect_stack(work_dir: &Path) -> Stack {
+    if work_dir.join("package.json").is_file() {
+        return Stack::Node;
+    }
+    if work_dir.join("requirements.txt").is_file() || work_dir.join("pyproject.toml").is_file() {
+        return Stack::Python;
+    }
+    Stack::Static
+}
+
+/// The [`ImageRef::dockerfile_source`] label for a synthesized fallback build.
+pub fn fallback_source_label(stack: Stack) -> &'static str {
+    match stack {
+        Stack::Node => "fallback_node",
+        Stack::Python => "fallback_python",
+        Stack::Static => "fallback_static",
+    }
+}
+
+/// Synthesize a previewable `Dockerfile` for a build that emitted none (or an
+/// invalid one). Every fallback binds `$PORT`/`8080` and `EXPOSE`s it.
+pub fn fallback_dockerfile(stack: Stack) -> String {
+    let lines: &[&str] = match stack {
+        Stack::Node => &[
+            "FROM node:22-slim",
+            "WORKDIR /app",
+            "COPY . .",
+            "RUN if [ -f package-lock.json ]; then npm ci --omit=dev || npm install --omit=dev; else npm install --omit=dev; fi",
+            "ENV PORT=8080",
+            "EXPOSE 8080",
+            "CMD [\"sh\", \"-c\", \"npm start\"]",
+            "",
+        ],
+        Stack::Python => &[
+            "FROM python:3.12-slim",
+            "WORKDIR /app",
+            "COPY . .",
+            "RUN if [ -f requirements.txt ]; then pip install --no-cache-dir -r requirements.txt; fi",
+            "ENV PORT=8080",
+            "EXPOSE 8080",
+            "CMD [\"sh\", \"-c\", \"if [ -f app.py ]; then exec python app.py; elif [ -f main.py ]; then exec python main.py; else exec python -m http.server ${PORT:-8080}; fi\"]",
+            "",
+        ],
+        Stack::Static => &[
+            "FROM python:3.12-slim",
+            "WORKDIR /app",
+            "COPY . .",
+            "ENV PORT=8080",
+            "EXPOSE 8080",
+            "CMD [\"sh\", \"-c\", \"python -m http.server ${PORT:-8080}\"]",
+            "",
+        ],
+    };
+    lines.join("\n")
+}
+
+/// A cheap validity check for a project `Dockerfile`: a non-comment line that
+/// starts with a `FROM ` instruction.
+pub fn is_valid_dockerfile(content: &str) -> bool {
+    content.lines().any(|line| {
+        let bytes = line.trim_start().as_bytes();
+        bytes.len() >= 5 && bytes[..5].eq_ignore_ascii_case(b"from ")
+    })
+}
+
+/// The `docker build` argument vector (everything after the docker binary).
+pub fn docker_build_argv(image_ref: &str, dockerfile_abs: &Path, context: &Path) -> Vec<String> {
+    vec![
+        "build".to_string(),
+        "-t".to_string(),
+        image_ref.to_string(),
+        "-f".to_string(),
+        dockerfile_abs.display().to_string(),
+        context.display().to_string(),
+    ]
+}
+
+// ─── Preview deployment ─────────────────────────────────────────────────────
+
+/// Tunables for running and routing a preview container.
+#[derive(Clone, Debug)]
+pub struct PreviewConfig {
+    pub network: String,
+    pub base_domain: String,
+    pub caddy_admin_url: String,
+    pub caddy_server_name: String,
+    pub container_port: u16,
+    pub health_timeout_secs: u64,
+    pub memory: String,
+    pub cpus: String,
+    pub pids_limit: u32,
+}
+
+impl Default for PreviewConfig {
+    fn default() -> Self {
+        PreviewConfig {
+            network: "foundry-preview".to_string(),
+            base_domain: "foundry.local".to_string(),
+            caddy_admin_url: "http://localhost:2019".to_string(),
+            caddy_server_name: "srv0".to_string(),
+            container_port: 8080,
+            health_timeout_secs: 60,
+            memory: "512m".to_string(),
+            cpus: "1".to_string(),
+            pids_limit: 256,
+        }
+    }
+}
+
+/// Poll a preview upstream's `/healthz` then `/` until one returns HTTP 200, or
+/// the timeout elapses. A connection error (the app still booting) is swallowed
+/// and retried; only the deadline produces an error.
+pub async fn health_check(upstream: &str, timeout_secs: u64) -> Result<()> {
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(5))
+        .build()
+        .context("build health-check client")?;
+    let deadline = Instant::now() + Duration::from_secs(timeout_secs);
+    loop {
+        for path in ["/healthz", "/"] {
+            let url = format!("http://{upstream}{path}");
+            if let Ok(resp) = client.get(&url).send().await {
+                if resp.status() == reqwest::StatusCode::OK {
+                    return Ok(());
+                }
+            }
+        }
+        if Instant::now() >= deadline {
+            anyhow::bail!("preview at {upstream} did not return 200 within {timeout_secs}s");
+        }
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+}
+
 // ─── LocalDocker backend ────────────────────────────────────────────────────
 
 /// A [`BuildBackend`] that runs builds in local `foundry-builder` containers.
@@ -211,6 +370,8 @@ pub struct LocalDocker {
     /// Test seam: when set, [`LocalDocker::start_build`] skips `docker run` and
     /// treats this string as the container's stdout (a recorded json-stream).
     recorded_stream: Option<String>,
+    /// Tunables for running and routing preview containers.
+    preview: PreviewConfig,
 }
 
 impl LocalDocker {
@@ -227,7 +388,15 @@ impl LocalDocker {
             proxy_url,
             docker_bin,
             recorded_stream: None,
+            preview: PreviewConfig::default(),
         }
+    }
+
+    /// Override the preview tunables. A builder method so `new` /
+    /// `with_recorded_stream` keep their existing signatures.
+    pub fn with_preview_config(mut self, preview: PreviewConfig) -> LocalDocker {
+        self.preview = preview;
+        self
     }
 
     /// Construct a backend that replays `stream` instead of running Docker —
@@ -239,6 +408,7 @@ impl LocalDocker {
             proxy_url: "http://host.docker.internal:8788".to_string(),
             docker_bin: "docker".to_string(),
             recorded_stream: Some(stream),
+            preview: PreviewConfig::default(),
         }
     }
 
@@ -317,6 +487,103 @@ impl LocalDocker {
             .with_context(|| format!("spawn `{}` for job {job_id}", self.docker_bin))?;
         Ok(status.code().unwrap_or(-1))
     }
+
+    /// The `docker network create` argv for the isolated preview network.
+    /// `--internal` keeps preview containers inbound-only (no egress).
+    pub fn network_create_argv(&self) -> Vec<String> {
+        vec![
+            "network".to_string(),
+            "create".to_string(),
+            "--internal".to_string(),
+            "--driver".to_string(),
+            "bridge".to_string(),
+            self.preview.network.clone(),
+        ]
+    }
+
+    /// The `docker run -d` argv for a preview container: the isolated network,
+    /// CPU/memory/pids caps, a bounded restart policy, and only a `PORT` env
+    /// var. It MUST NOT carry any secret — no `ANTHROPIC_*` is ever injected.
+    pub fn preview_run_argv(&self, job_id: &str, image_ref: &str) -> Vec<String> {
+        vec![
+            "run".to_string(),
+            "-d".to_string(),
+            "--name".to_string(),
+            preview_container_name(job_id),
+            "--network".to_string(),
+            self.preview.network.clone(),
+            "--restart".to_string(),
+            "on-failure:3".to_string(),
+            "--memory".to_string(),
+            self.preview.memory.clone(),
+            "--cpus".to_string(),
+            self.preview.cpus.clone(),
+            "--pids-limit".to_string(),
+            self.preview.pids_limit.to_string(),
+            "-e".to_string(),
+            format!("PORT={}", self.preview.container_port),
+            "-p".to_string(),
+            format!("127.0.0.1::{}", self.preview.container_port),
+            image_ref.to_string(),
+        ]
+    }
+
+    /// The `docker port` argv that reports the host port a preview is on.
+    pub fn port_argv(&self, job_id: &str) -> Vec<String> {
+        vec![
+            "port".to_string(),
+            preview_container_name(job_id),
+            format!("{}/tcp", self.preview.container_port),
+        ]
+    }
+
+    /// Read the ephemeral host port Docker assigned to a preview container.
+    async fn read_preview_port(&self, job_id: &str) -> Result<u16> {
+        let out = tokio::process::Command::new(&self.docker_bin)
+            .args(self.port_argv(job_id))
+            .stdin(Stdio::null())
+            .output()
+            .await
+            .with_context(|| format!("docker port for preview {job_id}"))?;
+        if !out.status.success() {
+            anyhow::bail!("docker port failed for preview {job_id}");
+        }
+        let text = String::from_utf8_lossy(&out.stdout);
+        text.lines()
+            .filter_map(|l| l.rsplit(':').next())
+            .filter_map(|p| p.trim().parse::<u16>().ok())
+            .next()
+            .with_context(|| format!("parse host port from `{}`", text.trim()))
+    }
+
+    /// Run one `docker build`, teeing stdout/stderr to `logs/image-build.log`.
+    async fn try_build(
+        &self,
+        job_id: &str,
+        image_ref: &str,
+        dockerfile_abs: &Path,
+        context: &Path,
+    ) -> Result<()> {
+        let logs = self.logs_dir(job_id);
+        std::fs::create_dir_all(&logs).ok();
+        let log = std::fs::File::create(logs.join("image-build.log"))
+            .context("create image-build.log")?;
+        let log_err = log.try_clone().context("clone image-build log handle")?;
+        let argv = docker_build_argv(image_ref, dockerfile_abs, context);
+        let status = tokio::process::Command::new(&self.docker_bin)
+            .args(&argv)
+            .stdin(Stdio::null())
+            .stdout(Stdio::from(log))
+            .stderr(Stdio::from(log_err))
+            .status()
+            .await
+            .with_context(|| format!("spawn docker build for job {job_id}"))?;
+        if status.success() {
+            Ok(())
+        } else {
+            anyhow::bail!("docker build exited with {:?}", status.code())
+        }
+    }
 }
 
 #[async_trait]
@@ -376,12 +643,123 @@ impl BuildBackend for LocalDocker {
         }
     }
 
-    async fn build_image(&self, _job: &Job) -> Result<ImageRef> {
-        anyhow::bail!("LocalDocker preview image build lands in M3 (T35.5)")
+    async fn build_image(&self, job: &Job) -> Result<ImageRef> {
+        let work = self.work_dir(&job.id);
+        let image = preview_image_ref(&job.id);
+
+        // Test seam: a recorded build never produced a real working tree.
+        if self.recorded_stream.is_some() {
+            return Ok(ImageRef {
+                reference: image,
+                dockerfile_source: "project".to_string(),
+            });
+        }
+
+        // Honor a valid project Dockerfile when the build emitted one.
+        let root = work.join("Dockerfile");
+        let project_valid = std::fs::read_to_string(&root)
+            .ok()
+            .map(|c| is_valid_dockerfile(&c))
+            .unwrap_or(false);
+        if project_valid
+            && self
+                .try_build(&job.id, &image, &root, &work)
+                .await
+                .is_ok()
+        {
+            return Ok(ImageRef {
+                reference: image,
+                dockerfile_source: "project".to_string(),
+            });
+        }
+
+        // Otherwise synthesize a fallback by stack detection.
+        let stack = detect_stack(&work);
+        let fallback = work.join("Dockerfile.foundry-fallback");
+        std::fs::write(&fallback, fallback_dockerfile(stack))
+            .context("write fallback Dockerfile")?;
+        if self
+            .try_build(&job.id, &image, &fallback, &work)
+            .await
+            .is_ok()
+        {
+            return Ok(ImageRef {
+                reference: image,
+                dockerfile_source: fallback_source_label(stack).to_string(),
+            });
+        }
+
+        anyhow::bail!(
+            "preview image build failed for job {}: project Dockerfile {} and {:?} fallback both failed",
+            job.id,
+            if project_valid {
+                "build failed"
+            } else {
+                "absent/invalid"
+            },
+            stack,
+        )
     }
 
-    async fn deploy_preview(&self, _job: &Job, _image: &ImageRef) -> Result<PreviewInfo> {
-        anyhow::bail!("LocalDocker preview deployment lands in M3 (T35.5)")
+    async fn deploy_preview(&self, job: &Job, image: &ImageRef) -> Result<PreviewInfo> {
+        let url = caddy::preview_url(&job.id, &self.preview.base_domain);
+
+        // Test seam: a recorded build never produced a real image to run.
+        if self.recorded_stream.is_some() {
+            return Ok(PreviewInfo { url });
+        }
+
+        // Ensure the isolated preview network exists (ignore "already exists").
+        let _ = tokio::process::Command::new(&self.docker_bin)
+            .args(self.network_create_argv())
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .await;
+
+        // Run the preview container.
+        let run = tokio::process::Command::new(&self.docker_bin)
+            .args(self.preview_run_argv(&job.id, &image.reference))
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .await
+            .with_context(|| format!("spawn docker run for preview {}", job.id))?;
+        if !run.success() {
+            anyhow::bail!("preview container for job {} failed to start", job.id);
+        }
+
+        let host_port = self.read_preview_port(&job.id).await?;
+        let upstream = format!("127.0.0.1:{host_port}");
+
+        // Health-check; on failure tear the container down so a failed deploy
+        // leaves nothing running.
+        if let Err(e) = health_check(&upstream, self.preview.health_timeout_secs).await {
+            let _ = self.teardown(&job.id).await;
+            return Err(e.context("preview health check"));
+        }
+
+        // Register the Caddy route — best-effort: a missing/misconfigured
+        // Caddy logs a warning but must NOT fail the job.
+        let hostname = caddy::preview_hostname(&job.id, &self.preview.base_domain);
+        if let Err(e) = caddy::add_route(
+            &self.preview.caddy_admin_url,
+            &self.preview.caddy_server_name,
+            &job.id,
+            &hostname,
+            &upstream,
+        )
+        .await
+        {
+            eprintln!(
+                "foundry service: Caddy route for {} not registered: {e}",
+                job.id
+            );
+        }
+
+        Ok(PreviewInfo { url })
     }
 
     async fn collect_artifact(&self, handle: &BuildHandle) -> Result<Vec<u8>> {
@@ -397,14 +775,18 @@ impl BuildBackend for LocalDocker {
             // No container was ever launched in the test seam.
             return Ok(());
         }
-        // Best-effort: a `--rm` container is usually already gone.
-        let _ = tokio::process::Command::new(&self.docker_bin)
-            .args(self.rm_argv(job_id))
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .await;
+        // Best-effort: remove the build container, the preview container, and
+        // the Caddy route. A `--rm` build container is usually already gone.
+        for name in [container_name(job_id), preview_container_name(job_id)] {
+            let _ = tokio::process::Command::new(&self.docker_bin)
+                .args(["rm", "-f", name.as_str()])
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .await;
+        }
+        let _ = caddy::remove_route(&self.preview.caddy_admin_url, job_id).await;
         Ok(())
     }
 }
@@ -505,5 +887,116 @@ mod tests {
             backend.rm_argv("fj_1"),
             vec!["rm", "-f", "foundry-build-fj_1"]
         );
+    }
+
+    #[test]
+    fn detect_stack_classifies_marker_files() {
+        let base = std::env::temp_dir().join(format!("foundry-detect-{}", ulid::Ulid::new()));
+        let node = base.join("node");
+        let py_req = base.join("py-req");
+        let py_proj = base.join("py-proj");
+        let empty = base.join("empty");
+        for dir in [&node, &py_req, &py_proj, &empty] {
+            std::fs::create_dir_all(dir).unwrap();
+        }
+        std::fs::write(node.join("package.json"), "{}").unwrap();
+        std::fs::write(py_req.join("requirements.txt"), "").unwrap();
+        std::fs::write(py_proj.join("pyproject.toml"), "").unwrap();
+
+        assert_eq!(detect_stack(&node), Stack::Node);
+        assert_eq!(detect_stack(&py_req), Stack::Python);
+        assert_eq!(detect_stack(&py_proj), Stack::Python);
+        assert_eq!(detect_stack(&empty), Stack::Static);
+    }
+
+    #[test]
+    fn is_valid_dockerfile_requires_a_from_line() {
+        assert!(is_valid_dockerfile("FROM node:22\n"));
+        assert!(is_valid_dockerfile("# comment\nfrom python:3.12"));
+        assert!(!is_valid_dockerfile("# just a comment\nRUN echo hi"));
+        assert!(!is_valid_dockerfile(""));
+    }
+
+    #[test]
+    fn fallback_dockerfile_binds_port_and_exposes() {
+        for stack in [Stack::Node, Stack::Python, Stack::Static] {
+            let d = fallback_dockerfile(stack);
+            assert!(d.contains("FROM "), "{stack:?} fallback has a FROM line");
+            assert!(d.contains("EXPOSE 8080"), "{stack:?} fallback exposes 8080");
+            assert!(d.contains("PORT"), "{stack:?} fallback sets PORT");
+        }
+    }
+
+    #[test]
+    fn preview_image_ref_and_name_are_safe() {
+        assert_eq!(
+            preview_image_ref("fj_01HMX"),
+            "foundry-preview-fj_01HMX:latest"
+        );
+        assert_eq!(
+            preview_container_name("a/b c"),
+            "foundry-preview-a-b-c"
+        );
+    }
+
+    #[test]
+    fn docker_build_argv_has_tag_file_and_context() {
+        let argv = docker_build_argv(
+            "img:latest",
+            Path::new("/w/Dockerfile"),
+            Path::new("/w"),
+        );
+        assert_eq!(argv[0], "build");
+        assert!(argv.contains(&"-t".to_string()));
+        assert!(argv.contains(&"-f".to_string()));
+        assert!(argv.contains(&"img:latest".to_string()));
+        assert_eq!(argv.last().unwrap(), "/w");
+    }
+
+    #[test]
+    fn preview_run_argv_has_caps_isolation_and_no_secrets() {
+        let backend = LocalDocker::new(
+            "img".to_string(),
+            PathBuf::from("/srv"),
+            "http://proxy".to_string(),
+            "docker".to_string(),
+        );
+        let argv = backend.preview_run_argv("fj_1", "img:latest");
+        for expected in [
+            "--network",
+            "foundry-preview",
+            "--restart",
+            "on-failure:3",
+            "--memory",
+            "--cpus",
+            "--pids-limit",
+            "-e",
+            "PORT=8080",
+            "127.0.0.1::8080",
+        ] {
+            assert!(
+                argv.contains(&expected.to_string()),
+                "preview argv contains `{expected}`"
+            );
+        }
+        assert!(!argv.iter().any(|a| a.contains("ANTHROPIC")));
+        assert!(!argv.iter().any(|a| a.contains("sk-ant")));
+    }
+
+    #[test]
+    fn with_preview_config_overrides_defaults() {
+        let backend = LocalDocker::new(
+            "img".to_string(),
+            PathBuf::from("/srv"),
+            "http://proxy".to_string(),
+            "docker".to_string(),
+        )
+        .with_preview_config(PreviewConfig {
+            network: "custom-net".to_string(),
+            ..PreviewConfig::default()
+        });
+        assert!(backend
+            .preview_run_argv("fj_1", "img:latest")
+            .contains(&"custom-net".to_string()));
     }
 }

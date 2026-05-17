@@ -33,6 +33,10 @@ pub struct BuildHandle {
 #[derive(Clone, Debug)]
 pub struct ImageRef {
     pub reference: String,
+    /// Which Dockerfile produced the image: `"project"` (the build's own
+    /// root `Dockerfile`) or `"fallback_node"` / `"fallback_python"` /
+    /// `"fallback_static"` (a synthesized fallback).
+    pub dockerfile_source: String,
 }
 
 /// The result of a successful preview deployment.

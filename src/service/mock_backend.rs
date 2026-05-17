@@ -16,6 +16,7 @@ use crate::service::models::Job;
 /// A build backend that replays a fixed recorded event stream.
 pub struct MockBuildBackend {
     stream: String,
+    fail_image: bool,
 }
 
 impl MockBuildBackend {
@@ -23,13 +24,27 @@ impl MockBuildBackend {
     pub fn new() -> Self {
         Self {
             stream: include_str!("../../tests/fixtures/service-run-sample.jsonl").to_string(),
+            fail_image: false,
         }
     }
 
     /// Construct with a caller-supplied stream — used by tests to exercise
     /// crash paths (e.g. a stream with no terminal report).
     pub fn with_stream(stream: String) -> Self {
-        Self { stream }
+        Self {
+            stream,
+            fail_image: false,
+        }
+    }
+
+    /// Construct a backend whose build stream succeeds but whose `build_image`
+    /// fails — exercises the `preview_deploy_failed` path while keeping the
+    /// source artifact downloadable.
+    pub fn with_failing_image() -> Self {
+        Self {
+            stream: include_str!("../../tests/fixtures/service-run-sample.jsonl").to_string(),
+            fail_image: true,
+        }
     }
 
     /// A minimal valid empty-gzip member (20 bytes) used as the mock artifact
@@ -65,8 +80,12 @@ impl BuildBackend for MockBuildBackend {
     }
 
     async fn build_image(&self, job: &Job) -> Result<ImageRef> {
+        if self.fail_image {
+            anyhow::bail!("mock image build failed");
+        }
         Ok(ImageRef {
             reference: format!("mock-image:{}", job.id),
+            dockerfile_source: "project".to_string(),
         })
     }
 

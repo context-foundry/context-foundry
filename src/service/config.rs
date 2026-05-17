@@ -38,6 +38,22 @@ pub struct ServiceConfig {
     pub builder_proxy_url: String,
     /// The `docker` CLI binary the `LocalDocker` backend invokes.
     pub docker_bin: String,
+    /// Docker network preview containers join — isolated/inbound-only.
+    pub preview_network: String,
+    /// Base domain previews are routed under (`build-<job>.<domain>`).
+    pub preview_base_domain: String,
+    /// Caddy admin API URL used to add/remove preview routes.
+    pub caddy_admin_url: String,
+    /// The Caddy HTTP-server name routes are appended to (default `srv0`).
+    pub caddy_server_name: String,
+    /// How long a preview health check polls before giving up.
+    pub preview_health_timeout_secs: u64,
+    /// `--memory` cap for a preview container.
+    pub preview_memory: String,
+    /// `--cpus` cap for a preview container.
+    pub preview_cpus: String,
+    /// `--pids-limit` cap for a preview container.
+    pub preview_pids_limit: u32,
 }
 
 fn env_or(key: &str, default: &str) -> String {
@@ -106,6 +122,13 @@ impl ServiceConfig {
             "http://host.docker.internal:8788",
         );
         let docker_bin = env_or("FOUNDRY_SERVICE_DOCKER_BIN", "docker");
+        let preview_health_timeout_secs: u64 =
+            env_or("FOUNDRY_SERVICE_PREVIEW_HEALTH_TIMEOUT_SECS", "60")
+                .parse()
+                .context("parse FOUNDRY_SERVICE_PREVIEW_HEALTH_TIMEOUT_SECS")?;
+        let preview_pids_limit: u32 = env_or("FOUNDRY_SERVICE_PREVIEW_PIDS_LIMIT", "256")
+            .parse()
+            .context("parse FOUNDRY_SERVICE_PREVIEW_PIDS_LIMIT")?;
 
         Ok(ServiceConfig {
             database_url: env_or(
@@ -139,6 +162,14 @@ impl ServiceConfig {
             builder_image,
             builder_proxy_url,
             docker_bin,
+            preview_network: env_or("FOUNDRY_SERVICE_PREVIEW_NETWORK", "foundry-preview"),
+            preview_base_domain: env_or("FOUNDRY_SERVICE_PREVIEW_DOMAIN", "foundry.local"),
+            caddy_admin_url: env_or("FOUNDRY_SERVICE_CADDY_ADMIN_URL", "http://localhost:2019"),
+            caddy_server_name: env_or("FOUNDRY_SERVICE_CADDY_SERVER", "srv0"),
+            preview_health_timeout_secs,
+            preview_memory: env_or("FOUNDRY_SERVICE_PREVIEW_MEMORY", "512m"),
+            preview_cpus: env_or("FOUNDRY_SERVICE_PREVIEW_CPUS", "1"),
+            preview_pids_limit,
         })
     }
 }

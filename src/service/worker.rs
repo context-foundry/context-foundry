@@ -13,7 +13,7 @@ use serde_json::{json, Value};
 use ulid::Ulid;
 
 use crate::service::backend::StorageGrant;
-use crate::service::models::{Job, JobStatus};
+use crate::service::models::{self, Job, JobStatus};
 use crate::service::{db, AppState};
 
 /// Spawn `worker_count` worker loops. Returns their join handles.
@@ -42,14 +42,25 @@ async fn worker_loop(state: Arc<AppState>, worker_id: String, shutdown: Arc<Atom
 /// Drive one claimed job to a terminal state. Every fallible step is matched
 /// explicitly (never `?`) so a failure records a typed `failed` job rather
 /// than aborting the worker.
-pub async fn drive_job(state: &Arc<AppState>, job: Job) {
+pub async fn drive_job(state: &Arc<AppState>, mut job: Job) {
+    // Append the preview-contract task so the build emits a previewable app.
+    // The DB row keeps the original tasks_md; only the staged copy is augmented.
+    job.tasks_md = models::append_preview_contract(&job.tasks_md);
+
     // 1. Persist the submitted inputs.
     if let Err(e) = state
         .storage
         .put_input(&job.id, &job.spec_md, &job.tasks_md)
         .await
     {
-        fail(state, &job.id, "internal_error", &format!("store input failed: {e}")).await;
+        fail(
+            state,
+            &job.id,
+            "internal_error",
+            &format!("store input failed: {e}"),
+            None,
+        )
+        .await;
         return;
     }
 
@@ -59,7 +70,14 @@ pub async fn drive_job(state: &Arc<AppState>, job: Job) {
         Ok(g) => g,
         Err(e) => {
             state.proxy.revoke(&token);
-            fail(state, &job.id, "internal_error", &format!("issue grant failed: {e}")).await;
+            fail(
+                state,
+                &job.id,
+                "internal_error",
+                &format!("issue grant failed: {e}"),
+                None,
+            )
+            .await;
             return;
         }
     };
@@ -74,6 +92,7 @@ pub async fn drive_job(state: &Arc<AppState>, job: Job) {
                 &job.id,
                 "backend_unavailable",
                 &format!("start build failed: {e}"),
+                None,
             )
             .await;
             return;
@@ -98,7 +117,14 @@ pub async fn drive_job(state: &Arc<AppState>, job: Job) {
         Ok(s) => s,
         Err(e) => {
             cleanup(state, &token, &grant, &job.id).await;
-            fail(state, &job.id, "build_crashed", &format!("stream failed: {e}")).await;
+            fail(
+                state,
+                &job.id,
+                "build_crashed",
+                &format!("stream failed: {e}"),
+                None,
+            )
+            .await;
             return;
         }
     };
@@ -112,6 +138,7 @@ pub async fn drive_job(state: &Arc<AppState>, job: Job) {
             &job.id,
             "build_crashed",
             "no terminal report in the build stream",
+            None,
         )
         .await;
         return;
@@ -136,53 +163,9 @@ pub async fn drive_job(state: &Arc<AppState>, job: Job) {
         let _ = db::insert_event(&state.pool, &job.id, "stage", Some(*percent), Some(label)).await;
     }
 
-    // 9. Move to deploying.
-    let _ = db::update_job_progress(
-        &state.pool,
-        &job.id,
-        JobStatus::Deploying,
-        85,
-        Some("Building app image"),
-        parsed.cost,
-        &parsed.quality,
-        &parsed.detail,
-    )
-    .await;
-
-    // 10. Build the image.
-    let image = match state.build.build_image(&job).await {
-        Ok(i) => i,
-        Err(e) => {
-            cleanup(state, &token, &grant, &job.id).await;
-            fail(
-                state,
-                &job.id,
-                "preview_deploy_failed",
-                &format!("build image failed: {e}"),
-            )
-            .await;
-            return;
-        }
-    };
-
-    // 11. Deploy the preview.
-    let preview = match state.build.deploy_preview(&job, &image).await {
-        Ok(p) => p,
-        Err(e) => {
-            cleanup(state, &token, &grant, &job.id).await;
-            fail(
-                state,
-                &job.id,
-                "preview_deploy_failed",
-                &format!("deploy preview failed: {e}"),
-            )
-            .await;
-            return;
-        }
-    };
-
-    // 12. Collect the source artifact + diagnostics from the backend, then
-    //     persist them via the storage backend.
+    // 9. Collect and persist the source artifact + diagnostics now — BEFORE
+    //    the preview image build — so a preview-deploy failure still leaves
+    //    the source artifact downloadable.
     let artifact_bytes = match state.build.collect_artifact(&handle).await {
         Ok(bytes) => bytes,
         Err(e) => {
@@ -192,6 +175,7 @@ pub async fn drive_job(state: &Arc<AppState>, job: Job) {
                 &job.id,
                 "internal_error",
                 &format!("collect artifact failed: {e}"),
+                None,
             )
             .await;
             return;
@@ -206,12 +190,13 @@ pub async fn drive_job(state: &Arc<AppState>, job: Job) {
                 &job.id,
                 "internal_error",
                 &format!("store artifact failed: {e}"),
+                None,
             )
             .await;
             return;
         }
     };
-    // Diagnostics are best-effort: a failure must not sink a `ready` job.
+    // Diagnostics are best-effort: a failure must not sink the job.
     let diagnostics_bytes = state
         .build
         .collect_diagnostics(&handle)
@@ -221,6 +206,64 @@ pub async fn drive_job(state: &Arc<AppState>, job: Job) {
         .storage
         .put_diagnostics(&job.id, &diagnostics_bytes)
         .await;
+
+    // 10. Move to deploying.
+    let _ = db::update_job_progress(
+        &state.pool,
+        &job.id,
+        JobStatus::Deploying,
+        85,
+        Some("Building app image"),
+        parsed.cost,
+        &parsed.quality,
+        &parsed.detail,
+    )
+    .await;
+
+    // 11. Build the app image (honors a root Dockerfile or a synthesized
+    //     fallback). A failure here is non-fatal to the artifact: the source
+    //     tarball stored in step 9 stays downloadable.
+    let image = match state.build.build_image(&job).await {
+        Ok(i) => i,
+        Err(e) => {
+            cleanup(state, &token, &grant, &job.id).await;
+            fail(
+                state,
+                &job.id,
+                "preview_deploy_failed",
+                &format!("build image failed: {e}"),
+                Some(&artifact_url),
+            )
+            .await;
+            return;
+        }
+    };
+    // Record which Dockerfile produced the image (honor vs fallback metric).
+    let _ = db::insert_event(
+        &state.pool,
+        &job.id,
+        "image_built",
+        Some(85),
+        Some(&image.dockerfile_source),
+    )
+    .await;
+
+    // 12. Deploy the preview and health-check it.
+    let preview = match state.build.deploy_preview(&job, &image).await {
+        Ok(p) => p,
+        Err(e) => {
+            cleanup(state, &token, &grant, &job.id).await;
+            fail(
+                state,
+                &job.id,
+                "preview_deploy_failed",
+                &format!("deploy preview failed: {e}"),
+                Some(&artifact_url),
+            )
+            .await;
+            return;
+        }
+    };
 
     // 13. Final deploying checkpoint.
     let _ = db::update_job_progress(
@@ -261,8 +304,10 @@ async fn cleanup(state: &Arc<AppState>, token: &str, grant: &StorageGrant, job_i
     let _ = state.build.teardown(job_id).await;
 }
 
-async fn fail(state: &Arc<AppState>, id: &str, code: &str, msg: &str) {
-    // `percent = 0` -> GREATEST leaves the existing percent unchanged.
+async fn fail(state: &Arc<AppState>, id: &str, code: &str, msg: &str, artifact_url: Option<&str>) {
+    // `percent = 0` -> GREATEST leaves the existing percent unchanged. An
+    // `artifact_url` is carried through on a preview failure so the source
+    // tarball stays downloadable.
     let _ = db::finish_job(
         &state.pool,
         id,
@@ -270,7 +315,7 @@ async fn fail(state: &Arc<AppState>, id: &str, code: &str, msg: &str) {
         0,
         Some(code),
         Some(msg),
-        None,
+        artifact_url,
         None,
         None,
     )

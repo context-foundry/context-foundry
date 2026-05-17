@@ -2335,8 +2335,8 @@ pub fn context_menu_hit_test(
 /// Compute the modal rect for the Skills overlay. Used by both the renderer
 /// and the mouse hit-test so they stay aligned.
 pub fn skills_overlay_modal_rect(area: Rect) -> Rect {
-    let modal_w = area.width.saturating_sub(4).min(120).max(60);
-    let modal_h = area.height.saturating_sub(4).min(40).max(12);
+    let modal_w = area.width.saturating_sub(4).clamp(60, 120);
+    let modal_h = area.height.saturating_sub(4).clamp(12, 40);
     let x = area.x + (area.width.saturating_sub(modal_w)) / 2;
     let y = area.y + (area.height.saturating_sub(modal_h)) / 2;
     Rect::new(x, y, modal_w, modal_h)

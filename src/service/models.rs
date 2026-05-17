@@ -185,6 +185,25 @@ pub fn normalized_request_hash(
     hasher.finalize().to_hex().to_string()
 }
 
+// ─── Preview contract ───────────────────────────────────────────────────────
+
+/// The preview-contract task appended to every build's `TASKS.md`. It tells
+/// the build agent to emit a previewable, self-contained `Dockerfile`.
+pub const PREVIEW_CONTRACT_TASK: &str = "- [ ] TPREVIEW.1: Produce a root-level `Dockerfile` that builds and serves this app for preview hosting. The container must bind `0.0.0.0` on the `$PORT` environment variable (default `8080`) and `EXPOSE` that port; a request to `/` or `/healthz` must return HTTP 200. The app must run fully self-contained: SQLite or in-memory storage only, no external database, no required secrets or environment configuration. Do not set `X-Frame-Options` or a `frame-ancestors` Content-Security-Policy that would block iframe embedding.";
+
+/// Append [`PREVIEW_CONTRACT_TASK`] to a `TASKS.md` body as a new task line,
+/// separated from the existing content by a blank line.
+pub fn append_preview_contract(tasks_md: &str) -> String {
+    let mut out = tasks_md.to_string();
+    if !out.ends_with('\n') {
+        out.push('\n');
+    }
+    out.push('\n');
+    out.push_str(PREVIEW_CONTRACT_TASK);
+    out.push('\n');
+    out
+}
+
 /// Validate a submit request. Returns a human-readable reason on failure.
 pub fn validate_submit(cfg: &ServiceConfig, req: &SubmitRequest) -> Result<(), String> {
     if !valid_app_name(&req.app_name) {
@@ -247,6 +266,14 @@ mod tests {
             builder_image: "foundry-builder:latest".to_string(),
             builder_proxy_url: "http://host.docker.internal:8788".to_string(),
             docker_bin: "docker".to_string(),
+            preview_network: "foundry-preview".to_string(),
+            preview_base_domain: "foundry.local".to_string(),
+            caddy_admin_url: "http://localhost:2019".to_string(),
+            caddy_server_name: "srv0".to_string(),
+            preview_health_timeout_secs: 60,
+            preview_memory: "512m".to_string(),
+            preview_cpus: "1".to_string(),
+            preview_pids_limit: 256,
         }
     }
 
@@ -277,6 +304,18 @@ mod tests {
         assert_eq!(a, b);
         assert_ne!(a, normalized_request_hash("app", "spec-2", "tasks", 24));
         assert_ne!(a, normalized_request_hash("app", "spec", "tasks", 48));
+    }
+
+    #[test]
+    fn preview_contract_is_appended_as_a_task_line() {
+        let out = append_preview_contract("- [ ] T1.1: build the app");
+        assert!(out.contains("- [ ] T1.1: build the app"));
+        assert!(out.contains("TPREVIEW.1"));
+        assert!(out.ends_with('\n'));
+        // Idempotent newline handling: an input that already ends in a
+        // newline still yields a clean append.
+        let out2 = append_preview_contract("- [ ] T1.1: x\n");
+        assert!(out2.contains("TPREVIEW.1"));
     }
 
     #[test]

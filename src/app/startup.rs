@@ -2116,7 +2116,7 @@ fn clamp_prompts_list_scroll(overlay: &mut crate::app::PromptsOverlayState, visi
 /// formulas in sync.
 pub(super) fn skills_overlay_visible_rows(terminal_size: (u16, u16)) -> usize {
     let term_h = terminal_size.1;
-    let modal_h = term_h.saturating_sub(4).min(40).max(12);
+    let modal_h = term_h.saturating_sub(4).clamp(12, 40);
     // modal interior = modal_h - 2 borders.
     // Layout reserves 1 row for the tab strip and 1 row for the footer.
     (modal_h as usize).saturating_sub(4)
