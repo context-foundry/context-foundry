@@ -2,8 +2,9 @@
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 
 /// Runtime configuration for the build service.
 ///
@@ -69,6 +70,112 @@ pub struct ServiceConfig {
     pub build_cpus: String,
     /// `--pids-limit` cap for a build container.
     pub build_pids_limit: u32,
+}
+
+/// Which credential the `foundry serve` auth proxy presents to Anthropic
+/// upstream. Selected by `FOUNDRY_SERVICE_UPSTREAM_AUTH`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum UpstreamAuthMode {
+    /// `x-api-key: <ANTHROPIC_API_KEY>` -- the legacy default.
+    ApiKey,
+    /// `Authorization: Bearer <token>` + the OAuth `anthropic-beta` header.
+    OAuth,
+}
+
+impl UpstreamAuthMode {
+    /// Parse the `FOUNDRY_SERVICE_UPSTREAM_AUTH` env value into the enum. An
+    /// empty value selects the legacy `ApiKey` default.
+    pub fn parse(raw: &str) -> Result<UpstreamAuthMode> {
+        match raw.trim().to_ascii_lowercase().as_str() {
+            "" | "api_key" => Ok(UpstreamAuthMode::ApiKey),
+            "oauth" => Ok(UpstreamAuthMode::OAuth),
+            other => bail!(
+                "invalid FOUNDRY_SERVICE_UPSTREAM_AUTH '{other}': expected 'api_key' or 'oauth'"
+            ),
+        }
+    }
+}
+
+/// The upstream-auth configuration resolved from the environment. Not a
+/// field of `ServiceConfig` -- kept separate so `ServiceConfig`'s struct
+/// literal (built in test helpers outside `src/service/`) is unchanged.
+#[derive(Clone, Debug)]
+pub struct UpstreamAuthConfig {
+    pub mode: UpstreamAuthMode,
+    /// `ANTHROPIC_API_KEY` (also held by `ServiceConfig.anthropic_api_key`).
+    pub api_key: String,
+    /// `FOUNDRY_SERVICE_OAUTH_TOKEN` -- long-lived OAuth access token
+    /// (the kind produced by `claude setup-token`).
+    pub oauth_token: String,
+    /// `FOUNDRY_SERVICE_OAUTH_REFRESH_TOKEN` -- empty if not configured.
+    pub oauth_refresh_token: String,
+    /// `FOUNDRY_SERVICE_OAUTH_CLIENT_ID` -- empty if not configured.
+    pub oauth_client_id: String,
+    /// `FOUNDRY_SERVICE_OAUTH_REFRESH_URL` -- the OAuth token endpoint.
+    pub oauth_refresh_url: String,
+    /// `FOUNDRY_SERVICE_OAUTH_EXPIRES_AT` (unix seconds) -> `None` when unset.
+    pub oauth_expires_at: Option<SystemTime>,
+}
+
+/// Read every upstream-auth env var into an [`UpstreamAuthConfig`]. `api_key`
+/// is passed in (rather than re-read) so it stays the single value the rest of
+/// `ServiceConfig` already holds. `Err` only on an invalid mode string or an
+/// unparseable expiry.
+pub fn resolve_upstream_auth(api_key: &str) -> Result<UpstreamAuthConfig> {
+    let mode = UpstreamAuthMode::parse(&env_or("FOUNDRY_SERVICE_UPSTREAM_AUTH", "api_key"))
+        .context("parse FOUNDRY_SERVICE_UPSTREAM_AUTH")?;
+    let raw_exp = env_or("FOUNDRY_SERVICE_OAUTH_EXPIRES_AT", "");
+    let oauth_expires_at = if raw_exp.is_empty() {
+        None
+    } else {
+        let secs: u64 = raw_exp
+            .parse()
+            .context("parse FOUNDRY_SERVICE_OAUTH_EXPIRES_AT as unix seconds")?;
+        UNIX_EPOCH.checked_add(Duration::from_secs(secs))
+    };
+    Ok(UpstreamAuthConfig {
+        mode,
+        api_key: api_key.to_string(),
+        oauth_token: env_or("FOUNDRY_SERVICE_OAUTH_TOKEN", ""),
+        oauth_refresh_token: env_or("FOUNDRY_SERVICE_OAUTH_REFRESH_TOKEN", ""),
+        oauth_client_id: env_or("FOUNDRY_SERVICE_OAUTH_CLIENT_ID", ""),
+        oauth_refresh_url: env_or(
+            "FOUNDRY_SERVICE_OAUTH_REFRESH_URL",
+            "https://console.anthropic.com/v1/oauth/token",
+        ),
+        oauth_expires_at,
+    })
+}
+
+/// Fail fast when the selected upstream-auth mode lacks its credential, or
+/// when `api_key` mode is genuinely ambiguous (both credentials present).
+///
+/// In `oauth` mode a present `ANTHROPIC_API_KEY` is ignored, not rejected:
+/// the explicit `FOUNDRY_SERVICE_UPSTREAM_AUTH=oauth` selector already states
+/// intent, and `ANTHROPIC_API_KEY` is a near-universal exported env var.
+/// Error messages name env vars only -- never the credential value.
+pub fn validate_upstream_credentials(cfg: &UpstreamAuthConfig) -> Result<()> {
+    let has_api_key = !cfg.api_key.is_empty();
+    let has_oauth = !cfg.oauth_token.is_empty();
+    match cfg.mode {
+        UpstreamAuthMode::ApiKey => {
+            if !has_api_key {
+                bail!("upstream_auth=api_key requires ANTHROPIC_API_KEY but it is empty");
+            }
+            if has_oauth {
+                bail!(
+                    "upstream_auth=api_key but FOUNDRY_SERVICE_OAUTH_TOKEN is also set; \
+                     provide exactly one credential"
+                );
+            }
+        }
+        UpstreamAuthMode::OAuth => {
+            if !has_oauth {
+                bail!("upstream_auth=oauth requires FOUNDRY_SERVICE_OAUTH_TOKEN but it is empty");
+            }
+        }
+    }
+    Ok(())
 }
 
 fn env_or(key: &str, default: &str) -> String {
@@ -158,6 +265,21 @@ impl ServiceConfig {
             .parse()
             .context("parse FOUNDRY_SERVICE_BUILD_PIDS_LIMIT")?;
 
+        let anthropic_api_key = env_or("ANTHROPIC_API_KEY", "");
+        let upstream_auth =
+            resolve_upstream_auth(&anthropic_api_key).context("resolve upstream auth config")?;
+        // The mock build backend never forwards through the auth proxy, so a
+        // missing upstream credential is tolerated there -- this preserves the
+        // pre-T35.7d behavior where from_env() did not validate
+        // ANTHROPIC_API_KEY. Fail-fast validation runs for a real build
+        // backend, or whenever the operator explicitly selected an upstream
+        // auth mode via FOUNDRY_SERVICE_UPSTREAM_AUTH.
+        let upstream_auth_explicit = !env_or("FOUNDRY_SERVICE_UPSTREAM_AUTH", "").is_empty();
+        if build_backend != "mock" || upstream_auth_explicit {
+            validate_upstream_credentials(&upstream_auth)
+                .context("validate upstream auth credentials")?;
+        }
+
         Ok(ServiceConfig {
             database_url: env_or(
                 "FOUNDRY_SERVICE_DATABASE_URL",
@@ -166,7 +288,7 @@ impl ServiceConfig {
             bind_addr,
             proxy_bind_addr,
             api_keys: split_csv(&env_or("FOUNDRY_SERVICE_API_KEYS", "")),
-            anthropic_api_key: env_or("ANTHROPIC_API_KEY", ""),
+            anthropic_api_key,
             anthropic_base_url: env_or(
                 "FOUNDRY_SERVICE_ANTHROPIC_BASE_URL",
                 "https://api.anthropic.com",
@@ -205,5 +327,87 @@ impl ServiceConfig {
             build_cpus: env_or("FOUNDRY_SERVICE_BUILD_CPUS", "2"),
             build_pids_limit,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Build an `UpstreamAuthConfig` with the given mode/api_key/oauth_token
+    /// and empty refresh/client/url/expiry fields.
+    fn ua(mode: UpstreamAuthMode, api_key: &str, oauth_token: &str) -> UpstreamAuthConfig {
+        UpstreamAuthConfig {
+            mode,
+            api_key: api_key.to_string(),
+            oauth_token: oauth_token.to_string(),
+            oauth_refresh_token: String::new(),
+            oauth_client_id: String::new(),
+            oauth_refresh_url: String::new(),
+            oauth_expires_at: None,
+        }
+    }
+
+    #[test]
+    fn upstream_auth_mode_parse_accepts_known_values() {
+        assert_eq!(
+            UpstreamAuthMode::parse("api_key").unwrap(),
+            UpstreamAuthMode::ApiKey
+        );
+        assert_eq!(UpstreamAuthMode::parse("").unwrap(), UpstreamAuthMode::ApiKey);
+        assert_eq!(
+            UpstreamAuthMode::parse("OAuth").unwrap(),
+            UpstreamAuthMode::OAuth
+        );
+        assert_eq!(
+            UpstreamAuthMode::parse("oauth ").unwrap(),
+            UpstreamAuthMode::OAuth
+        );
+    }
+
+    #[test]
+    fn upstream_auth_mode_parse_rejects_garbage() {
+        assert!(UpstreamAuthMode::parse("bogus").is_err());
+    }
+
+    #[test]
+    fn validate_api_key_mode_missing_key_errs() {
+        assert!(validate_upstream_credentials(&ua(UpstreamAuthMode::ApiKey, "", "")).is_err());
+    }
+
+    #[test]
+    fn validate_api_key_mode_ambiguous_errs() {
+        assert!(
+            validate_upstream_credentials(&ua(UpstreamAuthMode::ApiKey, "sk-x", "oauth-tok"))
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn validate_api_key_mode_ok() {
+        assert!(validate_upstream_credentials(&ua(UpstreamAuthMode::ApiKey, "sk-x", "")).is_ok());
+    }
+
+    #[test]
+    fn validate_oauth_mode_missing_token_errs() {
+        assert!(validate_upstream_credentials(&ua(UpstreamAuthMode::OAuth, "", "")).is_err());
+    }
+
+    #[test]
+    fn validate_oauth_mode_ignores_present_api_key() {
+        // Deviation from the original plan test `validate_oauth_mode_ambiguous_errs`:
+        // per unresolved plan-review feedback, `oauth` mode tolerates a
+        // present-but-unused ANTHROPIC_API_KEY rather than refusing startup.
+        assert!(
+            validate_upstream_credentials(&ua(UpstreamAuthMode::OAuth, "sk-x", "oauth-tok"))
+                .is_ok()
+        );
+    }
+
+    #[test]
+    fn validate_oauth_mode_ok() {
+        assert!(
+            validate_upstream_credentials(&ua(UpstreamAuthMode::OAuth, "", "oauth-tok")).is_ok()
+        );
     }
 }

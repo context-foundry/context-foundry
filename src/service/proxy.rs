@@ -10,8 +10,9 @@
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, RwLock};
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
+use anyhow::{anyhow, bail, Context, Result};
 use axum::{
     body::Body,
     extract::State,
@@ -23,9 +24,211 @@ use axum::{
 use serde_json::json;
 use ulid::Ulid;
 
-use crate::service::config::ServiceConfig;
+use crate::service::config::{
+    resolve_upstream_auth, ServiceConfig, UpstreamAuthConfig, UpstreamAuthMode,
+};
 use crate::service::ratelimit::RateLimitState;
 use crate::service::AppState;
+
+/// The `anthropic-beta` header value required when authenticating to the
+/// Anthropic API with an OAuth token rather than an API key.
+const OAUTH_BETA_HEADER: &str = "oauth-2025-04-20";
+
+/// Refresh an OAuth access token this many seconds before it expires.
+const OAUTH_REFRESH_SKEW_SECS: u64 = 300;
+
+/// The upstream credential the proxy presents to Anthropic. Resolved once at
+/// `ProxyRegistry::new` time; the real value never leaves this process.
+enum UpstreamAuth {
+    /// Legacy mode: a static `ANTHROPIC_API_KEY`.
+    ApiKey(String),
+    /// OAuth mode: a refreshable access token.
+    OAuth(Arc<OAuthTokenState>),
+}
+
+/// A point-in-time OAuth access token and its expiry.
+#[derive(Clone, Debug)]
+struct TokenSnapshot {
+    access_token: String,
+    expires_at: Option<SystemTime>,
+}
+
+/// Holds the live OAuth access token and refreshes it before expiry.
+struct OAuthTokenState {
+    snapshot: RwLock<TokenSnapshot>,
+    refresh_token: Option<String>,
+    client_id: Option<String>,
+    refresh_url: String,
+    http: reqwest::Client,
+    skew: Duration,
+}
+
+impl UpstreamAuth {
+    /// Turn the env-resolved [`UpstreamAuthConfig`] into the runtime credential.
+    fn from_resolved(cfg: UpstreamAuthConfig, http: reqwest::Client) -> UpstreamAuth {
+        match cfg.mode {
+            UpstreamAuthMode::ApiKey => UpstreamAuth::ApiKey(cfg.api_key),
+            UpstreamAuthMode::OAuth => {
+                let refresh_token = (!cfg.oauth_refresh_token.is_empty())
+                    .then(|| cfg.oauth_refresh_token.clone());
+                let client_id =
+                    (!cfg.oauth_client_id.is_empty()).then(|| cfg.oauth_client_id.clone());
+                UpstreamAuth::OAuth(Arc::new(OAuthTokenState::new(
+                    cfg.oauth_token,
+                    cfg.oauth_expires_at,
+                    refresh_token,
+                    client_id,
+                    cfg.oauth_refresh_url,
+                    http,
+                )))
+            }
+        }
+    }
+}
+
+impl OAuthTokenState {
+    /// Construct the token state with the configured access token.
+    fn new(
+        access_token: String,
+        expires_at: Option<SystemTime>,
+        refresh_token: Option<String>,
+        client_id: Option<String>,
+        refresh_url: String,
+        http: reqwest::Client,
+    ) -> OAuthTokenState {
+        OAuthTokenState {
+            snapshot: RwLock::new(TokenSnapshot {
+                access_token,
+                expires_at,
+            }),
+            refresh_token,
+            client_id,
+            refresh_url,
+            http,
+            skew: Duration::from_secs(OAUTH_REFRESH_SKEW_SECS),
+        }
+    }
+
+    /// Return a valid access token, refreshing first if it is near expiry. A
+    /// refresh failure is propagated as `Err` (a typed upstream error), never
+    /// a panic.
+    async fn current_token(&self) -> Result<String> {
+        let needs = {
+            let snap = self.snapshot.read().expect("oauth token lock poisoned");
+            needs_refresh(snap.expires_at, SystemTime::now(), self.skew)
+        };
+        if !needs {
+            return Ok(self
+                .snapshot
+                .read()
+                .expect("oauth token lock poisoned")
+                .access_token
+                .clone());
+        }
+        let refreshed = self.refresh().await;
+        self.apply_refreshed(refreshed)
+    }
+
+    /// POST the refresh token to the OAuth endpoint and parse the new token.
+    /// A missing refresh token, a network failure, a non-2xx status, or a
+    /// malformed body all return `Err` -- never a panic; the error message
+    /// never includes the token.
+    async fn refresh(&self) -> Result<TokenSnapshot> {
+        let refresh_token = match self.refresh_token.as_deref() {
+            Some(t) if !t.is_empty() => t,
+            _ => bail!("oauth access token requires refresh but no refresh token is configured"),
+        };
+        let mut form: Vec<(&str, &str)> = vec![
+            ("grant_type", "refresh_token"),
+            ("refresh_token", refresh_token),
+        ];
+        if let Some(cid) = self.client_id.as_deref().filter(|s| !s.is_empty()) {
+            form.push(("client_id", cid));
+        }
+        let resp = self
+            .http
+            .post(&self.refresh_url)
+            .form(&form)
+            .send()
+            .await
+            .context("oauth token refresh request failed")?;
+        let status = resp.status();
+        let body = resp
+            .bytes()
+            .await
+            .context("read oauth refresh response body")?;
+        if !status.is_success() {
+            bail!("oauth token refresh returned HTTP {}", status.as_u16());
+        }
+        parse_refresh_response(&body, SystemTime::now())
+    }
+
+    /// Commit a successful refresh to `snapshot`, or surface the failure. On
+    /// `Err` the snapshot is left unchanged.
+    fn apply_refreshed(&self, result: Result<TokenSnapshot>) -> Result<String> {
+        let snap = result.context("oauth upstream token refresh failed")?;
+        let mut guard = self.snapshot.write().expect("oauth token lock poisoned");
+        *guard = snap;
+        Ok(guard.access_token.clone())
+    }
+}
+
+/// Build the legacy `x-api-key` header set.
+fn api_key_headers(key: &str) -> Vec<(&'static str, String)> {
+    vec![("x-api-key", key.to_string())]
+}
+
+/// Build the OAuth header set: a bearer token plus the required
+/// `anthropic-beta` header.
+fn oauth_headers(access_token: &str) -> Vec<(&'static str, String)> {
+    vec![
+        ("authorization", format!("Bearer {access_token}")),
+        ("anthropic-beta", OAUTH_BETA_HEADER.to_string()),
+    ]
+}
+
+/// Decide whether an OAuth token must be refreshed: `true` when it is expired
+/// or within `skew` of expiry. A token with no expiry never needs refresh.
+fn needs_refresh(expires_at: Option<SystemTime>, now: SystemTime, skew: Duration) -> bool {
+    match expires_at {
+        None => false,
+        Some(exp) => match now.checked_add(skew) {
+            Some(deadline) => deadline >= exp,
+            None => true,
+        },
+    }
+}
+
+/// Parse an OAuth token-refresh JSON response. Malformed JSON or a
+/// missing/empty `access_token` returns `Err` -- never a panic.
+fn parse_refresh_response(body: &[u8], now: SystemTime) -> Result<TokenSnapshot> {
+    let v: serde_json::Value =
+        serde_json::from_slice(body).context("parse oauth refresh response as JSON")?;
+    let access_token = v
+        .get("access_token")
+        .and_then(|t| t.as_str())
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| anyhow!("oauth refresh response missing access_token"))?
+        .to_string();
+    let expires_at = v
+        .get("expires_in")
+        .and_then(|e| e.as_u64())
+        .and_then(|secs| now.checked_add(Duration::from_secs(secs)));
+    Ok(TokenSnapshot {
+        access_token,
+        expires_at,
+    })
+}
+
+/// The typed `502` returned when an OAuth refresh fails. It carries a generic
+/// message and never echoes the real credential.
+fn upstream_credential_error() -> Response {
+    (
+        StatusCode::BAD_GATEWAY,
+        Json(json!({ "error": "upstream_error", "message": "upstream credential unavailable" })),
+    )
+        .into_response()
+}
 
 /// A per-build proxy token with an atomic in-flight-request counter.
 pub struct ProxyToken {
@@ -92,15 +295,34 @@ pub struct ProxyRegistry {
     tokens: RwLock<HashMap<String, Arc<ProxyToken>>>,
     /// Rate-limit-aware dispatch gate driven by upstream Anthropic responses.
     ratelimit: RateLimitState,
+    /// The upstream credential presented to Anthropic; never leaves the proxy.
+    upstream: UpstreamAuth,
 }
 
 impl ProxyRegistry {
     pub fn new(cfg: ServiceConfig) -> ProxyRegistry {
+        let http = reqwest::Client::new();
+        // `from_env()` already validated the credential in production; this
+        // fallback only covers the test/embedded path where a `ServiceConfig`
+        // is built directly. It degrades to legacy `api_key` mode.
+        let resolved = resolve_upstream_auth(&cfg.anthropic_api_key).unwrap_or_else(|_| {
+            UpstreamAuthConfig {
+                mode: UpstreamAuthMode::ApiKey,
+                api_key: cfg.anthropic_api_key.clone(),
+                oauth_token: String::new(),
+                oauth_refresh_token: String::new(),
+                oauth_client_id: String::new(),
+                oauth_refresh_url: String::new(),
+                oauth_expires_at: None,
+            }
+        });
+        let upstream = UpstreamAuth::from_resolved(resolved, http.clone());
         ProxyRegistry {
             cfg,
-            http: reqwest::Client::new(),
+            http,
             tokens: RwLock::new(HashMap::new()),
             ratelimit: RateLimitState::new(),
+            upstream,
         }
     }
 
@@ -191,6 +413,19 @@ impl ProxyRegistry {
     pub fn note_upstream_response(&self, status: u16, headers: &HeaderMap) {
         self.ratelimit.record_response(status, headers);
     }
+
+    /// Produce the auth headers for the upstream forward, refreshing an OAuth
+    /// token first when it is near expiry. An OAuth refresh failure surfaces
+    /// as `Err` (a typed upstream error), never a panic.
+    async fn upstream_headers(&self) -> Result<Vec<(&'static str, String)>> {
+        match &self.upstream {
+            UpstreamAuth::ApiKey(key) => Ok(api_key_headers(key)),
+            UpstreamAuth::OAuth(state) => {
+                let token = state.current_token().await?;
+                Ok(oauth_headers(&token))
+            }
+        }
+    }
 }
 
 fn denial_response(denial: &ProxyDenial) -> Response {
@@ -278,20 +513,29 @@ async fn messages_handler(
         return rate_limited_response(delay);
     }
 
+    // Resolve the upstream credential (refreshing an OAuth token when it
+    // is near expiry). A refresh failure is a typed upstream error, never
+    // a panic, and never echoes the real credential. This runs before
+    // `try_acquire` so a refresh failure leaks no in-flight slot.
+    let auth_headers = match state.proxy.upstream_headers().await {
+        Ok(h) => h,
+        Err(_) => return upstream_credential_error(),
+    };
+
     if !tok.try_acquire(cfg.proxy_max_concurrent) {
         return denied(&state, Some(&tok.job_id), ProxyDenial::TooManyConcurrent);
     }
 
-    let upstream = state
+    let mut request = state
         .proxy
         .http
         .post(format!("{}/v1/messages", cfg.anthropic_base_url))
-        .header("x-api-key", &cfg.anthropic_api_key)
         .header("anthropic-version", "2023-06-01")
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(body_bytes.to_vec())
-        .send()
-        .await;
+        .header(header::CONTENT_TYPE, "application/json");
+    for (name, value) in &auth_headers {
+        request = request.header(*name, value.as_str());
+    }
+    let upstream = request.body(body_bytes.to_vec()).send().await;
     tok.release();
 
     match upstream {
@@ -332,4 +576,161 @@ pub async fn serve_proxy(state: Arc<AppState>) -> anyhow::Result<()> {
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, router(state)).await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::UNIX_EPOCH;
+
+    #[test]
+    fn api_key_headers_are_byte_identical() {
+        // `api_key` mode must be byte-identical to the legacy proxy: exactly
+        // one header named `x-api-key` carrying the raw key.
+        assert_eq!(
+            api_key_headers("sk-test-123"),
+            vec![("x-api-key", "sk-test-123".to_string())]
+        );
+    }
+
+    #[test]
+    fn oauth_headers_have_bearer_and_beta() {
+        assert_eq!(
+            oauth_headers("tok-abc"),
+            vec![
+                ("authorization", "Bearer tok-abc".to_string()),
+                ("anthropic-beta", "oauth-2025-04-20".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn needs_refresh_true_when_within_skew() {
+        let now = SystemTime::now();
+        assert!(needs_refresh(
+            Some(now + Duration::from_secs(60)),
+            now,
+            Duration::from_secs(300)
+        ));
+    }
+
+    #[test]
+    fn needs_refresh_true_when_expired() {
+        assert!(needs_refresh(
+            Some(UNIX_EPOCH + Duration::from_secs(1)),
+            SystemTime::now(),
+            Duration::from_secs(300)
+        ));
+    }
+
+    #[test]
+    fn needs_refresh_false_when_fresh() {
+        let now = SystemTime::now();
+        assert!(!needs_refresh(
+            Some(now + Duration::from_secs(86400)),
+            now,
+            Duration::from_secs(300)
+        ));
+    }
+
+    #[test]
+    fn needs_refresh_false_when_no_expiry() {
+        assert!(!needs_refresh(
+            None,
+            SystemTime::now(),
+            Duration::from_secs(300)
+        ));
+    }
+
+    #[test]
+    fn parse_refresh_response_reads_token_and_expiry() {
+        let now = SystemTime::now();
+        let snap =
+            parse_refresh_response(br#"{"access_token":"new-tok","expires_in":3600}"#, now)
+                .expect("valid refresh response parses");
+        assert_eq!(snap.access_token, "new-tok");
+        let exp = snap.expires_at.expect("expires_at present");
+        assert!(exp > now);
+    }
+
+    #[test]
+    fn parse_refresh_response_rejects_garbage() {
+        assert!(parse_refresh_response(b"not json", SystemTime::now()).is_err());
+        assert!(parse_refresh_response(br#"{"expires_in":10}"#, SystemTime::now()).is_err());
+    }
+
+    #[test]
+    fn apply_refreshed_ok_updates_snapshot() {
+        let state = OAuthTokenState::new(
+            "old".into(),
+            None,
+            None,
+            None,
+            "http://unused".into(),
+            reqwest::Client::new(),
+        );
+        let result = state.apply_refreshed(Ok(TokenSnapshot {
+            access_token: "new".into(),
+            expires_at: None,
+        }));
+        assert_eq!(result.unwrap(), "new");
+        assert_eq!(
+            state
+                .snapshot
+                .read()
+                .expect("lock")
+                .access_token,
+            "new"
+        );
+    }
+
+    #[test]
+    fn apply_refreshed_err_keeps_snapshot() {
+        let state = OAuthTokenState::new(
+            "old".into(),
+            None,
+            None,
+            None,
+            "http://unused".into(),
+            reqwest::Client::new(),
+        );
+        let result = state.apply_refreshed(Err(anyhow!("boom")));
+        assert!(result.is_err());
+        assert_eq!(
+            state
+                .snapshot
+                .read()
+                .expect("lock")
+                .access_token,
+            "old"
+        );
+    }
+
+    #[tokio::test]
+    async fn current_token_returns_existing_when_fresh() {
+        let state = OAuthTokenState::new(
+            "live-tok".into(),
+            Some(SystemTime::now() + Duration::from_secs(86400)),
+            None,
+            None,
+            "http://unused".into(),
+            reqwest::Client::new(),
+        );
+        assert_eq!(state.current_token().await.unwrap(), "live-tok");
+    }
+
+    #[tokio::test]
+    async fn current_token_refresh_failure_is_typed_error_not_panic() {
+        // Expired token, no refresh token configured: `current_token` must
+        // surface a typed `Err` (no network call, no panic).
+        let state = OAuthTokenState::new(
+            "stale".into(),
+            Some(UNIX_EPOCH + Duration::from_secs(1)),
+            None,
+            None,
+            "http://unused".into(),
+            reqwest::Client::new(),
+        );
+        assert!(state.current_token().await.is_err());
+    }
 }
