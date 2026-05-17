@@ -104,6 +104,12 @@ pub trait BuildBackend: Send + Sync {
     async fn build_image(&self, job: &Job) -> Result<ImageRef>;
     /// Deploy a preview of the built image.
     async fn deploy_preview(&self, job: &Job, image: &ImageRef) -> Result<PreviewInfo>;
+    /// Collect the built source as a `.tar.gz`: the working tree plus `.git`
+    /// history, excluding `.buildloop/` and dependency/build directories.
+    async fn collect_artifact(&self, handle: &BuildHandle) -> Result<Vec<u8>>;
+    /// Collect the build diagnostics bundle as a `.tar.gz`: `.buildloop/*.md`
+    /// plus the `.buildloop/history/**` per-task snapshots.
+    async fn collect_diagnostics(&self, handle: &BuildHandle) -> Result<Vec<u8>>;
     /// Tear down any resources associated with a job.
     async fn teardown(&self, job_id: &str) -> Result<()>;
 }

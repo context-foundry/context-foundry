@@ -243,6 +243,10 @@ mod tests {
             proxy_max_body_bytes: 4096,
             proxy_max_output_tokens: 8192,
             proxy_model_prefixes: vec!["claude-".to_string()],
+            build_backend: "mock".to_string(),
+            builder_image: "foundry-builder:latest".to_string(),
+            builder_proxy_url: "http://host.docker.internal:8788".to_string(),
+            docker_bin: "docker".to_string(),
         }
     }
 

@@ -10,6 +10,7 @@ pub mod api;
 pub mod backend;
 pub mod config;
 pub mod db;
+pub mod localdocker;
 pub mod mock_backend;
 pub mod models;
 pub mod proxy;
@@ -44,7 +45,15 @@ pub async fn run_serve() -> Result<()> {
 
     let storage: Arc<dyn backend::StorageBackend> =
         Arc::new(storage_local::LocalFilesystem::new(config.storage_root.clone()));
-    let build: Arc<dyn backend::BuildBackend> = Arc::new(mock_backend::MockBuildBackend::new());
+    let build: Arc<dyn backend::BuildBackend> = match config.build_backend.as_str() {
+        "local_docker" => Arc::new(localdocker::LocalDocker::new(
+            config.builder_image.clone(),
+            config.storage_root.clone(),
+            config.builder_proxy_url.clone(),
+            config.docker_bin.clone(),
+        )),
+        _ => Arc::new(mock_backend::MockBuildBackend::new()),
+    };
     let proxy = Arc::new(proxy::ProxyRegistry::new(config.clone()));
 
     let state = Arc::new(AppState {

@@ -13,7 +13,6 @@ use serde_json::{json, Value};
 use ulid::Ulid;
 
 use crate::service::backend::StorageGrant;
-use crate::service::mock_backend::MockBuildBackend;
 use crate::service::models::{Job, JobStatus};
 use crate::service::{db, AppState};
 
@@ -182,12 +181,23 @@ pub async fn drive_job(state: &Arc<AppState>, job: Job) {
         }
     };
 
-    // 12. Store the artifact and diagnostics.
-    let artifact_url = match state
-        .storage
-        .put_artifact(&job.id, &MockBuildBackend::fixture_artifact())
-        .await
-    {
+    // 12. Collect the source artifact + diagnostics from the backend, then
+    //     persist them via the storage backend.
+    let artifact_bytes = match state.build.collect_artifact(&handle).await {
+        Ok(bytes) => bytes,
+        Err(e) => {
+            cleanup(state, &token, &grant, &job.id).await;
+            fail(
+                state,
+                &job.id,
+                "internal_error",
+                &format!("collect artifact failed: {e}"),
+            )
+            .await;
+            return;
+        }
+    };
+    let artifact_url = match state.storage.put_artifact(&job.id, &artifact_bytes).await {
         Ok(url) => url,
         Err(e) => {
             cleanup(state, &token, &grant, &job.id).await;
@@ -201,9 +211,15 @@ pub async fn drive_job(state: &Arc<AppState>, job: Job) {
             return;
         }
     };
+    // Diagnostics are best-effort: a failure must not sink a `ready` job.
+    let diagnostics_bytes = state
+        .build
+        .collect_diagnostics(&handle)
+        .await
+        .unwrap_or_default();
     let _ = state
         .storage
-        .put_diagnostics(&job.id, &MockBuildBackend::fixture_artifact())
+        .put_diagnostics(&job.id, &diagnostics_bytes)
         .await;
 
     // 13. Final deploying checkpoint.

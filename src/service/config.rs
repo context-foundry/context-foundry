@@ -29,6 +29,15 @@ pub struct ServiceConfig {
     pub proxy_max_body_bytes: usize,
     pub proxy_max_output_tokens: u64,
     pub proxy_model_prefixes: Vec<String>,
+    /// Which `BuildBackend` to run: `"mock"` (default) or `"local_docker"`.
+    pub build_backend: String,
+    /// Docker image used by the `LocalDocker` backend.
+    pub builder_image: String,
+    /// URL a build container uses for `ANTHROPIC_BASE_URL` — the daemon's auth
+    /// proxy, reachable from inside the container.
+    pub builder_proxy_url: String,
+    /// The `docker` CLI binary the `LocalDocker` backend invokes.
+    pub docker_bin: String,
 }
 
 fn env_or(key: &str, default: &str) -> String {
@@ -90,6 +99,14 @@ impl ServiceConfig {
         let proxy_model_prefixes =
             split_csv(&env_or("FOUNDRY_SERVICE_PROXY_MODEL_PREFIXES", "claude-"));
 
+        let build_backend = env_or("FOUNDRY_SERVICE_BUILD_BACKEND", "mock");
+        let builder_image = env_or("FOUNDRY_SERVICE_BUILDER_IMAGE", "foundry-builder:latest");
+        let builder_proxy_url = env_or(
+            "FOUNDRY_SERVICE_BUILDER_PROXY_URL",
+            "http://host.docker.internal:8788",
+        );
+        let docker_bin = env_or("FOUNDRY_SERVICE_DOCKER_BIN", "docker");
+
         Ok(ServiceConfig {
             database_url: env_or(
                 "FOUNDRY_SERVICE_DATABASE_URL",
@@ -118,6 +135,10 @@ impl ServiceConfig {
             proxy_max_body_bytes,
             proxy_max_output_tokens,
             proxy_model_prefixes,
+            build_backend,
+            builder_image,
+            builder_proxy_url,
+            docker_bin,
         })
     }
 }

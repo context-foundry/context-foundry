@@ -76,6 +76,14 @@ impl BuildBackend for MockBuildBackend {
         })
     }
 
+    async fn collect_artifact(&self, _handle: &BuildHandle) -> Result<Vec<u8>> {
+        Ok(Self::fixture_artifact())
+    }
+
+    async fn collect_diagnostics(&self, _handle: &BuildHandle) -> Result<Vec<u8>> {
+        Ok(Self::fixture_artifact())
+    }
+
     async fn teardown(&self, _job_id: &str) -> Result<()> {
         Ok(())
     }
