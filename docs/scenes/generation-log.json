@@ -2314,5 +2314,32 @@
     "retries": 0,
     "api_retries": 0,
     "validation": "pass"
+  },
+  {
+    "ts": "2026-05-18T20:04:07.716Z",
+    "scene": "lunar-landing-page.js",
+    "seed_id": "lunar-landing-page",
+    "biome": "space",
+    "model": "gpt-4o-mini",
+    "input_tokens": 16274,
+    "output_tokens": 1405,
+    "cost_usd": 0.0033,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "fail",
+    "error": "Validation failed after 2 attempts: VALIDATION FAILED (2 errors):\n- Too short: 65 lines (min 80)\n- Insufficient animation: found 0 animation patterns (need 2+). Use osc(t,period,phase), Math.sin(t*speed), or Math.cos(t*speed) for time-based animation"
+  },
+  {
+    "ts": "2026-05-18T20:04:28.077Z",
+    "scene": "hello-world-from-orbit.js",
+    "seed_id": "hello-world-from-orbit",
+    "biome": "space",
+    "model": "gpt-4o-mini",
+    "input_tokens": 7417,
+    "output_tokens": 956,
+    "cost_usd": 0.0017,
+    "retries": 0,
+    "api_retries": 0,
+    "validation": "pass"
   }
 ]

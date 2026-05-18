@@ -1157,6 +1157,16 @@
       "model": "gpt-4o-mini",
       "lines": 82,
       "generation": 116
+    },
+    {
+      "file": "hello-world-from-orbit.js",
+      "name": "Hello World from Orbit",
+      "location": "International Space Station, Low Earth Orbit",
+      "biome": "space",
+      "generated": "2026-05-18T20:04:28.076Z",
+      "model": "gpt-4o-mini",
+      "lines": 81,
+      "generation": 117
     }
   ]
 }
