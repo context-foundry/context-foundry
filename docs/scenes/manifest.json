@@ -1147,6 +1147,16 @@
       "model": "gpt-4o-mini",
       "lines": 81,
       "generation": 115
+    },
+    {
+      "file": "open-ocean-open-source.js",
+      "name": "Open Ocean, Open Source",
+      "location": "Sargasso Sea, Atlantic Ocean",
+      "biome": "ocean",
+      "generated": "2026-05-18T04:45:31.327Z",
+      "model": "gpt-4o-mini",
+      "lines": 82,
+      "generation": 116
     }
   ]
 }

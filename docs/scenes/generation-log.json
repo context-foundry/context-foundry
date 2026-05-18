@@ -2273,5 +2273,46 @@
     "retries": 0,
     "api_retries": 0,
     "validation": "pass"
+  },
+  {
+    "ts": "2026-05-18T04:44:43.340Z",
+    "scene": "tcp-handshake-at-the-suez.js",
+    "seed_id": "tcp-handshake-at-the-suez",
+    "biome": "urban",
+    "model": "gpt-4o-mini",
+    "input_tokens": 16656,
+    "output_tokens": 1344,
+    "cost_usd": 0.0033,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "fail",
+    "error": "Validation failed after 2 attempts: VALIDATION FAILED (1 error):\n- Too short: 67 lines (min 80)"
+  },
+  {
+    "ts": "2026-05-18T04:45:13.499Z",
+    "scene": "404-sand-not-found.js",
+    "seed_id": "404-sand-not-found",
+    "biome": "desert",
+    "model": "gpt-4o-mini",
+    "input_tokens": 16292,
+    "output_tokens": 1346,
+    "cost_usd": 0.0033,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "fail",
+    "error": "Validation failed after 2 attempts: VALIDATION FAILED (1 error):\n- Too short: 62 lines (min 80)"
+  },
+  {
+    "ts": "2026-05-18T04:45:31.327Z",
+    "scene": "open-ocean-open-source.js",
+    "seed_id": "open-ocean-open-source",
+    "biome": "ocean",
+    "model": "gpt-4o-mini",
+    "input_tokens": 8125,
+    "output_tokens": 788,
+    "cost_usd": 0.0017,
+    "retries": 0,
+    "api_retries": 0,
+    "validation": "pass"
   }
 ]
