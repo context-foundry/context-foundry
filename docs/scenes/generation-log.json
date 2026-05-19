@@ -2382,5 +2382,46 @@
     "retries": 0,
     "api_retries": 0,
     "validation": "pass"
+  },
+  {
+    "ts": "2026-05-19T20:05:59.599Z",
+    "scene": "lunar-landing-page.js",
+    "seed_id": "lunar-landing-page",
+    "biome": "space",
+    "model": "gpt-4o-mini",
+    "input_tokens": 16304,
+    "output_tokens": 1543,
+    "cost_usd": 0.0034,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "fail",
+    "error": "Validation failed after 2 attempts: VALIDATION FAILED (1 error):\n- Too short: 74 lines (min 80)"
+  },
+  {
+    "ts": "2026-05-19T20:06:28.763Z",
+    "scene": "divide-and-conquer-canyon.js",
+    "seed_id": "divide-and-conquer-canyon",
+    "biome": "mountain",
+    "model": "gpt-4o-mini",
+    "input_tokens": 16646,
+    "output_tokens": 1358,
+    "cost_usd": 0.0033,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "fail",
+    "error": "Validation failed after 2 attempts: VALIDATION FAILED (1 error):\n- Too short: 58 lines (min 80)"
+  },
+  {
+    "ts": "2026-05-19T20:06:44.643Z",
+    "scene": "tcp-handshake-at-the-suez.js",
+    "seed_id": "tcp-handshake-at-the-suez",
+    "biome": "urban",
+    "model": "gpt-4o-mini",
+    "input_tokens": 8309,
+    "output_tokens": 801,
+    "cost_usd": 0.0017,
+    "retries": 0,
+    "api_retries": 0,
+    "validation": "pass"
   }
 ]
