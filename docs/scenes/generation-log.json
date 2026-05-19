@@ -2341,5 +2341,46 @@
     "retries": 0,
     "api_retries": 0,
     "validation": "pass"
+  },
+  {
+    "ts": "2026-05-19T04:36:08.022Z",
+    "scene": "404-sand-not-found.js",
+    "seed_id": "404-sand-not-found",
+    "biome": "desert",
+    "model": "gpt-4o-mini",
+    "input_tokens": 16292,
+    "output_tokens": 1588,
+    "cost_usd": 0.0034,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "fail",
+    "error": "Validation failed after 2 attempts: VALIDATION FAILED (1 error):\n- Too short: 70 lines (min 80)"
+  },
+  {
+    "ts": "2026-05-19T04:36:56.769Z",
+    "scene": "divide-and-conquer-canyon.js",
+    "seed_id": "divide-and-conquer-canyon",
+    "biome": "mountain",
+    "model": "gpt-4o-mini",
+    "input_tokens": 16646,
+    "output_tokens": 1396,
+    "cost_usd": 0.0033,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "fail",
+    "error": "Validation failed after 2 attempts: VALIDATION FAILED (1 error):\n- Too short: 55 lines (min 80)"
+  },
+  {
+    "ts": "2026-05-19T04:37:29.634Z",
+    "scene": "permafrost-persistence-layer.js",
+    "seed_id": "permafrost-persistence-layer",
+    "biome": "arctic",
+    "model": "gpt-4o-mini",
+    "input_tokens": 7602,
+    "output_tokens": 906,
+    "cost_usd": 0.0017,
+    "retries": 0,
+    "api_retries": 0,
+    "validation": "pass"
   }
 ]
