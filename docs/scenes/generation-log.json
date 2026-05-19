@@ -2450,5 +2450,18 @@
     "retries": 0,
     "api_retries": 0,
     "validation": "pass"
+  },
+  {
+    "ts": "2026-05-19T23:34:11.672Z",
+    "scene": "404-sand-not-found.js",
+    "seed_id": "404-sand-not-found",
+    "biome": "desert",
+    "model": "gpt-4o-mini",
+    "input_tokens": 8127,
+    "output_tokens": 938,
+    "cost_usd": 0.0018,
+    "retries": 0,
+    "api_retries": 0,
+    "validation": "pass"
   }
 ]

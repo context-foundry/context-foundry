@@ -1197,6 +1197,16 @@
       "model": "gpt-4o-mini",
       "lines": 83,
       "generation": 120
+    },
+    {
+      "file": "404-sand-not-found.js",
+      "name": "404: Sand Not Found",
+      "location": "White Sands National Park, New Mexico, USA",
+      "biome": "desert",
+      "generated": "2026-05-19T23:34:11.670Z",
+      "model": "gpt-4o-mini",
+      "lines": 90,
+      "generation": 121
     }
   ]
 }
