@@ -2423,5 +2423,32 @@
     "retries": 0,
     "api_retries": 0,
     "validation": "pass"
+  },
+  {
+    "ts": "2026-05-19T21:48:26.327Z",
+    "scene": "divide-and-conquer-canyon.js",
+    "seed_id": "divide-and-conquer-canyon",
+    "biome": "mountain",
+    "model": "gpt-4o-mini",
+    "input_tokens": 16646,
+    "output_tokens": 1367,
+    "cost_usd": 0.0033,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "fail",
+    "error": "Validation failed after 2 attempts: VALIDATION FAILED (1 error):\n- Too short: 60 lines (min 80)"
+  },
+  {
+    "ts": "2026-05-19T21:48:40.894Z",
+    "scene": "packet-loss-at-the-bermuda-triangle.js",
+    "seed_id": "packet-loss-at-the-bermuda-triangle",
+    "biome": "ocean",
+    "model": "gpt-4o-mini",
+    "input_tokens": 7596,
+    "output_tokens": 923,
+    "cost_usd": 0.0017,
+    "retries": 0,
+    "api_retries": 0,
+    "validation": "pass"
   }
 ]
