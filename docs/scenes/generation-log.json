@@ -2463,5 +2463,18 @@
     "retries": 0,
     "api_retries": 0,
     "validation": "pass"
+  },
+  {
+    "ts": "2026-05-20T04:39:11.646Z",
+    "scene": "nested-loop-switchbacks.js",
+    "seed_id": "nested-loop-switchbacks",
+    "biome": "mountain",
+    "model": "gpt-4o-mini",
+    "input_tokens": 7418,
+    "output_tokens": 815,
+    "cost_usd": 0.0016,
+    "retries": 0,
+    "api_retries": 0,
+    "validation": "pass"
   }
 ]

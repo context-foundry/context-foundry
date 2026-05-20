@@ -1207,6 +1207,16 @@
       "model": "gpt-4o-mini",
       "lines": 90,
       "generation": 121
+    },
+    {
+      "file": "nested-loop-switchbacks.js",
+      "name": "Nested Loop Switchbacks",
+      "location": "Trollstigen, More og Romsdal, Norway",
+      "biome": "mountain",
+      "generated": "2026-05-20T04:39:11.645Z",
+      "model": "gpt-4o-mini",
+      "lines": 81,
+      "generation": 122
     }
   ]
 }
