@@ -40,7 +40,7 @@ While the summary overlay is open:
 
 Three config fields drive summarisation:
 
-- `summary_provider` (default `claude`) -- which LLM provider runs the summary call.
+- `summary_provider` (default `claude`) -- which LLM provider runs the summary call (supports `claude`, `codex`, `opencode`, `mistral`).
 - `summary_model` (default `haiku`) -- which model the provider uses. Per-stage routing for the `summary` role overrides this global default.
 - `prefer_file_open_over_summary` (default `false`) -- when set to `true`, every connected pipeline card and the DISCOVER card open the underlying file directly instead of summarising. SHIP becomes a no-op in this mode (it has no file to open).
 

@@ -2,7 +2,7 @@
 
 Autonomous build loop that plans, builds, reviews, and learns.
 
-Foundry reads a `TASKS.md` task list and works through it using Claude Code agents in a TUI, committing each completed task. Several [run modes](#run-modes) control what happens next: run forever with discovery (Auto), stop when done (Sprint), pause for human review after each task (Review), or run unattended for the build service (Service).
+Foundry reads a `TASKS.md` task list and works through it using AI coding agents (Claude Code, Mistral, Codex, or OpenCode) in a TUI, committing each completed task. Several [run modes](#run-modes) control what happens next: run forever with discovery (Auto), stop when done (Sprint), pause for human review after each task (Review), or run unattended for the build service (Service).
 
 **When to use the pipeline:** the harness is a multiplier for verifiable engineering work — tasks with `file:line` references the planner can ground against, constraints the auditor can check, and behavior that BUILD or AUDIT can exercise against the code. For prose work (README updates, brainstorming, architecture decision records, documentation rewrites), the pipeline pays plan-review and audit costs for zero marginal benefit because there's nothing for it to verify. Write those directly. Full guidance: [`docs/task-composition.md`](docs/task-composition.md).
 
@@ -35,7 +35,7 @@ OPTIONAL AUTO-PUSH → only if `auto_push_remote` is configured
 
 ## How It Works
 
-Foundry is a harness for [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Each agent (planner, builder, reviewer, fixer, discoverer) is a Claude Code CLI invocation with a role-specific prompt and scoped tool access. The Rust binary handles orchestration, streaming, and state — Claude does all the reasoning and file editing.
+Foundry is a harness for AI coding CLIs including [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Mistral Vibe](https://docs.mistral.ai/api/vibe), and [OpenCode](https://github.com/sst/opencode). Each agent (planner, builder, reviewer, fixer, discoverer) is a CLI invocation with a role-specific prompt and scoped tool access. The Rust binary handles orchestration, streaming, and state — the AI model does all the reasoning and file editing.
 
 ### The loop
 
@@ -129,12 +129,12 @@ Foundry can run tasks through different AI providers. Toggle with `Ctrl+D` on th
 
 ```json
 {
-  "builder_models": ["claude:opus", "codex:"],
+  "builder_models": ["claude:opus", "codex:", "mistral:"],
   "dual_selection": "both"
 }
 ```
 
-Each entry is `provider:model` -- e.g., `claude:opus` or `codex:` (empty model uses the provider default).
+Each entry is `provider:model` -- e.g., `claude:opus`, `codex:`, or `mistral:` (empty model uses the provider default).
 
 **Three selection modes (Ctrl+D cycles through):**
 
@@ -144,12 +144,12 @@ Each entry is `provider:model` -- e.g., `claude:opus` or `codex:` (empty model u
 | **Second only** | Entire pipeline runs through `builder_models[1]` |
 | **Both** | Two complete independent pipelines run in parallel, one per provider |
 
-**Key design principle: provider selection is full-pipeline, not per-stage.** When you select "Codex", every stage runs through Codex -- scout, planner, builder, reviewer, and discovery. Foundry automatically clears model names that belong to the wrong provider (e.g., "sonnet" is a Claude model name, so when running through Codex it becomes empty, letting Codex use its default). This prevents errors like "model 'sonnet' is not supported by Codex."
+**Key design principle: provider selection is full-pipeline, not per-stage.** When you select "Codex" or "Mistral", every stage runs through that provider -- scout, planner, builder, reviewer, and discovery. Foundry automatically clears model names that belong to the wrong provider (e.g., "sonnet" is a Claude model name, so when running through Codex it becomes empty, letting Codex use its default; "claude-3-sonnet" won't work with Mistral either). This prevents errors like "model 'sonnet' is not supported by Codex."
 
 **Dual mode ("both")** forks into two git worktrees before Scout and runs two completely independent pipelines:
 
 ```
-Pipeline A (Claude)                    Pipeline B (Codex)
+Pipeline A (Claude)                    Pipeline B (Codex or Mistral)
 .buildloop/arena/claude/               .buildloop/arena/codex/
   scout-report.md                        scout-report.md
   current-plan.md                        current-plan.md
@@ -274,17 +274,18 @@ through the [opencode](https://github.com/sst/opencode) CLI, which talks to
 LM Studio's OpenAI-compatible server at `http://127.0.0.1:1234`.
 
 **Selecting a local model.** Press `?` in the TUI to open the settings
-overlay. The "Builder" row lists every Claude / Codex spec plus every model
+overlay. The "Builder" row lists every Claude / Codex / Mistral spec plus every model
 discovered from LM Studio's `/v1/models` and Ollama's `/api/tags`. Picking an
 LM Studio entry persists `builder_provider = "opencode"` and
 `builder_model = "lmstudio/<id>"` to `.foundry.json`. The canonical id list
 comes from `opencode models lmstudio` -- run that on the command line to see
-the exact ids opencode will accept.
+the exact ids opencode will accept. Picking a Mistral entry sets `builder_provider = "mistral"`
+with the model name via `VIBE_ACTIVE_MODEL` environment variable.
 
-**Full-pipeline routing.** When the selected builder spec is `opencode:...`,
+**Full-pipeline routing.** When the selected builder spec is `opencode:...` or `mistral:...`,
 `Config::for_pipeline()` (`src/config.rs`) overrides every role provider --
 **all 8 stages**: scout, query, research, planner, builder, reviewer,
-fixer, and discovery -- to opencode and reuses the same model. Local-model
+fixer, and discovery -- to that provider and reuses the same model. Local-model
 selection is therefore not "builder only"; the entire pipeline runs through
 the chosen LM Studio model.
 
@@ -340,7 +341,7 @@ See [`docs/settings-overlay.md`](docs/settings-overlay.md) for the full referenc
 By default, all pipeline stages route through a single provider selected via
 `Ctrl+D` or the Builder row in the Settings Overlay. Per-stage routing overrides
 let you pin individual stages to different providers -- for example, Claude Opus
-on Plan and Audit while Codex runs Build.
+on Plan and Audit while Codex or Mistral runs Build.
 
 Pin a stage by opening its Model Picker in the Settings Overlay (Routing section)
 and selecting a model. The stage is added to `stage_overrides` in `.foundry.json`
@@ -440,7 +441,7 @@ Point foundry at any project directory that has a `TASKS.md`:
 # TUI mode (default)
 foundry --dir /path/to/project
 
-# Interactive prompt-driven studio for Claude, Codex, or both
+# Interactive prompt-driven studio for Claude, Mistral, Codex, or OpenCode
 foundry --dir /path/to/project studio
 
 # Headless mode (CI/logs)
@@ -694,7 +695,7 @@ The pipeline currently runs every stage for every task. The next step is proport
 
 A self-hosted analytics dashboard that tracks every pipeline run across all projects. SQLite backend, lightweight web server, no cloud dependencies.
 
-**What it shows:** session history (tasks, models, pass/fail, cost, duration), pattern effectiveness (injected vs applied, patterns that never trigger), doubt finding trends by severity, provider comparison (Claude vs Codex cost, speed, reliability per project), and complexity classification accuracy.
+**What it shows:** session history (tasks, models, pass/fail, cost, duration), pattern effectiveness (injected vs applied, patterns that never trigger), doubt finding trends by severity, provider comparison (Claude vs Codex vs Mistral cost, speed, reliability per project), and complexity classification accuracy.
 
 **What it produces:**
 - Session retrospectives: "This run spent 40% of cost on doubt for tasks that have never failed review."

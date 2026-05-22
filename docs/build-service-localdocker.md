@@ -30,7 +30,7 @@ ambient host config can influence it. The contract is split across two pieces:
   | Field | Value |
   |-------|-------|
   | `run_mode` | `"service"` |
-  | `planner/builder/reviewer/fixer/discovery_provider` | `"claude"` |
+  | `planner/builder/reviewer/fixer/discovery_provider` | `"claude"` (supports `"claude"`, `"codex"`, `"opencode"`, `"mistral"`) |
   | `planner/builder/discovery_model` | `"opus"` |
   | `reviewer/fixer_model` | `"sonnet"` |
   | `builder_models`, `stage_overrides`, `plugins` | `[]` |
