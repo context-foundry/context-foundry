@@ -1033,13 +1033,14 @@ impl Config {
         )
     }
 
-    /// Parse a provider string ("claude", "codex", "opencode", or "ghcopilot") into a
+    /// Parse a provider string ("claude", "codex", "opencode", "ghcopilot", or "mistral") into a
     /// ModelProvider. Falls back to Claude for unrecognized values.
     pub fn parse_provider(value: &str) -> ModelProvider {
         match value.trim().to_lowercase().as_str() {
             "codex" => ModelProvider::Codex,
             "opencode" => ModelProvider::OpenCode,
             "ghcopilot" | "gh-copilot" | "github-copilot" | "copilot" => ModelProvider::GhCopilot,
+            "mistral" | "vibe" => ModelProvider::Mistral,
             _ => ModelProvider::Claude,
         }
     }
@@ -1106,6 +1107,16 @@ impl Config {
                 if model.is_empty() {
                     provider.to_string()
                 } else {
+                    format!("{provider} {model}")
+                }
+            }
+            ModelProvider::Mistral => {
+                let model = model.trim();
+                if model.is_empty() {
+                    provider.to_string()
+                } else {
+                    // Model is typically "mistral-large", "mistral-small", etc.
+                    // or a custom model name.
                     format!("{provider} {model}")
                 }
             }
@@ -2251,6 +2262,7 @@ fn default_group_for_provider(provider: &str) -> &'static str {
         "codex" => "Codex",
         "ghcopilot" => "GitHub Copilot",
         "opencode" => "OpenCode",
+        "vibe" => "Mistral",
         _ => "Other",
     }
 }

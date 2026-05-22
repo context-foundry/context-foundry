@@ -235,6 +235,8 @@ pub enum ModelProvider {
     /// Experimental: uses the logged-in `gh` CLI OAuth token to call the
     /// GitHub Copilot API. Rides the user's existing Copilot subscription.
     GhCopilot,
+    /// Mistral AI's Vibe CLI agent
+    Mistral,
 }
 
 impl ModelProvider {
@@ -244,6 +246,7 @@ impl ModelProvider {
             ModelProvider::Codex => "codex",
             ModelProvider::OpenCode => "opencode",
             ModelProvider::GhCopilot => "ghcopilot",
+            ModelProvider::Mistral => "vibe",
         }
     }
 
@@ -258,8 +261,10 @@ impl ModelProvider {
         let (cmd_name, module) = match self {
             ModelProvider::Claude => ("claude.cmd", "@anthropic-ai/claude-code/cli.js"),
             ModelProvider::Codex => ("codex.cmd", "@anthropic-ai/codex/cli.js"),
-            // OpenCode and GhCopilot are not distributed via npm.
-            ModelProvider::OpenCode | ModelProvider::GhCopilot => return None,
+            // OpenCode, GhCopilot, and Mistral are not distributed via npm.
+            ModelProvider::OpenCode | ModelProvider::GhCopilot | ModelProvider::Mistral => {
+                return None
+            }
         };
 
         // Strategy 1: find .cmd via `where`, look for sibling node_modules
@@ -408,6 +413,7 @@ impl std::fmt::Display for ModelProvider {
             ModelProvider::Codex => write!(f, "Codex"),
             ModelProvider::OpenCode => write!(f, "OpenCode"),
             ModelProvider::GhCopilot => write!(f, "GitHub Copilot"),
+            ModelProvider::Mistral => write!(f, "Mistral"),
         }
     }
 }
@@ -689,6 +695,25 @@ pub async fn run_provider_session(options: ProviderRunOptions<'_>) -> Result<Age
         ModelProvider::GhCopilot => {
             unreachable!("GhCopilot does not use PTY sessions — route via run_ghcopilot_session")
         }
+        ModelProvider::Mistral => {
+            let mut cmd = ModelProvider::Mistral.command_builder();
+            cmd.arg("-p");
+            // Prepend system directives to the prompt (vibe doesn't have --append-system-prompt)
+            let full_prompt = format!(
+                "{}\n\n{}",
+                agent_system_directives(),
+                options.prompt
+            );
+            cmd.arg(full_prompt);
+            // Model selection via VIBE_ACTIVE_MODEL environment variable
+            if !options.model.trim().is_empty() {
+                cmd.env("VIBE_ACTIVE_MODEL", options.model);
+            }
+            cmd.arg("--output");
+            cmd.arg("streaming");
+            cmd.env("CLAUDECODE", "");
+            cmd
+        }
     };
 
     cmd.cwd(options.project_dir);
@@ -763,6 +788,25 @@ pub async fn run_provider_session(options: ProviderRunOptions<'_>) -> Result<Age
                 }
                 ModelProvider::GhCopilot => {
                     unreachable!("GhCopilot does not use PTY/sandbox sessions")
+                }
+                ModelProvider::Mistral => {
+                    let program = "vibe";
+                    // Prepend system directives to the prompt
+                    let full_prompt = format!(
+                        "{}\n\n{}",
+                        agent_system_directives(),
+                        options.prompt
+                    );
+                    let mut args = vec!["-p".to_string(), full_prompt];
+                    // Model selection via VIBE_ACTIVE_MODEL env var
+                    let env_vars = if !options.model.trim().is_empty() {
+                        vec![("VIBE_ACTIVE_MODEL", options.model)]
+                    } else {
+                        vec![("CLAUDECODE", "")]
+                    };
+                    args.push("--output".to_string());
+                    args.push("streaming".to_string());
+                    (program, args, env_vars)
                 }
             };
         sandbox_cfg.wrap_command_builder(program, &args, options.project_dir, &env_vars)
@@ -1057,6 +1101,29 @@ pub async fn run_agent(
         }
         return run_provider_session(ProviderRunOptions {
             provider: ModelProvider::OpenCode,
+            model,
+            prompt,
+            project_dir,
+            output_tx,
+            log_dir,
+            timeout_secs,
+            skip_git_repo_check: false,
+            cancel_flag: shutdown,
+            config_override: Some(&config),
+        })
+        .await;
+    }
+
+    // Mistral Vibe: delegate to run_provider_session which builds the `vibe`
+    // CLI invocation. Mistral Vibe uses OpenAI-style streaming JSON output.
+    if provider == ModelProvider::Mistral {
+        if config.enforce_phase_rbac {
+            let _ = output_tx.send(AgentOutputEvent::Stderr(
+                "[foundry] enforce_phase_rbac: Mistral Vibe provider does not support tool allowlists; enforcement not applied".to_string(),
+            ));
+        }
+        return run_provider_session(ProviderRunOptions {
+            provider: ModelProvider::Mistral,
             model,
             prompt,
             project_dir,
@@ -1921,6 +1988,27 @@ fn read_provider_output(
                     ModelProvider::GhCopilot => {
                         // GhCopilot does not use PTY — this branch is unreachable.
                     }
+                    ModelProvider::Mistral => {
+                        match parse_vibe_line(line, model_name) {
+                            VibeParseOutcome::Event(event) => {
+                                note_provider_event(provider, &event, progress);
+                                if tx.send(event).is_err() {
+                                    return;
+                                }
+                                continue;
+                            }
+                            VibeParseOutcome::Suppressed => {
+                                // Valid JSON but intentionally suppressed (system/user messages)
+                                {
+                                    let mut guard =
+                                        progress.lock().unwrap_or_else(|p| p.into_inner());
+                                    guard.record_parsed_event_at(Instant::now());
+                                }
+                                continue;
+                            }
+                            VibeParseOutcome::Unparsed => {}
+                        }
+                    }
                 }
 
                 let cleaned = strip_ansi(line);
@@ -2637,6 +2725,14 @@ enum OpenCodeParseOutcome {
     Unparsed,
 }
 
+/// Parse outcome for Vibe's OpenAI-style streaming JSON format
+#[derive(Debug)]
+enum VibeParseOutcome {
+    Event(AgentOutputEvent),
+    Suppressed,
+    Unparsed,
+}
+
 fn parse_opencode_line(line: &str, model_name: &str) -> OpenCodeParseOutcome {
     let v: Value = match serde_json::from_str(line) {
         Ok(v) => v,
@@ -2868,6 +2964,90 @@ fn record_opencode_usage_if_present(v: &Value) {
             cache_read_tokens: cache_read,
         }));
     });
+}
+
+/// Parse a single line of Mistral Vibe's streaming NDJSON output.
+/// Vibe uses OpenAI-style message format: {"role": "system|user|assistant", "content": "..."}
+fn parse_vibe_line(line: &str, _model_name: &str) -> VibeParseOutcome {
+    // Try to parse as JSON
+    let v: Value = match serde_json::from_str(line) {
+        Ok(v) => v,
+        Err(_) => return VibeParseOutcome::Unparsed,
+    };
+
+    let role = v.get("role").and_then(|r| r.as_str());
+    let content = v.get("content").and_then(|c| c.as_str());
+
+    // Check for tool calls in assistant messages
+    // Vibe may use OpenAI-style tool_calls or a different format
+    // For now, handle basic text content
+    match role {
+        Some("system") => {
+            // System prompt - suppress (it's our own system directives echoed back)
+            VibeParseOutcome::Suppressed
+        }
+        Some("user") => {
+            // User messages - these are our prompts, suppress
+            VibeParseOutcome::Suppressed
+        }
+        Some("assistant") => {
+            // Check for tool_calls (OpenAI-style function calls)
+            if let Some(tool_calls) = v.get("tool_calls").and_then(|tc| tc.as_array()) {
+                if !tool_calls.is_empty() {
+                    // Parse tool call - extract first one for preview
+                    if let Some(first_call) = tool_calls.first() {
+                        let tool_name = first_call
+                            .get("function")
+                            .and_then(|f| f.get("name"))
+                            .and_then(|n| n.as_str())
+                            .unwrap_or("unknown");
+                        let tool_args = first_call
+                            .get("function")
+                            .and_then(|f| f.get("arguments"))
+                            .and_then(|a| a.as_str())
+                            .unwrap_or("");
+                        return VibeParseOutcome::Event(AgentOutputEvent::ToolUse {
+                            tool: tool_name.to_string(),
+                            input_preview: truncate_for_preview(tool_args, 120),
+                        });
+                    }
+                }
+            }
+            // Regular text content from assistant
+            if let Some(text) = content {
+                if text.trim().is_empty() {
+                    VibeParseOutcome::Suppressed
+                } else {
+                    VibeParseOutcome::Event(AgentOutputEvent::Text(text.to_string()))
+                }
+            } else {
+                VibeParseOutcome::Suppressed
+            }
+        }
+        Some("tool") => {
+            // Handle tool message format (if Vibe uses this)
+            // This is a hypothetical format - Vibe might use tool_calls instead
+            let _tool_name = v.get("name").and_then(|n| n.as_str()).unwrap_or("unknown");
+            let tool_output = extract_string_by_keys(&v, &["content", "output", "result"])
+                .unwrap_or_default();
+            if !tool_output.is_empty() {
+                VibeParseOutcome::Event(AgentOutputEvent::ToolResult {
+                    output_preview: truncate_for_preview(&tool_output, 200),
+                })
+            } else {
+                VibeParseOutcome::Suppressed
+            }
+        }
+        _ => {
+            // Unknown role - check if it's an error message
+            if let Some(error_msg) = extract_string_by_keys(&v, &["error", "message", "content"]) {
+                if !error_msg.is_empty() {
+                    return VibeParseOutcome::Event(AgentOutputEvent::Stderr(error_msg));
+                }
+            }
+            VibeParseOutcome::Unparsed
+        }
+    }
 }
 
 fn extract_string_by_keys(value: &Value, keys: &[&str]) -> Option<String> {
@@ -4632,5 +4812,70 @@ mod tests {
         assert_eq!(AgentRole::PlanReview.to_string(), "P+");
         assert_eq!(AgentRole::Discovery.to_string(), "DISCOVERY");
         assert_eq!(AgentRole::Coach.to_string(), "COACH");
+    }
+
+    #[test]
+    fn model_provider_mistral_slug_and_display() {
+        assert_eq!(ModelProvider::Mistral.slug(), "vibe");
+        assert_eq!(ModelProvider::Mistral.to_string(), "Mistral");
+    }
+
+    #[test]
+    fn parse_vibe_line_system_message_suppressed() {
+        let line = r#"{"role":"system","content":"You are a helpful assistant"}"#;
+        match parse_vibe_line(line, "mistral-large") {
+            VibeParseOutcome::Suppressed => {}
+            other => panic!("expected Suppressed, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_vibe_line_user_message_suppressed() {
+        let line = r#"{"role":"user","content":"Hello, how are you?"}"#;
+        match parse_vibe_line(line, "mistral-large") {
+            VibeParseOutcome::Suppressed => {}
+            other => panic!("expected Suppressed, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_vibe_line_assistant_text() {
+        let line = r#"{"role":"assistant","content":"I am doing well, thank you!"}"#;
+        match parse_vibe_line(line, "mistral-large") {
+            VibeParseOutcome::Event(AgentOutputEvent::Text(text)) => {
+                assert_eq!(text, "I am doing well, thank you!");
+            }
+            other => panic!("expected Text event, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_vibe_line_assistant_empty_content_suppressed() {
+        let line = r#"{"role":"assistant","content":""}"#;
+        match parse_vibe_line(line, "mistral-large") {
+            VibeParseOutcome::Suppressed => {}
+            other => panic!("expected Suppressed for empty content, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_vibe_line_tool_call() {
+        let line = r#"{"role":"assistant","tool_calls":[{"function":{"name":"Read","arguments":"{\"file_path\":\"src/main.rs\"}"}}]}"#;
+        match parse_vibe_line(line, "mistral-large") {
+            VibeParseOutcome::Event(AgentOutputEvent::ToolUse { tool, input_preview }) => {
+                assert_eq!(tool, "Read");
+                assert!(input_preview.contains("src/main.rs"));
+            }
+            other => panic!("expected ToolUse event, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_vibe_line_invalid_json_unparsed() {
+        let line = "not valid json";
+        match parse_vibe_line(line, "mistral-large") {
+            VibeParseOutcome::Unparsed => {}
+            other => panic!("expected Unparsed, got {:?}", other),
+        }
     }
 }
