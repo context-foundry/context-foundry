@@ -1237,6 +1237,16 @@
       "model": "gpt-4o-mini",
       "lines": 81,
       "generation": 124
+    },
+    {
+      "file": "deadlock-in-the-dead-vlei.js",
+      "name": "Deadlock in Dead Vlei",
+      "location": "Deadvlei, Namib-Naukluft Park, Namibia",
+      "biome": "forest",
+      "generated": "2026-05-22T20:13:43.314Z",
+      "model": "gpt-4o-mini",
+      "lines": 83,
+      "generation": 125
     }
   ]
 }

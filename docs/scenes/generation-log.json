@@ -2530,5 +2530,18 @@
     "retries": 1,
     "api_retries": 0,
     "validation": "pass"
+  },
+  {
+    "ts": "2026-05-22T20:13:43.315Z",
+    "scene": "deadlock-in-the-dead-vlei.js",
+    "seed_id": "deadlock-in-the-dead-vlei",
+    "biome": "forest",
+    "model": "gpt-4o-mini",
+    "input_tokens": 14882,
+    "output_tokens": 1456,
+    "cost_usd": 0.0031,
+    "retries": 1,
+    "api_retries": 0,
+    "validation": "pass"
   }
 ]
