@@ -16,11 +16,15 @@ on:
     types: [labeled]
 
 # Trust boundary:
-# - issue runs require a maintainer-applied 'foundry-agent' label (adding a label
-#   needs triage/write access), so untrusted users cannot trigger a credentialed run;
-# - we never trigger on pull_request, so forked-PR code never runs with secrets;
-# - --ignore-project-config skips checked-out .foundry.json settings while this
-#   workflow checks out only the trusted default branch, never forked PR code.
+# - never triggers on pull_request, so forked-PR code never runs with secrets;
+# - always checks out the trusted default branch (never a PR head), so the repo's
+#   .foundry.json IS trusted and is honored -- that is how per-stage routing
+#   reaches CI. We deliberately do NOT pass --ignore-project-config here; add it
+#   only if a future variant ever runs untrusted (PR-branch) code;
+# - issue runs require BOTH a maintainer-applied 'foundry-agent' label AND a
+#   trusted issue author (OWNER/MEMBER/COLLABORATOR). Residual risk: a labeled
+#   issue body becomes the agent task, so prompt-injection of a write-credentialed
+#   agent remains possible -- inherent to any issue-driven coding agent.
 permissions:
   contents: write
   checks: write
@@ -35,7 +39,9 @@ jobs:
   build:
     if: >-
       github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'issues' && github.event.label.name == 'foundry-agent')
+      (github.event_name == 'issues' &&
+       github.event.label.name == 'foundry-agent' &&
+       contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.issue.author_association))
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -81,7 +87,7 @@ jobs:
             BRANCH="foundry/dispatch-${{ github.run_id }}"
           else
             TASK="${ISSUE_TITLE}: ${ISSUE_BODY}"
-            BRANCH="foundry/issue-${ISSUE_NUMBER}"
+            BRANCH="foundry/issue-${ISSUE_NUMBER}-${GITHUB_RUN_ID}"
           fi
           git switch -c "$BRANCH"
           ONELINE="$(printf '%s' "$TASK" | tr '\n' ' ')"
@@ -111,12 +117,15 @@ jobs:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
           set -o pipefail
+          # Honors the (trusted, default-branch) repo .foundry.json for per-stage
+          # routing; the ci profile overlays bounded service behavior on top.
+          # Run status (PASS/WIP/FAIL) is derived from the SessionReport by the
+          # report script below and surfaced via the check-run -- not via the
+          # process exit code -- so the PR always opens for human review.
           foundry run \
             --no-tui \
             --output-format json-stream \
             --profile "${{ github.event.inputs.profile || 'ci' }}" \
-            --ignore-project-config \
-            --exit-on-wip \
             | tee foundry-stream.jsonl
 
       - name: Render report

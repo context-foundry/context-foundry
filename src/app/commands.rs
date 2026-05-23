@@ -436,6 +436,8 @@ fn required_providers(
         ProviderCommandMode::Run => {
             let mut v = vec![
                 ("scout", Config::parse_provider(&config.scout_provider)),
+                ("query", Config::parse_provider(&config.query_provider)),
+                ("research", Config::parse_provider(&config.research_provider)),
                 ("planner", Config::parse_provider(&config.planner_provider)),
                 (
                     "discovery",
