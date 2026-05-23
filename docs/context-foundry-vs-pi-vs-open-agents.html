@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Context Foundry vs pi vs open-agents — the agent stack, three layers</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent2: #f78166;
+    --good: #3fb950;
+    --row-alt: #11161d;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    line-height: 1.55;
+  }
+  .wrap {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 48px 24px 96px;
+  }
+  h1 {
+    font-size: 2rem;
+    margin: 0 0 8px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 12px;
+  }
+  h2 {
+    font-size: 1.4rem;
+    margin: 40px 0 12px;
+    color: var(--accent);
+  }
+  h3 {
+    font-size: 1.1rem;
+    margin: 24px 0 8px;
+    color: var(--accent2);
+  }
+  p, li { color: var(--text); }
+  .lede {
+    color: var(--muted);
+    font-size: 1.05rem;
+    margin-bottom: 16px;
+  }
+  .cards {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin: 16px 0 24px;
+  }
+  .cards.three { grid-template-columns: 1fr 1fr 1fr; }
+  .callout {
+    background: #1c232c;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent2);
+    border-radius: 6px;
+    padding: 14px 18px;
+    margin: 16px 0;
+    color: var(--text);
+  }
+  .callout strong { color: var(--accent2); }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 18px 20px;
+  }
+  .card h3 { margin-top: 0; color: var(--accent); }
+  code, kbd {
+    background: #1f242c;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 0.88em;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    margin: 16px 0;
+    font-size: 0.95rem;
+  }
+  th, td {
+    padding: 10px 14px;
+    text-align: left;
+    vertical-align: top;
+    border-bottom: 1px solid var(--border);
+  }
+  th {
+    background: #1c232c;
+    color: var(--accent);
+    font-weight: 600;
+    border-bottom: 2px solid var(--border);
+    position: sticky;
+    top: 0;
+  }
+  tr:nth-child(even) td { background: var(--row-alt); }
+  tr:last-child td { border-bottom: none; }
+  td:first-child {
+    font-weight: 600;
+    color: var(--accent2);
+    width: 20%;
+  }
+  ul { padding-left: 22px; }
+  li { margin: 4px 0; }
+  ol { padding-left: 22px; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .pill {
+    display: inline-block;
+    padding: 2px 8px;
+    background: #1c232c;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    font-size: 0.78em;
+    color: var(--muted);
+    margin-right: 6px;
+  }
+  .footer {
+    margin-top: 56px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+  @media (max-width: 900px) {
+    .cards.three { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 720px) {
+    .cards { grid-template-columns: 1fr; }
+    td:first-child { width: 35%; }
+    .wrap { padding: 24px 14px 64px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Context Foundry vs pi vs open-agents</h1>
+<p class="lede">Three open projects people lump together as "AI coding agents" &mdash; but they sit at <em>different layers</em> of the stack: a methodology + engine, a toolkit, and a cloud platform. Side-by-side evaluation plus how they fit together.</p>
+
+<div class="callout">
+  <strong>TL;DR on roles:</strong> <em>Context Foundry</em> is an opinionated, autonomous build <em>pipeline</em> (the QRPBA discipline with a built-in adversarial audit and learning). <em>pi</em> is a provider-agnostic agent <em>harness/toolkit</em> &mdash; libraries plus an interactive CLI you build on. <em>open-agents</em> is a Vercel <em>template/platform</em> for running background coding agents in the cloud. They're more complementary than competitive: pi could be the <em>brain</em> inside open-agents' platform, while Context Foundry is a self-contained pipeline that brings its own execution.
+</div>
+
+<h2>What each one is</h2>
+
+<div class="cards three">
+  <div class="card">
+    <h3>Context Foundry</h3>
+    <p>
+      <span class="pill">Local-first</span>
+      <span class="pill">Rust</span>
+      <span class="pill">Multi-provider</span>
+      <span class="pill">QRPBA</span>
+    </p>
+    <p>
+      An <strong>autonomous pipelined builder</strong> that runs the
+      <code>Query &rarr; Research &rarr; Plan &rarr; Build &rarr; Audit</code> stages over a
+      <code>TASKS.md</code> queue, with per-stage model routing across provider CLIs
+      (Claude / Codex / Copilot), a pattern-and-skill learning store, and a
+      fresh-context <strong>Doubt</strong> audit. Runs as a TUI, headless, a build
+      service, or a GitHub Actions agent.
+    </p>
+    <p><code>/Users/Shared/homelab/context-foundry</code></p>
+  </div>
+
+  <div class="card">
+    <h3>pi</h3>
+    <p>
+      <span class="pill">MIT</span>
+      <span class="pill">TypeScript</span>
+      <span class="pill">~53k stars</span>
+      <span class="pill">Multi-provider</span>
+    </p>
+    <p>
+      A <strong>self-extensible agent harness</strong> &mdash; a monorepo of building
+      blocks: <code>pi-ai</code> (unified multi-provider LLM API), <code>pi-agent-core</code>
+      (tool-calling runtime + state), <code>pi-coding-agent</code> (interactive CLI),
+      <code>pi-tui</code> (terminal UI), plus a Slack bot and vLLM pods. Interactive-first,
+      hackable, with a large community and heavy supply-chain hardening.
+    </p>
+    <p><a href="https://github.com/earendil-works/pi">github.com/earendil-works/pi</a></p>
+  </div>
+
+  <div class="card">
+    <h3>open-agents</h3>
+    <p>
+      <span class="pill">MIT</span>
+      <span class="pill">TypeScript</span>
+      <span class="pill">~5.5k stars</span>
+      <span class="pill">Vercel</span>
+    </p>
+    <p>
+      A <strong>template/platform for cloud agents</strong>:
+      <code>Web &rarr; Agent workflow &rarr; Sandbox VM</code>. Its headline rule is
+      <em>"the agent is not the sandbox"</em> &mdash; the agent runs <em>outside</em> an
+      ephemeral Vercel Sandbox and drives it through tools. Ships a web UI, Better Auth,
+      a GitHub App (clone / branch / commit / push / PR), durable Workflow-SDK runs, and
+      hibernate/resume sandboxes.
+    </p>
+    <p><a href="https://github.com/vercel-labs/open-agents">github.com/vercel-labs/open-agents</a></p>
+  </div>
+</div>
+
+<h2>Feature matrix</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>Feature</th>
+      <th>Context Foundry</th>
+      <th>pi</th>
+      <th>open-agents</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Category</td>
+      <td>Autonomous build pipeline (engine + methodology)</td>
+      <td>Agent harness / toolkit (libraries + CLI)</td>
+      <td>Cloud-agent platform / template</td>
+    </tr>
+    <tr>
+      <td>One-line purpose</td>
+      <td>Drive a project through a structured, audited build loop</td>
+      <td>Give you primitives to build or embed an agent</td>
+      <td>Host an agent as a background cloud service</td>
+    </tr>
+    <tr>
+      <td>Primary mode</td>
+      <td>Autonomous (unattended task queue)</td>
+      <td>Interactive (you drive the CLI)</td>
+      <td>Background / async (kick off &rarr; get a PR)</td>
+    </tr>
+    <tr>
+      <td>Where it runs</td>
+      <td>Your machine, an Actions runner, or <code>foundry serve</code></td>
+      <td>Wherever you run the CLI / embed the libs</td>
+      <td>Vercel: durable workflow + ephemeral Sandbox VM</td>
+    </tr>
+    <tr>
+      <td>Agent vs. sandbox</td>
+      <td>Agent runs where the code is (CLI orchestration)</td>
+      <td><code>agent == local FS</code> (edits the dir it runs in)</td>
+      <td><strong>agent &ne; sandbox</strong> &mdash; drives the VM via tools</td>
+    </tr>
+    <tr>
+      <td>Work intake</td>
+      <td><code>TASKS.md</code> queue; Discovery appends new tasks</td>
+      <td>Interactive prompts / Slack (<code>pi-chat</code>)</td>
+      <td>Web chat / prompt &rarr; a workflow run</td>
+    </tr>
+    <tr>
+      <td>Prescribed stages</td>
+      <td>Explicit QRPBA stages with skip/defer indicators</td>
+      <td>None &mdash; you compose the loop</td>
+      <td>None &mdash; chat-driven agent turns</td>
+    </tr>
+    <tr>
+      <td>Per-stage model routing</td>
+      <td><strong>Yes</strong> &mdash; e.g. Opus on Plan, Codex on Build</td>
+      <td>N/A &mdash; one agent; pick a model</td>
+      <td>N/A &mdash; may select the run's model</td>
+    </tr>
+    <tr>
+      <td>Audit / review</td>
+      <td><strong>First-class Doubt</strong>: fresh-context auditor + HIGH/MEDIUM gate</td>
+      <td>None built-in (it's a runtime)</td>
+      <td>Human reviews the diff / PR</td>
+    </tr>
+    <tr>
+      <td>Memory / learning</td>
+      <td>Skill + pattern store fed back into Plan</td>
+      <td>None &mdash; shares sessions as OSS training data</td>
+      <td>None &mdash; snapshots/resume the sandbox, not learning</td>
+    </tr>
+    <tr>
+      <td>Model access</td>
+      <td>Spawns provider <strong>CLIs</strong> + a GhCopilot HTTP provider</td>
+      <td><code>pi-ai</code> &mdash; unified provider HTTP API</td>
+      <td>AI SDK / provider</td>
+    </tr>
+    <tr>
+      <td>Multi-provider</td>
+      <td>Yes (CLI routing per stage)</td>
+      <td><strong>Yes</strong> (first-class, core selling point)</td>
+      <td>Provider-configurable</td>
+    </tr>
+    <tr>
+      <td>Repo / PR integration</td>
+      <td><code>feat()</code>/<code>WIP()</code> commits; Actions fork opens PRs</td>
+      <td>You wire it (or via <code>pi-chat</code>)</td>
+      <td><strong>Built-in GitHub App</strong>: clone, branch, commit, push, PR</td>
+    </tr>
+    <tr>
+      <td>Sandbox / isolation</td>
+      <td>Git worktrees, sandbox modes, per-run <code>.buildloop/</code></td>
+      <td>N/A (runs in place)</td>
+      <td>Ephemeral VM with hibernate/resume + base snapshots</td>
+    </tr>
+    <tr>
+      <td>Frontend / UI</td>
+      <td>Rust TUI + dashboard + headless JSON stream</td>
+      <td>CLI, TUI library, Slack</td>
+      <td>Web app (chat, streaming, read-only session sharing)</td>
+    </tr>
+    <tr>
+      <td>Self-hosted?</td>
+      <td>Yes &mdash; your machine / infra</td>
+      <td>Yes &mdash; it's libraries + a CLI</td>
+      <td>Yes &mdash; deploy to your own Vercel</td>
+    </tr>
+    <tr>
+      <td>Language</td>
+      <td>Rust</td>
+      <td>TypeScript</td>
+      <td>TypeScript</td>
+    </tr>
+    <tr>
+      <td>License</td>
+      <td>See <code>LICENSE</code> in repo</td>
+      <td>MIT</td>
+      <td>MIT</td>
+    </tr>
+    <tr>
+      <td>Community / scale</td>
+      <td>Small (homelab project)</td>
+      <td>Large (~53k stars, Discord, HF session datasets)</td>
+      <td>Growing (~5.5k stars, Vercel-backed)</td>
+    </tr>
+    <tr>
+      <td>Distinctive trait</td>
+      <td>QRPBA + adversarial audit + cross-project learning</td>
+      <td>Unified LLM API, self-extensible, supply-chain rigor</td>
+      <td>"Agent is not the sandbox" + durable workflows + managed sandboxes</td>
+    </tr>
+    <tr>
+      <td>Cost</td>
+      <td>Free + whatever provider API you use</td>
+      <td>Free + provider API</td>
+      <td>Free + Vercel compute + provider API</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>How pi and open-agents fit together</h2>
+<p>
+  They occupy <strong>different layers</strong>, so they stack rather than compete. pi is the
+  <em>brain + hands</em> (an agent runtime, a unified LLM API, and tools). open-agents is the
+  <em>operating environment</em> (a web frontend, auth, durable orchestration, an ephemeral
+  sandbox with hibernate/resume, and the GitHub-App PR flow). open-agents needs <em>some</em>
+  agent to run inside its workflow layer; pi is exactly that kind of agent.
+</p>
+<p>
+  They overlap in one band &mdash; the <strong>agent runtime + model access</strong> &mdash; so if
+  you combined them you'd pick one brain, not run two. Everywhere else they're complementary:
+  open-agents gives pi the cloud platform pi lacks; pi gives open-agents a hackable,
+  multi-provider agent it can host instead of its default one.
+</p>
+
+<div class="callout">
+  <strong>The one reconciliation point:</strong> open-agents enforces <em>"the agent is not the
+  sandbox."</em> pi is normally <code>agent == local</code> &mdash; it edits the filesystem it runs
+  on. To run pi <em>faithfully</em> inside open-agents you keep <code>pi-agent-core</code> in the
+  workflow layer but <strong>rebind pi's tools from the local FS to the Vercel Sandbox API</strong>.
+  The simpler alternative &mdash; drop the pi CLI <em>inside</em> the sandbox &mdash; works but forfeits
+  open-agents' main benefit: an agent whose lifecycle is independent of the sandbox.
+</div>
+
+<h2>Where Context Foundry sits</h2>
+<p>
+  Context Foundry is the <strong>opinionated, autonomous cousin</strong>. Two things set it apart
+  from both: it prescribes a <em>methodology</em> (QRPBA with a real audit gate and learning),
+  and it <em>brings its own execution</em> &mdash; a GitHub Actions runner or <code>foundry serve</code>
+  &mdash; so it doesn't need open-agents' sandbox, and it orchestrates provider <strong>CLIs</strong>
+  rather than embedding a library like <code>pi-agent-core</code>. In stack terms: open-agents is a
+  platform, pi is a toolkit, Context Foundry is a methodology with its own engine. You could
+  imagine QRPBA running as the "agent" inside open-agents, or rebuilt on pi's runtime &mdash; but
+  today it's self-contained, which is the lighter path for GitHub-native adoption.
+</p>
+
+<h2>Where they overlap</h2>
+<ul>
+  <li>All three are <strong>coding agents</strong> that edit a real repository and can talk to multiple model providers.</li>
+  <li>All three can run <strong>without a human in every step</strong> (headless / background / autonomous, respectively).</li>
+  <li>All three keep <strong>policy in the repo</strong> (Foundry's <code>CLAUDE.md</code>/<code>SPEC.md</code>/<code>TASKS.md</code>, pi's <code>AGENTS.md</code>, open-agents' GitHub-App config).</li>
+</ul>
+
+<h2>Where they fundamentally differ</h2>
+<ol>
+  <li><strong>Layer.</strong> Engine + methodology (Foundry) vs. toolkit (pi) vs. hosting platform (open-agents). They answer different questions: <em>"how should the work be done"</em>, <em>"what do I build the agent from"</em>, and <em>"where does the agent run."</em></li>
+  <li><strong>Autonomy.</strong> Foundry is autonomous (a task queue it grinds down), pi is interactive (you steer it), open-agents is background-async (fire a task, get a PR).</li>
+  <li><strong>The audit.</strong> Foundry's fresh-context Doubt + HIGH/MEDIUM gate has no equivalent in pi or open-agents, which leave review to the human.</li>
+  <li><strong>Learning.</strong> Foundry feeds patterns/skills back into future builds. pi shares sessions outward as open training data instead; open-agents doesn't learn.</li>
+  <li><strong>Execution stance.</strong> Foundry brings its own runner; pi runs where you put it; open-agents provides a managed ephemeral sandbox and insists the agent live outside it.</li>
+</ol>
+
+<h2>Use-case fit</h2>
+<ul>
+  <li><strong>Pick Context Foundry if</strong> you want an autonomous, audited, learning build loop &mdash; a factory that researches, plans, builds, and self-audits each task and commits.</li>
+  <li><strong>Pick pi if</strong> you want to build or embed an agent, need clean multi-provider model access, or want a hackable interactive coding CLI and a TUI/agent-runtime library.</li>
+  <li><strong>Pick open-agents if</strong> you want a hosted, background coding-agent service &mdash; web UI, managed sandboxes, GitHub PRs &mdash; and you'll supply or keep an agent to run in it.</li>
+  <li><strong>They compose.</strong> pi as the brain inside open-agents' platform; Context Foundry as a self-contained pipeline; and you could plausibly run Foundry's QRPBA <em>as</em> the agent open-agents hosts, or rebuild it on pi's runtime.</li>
+</ul>
+
+<div class="footer">
+  <strong>Sources</strong>
+  <ul>
+    <li><a href="https://github.com/earendil-works/pi">github.com/earendil-works/pi</a> &mdash; pi agent harness monorepo (MIT)</li>
+    <li><a href="https://pi.dev">pi.dev</a> &mdash; project site + docs</li>
+    <li><a href="https://github.com/earendil-works/pi-chat">github.com/earendil-works/pi-chat</a> &mdash; Slack/chat automation</li>
+    <li><a href="https://github.com/vercel-labs/open-agents">github.com/vercel-labs/open-agents</a> &mdash; cloud-agent template (MIT)</li>
+    <li>Local: <code>/Users/Shared/homelab/context-foundry/CLAUDE.md</code>, <code>src/</code>, <code>scaffolds/</code></li>
+    <li>Companion: <code>symphony-vs-context-foundry.html</code> &mdash; the Symphony / Linear comparison</li>
+  </ul>
+</div>
+
+</div>
+</body>
+</html>
