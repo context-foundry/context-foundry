@@ -5446,8 +5446,21 @@ pub async fn run_plan_mode(project_dir: &Path, max_iterations: u64) -> Result<()
 
 // ─── Headless Mode ───────────────────────────────────────────
 
-pub async fn run_headless(project_dir: &Path, output_format: Option<String>) -> Result<()> {
-    commands::run_headless(project_dir, output_format).await
+pub async fn run_headless(
+    project_dir: &Path,
+    output_format: Option<String>,
+    profile: Option<String>,
+    ignore_project_config: bool,
+    exit_on_wip: bool,
+) -> Result<i32> {
+    commands::run_headless(
+        project_dir,
+        output_format,
+        profile,
+        ignore_project_config,
+        exit_on_wip,
+    )
+    .await
 }
 
 // ─── Status & Tasks Commands ─────────────────────────────────

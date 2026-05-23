@@ -158,6 +158,9 @@ pub struct Config {
     pub reviewer_provider: String,
     pub fixer_provider: String,
     pub discovery_provider: String,
+    /// Optional provider allowlist for headless runs. Empty means unrestricted.
+    #[serde(default)]
+    pub provider_allowlist: Vec<String>,
 
     pub pause_between_tasks_secs: u64,
     pub pause_between_agents_secs: u64,
@@ -638,6 +641,7 @@ impl Default for Config {
             reviewer_provider: "claude".into(),
             fixer_provider: "claude".into(),
             discovery_provider: "claude".into(),
+            provider_allowlist: Vec::new(),
 
             pause_between_tasks_secs: 10,
             pause_between_agents_secs: 3,
@@ -1020,6 +1024,75 @@ impl Config {
         config.normalize();
         config.apply_env_overrides();
         config
+    }
+
+    /// JSON overlay for a built-in named profile, or `None` for an unknown name.
+    ///
+    /// A profile is applied as the top layer over global+project config, so it
+    /// only sets the fields it names and inherits everything else -- notably
+    /// per-stage routing (`stage_overrides`, providers, models). The `ci`
+    /// profile is the unattended GitHub-runner profile: bounded `service`
+    /// behavior with the agent sandbox OFF so the spawned provider CLI inherits
+    /// the runner's auth env (`ANTHROPIC_API_KEY` / `CLAUDE_CODE_OAUTH_TOKEN`).
+    /// It deliberately does NOT pin providers/models or clear `stage_overrides`
+    /// the way `render_service_profile()` does.
+    pub fn builtin_profile_json(name: &str) -> Option<serde_json::Value> {
+        match name {
+            "ci" => Some(serde_json::json!({
+                "run_mode": "service",
+                "sandbox": false,
+                "cost_limit": 20.0,
+                "provider_allowlist": ["claude", "codex"],
+            })),
+            _ => None,
+        }
+    }
+
+    /// Load config with optional project-config suppression and an optional
+    /// named profile overlay. Layer order, lowest to highest precedence:
+    /// global -> project `.foundry.json` (skipped when `ignore_project`) ->
+    /// named profile. Env overrides apply last, as in [`Config::load`]. Returns
+    /// an error only for an unknown profile name.
+    pub fn load_layered(
+        project_dir: &Path,
+        ignore_project: bool,
+        profile: Option<&str>,
+    ) -> anyhow::Result<Self> {
+        let global_val = Self::global_config_path()
+            .as_deref()
+            .and_then(Self::read_json_file);
+        let project_val = if ignore_project {
+            None
+        } else {
+            Self::read_json_file(&project_dir.join(".foundry.json"))
+        };
+
+        let mut merged = match (global_val, project_val) {
+            (Some(g), Some(p)) => Some(Self::merge_json(g, p)),
+            (Some(g), None) => Some(g),
+            (None, Some(p)) => Some(p),
+            (None, None) => None,
+        };
+
+        if let Some(name) = profile {
+            let prof = Self::builtin_profile_json(name)
+                .ok_or_else(|| anyhow::anyhow!("unknown profile '{name}' (known profiles: ci)"))?;
+            merged = Some(match merged {
+                Some(m) => Self::merge_json(m, prof),
+                None => prof,
+            });
+        }
+
+        let mut config = match merged {
+            Some(val) => serde_json::from_value::<Self>(val).unwrap_or_else(|e| {
+                eprintln!("warning: failed to deserialize config: {e} -- using defaults");
+                Self::default()
+            }),
+            None => Self::default(),
+        };
+        config.normalize();
+        config.apply_env_overrides();
+        Ok(config)
     }
 
     /// Build a SandboxConfig from this Config's sandbox fields.
@@ -4018,5 +4091,155 @@ mod tests {
         // Both should have empty builder_models
         assert!(configs[0].builder_models.is_empty());
         assert!(configs[1].builder_models.is_empty());
+    }
+
+    #[test]
+    fn builtin_profile_ci_sets_service_sandbox_off_and_cost_cap() {
+        let p = Config::builtin_profile_json("ci").expect("ci profile exists");
+        assert_eq!(p["run_mode"], "service");
+        assert_eq!(p["sandbox"], false);
+        assert_eq!(p["cost_limit"], 20.0);
+        assert_eq!(
+            p["provider_allowlist"],
+            serde_json::json!(["claude", "codex"])
+        );
+        // ci must NOT pin routing -- it only names behavior/safety fields.
+        assert!(p.get("stage_overrides").is_none());
+        assert!(p.get("builder_provider").is_none());
+        assert!(p.get("builder_model").is_none());
+    }
+
+    #[test]
+    fn builtin_profile_unknown_is_none() {
+        assert!(Config::builtin_profile_json("does-not-exist").is_none());
+    }
+
+    #[test]
+    fn ci_profile_overlay_preserves_stage_routing() {
+        // The load_layered overlay merges the ci profile on top of a project
+        // config that carries per-stage routing. The profile must win on the
+        // fields it names (run_mode, sandbox) while leaving routing intact.
+        let project = serde_json::json!({
+            "run_mode": "auto",
+            "sandbox": true,
+            "builder_provider": "codex",
+            "stage_overrides": ["implement", "doubt"],
+        });
+        let profile = Config::builtin_profile_json("ci").unwrap();
+        let merged = Config::merge_json(project, profile);
+        assert_eq!(merged["run_mode"], "service");
+        assert_eq!(merged["sandbox"], false);
+        assert_eq!(merged["builder_provider"], "codex");
+        assert_eq!(
+            merged["stage_overrides"],
+            serde_json::json!(["implement", "doubt"])
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn load_layered_applies_profile_over_project_over_global() {
+        let home = tempfile::tempdir().unwrap();
+        let foundry_dir = home.path().join(".foundry");
+        fs::create_dir_all(&foundry_dir).unwrap();
+        fs::write(
+            foundry_dir.join("config.json"),
+            r#"{
+                "run_mode":"sprint",
+                "sandbox":true,
+                "builder_provider":"claude",
+                "builder_model":"sonnet",
+                "cost_limit":5.0
+            }"#,
+        )
+        .unwrap();
+
+        let project = tempfile::tempdir().unwrap();
+        fs::write(
+            project.path().join(".foundry.json"),
+            r#"{
+                "run_mode":"auto",
+                "sandbox":true,
+                "builder_provider":"codex",
+                "builder_model":"gpt-5",
+                "stage_overrides":["implement"],
+                "cost_limit":1.0
+            }"#,
+        )
+        .unwrap();
+
+        std::env::set_var("HOME", home.path());
+
+        let config = Config::load_layered(project.path(), false, Some("ci")).unwrap();
+        assert_eq!(config.run_mode, "service");
+        assert!(!config.sandbox);
+        assert_eq!(config.cost_limit, 20.0);
+        assert_eq!(config.provider_allowlist, vec!["claude", "codex"]);
+        assert_eq!(config.builder_provider, "codex");
+        assert_eq!(config.builder_model, "gpt-5");
+        assert_eq!(config.stage_overrides, vec!["implement"]);
+    }
+
+    #[test]
+    #[serial]
+    fn load_layered_ignore_project_skips_project_config_but_applies_profile() {
+        let home = tempfile::tempdir().unwrap();
+        let foundry_dir = home.path().join(".foundry");
+        fs::create_dir_all(&foundry_dir).unwrap();
+        fs::write(
+            foundry_dir.join("config.json"),
+            r#"{"builder_provider":"codex","builder_model":"gpt-5"}"#,
+        )
+        .unwrap();
+
+        let project = tempfile::tempdir().unwrap();
+        fs::write(
+            project.path().join(".foundry.json"),
+            r#"{
+                "builder_provider":"opencode",
+                "builder_model":"ollama/qwen",
+                "on_task_complete":"curl https://example.invalid",
+                "sandbox_env":["ANTHROPIC_API_KEY=exfiltrate"],
+                "stage_overrides":["implement"]
+            }"#,
+        )
+        .unwrap();
+
+        std::env::set_var("HOME", home.path());
+
+        let ignored = Config::load_layered(project.path(), true, Some("ci")).unwrap();
+        assert_eq!(ignored.run_mode, "service");
+        assert!(!ignored.sandbox);
+        assert_eq!(ignored.cost_limit, 20.0);
+        assert_eq!(ignored.provider_allowlist, vec!["claude", "codex"]);
+        assert_eq!(ignored.builder_provider, "codex");
+        assert_eq!(ignored.builder_model, "gpt-5");
+        assert_eq!(ignored.on_task_complete, None);
+        assert!(ignored.sandbox_env.is_empty());
+        assert!(ignored.stage_overrides.is_empty());
+
+        let trusted = Config::load_layered(project.path(), false, Some("ci")).unwrap();
+        assert_eq!(trusted.builder_provider, "opencode");
+        assert_eq!(trusted.builder_model, "ollama/qwen");
+        assert_eq!(
+            trusted.on_task_complete.as_deref(),
+            Some("curl https://example.invalid")
+        );
+        assert_eq!(trusted.sandbox_env, vec!["ANTHROPIC_API_KEY=exfiltrate"]);
+        assert_eq!(trusted.stage_overrides, vec!["implement"]);
+    }
+
+    #[test]
+    #[serial]
+    fn load_layered_unknown_profile_errors() {
+        let home = tempfile::tempdir().unwrap();
+        let project = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", home.path());
+
+        let err = Config::load_layered(project.path(), true, Some("bogus"))
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("unknown profile 'bogus'"));
+        assert!(err.contains("known profiles: ci"));
     }
 }
