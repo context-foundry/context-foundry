@@ -2,7 +2,7 @@
 
 Date: 2026-05-22
 Version: v3
-Status: in-progress
+Status: implemented locally; release + clean-runner smoke pending
 
 ## Audit changelog (vs v2)
 
@@ -70,8 +70,8 @@ work the GitHub runner IS the sandbox, so we do not need a separate hibernating 
 - `agent.rs` spawns the `claude` CLI in a PTY and relies on ambient auth; it has no
   `ANTHROPIC_API_KEY` handling of its own and only knows `ANTHROPIC_BASE_URL`
   (src/config.rs:456). The "two worlds" split: interactive=Keychain, serve=proxy.
-- `ReviewPr` already has `--ignore-project-config` for CI trust (src/main.rs:104-107);
-  `Commands::Run` does not yet.
+- `ReviewPr` already had `--ignore-project-config` for CI trust; `Commands::Run`
+  now has the same flag for future untrusted-run variants.
 - The greenfield `foundry serve` build service (Phase 35, v4.0.0) seeds work dirs
   with SPEC.md/TASKS.md only (src/service/localdocker.rs:649) and builds preview
   containers. Repo-aware mode is ADDITIVE and must not break it.
@@ -80,14 +80,14 @@ work the GitHub runner IS the sandbox, so we do not need a separate hibernating 
 
 - [ ] T36.1 -- headless provider auth in a Keychain-less runner (env passthrough +
       manual smoke). The gate; prove it before the rest.
-- [ ] T36.2 -- `--profile <name>` Config overlay + a built-in `ci` profile
+- [x] T36.2 -- `--profile <name>` Config overlay + a built-in `ci` profile
       (`run_mode=service` + provider allowlist + budget caps; preserves routing).
-- [ ] T36.3 -- exit-code policy for headless runs (0 only when all feat/pass).
-- [ ] T36.4 -- `run --ignore-project-config` trust flag (mirror ReviewPr).
-- [ ] T36.5 -- label/dispatch-gated `.github/workflows/foundry-agent.yml` that
+- [x] T36.3 -- exit-code policy for headless runs (0 only when all feat/pass).
+- [x] T36.4 -- `run --ignore-project-config` trust flag (mirror ReviewPr).
+- [x] T36.5 -- label/dispatch-gated `.github/workflows/foundry-agent.yml` that
       checks out, branches first, runs headless, pushes, opens a PR, uploads
       `.buildloop`.
-- [ ] T36.6 -- PR/check reporting from the `SessionReport`.
+- [x] T36.6 -- PR/check reporting from the `SessionReport`.
 - [ ] T36.7 -- (deferred, optional) MCP launcher for VS Code / Copilot.
 - [ ] T36.8 -- (deferred) GitHub App packaging.
 
@@ -101,8 +101,11 @@ work the GitHub runner IS the sandbox, so we do not need a separate hibernating 
   behavior and a provider allowlist; it inherits stage routing from the repo.
 - **Runner is the sandbox.** No clone logic, no tarball artifact, no remote service
   in v1; GitHub provides the checkout, token, and PR.
-- **Trust boundary.** In CI, refuse to honor an untrusted PR branch's `.foundry.json`
-  (`--ignore-project-config`); only trusted triggers (dispatch / maintainer label).
+- **Trust boundary.** The v1 Action never checks out a PR head. It checks out the
+  trusted default branch, honors that branch's `.foundry.json` so per-stage routing
+  works in CI, and gates issue-triggered runs by both maintainer label and trusted
+  issue author. Future variants that run untrusted PR code must use
+  `--ignore-project-config`.
 - **Defer the heavy surfaces.** MCP launcher and GitHub App come only after the
   Action path is proven.
 
