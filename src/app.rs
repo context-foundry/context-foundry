@@ -3955,11 +3955,9 @@ fn handle_event(state: &mut AppState, event: AppEvent, config: &Config) {
                             state.agent_pane_split = pct;
                         }
                     }
-                    MouseEventKind::Up(MouseButton::Left) => {
-                        if state.dragging_split {
-                            state.dragging_split = false;
-                            Config::save_agent_pane_split_global(state.agent_pane_split);
-                        }
+                    MouseEventKind::Up(MouseButton::Left) if state.dragging_split => {
+                        state.dragging_split = false;
+                        Config::save_agent_pane_split_global(state.agent_pane_split);
                     }
                     _ => {}
                 }
@@ -5446,8 +5444,21 @@ pub async fn run_plan_mode(project_dir: &Path, max_iterations: u64) -> Result<()
 
 // ─── Headless Mode ───────────────────────────────────────────
 
-pub async fn run_headless(project_dir: &Path, output_format: Option<String>) -> Result<()> {
-    commands::run_headless(project_dir, output_format).await
+pub async fn run_headless(
+    project_dir: &Path,
+    output_format: Option<String>,
+    profile: Option<String>,
+    ignore_project_config: bool,
+    exit_on_wip: bool,
+) -> Result<i32> {
+    commands::run_headless(
+        project_dir,
+        output_format,
+        profile,
+        ignore_project_config,
+        exit_on_wip,
+    )
+    .await
 }
 
 // ─── Status & Tasks Commands ─────────────────────────────────
@@ -6264,25 +6275,25 @@ fn handle_startup_mouse_at_for_running(
     let preview_area = middle_cols[1];
 
     match mouse.kind {
-        MouseEventKind::Down(MouseButton::Right) => {
+        MouseEventKind::Down(MouseButton::Right)
+            if tui::rect_contains(explorer_area, mouse.column, mouse.row) =>
+        {
             // Right-click opens an AI-summary context menu on a file entry.
-            if tui::rect_contains(explorer_area, mouse.column, mouse.row) {
-                if let Some(ref explorer) = state.running_explorer {
-                    let inner_top = explorer_area.y + 1;
-                    let inner_bottom = explorer_area.y + explorer_area.height.saturating_sub(1);
-                    if mouse.row >= inner_top && mouse.row < inner_bottom {
-                        let relative_row = (mouse.row - inner_top) as usize;
-                        let vis = explorer.visible_indices();
-                        let vis_index = explorer.explorer_scroll + relative_row;
-                        if let Some(&tree_idx) = vis.get(vis_index) {
-                            if let Some(entry) = explorer.file_tree.get(tree_idx) {
-                                if !entry.is_dir {
-                                    state.explorer_context_menu = Some(ExplorerContextMenu {
-                                        anchor_col: mouse.column,
-                                        anchor_row: mouse.row,
-                                        file_path: entry.path.clone(),
-                                    });
-                                }
+            if let Some(ref explorer) = state.running_explorer {
+                let inner_top = explorer_area.y + 1;
+                let inner_bottom = explorer_area.y + explorer_area.height.saturating_sub(1);
+                if mouse.row >= inner_top && mouse.row < inner_bottom {
+                    let relative_row = (mouse.row - inner_top) as usize;
+                    let vis = explorer.visible_indices();
+                    let vis_index = explorer.explorer_scroll + relative_row;
+                    if let Some(&tree_idx) = vis.get(vis_index) {
+                        if let Some(entry) = explorer.file_tree.get(tree_idx) {
+                            if !entry.is_dir {
+                                state.explorer_context_menu = Some(ExplorerContextMenu {
+                                    anchor_col: mouse.column,
+                                    anchor_row: mouse.row,
+                                    file_path: entry.path.clone(),
+                                });
                             }
                         }
                     }

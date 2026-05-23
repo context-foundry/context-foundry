@@ -1,0 +1,195 @@
+name: Foundry Agent
+
+on:
+  workflow_dispatch:
+    inputs:
+      task:
+        description: "Task for Foundry to implement (one mental-model change)."
+        required: true
+        type: string
+      profile:
+        description: "Config profile overlay (default: ci)."
+        required: false
+        default: "ci"
+        type: string
+  issues:
+    types: [labeled]
+
+# Trust boundary:
+# - never triggers on pull_request, so forked-PR code never runs with secrets;
+# - always checks out the trusted default branch (never a PR head), so the repo's
+#   .foundry.json IS trusted and is honored -- that is how per-stage routing
+#   reaches CI. We deliberately do NOT pass --ignore-project-config here; add it
+#   only if a future variant ever runs untrusted (PR-branch) code;
+# - issue runs require BOTH a maintainer-applied 'foundry-agent' label AND a
+#   trusted issue author (OWNER/MEMBER/COLLABORATOR). Residual risk: a labeled
+#   issue body becomes the agent task, so prompt-injection of a write-credentialed
+#   agent remains possible -- inherent to any issue-driven coding agent.
+permissions:
+  contents: write
+  checks: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: foundry-agent-${{ github.repository }}-${{ github.event.issue.number || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'issues' &&
+       github.event.label.name == 'foundry-agent' &&
+       contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.issue.author_association))
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout default branch
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+
+      - name: Configure git identity
+        run: |
+          git config user.name "foundry-agent[bot]"
+          git config user.email "foundry-agent@users.noreply.github.com"
+
+      - name: Install foundry
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          gh release download --repo context-foundry/context-foundry --pattern 'foundry-linux.tar.gz' -D /tmp
+          tar xzf /tmp/foundry-linux.tar.gz -C /tmp
+          chmod +x /tmp/foundry
+          sudo mv /tmp/foundry /usr/local/bin/foundry
+          foundry --version
+
+      - name: Install Claude CLI
+        # foundry run spawns the `claude` CLI in a PTY; it must be on PATH and the
+        # job env must carry ANTHROPIC_API_KEY / CLAUDE_CODE_OAUTH_TOKEN (below).
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Prepare branch and task queue
+        id: prep
+        env:
+          GH_EVENT: ${{ github.event_name }}
+          DISPATCH_TASK: ${{ github.event.inputs.task }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          set -euo pipefail
+          if [ "$GH_EVENT" = "workflow_dispatch" ]; then
+            TASK="$DISPATCH_TASK"
+            BRANCH="foundry/dispatch-${{ github.run_id }}"
+          else
+            TASK="${ISSUE_TITLE}: ${ISSUE_BODY}"
+            BRANCH="foundry/issue-${ISSUE_NUMBER}-${GITHUB_RUN_ID}"
+          fi
+          git switch -c "$BRANCH"
+          ONELINE="$(printf '%s' "$TASK" | tr '\n' ' ')"
+          TASK_ID="F${GITHUB_RUN_ID}.1"
+
+          if [ ! -e SPEC.md ]; then
+            printf '# Spec\n' > SPEC.md
+          elif [ -s SPEC.md ] && [ -n "$(tail -c 1 SPEC.md || true)" ]; then
+            printf '\n' >> SPEC.md
+          fi
+          printf '\n## Foundry Agent %s\n\n%s\n' "$GITHUB_RUN_ID" "$TASK" >> SPEC.md
+
+          if [ ! -e TASKS.md ]; then
+            printf '# Task Queue\n' > TASKS.md
+          elif [ -s TASKS.md ] && [ -n "$(tail -c 1 TASKS.md || true)" ]; then
+            printf '\n' >> TASKS.md
+          fi
+          printf '\n## Foundry Agent %s\n\n' "$GITHUB_RUN_ID" >> TASKS.md
+          printf -- '- [ ] %s: %s\n' "$TASK_ID" "$ONELINE" >> TASKS.md
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+
+      - name: Run foundry (headless, ci profile)
+        id: run
+        continue-on-error: true
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          set -o pipefail
+          # Honors the (trusted, default-branch) repo .foundry.json for per-stage
+          # routing; the ci profile overlays bounded service behavior on top.
+          # Run status (PASS/WIP/FAIL) is derived from the SessionReport by the
+          # report script below and surfaced via the check-run -- not via the
+          # process exit code -- so the PR always opens for human review.
+          foundry run \
+            --no-tui \
+            --output-format json-stream \
+            --profile "${{ github.event.inputs.profile || 'ci' }}" \
+            | tee foundry-stream.jsonl
+
+      - name: Render report
+        if: always()
+        run: |
+          python3 scripts/foundry-ci-report.py foundry-stream.jsonl > foundry-report.md \
+            || echo "Report generation failed." > foundry-report.md
+          cat foundry-report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Push branch
+        run: git push -u origin "${{ steps.prep.outputs.branch }}"
+
+      - name: Create check run
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          CONCLUSION="$(python3 scripts/foundry-ci-report.py --conclusion foundry-stream.jsonl || echo failure)"
+          TITLE="$(python3 scripts/foundry-ci-report.py --title foundry-stream.jsonl || echo 'Foundry build: incomplete')"
+          gh api "repos/${GITHUB_REPOSITORY}/check-runs" \
+            -X POST \
+            -f name="Foundry Agent" \
+            -f head_sha="$(git rev-parse HEAD)" \
+            -f status="completed" \
+            -f conclusion="$CONCLUSION" \
+            -f "output[title]=$TITLE" \
+            -f "output[summary]=$(cat foundry-report.md)" \
+            --silent \
+            || echo "Check-run creation skipped."
+
+      - name: Open PR
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          STATUS="$(python3 scripts/foundry-ci-report.py --status foundry-stream.jsonl || echo WIP)"
+          PR_URL="$(gh pr create \
+            --base "${{ github.event.repository.default_branch }}" \
+            --head "${{ steps.prep.outputs.branch }}" \
+            --title "${STATUS}: foundry-agent ${{ steps.prep.outputs.branch }}" \
+            --body-file foundry-report.md 2>/tmp/foundry-pr-create.err || true)"
+          if [ -z "$PR_URL" ]; then
+            cat /tmp/foundry-pr-create.err
+            PR_URL="$(gh pr view "${{ steps.prep.outputs.branch }}" --json url -q .url 2>/dev/null || true)"
+          fi
+          if [ -n "$PR_URL" ]; then
+            echo "url=$PR_URL" >> "$GITHUB_OUTPUT"
+          else
+            echo "PR creation skipped (no commits or PR already exists)."
+          fi
+
+      - name: Comment report on PR
+        if: steps.pr.outputs.url != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh pr comment "${{ steps.pr.outputs.url }}" --body-file foundry-report.md
+
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: buildloop-${{ github.run_id }}
+          path: |
+            .buildloop/
+            foundry-stream.jsonl
+            foundry-report.md
+          if-no-files-found: warn

@@ -65,6 +65,19 @@ enum Commands {
         /// Output format for headless mode: "json" (single report) or "json-stream" (JSONL event stream)
         #[arg(long, value_name = "FORMAT")]
         output_format: Option<String>,
+        /// Named config profile overlaid on global+project config (e.g. "ci").
+        /// Headless only.
+        #[arg(long, value_name = "NAME")]
+        profile: Option<String>,
+        /// Ignore project `.foundry.json` (use global config + `--profile` only).
+        /// Use in CI so an untrusted PR branch cannot influence run config.
+        #[arg(long)]
+        ignore_project_config: bool,
+        /// Exit non-zero if any task ends WIP / audit-failed or no task passed.
+        /// Off by default so the build service (which treats WIP as terminal-but-
+        /// ready) is unaffected; the GitHub Action opts in.
+        #[arg(long)]
+        exit_on_wip: bool,
     },
     /// Show current progress
     Status,
@@ -192,14 +205,33 @@ async fn main() -> Result<()> {
     match cli.command.unwrap_or(Commands::Run {
         no_tui: false,
         output_format: None,
+        profile: None,
+        ignore_project_config: false,
+        exit_on_wip: false,
     }) {
         Commands::Run {
             no_tui,
             output_format,
+            profile,
+            ignore_project_config,
+            exit_on_wip,
         } => {
             if no_tui {
-                app::run_headless(&project_dir, output_format).await?;
+                let code = app::run_headless(
+                    &project_dir,
+                    output_format,
+                    profile,
+                    ignore_project_config,
+                    exit_on_wip,
+                )
+                .await?;
+                std::process::exit(code);
             } else {
+                if profile.is_some() || ignore_project_config || exit_on_wip {
+                    eprintln!(
+                        "[foundry] --profile/--ignore-project-config/--exit-on-wip apply to --no-tui headless mode only; ignoring in TUI mode"
+                    );
+                }
                 app::run_tui(&project_dir).await?;
             }
         }

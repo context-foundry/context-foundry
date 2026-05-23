@@ -2624,7 +2624,7 @@ mod ranks_tests {
 
     fn top_5_ids(patterns: &[Pattern], task_desc: &str) -> Vec<String> {
         let mut scored = keyword_scores(patterns, task_desc, &[]);
-        scored.sort_by(|a, b| b.1.cmp(&a.1));
+        scored.sort_by_key(|b| std::cmp::Reverse(b.1));
         scored
             .into_iter()
             .take(5)

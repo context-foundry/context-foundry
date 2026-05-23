@@ -2725,7 +2725,7 @@ fn render_prompts_drill_down(
 
     let visible_rows = body_area.height as usize;
     let total_lines = dd.source.lines().count();
-    let scroll = dd.scroll.min(total_lines.saturating_sub(1).max(0));
+    let scroll = dd.scroll.min(total_lines.saturating_sub(1));
     let body_lines: Vec<Line> = dd
         .source
         .lines()

@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::io::{self, BufRead, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
@@ -211,6 +211,70 @@ pub(crate) fn ensure_required_providers_available(
     );
 }
 
+fn provider_allowlist_slug(value: &str) -> Option<&'static str> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "claude" => Some("claude"),
+        "codex" => Some("codex"),
+        "opencode" => Some("opencode"),
+        "ghcopilot" | "gh-copilot" | "copilot" => Some("ghcopilot"),
+        _ => None,
+    }
+}
+
+fn ensure_required_providers_allowed(config: &Config, mode: ProviderCommandMode) -> Result<()> {
+    if config.provider_allowlist.is_empty() {
+        return Ok(());
+    }
+
+    let mut allowed = BTreeSet::new();
+    let mut invalid = Vec::new();
+    for entry in &config.provider_allowlist {
+        let trimmed = entry.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        match provider_allowlist_slug(trimmed) {
+            Some(slug) => {
+                allowed.insert(slug);
+            }
+            None => invalid.push(trimmed.to_string()),
+        }
+    }
+
+    if !invalid.is_empty() {
+        anyhow::bail!(
+            "unknown provider(s) in provider_allowlist: {}",
+            invalid.join(", ")
+        );
+    }
+    if allowed.is_empty() {
+        anyhow::bail!("provider_allowlist must name at least one provider when configured");
+    }
+
+    let mut disallowed: BTreeMap<&'static str, Vec<&'static str>> = BTreeMap::new();
+    for (role, provider) in required_providers(config, mode) {
+        let slug = provider.slug();
+        if !allowed.contains(slug) {
+            disallowed.entry(slug).or_default().push(role);
+        }
+    }
+
+    if disallowed.is_empty() {
+        return Ok(());
+    }
+
+    let disallowed = disallowed
+        .into_iter()
+        .map(|(provider, roles)| format!("{provider} ({})", roles.join(", ")))
+        .collect::<Vec<_>>()
+        .join(", ");
+    anyhow::bail!(
+        "provider not allowed by provider_allowlist: {}. Allowed providers: {}",
+        disallowed,
+        allowed.into_iter().collect::<Vec<_>>().join(", ")
+    );
+}
+
 pub(crate) fn provider_binary_is_available(provider: ModelProvider) -> bool {
     // GhCopilot depends on the `gh` CLI for OAuth, not a foundry-shipped binary;
     // its availability gate is out of scope for local-model routing (see KNOWN_GAPS
@@ -372,6 +436,8 @@ fn required_providers(
         ProviderCommandMode::Run => {
             let mut v = vec![
                 ("scout", Config::parse_provider(&config.scout_provider)),
+                ("query", Config::parse_provider(&config.query_provider)),
+                ("research", Config::parse_provider(&config.research_provider)),
                 ("planner", Config::parse_provider(&config.planner_provider)),
                 (
                     "discovery",
@@ -464,9 +530,23 @@ fn required_providers(
     providers
 }
 
-pub(super) async fn run_headless(project_dir: &Path, output_format: Option<String>) -> Result<()> {
+fn headless_exit_code(exit_on_wip: bool, feat_commits: usize, wip_commits: usize) -> i32 {
+    if exit_on_wip && (wip_commits > 0 || feat_commits == 0) {
+        1
+    } else {
+        0
+    }
+}
+
+pub(super) async fn run_headless(
+    project_dir: &Path,
+    output_format: Option<String>,
+    profile: Option<String>,
+    ignore_project_config: bool,
+    exit_on_wip: bool,
+) -> Result<i32> {
     let contract_paths = ContractPaths::resolve(project_dir);
-    let mut config = Config::load(project_dir);
+    let mut config = Config::load_layered(project_dir, ignore_project_config, profile.as_deref())?;
     if config.run_mode == "review" {
         eprintln!(
             "[foundry] review mode is not supported in headless mode -- falling back to auto"
@@ -509,6 +589,7 @@ pub(super) async fn run_headless(project_dir: &Path, output_format: Option<Strin
         );
     }
 
+    ensure_required_providers_allowed(&run_context.config, ProviderCommandMode::Run)?;
     ensure_required_providers_available(&run_context.config, ProviderCommandMode::Run)?;
 
     // Sandbox detection (headless)
@@ -850,7 +931,11 @@ pub(super) async fn run_headless(project_dir: &Path, output_format: Option<Strin
         );
     }
 
-    Ok(())
+    // T36.3: opt-in CI exit policy. Default (exit_on_wip = false) preserves the
+    // build-service contract, where a WIP / audit-failed task still yields a
+    // successful headless run. With --exit-on-wip the GitHub Action gets a
+    // non-zero status when any task ended WIP / audit-failed or nothing passed.
+    Ok(headless_exit_code(exit_on_wip, feat_commits, wip_commits))
 }
 
 pub(super) fn show_status(project_dir: &Path) -> Result<()> {
@@ -1837,9 +1922,10 @@ mod tests {
     use std::collections::BTreeSet;
 
     use super::{
-        format_status_output, format_tasks_output, migrate_to_skills_in_dir,
-        missing_provider_commands, prune_stale_in_dir, ConfigSnapshot, OutputMode,
-        ProviderCommandMode, SessionReport, SessionStats, HEADLESS_REPORT_SCHEMA_VERSION,
+        ensure_required_providers_allowed, format_status_output, format_tasks_output,
+        headless_exit_code, migrate_to_skills_in_dir, missing_provider_commands,
+        prune_stale_in_dir, ConfigSnapshot, OutputMode, ProviderCommandMode, SessionReport,
+        SessionStats, HEADLESS_REPORT_SCHEMA_VERSION,
     };
     use crate::agent::ModelProvider;
     use crate::config::Config;
@@ -1878,7 +1964,10 @@ mod tests {
             typed_error: None,
         };
         let s = serde_json::to_string(&report).expect("serialize");
-        assert!(!s.contains('\n'), "json-stream report must be a single line");
+        assert!(
+            !s.contains('\n'),
+            "json-stream report must be a single line"
+        );
         let v: serde_json::Value = serde_json::from_str(&s).expect("parse");
         assert_eq!(v["schema_version"], 3);
         assert_eq!(v["cost_usd"], 1.25);
@@ -1900,6 +1989,63 @@ mod tests {
         assert!(OutputMode::Json.is_json());
         assert!(OutputMode::JsonStream.is_json());
         assert!(!OutputMode::Human.is_json());
+    }
+
+    #[test]
+    fn headless_exit_policy_preserves_default_service_contract() {
+        assert_eq!(headless_exit_code(false, 0, 0), 0);
+        assert_eq!(headless_exit_code(false, 0, 1), 0);
+        assert_eq!(headless_exit_code(false, 1, 1), 0);
+    }
+
+    #[test]
+    fn headless_exit_policy_flags_wip_and_empty_when_enabled() {
+        assert_eq!(headless_exit_code(true, 1, 0), 0);
+        assert_eq!(headless_exit_code(true, 1, 1), 1);
+        assert_eq!(headless_exit_code(true, 0, 0), 1);
+    }
+
+    #[test]
+    fn provider_allowlist_allows_empty_and_matching_required_providers() {
+        let unrestricted = Config {
+            builder_provider: "opencode".into(),
+            ..Config::default()
+        };
+        assert!(ensure_required_providers_allowed(&unrestricted, ProviderCommandMode::Run).is_ok());
+
+        let allowed = Config {
+            provider_allowlist: vec!["claude".into(), "codex".into()],
+            builder_provider: "codex".into(),
+            ..Config::default()
+        };
+        assert!(ensure_required_providers_allowed(&allowed, ProviderCommandMode::Run).is_ok());
+    }
+
+    #[test]
+    fn provider_allowlist_rejects_disallowed_required_provider() {
+        let config = Config {
+            provider_allowlist: vec!["claude".into(), "codex".into()],
+            builder_provider: "opencode".into(),
+            ..Config::default()
+        };
+        let err = ensure_required_providers_allowed(&config, ProviderCommandMode::Run)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("provider not allowed by provider_allowlist"));
+        assert!(err.contains("opencode (builder)"));
+        assert!(err.contains("Allowed providers: claude, codex"));
+    }
+
+    #[test]
+    fn provider_allowlist_rejects_unknown_entries() {
+        let config = Config {
+            provider_allowlist: vec!["mystery".into()],
+            ..Config::default()
+        };
+        let err = ensure_required_providers_allowed(&config, ProviderCommandMode::Run)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("unknown provider(s) in provider_allowlist: mystery"));
     }
 
     fn write_plan(dir: &Path, contents: &str) -> Vec<task::Task> {
