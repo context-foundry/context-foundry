@@ -1,375 +1,438 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Knowmler x Context Foundry - from content to a working app</title>
-<style>
-  :root {
-    --bg: #0e1116;
-    --panel: #161b22;
-    --panel-2: #1c232d;
-    --line: #2a313c;
-    --line-bright: #3a4453;
-    --text: #e6edf3;
-    --muted: #8b949e;
-    --dim: #6b7480;
-    --accent: #4fc3f7;          /* Context Foundry phase */
-    --knowmler: #a78bfa;        /* Knowmler phase */
-    --accent-2: #56d6a0;        /* success / in progress */
-    --opus: #c792ea;
-    --sonnet: #ffcb6b;
-    --radius: 12px;
-    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  }
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  html { scroll-behavior: smooth; }
-  body {
-    font-family: var(--sans);
-    background: radial-gradient(1200px 600px at 50% -10%, #1a1830 0%, var(--bg) 55%);
-    color: var(--text);
-    line-height: 1.55;
-    min-height: 100vh;
-    padding: 40px 20px 80px;
-  }
-  .wrap { max-width: 1080px; margin: 0 auto; }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Knowmler and Context Foundry</title>
+  <meta name="description" content="How Knowmler turns useful analysis into app ideas, and how Context Foundry carries the best ideas into working previews.">
+  <meta property="og:title" content="Knowmler and Context Foundry">
+  <meta property="og:description" content="A story of content becoming an idea, an idea becoming a prototype, and the strongest prototype returning as a working app.">
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://contextfoundry.dev/build-pipeline.html">
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --surface-soft: rgba(22, 27, 34, 0.72);
+      --border: #30363d;
+      --text: #e6edf3;
+      --text-muted: #8b949e;
+      --foundry: #35d0ff;
+      --foundry-soft: rgba(53, 208, 255, 0.13);
+      --knowmler: #b88cff;
+      --knowmler-soft: rgba(184, 140, 255, 0.14);
+      --accent: #f0a500;
+      --radius: 8px;
+      --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+      --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
 
-  header.page { text-align: center; margin-bottom: 8px; }
-  .eyebrow {
-    font-family: var(--mono);
-    font-size: 12px; letter-spacing: 2px; text-transform: uppercase;
-    display: inline-flex; align-items: center; gap: 8px;
-  }
-  .eyebrow .k { color: var(--knowmler); }
-  .eyebrow .x { color: var(--dim); }
-  .eyebrow .c { color: var(--accent); }
-  .live-dot {
-    width: 8px; height: 8px; border-radius: 50%; background: var(--accent-2);
-    box-shadow: 0 0 0 0 rgba(86,214,160,0.6); animation: pulse 1.8s infinite;
-  }
-  @keyframes pulse {
-    0% { box-shadow: 0 0 0 0 rgba(86,214,160,0.55); }
-    70% { box-shadow: 0 0 0 9px rgba(86,214,160,0); }
-    100% { box-shadow: 0 0 0 0 rgba(86,214,160,0); }
-  }
-  h1 { font-size: 30px; font-weight: 700; letter-spacing: -0.5px; margin: 14px 0 6px; }
-  .sub { color: var(--muted); font-size: 15px; max-width: 700px; margin: 0 auto 10px; }
-  .sub b { color: var(--text); font-weight: 600; }
-  .hint { color: var(--dim); font-size: 12.5px; font-family: var(--mono); }
+    * { box-sizing: border-box; }
 
-  .legend {
-    display: flex; flex-wrap: wrap; gap: 16px; justify-content: center;
-    margin: 22px 0 26px; font-size: 12px; color: var(--muted);
-  }
-  .legend span { display: inline-flex; align-items: center; gap: 6px; }
-  .swatch { width: 12px; height: 12px; border-radius: 3px; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      background:
+        radial-gradient(circle at 12% 12%, rgba(184, 140, 255, 0.17), transparent 32rem),
+        radial-gradient(circle at 84% 18%, rgba(53, 208, 255, 0.14), transparent 30rem),
+        linear-gradient(180deg, #0d1117 0%, #10141c 55%, #0b1017 100%);
+      color: var(--text);
+      font-family: var(--font-sans);
+      line-height: 1.7;
+    }
 
-  /* phase band */
-  .phase { position: relative; padding: 6px 0 6px 0; }
-  .phase-label {
-    display: inline-flex; align-items: center; gap: 9px;
-    font-family: var(--mono); font-size: 12px; letter-spacing: 1px; text-transform: uppercase;
-    padding: 6px 14px; border-radius: 20px; margin: 4px 0 14px;
-    border: 1px solid var(--line-bright); background: var(--panel);
-  }
-  .phase-k .phase-label { color: var(--knowmler); border-color: rgba(167,139,250,0.4); }
-  .phase-c .phase-label { color: var(--accent); border-color: rgba(79,195,247,0.4); }
-  .phase-label .ic { width: 8px; height: 8px; border-radius: 2px; }
-  .phase-k .phase-label .ic { background: var(--knowmler); }
-  .phase-c .phase-label .ic { background: var(--accent); }
+    body {
+      min-height: 100vh;
+    }
 
-  .flow { display: flex; flex-direction: column; align-items: center; }
+    a {
+      color: var(--accent);
+      text-decoration: none;
+    }
 
-  .node {
-    width: 100%; background: var(--panel); border: 1px solid var(--line);
-    border-radius: var(--radius); padding: 16px 20px; position: relative; cursor: default;
-    transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
-  }
-  .node h3 { font-size: 15.5px; margin-bottom: 3px; }
-  .node p { font-size: 13px; color: var(--muted); }
-  .node .num {
-    position: absolute; top: -12px; left: 18px; width: 26px; height: 26px; border-radius: 50%;
-    background: var(--bg); border: 1px solid var(--line-bright);
-    font-family: var(--mono); font-size: 12px; font-weight: 700;
-    display: flex; align-items: center; justify-content: center;
-  }
-  .node .tag {
-    font-family: var(--mono); font-size: 11px; color: var(--dim);
-    background: var(--bg); border: 1px solid var(--line);
-    padding: 2px 8px; border-radius: 20px; margin-left: 8px; white-space: nowrap;
-  }
-  .node .row { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+    a:hover {
+      text-decoration: underline;
+    }
 
-  /* per-phase node accents */
-  .phase-k .node .num { color: var(--knowmler); }
-  .phase-k .node:hover {
-    transform: translateY(-2px); border-color: var(--knowmler); background: var(--panel-2);
-    box-shadow: 0 10px 30px rgba(167,139,250,0.10), 0 0 0 1px rgba(167,139,250,0.25) inset;
-  }
-  .phase-c .node .num { color: var(--accent); }
-  .phase-c .node:hover {
-    transform: translateY(-2px); border-color: var(--accent); background: var(--panel-2);
-    box-shadow: 0 10px 30px rgba(79,195,247,0.10), 0 0 0 1px rgba(79,195,247,0.25) inset;
-  }
+    .page {
+      width: min(1120px, calc(100% - 2rem));
+      margin: 0 auto;
+      padding: 1.25rem 0 4rem;
+    }
 
-  /* connector */
-  .connector { width: 2px; height: 30px; position: relative; overflow: hidden; background: var(--line); }
-  .connector::after {
-    content: ""; position: absolute; left: -1px; width: 4px; height: 14px; border-radius: 4px;
-    background: linear-gradient(var(--c, var(--accent)), transparent);
-    animation: drip 1.6s linear infinite;
-  }
-  .phase-k .connector::after { --c: var(--knowmler); }
-  @keyframes drip {
-    0% { top: -16px; opacity: 0; } 25% { opacity: 1; } 100% { top: 32px; opacity: 0; }
-  }
+    .topline {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      padding: 0.75rem 0;
+    }
 
-  /* handoff banner between phases */
-  .handoff {
-    width: 100%; margin: 18px 0; padding: 14px 18px; border-radius: var(--radius);
-    background: linear-gradient(90deg, rgba(167,139,250,0.10), rgba(79,195,247,0.10));
-    border: 1px dashed var(--line-bright);
-    display: flex; align-items: center; justify-content: center; gap: 12px;
-    flex-wrap: wrap; text-align: center; font-size: 13px; color: var(--text);
-  }
-  .handoff .pill {
-    font-family: var(--mono); font-size: 11px; padding: 3px 9px; border-radius: 20px;
-    border: 1px solid var(--line-bright); background: var(--bg); color: var(--muted);
-  }
-  .handoff .arrow { color: var(--accent-2); font-size: 18px; }
+    .topline a {
+      color: var(--text-muted);
+    }
 
-  /* Builder node */
-  .builder { padding-bottom: 20px; }
-  .builder .stages { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin: 14px 0 6px; }
-  .stage {
-    background: var(--bg); border: 1px solid var(--line); border-radius: 10px;
-    padding: 11px 9px; text-align: center; position: relative; transition: all 0.25s ease;
-  }
-  .stage .sname { font-family: var(--mono); font-size: 12px; font-weight: 700; letter-spacing: 0.5px; }
-  .stage .smodel { font-family: var(--mono); font-size: 10px; margin-top: 4px; }
-  .stage .sdesc { font-size: 10.5px; color: var(--dim); margin-top: 6px; line-height: 1.4; }
-  .stage[data-model="opus"] .smodel { color: var(--opus); }
-  .stage[data-model="sonnet"] .smodel { color: var(--sonnet); }
-  .stage.on {
-    border-color: var(--accent);
-    background: linear-gradient(180deg, rgba(79,195,247,0.10), rgba(79,195,247,0.02));
-    box-shadow: 0 0 0 1px rgba(79,195,247,0.35), 0 8px 24px rgba(79,195,247,0.12);
-    transform: translateY(-3px);
-  }
-  .stage .arrow { position: absolute; right: -8px; top: 50%; transform: translateY(-50%); color: var(--line-bright); font-size: 14px; }
-  .stage:last-child .arrow { display: none; }
-  .loopnote { text-align: center; font-size: 11.5px; color: var(--dim); font-family: var(--mono); margin-top: 10px; }
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
+      gap: clamp(2rem, 5vw, 4.5rem);
+      min-height: min(720px, calc(100vh - 3rem));
+      align-items: center;
+      padding: clamp(2rem, 5vw, 5.5rem) 0 4rem;
+    }
 
-  .tasks { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
-  .task {
-    font-size: 12px; color: var(--muted); background: var(--bg);
-    border: 1px solid var(--line); border-radius: 8px; padding: 7px 11px;
-    display: flex; align-items: center; gap: 7px; transition: all 0.2s ease;
-  }
-  .task .t-i { font-family: var(--mono); font-size: 10px; color: var(--dim); }
-  .task.on {
-    color: var(--text); border-color: var(--accent-2);
-    background: linear-gradient(180deg, rgba(86,214,160,0.10), rgba(86,214,160,0.02));
-    box-shadow: 0 0 0 1px rgba(86,214,160,0.3);
-  }
-  .task.on .t-i { color: var(--accent-2); }
-  .spinner {
-    width: 10px; height: 10px; border-radius: 50%;
-    border: 2px solid rgba(86,214,160,0.3); border-top-color: var(--accent-2);
-    animation: spin 0.8s linear infinite; display: none;
-  }
-  .task.on .spinner { display: inline-block; }
-  @keyframes spin { to { transform: rotate(360deg); } }
+    .eyebrow {
+      color: var(--knowmler);
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      letter-spacing: 0;
+      margin: 0 0 1rem;
+    }
 
-  .poll {
-    align-self: flex-end; margin: -22px 0 0; position: relative; z-index: 2;
-    font-family: var(--mono); font-size: 11.5px; color: var(--accent);
-    background: var(--panel); border: 1px dashed var(--line-bright);
-    border-radius: 20px; padding: 6px 12px; display: inline-flex; align-items: center; gap: 8px;
-  }
-  .poll .rot { display: inline-block; animation: spin 2.4s linear infinite; }
+    h1 {
+      max-width: 14ch;
+      margin: 0;
+      font-size: clamp(3rem, 8vw, 6.6rem);
+      line-height: 0.95;
+      letter-spacing: 0;
+    }
 
-  .node.final { border-color: rgba(86,214,160,0.4); }
-  .phase-c .node.final:hover { border-color: var(--accent-2); box-shadow: 0 10px 30px rgba(86,214,160,0.12); }
-  .node.final .num { color: var(--accent-2); }
-  .url-pill {
-    font-family: var(--mono); font-size: 12px; color: var(--accent-2);
-    background: var(--bg); border: 1px solid rgba(86,214,160,0.3);
-    padding: 4px 10px; border-radius: 8px; margin-top: 8px; display: inline-block;
-  }
+    .lede {
+      max-width: 42rem;
+      margin: 1.5rem 0 0;
+      color: #d8dee9;
+      font-size: clamp(1.05rem, 2.2vw, 1.32rem);
+      line-height: 1.65;
+    }
 
-  footer.page { text-align: center; margin-top: 40px; color: var(--dim); font-size: 12px; }
-  footer.page a { color: var(--accent); text-decoration: none; }
-  footer.page a:hover { text-decoration: underline; }
+    .story-panel {
+      position: relative;
+      min-height: 460px;
+      border: 1px solid rgba(139, 148, 158, 0.22);
+      border-radius: var(--radius);
+      background:
+        linear-gradient(135deg, rgba(184, 140, 255, 0.11), transparent 36%),
+        linear-gradient(315deg, rgba(53, 208, 255, 0.11), transparent 42%),
+        rgba(13, 17, 23, 0.68);
+      overflow: hidden;
+      box-shadow: 0 22px 80px rgba(0, 0, 0, 0.36);
+    }
 
-  @media (max-width: 720px) {
-    .builder .stages { grid-template-columns: repeat(2, 1fr); }
-    .stage .arrow { display: none; }
-    h1 { font-size: 23px; }
-  }
-</style>
+    .story-panel:before {
+      content: "";
+      position: absolute;
+      inset: 1.25rem;
+      border: 1px solid rgba(139, 148, 158, 0.16);
+      border-radius: calc(var(--radius) - 2px);
+      pointer-events: none;
+    }
+
+    .story-panel:after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 16%;
+      bottom: 16%;
+      width: 1px;
+      background: linear-gradient(180deg, transparent, rgba(240, 165, 0, 0.6), transparent);
+      transform: translateX(-50%);
+    }
+
+    .node {
+      position: absolute;
+      display: grid;
+      place-items: center;
+      width: clamp(6.75rem, 12vw, 8.25rem);
+      aspect-ratio: 1;
+      border-radius: 999px;
+      border: 1px solid rgba(230, 237, 243, 0.18);
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      text-align: center;
+      line-height: 1.35;
+      padding: 1rem;
+      background: rgba(13, 17, 23, 0.84);
+      box-shadow: 0 0 0 10px rgba(13, 17, 23, 0.3);
+    }
+
+    .node.knowmler {
+      color: var(--knowmler);
+      box-shadow: 0 0 32px rgba(184, 140, 255, 0.2), 0 0 0 10px rgba(13, 17, 23, 0.3);
+    }
+
+    .node.foundry {
+      color: var(--foundry);
+      box-shadow: 0 0 32px rgba(53, 208, 255, 0.18), 0 0 0 10px rgba(13, 17, 23, 0.3);
+    }
+
+    .node:nth-of-type(1) { left: 9%; top: 12%; }
+    .node:nth-of-type(2) { left: 31%; top: 38%; }
+    .node:nth-of-type(3) { right: 31%; top: 30%; }
+    .node:nth-of-type(4) { right: 9%; top: 58%; }
+
+    .thread {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    .thread path {
+      fill: none;
+      stroke-width: 2;
+      stroke-linecap: round;
+    }
+
+    .thread .main {
+      stroke: url(#thread-gradient);
+      opacity: 0.86;
+    }
+
+    .thread .ghost {
+      stroke: rgba(230, 237, 243, 0.14);
+      stroke-width: 1;
+    }
+
+    .caption {
+      position: absolute;
+      left: 1.6rem;
+      right: 1.6rem;
+      bottom: 1.25rem;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+    }
+
+    .chapter {
+      display: grid;
+      grid-template-columns: 12rem minmax(0, 1fr);
+      gap: clamp(1rem, 4vw, 3rem);
+      border-top: 1px solid rgba(139, 148, 158, 0.2);
+      padding: clamp(2rem, 5vw, 4rem) 0;
+    }
+
+    .chapter-label {
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      font-size: 0.76rem;
+      padding-top: 0.35rem;
+    }
+
+    .chapter h2 {
+      margin: 0 0 1rem;
+      color: var(--text);
+      font-size: clamp(1.55rem, 3vw, 2.35rem);
+      line-height: 1.18;
+      letter-spacing: 0;
+    }
+
+    .chapter p {
+      max-width: 47rem;
+      margin: 0.85rem 0;
+      color: #c7d0dc;
+      font-size: 1.02rem;
+    }
+
+    .bridge {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 1rem;
+      margin: 1.75rem 0 0;
+    }
+
+    .voice {
+      border: 1px solid rgba(139, 148, 158, 0.22);
+      border-radius: var(--radius);
+      padding: 1rem;
+      background: var(--surface-soft);
+    }
+
+    .voice strong {
+      display: block;
+      margin-bottom: 0.35rem;
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      font-weight: 700;
+    }
+
+    .voice.knowmler strong { color: var(--knowmler); }
+    .voice.foundry strong { color: var(--foundry); }
+
+    .voice p {
+      margin: 0;
+      color: var(--text-muted);
+      font-size: 0.92rem;
+    }
+
+    .closing {
+      border-top: 1px solid rgba(139, 148, 158, 0.2);
+      padding: clamp(2rem, 5vw, 4.5rem) 0 0;
+    }
+
+    .closing p {
+      max-width: 54rem;
+      margin: 0;
+      color: #d8dee9;
+      font-size: clamp(1.25rem, 3vw, 2rem);
+      line-height: 1.48;
+    }
+
+    footer {
+      margin-top: 4rem;
+      padding-top: 1rem;
+      border-top: 1px solid rgba(139, 148, 158, 0.2);
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+    }
+
+    @media (max-width: 860px) {
+      .hero {
+        grid-template-columns: 1fr;
+        min-height: auto;
+      }
+
+      .story-panel {
+        min-height: 390px;
+      }
+
+      .chapter {
+        grid-template-columns: 1fr;
+        gap: 0.4rem;
+      }
+
+      .chapter-label {
+        padding-top: 0;
+      }
+    }
+
+    @media (max-width: 620px) {
+      .page {
+        width: min(100% - 1rem, 1120px);
+      }
+
+      .topline {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .hero {
+        padding-top: 1.25rem;
+      }
+
+      .story-panel {
+        min-height: 430px;
+      }
+
+      .story-panel:after {
+        display: none;
+      }
+
+      .node {
+        width: 6.7rem;
+        font-size: 0.68rem;
+      }
+
+      .node:nth-of-type(1) { left: 5%; top: 9%; }
+      .node:nth-of-type(2) { left: 49%; top: 26%; }
+      .node:nth-of-type(3) { left: 7%; right: auto; top: 52%; }
+      .node:nth-of-type(4) { right: 5%; top: 66%; }
+
+      .bridge {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
 </head>
 <body>
-<div class="wrap">
-  <header class="page">
-    <div class="eyebrow"><span class="live-dot"></span> &nbsp;<span class="k">Knowmler</span> <span class="x">x</span> <span class="c">Context Foundry</span></div>
-    <h1>From a piece of content to a working app</h1>
-    <p class="sub">
-      Knowmler's new build mode. Knowmler <b>analyzes</b> a video, PDF, or article,
-      <b>develops an app idea</b> out of that analysis, and <b>prototypes</b> it.
-      Once the idea is validated, <b>Context Foundry builds it into a real, hosted
-      application</b> - it is the build engine behind the new "idea to app" mode.
-    </p>
-  </header>
+  <main class="page">
+    <nav class="topline" aria-label="Context Foundry">
+      <a href="index.html">contextfoundry.dev</a>
+      <span>Knowmler x Context Foundry</span>
+    </nav>
 
-  <div class="legend">
-    <span><span class="swatch" style="background:var(--knowmler)"></span> Knowmler (understand &amp; ideate)</span>
-    <span><span class="swatch" style="background:var(--accent)"></span> Context Foundry (build &amp; host)</span>
-    <span><span class="swatch" style="background:var(--opus)"></span> Claude Opus</span>
-    <span><span class="swatch" style="background:var(--sonnet)"></span> Claude Sonnet</span>
-  </div>
-
-  <!-- PHASE 1: KNOWMLER -->
-  <div class="phase phase-k">
-    <div class="phase-label"><span class="ic"></span> Knowmler &middot; understand &amp; ideate</div>
-    <div class="flow">
-
-      <div class="node">
-        <div class="num">1</div>
-        <div class="row"><h3>Analyze the content</h3><span class="tag">video / PDF / article</span></div>
-        <p>Knowmler ingests a source and produces a structured analysis: a summary, key concepts,
-           action items, and cross-domain directions. This is Knowmler's core - making sense of
-           dense material.</p>
-      </div>
-      <div class="connector"></div>
-
-      <div class="node">
-        <div class="num">2</div>
-        <div class="row"><h3>Develop an app idea from the analysis</h3><span class="tag">App Builder</span></div>
-        <p>Instead of stopping at notes, Knowmler turns the analysis into a concrete product idea -
-           the problem worth solving, who it is for, and the key features - drawn directly from what
-           the content surfaced.</p>
-      </div>
-      <div class="connector"></div>
-
-      <div class="node">
-        <div class="num">3</div>
-        <div class="row"><h3>Generate a clickable prototype</h3><span class="tag">approved visual target</span></div>
-        <p>The idea becomes a self-contained HTML prototype you can click through, so the look and the
-           core workflow are shaped and agreed before any code is written.</p>
-      </div>
-      <div class="connector"></div>
-
-      <div class="node">
-        <div class="num">4</div>
-        <div class="row"><h3>Validate: vote and promote</h3><span class="tag">Lab board</span></div>
-        <p>The idea goes to the community Lab board for votes and comments. A promoted idea is one
-           with proven demand and an agreed visual target - the green light to build.</p>
+    <section class="hero" aria-labelledby="page-title">
+      <div>
+        <p class="eyebrow">The app is already hiding in the analysis.</p>
+        <h1 id="page-title">From insight to working software</h1>
+        <p class="lede">Knowmler begins with the thing a person is trying to understand. A dense video, a document, a messy thread of claims -- whatever it is, the first job is to make the material usable. Once the shape is clear, a different question appears: what could this become if it were not just a report?</p>
       </div>
 
-    </div>
-  </div>
-
-  <!-- HANDOFF -->
-  <div class="handoff">
-    <span class="pill">promoted idea</span>
-    <span class="pill">+ approved prototype</span>
-    <span class="arrow">&rarr;</span>
-    <span>handed off to <b>Context Foundry</b> as the build spec</span>
-  </div>
-
-  <!-- PHASE 2: CONTEXT FOUNDRY -->
-  <div class="phase phase-c">
-    <div class="phase-label"><span class="ic"></span> Context Foundry &middot; build &amp; host</div>
-    <div class="flow">
-
-      <div class="node">
-        <div class="num">5</div>
-        <div class="row"><h3>Assemble the build inputs</h3><span class="tag">SPEC.md + TASKS.md</span></div>
-        <p>Knowmler composes a SPEC (the brief, a required-capabilities list, and the full prototype
-           inlined as a visual contract) and an ordered TASKS plan, then sends them to Context
-           Foundry.</p>
+        <div class="story-panel" aria-label="A continuous story from Knowmler analysis to Context Foundry build">
+        <svg class="thread" viewBox="0 0 560 460" preserveAspectRatio="none" aria-hidden="true">
+          <defs>
+            <linearGradient id="thread-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#b88cff"/>
+              <stop offset="50%" stop-color="#f0a500"/>
+              <stop offset="100%" stop-color="#35d0ff"/>
+            </linearGradient>
+          </defs>
+          <path class="ghost" d="M92 91 C142 174, 185 203, 246 214 C320 227, 369 181, 437 192 C494 201, 513 264, 500 330" />
+          <path class="main" d="M92 91 C142 174, 185 203, 246 214 C320 227, 369 181, 437 192 C494 201, 513 264, 500 330" />
+        </svg>
+        <div class="node knowmler">content becomes context</div>
+        <div class="node knowmler">a useful idea takes shape</div>
+        <div class="node foundry">Foundry starts building</div>
+        <div class="node foundry">a working app returns</div>
+        <p class="caption">One continuous thread.</p>
       </div>
-      <div class="connector"></div>
+    </section>
 
-      <div class="node">
-        <div class="num">6</div>
-        <div class="row"><h3>Submit the job</h3><span class="tag">POST /v1/jobs</span></div>
-        <p>Context Foundry validates the inputs, queues the job, and launches one isolated, single-use
-           builder container.</p>
+    <section class="chapter">
+      <div class="chapter-label">Inside Knowmler</div>
+      <div>
+        <h2>The story starts before anyone asks for an app.</h2>
+        <p>Knowmler watches the source material closely enough to find the pressure points: the claims that matter, the contradictions worth testing, the patterns a person would otherwise have to hold in their head. That analysis becomes the raw material for a product idea because it already contains the user's need.</p>
+        <p>Instead of asking someone to begin with a blank app brief, Knowmler can say: here is what this content is really about, here is the problem it keeps circling, and here is the tool that would make the next version of this work easier.</p>
       </div>
-      <div class="connector"></div>
+    </section>
 
-      <div class="node builder">
-        <div class="num">7</div>
-        <div class="row"><h3>Builder container</h3><span class="tag">runs each task in order</span></div>
-        <p>Every task moves through a five-stage agent pipeline. The active stage is highlighted as it
-           cycles; the loop repeats for each task in the plan.</p>
+    <section class="chapter">
+      <div class="chapter-label">The idea earns its weight</div>
+      <div>
+        <h2>A prototype is not the finish line. It is the first proof.</h2>
+        <p>The early version stays close to Knowmler because the idea still needs judgment. People can react to it, sharpen it, vote on it, and decide whether it is worth promoting. The important part is not that a prototype exists. The important part is that the prototype carries the original context with it.</p>
+        <p>By the time an idea is promoted, it is no longer a loose suggestion. It has a reason to exist, a user story behind it, and enough shared confidence to justify a real build.</p>
+      </div>
+    </section>
 
-        <div class="stages">
-          <div class="stage" data-model="sonnet"><div class="sname">QUERY</div><div class="smodel">Sonnet</div><div class="sdesc">Asks what it needs to know about the workspace.</div><span class="arrow">&rsaquo;</span></div>
-          <div class="stage" data-model="sonnet"><div class="sname">RESEARCH</div><div class="smodel">Sonnet</div><div class="sdesc">Reads the spec and files to gather context.</div><span class="arrow">&rsaquo;</span></div>
-          <div class="stage" data-model="opus"><div class="sname">PLAN</div><div class="smodel">Opus</div><div class="sdesc">Designs the implementation for this task.</div><span class="arrow">&rsaquo;</span></div>
-          <div class="stage" data-model="opus"><div class="sname">BUILD</div><div class="smodel">Opus</div><div class="sdesc">Writes the actual code.</div><span class="arrow">&rsaquo;</span></div>
-          <div class="stage" data-model="sonnet"><div class="sname">AUDIT</div><div class="smodel">Sonnet</div><div class="sdesc">Reviews its own work and fixes issues (the doubt loop).</div></div>
-        </div>
-        <div class="loopnote">QUERY &rarr; RESEARCH &rarr; PLAN &rarr; BUILD &rarr; AUDIT &nbsp;&middot;&nbsp; repeated per task</div>
-
-        <div class="tasks" id="tasks">
-          <div class="task"><span class="t-i">T1</span><span>App shell &amp; design system</span><span class="spinner"></span></div>
-          <div class="task"><span class="t-i">T2</span><span>Core screens &amp; data</span><span class="spinner"></span></div>
-          <div class="task"><span class="t-i">T3</span><span>Primary interactive workflow</span><span class="spinner"></span></div>
-          <div class="task"><span class="t-i">T4</span><span>Secondary flows</span><span class="spinner"></span></div>
-          <div class="task"><span class="t-i">T5</span><span>Polish &amp; persistence</span><span class="spinner"></span></div>
-          <div class="task"><span class="t-i">T6</span><span>Verify &amp; finish</span><span class="spinner"></span></div>
-          <div class="task"><span class="t-i">T7</span><span>Package &amp; host preview</span><span class="spinner"></span></div>
+    <section class="chapter">
+      <div class="chapter-label">Where Foundry enters</div>
+      <div>
+        <h2>Context Foundry is the build engine waiting behind the moment of confidence.</h2>
+        <p>When a promoted idea reaches Foundry, the premise is already alive. Foundry receives the context Knowmler has gathered and shapes it into the working app. The work can stay focused on delivery because the "why" has already been earned upstream.</p>
+        <div class="bridge">
+          <div class="voice knowmler">
+            <strong>Knowmler carries the meaning.</strong>
+            <p>The source analysis, the app idea, the prototype, and the promotion signal stay connected.</p>
+          </div>
+          <div class="voice foundry">
+            <strong>Foundry carries the build.</strong>
+            <p>Foundry assembles the app, checks the result, and returns a live preview.</p>
+          </div>
         </div>
       </div>
+    </section>
 
-      <div class="poll"><span class="rot">&#8635;</span> Knowmler polls progress every 15s &rarr; updates the page (10-95%)</div>
-      <div class="connector"></div>
-
-      <div class="node">
-        <div class="num">8</div>
-        <div class="row"><h3>Deploy the preview</h3><span class="tag">isolated container</span></div>
-        <p>When the tasks pass, Context Foundry starts a separate preview container that serves the
-           built application and returns a hosted URL.</p>
+    <section class="chapter">
+      <div class="chapter-label">Back to the user</div>
+      <div>
+        <h2>The app returns to the place where the idea was born.</h2>
+        <p>The preview is not a detached artifact living somewhere else. It comes back into Knowmler as the working version of the idea people chose to promote. The original analysis, the community signal, the prototype, and the finished build can all be read as one arc.</p>
+        <p>That is the point of the integration: Knowmler helps people discover what should be built, and Context Foundry gives those discoveries a way to become software without losing the thread.</p>
       </div>
-      <div class="connector"></div>
+    </section>
 
-      <div class="node final">
-        <div class="num">9</div>
-        <div class="row"><h3>Live application, back in Knowmler</h3><span class="tag">clickable preview</span></div>
-        <p>Knowmler records the URL and the idea's page swaps to "Open the built app". What started as
-           a piece of content is now a running application you can click through.</p>
-        <span class="url-pill">https://&lt;app&gt;.&lt;org&gt;.knowmler.com</span>
-      </div>
+    <section class="closing">
+      <p>The whole system is easier to understand as a story: someone studies a piece of content, sees the tool hiding inside it, proves the idea with others, and lets Foundry carry that idea across the distance to a working app.</p>
+    </section>
 
-    </div>
-  </div>
-
-  <footer class="page">
-    How Context Foundry powers Knowmler's idea-to-app mode &middot; <a href="/">back to Context Foundry</a>
-  </footer>
-</div>
-
-<script>
-  // Cycle the active stage through the five-stage pipeline, and advance the
-  // "task in progress" highlight as each full pipeline completes.
-  (function () {
-    var stages = Array.prototype.slice.call(document.querySelectorAll('.stage'));
-    var tasks = Array.prototype.slice.call(document.querySelectorAll('#tasks .task'));
-    var sIdx = 0, tIdx = 0;
-    function tick() {
-      stages.forEach(function (s, i) { s.classList.toggle('on', i === sIdx); });
-      tasks.forEach(function (t, i) { t.classList.toggle('on', i === tIdx); });
-      sIdx++;
-      if (sIdx >= stages.length) { sIdx = 0; tIdx = (tIdx + 1) % tasks.length; }
-    }
-    tick();
-    setInterval(tick, 1100);
-  })();
-</script>
+    <footer>
+      Context Foundry &middot; <a href="https://github.com/context-foundry/context-foundry">GitHub</a> &middot; MIT License
+    </footer>
+  </main>
 </body>
 </html>
