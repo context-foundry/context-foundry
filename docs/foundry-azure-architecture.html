@@ -1,0 +1,401 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Foundry Execution Backends - Azure Container Apps</title>
+<meta name="description" content="Architecture decision and Azure Container Apps design for Context Foundry build execution and preview hosting." />
+<style>
+  :root{
+    --az-blue:#0078D4; --az-blue-700:#005a9e; --az-cyan:#50E6FF;
+    --ink:#243a5e; --muted:#5b6b7f; --bg:#ffffff; --soft:#f3f9fd;
+    --line:#d6e4f0; --soft2:#e6f2fb; --good:#107c10; --warn:#a15c00;
+    --shadow:0 1px 2px rgba(16,42,67,.06),0 8px 24px rgba(16,42,67,.06);
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;font-family:"Segoe UI",-apple-system,BlinkMacSystemFont,Roboto,Helvetica,Arial,sans-serif;
+    color:var(--ink);background:var(--bg);line-height:1.6;font-size:16px}
+  a{color:var(--az-blue);text-decoration:none}
+  a:hover{text-decoration:underline}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 24px}
+  header.hero{background:linear-gradient(135deg,#004e8c 0%,#0078D4 55%,#2899e6 100%);color:#fff;
+    padding:56px 0 48px;border-bottom:4px solid var(--az-cyan)}
+  .hero h1{margin:0 0 8px;font-size:34px;font-weight:650;letter-spacing:-.01em}
+  .hero p{margin:0;font-size:18px;color:#dcefff;max-width:760px}
+  .badges{margin-top:20px;display:flex;gap:10px;flex-wrap:wrap}
+  .badge{background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.28);
+    color:#fff;padding:5px 12px;border-radius:999px;font-size:13px;font-weight:500}
+  nav.toc{position:sticky;top:0;z-index:5;background:rgba(255,255,255,.92);backdrop-filter:blur(6px);
+    border-bottom:1px solid var(--line)}
+  nav.toc .wrap{display:flex;gap:18px;flex-wrap:wrap;padding:12px 24px;font-size:14px}
+  nav.toc a{color:var(--muted);font-weight:500}
+  nav.toc a:hover{color:var(--az-blue)}
+  main{padding:8px 0 64px}
+  section{padding:34px 0 6px;border-bottom:1px solid var(--soft)}
+  h2{font-size:24px;margin:6px 0 14px;font-weight:640;display:flex;align-items:center;gap:10px}
+  h2 .num{color:var(--az-blue);font-variant-numeric:tabular-nums;font-weight:700;font-size:18px;
+    background:var(--soft2);border:1px solid var(--line);border-radius:8px;padding:2px 9px}
+  h3{font-size:17px;margin:22px 0 8px;color:var(--az-blue-700)}
+  p{margin:10px 0}
+  ul{margin:10px 0;padding-left:22px}
+  li{margin:5px 0}
+  code{background:var(--soft);border:1px solid var(--line);border-radius:5px;padding:1px 6px;
+    font-family:"Cascadia Code",Consolas,Menlo,monospace;font-size:13.5px;color:#0b3d66}
+  .cards{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:16px 0}
+  .card{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:18px 20px;
+    box-shadow:var(--shadow)}
+  .card.lead{border-left:4px solid var(--az-blue)}
+  .card h4{margin:0 0 6px;font-size:15px;color:var(--az-blue);text-transform:uppercase;letter-spacing:.04em}
+  .card p{margin:6px 0;font-size:15px}
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:14.5px;box-shadow:var(--shadow);
+    border-radius:10px;overflow:hidden}
+  th{background:var(--az-blue);color:#fff;text-align:left;padding:10px 12px;font-weight:600;font-size:13.5px}
+  td{padding:9px 12px;border-top:1px solid var(--line);vertical-align:top}
+  tr:nth-child(even) td{background:var(--soft)}
+  .diagram{background:var(--soft);border:1px solid var(--line);border-radius:12px;padding:18px;margin:16px 0;
+    overflow-x:auto;text-align:center}
+  .mermaid{font-size:14px}
+  .tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px;margin:16px 0}
+  .tile{background:linear-gradient(180deg,#fff, #f7fbff);border:1px solid var(--line);border-top:3px solid var(--az-blue);
+    border-radius:10px;padding:14px;box-shadow:var(--shadow)}
+  .tile .svc{font-weight:650;color:var(--ink);font-size:15px;margin-bottom:2px}
+  .tile .nm{font-family:"Cascadia Code",Consolas,monospace;font-size:12.5px;color:var(--az-blue-700)}
+  .tile .ds{font-size:13px;color:var(--muted);margin-top:6px}
+  .note{background:var(--soft2);border:1px solid var(--line);border-left:4px solid var(--az-cyan);
+    border-radius:8px;padding:12px 16px;margin:14px 0;font-size:14.5px}
+  .pill{display:inline-block;font-size:12px;font-weight:600;padding:2px 9px;border-radius:999px}
+  .pill.no{background:#fde7e9;color:#a4262c}
+  .pill.yes{background:#dff6dd;color:#107c10}
+  ol.steps{counter-reset:s;list-style:none;padding-left:0}
+  ol.steps li{position:relative;padding:8px 0 8px 38px;border-bottom:1px dashed var(--line)}
+  ol.steps li:before{counter-increment:s;content:counter(s);position:absolute;left:0;top:7px;
+    width:26px;height:26px;border-radius:50%;background:var(--az-blue);color:#fff;font-size:13px;
+    font-weight:700;display:flex;align-items:center;justify-content:center}
+  footer{padding:28px 0;color:var(--muted);font-size:13.5px;text-align:center}
+  @media(max-width:720px){.cards{grid-template-columns:1fr}.hero h1{font-size:27px}}
+</style>
+</head>
+<body>
+<header class="hero">
+  <div class="wrap">
+    <a href="index.html" style="display:inline-block;margin-bottom:14px;color:#bfe3ff;font-size:13px;font-weight:600;text-decoration:none">&larr; Context Foundry</a>
+    <h1>Foundry Execution Backends</h1>
+    <p>Architecture decision and Azure Container Apps design for Context Foundry build execution and scale-to-zero preview hosting.</p>
+    <div class="badges">
+      <span class="badge">Decision: Azure Container Apps</span>
+      <span class="badge">Status: Planning</span>
+      <span class="badge">2026-05-24</span>
+      <span class="badge">C4 + Azure topology</span>
+    </div>
+  </div>
+</header>
+
+<nav class="toc"><div class="wrap">
+  <a href="#context">Context</a>
+  <a href="#decision">Decision</a>
+  <a href="#alternatives">Alternatives</a>
+  <a href="#c4">C4 architecture</a>
+  <a href="#azure">Azure design</a>
+  <a href="#lifecycle">Lifecycle</a>
+  <a href="#config">Config</a>
+  <a href="#cost">Cost</a>
+  <a href="#security">Security</a>
+  <a href="#steps">Implementation</a>
+  <a href="#risks">Risks</a>
+</div></nav>
+
+<main class="wrap">
+
+<section id="context">
+  <h2><span class="num">1</span> Context</h2>
+  <p>Knowmler Lab turns a promoted idea into a working app by calling Context
+  Foundry. Today the whole lifecycle (run the AI build, build the image, host the
+  preview) runs on the <strong>main VPS</strong> through Foundry's
+  <code>local_docker</code> backend. That has three problems:</p>
+  <div class="cards">
+    <div class="card"><h4>Blast radius</h4><p>AI-generated apps run as containers
+      on the same host as Knowmler production and the trading bots. Untrusted code
+      next to real money.</p></div>
+    <div class="card"><h4>Contention &amp; fragility</h4><p>Builds spike CPU on the
+      production box (the exit-125 incident), and the preview path is brittle
+      (the <code>foundry-caddy</code> auto-HTTPS 502 and the edge-network gap).</p></div>
+    <div class="card"><h4>No elasticity</h4><p>Each preview is a long-lived
+      container. Previews do not scale to zero and accumulate on the box.</p></div>
+    <div class="card lead"><h4>The contract that stays fixed</h4><p>Knowmler submits
+      builds via <code>POST /v1/jobs</code> and polls. That interface does not
+      change; only the execution target behind it does.</p></div>
+  </div>
+</section>
+
+<section id="decision">
+  <h2><span class="num">2</span> Decision</h2>
+  <h3>D1 &mdash; Backends live inside Foundry, never inside Knowmler</h3>
+  <p>Knowmler's interface stays as it is: <code>POST /v1/jobs</code> + poll. The
+  execution target (local Docker, Azure, a future GitHub or Cloudflare backend)
+  is a <strong>BuildBackend selected by Foundry</strong>, configured by
+  environment, swappable without touching Knowmler. This preserves the queue,
+  idempotency, per-job logs, artifacts, cancel/TTL, cleanup, and the scoped-token
+  auth model that Foundry's <code>/v1</code> service already provides.</p>
+  <h3>D2 &mdash; Adopt the in-tree <code>azure_container_apps</code> backend</h3>
+  <p>Run builds as <strong>Azure Container Apps Jobs</strong> and previews as
+  <strong>scale-to-zero Azure Container Apps</strong>, with images in
+  <strong>Azure Container Registry</strong> and job objects in
+  <strong>Azure Blob Storage</strong>. Chosen because it is the only complete,
+  already-written off-VPS backend: it covers build and preview, scales to zero,
+  isolates untrusted apps, and aligns with Foundry's existing abstraction. The
+  cost is onboarding Azure as a vendor.</p>
+</section>
+
+<section id="alternatives">
+  <h2><span class="num">3</span> Alternatives considered</h2>
+  <table>
+    <tr><th>Option</th><th>Verdict</th><th>Why</th></tr>
+    <tr><td>Stay on main VPS (<code>local_docker</code>)</td><td><span class="pill no">Rejected</span></td>
+      <td>Untrusted apps beside trading money; contention; preview fragility.</td></tr>
+    <tr><td>Dedicated preview VPS</td><td><span class="pill yes">Fallback</span></td>
+      <td>Cheap isolation, zero new code, but self-managed and not elastic.</td></tr>
+    <tr><td>GitHub build + Cloudflare Containers</td><td><span class="pill no">Deferred</span></td>
+      <td>Cleanest single-vendor stack, but no backend exists: new BuildBackend + routing Worker. Most engineering, no scale problem yet.</td></tr>
+    <tr><td>Knowmler -&gt; GitHub <code>workflow_dispatch</code></td><td><span class="pill no">Rejected</span></td>
+      <td>Bypasses the entire Foundry control plane.</td></tr>
+  </table>
+</section>
+
+<section id="c4">
+  <h2><span class="num">4</span> C4 architecture</h2>
+  <h3>Level 1 &mdash; System Context</h3>
+  <div class="diagram"><pre class="mermaid">
+C4Context
+    title System Context - Knowmler Lab builds via Context Foundry on Azure
+    Person(admin, "Lab Admin", "Promotes an idea and clicks Build")
+    Person_Ext(viewer, "Preview Viewer", "Opens the built app")
+    System(knowmler, "Knowmler", "Lab platform. Submits builds and polls status.")
+    System(foundry, "Context Foundry Build Service", "/v1 control plane: queue, idempotency, logs, artifacts, TTL, auth proxy")
+    System_Ext(azure, "Microsoft Azure", "Build compute and preview hosting")
+    System_Ext(anthropic, "Anthropic Claude", "LLM, via Foundry scoped auth proxy")
+    Rel(admin, knowmler, "Clicks Build")
+    Rel(knowmler, foundry, "POST /v1/jobs; polls", "HTTPS + bearer")
+    Rel(foundry, azure, "Runs build job, builds image, deploys preview", "ARM API")
+    Rel(foundry, anthropic, "Per-job scoped proxy token", "HTTPS")
+    Rel(viewer, azure, "Opens app.org.knowmler.com", "HTTPS")
+    UpdateLayoutConfig($c4ShapeInRow="3", $c4BoundaryInRow="2")
+  </pre></div>
+
+  <h3>Level 2 &mdash; Container Diagram</h3>
+  <div class="diagram"><pre class="mermaid">
+C4Container
+    title Container Diagram - azure_container_apps backend
+    Person(admin, "Lab Admin")
+    System_Boundary(kn, "Knowmler (VPS)") {
+        Container(fe, "Frontend", "Next.js", "Lab UI and Build button")
+        Container(be, "Backend + Worker", "FastAPI", "Calls /v1/jobs, polls")
+    }
+    System_Boundary(az, "Azure Resource Group: rg-foundry-prod") {
+        Container(daemon, "foundry serve", "Container App (Rust)", "The /v1 control plane")
+        Container(job, "Build Job", "ACA Job (foundry-builder)", "QRPBA, 2 vCPU / 4 GiB, scoped token")
+        Container(preview, "Preview App", "Container App, scale-to-zero", "The built application")
+        Container(acr, "Container Registry", "ACR", "foundry-builder + per-app images")
+        ContainerDb(blob, "Job Storage", "Blob foundry-jobs", "inputs, logs, artifacts")
+        ContainerDb(logs, "Log Analytics", "Workspace", "ACA environment logs")
+    }
+    System_Ext(anthropic, "Anthropic Claude")
+    Rel(admin, fe, "Build")
+    Rel(fe, be, "POST /api/lab/ideas/{id}/build")
+    Rel(be, daemon, "POST /v1/jobs; poll", "HTTPS")
+    Rel(daemon, job, "Create + start ACA Job", "ARM")
+    Rel(job, blob, "I/O via SAS")
+    Rel(job, anthropic, "scoped proxy token")
+    Rel(daemon, acr, "Build app image (ACR Tasks)")
+    Rel(daemon, preview, "Deploy from image", "ARM")
+    Rel(preview, acr, "Pull image")
+    Rel(daemon, logs, "logs")
+    UpdateLayoutConfig($c4ShapeInRow="2", $c4BoundaryInRow="1")
+  </pre></div>
+</section>
+
+<section id="azure">
+  <h2><span class="num">5</span> Azure deployment design</h2>
+  <h3>Deployment topology</h3>
+  <div class="diagram"><pre class="mermaid">
+flowchart TB
+    classDef az fill:#e6f2fb,stroke:#0078D4,stroke-width:1.5px,color:#243a5e;
+    classDef edge fill:#f3f9fd,stroke:#5b6b7f,stroke-width:1px,color:#243a5e;
+    VIEWER["Preview Viewer"]:::edge
+    CF["Cloudflare DNS + TLS<br/>*.org.knowmler.com"]:::edge
+    BE["Knowmler Backend + Worker<br/>POST /v1/jobs, poll"]:::edge
+    subgraph RG["Azure Resource Group: rg-foundry-prod"]
+      direction TB
+      SVC["Container App: ca-foundry-service<br/>foundry serve (/v1)"]:::az
+      ENV["Container Apps Env: cae-foundry"]:::az
+      JOB["ACA Job: caj-foundry-build<br/>2 vCPU / 4 GiB"]:::az
+      PREV["Container Apps: ca-preview-*<br/>scale-to-zero"]:::az
+      ACR["Container Registry: crfoundry"]:::az
+      ST["Storage + Blob<br/>stfoundryjobs / foundry-jobs"]:::az
+      LOG["Log Analytics: log-foundry"]:::az
+      ID["Managed Identity: id-foundry"]:::az
+    end
+    BE -->|/v1 HTTPS + bearer| SVC
+    SVC -->|create/start ARM| JOB
+    SVC -->|ACR Tasks build| ACR
+    SVC -->|deploy ARM| PREV
+    JOB -->|SAS I/O| ST
+    JOB -->|pull builder| ACR
+    PREV -->|pull app image| ACR
+    SVC --- ENV
+    JOB --- ENV
+    PREV --- ENV
+    ENV --> LOG
+    SVC -. uses .-> ID
+    VIEWER --> CF -->|CNAME| PREV
+  </pre></div>
+
+  <h3>Resource inventory</h3>
+  <div class="tiles">
+    <div class="tile"><div class="svc">Resource Group</div><div class="nm">rg-foundry-prod</div><div class="ds">One blast-radius boundary for all Foundry infra.</div></div>
+    <div class="tile"><div class="svc">Container Apps Env</div><div class="nm">cae-foundry</div><div class="ds">Hosts daemon, build jobs, and previews.</div></div>
+    <div class="tile"><div class="svc">Container App (daemon)</div><div class="nm">ca-foundry-service</div><div class="ds"><code>foundry serve</code>, the /v1 control plane.</div></div>
+    <div class="tile"><div class="svc">Container Apps Job</div><div class="nm">caj-foundry-build</div><div class="ds">Per-build foundry-builder, 2 vCPU / 4 GiB.</div></div>
+    <div class="tile"><div class="svc">Container Apps (preview)</div><div class="nm">ca-preview-&lt;jobid&gt;</div><div class="ds">One scale-to-zero app per preview.</div></div>
+    <div class="tile"><div class="svc">Container Registry</div><div class="nm">crfoundry</div><div class="ds">Builder + per-app images. Basic SKU.</div></div>
+    <div class="tile"><div class="svc">Storage + Blob</div><div class="nm">stfoundryjobs</div><div class="ds">Inputs, logs (append blob), artifacts.</div></div>
+    <div class="tile"><div class="svc">Log Analytics</div><div class="nm">log-foundry</div><div class="ds">Backs the ACA environment.</div></div>
+    <div class="tile"><div class="svc">Managed Identity</div><div class="nm">id-foundry</div><div class="ds">Daemon + jobs identity for ACR/storage/ARM.</div></div>
+  </div>
+
+  <h3>Identity and least-privilege roles</h3>
+  <table>
+    <tr><th>Principal</th><th>Role</th><th>Scope</th><th>Why</th></tr>
+    <tr><td>ca-foundry-service MI</td><td>Contributor (or custom: <code>Microsoft.App/*</code> + ACR scheduleRun)</td><td>RG</td><td>Create/start jobs, build images, deploy/delete previews.</td></tr>
+    <tr><td>ca-foundry-service MI</td><td>Storage Blob Data Contributor</td><td>Storage acct</td><td>Read/write job objects.</td></tr>
+    <tr><td>ca-foundry-service MI</td><td>AcrPush</td><td>ACR</td><td>Push built app images.</td></tr>
+    <tr><td>Job + preview MI</td><td>AcrPull</td><td>ACR</td><td>Pull builder + app images.</td></tr>
+  </table>
+</section>
+
+<section id="lifecycle">
+  <h2><span class="num">6</span> Build &amp; preview lifecycle</h2>
+  <div class="diagram"><pre class="mermaid">
+sequenceDiagram
+    autonumber
+    participant K as Knowmler worker
+    participant F as foundry serve
+    participant J as ACA Job (builder)
+    participant R as ACR
+    participant P as Preview App
+    K->>F: POST /v1/jobs (SPEC.md, TASKS.md, org_slug)
+    F->>F: enqueue, idempotency, SAS grant + scoped proxy token
+    F->>J: create + start ACA Job
+    J->>J: QRPBA build (LLM via proxy token)
+    J-->>F: stream.jsonl via append blob
+    F->>R: ACR Tasks build app image, push
+    F->>P: deploy scale-to-zero Container App
+    P-->>F: FQDN
+    F-->>K: status ready + preview_url
+    Note over F,P: TTL reaper + teardown DELETE Job, Container App, ACR repo
+  </pre></div>
+</section>
+
+<section id="config">
+  <h2><span class="num">7</span> Service configuration</h2>
+  <p>Read only when built <code>--features azure</code> and
+  <code>FOUNDRY_SERVICE_BUILD_BACKEND=azure_container_apps</code>. The first seven
+  are required.</p>
+  <table>
+    <tr><th>Variable</th><th>Required</th><th>Example</th></tr>
+    <tr><td><code>FOUNDRY_SERVICE_AZURE_SUBSCRIPTION_ID</code></td><td>yes</td><td>&lt;sub-guid&gt;</td></tr>
+    <tr><td><code>FOUNDRY_SERVICE_AZURE_RESOURCE_GROUP</code></td><td>yes</td><td>rg-foundry-prod</td></tr>
+    <tr><td><code>FOUNDRY_SERVICE_AZURE_LOCATION</code></td><td>yes</td><td>eastus2</td></tr>
+    <tr><td><code>FOUNDRY_SERVICE_AZURE_STORAGE_ACCOUNT</code></td><td>yes</td><td>stfoundryjobs</td></tr>
+    <tr><td><code>FOUNDRY_SERVICE_AZURE_STORAGE_KEY</code></td><td>yes</td><td>&lt;key, prefer Key Vault&gt;</td></tr>
+    <tr><td><code>FOUNDRY_SERVICE_AZURE_ACR_NAME</code></td><td>yes</td><td>crfoundry</td></tr>
+    <tr><td><code>FOUNDRY_SERVICE_AZURE_ACA_ENVIRONMENT</code></td><td>yes</td><td>cae-foundry</td></tr>
+    <tr><td><code>FOUNDRY_SERVICE_AZURE_STORAGE_CONTAINER</code></td><td>no (foundry-jobs)</td><td>foundry-jobs</td></tr>
+    <tr><td><code>FOUNDRY_SERVICE_AZURE_MI_CLIENT_ID</code></td><td>no (system-assigned)</td><td>&lt;mi-guid&gt;</td></tr>
+    <tr><td><code>FOUNDRY_SERVICE_AZURE_SIGNED_URL_TTL_SECS</code></td><td>no (900)</td><td>900</td></tr>
+    <tr><td><code>FOUNDRY_SERVICE_AZURE_SAS_GRANT_TTL_SECS</code></td><td>no (3600)</td><td>3600</td></tr>
+  </table>
+  <div class="note"><strong>Custom domains:</strong> previews resolve at
+  <code>&lt;app&gt;.&lt;org-slug&gt;.knowmler.com</code>. Cloudflare holds DNS + edge
+  TLS; a CNAME points the per-org wildcard at the ACA environment, with the
+  preview bound as an ACA custom domain. The <code>org-slug</code> is the owning
+  org's slug (fixed in commit <code>185cee5</code>), capped at 63 chars.</div>
+</section>
+
+<section id="cost">
+  <h2><span class="num">8</span> Cost model</h2>
+  <p>List price, region-dependent.</p>
+  <ul>
+    <li><strong>ACA Consumption</strong> has a monthly free grant per subscription
+      (about 180,000 vCPU-seconds + 360,000 GiB-seconds + 2M requests). A 53-minute
+      build at 2 vCPU / 4 GiB is roughly 6,360 vCPU-s + 12,720 GiB-s, so a handful
+      of builds per month likely falls inside the free grant.</li>
+    <li><strong>Preview Container Apps</strong> scale to zero: idle is approximately
+      nothing; active time is billed per vCPU-s / GiB-s.</li>
+    <li><strong>ACR</strong> Basic is about $5/month (Standard about $20).</li>
+    <li><strong>Storage + Log Analytics</strong>: a few dollars at this volume.</li>
+    <li><strong>Rough total</strong> at low volume: about <strong>$5-15/month</strong>,
+      dominated by the fixed ACR SKU, with compute largely inside the free grant.</li>
+  </ul>
+</section>
+
+<section id="security">
+  <h2><span class="num">9</span> Security posture</h2>
+  <div class="cards">
+    <div class="card lead"><h4>Scoped tokens, not the OAuth key</h4><p>Builds get a
+      per-job scoped proxy token, never the raw Claude OAuth credential. The auth
+      proxy revokes it when the job ends or is canceled.</p></div>
+    <div class="card"><h4>Short-TTL grants</h4><p>Job I/O uses short-TTL SAS;
+      artifact downloads use short-TTL signed URLs.</p></div>
+    <div class="card"><h4>Isolation</h4><p>Untrusted generated apps run in their own
+      Container Apps, away from Knowmler production and the trading host.</p></div>
+    <div class="card"><h4>Secret storage</h4><p>Prefer Key Vault for the storage key
+      and <code>FOUNDRY_SERVICE_API_KEYS</code> rather than plaintext env.</p></div>
+  </div>
+</section>
+
+<section id="steps">
+  <h2><span class="num">10</span> Implementation steps</h2>
+  <ol class="steps">
+    <li>Provision <code>rg-foundry-prod</code>: Log Analytics, ACA environment, Storage + <code>foundry-jobs</code> container, ACR, managed identity, role assignments.</li>
+    <li>Build Foundry <code>--features azure</code>; build and push <code>foundry-builder</code> to <code>crfoundry</code> (in a Rust container or CI; the host has no Rust toolchain).</li>
+    <li>Deploy <code>ca-foundry-service</code> with the <code>FOUNDRY_SERVICE_AZURE_*</code> env and <code>FOUNDRY_SERVICE_BUILD_BACKEND=azure_container_apps</code>.</li>
+    <li>Point Knowmler's <code>FOUNDRY_API_URL</code> at the Azure daemon; rotate <code>FOUNDRY_SERVICE_API_KEYS</code> per the runbook.</li>
+    <li>Wire the per-org preview domain (Cloudflare CNAME + ACA custom domain). <code>org_slug</code> routing is already fixed.</li>
+    <li>Canary: run one build end-to-end; confirm preview and teardown.</li>
+    <li>Cutover: switch Knowmler builds to the Azure daemon; keep the VPS path as a documented rollback.</li>
+  </ol>
+</section>
+
+<section id="risks">
+  <h2><span class="num">11</span> Risks &amp; open questions</h2>
+  <ul>
+    <li><strong>Azure onboarding effort</strong> (subscription, IAM, ACR, DNS) is the main cost. The dedicated-preview-VPS path is the documented fallback.</li>
+    <li><strong>Custom-domain wildcard wiring</strong> between Cloudflare and ACA needs a spike (managed cert vs Cloudflare-origin cert).</li>
+    <li><strong>Anthropic Agent SDK credit metering</strong> begins 2026-06-15 for programmatic subscription usage; confirm the impact on the auth-proxy token model.</li>
+    <li><strong><code>--features azure</code> build + image size</strong> for <code>foundry-builder</code> needs a first real run to validate.</li>
+  </ul>
+</section>
+
+</main>
+
+<footer>
+  Context Foundry &middot; Foundry Execution Backends decision record &middot; generated 2026-05-24 &middot;
+  source of truth: <code>knowmler/docs/PLAN_foundry-execution-backends.md</code>
+</footer>
+
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  mermaid.initialize({
+    startOnLoad:true,
+    theme:"base",
+    themeVariables:{
+      primaryColor:"#e6f2fb", primaryBorderColor:"#0078D4", primaryTextColor:"#243a5e",
+      lineColor:"#5b6b7f", fontFamily:'"Segoe UI",Roboto,Helvetica,Arial,sans-serif',
+      fontSize:"14px"
+    },
+    c4:{ }, sequence:{ actorMargin:38, useMaxWidth:true }, flowchart:{ useMaxWidth:true, curve:"basis" }
+  });
+</script>
+</body>
+</html>
