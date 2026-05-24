@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>How a Lab idea becomes a live app - the build pipeline</title>
+<title>Knowmler x Context Foundry - from content to a working app</title>
 <style>
   :root {
     --bg: #0e1116;
@@ -14,8 +14,9 @@
     --text: #e6edf3;
     --muted: #8b949e;
     --dim: #6b7480;
-    --accent: #4fc3f7;
-    --accent-2: #56d6a0;
+    --accent: #4fc3f7;          /* Context Foundry phase */
+    --knowmler: #a78bfa;        /* Knowmler phase */
+    --accent-2: #56d6a0;        /* success / in progress */
     --opus: #c792ea;
     --sonnet: #ffcb6b;
     --radius: 12px;
@@ -26,7 +27,7 @@
   html { scroll-behavior: smooth; }
   body {
     font-family: var(--sans);
-    background: radial-gradient(1200px 600px at 50% -10%, #16202c 0%, var(--bg) 60%);
+    background: radial-gradient(1200px 600px at 50% -10%, #1a1830 0%, var(--bg) 55%);
     color: var(--text);
     line-height: 1.55;
     min-height: 100vh;
@@ -37,17 +38,15 @@
   header.page { text-align: center; margin-bottom: 8px; }
   .eyebrow {
     font-family: var(--mono);
-    font-size: 12px;
-    letter-spacing: 2px;
-    text-transform: uppercase;
-    color: var(--accent);
+    font-size: 12px; letter-spacing: 2px; text-transform: uppercase;
     display: inline-flex; align-items: center; gap: 8px;
   }
+  .eyebrow .k { color: var(--knowmler); }
+  .eyebrow .x { color: var(--dim); }
+  .eyebrow .c { color: var(--accent); }
   .live-dot {
-    width: 8px; height: 8px; border-radius: 50%;
-    background: var(--accent-2);
-    box-shadow: 0 0 0 0 rgba(86,214,160,0.6);
-    animation: pulse 1.8s infinite;
+    width: 8px; height: 8px; border-radius: 50%; background: var(--accent-2);
+    box-shadow: 0 0 0 0 rgba(86,214,160,0.6); animation: pulse 1.8s infinite;
   }
   @keyframes pulse {
     0% { box-shadow: 0 0 0 0 rgba(86,214,160,0.55); }
@@ -55,44 +54,46 @@
     100% { box-shadow: 0 0 0 0 rgba(86,214,160,0); }
   }
   h1 { font-size: 30px; font-weight: 700; letter-spacing: -0.5px; margin: 14px 0 6px; }
-  .sub { color: var(--muted); font-size: 15px; max-width: 640px; margin: 0 auto 10px; }
+  .sub { color: var(--muted); font-size: 15px; max-width: 700px; margin: 0 auto 10px; }
+  .sub b { color: var(--text); font-weight: 600; }
   .hint { color: var(--dim); font-size: 12.5px; font-family: var(--mono); }
 
   .legend {
     display: flex; flex-wrap: wrap; gap: 16px; justify-content: center;
-    margin: 22px 0 30px; font-size: 12px; color: var(--muted);
+    margin: 22px 0 26px; font-size: 12px; color: var(--muted);
   }
   .legend span { display: inline-flex; align-items: center; gap: 6px; }
   .swatch { width: 12px; height: 12px; border-radius: 3px; }
 
-  /* Pipeline flow */
+  /* phase band */
+  .phase { position: relative; padding: 6px 0 6px 0; }
+  .phase-label {
+    display: inline-flex; align-items: center; gap: 9px;
+    font-family: var(--mono); font-size: 12px; letter-spacing: 1px; text-transform: uppercase;
+    padding: 6px 14px; border-radius: 20px; margin: 4px 0 14px;
+    border: 1px solid var(--line-bright); background: var(--panel);
+  }
+  .phase-k .phase-label { color: var(--knowmler); border-color: rgba(167,139,250,0.4); }
+  .phase-c .phase-label { color: var(--accent); border-color: rgba(79,195,247,0.4); }
+  .phase-label .ic { width: 8px; height: 8px; border-radius: 2px; }
+  .phase-k .phase-label .ic { background: var(--knowmler); }
+  .phase-c .phase-label .ic { background: var(--accent); }
+
   .flow { display: flex; flex-direction: column; align-items: center; }
 
   .node {
-    width: 100%;
-    background: var(--panel);
-    border: 1px solid var(--line);
-    border-radius: var(--radius);
-    padding: 18px 20px;
-    position: relative;
-    cursor: default;
+    width: 100%; background: var(--panel); border: 1px solid var(--line);
+    border-radius: var(--radius); padding: 16px 20px; position: relative; cursor: default;
     transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
   }
-  .node:hover {
-    transform: translateY(-2px);
-    border-color: var(--accent);
-    background: var(--panel-2);
-    box-shadow: 0 10px 30px rgba(79,195,247,0.10), 0 0 0 1px rgba(79,195,247,0.25) inset;
-  }
+  .node h3 { font-size: 15.5px; margin-bottom: 3px; }
+  .node p { font-size: 13px; color: var(--muted); }
   .node .num {
-    position: absolute; top: -12px; left: 18px;
-    width: 26px; height: 26px; border-radius: 50%;
+    position: absolute; top: -12px; left: 18px; width: 26px; height: 26px; border-radius: 50%;
     background: var(--bg); border: 1px solid var(--line-bright);
-    color: var(--accent); font-family: var(--mono); font-size: 12px; font-weight: 700;
+    font-family: var(--mono); font-size: 12px; font-weight: 700;
     display: flex; align-items: center; justify-content: center;
   }
-  .node h3 { font-size: 16px; margin-bottom: 4px; }
-  .node p { font-size: 13.5px; color: var(--muted); }
   .node .tag {
     font-family: var(--mono); font-size: 11px; color: var(--dim);
     background: var(--bg); border: 1px solid var(--line);
@@ -100,35 +101,54 @@
   }
   .node .row { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
 
-  /* animated connector */
-  .connector {
-    width: 2px; height: 34px; position: relative; overflow: hidden;
-    background: var(--line);
+  /* per-phase node accents */
+  .phase-k .node .num { color: var(--knowmler); }
+  .phase-k .node:hover {
+    transform: translateY(-2px); border-color: var(--knowmler); background: var(--panel-2);
+    box-shadow: 0 10px 30px rgba(167,139,250,0.10), 0 0 0 1px rgba(167,139,250,0.25) inset;
   }
-  .connector::after {
-    content: ""; position: absolute; left: -1px; width: 4px; height: 14px; border-radius: 4px;
-    background: linear-gradient(var(--accent), transparent);
-    animation: drip 1.6s linear infinite;
-  }
-  @keyframes drip {
-    0% { top: -16px; opacity: 0; }
-    25% { opacity: 1; }
-    100% { top: 36px; opacity: 0; }
+  .phase-c .node .num { color: var(--accent); }
+  .phase-c .node:hover {
+    transform: translateY(-2px); border-color: var(--accent); background: var(--panel-2);
+    box-shadow: 0 10px 30px rgba(79,195,247,0.10), 0 0 0 1px rgba(79,195,247,0.25) inset;
   }
 
-  /* Builder node (the big one) */
-  .builder { padding-bottom: 22px; }
-  .builder .stages {
-    display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin: 16px 0 6px;
+  /* connector */
+  .connector { width: 2px; height: 30px; position: relative; overflow: hidden; background: var(--line); }
+  .connector::after {
+    content: ""; position: absolute; left: -1px; width: 4px; height: 14px; border-radius: 4px;
+    background: linear-gradient(var(--c, var(--accent)), transparent);
+    animation: drip 1.6s linear infinite;
   }
+  .phase-k .connector::after { --c: var(--knowmler); }
+  @keyframes drip {
+    0% { top: -16px; opacity: 0; } 25% { opacity: 1; } 100% { top: 32px; opacity: 0; }
+  }
+
+  /* handoff banner between phases */
+  .handoff {
+    width: 100%; margin: 18px 0; padding: 14px 18px; border-radius: var(--radius);
+    background: linear-gradient(90deg, rgba(167,139,250,0.10), rgba(79,195,247,0.10));
+    border: 1px dashed var(--line-bright);
+    display: flex; align-items: center; justify-content: center; gap: 12px;
+    flex-wrap: wrap; text-align: center; font-size: 13px; color: var(--text);
+  }
+  .handoff .pill {
+    font-family: var(--mono); font-size: 11px; padding: 3px 9px; border-radius: 20px;
+    border: 1px solid var(--line-bright); background: var(--bg); color: var(--muted);
+  }
+  .handoff .arrow { color: var(--accent-2); font-size: 18px; }
+
+  /* Builder node */
+  .builder { padding-bottom: 20px; }
+  .builder .stages { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin: 14px 0 6px; }
   .stage {
     background: var(--bg); border: 1px solid var(--line); border-radius: 10px;
-    padding: 12px 10px; text-align: center; position: relative;
-    transition: all 0.25s ease;
+    padding: 11px 9px; text-align: center; position: relative; transition: all 0.25s ease;
   }
   .stage .sname { font-family: var(--mono); font-size: 12px; font-weight: 700; letter-spacing: 0.5px; }
   .stage .smodel { font-family: var(--mono); font-size: 10px; margin-top: 4px; }
-  .stage .sdesc { font-size: 11px; color: var(--dim); margin-top: 6px; line-height: 1.4; }
+  .stage .sdesc { font-size: 10.5px; color: var(--dim); margin-top: 6px; line-height: 1.4; }
   .stage[data-model="opus"] .smodel { color: var(--opus); }
   .stage[data-model="sonnet"] .smodel { color: var(--sonnet); }
   .stage.on {
@@ -137,23 +157,15 @@
     box-shadow: 0 0 0 1px rgba(79,195,247,0.35), 0 8px 24px rgba(79,195,247,0.12);
     transform: translateY(-3px);
   }
-  .stage .arrow {
-    position: absolute; right: -8px; top: 50%; transform: translateY(-50%);
-    color: var(--line-bright); font-size: 14px;
-  }
+  .stage .arrow { position: absolute; right: -8px; top: 50%; transform: translateY(-50%); color: var(--line-bright); font-size: 14px; }
   .stage:last-child .arrow { display: none; }
-  .loopnote {
-    text-align: center; font-size: 11.5px; color: var(--dim); font-family: var(--mono);
-    margin-top: 10px;
-  }
+  .loopnote { text-align: center; font-size: 11.5px; color: var(--dim); font-family: var(--mono); margin-top: 10px; }
 
-  /* task strip */
-  .tasks { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+  .tasks { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
   .task {
-    font-size: 12px; color: var(--muted);
-    background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
-    padding: 7px 11px; display: flex; align-items: center; gap: 7px;
-    transition: all 0.2s ease;
+    font-size: 12px; color: var(--muted); background: var(--bg);
+    border: 1px solid var(--line); border-radius: 8px; padding: 7px 11px;
+    display: flex; align-items: center; gap: 7px; transition: all 0.2s ease;
   }
   .task .t-i { font-family: var(--mono); font-size: 10px; color: var(--dim); }
   .task.on {
@@ -170,18 +182,16 @@
   .task.on .spinner { display: inline-block; }
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  /* side poll badge */
   .poll {
-    align-self: flex-end; margin: -26px 0 0; position: relative; z-index: 2;
+    align-self: flex-end; margin: -22px 0 0; position: relative; z-index: 2;
     font-family: var(--mono); font-size: 11.5px; color: var(--accent);
     background: var(--panel); border: 1px dashed var(--line-bright);
     border-radius: 20px; padding: 6px 12px; display: inline-flex; align-items: center; gap: 8px;
   }
   .poll .rot { display: inline-block; animation: spin 2.4s linear infinite; }
 
-  /* final node accent */
   .node.final { border-color: rgba(86,214,160,0.4); }
-  .node.final:hover { border-color: var(--accent-2); box-shadow: 0 10px 30px rgba(86,214,160,0.12); }
+  .phase-c .node.final:hover { border-color: var(--accent-2); box-shadow: 0 10px 30px rgba(86,214,160,0.12); }
   .node.final .num { color: var(--accent-2); }
   .url-pill {
     font-family: var(--mono); font-size: 12px; color: var(--accent-2);
@@ -196,137 +206,152 @@
   @media (max-width: 720px) {
     .builder .stages { grid-template-columns: repeat(2, 1fr); }
     .stage .arrow { display: none; }
-    h1 { font-size: 24px; }
+    h1 { font-size: 23px; }
   }
 </style>
 </head>
 <body>
 <div class="wrap">
   <header class="page">
-    <div class="eyebrow"><span class="live-dot"></span> live build pipeline</div>
-    <h1>From a Lab idea to a running app</h1>
+    <div class="eyebrow"><span class="live-dot"></span> &nbsp;<span class="k">Knowmler</span> <span class="x">x</span> <span class="c">Context Foundry</span></div>
+    <h1>From a piece of content to a working app</h1>
     <p class="sub">
-      What happens after an idea is promoted and a build is started: how the brief and
-      its approved prototype turn into a hosted, clickable application.
+      Knowmler's new build mode. Knowmler <b>analyzes</b> a video, PDF, or article,
+      <b>develops an app idea</b> out of that analysis, and <b>prototypes</b> it.
+      Once the idea is validated, <b>Context Foundry builds it into a real, hosted
+      application</b> - it is the build engine behind the new "idea to app" mode.
     </p>
     <p class="hint">hover any step to highlight it &middot; the loop and tasks animate to show flow</p>
   </header>
 
   <div class="legend">
-    <span><span class="swatch" style="background:var(--accent)"></span> data / flow</span>
-    <span><span class="swatch" style="background:var(--opus)"></span> Claude Opus (plan &amp; build)</span>
-    <span><span class="swatch" style="background:var(--sonnet)"></span> Claude Sonnet (query, research, audit)</span>
-    <span><span class="swatch" style="background:var(--accent-2)"></span> task in progress</span>
+    <span><span class="swatch" style="background:var(--knowmler)"></span> Knowmler (understand &amp; ideate)</span>
+    <span><span class="swatch" style="background:var(--accent)"></span> Context Foundry (build &amp; host)</span>
+    <span><span class="swatch" style="background:var(--opus)"></span> Claude Opus</span>
+    <span><span class="swatch" style="background:var(--sonnet)"></span> Claude Sonnet</span>
   </div>
 
-  <div class="flow">
+  <!-- PHASE 1: KNOWMLER -->
+  <div class="phase phase-k">
+    <div class="phase-label"><span class="ic"></span> Knowmler &middot; understand &amp; ideate</div>
+    <div class="flow">
 
-    <!-- 1 -->
-    <div class="node">
-      <div class="num">1</div>
-      <div class="row"><h3>Promoted Lab idea</h3><span class="tag">brief + prototype</span></div>
-      <p>A community-voted idea: four short brief fields (problem, audience, key features, title)
-         plus an approved HTML prototype that fixes the visual target. Demand and design are
-         validated before any code is written.</p>
+      <div class="node">
+        <div class="num">1</div>
+        <div class="row"><h3>Analyze the content</h3><span class="tag">video / PDF / article</span></div>
+        <p>Knowmler ingests a source and produces a structured analysis: a summary, key concepts,
+           action items, and cross-domain directions. This is Knowmler's core - making sense of
+           dense material.</p>
+      </div>
+      <div class="connector"></div>
+
+      <div class="node">
+        <div class="num">2</div>
+        <div class="row"><h3>Develop an app idea from the analysis</h3><span class="tag">App Builder</span></div>
+        <p>Instead of stopping at notes, Knowmler turns the analysis into a concrete product idea -
+           the problem worth solving, who it is for, and the key features - drawn directly from what
+           the content surfaced.</p>
+      </div>
+      <div class="connector"></div>
+
+      <div class="node">
+        <div class="num">3</div>
+        <div class="row"><h3>Generate a clickable prototype</h3><span class="tag">approved visual target</span></div>
+        <p>The idea becomes a self-contained HTML prototype you can click through, so the look and the
+           core workflow are shaped and agreed before any code is written.</p>
+      </div>
+      <div class="connector"></div>
+
+      <div class="node">
+        <div class="num">4</div>
+        <div class="row"><h3>Validate: vote and promote</h3><span class="tag">Lab board</span></div>
+        <p>The idea goes to the community Lab board for votes and comments. A promoted idea is one
+           with proven demand and an agreed visual target - the green light to build.</p>
+      </div>
+
     </div>
+  </div>
 
-    <div class="connector"></div>
+  <!-- HANDOFF -->
+  <div class="handoff">
+    <span class="pill">promoted idea</span>
+    <span class="pill">+ approved prototype</span>
+    <span class="arrow">&rarr;</span>
+    <span>handed off to <b>Context Foundry</b> as the build spec</span>
+  </div>
 
-    <!-- 2 -->
-    <div class="node">
-      <div class="num">2</div>
-      <div class="row"><h3>Assemble the build inputs</h3><span class="tag">SPEC.md + TASKS.md</span></div>
-      <p>The backend composes two documents: a SPEC (the brief, a required-capabilities list,
-         and the full prototype inlined as a visual contract) and an ordered TASKS plan. Both are
-         size-checked before they leave.</p>
-    </div>
+  <!-- PHASE 2: CONTEXT FOUNDRY -->
+  <div class="phase phase-c">
+    <div class="phase-label"><span class="ic"></span> Context Foundry &middot; build &amp; host</div>
+    <div class="flow">
 
-    <div class="connector"></div>
+      <div class="node">
+        <div class="num">5</div>
+        <div class="row"><h3>Assemble the build inputs</h3><span class="tag">SPEC.md + TASKS.md</span></div>
+        <p>Knowmler composes a SPEC (the brief, a required-capabilities list, and the full prototype
+           inlined as a visual contract) and an ordered TASKS plan, then sends them to Context
+           Foundry.</p>
+      </div>
+      <div class="connector"></div>
 
-    <!-- 3 -->
-    <div class="node">
-      <div class="num">3</div>
-      <div class="row"><h3>Submit the job</h3><span class="tag">POST /v1/jobs</span></div>
-      <p>The build service receives the app name, SPEC, TASKS, and target namespace, validates the
-         input size, and queues the job. It then launches one isolated, single-use builder
-         container on the host.</p>
-    </div>
+      <div class="node">
+        <div class="num">6</div>
+        <div class="row"><h3>Submit the job</h3><span class="tag">POST /v1/jobs</span></div>
+        <p>Context Foundry validates the inputs, queues the job, and launches one isolated, single-use
+           builder container.</p>
+      </div>
+      <div class="connector"></div>
 
-    <div class="connector"></div>
+      <div class="node builder">
+        <div class="num">7</div>
+        <div class="row"><h3>Builder container</h3><span class="tag">runs each task in order</span></div>
+        <p>Every task moves through a five-stage agent pipeline. The active stage is highlighted as it
+           cycles; the loop repeats for each task in the plan.</p>
 
-    <!-- 4 builder -->
-    <div class="node builder">
-      <div class="num">4</div>
-      <div class="row"><h3>Builder container</h3><span class="tag">runs each task in order</span></div>
-      <p>Every task moves through a five-stage agent pipeline. The active stage is highlighted as it
-         cycles; the loop repeats for each task in the plan.</p>
-
-      <div class="stages">
-        <div class="stage" data-model="sonnet">
-          <div class="sname">QUERY</div><div class="smodel">Sonnet</div>
-          <div class="sdesc">Asks what it needs to know about the workspace.</div>
-          <span class="arrow">&rsaquo;</span>
+        <div class="stages">
+          <div class="stage" data-model="sonnet"><div class="sname">QUERY</div><div class="smodel">Sonnet</div><div class="sdesc">Asks what it needs to know about the workspace.</div><span class="arrow">&rsaquo;</span></div>
+          <div class="stage" data-model="sonnet"><div class="sname">RESEARCH</div><div class="smodel">Sonnet</div><div class="sdesc">Reads the spec and files to gather context.</div><span class="arrow">&rsaquo;</span></div>
+          <div class="stage" data-model="opus"><div class="sname">PLAN</div><div class="smodel">Opus</div><div class="sdesc">Designs the implementation for this task.</div><span class="arrow">&rsaquo;</span></div>
+          <div class="stage" data-model="opus"><div class="sname">BUILD</div><div class="smodel">Opus</div><div class="sdesc">Writes the actual code.</div><span class="arrow">&rsaquo;</span></div>
+          <div class="stage" data-model="sonnet"><div class="sname">AUDIT</div><div class="smodel">Sonnet</div><div class="sdesc">Reviews its own work and fixes issues (the doubt loop).</div></div>
         </div>
-        <div class="stage" data-model="sonnet">
-          <div class="sname">RESEARCH</div><div class="smodel">Sonnet</div>
-          <div class="sdesc">Reads the spec and existing files to gather context.</div>
-          <span class="arrow">&rsaquo;</span>
-        </div>
-        <div class="stage" data-model="opus">
-          <div class="sname">PLAN</div><div class="smodel">Opus</div>
-          <div class="sdesc">Designs the implementation for this task.</div>
-          <span class="arrow">&rsaquo;</span>
-        </div>
-        <div class="stage" data-model="opus">
-          <div class="sname">BUILD</div><div class="smodel">Opus</div>
-          <div class="sdesc">Writes the actual code.</div>
-          <span class="arrow">&rsaquo;</span>
-        </div>
-        <div class="stage" data-model="sonnet">
-          <div class="sname">AUDIT</div><div class="smodel">Sonnet</div>
-          <div class="sdesc">Reviews its own work and fixes issues (the doubt loop).</div>
+        <div class="loopnote">QUERY &rarr; RESEARCH &rarr; PLAN &rarr; BUILD &rarr; AUDIT &nbsp;&middot;&nbsp; repeated per task</div>
+
+        <div class="tasks" id="tasks">
+          <div class="task"><span class="t-i">T1</span><span>App shell &amp; design system</span><span class="spinner"></span></div>
+          <div class="task"><span class="t-i">T2</span><span>Core screens &amp; data</span><span class="spinner"></span></div>
+          <div class="task"><span class="t-i">T3</span><span>Primary interactive workflow</span><span class="spinner"></span></div>
+          <div class="task"><span class="t-i">T4</span><span>Secondary flows</span><span class="spinner"></span></div>
+          <div class="task"><span class="t-i">T5</span><span>Polish &amp; persistence</span><span class="spinner"></span></div>
+          <div class="task"><span class="t-i">T6</span><span>Verify &amp; finish</span><span class="spinner"></span></div>
+          <div class="task"><span class="t-i">T7</span><span>Package &amp; host preview</span><span class="spinner"></span></div>
         </div>
       </div>
-      <div class="loopnote">QUERY &rarr; RESEARCH &rarr; PLAN &rarr; BUILD &rarr; AUDIT &nbsp;&middot;&nbsp; repeated per task</div>
 
-      <div class="tasks" id="tasks">
-        <div class="task"><span class="t-i">T1</span><span>Workshop shell &amp; design system</span><span class="spinner"></span></div>
-        <div class="task"><span class="t-i">T2</span><span>9-step curriculum &amp; Code tab</span><span class="spinner"></span></div>
-        <div class="task"><span class="t-i">T3</span><span>AI guide (conversational tutor)</span><span class="spinner"></span></div>
-        <div class="task"><span class="t-i">T4</span><span>Visualization tab</span><span class="spinner"></span></div>
-        <div class="task"><span class="t-i">T5</span><span>Concepts &amp; cross-domain</span><span class="spinner"></span></div>
-        <div class="task"><span class="t-i">T6</span><span>Verify &amp; finish</span><span class="spinner"></span></div>
-        <div class="task"><span class="t-i">T7</span><span>Package &amp; host preview</span><span class="spinner"></span></div>
+      <div class="poll"><span class="rot">&#8635;</span> Knowmler polls progress every 15s &rarr; updates the page (10-95%)</div>
+      <div class="connector"></div>
+
+      <div class="node">
+        <div class="num">8</div>
+        <div class="row"><h3>Deploy the preview</h3><span class="tag">isolated container</span></div>
+        <p>When the tasks pass, Context Foundry starts a separate preview container that serves the
+           built application and returns a hosted URL.</p>
       </div>
+      <div class="connector"></div>
+
+      <div class="node final">
+        <div class="num">9</div>
+        <div class="row"><h3>Live application, back in Knowmler</h3><span class="tag">clickable preview</span></div>
+        <p>Knowmler records the URL and the idea's page swaps to "Open the built app". What started as
+           a piece of content is now a running application you can click through.</p>
+        <span class="url-pill">https://&lt;app&gt;.&lt;org&gt;.knowmler.com</span>
+      </div>
+
     </div>
-
-    <div class="poll"><span class="rot">&#8635;</span> backend polls progress every 15s &rarr; updates the page (10-95%)</div>
-
-    <div class="connector"></div>
-
-    <!-- 5 deploy -->
-    <div class="node">
-      <div class="num">5</div>
-      <div class="row"><h3>Deploy the preview</h3><span class="tag">isolated container</span></div>
-      <p>When the tasks pass, the service starts a separate preview container that serves the built
-         application and returns a hosted URL.</p>
-    </div>
-
-    <div class="connector"></div>
-
-    <!-- 6 live -->
-    <div class="node final">
-      <div class="num">6</div>
-      <div class="row"><h3>Live application</h3><span class="tag">clickable preview</span></div>
-      <p>The backend records the preview URL and the page swaps to "Open the built app". The idea is
-         now a running application, served on its own subdomain.</p>
-      <span class="url-pill">https://&lt;app&gt;.&lt;org&gt;.knowmler.com</span>
-    </div>
-
   </div>
 
   <footer class="page">
-    A technical view of the Context Foundry build loop &middot; <a href="/">back to Context Foundry</a>
+    How Context Foundry powers Knowmler's idea-to-app mode &middot; <a href="/">back to Context Foundry</a>
   </footer>
 </div>
 
@@ -337,15 +362,11 @@
     var stages = Array.prototype.slice.call(document.querySelectorAll('.stage'));
     var tasks = Array.prototype.slice.call(document.querySelectorAll('#tasks .task'));
     var sIdx = 0, tIdx = 0;
-
     function tick() {
       stages.forEach(function (s, i) { s.classList.toggle('on', i === sIdx); });
       tasks.forEach(function (t, i) { t.classList.toggle('on', i === tIdx); });
       sIdx++;
-      if (sIdx >= stages.length) {
-        sIdx = 0;
-        tIdx = (tIdx + 1) % tasks.length;
-      }
+      if (sIdx >= stages.length) { sIdx = 0; tIdx = (tIdx + 1) % tasks.length; }
     }
     tick();
     setInterval(tick, 1100);
