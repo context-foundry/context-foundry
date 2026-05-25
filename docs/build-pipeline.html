@@ -4,9 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Knowmler and Context Foundry</title>
-  <meta name="description" content="How Knowmler turns useful analysis into app ideas, and how Context Foundry carries the best ideas into working previews.">
+  <meta name="description" content="How Knowmler turns useful analysis into app ideas, and how Context Foundry builds promoted ideas into live previews.">
   <meta property="og:title" content="Knowmler and Context Foundry">
-  <meta property="og:description" content="A story of content becoming an idea, an idea becoming a prototype, and the strongest prototype returning as a working app.">
+  <meta property="og:description" content="Knowmler analyzes content, shapes an app idea, and sends promoted ideas to Context Foundry for a live build.">
   <meta property="og:type" content="article">
   <meta property="og:url" content="https://contextfoundry.dev/build-pipeline.html">
   <style>
@@ -108,20 +108,19 @@
       line-height: 1.65;
     }
 
-    .story-panel {
+    .flow-panel {
       position: relative;
-      min-height: 460px;
       border: 1px solid rgba(139, 148, 158, 0.22);
       border-radius: var(--radius);
       background:
         linear-gradient(135deg, rgba(184, 140, 255, 0.11), transparent 36%),
         linear-gradient(315deg, rgba(53, 208, 255, 0.11), transparent 42%),
         rgba(13, 17, 23, 0.68);
-      overflow: hidden;
       box-shadow: 0 22px 80px rgba(0, 0, 0, 0.36);
+      padding: 1.25rem;
     }
 
-    .story-panel:before {
+    .flow-panel:before {
       content: "";
       position: absolute;
       inset: 1.25rem;
@@ -130,80 +129,57 @@
       pointer-events: none;
     }
 
-    .story-panel:after {
-      content: "";
-      position: absolute;
-      left: 50%;
-      top: 16%;
-      bottom: 16%;
-      width: 1px;
-      background: linear-gradient(180deg, transparent, rgba(240, 165, 0, 0.6), transparent);
-      transform: translateX(-50%);
+    .flow-rail {
+      position: relative;
+      display: grid;
+      gap: 0.85rem;
+      padding: 0.25rem;
     }
 
-    .node {
-      position: absolute;
-      display: grid;
-      place-items: center;
-      width: clamp(6.75rem, 12vw, 8.25rem);
-      aspect-ratio: 1;
-      border-radius: 999px;
-      border: 1px solid rgba(230, 237, 243, 0.18);
-      font-family: var(--font-mono);
-      font-size: 0.72rem;
-      text-align: center;
-      line-height: 1.35;
+    .handoff-card {
+      position: relative;
+      border: 1px solid rgba(230, 237, 243, 0.16);
+      border-radius: var(--radius);
       padding: 1rem;
       background: rgba(13, 17, 23, 0.84);
-      box-shadow: 0 0 0 10px rgba(13, 17, 23, 0.3);
     }
 
-    .node.knowmler {
-      color: var(--knowmler);
-      box-shadow: 0 0 32px rgba(184, 140, 255, 0.2), 0 0 0 10px rgba(13, 17, 23, 0.3);
+    .handoff-card.knowmler {
+      border-color: rgba(184, 140, 255, 0.32);
     }
 
-    .node.foundry {
-      color: var(--foundry);
-      box-shadow: 0 0 32px rgba(53, 208, 255, 0.18), 0 0 0 10px rgba(13, 17, 23, 0.3);
+    .handoff-card.foundry {
+      border-color: rgba(53, 208, 255, 0.3);
     }
 
-    .node:nth-of-type(1) { left: 9%; top: 12%; }
-    .node:nth-of-type(2) { left: 31%; top: 38%; }
-    .node:nth-of-type(3) { right: 31%; top: 30%; }
-    .node:nth-of-type(4) { right: 9%; top: 58%; }
-
-    .thread {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-    }
-
-    .thread path {
-      fill: none;
-      stroke-width: 2;
-      stroke-linecap: round;
-    }
-
-    .thread .main {
-      stroke: url(#thread-gradient);
-      opacity: 0.86;
-    }
-
-    .thread .ghost {
-      stroke: rgba(230, 237, 243, 0.14);
-      stroke-width: 1;
-    }
-
-    .caption {
-      position: absolute;
-      left: 1.6rem;
-      right: 1.6rem;
-      bottom: 1.25rem;
-      color: var(--text-muted);
+    .handoff-card strong {
+      display: block;
       font-family: var(--font-mono);
       font-size: 0.78rem;
+      margin-bottom: 0.35rem;
+    }
+
+    .handoff-card.knowmler strong {
+      color: var(--knowmler);
+    }
+
+    .handoff-card.foundry strong {
+      color: var(--foundry);
+    }
+
+    .handoff-card p {
+      margin: 0;
+      color: var(--text-muted);
+      font-size: 0.92rem;
+      line-height: 1.55;
+    }
+
+    .handoff-arrow {
+      color: var(--accent);
+      font-family: var(--font-mono);
+      font-size: 1rem;
+      line-height: 1;
+      text-align: center;
     }
 
     .chapter {
@@ -295,10 +271,6 @@
         min-height: auto;
       }
 
-      .story-panel {
-        min-height: 390px;
-      }
-
       .chapter {
         grid-template-columns: 1fr;
         gap: 0.4rem;
@@ -323,24 +295,6 @@
         padding-top: 1.25rem;
       }
 
-      .story-panel {
-        min-height: 430px;
-      }
-
-      .story-panel:after {
-        display: none;
-      }
-
-      .node {
-        width: 6.7rem;
-        font-size: 0.68rem;
-      }
-
-      .node:nth-of-type(1) { left: 5%; top: 9%; }
-      .node:nth-of-type(2) { left: 49%; top: 26%; }
-      .node:nth-of-type(3) { left: 7%; right: auto; top: 52%; }
-      .node:nth-of-type(4) { right: 5%; top: 66%; }
-
       .bridge {
         grid-template-columns: 1fr;
       }
@@ -356,62 +310,67 @@
 
     <section class="hero" aria-labelledby="page-title">
       <div>
-        <p class="eyebrow">The app is already hiding in the analysis.</p>
-        <h1 id="page-title">From insight to working software</h1>
-        <p class="lede">Knowmler begins with the thing a person is trying to understand. A dense video, a document, a messy thread of claims -- whatever it is, the first job is to make the material usable. Once the shape is clear, a different question appears: what could this become if it were not just a report?</p>
+        <p class="eyebrow">Knowmler finds the app idea. Foundry builds it.</p>
+        <h1 id="page-title">From analysis to a live app</h1>
+        <p class="lede">Start with a video, PDF, or article. Knowmler pulls out the useful problem, turns it into an app idea, and lets people decide whether it is worth building. When an idea is promoted, Context Foundry builds the live preview and sends it back to Knowmler.</p>
       </div>
 
-        <div class="story-panel" aria-label="A continuous story from Knowmler analysis to Context Foundry build">
-        <svg class="thread" viewBox="0 0 560 460" preserveAspectRatio="none" aria-hidden="true">
-          <defs>
-            <linearGradient id="thread-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stop-color="#b88cff"/>
-              <stop offset="50%" stop-color="#f0a500"/>
-              <stop offset="100%" stop-color="#35d0ff"/>
-            </linearGradient>
-          </defs>
-          <path class="ghost" d="M92 91 C142 174, 185 203, 246 214 C320 227, 369 181, 437 192 C494 201, 513 264, 500 330" />
-          <path class="main" d="M92 91 C142 174, 185 203, 246 214 C320 227, 369 181, 437 192 C494 201, 513 264, 500 330" />
-        </svg>
-        <div class="node knowmler">content becomes context</div>
-        <div class="node knowmler">a useful idea takes shape</div>
-        <div class="node foundry">Foundry starts building</div>
-        <div class="node foundry">a working app returns</div>
-        <p class="caption">One continuous thread.</p>
+      <div class="flow-panel" aria-label="Knowmler and Context Foundry build flow">
+        <div class="flow-rail">
+          <div class="handoff-card knowmler">
+            <strong>Analyze the source</strong>
+            <p>Knowmler summarizes the material and identifies the problem a tool could solve.</p>
+          </div>
+          <div class="handoff-arrow">then</div>
+          <div class="handoff-card knowmler">
+            <strong>Shape the app idea</strong>
+            <p>The idea becomes a prototype people can review, discuss, and promote.</p>
+          </div>
+          <div class="handoff-arrow">then</div>
+          <div class="handoff-card foundry">
+            <strong>Build the preview</strong>
+            <p>Context Foundry turns the promoted idea into a hosted working app.</p>
+          </div>
+          <div class="handoff-arrow">then</div>
+          <div class="handoff-card foundry">
+            <strong>Return it to Knowmler</strong>
+            <p>The live app link appears with the original idea so people can open it.</p>
+          </div>
+        </div>
       </div>
     </section>
 
     <section class="chapter">
       <div class="chapter-label">Inside Knowmler</div>
       <div>
-        <h2>The story starts before anyone asks for an app.</h2>
-        <p>Knowmler watches the source material closely enough to find the pressure points: the claims that matter, the contradictions worth testing, the patterns a person would otherwise have to hold in their head. That analysis becomes the raw material for a product idea because it already contains the user's need.</p>
-        <p>Instead of asking someone to begin with a blank app brief, Knowmler can say: here is what this content is really about, here is the problem it keeps circling, and here is the tool that would make the next version of this work easier.</p>
+        <h2>Knowmler starts with the source.</h2>
+        <p>A user brings in a video, PDF, or article. Knowmler summarizes it, pulls out the main ideas, and shows where there may be a useful tool to build.</p>
+        <p>The app idea is not a blank prompt. It comes from the analysis: what the content is about, who it helps, and what workflow would make the next step easier.</p>
       </div>
     </section>
 
     <section class="chapter">
-      <div class="chapter-label">The idea earns its weight</div>
+      <div class="chapter-label">Prototype review</div>
       <div>
-        <h2>A prototype is not the finish line. It is the first proof.</h2>
-        <p>The early version stays close to Knowmler because the idea still needs judgment. People can react to it, sharpen it, vote on it, and decide whether it is worth promoting. The important part is not that a prototype exists. The important part is that the prototype carries the original context with it.</p>
-        <p>By the time an idea is promoted, it is no longer a loose suggestion. It has a reason to exist, a user story behind it, and enough shared confidence to justify a real build.</p>
+        <h2>The prototype proves whether the idea is worth building.</h2>
+        <p>Knowmler makes a small clickable version first. People can look at it, comment, vote, and decide whether it should become a real app.</p>
+        <p>If the idea is promoted, Foundry gets a clearer brief: the source analysis, the app idea, the prototype, and the feedback that made it worth building.</p>
       </div>
     </section>
 
     <section class="chapter">
       <div class="chapter-label">Where Foundry enters</div>
       <div>
-        <h2>Context Foundry is the build engine waiting behind the moment of confidence.</h2>
-        <p>When a promoted idea reaches Foundry, the premise is already alive. Foundry receives the context Knowmler has gathered and shapes it into the working app. The work can stay focused on delivery because the "why" has already been earned upstream.</p>
+        <h2>Context Foundry builds the promoted idea.</h2>
+        <p>Foundry receives the brief from Knowmler and builds the app. It handles the implementation work, checks the result, and publishes a preview.</p>
         <div class="bridge">
           <div class="voice knowmler">
-            <strong>Knowmler carries the meaning.</strong>
-            <p>The source analysis, the app idea, the prototype, and the promotion signal stay connected.</p>
+            <strong>Knowmler decides what is worth building.</strong>
+            <p>It keeps the analysis, idea, prototype, and promotion signal together.</p>
           </div>
           <div class="voice foundry">
-            <strong>Foundry carries the build.</strong>
-            <p>Foundry assembles the app, checks the result, and returns a live preview.</p>
+            <strong>Foundry does the build.</strong>
+            <p>It turns the promoted idea into a hosted preview people can use.</p>
           </div>
         </div>
       </div>
@@ -420,14 +379,14 @@
     <section class="chapter">
       <div class="chapter-label">Back to the user</div>
       <div>
-        <h2>The app returns to the place where the idea was born.</h2>
-        <p>The preview is not a detached artifact living somewhere else. It comes back into Knowmler as the working version of the idea people chose to promote. The original analysis, the community signal, the prototype, and the finished build can all be read as one arc.</p>
-        <p>That is the point of the integration: Knowmler helps people discover what should be built, and Context Foundry gives those discoveries a way to become software without losing the thread.</p>
+        <h2>The live preview comes back to Knowmler.</h2>
+        <p>When the build is ready, Knowmler shows the app link beside the promoted idea. People can open the preview, compare it with the prototype, and keep working from the same place.</p>
+        <p>The flow stays simple: Knowmler finds and validates the idea. Context Foundry builds it. Knowmler shows the result.</p>
       </div>
     </section>
 
     <section class="closing">
-      <p>The whole system is easier to understand as a story: someone studies a piece of content, sees the tool hiding inside it, proves the idea with others, and lets Foundry carry that idea across the distance to a working app.</p>
+      <p>Use Knowmler to turn content into a clear app idea. Use Context Foundry to turn the promoted idea into a live preview.</p>
     </section>
 
     <footer>
