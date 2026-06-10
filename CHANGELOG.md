@@ -5,7 +5,45 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [4.2.0] - 2026-06-09
+
+Adaptive pipeline routing. Telemetry over 86 completed tasks showed the P+
+plan-review loop consuming 51.5% of wall-clock and 46% of cost because the
+classifier marked 96% of tasks Complex (any description over 200 chars) and
+the accept policy made convergence nearly impossible (21 loops hit the cap;
+all 21 still shipped as feat).
+
+### Changed
+- **Complexity classifier rewritten** (`src/complexity.rs`): composite score
+  from bundling signals, risk domains (auth/security/payments/migrations/
+  schema/infrastructure), structural keywords (architect/redesign/refactor/
+  rewrite/overhaul), and length only at the over-bundle thresholds (>300/>500
+  words). Description length alone no longer classifies Complex; Simple
+  requires a leading simple keyword. Re-validated over 124 real task
+  descriptions: 119 Complex / 5 Medium -> 44 Complex / 80 Medium.
+- **Medium tier gets a real route**: PLAN runs (the >=80-char planner skip is
+  removed), the P+ review loop is skipped (budget 1 -> 0). The chosen route is
+  logged at task start and carried in the `task_classified` observatory event.
+- **P+ accept policy default** `"no-high-medium"` -> `"no-high"`: medium
+  findings on an accepted plan append to `current-plan.md` as advisory
+  constraints instead of forcing another full propose+review cycle.
+- **P+ stall detection**: if the policy-blocking finding count does not
+  strictly decrease between iterations, the loop exits early via the
+  unresolved-feedback path instead of burning the remaining budget.
+  `OrchestratorOutcome.iterations` now reports actual iterations used.
+
+### Removed
+- Dead `classify_task_with_context` (spec-aware downgrade that was never
+  wired in).
+
+### Migration
+- Configs that set `orchestrator_accept_policy` explicitly keep their value;
+  omitted values now mean `"no-high"`. Set `"no-high-medium"` to restore the
+  stricter gate.
+- `[fast]` / `[strict]` per-task flags still override the classifier in both
+  directions.
+
+## [4.1.0] - 2026-05-22
 
 ### Changed
 - `pattern_dual_emit` now defaults to `false`. Skills (`~/.foundry/skills/<id>/SKILL.md`) are the default reuse path; the legacy `~/.foundry/patterns/common-issues.json` store is no longer read or written by default.
