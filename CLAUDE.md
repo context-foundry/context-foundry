@@ -25,13 +25,19 @@ LM Studio + opencode is wired into the builder pipeline via Phase 32. Runbook:
 `bash scripts/smoke-local-model.sh` (asserts schema_version, opencode routing,
 and typed-error absence).
 
-## Global Patterns
+## Skills and Plugins
 
-Patterns are stored in `~/.foundry/patterns/`. Read them before starting work:
+Domain knowledge lives in **skills** (Anthropic SKILL.md format) packaged inside
+**plugins**. Skills replaced the legacy `~/.foundry/patterns/` JSON store; the
+pattern catalog is still emitted in dual-emit mode for back-compat but new
+knowledge should be written as a `SKILL.md` under the relevant plugin.
 
-```lua
-mcp__context-foundry__read_global_patterns("common-issues")
-```
+- On-disk layout: `plugins/<plugin>/skills/<slug>/SKILL.md`
+- Global skills: `~/.foundry/skills/`
+- Global plugins: `~/.foundry/plugins/`
+
+Before starting a task, read the matching plugin's `CLAUDE.md` and any
+`SKILL.md` files whose frontmatter matches the task domain.
 
 ## Plugins
 
@@ -103,24 +109,24 @@ Context Foundry has domain-specific plugins (formerly called "extensions"). **Wh
 |-----------|------|--------|
 | Flowise | `plugins/flowise/` | Flowise AI workflows |
 
-## MCP Tools Available
+## MCP Server
 
-Context Foundry provides these MCP tools:
+Context Foundry runs an MCP server over stdio (`src/mcp.rs`) that exposes
+**resources** for clients to read. No tool calls are exported.
 
-| Tool | Purpose |
-|------|---------|
-| `read_global_patterns` | Read learned patterns |
-| `save_global_patterns` | Save new patterns |
-| `merge_project_patterns` | Merge project patterns to global |
-| `delegate_to_claude_code` | Delegate tasks to fresh Claude instances |
-| `search_skills` | Find reusable code skills |
+| URI | Purpose |
+|-----|---------|
+| `foundry://plugins/index` | JSON list of available plugins with name, description, source (global/ancestor/project-local), and skill count |
+| `foundry://patterns/catalog` | JSON catalog of legacy patterns sorted by frequency. Returns `[]` unless `pattern_dual_emit` is enabled in config. |
+
+To consume a resource from a client, call `resources/read` with the URI.
 
 ## After Solving Issues
 
-When you solve a new problem, save the pattern:
+When you solve a new problem worth remembering:
 
-1. Add to the relevant plugin's patterns file
-2. Merge to global: `mcp__context-foundry__merge_project_patterns(path, "common-issues")`
+1. Write a `SKILL.md` under the relevant plugin: `plugins/<plugin>/skills/<slug>/SKILL.md` (Anthropic Skills format with frontmatter `name`, `description`, `when_to_use`).
+2. If the lesson is project-agnostic, also place it under `~/.foundry/skills/<slug>/SKILL.md` so it surfaces across projects.
 
 This helps future agents avoid the same issues.
 

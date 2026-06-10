@@ -388,11 +388,11 @@
   "learned_from": "project-name"
 }</code></pre>
 
-  <h3>How Patterns Are Matched</h3>
+  <h3>How Skills Are Matched</h3>
 
-  <p>At plan time, the system loads all patterns from <code>~/.foundry/patterns/</code> and matches them against the current task description using keyword overlap. If <code>semantic_match_enabled</code> is true, Ollama embeddings provide semantic similarity scoring alongside keyword matching. Up to <code>max_pattern_injection</code> (default 10) patterns are injected into the planner and reviewer prompts as reference data.</p>
+  <p>At plan time, the system loads skills (<code>SKILL.md</code> files) from <code>~/.foundry/skills/</code> and from the active plugins, and matches them against the current task description. Legacy JSON patterns under <code>~/.foundry/patterns/</code> are still consulted in dual-emit mode for back-compat. If <code>semantic_match_enabled</code> is true, Ollama embeddings provide semantic similarity scoring alongside keyword matching. Up to <code>max_pattern_injection</code> (default 10) matches are injected into the planner and reviewer prompts as reference data.</p>
 
-  <p>Local patterns (project-level JSON files) can be promoted to the global registry using <code>merge_project_patterns()</code>, available as an MCP tool. This is how a solved problem in one project prevents the same mistake in every future project.</p>
+  <p>Project-local skills live at <code>plugins/&lt;plugin&gt;/skills/&lt;slug&gt;/SKILL.md</code>. Skills that prove broadly useful are promoted by copying the SKILL.md to <code>~/.foundry/skills/&lt;slug&gt;/</code> so they surface across every project.</p>
 
   <div class="divider">~:~=~:~=~:~=~:~=~:~=~:~</div>
 

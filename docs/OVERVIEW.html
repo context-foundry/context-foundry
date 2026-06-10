@@ -1476,42 +1476,27 @@ this repo (only __pycache__ remnants in tools/); documentation is derived from
 CLAUDE.md and the patterns module API.
 </p>
 
+<p>
+The MCP server (<code>src/mcp.rs</code>) speaks JSON-RPC 2.0 over stdio and exposes
+<strong>resources only</strong> &mdash; no tool calls. Clients read resources via the
+standard <code>resources/list</code> and <code>resources/read</code> methods.
+</p>
+
 <table>
   <tr>
-    <th>Tool</th>
-    <th>Signature</th>
-    <th>Reads/Writes</th>
-    <th>Usage Note</th>
+    <th>Resource URI</th>
+    <th>MIME</th>
+    <th>Contents</th>
   </tr>
   <tr>
-    <td><code>read_global_patterns</code></td>
-    <td><code>read_global_patterns(category: str)</code></td>
-    <td>Reads <code>~/.foundry/patterns/*.json</code></td>
-    <td>Load patterns before starting work; category is typically "common-issues"</td>
+    <td><code>foundry://plugins/index</code></td>
+    <td><code>application/json</code></td>
+    <td>Array of installed plugins with <code>name</code>, <code>description</code>, <code>source</code> (global/ancestor/project-local), and <code>skill_count</code>. Skills live at <code>plugins/&lt;plugin&gt;/skills/&lt;slug&gt;/SKILL.md</code> in Anthropic Skills format.</td>
   </tr>
   <tr>
-    <td><code>save_global_patterns</code></td>
-    <td><code>save_global_patterns(patterns: list, category: str)</code></td>
-    <td>Writes to <code>~/.foundry/patterns/{category}.json</code></td>
-    <td>Save newly discovered patterns after solving issues</td>
-  </tr>
-  <tr>
-    <td><code>merge_project_patterns</code></td>
-    <td><code>merge_project_patterns(path: str, category: str)</code></td>
-    <td>Reads project patterns, writes to global store</td>
-    <td>Promotes project-local patterns to <code>~/.foundry/patterns/</code>; deduplicates by pattern_id</td>
-  </tr>
-  <tr>
-    <td><code>delegate_to_claude_code</code></td>
-    <td><code>delegate_to_claude_code(task: str, ...)</code></td>
-    <td>Spawns a fresh Claude Code instance</td>
-    <td>Delegate subtasks to a fresh agent with independent context</td>
-  </tr>
-  <tr>
-    <td><code>search_skills</code></td>
-    <td><code>search_skills(query: str)</code></td>
-    <td>Reads pattern store and skills index</td>
-    <td>Find reusable code patterns and skills by keyword search</td>
+    <td><code>foundry://patterns/catalog</code></td>
+    <td><code>application/json</code></td>
+    <td>Legacy pattern catalog sorted by frequency. Returns <code>[]</code> unless <code>pattern_dual_emit</code> is enabled. Patterns have been superseded by skills; this resource exists for back-compat.</td>
   </tr>
 </table>
 

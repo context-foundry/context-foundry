@@ -54,6 +54,6 @@ cat hosts.r10 | xargs -P 10 -I{} bash -c '
 ## After Solving New Issues
 
 When you discover a new gotcha or useful command:
-1. Add it to `patterns/recon-common-issues.json`
-2. If it's a reusable command, add it to the relevant template file
-3. Merge to global: `merge_project_patterns("extensions/recon/patterns/recon-common-issues.json", "common-issues")`
+1. Capture it as a skill: `plugins/recon/skills/<slug>/SKILL.md` (Anthropic Skills format)
+2. If it's a reusable command, also add it to the relevant template file
+3. If broadly applicable beyond recon, copy to `~/.foundry/skills/<slug>/SKILL.md`

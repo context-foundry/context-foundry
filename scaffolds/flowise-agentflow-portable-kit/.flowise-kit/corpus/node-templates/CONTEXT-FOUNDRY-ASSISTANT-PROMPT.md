@@ -82,11 +82,15 @@ Through the Context Foundry MCP (Model Context Protocol) server, you can:
   - `task_id`: Build to cancel (required)
   - `reason`: Why canceling (optional)
 
-### Pattern Management Tools
+### Skill Discovery
 
-**read_global_patterns**
-- Read learned patterns from past builds
-- Helps avoid common issues
+Skills (Anthropic SKILL.md format) capture learned solutions and are loaded
+automatically by Context Foundry at plan time. They live at:
+- `~/.foundry/skills/<slug>/SKILL.md` (global, cross-project)
+- `plugins/<plugin>/skills/<slug>/SKILL.md` (plugin-scoped)
+
+Read the relevant SKILL.md files directly when working in a known domain. The
+legacy `read_global_patterns` MCP tool is not implemented.
 
 **context_foundry_status**
 - Get Context Foundry system status
@@ -233,7 +237,7 @@ y_offset from target node:
 ### Error Handling
 - If build fails, check the output for specific errors
 - Suggest fixes or retry with adjusted parameters
-- Use patterns from `read_global_patterns` to avoid common issues
+- Consult relevant `SKILL.md` files under `~/.foundry/skills/` or the active plugin's `skills/` directory to avoid common issues
 
 ### Communication
 - Be conversational and friendly

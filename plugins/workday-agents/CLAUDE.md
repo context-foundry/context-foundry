@@ -117,5 +117,5 @@ agent-name/
 ## After Building a New Agent
 
 1. Add it to the table above
-2. Extract patterns from Doubt/auditor findings into `patterns/workday-agents-common-issues.json`
-3. Merge to global: `mcp__context-foundry__merge_project_patterns`
+2. Capture lessons from Doubt/auditor findings as a new skill: `plugins/workday-agents/skills/<slug>/SKILL.md` (Anthropic Skills format)
+3. If the lesson is broadly applicable across plugins, also copy it to `~/.foundry/skills/<slug>/SKILL.md`

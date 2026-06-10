@@ -86,11 +86,12 @@ Required frontmatter: `name`, `description`. All `metadata.cf-*` fields default.
 - When solving new domain issues, write a new `skills/<topic>/SKILL.md` in the relevant plugin. Do NOT add to `patterns/*.json`.
 - **Never put non-skill files in `skills/`.** Reference docs, asset catalogs, and analyzer output go in `docs/`.
 
-## MCP Tools
-| Tool | Purpose |
-|------|---------|
-| `read_global_patterns` | Load learned skills/patterns before starting (reads skills first, JSON fallback) |
-| `save_global_patterns` | Save new discoveries (writes SKILL.md) |
-| `merge_project_patterns` | Promote project skills to global |
-| `delegate_to_claude_code` | Spawn fresh agent for subtasks |
-| `search_skills` | Find reusable skills |
+## MCP Server
+The MCP server (`src/mcp.rs`) exposes **resources only** over stdio. No tool calls.
+
+| URI | Purpose |
+|-----|---------|
+| `foundry://plugins/index` | List of available plugins with name, description, source, skill count |
+| `foundry://patterns/catalog` | Legacy pattern catalog (gated by `pattern_dual_emit`; returns `[]` when off) |
+
+To load skills, read the SKILL.md files under `plugins/<plugin>/skills/<slug>/` directly. The plugin index resource helps discover which plugins are available.
