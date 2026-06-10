@@ -89,8 +89,9 @@ envelopes, not prose.
 - [ ] Step 4 -- Add acceptance policy (configurable)
   - Default: accept if no high or medium findings
   - Configurable in .foundry.json: `orchestrator_accept_policy: "no-high" | "no-high-medium" | "no-findings"`
-  - "no-high": accept with medium/low findings (aggressive)
-  - "no-high-medium": accept only with low findings (default, current behavior)
+  - "no-high": accept with medium/low findings (default since 2026-06-09;
+    mediums append to the plan as advisory constraints)
+  - "no-high-medium": accept only with low findings (original default)
   - "no-findings": accept only when completely clean (strict)
 
 - [ ] Step 5 -- Build the orchestration loop

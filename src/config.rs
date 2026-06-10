@@ -245,6 +245,8 @@ pub struct Config {
     #[serde(default = "default_max_plan_review_cycles")]
     pub max_plan_review_cycles: usize,
     /// Orchestrator: acceptance policy ("no-high", "no-high-medium", "no-findings").
+    /// Default "no-high": medium findings on an accepted plan ship as advisory
+    /// constraints instead of forcing another full propose+review cycle.
     pub orchestrator_accept_policy: String,
 
     /// Enable P+ subphase: run the planner's output through the proposer/reviewer
@@ -674,7 +676,7 @@ impl Default for Config {
             orchestrator_reviewer_model: "opus".into(),
             orchestrator_max_iterations: 3,
             max_plan_review_cycles: 2,
-            orchestrator_accept_policy: "no-high-medium".into(),
+            orchestrator_accept_policy: "no-high".into(),
             plan_review_enabled: false,
             review_mode: "diff-only".into(),
             skip_planner_for_simple: true,

@@ -3408,6 +3408,35 @@ async fn process_task(
         override_flag: task_classification.override_flag,
         p_plus_cycles_budget: p_plus_budget,
     }));
+    // Surface the chosen route up front so a run's cost profile is explainable
+    // from the log alone (which tier won, and what that tier buys).
+    {
+        let route_planner = if !ctx.config.pipeline_stage_enabled("plan") {
+            "off"
+        } else if ctx.config.skip_planner_for_simple && task_complexity == TaskComplexity::Simple {
+            "skip"
+        } else {
+            "run"
+        };
+        let route_doubt = if !ctx.config.pipeline_stage_enabled("doubt") {
+            "off"
+        } else if ctx.config.skip_doubt_for_simple && task_complexity == TaskComplexity::Simple {
+            "skip"
+        } else if ctx.config.batch_doubt {
+            "batched"
+        } else {
+            "run"
+        };
+        let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+            "Pipeline route for {}: {:?} (score {}) -> planner={}, P+ budget={}, doubt={}",
+            task_id,
+            task_complexity,
+            task_classification.signals.composite_score,
+            route_planner,
+            p_plus_budget,
+            route_doubt,
+        ))));
+    }
     let skip_query = skip_scout
         || checkpoint_skip_query
         || (ctx.config.skip_scout_for_simple && task_complexity == TaskComplexity::Simple)
@@ -3930,14 +3959,13 @@ async fn process_task(
         .map(|p| p.pattern_id.clone())
         .collect();
 
-    // Decide whether to skip the planner based on complexity (already computed above).
-    // Skip for simple tasks (existing behavior) AND for medium tasks with
-    // detailed descriptions (80+ chars). Detailed task descriptions from the
-    // upgraded describe-work agent are already comprehensive plans.
+    // Decide whether to skip the planner based on complexity (already computed
+    // above). Only Simple tasks skip the planner. Medium tasks run PLAN (their
+    // route skips the P+ review loop instead -- see p_plus_cycles_budget); the
+    // old "Medium with >= 80 char description skips planning entirely" rule
+    // left the most common tier with no plan artifact at all.
     let skip_planner = checkpoint_skip_planner
-        || (ctx.config.skip_planner_for_simple
-            && (task_complexity == TaskComplexity::Simple
-                || (task_complexity == TaskComplexity::Medium && task_desc.len() >= 80)))
+        || (ctx.config.skip_planner_for_simple && task_complexity == TaskComplexity::Simple)
         || !ctx.config.pipeline_stage_enabled("plan");
     let stage_skip_builder = !ctx.config.pipeline_stage_enabled("implement");
 
@@ -4685,7 +4713,7 @@ async fn process_task(
         } else if task_complexity == TaskComplexity::Simple {
             "simple task"
         } else {
-            "detailed medium task (>= 80 chars)"
+            "plan stage disabled"
         };
         let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
             "Skipping planner for {}",
@@ -5450,7 +5478,7 @@ async fn process_task(
             ))));
 
             let mut orch_config = OrchestratorConfig::from_config(&ctx.config);
-            // T1.23: scale P+ depth to task complexity (Simple=0/skipped, Medium=1, Complex=N+1).
+            // Scale P+ depth to task complexity (Simple=0, Medium=0, Complex=N+1).
             orch_config.max_iterations = p_plus_budget;
 
             let (agent_tx, mut agent_rx) = mpsc::unbounded_channel();
@@ -5517,6 +5545,29 @@ async fn process_task(
                                 "P+ warning: failed to write reviewed plan: {}",
                                 e
                             ))));
+                        }
+                        // Findings the accept policy waved through (mediums/lows)
+                        // still carry signal for BUILD -- append them as
+                        // non-blocking constraints instead of dropping them.
+                        if !outcome.advisory_findings.is_empty() {
+                            match append_advisory_plan_review_findings(
+                                &ctx.current_plan,
+                                task_id,
+                                &outcome.advisory_findings,
+                            ) {
+                                Ok(()) => {
+                                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                                        "P+ accepted with {} advisory finding(s) -- appended to current-plan.md",
+                                        outcome.advisory_findings.len()
+                                    ))));
+                                }
+                                Err(e) => {
+                                    let _ = tx.send(AppEvent::LoopEvent(LoopEvent::Log(format!(
+                                        "P+ warning: failed to append advisory findings: {}",
+                                        e
+                                    ))));
+                                }
+                            }
                         }
                         plan_review_char = "+";
                         {
@@ -7774,6 +7825,47 @@ in the build-claims.md gaps section so AUDIT can adjudicate.\n\
     let combined = format!("{}{}", existing, block);
     crate::utils::atomic_write_file(current_plan_path, combined.as_bytes())?;
     Ok(block)
+}
+
+/// Append findings the P+ accept policy waved through (mediums/lows on an
+/// accepted plan) as advisory, non-blocking constraints for BUILD.
+fn append_advisory_plan_review_findings(
+    current_plan_path: &std::path::Path,
+    task_id: &str,
+    findings: &[crate::orchestrator::Finding],
+) -> std::io::Result<()> {
+    let mut bulleted = String::new();
+    for f in findings {
+        bulleted.push_str(&format!("- {} [{}]", f.description, f.severity));
+        if !f.location.is_empty() {
+            bulleted.push_str(&format!(" at {}", f.location));
+        }
+        bulleted.push('\n');
+        if !f.suggestion.is_empty() {
+            bulleted.push_str(&format!("  Suggestion: {}\n", f.suggestion));
+        }
+    }
+
+    let block = format!(
+        "\n--- BEGIN PLAN-REVIEW FINDINGS (ADVISORY) ---\n\
+Task: {task_id}\n\
+Generated: {timestamp}\n\
+\n\
+The plan was ACCEPTED. The reviewer noted the following non-blocking findings.\n\
+Address them during BUILD where cheap; none of them gate the build.\n\
+\n\
+## Plan-Review Findings (Advisory)\n\
+{bulleted}\
+--- END PLAN-REVIEW FINDINGS (ADVISORY) ---\n",
+        task_id = task_id,
+        timestamp = chrono::Utc::now().to_rfc3339(),
+        bulleted = bulleted,
+    );
+
+    let existing = std::fs::read_to_string(current_plan_path)?;
+    let combined = format!("{}{}", existing, block);
+    crate::utils::atomic_write_file(current_plan_path, combined.as_bytes())?;
+    Ok(())
 }
 
 #[cfg(test)]
@@ -10407,7 +10499,7 @@ mod card_loop_tests {
 
 #[cfg(test)]
 mod plan_review_cap_tests {
-    use super::append_unresolved_plan_review_feedback;
+    use super::{append_advisory_plan_review_findings, append_unresolved_plan_review_feedback};
     use crate::orchestrator::Finding;
     use tempfile::tempdir;
 
@@ -10464,6 +10556,36 @@ mod plan_review_cap_tests {
             contents.starts_with(original),
             "original plan content must be preserved verbatim before the appended block"
         );
+    }
+
+    #[test]
+    fn append_advisory_plan_review_findings_writes_non_blocking_marker_block() {
+        let dir = tempdir().unwrap();
+        let plan_path = dir.path().join("current-plan.md");
+        let original = "# Plan: T1.99\n\n## Verification\n- cargo test\n";
+        std::fs::write(&plan_path, original).unwrap();
+        let findings = vec![Finding {
+            severity: "medium".into(),
+            description: "Plan should mention fallback behavior".into(),
+            location: "current-plan.md:12".into(),
+            suggestion: "Add a non-blocking fallback note".into(),
+        }];
+
+        append_advisory_plan_review_findings(&plan_path, "T1.99", &findings).unwrap();
+
+        let contents = std::fs::read_to_string(&plan_path).unwrap();
+        assert!(
+            contents.starts_with(original),
+            "original reviewed plan content must be preserved before advisory block"
+        );
+        assert!(contents.contains("--- BEGIN PLAN-REVIEW FINDINGS (ADVISORY) ---"));
+        assert!(contents.contains("--- END PLAN-REVIEW FINDINGS (ADVISORY) ---"));
+        assert!(contents.contains("The plan was ACCEPTED."));
+        assert!(contents.contains("Task: T1.99"));
+        assert!(contents.contains("Plan should mention fallback behavior"));
+        assert!(contents.contains("[medium]"));
+        assert!(contents.contains("at current-plan.md:12"));
+        assert!(contents.contains("Suggestion: Add a non-blocking fallback note"));
     }
 }
 

@@ -2436,6 +2436,7 @@ fn plan_review_outcome_accepted_replaces_text() {
         final_plan_text: "## File Operations\n...\n## Verification\n...".to_string(),
         iterations: 2,
         unresolved_findings: vec![],
+        advisory_findings: vec![],
     };
     assert!(outcome.accepted);
     assert!(outcome.final_plan_text.contains("## File Operations"));
@@ -2448,6 +2449,7 @@ fn plan_review_outcome_rejected_preserves_findings() {
         accepted: false,
         final_plan_text: "original".to_string(),
         iterations: 3,
+        advisory_findings: vec![],
         unresolved_findings: vec![Finding {
             severity: "high".to_string(),
             description: "Missing error handling".to_string(),

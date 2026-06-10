@@ -49,6 +49,39 @@ or the bugs ship if you don't run P+ at all. Bias toward splitting.
 T1.17 is the gold standard: one config field, one persistence path, one merge
 point. The pipeline ran clean.
 
+## How the Complexity Engine Routes Tasks
+
+The classifier (`src/complexity.rs`) scores each task from composition signals
+and picks one of three routes. Description length alone is NOT a complexity
+signal: detailed, well-specified descriptions are encouraged (see the checklist
+below) and do not buy you the heavyweight route. Length only contributes at the
+over-bundling thresholds (>300 words +1, >500 words +2).
+
+**Composite score** = bundling signals (numbered sub-features, bundling
+phrases, 3+ distinct verbs, >6 file refs) + 2 if a risk domain is mentioned
+(auth, security, encryption, payments, migrations, schema, infrastructure)
++ 1 per structural keyword, capped at 2 (architect, redesign, refactor,
+rewrite, overhaul) + over-bundling length score.
+
+| Tier | Criteria | Route |
+|------|----------|-------|
+| **Simple** | < 80 chars, leads with a simple verb (fix/rename/bump/...), one verb, score 0 | Query -> Build. Scout, planner, and per-task doubt skipped. |
+| **Medium** | Everything else (the default for substantial single-concern work) | Query -> Research -> Plan -> Build -> Audit (batched). No P+ review loop. |
+| **Complex** | Composite score >= 2 | Full pipeline including the P+ proposer/reviewer loop (`max_plan_review_cycles + 1` iterations). |
+
+The P+ loop itself is economical: it accepts once no HIGH findings remain
+(`orchestrator_accept_policy: "no-high"`, the default) and appends any
+remaining medium/low findings to the plan as advisory constraints for BUILD.
+If the blocking-finding count fails to strictly decrease between iterations,
+the loop bails early (stall detection) instead of burning the remaining
+budget -- telemetry showed capped loops shipped `feat` at the same rate as
+accepted ones.
+
+The chosen route is logged at task start
+(`Pipeline route for T...: Medium (score 1) -> planner=run, P+ budget=0,
+doubt=batched`) and emitted as a `task_classified` observatory event with the
+full signal breakdown.
+
 ## Signs a Task Is Over-Bundled
 
 Split if any of these apply:
@@ -124,7 +157,7 @@ Split when the change has both a state-model layer and a UI layer.
 
 ## Per-Task Override Flags
 
-Planned via T1.23. The flags will go after the task ID in TASKS.md:
+Shipped via T1.23. The flags go after the task ID in TASKS.md:
 
 - **`[fast]`** -- skip P+ entirely. Use when:
   - The spec has explicit `Files:` + `Constraints:` + `Verification:` sections
@@ -138,8 +171,8 @@ Planned via T1.23. The flags will go after the task ID in TASKS.md:
   - You explicitly want fresh-context plan review even though the spec is
     bounded
 
-Until T1.23 ships, the only lever is composition: rewrite the task to match
-what you want the pipeline to do.
+Beyond the flags, the main lever is still composition: rewrite the task to
+match what you want the pipeline to do.
 
 ## Quick Checklist Before Filing
 

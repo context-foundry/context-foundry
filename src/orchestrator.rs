@@ -56,6 +56,10 @@ pub struct PlanReviewOutcome {
     pub final_plan_text: String,
     pub iterations: usize,
     pub unresolved_findings: Vec<Finding>,
+    /// Findings the accept policy waved through (mediums/lows on an accepted
+    /// plan). Empty when not accepted. Carried so the build loop can append
+    /// them to the plan as non-blocking constraints instead of dropping them.
+    pub advisory_findings: Vec<Finding>,
 }
 
 // ─── Config ──────────────────────────────────────────────────
@@ -83,7 +87,7 @@ impl OrchestratorConfig {
             "no-high" => AcceptPolicy::AllowLowAndMedium,
             "no-high-medium" => AcceptPolicy::AllowLowOnly,
             "no-findings" => AcceptPolicy::RequireClean,
-            _ => AcceptPolicy::AllowLowOnly,
+            _ => AcceptPolicy::AllowLowAndMedium,
         };
 
         Self {
@@ -307,6 +311,33 @@ fn is_accepted(review: &ReviewerOutput, policy: AcceptPolicy) -> bool {
     }
 }
 
+/// Count the findings that actually block acceptance under the given policy.
+/// Mediums are advisory under AllowLowAndMedium ("no-high"), so they must not
+/// feed stall detection there -- otherwise a run where highs decrease but
+/// mediums rise would be misread as stalled.
+fn blocking_finding_count(review: &ReviewerOutput, policy: AcceptPolicy) -> usize {
+    let severity_is = |f: &Finding, level: &str| f.severity.eq_ignore_ascii_case(level);
+    review
+        .findings
+        .iter()
+        .filter(|f| match policy {
+            AcceptPolicy::AllowLowAndMedium => severity_is(f, "high"),
+            AcceptPolicy::AllowLowOnly => severity_is(f, "high") || severity_is(f, "medium"),
+            AcceptPolicy::RequireClean => true,
+        })
+        .count()
+}
+
+/// Stall detection for the propose/review loop: if the count of blocking
+/// findings (per the accept policy) did not strictly decrease since the
+/// previous iteration, another full propose+review cycle is unlikely to
+/// converge -- reviewers that hold a finding count steady tend to keep finding
+/// new issues of the same weight. Bail early and ship via the
+/// unresolved-feedback path.
+fn plan_review_stalled(prev_blocking: Option<usize>, current_blocking: usize) -> bool {
+    prev_blocking.is_some_and(|prev| current_blocking >= prev)
+}
+
 fn format_findings_for_proposer(review: &ReviewerOutput) -> String {
     review
         .findings
@@ -342,6 +373,8 @@ pub async fn orchestrate(
     let mut last_artifact = None;
     let mut last_review = None;
     let mut findings_text: Option<String> = None;
+    let mut prev_blocking: Option<usize> = None;
+    let mut iterations_used = 0;
 
     // Helper closure to send separator lines to the TUI
     let send_separator = |tx: &Option<mpsc::UnboundedSender<AgentOutputEvent>>, text: &str| {
@@ -455,6 +488,7 @@ pub async fn orchestrate(
         ));
 
         let accepted = is_accepted(&review, config.accept_policy);
+        iterations_used = iteration;
 
         if accepted {
             on_event(&format!("Accepted after {} iteration(s).", iteration,));
@@ -467,6 +501,24 @@ pub async fn orchestrate(
             });
         }
 
+        // Stall detection: blocking findings not strictly decreasing means
+        // further cycles are unlikely to converge -- stop burning budget.
+        // "Blocking" is policy-relative: advisory severities must not count.
+        let blocking = blocking_finding_count(&review, config.accept_policy);
+        if plan_review_stalled(prev_blocking, blocking) {
+            on_event(&format!(
+                "Stalled: blocking findings did not decrease ({} -> {}). Stopping after {} of {} iteration(s).",
+                prev_blocking.unwrap_or(0),
+                blocking,
+                iteration,
+                config.max_iterations,
+            ));
+            last_artifact = Some(artifact);
+            last_review = Some(review);
+            break;
+        }
+        prev_blocking = Some(blocking);
+
         // Not accepted -- format findings for next round
         findings_text = Some(format_findings_for_proposer(&review));
         on_event(&format!(
@@ -478,11 +530,12 @@ pub async fn orchestrate(
         last_review = Some(review);
     }
 
-    // Max iterations reached
-    on_event(&format!(
-        "Max iterations ({}) reached. Emitting with unresolved findings.",
-        config.max_iterations,
-    ));
+    if iterations_used >= config.max_iterations {
+        on_event(&format!(
+            "Max iterations ({}) reached. Emitting with unresolved findings.",
+            config.max_iterations,
+        ));
+    }
 
     Ok(OrchestratorOutcome {
         artifact: last_artifact.unwrap_or(ProposerOutput {
@@ -498,7 +551,7 @@ pub async fn orchestrate(
             findings: Vec::new(),
             validated: Vec::new(),
         }),
-        iterations: config.max_iterations,
+        iterations: iterations_used,
         accepted: false,
     })
 }
@@ -553,12 +606,18 @@ pub async fn run_plan_review(
     } else {
         Vec::new()
     };
+    let advisory_findings = if outcome.accepted {
+        outcome.final_review.findings.clone()
+    } else {
+        Vec::new()
+    };
 
     Ok(PlanReviewOutcome {
         accepted: outcome.accepted,
         final_plan_text,
         iterations: outcome.iterations,
         unresolved_findings,
+        advisory_findings,
     })
 }
 
@@ -1242,7 +1301,7 @@ mod tests {
 
     #[test]
     fn from_config_parses_accept_policy() {
-        // "no-high-medium" (the default) maps to AllowLowOnly
+        // "no-high-medium" maps to AllowLowOnly
         let mut config = Config::default();
         config.orchestrator_accept_policy = "no-high-medium".into();
         let orch = OrchestratorConfig::from_config(&config);
@@ -1258,10 +1317,14 @@ mod tests {
         let orch = OrchestratorConfig::from_config(&config);
         assert_eq!(orch.accept_policy, AcceptPolicy::RequireClean);
 
-        // Unknown string falls back to AllowLowOnly
+        // Unknown string falls back to AllowLowAndMedium (matches the default)
         config.orchestrator_accept_policy = "unknown-value".into();
         let orch = OrchestratorConfig::from_config(&config);
-        assert_eq!(orch.accept_policy, AcceptPolicy::AllowLowOnly);
+        assert_eq!(orch.accept_policy, AcceptPolicy::AllowLowAndMedium);
+
+        // The Config default itself is "no-high"
+        let orch = OrchestratorConfig::from_config(&Config::default());
+        assert_eq!(orch.accept_policy, AcceptPolicy::AllowLowAndMedium);
     }
 
     #[test]
@@ -1340,6 +1403,7 @@ mod tests {
             final_plan_text: "test plan".to_string(),
             iterations: 1,
             unresolved_findings: vec![],
+            advisory_findings: vec![],
         };
         assert!(outcome.accepted);
         assert_eq!(outcome.final_plan_text, "test plan");
@@ -1371,5 +1435,51 @@ mod tests {
             TaskComplexity::Complex
         );
         assert_eq!(classify_task("fix typo in readme"), TaskComplexity::Simple);
+    }
+
+    #[test]
+    fn stall_detection_requires_strict_improvement() {
+        // First iteration: no prior count, never stalled.
+        assert!(!plan_review_stalled(None, 5));
+        // Findings decreased -- progress, keep going.
+        assert!(!plan_review_stalled(Some(5), 3));
+        // Findings flat -- stalled.
+        assert!(plan_review_stalled(Some(3), 3));
+        // Findings increased -- stalled.
+        assert!(plan_review_stalled(Some(3), 4));
+        // Zero blocking findings but not accepted (e.g. lows under a strict
+        // policy) on consecutive iterations -- stalled.
+        assert!(plan_review_stalled(Some(0), 0));
+    }
+
+    #[test]
+    fn blocking_count_is_policy_relative() {
+        let finding = |sev: &str| Finding {
+            severity: sev.to_string(),
+            description: String::new(),
+            location: String::new(),
+            suggestion: String::new(),
+        };
+        // 1 high, 2 medium, 1 low -- the codex P2 scenario: highs converging
+        // while mediums rise must not read as a stall under "no-high".
+        let review = ReviewerOutput {
+            status: "findings".to_string(),
+            findings: vec![
+                finding("high"),
+                finding("medium"),
+                finding("medium"),
+                finding("low"),
+            ],
+            validated: vec![],
+        };
+        assert_eq!(
+            blocking_finding_count(&review, AcceptPolicy::AllowLowAndMedium),
+            1
+        );
+        assert_eq!(blocking_finding_count(&review, AcceptPolicy::AllowLowOnly), 3);
+        assert_eq!(blocking_finding_count(&review, AcceptPolicy::RequireClean), 4);
+        // Under no-high: prev 2 highs -> now 1 high (+2 new mediums) is
+        // progress, not a stall.
+        assert!(!plan_review_stalled(Some(2), 1));
     }
 }
