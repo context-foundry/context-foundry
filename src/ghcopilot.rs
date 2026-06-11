@@ -694,11 +694,12 @@ async fn call_copilot(
 
     let prompt_tokens = json["usage"]["prompt_tokens"].as_u64().unwrap_or(0);
     let completion_tokens = json["usage"]["completion_tokens"].as_u64().unwrap_or(0);
-    let finish_reason = json["choices"][0]["finish_reason"]
-        .as_str()
-        .unwrap_or("stop")
-        .to_string();
-    let message = json["choices"][0]["message"].clone();
+
+    // The Copilot API frequently splits a single logical response across two
+    // choices: one carries content/reasoning, the other carries tool_calls.
+    // Merge them into a single synthetic message before selection so
+    // downstream code always sees a complete response.
+    let (message, finish_reason) = merge_copilot_choices(&json);
 
     Ok(CopilotResponse {
         raw_json: json,
@@ -707,6 +708,83 @@ async fn call_copilot(
         prompt_tokens,
         completion_tokens,
     })
+}
+
+/// Merge split choices from the Copilot API into a single coherent message.
+///
+/// The API frequently returns two choices for tool-call responses:
+///   Choice 0: finish_reason=tool_calls, content="Let me write...", NO tool_calls
+///   Choice 1: finish_reason=tool_calls, tool_calls=[Write(...)], NO content
+///
+/// This function finds the choice with tool_calls, grafts in content from any
+/// sibling choice, and returns the merged message. For single-choice or
+/// non-split responses, it returns the best available choice unchanged.
+fn merge_copilot_choices(json: &Value) -> (Value, String) {
+    let choices = match json["choices"].as_array() {
+        Some(cs) if !cs.is_empty() => cs,
+        _ => {
+            return (json!({ "role": "assistant", "content": "" }), "stop".to_string());
+        }
+    };
+
+    // Single choice: return it directly.
+    if choices.len() == 1 {
+        let fr = choices[0]["finish_reason"]
+            .as_str()
+            .unwrap_or("stop")
+            .to_string();
+        return (choices[0]["message"].clone(), fr);
+    }
+
+    // Multiple choices: find one with non-empty tool_calls.
+    let tc_idx = choices.iter().position(|c| {
+        c["message"]["tool_calls"]
+            .as_array()
+            .is_some_and(|tc| !tc.is_empty())
+    });
+
+    if let Some(idx) = tc_idx {
+        let mut merged = choices[idx]["message"].clone();
+        let fr = choices[idx]["finish_reason"]
+            .as_str()
+            .unwrap_or("tool_calls")
+            .to_string();
+
+        // Graft content from a sibling choice if our selected one lacks it.
+        if !merged["content"].as_str().is_some_and(|s| !s.trim().is_empty()) {
+            for (i, c) in choices.iter().enumerate() {
+                if i != idx {
+                    if let Some(text) = c["message"]["content"].as_str() {
+                        if !text.trim().is_empty() {
+                            merged["content"] = Value::String(text.to_string());
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        return (merged, fr);
+    }
+
+    // No choice has tool_calls. Fall back to stop/end_turn with content,
+    // then to choices[0].
+    for c in choices {
+        let fr = c["finish_reason"].as_str().unwrap_or("");
+        if (fr == "stop" || fr == "end_turn")
+            && c["message"]["content"]
+                .as_str()
+                .is_some_and(|s| !s.trim().is_empty())
+        {
+            return (c["message"].clone(), fr.to_string());
+        }
+    }
+
+    let fr = choices[0]["finish_reason"]
+        .as_str()
+        .unwrap_or("stop")
+        .to_string();
+    (choices[0]["message"].clone(), fr)
 }
 
 /// Returns the approximate context window size for the given model slug.
@@ -857,7 +935,7 @@ pub async fn run_ghcopilot_session(options: GhCopilotOptions<'_>) -> Result<Agen
         let _ = tx.send(AgentOutputEvent::Text(thinking_msg));
 
         // Call the Copilot API.
-        let response = {
+        let mut response = {
             let result =
                 call_copilot(&client, &bearer_token, model, &messages, &tool_defs).await;
 
@@ -949,48 +1027,60 @@ pub async fn run_ghcopilot_session(options: GhCopilotOptions<'_>) -> Result<Agen
                 let tool_calls = match response.message["tool_calls"].as_array() {
                     Some(tc) if !tc.is_empty() => tc.clone(),
                     _ => {
-                        // Log the full response for debugging — the tool_calls
-                        // may be structured differently than expected.
-                        let debug_msg = format!(
-                            "finish_reason=tool_calls but no tool_calls array in message. \
-                             Raw response: {}",
-                            serde_json::to_string_pretty(&response.raw_json)
-                                .unwrap_or_else(|_| "??".to_string())
-                        );
-                        log_error(&mut error_log, &debug_msg);
+                        // Safety net: merge_copilot_choices should have handled
+                        // this, but recover from raw_json as a last resort.
+                        let recovered = response.raw_json["choices"]
+                            .as_array()
+                            .and_then(|cs| {
+                                cs.iter().find_map(|c| {
+                                    c["message"]["tool_calls"]
+                                        .as_array()
+                                        .filter(|tc| !tc.is_empty())
+                                        .cloned()
+                                })
+                            });
 
-                        // If there's text content, treat it as a normal completion.
-                        if response.message["content"].as_str().is_some_and(|s| !s.trim().is_empty()) {
+                        if let Some(tc) = recovered {
+                            log_error(
+                                &mut error_log,
+                                "recovered tool_calls from alternate choice (merge missed)",
+                            );
+                            // Patch the message so the assistant history is correct.
+                            response.message["tool_calls"] = Value::Array(tc.clone());
+                            tc
+                        } else if response.message["content"]
+                            .as_str()
+                            .is_some_and(|s| !s.trim().is_empty())
+                        {
                             let result_text = response.message["content"]
                                 .as_str()
                                 .unwrap_or("")
                                 .trim()
                                 .to_string();
-                            let _ = tx.send(AgentOutputEvent::Result(result_text));
+                            let _ = tx.send(AgentOutputEvent::Text(format!(
+                                "[ghcopilot] retrying dropped tool call — model said: {}",
+                                result_text.chars().take(120).collect::<String>()
+                            )));
+                            messages.push(json!({"role": "assistant", "content": result_text}));
+                            messages.push(json!({
+                                "role": "user",
+                                "content": "Please proceed and call the tool(s) you described to complete the task."
+                            }));
+                            continue;
+                        } else {
+                            let msg = "[ghcopilot] finish_reason=tool_calls but no tool_calls found — see ghcopilot-errors.log".to_string();
+                            let _ = tx.send(AgentOutputEvent::Stderr(msg.clone()));
                             return Ok(AgentResult {
-                                success: true,
-                                exit_code: 0,
-                                exit_kind: AgentExitKind::Completed,
-                                failure_message: None,
+                                success: false,
+                                exit_code: 1,
+                                exit_kind: AgentExitKind::Failed,
+                                failure_message: Some(msg),
                                 log_path: Some(log_path.clone()),
                                 actual_provider: "ghcopilot".to_string(),
                                 actual_model: model.to_string(),
                                 fallback_reason: None,
                             });
                         }
-
-                        let msg = "[ghcopilot] finish_reason=tool_calls but no tool_calls found — see ghcopilot-errors.log".to_string();
-                        let _ = tx.send(AgentOutputEvent::Stderr(msg.clone()));
-                        return Ok(AgentResult {
-                            success: false,
-                            exit_code: 1,
-                            exit_kind: AgentExitKind::Failed,
-                            failure_message: Some(msg),
-                            log_path: Some(log_path.clone()),
-                            actual_provider: "ghcopilot".to_string(),
-                            actual_model: model.to_string(),
-                            fallback_reason: None,
-                        });
                     }
                 };
 
