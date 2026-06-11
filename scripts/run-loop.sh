@@ -74,7 +74,14 @@ _agent_bin() {
     claude|lmstudio|custom) echo "${AGENT_BIN:-claude}";;
     gemini)  echo "${AGENT_BIN:-gemini}";;
     codex)   echo "${AGENT_BIN:-codex}";;
-    copilot) echo "${AGENT_BIN:-gh}";;
+    copilot)
+      if [[ -n "$AGENT_BIN" ]]; then echo "$AGENT_BIN"
+      elif command -v foundry >/dev/null 2>&1; then echo "foundry"
+      else
+        # Auto-discover: prefer a foundry binary co-located with this script
+        local _sd; _sd="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+        echo "${_sd}/../target/release/foundry"
+      fi;;
     *) echo "unknown provider: $PROVIDER (claude|lmstudio|gemini|codex|copilot|custom)" >&2; exit 2;;
   esac
 }
@@ -161,9 +168,10 @@ run_agent() {
       [[ -n "$CLAUDE_MODEL" ]] && args=(--model "$CLAUDE_MODEL" "${args[@]}")
       ;;
     copilot)
-      bin="${AGENT_BIN:-gh}"
-      args=(copilot suggest -t shell "$prompt")
-      ;;
+      # Copilot is native to the foundry binary — unreachable; delegation happens
+      # before the main loop via _run_copilot_delegate().
+      echo "internal error: run_agent called for copilot provider" >&2; exit 2;;
+
     custom)
       bin="${AGENT_BIN:?--agent-bin required for provider=custom}"
       [[ -n "$BASE_URL" ]] && export ANTHROPIC_BASE_URL="$BASE_URL"
@@ -242,6 +250,53 @@ Task rules:
   wait $dpid; set -e
 }
 
+# _run_copilot_delegate — delegates the entire loop to `foundry run --no-tui`
+# with the ghcopilot provider patched into .foundry.json.  Called instead of
+# the main while-loop when --provider copilot is active.
+_run_copilot_delegate() {
+  local bin="${_BIN}" json=".foundry.json"
+  local original="" model="${CLAUDE_MODEL:-ghcopilot:claude-sonnet-4.6}"
+
+  [[ -f "$json" ]] && original=$(cat "$json")
+
+  # Restore .foundry.json on exit / Ctrl-C
+  _cop_restore() {
+    if [[ -n "$original" ]]; then printf '%s\n' "$original" > "$json"
+    else rm -f "$json"; fi
+  }
+  trap '_cop_restore' EXIT INT TERM
+
+  # Merge ghcopilot provider onto existing config; keep other settings intact.
+  # If run_mode is "auto" (loops forever) demote it to "sprint" (drain then stop).
+  if command -v jq >/dev/null 2>&1; then
+    { [[ -n "$original" ]] && echo "$original" || echo '{}'; } \
+    | jq --arg p "ghcopilot" --arg m "$model" \
+         '. + {builder_provider: $p, builder_model: $m}
+          | if (.run_mode // "auto") == "auto" then .run_mode = "sprint" else . end' \
+    > "$json"
+  else
+    # No jq: write a minimal config (loses other .foundry.json settings)
+    printf '{"builder_provider":"ghcopilot","builder_model":"%s","run_mode":"sprint"}\n' \
+      "$model" > "$json"
+    [[ -n "$original" ]] && \
+      echo "    Warning: jq not found — other .foundry.json settings not preserved" >&2
+  fi
+
+  [[ -n "$API_KEY" ]] && export GH_TOKEN="$API_KEY"
+  [[ -n "$MAX_ITER" ]] && echo "    Note: --max is not supported with --provider copilot" >&2
+  [[ "$TASKS_FILE" != "TASKS.md" ]] && \
+    echo "    Note: --tasks is not supported with --provider copilot; foundry uses TASKS.md" >&2
+
+  echo "==> Copilot — foundry run --no-tui (ghcopilot / $(basename "$json") patched)"
+  echo ""
+
+  "$bin" run --no-tui; local rc=$?
+
+  _cop_restore
+  trap - EXIT INT TERM
+  return $rc
+}
+
 # ── Startup ──────────────────────────────────────────────────────────────────
 
 _logo
@@ -292,6 +347,9 @@ else
 fi
 
 # ── Main Loop ─────────────────────────────────────────────────────────────────
+
+# Copilot uses foundry's native ghcopilot integration — delegate the full loop.
+[[ "$PROVIDER" == "copilot" ]] && { _run_copilot_delegate; exit $?; }
 
 FAIL_STREAK=0
 EXIT_CODE=0
