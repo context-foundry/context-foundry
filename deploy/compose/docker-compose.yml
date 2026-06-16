@@ -47,31 +47,62 @@ services:
     ports:
       - "8787:8787"
       - "8788:8788"
-    # The docker socket is required by the local_docker backend, which
-    # launches builder and preview containers on the host daemon.
+    # Run as the foundry-builder image's `builder` uid (10001) so per-job work
+    # dirs the service stages are owner-writable by the builder container; the
+    # gid is the host docker group, needed to use the mounted docker socket.
+    # Set FOUNDRY_SERVICE_USER (e.g. 10001:<docker-gid>) in .env.
+    user: "${FOUNDRY_SERVICE_USER:-}"
     volumes:
+      # The docker socket is required by the local_docker backend, which
+      # launches builder and preview containers on the host daemon.
       - /var/run/docker.sock:/var/run/docker.sock
+      # local_docker builds: builder containers run on the HOST daemon, so the
+      # per-job work dir must resolve to the same path the service wrote it to.
+      # Bind-mount the storage dir at an IDENTICAL absolute path on both sides;
+      # FOUNDRY_SERVICE_STORAGE in .env must equal this path.
+      - "${FOUNDRY_SERVICE_STORAGE:-/var/lib/foundry-service-storage}:${FOUNDRY_SERVICE_STORAGE:-/var/lib/foundry-service-storage}"
     # So builder containers' default FOUNDRY_SERVICE_BUILDER_PROXY_URL of
     # http://host.docker.internal:8788 resolves on Linux Docker.
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    networks:
+      # `default` reaches Postgres; `foundry-preview` lets the service reach
+      # preview containers by name to health-check them (they publish no host
+      # port — the network is internal).
+      - default
+      - foundry-preview
     restart: unless-stopped
 
   caddy:
     image: caddy:2-alpine
-    ports:
-      - "80:80"
-      - "443:443"
-    # The service reconfigures Caddy at runtime through its admin API on port
-    # 2019 to add and remove preview routes; the static Caddyfile only
-    # declares the admin endpoint and the API route.
+    container_name: foundry-caddy
+    # No host ports. This Caddy is the previews' internal router, not a public
+    # edge: a front Caddy (the host's real :80/:443 edge) reaches it by
+    # container name over `compose_default` and forwards `*.<preview-domain>`
+    # traffic to it. The build service manages it entirely through its admin
+    # API (port 2019) -- POSTing/DELETEing per-preview routes; the static
+    # Caddyfile only bootstraps the server + admin endpoint.
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
       - caddy-config:/config
+    networks:
+      # `default` -- the build service reaches the admin API (caddy:2019);
+      # `foundry-preview` -- reach preview containers to reverse-proxy them.
+      - default
+      - foundry-preview
     restart: unless-stopped
 
 volumes:
   foundry-pgdata:
   caddy-data:
   caddy-config:
+
+networks:
+  # The isolated network preview containers run on. Declared here so
+  # foundry-service can join it; `name:` pins it un-prefixed so the runtime
+  # `docker run --network foundry-preview` in localdocker.rs targets the same
+  # network. `internal: true` keeps preview containers egress-free.
+  foundry-preview:
+    name: foundry-preview
+    internal: true

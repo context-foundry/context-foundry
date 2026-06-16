@@ -30,8 +30,9 @@ afterwards.
   no plugins, no auto-push, no human gate, no local-model routing, sandbox off)
   and writes it into the bind-mounted working tree. `entrypoint.sh` requires it.
 - **Auth via the proxy** — the container receives `ANTHROPIC_BASE_URL` (the
-  daemon's auth proxy) and a per-build scoped token as `ANTHROPIC_API_KEY`,
-  never the real key.
+  daemon's auth proxy) and a per-build scoped token as `ANTHROPIC_AUTH_TOKEN`
+  (so the `claude` CLI presents it as `Authorization: Bearer`, the header the
+  proxy validates), never the real key.
 
 The entrypoint then `git init`s the working tree, requires `SPEC.md` +
 `TASKS.md`, and `exec`s `foundry run --no-tui --output-format json-stream`.

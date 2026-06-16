@@ -66,7 +66,12 @@ migration is needed.
 - `--restart on-failure:3` -- a bounded restart policy.
 - `--memory` / `--cpus` / `--pids-limit` -- resource caps.
 - only `-e PORT=8080` -- **no secrets**, no `ANTHROPIC_*` env.
-- `-p 127.0.0.1::8080` -- the host port is published on loopback only.
+
+**No host port is published.** The preview is reached by **container name** on
+the `foundry-preview` network (`foundry-preview-<job>:8080`); the
+`foundry-service` process and the Caddy that fronts previews both join that
+network. Host-port publishing does not work here -- the network is
+`--internal`, and the service runs in its own container with its own loopback.
 
 A health-check failure tears the container down, so a failed deploy leaves
 nothing running.
@@ -75,14 +80,30 @@ nothing running.
 
 `src/service/caddy.rs` POSTs a `reverse_proxy` route to the Caddy admin API at
 `caddy_admin_url`, appending it to the routes of the configured HTTP server
-(`caddy_server_name`, default `srv0`). The preview URL is
-`http://build-<job>.<preview_base_domain>`.
+(`caddy_server_name`, default `srv0`). The route's upstream is the preview
+container by name (`foundry-preview-<job>:8080`); its host match and the
+`preview_url` stored on the job are `https://<app_name>.<preview_base_domain>`
+(`app_name` is the `/v1` request slug). The route `@id` keys off the job id,
+so route registration stays unique even if two jobs share an `app_name` -- but
+the host *match* does not (see "Hostname uniqueness" below).
 
 Route registration is **best-effort**: a Caddy that is down or misconfigured
 logs a warning and the job still reaches `ready`. Only a failed container start
 or a health-check timeout produces `preview_deploy_failed`.
 
 Caddy must already have an HTTP server configured for the route POST to land.
+
+## Hostname uniqueness
+
+The preview hostname is `<app_name>.<domain>`, and the `/v1` API validates
+`app_name` for slug *shape* only -- there is no uniqueness constraint on
+`app_name` in the jobs table. Two live previews with the same `app_name`
+register two Caddy routes (distinct `@id`s) that match the **same** host;
+Caddy serves whichever it resolves first.
+
+The caller (Knowmler) owns naming and **must** keep `app_name` unique among
+currently-live (`ready`) previews -- e.g. by regenerating or suffixing the
+playful slug on collision. See `SPEC_knowmler-build-integration.md` (D5).
 
 ## TTL + teardown
 
@@ -99,7 +120,7 @@ Eight `FOUNDRY_SERVICE_*` env vars tune preview hosting:
 | Env var | Default | Purpose |
 |---------|---------|---------|
 | `FOUNDRY_SERVICE_PREVIEW_NETWORK` | `foundry-preview` | Isolated preview network name |
-| `FOUNDRY_SERVICE_PREVIEW_DOMAIN` | `foundry.local` | Base domain (`build-<job>.<domain>`) |
+| `FOUNDRY_SERVICE_PREVIEW_DOMAIN` | `foundry.local` | Base domain (`<app_name>.<domain>`) |
 | `FOUNDRY_SERVICE_CADDY_ADMIN_URL` | `http://localhost:2019` | Caddy admin API URL |
 | `FOUNDRY_SERVICE_CADDY_SERVER` | `srv0` | Caddy HTTP-server name routes append to |
 | `FOUNDRY_SERVICE_PREVIEW_HEALTH_TIMEOUT_SECS` | `60` | Health-check poll budget |

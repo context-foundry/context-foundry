@@ -29,14 +29,31 @@ pub fn route_id(job_id: &str) -> String {
     format!("foundry-preview-{}", host_label(job_id))
 }
 
-/// The hostname a preview is served under (`build-<job>.<base_domain>`).
-pub fn preview_hostname(job_id: &str, base_domain: &str) -> String {
-    format!("build-{}.{}", host_label(job_id), base_domain)
+/// The hostname a preview is served under.
+///
+/// With an `org_slug` the preview is namespaced per organization —
+/// `<app_name>.<org_slug>.<root_domain>` — so each org's builds live under
+/// their own subdomain. Without one it is `<app_name>.<root_domain>`
+/// (unchanged, backward compatible). `app_name` and `org_slug` are both
+/// validated lowercase `[a-z0-9-]` slugs (DNS-safe labels), so they are used
+/// directly. Knowmler generates a playful, app-derived `app_name`, so a
+/// preview lands at e.g. `wishful-stickers.acme.knowmler.com`. The Caddy
+/// route `@id` keys off the job id (`route_id`), which stays unique even if
+/// two apps share a name.
+pub fn preview_hostname(app_name: &str, org_slug: Option<&str>, root_domain: &str) -> String {
+    match org_slug {
+        Some(slug) => format!("{}.{}.{}", app_name, slug, root_domain),
+        None => format!("{}.{}", app_name, root_domain),
+    }
 }
 
-/// The full `http://` preview URL stored on the job.
-pub fn preview_url(job_id: &str, base_domain: &str) -> String {
-    format!("http://{}", preview_hostname(job_id, base_domain))
+/// The full `https://` preview URL stored on the job.
+///
+/// `https`, not `http`: previews are always served through a TLS-terminating
+/// reverse proxy (Caddy). Knowmler links/embeds this URL from an HTTPS page,
+/// so an `http://` value would be a mixed-content failure.
+pub fn preview_url(app_name: &str, org_slug: Option<&str>, root_domain: &str) -> String {
+    format!("https://{}", preview_hostname(app_name, org_slug, root_domain))
 }
 
 /// The Caddy route object reverse-proxying `hostname` to `upstream`
@@ -108,14 +125,26 @@ mod tests {
 
     #[test]
     fn route_id_and_hostname_are_derived() {
+        // route_id is keyed by the job id (unique); the hostname uses the
+        // app_name slug — the playful, app-derived label Knowmler generates.
         assert_eq!(route_id("fj_1"), "foundry-preview-fj-1");
+        // No org slug: <app>.<root> (backward compatible).
         assert_eq!(
-            preview_hostname("fj_1", "foundry.local"),
-            "build-fj-1.foundry.local"
+            preview_hostname("wishful-stickers", None, "knowmler.com"),
+            "wishful-stickers.knowmler.com"
         );
         assert_eq!(
-            preview_url("fj_1", "foundry.local"),
-            "http://build-fj-1.foundry.local"
+            preview_url("wishful-stickers", None, "knowmler.com"),
+            "https://wishful-stickers.knowmler.com"
+        );
+        // With an org slug: <app>.<org>.<root>.
+        assert_eq!(
+            preview_hostname("wishful-stickers", Some("acme"), "knowmler.com"),
+            "wishful-stickers.acme.knowmler.com"
+        );
+        assert_eq!(
+            preview_url("wishful-stickers", Some("acme"), "knowmler.com"),
+            "https://wishful-stickers.acme.knowmler.com"
         );
     }
 

@@ -348,8 +348,13 @@ pub async fn drive_job(state: &Arc<AppState>, mut job: Job) {
     .await;
     let _ = db::insert_event(&state.pool, &job.id, "ready", Some(100), None).await;
 
-    // 15. Release the proxy token and storage grant.
-    cleanup(state, &token, &grant, &job.id).await;
+    // 15. Release the proxy token and storage grant. The build container is
+    //     `--rm` (already gone); the preview container and its Caddy route
+    //     MUST survive — they are the live deliverable — so `teardown` is
+    //     deliberately NOT called on the success path (unlike `cleanup`,
+    //     which tears the preview down and is only correct for failures).
+    state.proxy.revoke(&token);
+    let _ = state.storage.revoke_grant(&grant).await;
 }
 
 async fn cleanup(state: &Arc<AppState>, token: &str, grant: &StorageGrant, job_id: &str) {

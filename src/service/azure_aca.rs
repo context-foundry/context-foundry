@@ -393,6 +393,15 @@ impl BuildBackend for AzureContainerApps {
                         "resources": { "cpu": 2.0, "memory": "4Gi" },
                         "env": [
                             { "name": "ANTHROPIC_BASE_URL", "value": self.proxy_url },
+                            // TODO(auth-401): inject `proxy_token` as ANTHROPIC_AUTH_TOKEN,
+                            // not ANTHROPIC_API_KEY. The `claude` CLI sends ANTHROPIC_API_KEY
+                            // as the `x-api-key` header, but the auth proxy reads the token
+                            // from `Authorization: Bearer` (`messages_handler` in proxy.rs),
+                            // so every build call is rejected 401 `unauthorized`. This is the
+                            // identical bug fixed for the local_docker backend in
+                            // `localdocker.rs::docker_run_argv` (see the doc comment there).
+                            // The foundry-builder `entrypoint.sh` now also requires
+                            // ANTHROPIC_AUTH_TOKEN. Fix when the Azure backend is exercised.
                             { "name": "ANTHROPIC_API_KEY", "value": proxy_token },
                             { "name": "FOUNDRY_JOB_ID", "value": job.id },
                             { "name": "FOUNDRY_STORAGE_GRANT", "value": grant_sas },

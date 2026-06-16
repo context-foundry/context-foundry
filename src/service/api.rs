@@ -48,6 +48,7 @@ struct JobView {
     schema_version: u32,
     job_id: String,
     app_name: String,
+    org_slug: Option<String>,
     owner: String,
     status: String,
     percent: i32,
@@ -120,6 +121,7 @@ async fn job_view(state: &Arc<AppState>, job: &Job) -> JobView {
         schema_version: 1,
         job_id: job.id.clone(),
         app_name: job.app_name.clone(),
+        org_slug: job.org_slug.clone(),
         owner: job.owner.clone(),
         status: job.status.as_str().to_string(),
         percent: job.percent,
@@ -192,8 +194,13 @@ async fn submit_job(State(state): State<Arc<AppState>>, body: Bytes) -> Response
     }
 
     let ttl = models::clamp_ttl(&state.config, req.preview_ttl_hours);
-    let hash =
-        models::normalized_request_hash(&req.app_name, &req.spec_md, &req.tasks_md, ttl);
+    let hash = models::normalized_request_hash(
+        &req.app_name,
+        req.org_slug.as_deref(),
+        &req.spec_md,
+        &req.tasks_md,
+        ttl,
+    );
 
     match db::find_by_idempotency(&state.pool, &req.owner, &req.idempotency_key).await {
         Ok(Some(existing)) => {
@@ -211,10 +218,26 @@ async fn submit_job(State(state): State<Arc<AppState>>, body: Bytes) -> Response
         Err(_) => return err(ErrorCode::InternalError, "idempotency lookup failed"),
     }
 
+    // Reject a submit whose app_name is already held by an in-flight or live
+    // preview -- the preview hostname is `<app_name>.<domain>`, so two would
+    // collide on the same host (SPEC O5 / D6). An idempotent replay is handled
+    // above, so this only fires for a genuinely new submit.
+    match db::app_name_in_use(&state.pool, &req.app_name, req.org_slug.as_deref()).await {
+        Ok(true) => {
+            return err(
+                ErrorCode::AppNameConflict,
+                "app_name is already in use by an in-flight or live build",
+            )
+        }
+        Ok(false) => {}
+        Err(_) => return err(ErrorCode::InternalError, "app_name conflict check failed"),
+    }
+
     let now = Utc::now();
     let job = Job {
         id: format!("fj_{}", Ulid::new()),
         app_name: req.app_name.clone(),
+        org_slug: req.org_slug.clone(),
         owner: req.owner.clone(),
         status: JobStatus::Queued,
         percent: 0,
